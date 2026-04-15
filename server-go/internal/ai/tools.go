@@ -58,9 +58,10 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_component_config",
-			Description: anthropic.String("Update basic component configuration like description and chart type. Note: Component name is set by the user when saving, do NOT try to set the name."),
+			Description: anthropic.String("Update basic component configuration like title, description and chart type. Note: Component name is set by the user when saving, do NOT try to set the name."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
+					"title":       map[string]interface{}{"type": "string", "description": "Display title shown at the top of the chart on dashboards. Use a concise human-readable title (e.g., 'CPU Utilization') — this is what users see, NOT the internal name."},
 					"description": map[string]interface{}{"type": "string", "description": "Component description"},
 					"chart_type": map[string]interface{}{
 						"type":        "string",

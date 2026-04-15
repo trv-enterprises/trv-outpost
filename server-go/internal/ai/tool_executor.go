@@ -284,6 +284,7 @@ func (e *ToolExecutor) executeUpdateControlConfig(ctx context.Context, chartID s
 // executeUpdateComponentConfig updates basic component configuration (not name - that's user-controlled)
 func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID string, chartVersion int, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
+		Title       *string `json:"title,omitempty"`
 		Description *string `json:"description,omitempty"`
 		ChartType   *string `json:"chart_type,omitempty"`
 	}
@@ -300,6 +301,10 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 	}
 
 	updates := []string{}
+	if params.Title != nil {
+		chart.Title = *params.Title
+		updates = append(updates, "title")
+	}
 	if params.Description != nil {
 		chart.Description = *params.Description
 		updates = append(updates, "description")

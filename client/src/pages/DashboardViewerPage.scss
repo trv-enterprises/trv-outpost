@@ -562,10 +562,14 @@
     &.dragging {
       opacity: 0.7;
       z-index: 10;
+
+      .edit-hover-header { display: none; }
     }
 
     &.resizing {
       z-index: 10;
+
+      .edit-hover-header { display: none; }
     }
 
     // Prevent component interaction during edit
@@ -609,6 +613,12 @@
         gap: spacing.$spacing-01;
         flex-shrink: 0;
         margin-left: spacing.$spacing-02;
+
+        .panel-window-label {
+          color: #0f62fe;
+          font-size: 0.625rem;
+          font-family: 'IBM Plex Mono', monospace;
+        }
 
         .panel-size-label {
           color: #6f6f6f;

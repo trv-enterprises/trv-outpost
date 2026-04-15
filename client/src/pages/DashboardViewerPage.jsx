@@ -119,6 +119,7 @@ function DashboardViewerPage({ canDesign = false }) {
   const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [refreshKey, setRefreshKey] = useState(0);
   // Dashboard fit mode: "actual" | "window" | "width" | "stretch".
   // Migrated from the legacy `dashboard_reduceToFit` boolean:
   //   true  → "stretch" (the current behavior before the four-mode work)
@@ -626,6 +627,7 @@ function DashboardViewerPage({ canDesign = false }) {
 
   const handleManualRefresh = () => {
     setLoading(true);
+    setRefreshKey(k => k + 1); // Force all DynamicComponentLoaders to re-mount and re-query
     fetchDashboard();
   };
 
@@ -1509,6 +1511,13 @@ function DashboardViewerPage({ canDesign = false }) {
                         {hasText ? (panel.text_config.content || 'Text') : (chart?.title || chart?.name || 'Empty')}
                       </span>
                       <div className="panel-header-right" style={{ pointerEvents: (draggingPanel || resizingPanel) ? 'none' : 'auto' }}>
+                        {chart?.data_mapping?.sliding_window?.duration > 0 && (
+                          <span className="panel-window-label">
+                            {chart.data_mapping.sliding_window.duration >= 60
+                              ? `${Math.round(chart.data_mapping.sliding_window.duration / 60)}m window`
+                              : `${chart.data_mapping.sliding_window.duration}s window`}
+                          </span>
+                        )}
                         <span className="panel-size-label">{panel.w}×{panel.h}</span>
                         <div className="panel-header-edit-menu" onMouseDown={(e) => e.stopPropagation()}>
                           {hasText ? (
@@ -1588,6 +1597,7 @@ function DashboardViewerPage({ canDesign = false }) {
                           )}
                           <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''}`}>
                             <DynamicComponentLoader
+                              key={`${panel.chart_id}-${refreshKey}`}
                               code={chart.component_code}
                               props={{}}
                               dataMapping={chart.data_mapping}

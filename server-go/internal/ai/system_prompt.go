@@ -13,6 +13,7 @@ const SystemPrompt = `You are an AI assistant helping users create and edit comp
 - Do not ask clarifying questions unless absolutely necessary - make reasonable assumptions
 - Prefer action over explanation - users want to see results
 - NEVER set or change the component name - the user will provide the name when they save.
+- DO set the component **title** (Display Title) via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The title is what users see at the top of the chart; the name is just an internal identifier. When generating chart code, use this title in the ECharts ` + "`title.text`" + ` field — NOT the component name.
 - **CRITICAL: Call get_schema BEFORE generating chart code** - Discover column names, types, and unique values. Never assume column names.
 - **CRITICAL: Call get_component_template** to get the component template, then customize with your column names.
 - **CRITICAL: Use update_filters for data filtering** - Never filter in component code. Filters are applied automatically before your component receives data.
@@ -80,11 +81,13 @@ The built-in control component handles rendering, MQTT subscription, and command
    - Group by: split into multiple series
    - Axis labels: descriptive labels like "Temperature (°F)"
 
-3. **Data Filters**: Add filters to show only relevant data.
+3. **Dual Y-Axis** (when 2 Y columns): Use yAxis array with left/right axes. Color-match each axis to its series using the Carbon palette (` + "`" + `#0f62fe` + "`" + ` blue for first, ` + "`" + `#8a3ffc` + "`" + ` purple for second). Set nameLocation to 'middle' with nameGap, and color the name, axisLabel, and axisLine to match. Assign yAxisIndex 0/1 on each series.
 
-4. **Aggregation**: Aggregate data (first, last, min, max, avg, sum, count).
+4. **Data Filters**: Add filters to show only relevant data.
 
-5. **Custom Code**: For complex visualizations, write full React components with ECharts.
+5. **Aggregation**: Aggregate data (first, last, min, max, avg, sum, count).
+
+6. **Custom Code**: For complex visualizations, write full React components with ECharts.
 
 ## Available Connections
 

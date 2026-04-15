@@ -33,7 +33,7 @@ import { queryData } from '../api/dataClient';
 import apiClient, { API_BASE } from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 
-export function useData({ datasourceId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null }) {
+export function useData({ datasourceId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null }) {
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,8 +57,9 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
   const disconnectedSinceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
 
-  // Serialize query for stable dependency comparison
+  // Serialize query and backfill for stable dependency comparison
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
+  const backfillKey = useMemo(() => JSON.stringify(backfill), [backfill]);
 
   // Fetch datasource type on mount
   useEffect(() => {
@@ -103,31 +104,50 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
     || (datasourceType === 'tsstore' && datasourceTransport === 'streaming');
 
   // === STREAMING LOGIC (for streaming datasources) ===
-  const processStreamRecord = useCallback((record) => {
-    if (!mountedRef.current) return;
+  // Batch incoming records and flush once per animation frame to avoid
+  // partial-batch re-renders that cause x-axis flicker on line charts.
+  const pendingRecordsRef = useRef([]);
+  const flushRAFRef = useRef(null);
+  const backfillDoneRef = useRef(false); // Backfill once per useData lifecycle, not per reconnect
+
+  const flushPendingRecords = useCallback(() => {
+    flushRAFRef.current = null;
+    if (!mountedRef.current || pendingRecordsRef.current.length === 0) return;
+
+    const batch = pendingRecordsRef.current;
+    pendingRecordsRef.current = [];
 
     setData((prev) => {
       const prevData = prev || { columns: [], rows: [] };
 
-      // Build columns from record keys if not already set
       let columns = prevData.columns;
-      if (columns.length === 0) {
-        columns = Object.keys(record);
+      if (columns.length === 0 && batch.length > 0) {
+        columns = Object.keys(batch[0]);
         columnsRef.current = columns;
       }
 
-      // Convert record object to row array (matching column order)
-      const row = columns.map(col => record[col]);
+      // Convert all batched records to rows
+      const newRows = batch.map(record => columns.map(col => record[col]));
 
-      // Append row to existing rows, respecting maxBuffer
-      let newRows = [...prevData.rows, row];
-      if (newRows.length > maxBuffer) {
-        newRows = newRows.slice(newRows.length - maxBuffer);
+      let allRows = [...prevData.rows, ...newRows];
+      if (allRows.length > maxBuffer) {
+        allRows = allRows.slice(allRows.length - maxBuffer);
       }
 
-      return { columns, rows: newRows };
+      return { columns, rows: allRows };
     });
   }, [maxBuffer]);
+
+  const processStreamRecord = useCallback((record) => {
+    if (!mountedRef.current) return;
+
+    pendingRecordsRef.current.push(record);
+
+    // Schedule a single flush per animation frame
+    if (!flushRAFRef.current) {
+      flushRAFRef.current = requestAnimationFrame(flushPendingRecords);
+    }
+  }, [flushPendingRecords]);
 
   // Serialize timeBucket for stable dependency comparison
   const timeBucketKey = useMemo(() => JSON.stringify(timeBucket), [timeBucket]);
@@ -344,16 +364,45 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       }
     };
 
-    // Choose connection type based on timeBucket
-    if (useAggregated) {
-      connectAggregated();
-    } else {
-      connectRawShared();
-    }
+    // Backfill: fire a one-shot REST query to pre-populate the buffer before streaming.
+    // Only on first mount, NOT on every effect re-run/reconnect (would duplicate data).
+    const runBackfillThenConnect = async () => {
+      if (backfill && mountedRef.current && !backfillDoneRef.current) {
+        backfillDoneRef.current = true;
+        try {
+          const result = await queryData(datasourceId, backfill, false);
+          if (mountedRef.current && result.data?.columns && result.data?.rows) {
+            // Convert columnar result to record objects for processStreamRecord
+            const { columns, rows } = result.data;
+            rows.forEach(row => {
+              const record = {};
+              columns.forEach((col, i) => { record[col] = row[i]; });
+              processStreamRecord(record);
+            });
+          }
+        } catch (err) {
+          console.warn('[useData] Backfill query failed, streaming will start empty:', err.message);
+        }
+      }
+
+      // Now connect to the stream
+      if (useAggregated) {
+        connectAggregated();
+      } else {
+        connectRawShared();
+      }
+    };
+
+    runBackfillThenConnect();
 
     // Cleanup on unmount or type change
     return () => {
       mountedRef.current = false;
+      if (flushRAFRef.current) {
+        cancelAnimationFrame(flushRAFRef.current);
+        flushRAFRef.current = null;
+      }
+      pendingRecordsRef.current = [];
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
@@ -371,7 +420,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
         eventSourceRef.current = null;
       }
     };
-  }, [datasourceId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, handleConnectionError, handleConnectionSuccess]);
+  }, [datasourceId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, backfillKey, handleConnectionError, handleConnectionSuccess]);
 
   // === POLLING LOGIC (for non-socket datasources) ===
   // isInitialFetch tracks whether this is the first load (shows loading state)

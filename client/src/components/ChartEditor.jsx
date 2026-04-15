@@ -854,11 +854,15 @@ const ChartEditor = forwardRef(function ChartEditor({
       xAxisFormat: xAxisFormat || 'chart',
       xAxisLabel: xAxisLabel || '',
       yAxisLabel: yAxisLabel || '',
-      chartName: name || ''
+      chartName: title || name || '' // Display Title takes precedence, falls back to Chart Name
     };
 
-    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming);
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming]);
+    const slidingWindow = slidingWindowEnabled && slidingWindowTimestampCol
+      ? { duration: slidingWindowDuration, timestampCol: slidingWindowTimestampCol }
+      : null;
+
+    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming, slidingWindow);
+  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2703,11 +2707,31 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false) {
+function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', chartName = '' } = transforms;
   // Streaming connections don't need refreshInterval — data arrives via SSE
   const refreshLine = isStreaming ? '' : '\n    refreshInterval: 30000';
+
+  // Backfill: for streaming charts with a sliding window, pre-populate the buffer
+  // by querying the REST endpoint for historical data matching the window duration
+  let backfillLine = '';
+  if (isStreaming && slidingWindow?.duration > 0) {
+    // Convert seconds to ts-store since format (e.g., 300 -> "5m", 3600 -> "1h", 30 -> "30s")
+    const dur = slidingWindow.duration;
+    const sinceStr = dur >= 3600 && dur % 3600 === 0 ? `${dur / 3600}h`
+      : dur >= 60 && dur % 60 === 0 ? `${dur / 60}m`
+      : `${dur}s`;
+    backfillLine = `,\n    backfill: { raw: 'since:${sinceStr}', type: '${queryType}', params: {} }`;
+  }
+
+  // Streaming charts destructure extra fields and show "Waiting for data..." instead of "No data"
+  const useDataFields = isStreaming
+    ? '{ data, loading, error, isStreaming, connected }'
+    : '{ data, loading, error }';
+  const noDataLine = isStreaming
+    ? "if (!data?.rows?.length) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6f6f6f' }}>{connected ? 'Waiting for data...' : 'Connecting...'}</div>;"
+    : "if (!data?.rows?.length) return <div style={{ color: '#6f6f6f', padding: '1rem' }}>No data</div>;";
 
   const hasTransforms = filters.length > 0 || aggregation?.type || sortBy || limit > 0;
   const transformsConfig = hasTransforms ? `
@@ -2769,6 +2793,7 @@ function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xA
       type: '${chartType === 'area' ? 'line' : chartType}',
       ${chartType === 'area' ? 'areaStyle: {},' : ''}
       ${chartType === 'line' || chartType === 'area' ? 'smooth: true,' : ''}
+      ${yAxisCols.length === 2 ? 'yAxisIndex: idx,' : ''}
     }));`;
   } else {
     seriesCode = `const yColumns = [${yAxisStr}];
@@ -2783,18 +2808,18 @@ function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xA
 
   if (chartType === 'pie') {
     return `const Component = () => {
-  const { data, loading, error } = useData({
+  const ${useDataFields} = useData({
     datasourceId: '${datasourceId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}
+    },${refreshLine}${backfillLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
   if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
-  if (!data?.rows?.length) return <div style={{ color: '#6f6f6f', padding: '1rem' }}>No data</div>;
+  ${noDataLine}
 ${transformsConfig}
 ${xAxisFormatCode}
 
@@ -2826,18 +2851,18 @@ ${xAxisFormatCode}
     // Generate DataTable component with column aliases support
     const aliasesJson = JSON.stringify(columnAliases);
     return `const Component = () => {
-  const { data, loading, error } = useData({
+  const ${useDataFields} = useData({
     datasourceId: '${datasourceId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}
+    },${refreshLine}${backfillLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
   if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
-  if (!data?.rows?.length) return <div style={{ color: '#6f6f6f', padding: '1rem' }}>No data</div>;
+  ${noDataLine}
 ${transformsConfig}
 
   // Column aliases for display names
@@ -2954,18 +2979,18 @@ ${transformsConfig}
     return () => observer.disconnect();
   }, []);
 
-  const { data, loading, error } = useData({
+  const ${useDataFields} = useData({
     datasourceId: '${datasourceId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}
+    },${refreshLine}${backfillLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
   if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
-  if (!data?.rows?.length) return <div style={{ color: '#6f6f6f', padding: '1rem' }}>No data</div>;
+  ${noDataLine}
 ${transformsConfig}
 
   const yCol = ${yAxisStr.split(',')[0]};
@@ -3043,18 +3068,18 @@ ${transformsConfig}
     : '';
 
   return `const Component = () => {
-  const { data, loading, error } = useData({
+  const ${useDataFields} = useData({
     datasourceId: '${datasourceId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}
+    },${refreshLine}${backfillLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
   if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
-  if (!data?.rows?.length) return <div style={{ color: '#6f6f6f', padding: '1rem' }}>No data</div>;
+  ${noDataLine}
 ${transformsConfig}
 ${xAxisFormatCode}
 ${categoriesCode}
@@ -3066,9 +3091,12 @@ ${categoriesCode}
     ${chartName ? `title: { text: '${chartName.replace(/'/g, "\\'")}', left: 'center', top: 0, textStyle: { color: '#f4f4f4', fontSize: 16 } },` : ''}
     tooltip: { trigger: 'axis' },
     ${legendCode}
-    grid: { top: ${showLegend ? (chartName ? 55 : 35) : (chartName ? 30 : 10)}, left: ${yAxisLabel ? 55 : "'1.5%'"}, right: '2%', bottom: '1.5%', containLabel: true },
+    grid: { top: ${showLegend ? (chartName ? 55 : 35) : (chartName ? 30 : 10)}, left: 0, right: 0, bottom: 0, containLabel: true },
     xAxis: { type: 'category', data: categories${chartType === 'area' ? ', boundaryGap: false' : ''}${xAxisLabel ? `, name: '${xAxisLabel}', nameLocation: 'middle', nameGap: 30` : ''} },
-    yAxis: { type: 'value'${yAxisLabel ? `, name: '${yAxisLabel}', nameLocation: 'middle', nameGap: 40` : ''} },
+    ${yAxisCols.length === 2 ? `yAxis: [
+      { type: 'value', name: '${yAxisCols[0]}', nameLocation: 'middle', nameGap: 40, nameTextStyle: { color: '#0f62fe' }, axisLabel: { color: '#0f62fe' }, axisLine: { show: true, lineStyle: { color: '#0f62fe' } } },
+      { type: 'value', name: '${yAxisCols[1]}', nameLocation: 'middle', nameGap: 40, nameTextStyle: { color: '#8a3ffc' }, axisLabel: { color: '#8a3ffc' }, axisLine: { show: true, lineStyle: { color: '#8a3ffc' } } }
+    ],` : `yAxis: { type: 'value'${yAxisLabel ? `, name: '${yAxisLabel}', nameLocation: 'middle', nameGap: 40` : ''} },`}
     series: series
   };
 
