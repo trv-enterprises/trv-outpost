@@ -111,6 +111,52 @@ management with role-based access (Admin / Designer / Support),
 global settings, smart device management, and device-type
 definitions.
 
+## Known Limitations & Future Optimizations
+
+### MQTT Streaming Performance
+
+The MQTT streaming subsystem uses a single Eclipse Paho v2 client per
+MQTT connection for both **subscribing** (inbound sensor data) and
+**publishing** (outbound control commands). At moderate throughput
+(tens of messages/second) this works well. At high volume, two
+concerns arise:
+
+1. **Shared connection contention** — Inbound subscriptions and
+   outbound control publishes share the same broker connection. Under
+   heavy inbound load (hundreds of messages/second from a ts-store
+   MQTT sink, for example), the Paho client's internal buffers may
+   saturate, causing outbound control commands to queue or timeout.
+
+2. **Per-message processing** — Each inbound message goes through JSON
+   unmarshal → record merge → ring buffer push → fan-out to all
+   subscriber channels. The fan-out uses non-blocking sends on
+   buffered channels (100 items); if a subscriber (SSE client) is
+   slow, records are silently dropped.
+
+**Planned mitigations:**
+
+- **Separate MQTT clients** for subscribe vs. publish, so control
+  commands are never blocked by inbound data volume.
+- **Rate-limiting / sampling** on inbound processing — drop or
+  down-sample when buffers back up, rather than silently discarding.
+- **QoS differentiation** — subscribe with QoS 0 (fire-and-forget)
+  for high-frequency sensor data; publish controls with QoS 1
+  (at-least-once) for reliability.
+
+### ts-store Push Cursor Persistence
+
+ts-store's outbound WebSocket push connections persist their cursor
+to `ws_connections.json` and resume from `last_timestamp` on
+reconnect. When the dashboard creates a new push connection with
+`from: -1` (start from now), ts-store may still resume from a stale
+cursor position, causing the stream to replay hours of historical
+data before catching up to realtime. The dashboard attempts to
+clean up stale push connections before creating new ones, but the
+persisted cursor file is not cleared by connection deletion.
+
+**Planned fix:** ts-store should honor `from: -1` unconditionally on
+new connections, ignoring any persisted cursor state.
+
 ## Related
 
 - [Deployment](../DEPLOYMENT.md) — production deployment, env vars,
