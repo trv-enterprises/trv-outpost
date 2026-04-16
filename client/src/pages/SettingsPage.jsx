@@ -15,7 +15,11 @@ import {
   TableCell,
   Button,
   Tag,
-  InlineNotification
+  InlineNotification,
+  Modal,
+  TextInput,
+  Select,
+  SelectItem
 } from '@carbon/react';
 import { Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -41,6 +45,8 @@ function SettingsPage() {
   const [layoutDimensionsModalOpen, setLayoutDimensionsModalOpen] = useState(false);
   const [defaultLayoutDimensionModalOpen, setDefaultLayoutDimensionModalOpen] = useState(false);
   const [tileFontSizeModalOpen, setTileFontSizeModalOpen] = useState(false);
+  const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
+  const [mqttConnections, setMqttConnections] = useState([]);
 
   useEffect(() => {
     fetchSettings();
@@ -72,6 +78,15 @@ function SettingsPage() {
         break;
       case 'tile_font_size':
         setTileFontSizeModalOpen(true);
+        break;
+      case 'dashboard_command_topic':
+      case 'dashboard_command_connection':
+        // Fetch MQTT connections for the dropdown
+        apiClient.getConnections().then(data => {
+          const conns = (data.datasources || data.connections || []).filter(c => c.type === 'mqtt');
+          setMqttConnections(conns);
+        }).catch(() => {});
+        setDashboardCommandModalOpen(true);
         break;
       default:
         // For unknown setting types, show a notification
@@ -105,6 +120,11 @@ function SettingsPage() {
 
   const handleTileFontSizeClose = () => {
     setTileFontSizeModalOpen(false);
+    setEditingSetting(null);
+  };
+
+  const handleDashboardCommandClose = () => {
+    setDashboardCommandModalOpen(false);
     setEditingSetting(null);
   };
 
@@ -288,6 +308,45 @@ function SettingsPage() {
           handleTileFontSizeClose();
         }}
       />
+
+      {/* Dashboard Command Settings Modal */}
+      <Modal
+        open={dashboardCommandModalOpen}
+        onRequestClose={handleDashboardCommandClose}
+        modalHeading={editingSetting?.key === 'dashboard_command_topic' ? 'Dashboard Command Topic' : 'Dashboard Command Connection'}
+        primaryButtonText="Save"
+        secondaryButtonText="Cancel"
+        onSecondarySubmit={handleDashboardCommandClose}
+        onRequestSubmit={() => {
+          const input = document.getElementById('dashboard-cmd-input');
+          if (input) {
+            handleSave(editingSetting.key, input.value);
+          }
+          handleDashboardCommandClose();
+        }}
+        size="sm"
+      >
+        {editingSetting?.key === 'dashboard_command_topic' ? (
+          <TextInput
+            id="dashboard-cmd-input"
+            labelText="Command Topic"
+            defaultValue={editingSetting?.value || 'dashboard/cmd'}
+            helperText="MQTT topic the dashboard subscribes to for voice/kiosk commands. Commands are JSON: {target, action, ...}"
+          />
+        ) : (
+          <Select
+            id="dashboard-cmd-input"
+            labelText="MQTT Connection"
+            defaultValue={editingSetting?.value || ''}
+            helperText="Select the MQTT broker connection used for dashboard commands"
+          >
+            <SelectItem value="" text="None (disabled)" />
+            {mqttConnections.map(c => (
+              <SelectItem key={c.id} value={c.id} text={`${c.name} (${c.type})`} />
+            ))}
+          </Select>
+        )}
+      </Modal>
     </div>
   );
 }

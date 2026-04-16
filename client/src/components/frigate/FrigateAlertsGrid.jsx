@@ -32,7 +32,7 @@ import './FrigateAlertsGrid.scss';
  *     has_been_reviewed: false,
  *   }
  */
-function FrigateAlertsGrid({ config }) {
+function FrigateAlertsGrid({ config, dashboardCommand }) {
   const connectionId = config?.frigate_connection_id;
   const maxThumbnails = Math.max(1, Math.min(50, config?.max_thumbnails || 8));
   const cameraFilter = config?.default_camera || '';
@@ -122,6 +122,69 @@ function FrigateAlertsGrid({ config }) {
       if (mountedRef.current) setMarking(false);
     }
   };
+
+  // Handle dashboard commands targeting frigate-alert
+  useEffect(() => {
+    if (!dashboardCommand || dashboardCommand.target !== 'frigate-alert') return;
+
+    const { action } = dashboardCommand;
+
+    switch (action) {
+      case 'show':
+      case 'show_alert':
+        // Open the first (most recent) unreviewed alert
+        if (reviews.length > 0 && !selectedReview) {
+          setSelectedReview(reviews[0]);
+          setClipError(false);
+          setMarkError(null);
+        }
+        break;
+
+      case 'reviewed':
+      case 'dismiss':
+        // Mark the currently displayed alert as reviewed
+        if (selectedReview) {
+          handleMarkReviewed();
+        }
+        break;
+
+      case 'next':
+        // Show next alert in the list
+        if (selectedReview && reviews.length > 0) {
+          const currentIdx = reviews.findIndex(r => r.id === selectedReview.id);
+          const nextIdx = currentIdx + 1;
+          if (nextIdx < reviews.length) {
+            setSelectedReview(reviews[nextIdx]);
+            setClipError(false);
+            setMarkError(null);
+          }
+        } else if (!selectedReview && reviews.length > 0) {
+          setSelectedReview(reviews[0]);
+        }
+        break;
+
+      case 'previous':
+        // Show previous alert in the list
+        if (selectedReview && reviews.length > 0) {
+          const currentIdx = reviews.findIndex(r => r.id === selectedReview.id);
+          const prevIdx = currentIdx - 1;
+          if (prevIdx >= 0) {
+            setSelectedReview(reviews[prevIdx]);
+            setClipError(false);
+            setMarkError(null);
+          }
+        }
+        break;
+
+      case 'close':
+        // Close the modal without marking reviewed
+        handleClose();
+        break;
+
+      default:
+        break;
+    }
+  }, [dashboardCommand]);
 
   const formatTime = (epochSec) => {
     if (!epochSec) return '';
@@ -292,6 +355,7 @@ FrigateAlertsGrid.propTypes = {
     max_thumbnails: PropTypes.number,
     snapshot_interval: PropTypes.number,
   }).isRequired,
+  dashboardCommand: PropTypes.object, // { target, action, ... } from MQTT command topic
 };
 
 export default FrigateAlertsGrid;

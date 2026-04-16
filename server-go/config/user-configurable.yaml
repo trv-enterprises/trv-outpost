@@ -26,3 +26,13 @@ settings:
     category: appearance
     description: "Font size for compact tile control labels (xs, sm, md, lg)"
     value: "sm"
+
+  - key: dashboard_command_topic
+    category: dashboard
+    description: "MQTT topic for dashboard commands (voice control, kiosk integration)"
+    value: "dashboard/cmd"
+
+  - key: dashboard_command_connection
+    category: dashboard
+    description: "MQTT connection ID used for dashboard commands"
+    value: ""

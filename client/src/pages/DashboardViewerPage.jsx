@@ -117,6 +117,9 @@ function DashboardViewerPage({ canDesign = false }) {
   const [chartsMap, setChartsMap] = useState({}); // Chart data keyed by chart_id
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Dashboard command subscription (voice control / kiosk integration)
+  const [dashboardCommand, setDashboardCommand] = useState(null); // Latest command: { target, action, ... }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
@@ -607,6 +610,54 @@ function DashboardViewerPage({ canDesign = false }) {
     const interval = setInterval(() => fetchDashboard(), intervalMs);
     return () => clearInterval(interval);
   }, [configRefreshInterval, fetchDashboard, isEditMode]);
+
+  // Dashboard command subscription — listen for voice/kiosk commands via MQTT
+  useEffect(() => {
+    if (isEditMode) return;
+
+    let unsubscribe = null;
+
+    const setupCommandSubscription = async () => {
+      try {
+        // Fetch command settings
+        const [topicSetting, connSetting] = await Promise.all([
+          apiClient.getSetting('dashboard_command_topic').catch(() => null),
+          apiClient.getSetting('dashboard_command_connection').catch(() => null)
+        ]);
+
+        const commandTopic = topicSetting?.value || '';
+        const commandConnectionId = connSetting?.value || '';
+
+        if (!commandTopic || !commandConnectionId) return;
+
+        const manager = StreamConnectionManager.getInstance();
+        unsubscribe = manager.subscribe(
+          commandConnectionId,
+          (record) => {
+            // Parse command from MQTT record — payload fields are merged at top level
+            const target = record.target;
+            const action = record.action;
+            if (target && action) {
+              console.log(`[DashboardCommand] ${target}.${action}`, record);
+              setDashboardCommand({ ...record, _ts: Date.now() }); // _ts forces re-render for same command
+            }
+          },
+          {
+            topics: commandTopic,
+            onConnect: () => console.log('[DashboardCommand] Connected to command topic:', commandTopic)
+          }
+        );
+      } catch (err) {
+        console.warn('[DashboardCommand] Failed to subscribe:', err.message);
+      }
+    };
+
+    setupCommandSubscription();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isEditMode]);
 
   // Fullscreen handling
   const toggleFullscreen = () => {
@@ -1581,9 +1632,9 @@ function DashboardViewerPage({ canDesign = false }) {
                           {chart.display_config?.display_type === 'weather' ? (
                             <WeatherDisplay config={chart.display_config} />
                           ) : chart.display_config?.display_type === 'frigate_camera' ? (
-                            <FrigateCameraViewer config={chart.display_config} />
+                            <FrigateCameraViewer config={chart.display_config} dashboardCommand={dashboardCommand} />
                           ) : chart.display_config?.display_type === 'frigate_alerts' ? (
-                            <FrigateAlertsGrid config={chart.display_config} />
+                            <FrigateAlertsGrid config={chart.display_config} dashboardCommand={dashboardCommand} />
                           ) : (
                             <div className="display-empty">Unknown display type</div>
                           )}
