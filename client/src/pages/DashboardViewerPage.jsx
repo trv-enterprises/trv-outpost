@@ -612,14 +612,17 @@ function DashboardViewerPage({ canDesign = false }) {
   }, [configRefreshInterval, fetchDashboard, isEditMode]);
 
   // Dashboard command subscription — listen for voice/kiosk commands via MQTT
+  // Subscribes once on mount (not gated by isEditMode — commands are ignored during edit
+  // by the individual component handlers, but the subscription stays alive to avoid
+  // buffer replay issues on edit mode toggle).
+  const commandSubscribedRef = useRef(false);
   useEffect(() => {
-    if (isEditMode) return;
+    if (commandSubscribedRef.current) return; // Only subscribe once
 
     let unsubscribe = null;
 
     const setupCommandSubscription = async () => {
       try {
-        // Fetch command settings
         const [topicSetting, connSetting] = await Promise.all([
           apiClient.getSetting('dashboard_command_topic').catch(() => null),
           apiClient.getSetting('dashboard_command_connection').catch(() => null)
@@ -630,20 +633,21 @@ function DashboardViewerPage({ canDesign = false }) {
 
         if (!commandTopic || !commandConnectionId) return;
 
+        commandSubscribedRef.current = true;
         const manager = StreamConnectionManager.getInstance();
         unsubscribe = manager.subscribe(
           commandConnectionId,
           (record) => {
-            // Parse command from MQTT record — payload fields are merged at top level
             const target = record.target;
             const action = record.action;
             if (target && action) {
               console.log(`[DashboardCommand] ${target}.${action}`, record);
-              setDashboardCommand({ ...record, _ts: Date.now() }); // _ts forces re-render for same command
+              setDashboardCommand({ ...record, _ts: Date.now() });
             }
           },
           {
             topics: commandTopic,
+            skipBufferReplay: true, // Don't replay old commands from buffer
             onConnect: () => console.log('[DashboardCommand] Connected to command topic:', commandTopic)
           }
         );
@@ -656,8 +660,9 @@ function DashboardViewerPage({ canDesign = false }) {
 
     return () => {
       if (unsubscribe) unsubscribe();
+      commandSubscribedRef.current = false;
     };
-  }, [isEditMode]);
+  }, []); // Subscribe once on mount, unsubscribe on unmount
 
   // Fullscreen handling
   const toggleFullscreen = () => {
