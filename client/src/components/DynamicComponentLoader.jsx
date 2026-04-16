@@ -123,7 +123,8 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
     query: queryConfig || dataMapping?.query_config || { raw: '', type: 'sql' },
     refreshInterval: dataRefreshInterval,
     useCache: true,
-    timeBucket: timeBucketConfig
+    timeBucket: timeBucketConfig,
+    parser: dataMapping?.parser || null
   });
 
   // Apply transforms to fetched data

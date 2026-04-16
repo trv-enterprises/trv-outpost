@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
+import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import {
   DataTable,
   TableContainer,
@@ -54,8 +55,8 @@ import './ChartsListPage.scss';
 function ChartsListPage() {
   const navigate = useNavigate();
 
-  // Get saved filters from session store
-  const savedFilters = getFilters('charts');
+  // Merge persisted per-user prefs (survives reload) with session filters (takes precedence)
+  const savedFilters = { ...getListPrefs('charts'), ...getFilters('charts') };
 
   // Initialize state from saved filters (persist across navigation within session)
   const [charts, setCharts] = useState([]);
@@ -247,6 +248,12 @@ function ChartsListPage() {
       ds: connectionFilter,
       types: selectedTypes !== null && selectedTypes.size > 0 ? Array.from(selectedTypes).join(',') : '',
       tags: tagFilter
+    });
+    // Persist user-level preferences (view mode, sort) to user config — survives reloads
+    setListPrefs('charts', {
+      view: viewMode,
+      sortKey,
+      sortDir: sortDirection
     });
   }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter]);
 

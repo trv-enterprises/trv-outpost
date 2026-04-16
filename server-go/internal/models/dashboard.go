@@ -89,6 +89,16 @@ type ChartDataMapping struct {
 	SortOrder     string            `json:"sort_order" bson:"sort_order"`             // asc or desc
 	Limit         int               `json:"limit" bson:"limit"`                       // Max rows to return
 	ColumnAliases map[string]string `json:"column_aliases" bson:"column_aliases"`     // Display names for columns (column name -> display name), primarily for dataview
+	Parser        *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"` // Per-component data extraction for streaming (MQTT, ts-store MQTT)
+}
+
+// StreamParserConfig configures how to extract data from streaming messages.
+// Used when messages arrive in an envelope format (e.g., ts-store MQTT sink publishes
+// {"type": "data", "timestamp": nanoseconds, "data": {...actual fields...}}).
+type StreamParserConfig struct {
+	DataPath       string `json:"data_path,omitempty" bson:"data_path,omitempty"`           // Dot-notation path to data object (e.g., "data", "payload.readings")
+	TimestampField string `json:"timestamp_field,omitempty" bson:"timestamp_field,omitempty"` // Field containing timestamp (extracted before data_path)
+	TimestampScale string `json:"timestamp_scale,omitempty" bson:"timestamp_scale,omitempty"` // "s", "ms", "ns" — auto-detected if empty
 }
 
 // EmbeddedChart represents a chart embedded directly in a dashboard

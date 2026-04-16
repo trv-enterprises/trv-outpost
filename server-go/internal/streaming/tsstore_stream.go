@@ -100,12 +100,86 @@ func (ts *TSStoreStream) Start(ctx context.Context) error {
 	return nil
 }
 
+// cleanupStalePushConnections lists existing push connections on ts-store and deletes
+// any that target our inbound URL. This clears persisted cursors so the new connection
+// starts fresh with from=-1 instead of resuming from a stale position.
+func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboundURL string) {
+	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.config.StoreName)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return
+	}
+	if ts.config.APIKey != "" {
+		req.Header.Set("X-API-Key", ts.config.APIKey)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[TSStoreStream %s] Failed to list push connections: %v", ts.datasourceID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[TSStoreStream %s] List push connections returned %d: %s", ts.datasourceID, resp.StatusCode, string(body))
+		return
+	}
+
+	// Parse response — ts-store returns an array directly
+	var connections []struct {
+		ID  string `json:"id"`
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(body, &connections); err != nil {
+		// Try unwrapping from { connections: [...] } envelope
+		var envelope struct {
+			Connections []struct {
+				ID  string `json:"id"`
+				URL string `json:"url"`
+			} `json:"connections"`
+		}
+		if err2 := json.Unmarshal(body, &envelope); err2 == nil {
+			connections = envelope.Connections
+		} else {
+			log.Printf("[TSStoreStream %s] Failed to parse push connections list: %s", ts.datasourceID, string(body[:200]))
+		}
+	}
+
+	log.Printf("[TSStoreStream %s] Found %d existing push connections, looking for URL: %s", ts.datasourceID, len(connections), inboundURL)
+	for _, conn := range connections {
+		if conn.URL == inboundURL {
+			log.Printf("[TSStoreStream %s] Deleting stale push connection %s (URL: %s)", ts.datasourceID, conn.ID, conn.URL)
+			delURL := fmt.Sprintf("%s/%s", apiURL, conn.ID)
+			delReq, err := http.NewRequestWithContext(ctx, "DELETE", delURL, nil)
+			if err != nil {
+				continue
+			}
+			if ts.config.APIKey != "" {
+				delReq.Header.Set("X-API-Key", ts.config.APIKey)
+			}
+			delResp, err := client.Do(delReq)
+			if err != nil {
+				continue
+			}
+			delResp.Body.Close()
+		}
+	}
+}
+
 // createPushConnection calls ts-store API to create a push connection
 func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 	// Build the inbound URL that ts-store will connect to
 	// Use the configured dashboard host or default to localhost
 	dashboardHost := ts.getDashboardHost()
 	inboundURL := GetInboundURL(dashboardHost, ts.datasourceID)
+
+	// Clean up any stale push connections that target our inbound URL
+	// This ensures ts-store doesn't resume from a persisted cursor
+	ts.cleanupStalePushConnections(ctx, inboundURL)
 
 	// Build request
 	pushConfig := ts.config.Push
@@ -134,6 +208,8 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
+
+	log.Printf("[TSStoreStream %s] Push request: %s", ts.datasourceID, string(reqBody))
 
 	// Build API URL
 	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.config.StoreName)

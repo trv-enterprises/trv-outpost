@@ -215,14 +215,18 @@ function ControlEditor({
 
   // Track the ComboBox selection independently from the target field.
   // This prevents circular updates when manually editing the Command Target.
-  const [comboBoxTopic, setComboBoxTopic] = useState(() => {
-    // Initialize from existing target on mount
+  const [comboBoxTopic, setComboBoxTopic] = useState(null);
+
+  // Sync comboBoxTopic when topics finish loading and we have an existing target
+  useEffect(() => {
+    if (mqttTopics.length === 0) return;
     const target = controlConfig?.target || '';
-    if (!target) return null;
-    if (usesRawTopic) return mqttTopics.includes(target) ? target : null;
-    const base = target.endsWith('/set') ? target.slice(0, -4) : target;
-    return mqttTopics.includes(base) ? base : null;
-  });
+    if (!target) return;
+    const base = usesRawTopic ? target : (target.endsWith('/set') ? target.slice(0, -4) : target);
+    if (mqttTopics.includes(base)) {
+      setComboBoxTopic(base);
+    }
+  }, [mqttTopics, controlConfig?.target, usesRawTopic]);
 
   // Handle MQTT topic selection from ComboBox — sets target
   const handleTopicSelect = (topic) => {

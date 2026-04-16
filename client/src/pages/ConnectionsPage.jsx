@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
+import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import {
   DataTable,
   TableContainer,
@@ -46,7 +47,7 @@ function ConnectionsPage() {
   const navigate = useNavigate();
 
   // Get saved filters from session store
-  const savedFilters = getFilters('connections');
+  const savedFilters = { ...getListPrefs('connections'), ...getFilters('connections') };
 
   const [connections, setConnections] = useState([]);
   const [chartCounts, setChartCounts] = useState({}); // Map of connection_id -> chart count
@@ -68,6 +69,12 @@ function ConnectionsPage() {
       view: viewMode,
       type: typeFilter,
       tags: tagFilter
+    });
+    // Persist user-level preferences (view mode, sort) to user config — survives reloads
+    setListPrefs('connections', {
+      view: viewMode,
+      sortKey,
+      sortDir: sortDirection
     });
   }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter]);
 

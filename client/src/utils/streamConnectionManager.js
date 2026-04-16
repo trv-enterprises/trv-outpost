@@ -82,6 +82,7 @@ class StreamConnectionManager {
     const subscriber = {
       callback,
       topics: options.topics ? options.topics.split(',') : null, // null = all topics
+      skipBufferReplay: !!options.skipBufferReplay, // skip replaying buffered records on subscribe
       onConnect: options.onConnect || (() => {}),
       onDisconnect: options.onDisconnect || (() => {}),
       onError: options.onError || (() => {}),
@@ -105,14 +106,16 @@ class StreamConnectionManager {
       // Connection exists — check if topics changed
       if (connection.connected) {
         subscriber.onConnect();
-        // Replay buffered records matching this subscriber's topics
-        const buffer = this.buffers.get(datasourceId);
-        if (buffer && buffer.length > 0) {
-          buffer.forEach(record => {
-            if (this._matchesTopic(record, subscriber)) {
-              subscriber.callback(record);
-            }
-          });
+        // Replay buffered records matching this subscriber's topics (unless opted out)
+        if (!subscriber.skipBufferReplay) {
+          const buffer = this.buffers.get(datasourceId);
+          if (buffer && buffer.length > 0) {
+            buffer.forEach(record => {
+              if (this._matchesTopic(record, subscriber)) {
+                subscriber.callback(record);
+              }
+            });
+          }
         }
       }
 

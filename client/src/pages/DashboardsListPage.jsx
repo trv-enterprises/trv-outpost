@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
+import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import {
   DataTable,
   TableContainer,
@@ -44,8 +45,8 @@ import './DashboardsListPage.scss';
 function DashboardsListPage() {
   const navigate = useNavigate();
 
-  // Get saved filters from session store
-  const savedFilters = getFilters('dashboards');
+  // Merge persisted per-user prefs (survives reload) with session filters (takes precedence)
+  const savedFilters = { ...getListPrefs('dashboards'), ...getFilters('dashboards') };
 
   const [dashboards, setDashboards] = useState([]);
   const [charts, setCharts] = useState({});
@@ -66,6 +67,12 @@ function DashboardsListPage() {
       sortDir: sortDirection,
       view: viewMode,
       tags: tagFilter
+    });
+    // Persist user-level preferences (view mode, sort) to user config — survives reloads
+    setListPrefs('dashboards', {
+      view: viewMode,
+      sortKey,
+      sortDir: sortDirection
     });
   }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter]);
 

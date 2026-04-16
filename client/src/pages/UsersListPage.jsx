@@ -28,6 +28,7 @@ import {
 } from '@carbon/react';
 import { TrashCan, UserMultiple, List, Grid, Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import './UsersListPage.scss';
 
 /**
@@ -42,12 +43,18 @@ import './UsersListPage.scss';
 function UsersListPage() {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
+  const savedPrefs = getListPrefs('users');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortKey, setSortKey] = useState('name');
-  const [sortDirection, setSortDirection] = useState('asc');
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'tile'
+  const [sortKey, setSortKey] = useState(savedPrefs.sortKey || 'name');
+  const [sortDirection, setSortDirection] = useState(savedPrefs.sortDir || 'asc');
+  const [viewMode, setViewMode] = useState(savedPrefs.view || 'list'); // 'list' or 'tile'
+
+  // Persist user-level preferences to user config
+  useEffect(() => {
+    setListPrefs('users', { view: viewMode, sortKey, sortDir: sortDirection });
+  }, [viewMode, sortKey, sortDirection]);
 
   // Get color for capability tag
   const getCapabilityColor = (capability) => {

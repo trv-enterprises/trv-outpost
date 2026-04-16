@@ -30,6 +30,7 @@ import {
 import apiClient, { API_BASE } from './api/client';
 import { isElectron } from './utils/electron';
 import { getCredentials, clearCredentials } from './utils/secureStorage';
+import { hydrateListPrefs } from './utils/listPrefs';
 import LoginPage from './pages/LoginPage';
 import ConnectionsPage from './pages/ConnectionsPage';
 import ConnectionDetailPage from './pages/ConnectionDetailPage';
@@ -113,6 +114,8 @@ function AppContent({ onDisconnect }) {
     try {
       const capabilities = await apiClient.getCurrentUser();
       setUserCapabilities(capabilities);
+      // Hydrate persisted list prefs from user config (view mode, sort, filters per list page)
+      hydrateListPrefs();
       // If current mode is not allowed for this user, switch to VIEW
       if (currentMode === MODES.DESIGN && !capabilities.can_design) {
         handleModeChange(MODES.VIEW);

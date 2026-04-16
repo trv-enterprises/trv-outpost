@@ -22,7 +22,7 @@ import './MQTTTopicSelector.scss';
  * select one or more topics. Selected topics are joined with commas
  * and passed to onQueryChange as the query raw string.
  */
-function MQTTTopicSelector({ datasourceId, onQueryChange, initialQuery = '#' }) {
+function MQTTTopicSelector({ datasourceId, onQueryChange, initialQuery = '#', singleSelect = false }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -61,6 +61,10 @@ function MQTTTopicSelector({ datasourceId, onQueryChange, initialQuery = '#' }) 
 
   const toggleTopic = (topic) => {
     setSelectedTopics(prev => {
+      if (singleSelect) {
+        // Single select: toggle off if already selected, otherwise replace
+        return prev.includes(topic) ? [] : [topic];
+      }
       if (prev.includes(topic)) {
         return prev.filter(t => t !== topic);
       }
@@ -71,7 +75,7 @@ function MQTTTopicSelector({ datasourceId, onQueryChange, initialQuery = '#' }) 
   const addCustomTopic = () => {
     const trimmed = customTopic.trim();
     if (trimmed && !selectedTopics.includes(trimmed)) {
-      setSelectedTopics(prev => [...prev, trimmed]);
+      setSelectedTopics(singleSelect ? [trimmed] : prev => [...prev, trimmed]);
       setCustomTopic('');
     }
   };

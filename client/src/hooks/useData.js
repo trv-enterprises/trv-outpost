@@ -33,7 +33,68 @@ import { queryData } from '../api/dataClient';
 import apiClient, { API_BASE } from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 
-export function useData({ datasourceId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null }) {
+/**
+ * Extract a nested value from an object using dot-notation path.
+ * E.g., getNestedValue({a: {b: {c: 1}}}, 'a.b.c') → 1
+ */
+function getNestedValue(obj, path) {
+  if (!path || !obj) return obj;
+  const parts = path.split('.');
+  let current = obj;
+  for (const part of parts) {
+    if (current == null || typeof current !== 'object') return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+/**
+ * Apply parser config to a streaming record.
+ * Extracts nested data from envelope formats (e.g., ts-store MQTT: {type, timestamp, data: {...}})
+ * and normalizes timestamps.
+ */
+function applyParser(record, parser) {
+  if (!parser) return record;
+
+  let result = { ...record };
+
+  // Extract and normalize timestamp BEFORE extracting data path
+  // (timestamp is often at the envelope level, not inside data)
+  if (parser.timestampField) {
+    let ts = getNestedValue(record, parser.timestampField);
+    if (ts != null) {
+      if (typeof ts === 'number') {
+        const scale = parser.timestampScale;
+        if (scale === 'ns') ts = ts / 1e9;
+        else if (scale === 'ms') ts = ts / 1e3;
+        else if (!scale) {
+          // Auto-detect: >1e15 = ns, >1e12 = ms, else seconds
+          if (ts > 1e15) ts = ts / 1e9;
+          else if (ts > 1e12) ts = ts / 1e3;
+        }
+      }
+      // Will be set on the result after data extraction
+      var parsedTimestamp = ts;
+    }
+  }
+
+  // Extract nested data at data_path
+  if (parser.dataPath) {
+    const nested = getNestedValue(record, parser.dataPath);
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      result = { ...nested };
+    }
+  }
+
+  // Apply the extracted timestamp to the result
+  if (parsedTimestamp != null) {
+    result.timestamp = parsedTimestamp;
+  }
+
+  return result;
+}
+
+export function useData({ datasourceId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null, parser = null }) {
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +121,10 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
   // Serialize query and backfill for stable dependency comparison
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
   const backfillKey = useMemo(() => JSON.stringify(backfill), [backfill]);
+  // Serialize parser for stable dependency — parser is an object that may be recreated each render
+  const parserKey = useMemo(() => JSON.stringify(parser), [parser]);
+  // Stable parser reference — only changes when content changes
+  const stableParser = useMemo(() => parser, [parserKey]);
 
   // Fetch datasource type on mount
   useEffect(() => {
@@ -141,13 +206,15 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
   const processStreamRecord = useCallback((record) => {
     if (!mountedRef.current) return;
 
-    pendingRecordsRef.current.push(record);
+    // Apply parser to extract data from envelope formats (e.g., ts-store MQTT)
+    const parsed = applyParser(record, stableParser);
+    pendingRecordsRef.current.push(parsed);
 
     // Schedule a single flush per animation frame
     if (!flushRAFRef.current) {
       flushRAFRef.current = requestAnimationFrame(flushPendingRecords);
     }
-  }, [flushPendingRecords]);
+  }, [flushPendingRecords, stableParser]);
 
   // Serialize timeBucket for stable dependency comparison
   const timeBucketKey = useMemo(() => JSON.stringify(timeBucket), [timeBucket]);
@@ -317,14 +384,18 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       // Use shared connection manager for raw streams
       const manager = StreamConnectionManager.getInstance();
 
-      // First, load any buffered data from the manager
-      const bufferedRecords = manager.getBuffer(datasourceId, topicFilter);
-      if (bufferedRecords.length > 0) {
-        bufferedRecords.forEach(record => {
-          if (mountedRef.current) {
-            processStreamRecord(record);
-          }
-        });
+      // First, load any buffered data from the manager.
+      // Skip buffer replay when backfill is configured — the REST backfill query is
+      // the authoritative source for historical data within the sliding window.
+      if (!backfill) {
+        const bufferedRecords = manager.getBuffer(datasourceId, topicFilter);
+        if (bufferedRecords.length > 0) {
+          bufferedRecords.forEach(record => {
+            if (mountedRef.current) {
+              processStreamRecord(record);
+            }
+          });
+        }
       }
 
       // Subscribe to the shared connection (with optional topic filter for MQTT)
@@ -337,6 +408,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
         },
         {
           topics: topicFilter,
+          skipBufferReplay: !!backfill,
           onConnect: () => {
             if (mountedRef.current) {
               handleConnectionSuccess();

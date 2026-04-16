@@ -303,6 +303,110 @@
       gap: spacing.$spacing-03;
     }
 
+    // MQTT section — topic selector + parser config box
+    .mqtt-section {
+      margin-top: spacing.$spacing-03;
+      display: flex;
+      flex-direction: column;
+      gap: spacing.$spacing-05;
+
+      .parser-config-box {
+        padding: spacing.$spacing-05;
+        background-color: rgba(0, 0, 0, 0.15);
+        border: 1px solid var(--cds-border-subtle-01);
+        border-radius: 4px;
+
+        h4 {
+          margin-bottom: spacing.$spacing-02;
+        }
+
+        .parser-fields-row {
+          display: grid;
+          grid-template-columns: 1fr 2fr 1fr;
+          gap: spacing.$spacing-04;
+          margin-bottom: spacing.$spacing-05;
+
+          @media (max-width: 672px) {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .parse-preview-section {
+          border-top: 1px solid var(--cds-border-subtle-01);
+          padding-top: spacing.$spacing-04;
+
+          h5 {
+            color: var(--cds-text-primary);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            margin-bottom: spacing.$spacing-02;
+          }
+
+          .preview-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: spacing.$spacing-04;
+
+            @media (max-width: 672px) {
+              grid-template-columns: 1fr;
+            }
+          }
+
+          .preview-column {
+            display: flex;
+            flex-direction: column;
+          }
+
+          .preview-label {
+            font-size: 0.75rem;
+            color: var(--cds-text-secondary);
+            margin-bottom: spacing.$spacing-02;
+
+            .path-badge {
+              display: inline-block;
+              padding: 1px 6px;
+              background-color: #0f62fe;
+              color: #fff;
+              border-radius: 8px;
+              font-size: 0.625rem;
+              margin-left: spacing.$spacing-02;
+            }
+          }
+
+          .preview-textarea {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+          }
+
+          .preview-output {
+            padding: spacing.$spacing-03;
+            background-color: var(--cds-field-01);
+            border-radius: 4px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            min-height: 160px;
+            margin: 0;
+            overflow: auto;
+            white-space: pre-wrap;
+
+            &.preview-empty { color: var(--cds-text-secondary); }
+            &.preview-success { color: #24a148; }
+            &.preview-error { color: #da1e28; }
+          }
+
+          .preview-fields {
+            margin-top: spacing.$spacing-02;
+            font-size: 0.75rem;
+            color: var(--cds-text-secondary);
+            display: flex;
+            align-items: center;
+            gap: spacing.$spacing-02;
+            flex-wrap: wrap;
+          }
+        }
+      }
+    }
+
     // Socket capture info section
     .socket-capture-info {
       margin-top: spacing.$spacing-03;

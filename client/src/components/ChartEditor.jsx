@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo, useImperativeHandle, forwardRef, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
 import {
@@ -24,7 +24,7 @@ import {
   Slider,
   Modal
 } from '@carbon/react';
-import { Play, Add, TrashCan, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit } from '@carbon/icons-react';
+import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
 import { API_BASE } from '../api/client';
 import SQLQueryBuilder from './SQLQueryBuilder';
@@ -275,6 +275,63 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [mqttSelectedTopic, setMqttSelectedTopic] = useState('');
   const [mqttSampling, setMqttSampling] = useState(false);
 
+  // Stream parser config (per-component data extraction for MQTT/streaming)
+  const [parserPreset, setParserPreset] = useState('none'); // 'none', 'tsstore_mqtt', 'custom'
+  const [parserDataPath, setParserDataPath] = useState('');
+  const [parserTimestampField, setParserTimestampField] = useState('');
+  const [parserTimestampScale, setParserTimestampScale] = useState(''); // 's', 'ms', 'ns', or '' for auto
+  const [parserSampleInput, setParserSampleInput] = useState(''); // Sample JSON for testing parser
+  const mqttRawRecordsRef = useRef([]); // Raw MQTT records for re-parsing when parser changes
+
+  // Helper: apply parser config to a raw record
+  const applyParserToRaw = useCallback((raw) => {
+    if (parserPreset === 'none' || (!parserDataPath && !parserTimestampField)) return { ...raw };
+    const result = {};
+    if (parserTimestampField) {
+      const parts = parserTimestampField.split('.');
+      let ts = raw; for (const p of parts) { ts = ts?.[p]; }
+      if (ts != null && typeof ts === 'number') {
+        if (parserTimestampScale === 'ns') ts = ts / 1e9;
+        else if (parserTimestampScale === 'ms') ts = ts / 1e3;
+        else if (!parserTimestampScale) { if (ts > 1e15) ts = ts / 1e9; else if (ts > 1e12) ts = ts / 1e3; }
+        result.timestamp = ts;
+      }
+    }
+    if (parserDataPath) {
+      const parts = parserDataPath.split('.');
+      let nested = raw; for (const p of parts) { nested = nested?.[p]; }
+      if (nested && typeof nested === 'object') Object.assign(result, nested);
+    }
+    return Object.keys(result).length > 0 ? result : { ...raw };
+  }, [parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+
+  // When sample input or parser config changes, extract columns and rebuild query results
+  useEffect(() => {
+    if (!parserSampleInput.trim()) return;
+    try {
+      const parsed = applyParserToRaw(JSON.parse(parserSampleInput));
+      const cols = Object.keys(parsed);
+      if (cols.length > 0) {
+        setAvailableColumns(cols);
+        if (!xAxisColumn) setXAxisColumn(cols[0]);
+        if (yAxisColumns.length === 0 && cols.length > 1) setYAxisColumns([cols[1]]);
+      }
+    } catch { /* invalid JSON, ignore */ }
+
+    // Rebuild preview table from stored raw MQTT records if available
+    const rawRecords = mqttRawRecordsRef.current;
+    if (rawRecords.length > 0) {
+      const processedRecords = rawRecords.map(applyParserToRaw);
+      const columns = Object.keys(processedRecords[0]);
+      const rows = processedRecords.map(r => columns.map(c => r[c]));
+      setPreviewData({ columns, rows, metadata: { row_count: rows.length } });
+      if (columns.length > 0) {
+        setAvailableColumns(columns);
+      }
+    }
+  }, [parserSampleInput, applyParserToRaw]);
+  const mqttCaptureRef = useRef(null); // EventSource ref for cancellable MQTT capture
+
   // Preview data
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -284,6 +341,8 @@ const ChartEditor = forwardRef(function ChartEditor({
   // Code editor
   const [componentCode, setComponentCode] = useState('');
   const [showCustomCode, setShowCustomCode] = useState(false);
+  const [customCodeWarningOpen, setCustomCodeWarningOpen] = useState(false);
+  const customCodeWarningShownRef = useRef(false); // Show warning only once per chart load
 
   // Chart-specific options (gauge thresholds, pie radius, etc.)
   const [chartOptions, setChartOptions] = useState({
@@ -444,6 +503,24 @@ const ChartEditor = forwardRef(function ChartEditor({
       setTimeBucketFunction(tb?.function || 'avg');
       setTimeBucketValueCols(tb?.value_cols || []);
       setTimeBucketTimestampCol(tb?.timestamp_col || '');
+      // Parser initialization (per-component data extraction for streaming)
+      const p = chart.data_mapping?.parser;
+      if (p?.data_path || p?.timestamp_field) {
+        setParserDataPath(p.data_path || '');
+        setParserTimestampField(p.timestamp_field || '');
+        setParserTimestampScale(p.timestamp_scale || '');
+        // Detect preset
+        if (p.data_path === 'data' && p.timestamp_field === 'timestamp' && p.timestamp_scale === 'ns') {
+          setParserPreset('tsstore_mqtt');
+        } else {
+          setParserPreset('custom');
+        }
+      } else {
+        setParserPreset('none');
+        setParserDataPath('');
+        setParserTimestampField('');
+        setParserTimestampScale('');
+      }
       // Debug logging for time bucket load
       if (tb) {
         console.log('[ChartEditor] Loading time_bucket:', { tb, hasValidTimeBucket });
@@ -494,6 +571,8 @@ const ChartEditor = forwardRef(function ChartEditor({
       }
       setComponentCode(chart.component_code || '');
       setShowCustomCode(chart.use_custom_code ?? (chart.chart_type === 'custom'));
+      // Reset warning ref when loading a new chart so the warning fires on next config change
+      customCodeWarningShownRef.current = false;
       // Initialize chart options from saved data
       if (chart.options) {
         setChartOptions(prev => ({
@@ -549,6 +628,17 @@ const ChartEditor = forwardRef(function ChartEditor({
     });
     setHasChanges(currentState !== initialState);
   }, [name, description, tags, chartType, selectedDatasourceId, queryRaw, xAxisColumn, yAxisColumns, filters, showCustomCode, initialState]);
+
+  // Show warning modal when user changes config-affecting fields on a chart with custom code.
+  // Fires once per chart load. Config changes don't render unless user switches to generated code.
+  useEffect(() => {
+    if (!showCustomCode) return; // No custom code, no warning needed
+    if (customCodeWarningShownRef.current) return; // Already shown for this load
+    if (!hasChanges) return; // No changes yet
+    // Only trigger for config-shape changes (not name/description/tags which don't affect rendering)
+    customCodeWarningShownRef.current = true;
+    setCustomCodeWarningOpen(true);
+  }, [hasChanges, showCustomCode, chartType, selectedDatasourceId, queryRaw, xAxisColumn, yAxisColumns, filters]);
 
   // Notify parent of validity changes
   useEffect(() => {
@@ -754,6 +844,108 @@ const ChartEditor = forwardRef(function ChartEditor({
 
     setPreviewLoading(true);
     setPreviewError(null);
+    setPreviewData(null); // Clear previous results on every new capture/query
+
+    // Cancel any in-progress MQTT capture
+    if (mqttCaptureRef.current) {
+      mqttCaptureRef.current.close();
+      mqttCaptureRef.current = null;
+    }
+
+    // MQTT: capture from SSE stream on the frontend (no REST query support for MQTT)
+    // Stays open until data arrives + 2s buffer, or user clicks "Stop Capture", or 5 min max timeout.
+    // NOTE: This block is outside try/catch/finally so setPreviewLoading stays true until finishCapture.
+    if (isMQTT) {
+        const topicParam = queryRaw ? `&topics=${encodeURIComponent(queryRaw)}` : '';
+        const sseUrl = `${API_BASE}/api/connections/${selectedDatasourceId}/stream?user_id=${apiClient.getCurrentUserGuid() || ''}${topicParam}`;
+        const es = new EventSource(sseUrl);
+        mqttCaptureRef.current = es;
+        const rawRecords = [];
+        const records = [];
+
+        const activeParser = parserPreset !== 'none' && (parserDataPath || parserTimestampField)
+          ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
+          : null;
+
+        const applyParserToRecord = (raw) => {
+          if (!activeParser) return { ...raw };
+          const parsed = {};
+          if (activeParser.timestampField) {
+            const parts = activeParser.timestampField.split('.');
+            let ts = raw; for (const p of parts) { ts = ts?.[p]; }
+            if (ts != null && typeof ts === 'number') {
+              if (activeParser.timestampScale === 'ns') ts = ts / 1e9;
+              else if (activeParser.timestampScale === 'ms') ts = ts / 1e3;
+              else if (!activeParser.timestampScale) { if (ts > 1e15) ts = ts / 1e9; else if (ts > 1e12) ts = ts / 1e3; }
+              parsed.timestamp = ts;
+            }
+          }
+          if (activeParser.dataPath) {
+            const parts = activeParser.dataPath.split('.');
+            let nested = raw; for (const p of parts) { nested = nested?.[p]; }
+            if (nested && typeof nested === 'object') Object.assign(parsed, nested);
+          }
+          return Object.keys(parsed).length > 0 ? parsed : { ...raw };
+        };
+
+        let firstRecordTimer = null;
+
+        const finishCapture = () => {
+          es.close();
+          mqttCaptureRef.current = null;
+          if (firstRecordTimer) clearTimeout(firstRecordTimer);
+
+          if (rawRecords.length === 0) {
+            setPreviewError('No messages received. The topic may not be publishing or try pasting a sample above.');
+            setPreviewLoading(false);
+            return;
+          }
+
+          // Store raw records for re-parsing when parser changes
+          mqttRawRecordsRef.current = rawRecords;
+
+          // Populate sample input with first raw record for parser testing
+          setParserSampleInput(JSON.stringify(rawRecords[0], null, 2));
+
+          // Build preview from parsed (or raw) records
+          const displayRecords = records.length > 0 ? records : rawRecords;
+          const columns = Object.keys(displayRecords[0]);
+          const rows = displayRecords.map(r => columns.map(c => r[c]));
+          setPreviewData({ columns, rows, metadata: { row_count: rows.length } });
+          if (columns.length > 0) {
+            setAvailableColumns(columns);
+            if (!xAxisColumn) setXAxisColumn(columns[0]);
+            if (yAxisColumns.length === 0 && columns.length > 1) setYAxisColumns([columns[1]]);
+          }
+          setPreviewLoading(false);
+        };
+
+        es.addEventListener('record', (event) => {
+          try {
+            const raw = JSON.parse(event.data);
+            rawRecords.push(raw);
+            records.push(applyParserToRecord(raw));
+
+            if (rawRecords.length === 1) {
+              firstRecordTimer = setTimeout(finishCapture, 2000);
+            }
+          } catch { /* ignore parse errors */ }
+        });
+
+        es.onerror = () => {
+          if (mqttCaptureRef.current === null) {
+            finishCapture();
+          }
+        };
+
+        setTimeout(() => {
+          if (mqttCaptureRef.current === es) {
+            finishCapture();
+          }
+        }, 300000); // 5 minute max timeout
+
+      return; // Don't fall through to the REST query path
+    }
 
     try {
       // Build query params based on datasource type
@@ -861,8 +1053,12 @@ const ChartEditor = forwardRef(function ChartEditor({
       ? { duration: slidingWindowDuration, timestampCol: slidingWindowTimestampCol }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming, slidingWindow);
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol]);
+    const activeParser = parserPreset !== 'none' && (parserDataPath || parserTimestampField)
+      ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
+      : null;
+
+    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser);
+  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1016,7 +1212,12 @@ const ChartEditor = forwardRef(function ChartEditor({
         sort_by: sortBy || '',
         sort_order: sortOrder || 'desc',
         limit: limitRows || 0,
-        column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null
+        column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
+        parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
+          data_path: parserDataPath || undefined,
+          timestamp_field: parserTimestampField || undefined,
+          timestamp_scale: parserTimestampScale || undefined
+        } : null
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
@@ -1172,6 +1373,36 @@ const ChartEditor = forwardRef(function ChartEditor({
         );
       })()}
 
+      {/* Custom Code Warning Modal — fires when user changes config on a chart with custom code */}
+      {customCodeWarningOpen && createPortal(
+        <Modal
+          open
+          onRequestClose={() => setCustomCodeWarningOpen(false)}
+          onRequestSubmit={() => {
+            // Switch to generated code — config changes will take effect, custom code will be overwritten on save
+            setShowCustomCode(false);
+            setCustomCodeWarningOpen(false);
+          }}
+          modalHeading="Custom Code Will Be Overwritten"
+          primaryButtonText="Switch to Generated Code"
+          secondaryButtonText="Keep Custom Code"
+          danger
+          size="sm"
+        >
+          <p style={{ marginBottom: '1rem' }}>
+            This chart has custom code (likely written by the AI agent). Your configuration changes
+            will not be reflected in the rendered chart unless you switch to generated code.
+          </p>
+          <p>
+            <strong>Switch to Generated Code:</strong> Apply your config changes — the custom code will be regenerated on save (custom code lost).
+          </p>
+          <p style={{ marginTop: '0.5rem' }}>
+            <strong>Keep Custom Code:</strong> Custom code stays — your config changes save to the record but won't render until you switch.
+          </p>
+        </Modal>,
+        document.body
+      )}
+
       {/* Chart Type Selection Modal — portaled to body to escape parent modal */}
       {chartTypeModalOpen && createPortal(
         <Modal
@@ -1309,9 +1540,10 @@ const ChartEditor = forwardRef(function ChartEditor({
                           selectedIndex={queryMode === 'visual' ? 0 : 1}
                           onChange={(e) => setQueryMode(e.name)}
                           className="query-mode-switcher"
+                          style={{ minWidth: '200px' }}
                         >
-                          <Switch name="visual" text="Topics" />
-                          <Switch name="raw" text="Raw" />
+                          <Switch name="visual" text="Topic List" />
+                          <Switch name="raw" text="Manual" />
                         </ContentSwitcher>
                       )}
                       {selectedDatasource.type === 'edgelake' && (
@@ -1335,6 +1567,32 @@ const ChartEditor = forwardRef(function ChartEditor({
                         >
                           {previewLoading ? 'Capturing...' : 'Capture Sample (5s)'}
                         </Button>
+                      ) : isMQTT ? (
+                        previewLoading ? (
+                          <Button
+                            kind="danger--tertiary"
+                            size="sm"
+                            renderIcon={Close}
+                            onClick={() => {
+                              // Cancel the MQTT capture
+                              if (mqttCaptureRef.current) {
+                                mqttCaptureRef.current.close();
+                                mqttCaptureRef.current = null;
+                              }
+                            }}
+                          >
+                            Stop Capture
+                          </Button>
+                        ) : (
+                          <Button
+                            kind="tertiary"
+                            size="sm"
+                            renderIcon={Play}
+                            onClick={fetchPreviewData}
+                          >
+                            Capture Sample
+                          </Button>
+                        )
                       ) : isTSStore ? (
                         <Button
                           kind="tertiary"
@@ -1369,6 +1627,167 @@ const ChartEditor = forwardRef(function ChartEditor({
                         hideCloseButton
                         lowContrast
                       />
+                    </div>
+                  ) : isMQTT ? (
+                    <div className="mqtt-section">
+                      {/* MQTT Topic Selector — visual mode shows topic list, raw mode shows text input */}
+                      {queryMode === 'visual' ? (
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem' }}>
+                          <Select
+                            id="mqtt-topic-dropdown"
+                            labelText="MQTT Topic"
+                            value={queryRaw || ''}
+                            onChange={(e) => setQueryRaw(e.target.value)}
+                            disabled={mqttTopicsLoading}
+                          >
+                            <SelectItem value="" text={mqttTopicsLoading ? 'Loading topics...' : 'Select a topic...'} />
+                            {mqttTopics.map(t => <SelectItem key={t} value={t} text={t} />)}
+                          </Select>
+                          <IconButton
+                            kind="ghost"
+                            size="sm"
+                            label="Refresh topics"
+                            onClick={() => {
+                              setMqttTopicsLoading(true);
+                              apiClient.getMQTTTopics(selectedDatasourceId).then(result => {
+                                setMqttTopics(result.topics || []);
+                              }).catch(err => console.error('Failed to discover MQTT topics:', err))
+                                .finally(() => setMqttTopicsLoading(false));
+                            }}
+                            disabled={mqttTopicsLoading}
+                          >
+                            <Renew size={16} />
+                          </IconButton>
+                        </div>
+                      ) : (
+                        <TextInput
+                          id="mqtt-raw-topic"
+                          labelText="MQTT Topic"
+                          value={queryRaw}
+                          onChange={(e) => setQueryRaw(e.target.value)}
+                          placeholder="e.g., sensors/temperature or home/living-room/status"
+                          helperText="Enter the MQTT topic to subscribe to"
+                          size="md"
+                        />
+                      )}
+
+                      {/* Data Parser Configuration — bordered box matching WebSocket connection editor style */}
+                      <div className="parser-config-box">
+                        <h4>Data Parser Configuration</h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', marginBottom: '0.75rem' }}>
+                          Configure how to extract data fields from incoming messages.
+                        </p>
+
+                        <div className="parser-fields-row">
+                          <Select
+                            id="parser-preset"
+                            labelText="Preset"
+                            value={parserPreset}
+                            onChange={(e) => {
+                              const preset = e.target.value;
+                              setParserPreset(preset);
+                              if (preset === 'tsstore_mqtt') {
+                                setParserDataPath('data');
+                                setParserTimestampField('timestamp');
+                                setParserTimestampScale('ns');
+                              } else if (preset === 'none') {
+                                setParserDataPath('');
+                                setParserTimestampField('');
+                                setParserTimestampScale('');
+                              }
+                            }}
+                          >
+                            <SelectItem value="none" text="None (flat JSON)" />
+                            <SelectItem value="tsstore_mqtt" text="ts-store MQTT" />
+                            <SelectItem value="custom" text="Custom" />
+                          </Select>
+                          <TextInput
+                            id="parser-data-path"
+                            labelText="Data Path"
+                            value={parserDataPath}
+                            onChange={(e) => { setParserDataPath(e.target.value); if (parserPreset !== 'none') setParserPreset('custom'); }}
+                            placeholder="data, payload.readings"
+                            helperText="Path to the data object containing metrics"
+                            size="md"
+                            disabled={parserPreset === 'none'}
+                          />
+                          <TextInput
+                            id="parser-timestamp-field"
+                            labelText="Timestamp Field"
+                            value={parserTimestampField}
+                            onChange={(e) => { setParserTimestampField(e.target.value); if (parserPreset !== 'none') setParserPreset('custom'); }}
+                            placeholder="timestamp"
+                            helperText="Path to the timestamp (extracted before data path)"
+                            size="md"
+                            disabled={parserPreset === 'none'}
+                          />
+                        </div>
+
+                        {/* Test Parser — sample input + parsed output side by side */}
+                        <div className="parse-preview-section">
+                          <h5>Test Parser</h5>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', marginBottom: '0.5rem' }}>
+                            Paste a sample message to test the data path extraction. First captured message auto-populates this field.
+                          </p>
+                          <div className="preview-columns">
+                            <div className="preview-column">
+                              <label className="preview-label">Sample Input (JSON)</label>
+                              <TextArea
+                                id="parser-sample-input"
+                                value={parserSampleInput}
+                                onChange={(e) => setParserSampleInput(e.target.value)}
+                                rows={8}
+                                className="preview-textarea"
+                                placeholder={'{\n  "type": "data",\n  "timestamp": 1707012345678901234,\n  "data": {\n    "temperature": 72.5,\n    "humidity": 45.2\n  }\n}'}
+                              />
+                            </div>
+                            <div className="preview-column">
+                              <label className="preview-label">
+                                Extracted Output {parserDataPath && <span className="path-badge">path: {parserDataPath}</span>}
+                              </label>
+                              {(() => {
+                                if (!parserSampleInput.trim()) return <pre className="preview-output preview-empty">Paste a sample message or capture from stream</pre>;
+                                try {
+                                  let parsed = JSON.parse(parserSampleInput);
+                                  if (parserPreset !== 'none' && (parserDataPath || parserTimestampField)) {
+                                    const result = {};
+                                    if (parserTimestampField) {
+                                      const parts = parserTimestampField.split('.');
+                                      let ts = parsed;
+                                      for (const p of parts) { ts = ts?.[p]; }
+                                      if (ts != null && typeof ts === 'number') {
+                                        if (parserTimestampScale === 'ns') ts = ts / 1e9;
+                                        else if (parserTimestampScale === 'ms') ts = ts / 1e3;
+                                        else if (!parserTimestampScale) { if (ts > 1e15) ts = ts / 1e9; else if (ts > 1e12) ts = ts / 1e3; }
+                                        result.timestamp = ts;
+                                      }
+                                    }
+                                    if (parserDataPath) {
+                                      const parts = parserDataPath.split('.');
+                                      let nested = parsed;
+                                      for (const p of parts) { nested = nested?.[p]; }
+                                      if (nested && typeof nested === 'object') Object.assign(result, nested);
+                                    }
+                                    parsed = Object.keys(result).length > 0 ? result : parsed;
+                                  }
+                                  const cols = Object.keys(parsed);
+                                  // Show extracted fields as tags
+                                  return (
+                                    <>
+                                      <pre className="preview-output preview-success">{JSON.stringify(parsed, null, 2)}</pre>
+                                      <div className="preview-fields">
+                                        Fields: {cols.map(c => <Tag key={c} type="cool-gray" size="sm">{c}</Tag>)}
+                                      </div>
+                                    </>
+                                  );
+                                } catch (err) {
+                                  return <pre className="preview-output preview-error">Parse error: {err.message}</pre>;
+                                }
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : isTSStore ? (
                     <div className="tsstore-query-section">
@@ -2707,23 +3126,32 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null) {
+function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', chartName = '' } = transforms;
-  // Streaming connections don't need refreshInterval — data arrives via SSE
-  const refreshLine = isStreaming ? '' : '\n    refreshInterval: 30000';
-
-  // Backfill: for streaming charts with a sliding window, pre-populate the buffer
-  // by querying the REST endpoint for historical data matching the window duration
-  let backfillLine = '';
+  // Build extra useData options (refreshInterval, backfill) — each prefixed with `,\n    `
+  const extraOptions = [];
+  if (!isStreaming) {
+    extraOptions.push('refreshInterval: 30000');
+  }
   if (isStreaming && slidingWindow?.duration > 0) {
     // Convert seconds to ts-store since format (e.g., 300 -> "5m", 3600 -> "1h", 30 -> "30s")
     const dur = slidingWindow.duration;
     const sinceStr = dur >= 3600 && dur % 3600 === 0 ? `${dur / 3600}h`
       : dur >= 60 && dur % 60 === 0 ? `${dur / 60}m`
       : `${dur}s`;
-    backfillLine = `,\n    backfill: { raw: 'since:${sinceStr}', type: '${queryType}', params: {} }`;
+    extraOptions.push(`backfill: { raw: 'since:${sinceStr}', type: '${queryType}', params: {} }`);
   }
+  if (parserConfig && (parserConfig.dataPath || parserConfig.timestampField)) {
+    const parts = [];
+    if (parserConfig.dataPath) parts.push(`dataPath: '${parserConfig.dataPath}'`);
+    if (parserConfig.timestampField) parts.push(`timestampField: '${parserConfig.timestampField}'`);
+    if (parserConfig.timestampScale) parts.push(`timestampScale: '${parserConfig.timestampScale}'`);
+    extraOptions.push(`parser: { ${parts.join(', ')} }`);
+  }
+  const extraOptionsLine = extraOptions.length > 0
+    ? ',\n    ' + extraOptions.join(',\n    ')
+    : '';
 
   // Streaming charts destructure extra fields and show "Waiting for data..." instead of "No data"
   const useDataFields = isStreaming
@@ -2814,7 +3242,7 @@ function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xA
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}${backfillLine}
+    }${extraOptionsLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
@@ -2857,7 +3285,7 @@ ${xAxisFormatCode}
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}${backfillLine}
+    }${extraOptionsLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
@@ -2985,7 +3413,7 @@ ${transformsConfig}
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}${backfillLine}
+    }${extraOptionsLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
@@ -3074,7 +3502,7 @@ ${transformsConfig}
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },${refreshLine}${backfillLine}
+    }${extraOptionsLine}
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
