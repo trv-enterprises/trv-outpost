@@ -472,10 +472,14 @@ func (h *FrigateHandler) GetInfo(c *gin.Context) {
 }
 
 // WebSocket upgrader for live stream proxy
+// Subprotocols includes "null" and "binary" to satisfy JSMPEG's Sec-WebSocket-Protocol
+// header — Chromium 147+ strictly enforces RFC 6455 and rejects the handshake if the
+// server doesn't echo back a matching subprotocol.
 var frigateWSUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
 	CheckOrigin:     func(r *http.Request) bool { return true },
+	Subprotocols:    []string{"null", "binary"},
 }
 
 // ProxyLiveStream proxies a JSMPEG WebSocket stream from Frigate to the browser
