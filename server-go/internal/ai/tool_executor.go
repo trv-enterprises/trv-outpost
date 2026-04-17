@@ -340,7 +340,8 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		XAxisLabel   *string   `json:"x_axis_label,omitempty"`
 		XAxisFormat  *string   `json:"x_axis_format,omitempty"`
 		YAxis        *[]string `json:"y_axis,omitempty"`
-		YAxisLabel   *string   `json:"y_axis_label,omitempty"`
+		YAxisLabel   *string   `json:"y_axis_label,omitempty"`   // legacy single label
+		YAxisLabels  *[]string `json:"y_axis_labels,omitempty"`  // per-column labels (preferred)
 		GroupBy      *string   `json:"group_by,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
@@ -374,10 +375,26 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		chart.DataMapping.XAxisFormat = *params.XAxisFormat
 	}
 	if params.YAxis != nil {
-		chart.DataMapping.YAxis = *params.YAxis
+		// Cap y_axis at 2 columns for chart types that render with axes.
+		// Beyond 2 there's no good rendering — no place for axis names, tick
+		// values overlap, and color coding breaks down. Two separate charts
+		// beat one cluttered one. Dataview (tabular) is the exception; any
+		// column count is fine there.
+		ys := *params.YAxis
+		if chart.ChartType != "dataview" && len(ys) > 2 {
+			ys = ys[:2]
+		}
+		chart.DataMapping.YAxis = ys
 	}
 	if params.YAxisLabel != nil {
 		chart.DataMapping.YAxisLabel = *params.YAxisLabel
+	}
+	if params.YAxisLabels != nil {
+		chart.DataMapping.YAxisLabels = *params.YAxisLabels
+		// Keep the legacy singular in sync for back-compat consumers.
+		if len(*params.YAxisLabels) > 0 {
+			chart.DataMapping.YAxisLabel = (*params.YAxisLabels)[0]
+		}
 	}
 	if params.GroupBy != nil {
 		chart.DataMapping.GroupBy = *params.GroupBy

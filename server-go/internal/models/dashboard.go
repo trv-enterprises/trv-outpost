@@ -74,10 +74,11 @@ type DataAggregation struct {
 // @Description Mapping configuration from data columns to chart axes/series
 type ChartDataMapping struct {
 	XAxis         string           `json:"x_axis" bson:"x_axis"`                     // Column for X axis (categories)
-	XAxisLabel    string           `json:"x_axis_label" bson:"x_axis_label"`         // Label for X axis (e.g., "Time", "Date")
+	XAxisLabel    string           `json:"x_axis_label" bson:"x_axis_label"`         // Label for X axis (e.g., "Time", "Date"). Empty = render no x-axis name; most charts are time-based and don't need one.
 	XAxisFormat   string           `json:"x_axis_format" bson:"x_axis_format"`       // Format for X axis values: chart, chart_time, chart_date, chart_datetime, short, long, etc.
 	YAxis         []string         `json:"y_axis" bson:"y_axis"`                     // Columns for Y axis (values/series)
-	YAxisLabel    string           `json:"y_axis_label" bson:"y_axis_label"`         // Label for Y axis (e.g., "Temperature (°F)", "Count")
+	YAxisLabel    string           `json:"y_axis_label" bson:"y_axis_label"`         // Legacy single y-axis label — kept for backwards compat. Prefer YAxisLabels (plural) going forward; this is populated from YAxisLabels[0] on save.
+	YAxisLabels   []string         `json:"y_axis_labels,omitempty" bson:"y_axis_labels,omitempty"` // Per-column y-axis labels. When shorter than YAxis, missing entries fall back to the column name. Dual-axis charts use [0] for the left axis and [1] for the right. Three+ y-columns suppress axis names entirely (series legend carries the identity).
 	Series        string           `json:"series" bson:"series"`                     // Column that identifies each series (e.g., "location") - used for time bucket partitioning
 	GroupBy       string           `json:"group_by" bson:"group_by"`                 // Column to group/split series by (client-side grouping)
 	LabelCol      string           `json:"label_col" bson:"label_col"`               // Column for labels

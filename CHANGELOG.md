@@ -6,6 +6,49 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] — 2026-04-17
+
+### Added
+
+- **Per-column Y-axis label overrides** (`data_mapping.y_axis_labels`, a
+  parallel array to `y_axis`). For single-y charts the override renames
+  the axis `name`. For dual-y charts the override renames the series in
+  the legend at the top of the chart (axis itself remains nameless so
+  legend toggling hides the label with its line). Raw DB/MQTT column
+  names are often terse — this gives users a place to rename them.
+  Legacy `y_axis_label` (singular) is kept populated from index [0] for
+  back-compat.
+
+### Changed
+
+- **Y-axis column count capped at 2** for chart types that render with
+  axes (dataview/table unaffected). Enforced in three places: the
+  ChartEditor MultiSelect clamps selection to 2, the `update_data_mapping`
+  AI tool truncates any y_axis array longer than 2, and the AI system
+  prompt now instructs splitting into separate charts when more than 2
+  values need to be shown together.
+- **Dual-y axis names removed from the sides**; colored tick labels and
+  axis lines remain. Rationale: ECharts keeps an axis `name` visible
+  when its series is legend-hidden, which looks broken. Legend at the
+  top already carries series identity and toggles cleanly.
+- **X-axis name is now opt-in** (rendered only when `x_axis_label` is
+  explicitly set). Most dashboard charts are time-based and don't
+  benefit from an x-axis name.
+- **Single-y axis always gets a name** — the user's override if set,
+  otherwise the column name as a default.
+
+### Fixed
+
+- **Axis labels were being clipped** because the grid had
+  `left: 0, bottom: 0` while `containLabel: true` only reserves space
+  for tick labels, not the axis `name`. Grid margins now expand
+  dynamically to fit the label when one is present.
+- **Legend rendering empty when overrides were set**. Legend `data`
+  was hardcoded to the raw column names, but the series were renamed
+  to the override strings — ECharts' legend-to-series matching failed.
+  Legend now reads from the same `seriesNames` array that drives the
+  series.
+
 ## [0.6.2] — 2026-04-17
 
 ### Fixed

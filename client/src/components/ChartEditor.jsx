@@ -239,7 +239,8 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
   const [xAxisFormat, setXAxisFormat] = useState('chart'); // Default format for timestamp display
   const [yAxisColumns, setYAxisColumns] = useState([]);
-  const [yAxisLabel, setYAxisLabel] = useState(''); // Custom label for Y axis (e.g., "Temperature (°F)")
+  const [yAxisLabel, setYAxisLabel] = useState(''); // Legacy single y-axis label — kept for back-compat; use yAxisLabels for new code.
+  const [yAxisLabels, setYAxisLabels] = useState([]); // Per-column y-axis labels. Index matches yAxisColumns. Empty entries fall back to column name.
   const [groupByColumn, setGroupByColumn] = useState('');
   const [seriesColumn, setSeriesColumn] = useState(''); // Column that identifies each series (e.g., location) - used for time bucket partitioning
 
@@ -404,6 +405,7 @@ const ChartEditor = forwardRef(function ChartEditor({
     if (!newConfig.hasAxisLabels) {
       setXAxisLabel('');
       setYAxisLabel('');
+      setYAxisLabels([]);
     }
 
     // Clear time bucket if not applicable
@@ -483,6 +485,16 @@ const ChartEditor = forwardRef(function ChartEditor({
       setXAxisFormat(chart.data_mapping?.x_axis_format || 'chart');
       setYAxisColumns(chart.data_mapping?.y_axis || []);
       setYAxisLabel(chart.data_mapping?.y_axis_label || '');
+      // Prefer the new per-column array; fall back to seeding from the legacy
+      // single label (position 0) so existing charts keep their label.
+      const loadedLabels = chart.data_mapping?.y_axis_labels;
+      if (Array.isArray(loadedLabels) && loadedLabels.length > 0) {
+        setYAxisLabels(loadedLabels);
+      } else if (chart.data_mapping?.y_axis_label) {
+        setYAxisLabels([chart.data_mapping.y_axis_label]);
+      } else {
+        setYAxisLabels([]);
+      }
       setGroupByColumn(chart.data_mapping?.group_by || '');
       setSeriesColumn(chart.data_mapping?.series || '');
       setFilters(chart.data_mapping?.filters || []);
@@ -795,6 +807,7 @@ const ChartEditor = forwardRef(function ChartEditor({
     setXAxisFormat('chart');
     setYAxisColumns([]);
     setYAxisLabel('');
+    setYAxisLabels([]);
     setGroupByColumn('');
     setSeriesColumn('');
     setFilters([]);
@@ -1049,6 +1062,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       xAxisFormat: xAxisFormat || 'chart',
       xAxisLabel: xAxisLabel || '',
       yAxisLabel: yAxisLabel || '',
+      yAxisLabels: yAxisLabels || [],
       chartName: title || name || '' // Display Title takes precedence, falls back to Chart Name
     };
 
@@ -1061,7 +1075,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser);
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1181,7 +1195,9 @@ const ChartEditor = forwardRef(function ChartEditor({
         x_axis_label: xAxisLabel || '',
         x_axis_format: xAxisFormat || 'chart',
         y_axis: yAxisColumns,
-        y_axis_label: yAxisLabel || '',
+        // y_axis_label kept for back-compat; y_axis_labels is the new per-column source of truth.
+        y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
+        y_axis_labels: yAxisLabels && yAxisLabels.length > 0 ? yAxisLabels : undefined,
         group_by: groupByColumn || '',
         series: seriesColumn || '', // Column for series partitioning in time buckets
         filters: filters.length > 0 ? filters : [],
@@ -2075,6 +2091,7 @@ const ChartEditor = forwardRef(function ChartEditor({
                                 <MultiSelect
                                   id="y-axis-columns"
                                   titleText={chartTypeConfig.yAxisLabel || 'Y-Axis'}
+                                  helperText="Up to 2 values. Two uses dual-axis (left/right, color-coded); for more, split into separate charts."
                                   label={yAxisColumns.length > 0 ? yAxisColumns.join(', ') : 'Select value(s)...'}
                                   items={availableColumns.filter(c => c !== xAxisColumn).map(col => ({
                                     id: col,
@@ -2082,7 +2099,16 @@ const ChartEditor = forwardRef(function ChartEditor({
                                   }))}
                                   selectedItems={yAxisColumns.map(col => ({ id: col, label: col }))}
                                   onChange={({ selectedItems }) => {
-                                    setYAxisColumns(selectedItems.map(item => item.id));
+                                    const ids = selectedItems.map(item => item.id);
+                                    // Hard-cap at 2: three or more y-columns has no
+                                    // good rendering — no place for axis names, tick
+                                    // values overlap, color coding runs out. Two
+                                    // separate charts beat one cluttered one. If the
+                                    // user picks a third, keep the two earliest
+                                    // selections (Carbon MultiSelect emits the full
+                                    // new set in document order).
+                                    const capped = ids.length > 2 ? ids.slice(0, 2) : ids;
+                                    setYAxisColumns(capped);
                                   }}
                                   itemToString={(item) => item ? item.label : ''}
                                 />
@@ -2133,15 +2159,34 @@ const ChartEditor = forwardRef(function ChartEditor({
                                 />
                               </Column>
                             )}
-                            <Column lg={4} md={4} sm={4}>
-                              <TextInput
-                                id="y-axis-label"
-                                labelText="Y-Axis Label (Optional)"
-                                value={yAxisLabel}
-                                onChange={(e) => setYAxisLabel(e.target.value)}
-                                placeholder="e.g., Temperature (°F)"
-                              />
-                            </Column>
+                            {/* Y-axis label overrides.
+                                - Single y: the override becomes the axis name.
+                                - Dual y: the overrides become the series names in the
+                                  legend at the top of the chart (the axis itself has
+                                  no name — ECharts leaves axis names visible even
+                                  when their series is legend-hidden). Raw column
+                                  names from databases or MQTT are often terse; this
+                                  gives users a place to rename. */}
+                            {yAxisColumns.length >= 1 && yAxisColumns.length <= 2 && yAxisColumns.map((col, idx) => (
+                              <Column key={`yaxis-label-${idx}`} lg={4} md={4} sm={4}>
+                                <TextInput
+                                  id={`y-axis-label-${idx}`}
+                                  labelText={yAxisColumns.length === 2
+                                    ? `Y-Axis Label — ${idx === 0 ? 'Left' : 'Right'} (Optional)`
+                                    : 'Y-Axis Label (Optional)'}
+                                  helperText={yAxisColumns.length === 2 ? 'Shown in the legend; axis itself is unnamed.' : undefined}
+                                  value={yAxisLabels[idx] || (idx === 0 ? yAxisLabel : '') || ''}
+                                  onChange={(e) => {
+                                    const next = [...yAxisLabels];
+                                    next[idx] = e.target.value;
+                                    while (next.length > 0 && !next[next.length - 1]) next.pop();
+                                    setYAxisLabels(next);
+                                    if (idx === 0) setYAxisLabel(e.target.value);
+                                  }}
+                                  placeholder={col ? `Defaults to "${col}"` : 'e.g., Temperature (°F)'}
+                                />
+                              </Column>
+                            ))}
                             {chartTypeConfig.hasXAxisFormat && (
                               <Column lg={4} md={4} sm={4}>
                                 <Select
@@ -3156,7 +3201,26 @@ function getStaticChartCode(chartType) {
 
 function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
-  const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', chartName = '' } = transforms;
+  const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], chartName = '' } = transforms;
+
+  // Y-axis name policy:
+  //   - Single y column: emit the axis name (y_axis_labels[0] | y_axis_label | column name).
+  //   - Two y columns:   NO axis names. The left/right axes keep their
+  //     color-coded tick labels and axis lines, but the series identity
+  //     lives in the legend where toggling hides the name together with
+  //     the line. An axis `name` on ECharts stays visible when the series
+  //     is legend-hidden, which looks broken.
+  //   - Three+ y columns: no axis names; legend carries identity.
+  //
+  // X-axis name is opt-in: most charts are time-based and don't benefit
+  // from a name.
+  const singleYName = (() => {
+    if (yAxisCols.length !== 1) return '';
+    const labels = Array.isArray(yAxisLabels) ? yAxisLabels : [];
+    return (labels[0] && labels[0].trim()) || yAxisLabel || yAxisCols[0] || '';
+  })();
+  const showXAxisName = !!(xAxisLabel && xAxisLabel.trim());
+  const showSingleYName = !!singleYName;
   // Build extra useData options (refreshInterval, backfill) — each prefixed with `,\n    `
   const extraOptions = [];
   if (!isStreaming) {
@@ -3242,9 +3306,19 @@ function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xA
     const firstSeriesRows = rows.filter(r => r[seriesColIdx] === seriesValues[0]);
     const categories = firstSeriesRows.map(r => formatXValue(r[xColIdx], '${xAxisCol}'));`;
   } else if (yAxisCols.length > 1) {
+    // Per-column display names (legend). Falls back to the column name when
+    // the user hasn't overridden it. This is how y-axis "labels" reach the
+    // user when there are two y columns — the axis itself has no name (see
+    // y-axis naming policy above), but each series in the legend does.
+    const seriesNamesArr = yAxisCols.map((col, i) => {
+      const override = Array.isArray(yAxisLabels) ? yAxisLabels[i] : '';
+      return override && override.trim() ? override.trim() : col;
+    });
+    const seriesNamesLiteral = JSON.stringify(seriesNamesArr);
     seriesCode = `const yColumns = [${yAxisStr}];
+    const seriesNames = ${seriesNamesLiteral};
     const series = yColumns.map((col, idx) => ({
-      name: col,
+      name: seriesNames[idx] || col,
       data: rows.map(r => r[${hasTransforms ? 'transformed' : 'data'}.columns.indexOf(col)]),
       type: '${chartType === 'area' ? 'line' : chartType}',
       ${chartType === 'area' ? 'areaStyle: {},' : ''}
@@ -3519,8 +3593,14 @@ ${transformsConfig}
   const showLegend = seriesCol || yAxisCols.length > 1;
   // Position legend at top, below title if present (title at 8px, legend needs more gap below title)
   const legendTop = chartName ? 28 : 8;
+  // Legend entries must match series.name exactly — for the dual-y path we
+  // emit a `seriesNames` array (column name, or the user's override if set),
+  // so the legend has to read from that same array. Otherwise the legend
+  // looks for the raw column names and finds no match, rendering empty.
   const legendCode = showLegend
-    ? (seriesCol ? `legend: { data: seriesValues.map(String), top: ${legendTop} },` : `legend: { data: yColumns, top: ${legendTop} },`)
+    ? (seriesCol
+        ? `legend: { data: seriesValues.map(String), top: ${legendTop} },`
+        : `legend: { data: typeof seriesNames !== 'undefined' ? seriesNames : yColumns, top: ${legendTop} },`)
     : '';
 
   return `const Component = () => {
@@ -3547,12 +3627,12 @@ ${categoriesCode}
     ${chartName ? `title: { text: '${chartName.replace(/'/g, "\\'")}', left: 'center', top: 0, textStyle: { color: '#f4f4f4', fontSize: 16 } },` : ''}
     tooltip: { trigger: 'axis' },
     ${legendCode}
-    grid: { top: ${showLegend ? (chartName ? 55 : 35) : (chartName ? 30 : 10)}, left: 0, right: 0, bottom: 0, containLabel: true },
-    xAxis: { type: 'category', data: categories${chartType === 'area' ? ', boundaryGap: false' : ''}${xAxisLabel ? `, name: '${xAxisLabel}', nameLocation: 'middle', nameGap: 30` : ''} },
+    grid: { top: ${showLegend ? (chartName ? 55 : 35) : (chartName ? 30 : 10)}, left: ${showSingleYName ? 50 : 10}, right: 10, bottom: ${showXAxisName ? 40 : 10}, containLabel: true },
+    xAxis: { type: 'category', data: categories${chartType === 'area' ? ', boundaryGap: false' : ''}${showXAxisName ? `, name: '${xAxisLabel.replace(/'/g, "\\'")}', nameLocation: 'middle', nameGap: 30` : ''} },
     ${yAxisCols.length === 2 ? `yAxis: [
-      { type: 'value', name: '${yAxisCols[0]}', nameLocation: 'middle', nameGap: 40, nameTextStyle: { color: '#0f62fe' }, axisLabel: { color: '#0f62fe' }, axisLine: { show: true, lineStyle: { color: '#0f62fe' } } },
-      { type: 'value', name: '${yAxisCols[1]}', nameLocation: 'middle', nameGap: 40, nameTextStyle: { color: '#8a3ffc' }, axisLabel: { color: '#8a3ffc' }, axisLine: { show: true, lineStyle: { color: '#8a3ffc' } } }
-    ],` : `yAxis: { type: 'value'${yAxisLabel ? `, name: '${yAxisLabel}', nameLocation: 'middle', nameGap: 40` : ''} },`}
+      { type: 'value', axisLabel: { color: '#0f62fe' }, axisLine: { show: true, lineStyle: { color: '#0f62fe' } } },
+      { type: 'value', axisLabel: { color: '#8a3ffc' }, axisLine: { show: true, lineStyle: { color: '#8a3ffc' } } }
+    ],` : `yAxis: { type: 'value'${showSingleYName ? `, name: '${singleYName.replace(/'/g, "\\'")}', nameLocation: 'middle', nameGap: 40` : ''} },`}
     series: series
   };
 

@@ -100,7 +100,7 @@ The built-in control component handles rendering, MQTT subscription, and command
    - Group by: split into multiple series
    - Axis labels: descriptive labels like "Temperature (°F)"
 
-3. **Dual Y-Axis** (when 2 Y columns): Use yAxis array with left/right axes. Color-match each axis to its series using the Carbon palette (` + "`" + `#0f62fe` + "`" + ` blue for first, ` + "`" + `#8a3ffc` + "`" + ` purple for second). Set nameLocation to 'middle' with nameGap, and color the name, axisLabel, and axisLine to match. Assign yAxisIndex 0/1 on each series.
+3. **Y-Axis columns cap at 2**. One y column renders a single axis with its name. Two y columns split left/right with color-coded tick labels (` + "`" + `#0f62fe` + "`" + ` blue left, ` + "`" + `#8a3ffc` + "`" + ` purple right) — no axis names in this mode; the series legend carries identity and toggles cleanly. Three or more y columns is not supported: no place for axis names, ticks overlap, colors run out. If a user asks for 3+, propose splitting into separate charts.
 
 4. **Data Filters**: Add filters to show only relevant data.
 
