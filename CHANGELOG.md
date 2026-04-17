@@ -6,6 +6,22 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-04-17
+
+### Fixed
+
+- **SSE streams killed by 30s `WriteTimeout`**. The global HTTP
+  `WriteTimeout` set on the Gin server was being enforced on
+  long-lived `/api/connections/:id/stream` responses, terminating the
+  stream after exactly 30 seconds. The browser auto-reconnected
+  behind the scenes, but Firefox logged a "can't establish a
+  connection" error on every reconnect cycle — visible as a flood of
+  errors while viewing ts-store / WebSocket-backed charts. Fixed by
+  calling `http.ResponseController.SetWriteDeadline(time.Time{})` at
+  the top of both the standard and aggregated SSE handlers to
+  disable the deadline for SSE responses only. Global `WriteTimeout`
+  stays in place for every other handler.
+
 ## [0.6.0] — 2026-04-17
 
 ### Added
