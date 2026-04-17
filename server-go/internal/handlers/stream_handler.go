@@ -84,6 +84,15 @@ func (h *StreamHandler) StreamDatasource(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
 
+	// Disable the server's global WriteTimeout (30s) for this response —
+	// it's set on http.Server for safety against slow-body handlers, but
+	// SSE is intentionally long-lived. Without this, the connection dies
+	// after 30s and the browser repeatedly logs "can't establish a
+	// connection" errors during the auto-reconnect loop.
+	if rc := http.NewResponseController(c.Writer); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+
 	log.Printf("[StreamHandler] SSE connection opened for datasource %s", datasourceID)
 
 	// Send buffered records first (initial state) — already topic-filtered for MQTT
@@ -279,6 +288,12 @@ func (h *StreamHandler) StreamAggregatedDatasource(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
+
+	// Disable the global WriteTimeout for SSE — see comment in the
+	// non-aggregated StreamDatasource handler above for details.
+	if rc := http.NewResponseController(c.Writer); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
 
 	// Send initial config acknowledgment
 	configData, _ := json.Marshal(gin.H{
