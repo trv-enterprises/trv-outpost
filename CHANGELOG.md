@@ -6,6 +6,20 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] — 2026-04-17
+
+### Fixed
+
+- **Long "Connecting → Connected" delay on idle SSE streams.** The
+  non-aggregated `/api/connections/:id/stream` handler didn't flush
+  anything to the response until the first record or heartbeat, so
+  the browser's `EventSource.onopen` callback didn't fire until ts-
+  store or the upstream source pushed data — up to 30 seconds for
+  quiet streams. Fix: emit an `event: connected` SSE frame + flush
+  at the very top of the handler so `onopen` fires immediately.
+  (The aggregated variant already flushed an initial `config` event
+  and was unaffected.)
+
 ## [0.6.1] — 2026-04-17
 
 ### Fixed

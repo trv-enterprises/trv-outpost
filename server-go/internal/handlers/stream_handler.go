@@ -95,6 +95,14 @@ func (h *StreamHandler) StreamDatasource(c *gin.Context) {
 
 	log.Printf("[StreamHandler] SSE connection opened for datasource %s", datasourceID)
 
+	// Flush a connected event immediately so the browser's EventSource
+	// fires `onopen` right away. Without this, `onopen` doesn't fire
+	// until the first record or heartbeat (up to 30s later for an idle
+	// stream), which looks like a very long "Connecting → Connected" gap
+	// in the frontend logs.
+	fmt.Fprintf(c.Writer, "event: connected\ndata: {\"timestamp\":%d}\n\n", time.Now().Unix())
+	c.Writer.Flush()
+
 	// Send buffered records first (initial state) — already topic-filtered for MQTT
 	bufferedRecords := h.manager.GetBufferFiltered(datasourceID, topicFilters)
 	if len(bufferedRecords) > 0 {
