@@ -420,6 +420,10 @@ Global settings managed by administrators through the Settings page in Manage mo
 | `default_layout_dimension` | layout | Default dimension preset for new dashboards |
 | `layout_dimensions` | layout | Array of available dashboard dimension presets |
 | `tile_font_size` | appearance | Font size for compact tile controls (xs/sm/md/lg) |
+| `dashboard_command_topic` | dashboard | MQTT topic the dashboard subscribes to for voice/kiosk commands |
+| `dashboard_command_connection` | dashboard | MQTT connection ID used for dashboard commands |
+| `enabled_types` | availability | Allowlist of integrations + connection / chart / control / display types available in this deployment. Edited via the hierarchical Type Availability modal; see the type-availability gating section. |
+| `known_types` | availability | Server-maintained ledger of every type/integration the system has seen across upgrades. Hidden from the settings UI. New types in upgrades auto-enable on first boot; admin disables persist. |
 
 **Adding a new admin setting:**
 1. Add entry to `server-go/config/user-configurable.yaml` with key, category, description, value
@@ -599,7 +603,7 @@ Tiles (`tile_*`) and `text_label` skip the top `.control-title` entirely — the
 └───────────────────────────────┴────────────────────────────────┘
 ```
 
-## Current Status (2026-03-06)
+## Current Status (2026-04-17)
 
 ### ✅ Completed
 - Go backend with MongoDB (layouts, connections, components, dashboards, charts)
@@ -623,6 +627,10 @@ Tiles (`tile_*`) and `text_label` skip the top `.control-title` entirely — the
 - **Terminology Rename**: "Data Sources" renamed to "Connections" throughout UI and API (`/api/connections`)
 - **Terminology Rename**: "Chart" renamed to "Display" in UI (DB still uses `component_type: 'chart'` for backward compatibility)
 - **MQTT Connection**: Full MQTT broker integration with Eclipse Paho v2, bidirectional pub/sub, visual topic selector with broker discovery, multi-topic subscription, and streaming support via SSE
+- **Type Availability Gating** (v0.6.0): Admin-managed `enabled_types` setting toggles connection / chart / control / display types and integrations per deployment. Frigate and Weather are integrations; admins can enable/disable a whole bundle from Manage → Settings → Type Availability. Filter applies to picker UIs, AI agent prompt + tool enums, and MCP catalog. Existing dashboard components keep rendering even when their type is disabled.
+- **WebSocket Bidirectional UI** (v0.6.0): Connection editor exposes a Bidirectional checkbox for WebSocket connections. When set, resolves to `stream.websocket-bidir` so the connection gains write capability for control commands.
+- **Connection-Level Parser** (v0.6.0): WebSocket and TCP connections now expose a parser config (`data_path`, `timestamp_field`, `timestamp_scale`) at the connection layer with a ts-store preset and live test panel. MQTT connections keep per-component parsers because broker multiplexing means each topic may carry a different shape.
+- **UDP and binary WebSocket removed** (v0.6.0): UDP wasn't used by realistic dashboard telemetry (MQTT/WebSocket/REST cover ~99% of cases) and the legacy adapter couldn't receive unsolicited packets. Binary message_format on WebSocket was dropped — binary frames carrying JSON still work transparently because the adapter ignores the frame type.
 
 ### 🚧 In Progress
 - AI Builder Phase 8: Polish & Testing

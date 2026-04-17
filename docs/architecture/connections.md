@@ -112,23 +112,48 @@ Local file or HTTP URL CSV reader.
 - **Detection**: URL-mode checks the URL with an HTTP HEAD; local
   mode uses `os.Stat`. Both paths are exercised by `Test connection`.
 
-### `stream.websocket`
+### `stream.websocket` / `stream.websocket-bidir`
 
-Generic WebSocket adapter, bidirectional.
+Generic WebSocket adapters. Read-only and bidirectional variants are
+distinct registry types with different capabilities; the connection
+editor surfaces this as a single "WebSocket" protocol with a
+**Bidirectional** checkbox. When the checkbox is set, the saved
+connection resolves to `stream.websocket-bidir` and gains write
+capability for control commands.
 
-- **Config**: URL, optional headers, parser config (JSON path
-  extraction or regex), message format, reconnect policy
-- **Capabilities**: read, write, stream
-- **Parser**: messages can be parsed as JSON (with a `data_path`
-  extractor) or regex. Normalized into `Record` maps before
-  fan-out.
-- **Writes**: `POST /api/controls/:id/execute` sends arbitrary
-  bidirectional commands through the WebSocket.
+- **Config**: URL, optional headers, parser config (see below),
+  message format (`json` or `text`), reconnect policy, bidirectional
+  flag
+- **Capabilities**: read, stream — plus write when bidirectional
+- **Message formats**: `json` (default — payloads are unmarshaled
+  and the parser config applies) or `text` (payload lands verbatim
+  in `data`, parser bypassed). Binary frames carrying JSON parse
+  transparently because the adapter ignores the frame type and tries
+  `json.Unmarshal` on the raw bytes; non-JSON binary protocols
+  (MessagePack, protobuf) are not supported in the generic adapter.
+- **Connection-level parser** (`json` mode only): `data_path` re-roots
+  the record at a nested key, `timestamp_field` lifts a timestamp
+  out of the envelope, and `timestamp_scale` (`ns` / `ms` / empty
+  for auto-detect) normalizes numeric timestamps to Unix seconds.
+  The parser is connection-level because point-to-point streams
+  carry one shape — every consumer benefits from one-time unwrap.
+  Charts on broker-style connections (MQTT) keep their own
+  per-component parser instead.
+- **Writes**: `POST /api/controls/:id/execute` sends commands
+  through the WebSocket when bidirectional.
 
-### `stream.tcp` / `stream.udp`
+### `stream.tcp`
 
-Raw TCP / UDP socket adapters. Same config/capability shape as
-WebSocket minus some of the protocol-specific fields.
+Raw TCP socket adapter. Same parser/format affordances as the
+WebSocket adapter (`json` / `text` message format, connection-level
+JSON parser config). Read-only; no write side.
+
+UDP support was removed in v0.6 — real-world dashboard telemetry is
+overwhelmingly MQTT/WebSocket/REST, and the legacy connected-socket
+implementation couldn't receive unsolicited packets in any case.
+If a future need for unsolicited UDP arrives it should be a
+purpose-built listening adapter, not the legacy dial-then-read
+shape.
 
 ### `stream.mqtt`
 
@@ -166,11 +191,19 @@ project in `simulators/` for local testing).
   via `GET /api/streams/inbound/:datasourceId` — an inbound WebSocket
   endpoint the ts-store server dials into
 
-### `nvr.frigate`
+### `frigate`
 
 Frigate NVR (Network Video Recorder) adapter. Frigate is an
-open-source video surveillance system with AI-based object
-detection.
+open-source video surveillance system with AI-based object detection.
+Frigate is registered as an **integration** (see below) so the
+connection type plus the Frigate display types can be enabled or
+disabled as a single bundle.
+
+The `frigate` connection type is special: it doesn't have a
+registered Go adapter (every request proxies through
+`internal/handlers/frigate_handler.go`). It surfaces in the type
+catalog because the Frigate integration declares
+`OwnedConnectionType: "frigate"`.
 
 - **Config**: base URL (HTTP API), go2rtc URL (live stream),
   username, password
@@ -191,6 +224,37 @@ detection.
 
 All Frigate requests are proxied through the backend because browsers
 can't hit the Frigate host directly (CORS + network segmentation).
+
+## Integrations and type availability
+
+Some types ship as part of a named **integration** that bundles a
+connection type with one or more component subtypes (e.g., Frigate
+bundles the `frigate` connection with the `frigate_camera` and
+`frigate_alerts` displays; Weather bundles the `weather` display
+type). Admins can toggle entire integrations on or off from
+**Manage → Settings → Type Availability** so deployments without a
+given integration don't see its types in pickers, the AI agent's
+prompt and tool enums, or the MCP catalog.
+
+Disabling an integration **does not break existing components** —
+only creation, AI suggestions, and MCP catalog visibility are
+filtered. Dashboards that already use a now-disabled type continue
+to render and stream as before. The Frigate proxy routes stay live
+regardless of toggle state for the same reason.
+
+The settings system maintains two keys:
+
+- `enabled_types` — the admin's allowlist (per-category arrays plus
+  `integrations`).
+- `known_types` — server-maintained ledger of every type seen across
+  upgrades. New types added in a release auto-enable on first boot
+  while admin-disabled items persist.
+
+Filter logic: a type tagged with an integration is enabled only when
+that integration is enabled AND its ID appears in the per-category
+list. The filter is consumed by the registry HTTP handlers, the AI
+agent's catalog provider (rebuilds prompt + tools per message), and
+the MCP `list_*_types` tools.
 
 ## Testing and health
 

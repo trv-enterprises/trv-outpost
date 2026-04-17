@@ -25,6 +25,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/mcp"
 	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 	"github.com/trv-enterprises/trve-dashboard/internal/streaming"
@@ -192,6 +193,31 @@ func main() {
 		fmt.Println("✓ User-configurable settings synced to MongoDB")
 	}
 
+	// Wire the registry TypeFilter on top of the settings service. The
+	// adapter implements both EnabledTypesProvider (for the filter) and
+	// EnabledTypesUpdater (for the seed routine). The filter's Invalidate
+	// hook is wired in below so admin saves take effect immediately.
+	var typeFilter *registry.SettingsTypeFilter
+	enabledTypesAdapter := service.NewEnabledTypesAdapter(settingsService, func() {
+		if typeFilter != nil {
+			typeFilter.Invalidate()
+		}
+	})
+	typeFilter = registry.NewSettingsTypeFilter(enabledTypesAdapter)
+	settingsService.SetEnabledTypesObserver(func(key string) {
+		if key == service.EnabledTypesKey {
+			typeFilter.Invalidate()
+		}
+	})
+
+	// Seed known/enabled types so newly-shipped types in this release land
+	// enabled by default while admin disables persist across upgrades.
+	if err := registry.SeedKnownAndEnabledTypes(ctx, enabledTypesAdapter); err != nil {
+		log.Printf("Warning: Failed to seed enabled/known types: %v", err)
+	} else {
+		fmt.Println("✓ Type availability ledger seeded (enabled_types/known_types)")
+	}
+
 	// Seed pseudo users (Admin, Designer, Support)
 	if err := userService.SeedPseudoUsers(ctx); err != nil {
 		log.Printf("Warning: Failed to seed pseudo users: %v", err)
@@ -221,8 +247,10 @@ func main() {
 
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
 	toolExecutor := ai.NewToolExecutor(chartRepo, datasourceRepo, datasourceService, deviceTypeRepo, chartHub)
+	deviceTypeLister := &service.DeviceTypeListerAdapter{Service: deviceTypeService}
+	catalogProvider := service.NewCatalogProvider(deviceTypeLister, typeFilter)
 	var aiAgent *ai.Agent
-	agent, err := ai.NewAgent(toolExecutor, aiSessionService, nil) // nil uses default config
+	agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
 	if err != nil {
 		log.Printf("⚠️  AI Agent disabled: %v", err)
 		log.Printf("   Set ANTHROPIC_API_KEY environment variable to enable AI features")
@@ -243,7 +271,7 @@ func main() {
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	commandHandler := handlers.NewCommandHandler(datasourceService, chartService, deviceTypeService)
 	frigateHandler := handlers.NewFrigateHandler(datasourceService)
-	registryHandler := handlers.NewRegistryHandler(deviceTypeService)
+	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
@@ -253,7 +281,7 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(userService)
 
 	// Initialize MCP
-	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, chartService, deviceTypeService)
+	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, chartService, deviceTypeService, typeFilter)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
 	// Public API routes (no authentication required)
@@ -343,15 +371,16 @@ func main() {
 		// Registry routes - unified type catalog (connection types, component
 		// subtypes, device types). This is the single source of truth that
 		// the AI builder and MCP server both read from.
-		registry := api.Group("/registry")
+		registryRoutes := api.Group("/registry")
 		{
-			registry.GET("/connections", registryHandler.ListConnectionTypes)
-			registry.GET("/connections/:typeId", registryHandler.GetConnectionType)
-			registry.GET("/categories", registryHandler.ListCategories)
-			registry.GET("/components", registryHandler.ListComponentTypes)
-			registry.GET("/components/:typeId", registryHandler.GetComponentType)
-			registry.GET("/catalog", registryHandler.GetCatalog)
-			registry.GET("/catalog.md", registryHandler.GetCatalogMarkdown)
+			registryRoutes.GET("/connections", registryHandler.ListConnectionTypes)
+			registryRoutes.GET("/connections/:typeId", registryHandler.GetConnectionType)
+			registryRoutes.GET("/categories", registryHandler.ListCategories)
+			registryRoutes.GET("/components", registryHandler.ListComponentTypes)
+			registryRoutes.GET("/components/:typeId", registryHandler.GetComponentType)
+			registryRoutes.GET("/catalog", registryHandler.GetCatalog)
+			registryRoutes.GET("/catalog.md", registryHandler.GetCatalogMarkdown)
+			registryRoutes.GET("/integrations", registryHandler.ListIntegrations)
 		}
 
 		// Chart routes

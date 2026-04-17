@@ -26,6 +26,8 @@ import apiClient from '../api/client';
 import LayoutDimensionsEditorModal from '../components/LayoutDimensionsEditorModal';
 import DefaultLayoutDimensionEditorModal from '../components/DefaultLayoutDimensionEditorModal';
 import TileFontSizeEditorModal from '../components/TileFontSizeEditorModal';
+import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
+import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './SettingsPage.scss';
 
 /**
@@ -46,7 +48,9 @@ function SettingsPage() {
   const [defaultLayoutDimensionModalOpen, setDefaultLayoutDimensionModalOpen] = useState(false);
   const [tileFontSizeModalOpen, setTileFontSizeModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
+  const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
   const [mqttConnections, setMqttConnections] = useState([]);
+  const { refresh: refreshEnabledTypes } = useEnabledTypes();
 
   useEffect(() => {
     fetchSettings();
@@ -87,6 +91,9 @@ function SettingsPage() {
           setMqttConnections(conns);
         }).catch(() => {});
         setDashboardCommandModalOpen(true);
+        break;
+      case 'enabled_types':
+        setEnabledTypesModalOpen(true);
         break;
       default:
         // For unknown setting types, show a notification
@@ -169,8 +176,13 @@ function SettingsPage() {
     { key: 'actions', header: '' }
   ];
 
+  // Hide system-managed settings (known_types is the upgrade ledger and
+  // shouldn't appear in the admin settings list — it's maintained by the
+  // server's seed-on-first-sight routine).
+  const visibleSettings = settings.filter((s) => s.key !== 'known_types');
+
   // Transform settings to table rows
-  const rows = settings.map((setting) => ({
+  const rows = visibleSettings.map((setting) => ({
     id: setting.key,
     key: setting.key,
     category: setting.category || '-',
@@ -231,7 +243,7 @@ function SettingsPage() {
               </TableHead>
               <TableBody>
                 {rows.map((row) => {
-                  const originalSetting = settings.find(s => s.key === row.id);
+                  const originalSetting = visibleSettings.find(s => s.key === row.id);
                   return (
                     <TableRow key={row.id} {...getRowProps({ row })}>
                       {row.cells.map((cell) => {
@@ -306,6 +318,22 @@ function SettingsPage() {
         onSave={(value) => {
           handleSave('tile_font_size', value);
           handleTileFontSizeClose();
+        }}
+      />
+
+      {/* Type Availability Editor Modal */}
+      <EnabledTypesEditorModal
+        open={enabledTypesModalOpen}
+        onClose={() => {
+          setEnabledTypesModalOpen(false);
+          setEditingSetting(null);
+        }}
+        onSaved={() => {
+          // Refresh the picker context so changes take effect immediately
+          // across the app, then refetch settings to update the table.
+          refreshEnabledTypes();
+          setNotification({ kind: 'success', title: 'Type availability updated' });
+          fetchSettings();
         }}
       />
 

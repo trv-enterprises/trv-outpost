@@ -15,8 +15,12 @@ real-time streaming, and smart device control.
 - **AI Component Builder** for generating chart components via
   Anthropic Claude with SSE streaming
 - **Real-time data** over SSE from 10 built-in connection types:
-  SQL, REST API, CSV, WebSocket, TCP, UDP, MQTT, Prometheus,
-  EdgeLake, ts-store, Frigate NVR
+  SQL, REST API, CSV, WebSocket (read-only or bidirectional),
+  TCP, MQTT, Prometheus, EdgeLake, ts-store, Frigate NVR
+- **Type availability gating** — admins enable / disable connection
+  and component types (and bundled integrations like Frigate or
+  Weather) per deployment from the Settings UI, propagating to
+  pickers, the AI agent, and the MCP catalog
 - **MQTT retained-state replay** so panels repopulate instantly on
   dashboard switches instead of waiting for the next publish
 - **Shared tag filtering** across connections, components, and

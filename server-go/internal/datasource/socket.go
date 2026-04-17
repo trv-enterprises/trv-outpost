@@ -50,6 +50,14 @@ func getBufferSize(config *models.SocketConfig) int {
 // Detects milliseconds (13+ digits) and converts to seconds
 // Handles int, int64, float64, and string types
 func normalizeTimestamp(val interface{}) interface{} {
+	return normalizeTimestampWithScale(val, "")
+}
+
+// normalizeTimestampWithScale converts a timestamp value to Unix seconds
+// using an explicit scale hint. Scale "ns" divides by 1e9, "ms" divides by
+// 1e3, anything else falls back to magnitude-based auto-detect (>1e15 → ns,
+// >1e12 → ms, otherwise seconds).
+func normalizeTimestampWithScale(val interface{}, scale string) interface{} {
 	var ts int64
 
 	switch v := val.(type) {
@@ -60,21 +68,29 @@ func normalizeTimestamp(val interface{}) interface{} {
 	case float64:
 		ts = int64(v)
 	case string:
-		// Try to parse as number
 		var f float64
 		if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
 			ts = int64(f)
 		} else {
-			return val // Return as-is if not a number
+			return val
 		}
 	default:
-		return val // Return as-is for unknown types
+		return val
 	}
 
-	// If timestamp is in milliseconds (13+ digits), convert to seconds
-	// Unix timestamps in seconds are 10 digits until year 2286
-	if ts > 9999999999 {
-		ts = ts / 1000
+	switch scale {
+	case "ns":
+		ts = ts / 1_000_000_000
+	case "ms":
+		ts = ts / 1_000
+	default:
+		// Auto-detect by magnitude: 16+ digits → ns, 13+ digits → ms.
+		// Unix seconds stay 10 digits until year 2286.
+		if ts > 1_000_000_000_000_000 {
+			ts = ts / 1_000_000_000
+		} else if ts > 9_999_999_999 {
+			ts = ts / 1_000
+		}
 	}
 
 	return ts
@@ -87,8 +103,6 @@ func (s *SocketDataSource) connect() error {
 		return s.connectWebSocket()
 	case "tcp":
 		return s.connectTCP()
-	case "udp":
-		return s.connectUDP()
 	default:
 		return fmt.Errorf("unsupported protocol: %s", s.config.Protocol)
 	}
@@ -122,17 +136,6 @@ func (s *SocketDataSource) connectTCP() error {
 	}
 
 	s.tcpConn = conn
-	return nil
-}
-
-// connectUDP establishes a UDP connection
-func (s *SocketDataSource) connectUDP() error {
-	conn, err := net.Dial("udp", s.config.URL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to UDP socket: %w", err)
-	}
-
-	s.tcpConn = conn // UDP uses net.Conn interface too
 	return nil
 }
 
@@ -245,7 +248,7 @@ func (s *SocketDataSource) Stream(ctx context.Context, query models.Query) (<-ch
 		switch s.config.Protocol {
 		case "websocket":
 			s.streamWebSocket(streamCtx, recordChan)
-		case "tcp", "udp":
+		case "tcp":
 			s.streamTCP(streamCtx, recordChan)
 		}
 	}()
@@ -285,7 +288,7 @@ func (s *SocketDataSource) streamWebSocket(ctx context.Context, recordChan chan<
 	}
 }
 
-// streamTCP reads messages from TCP/UDP socket
+// streamTCP reads messages from TCP socket
 func (s *SocketDataSource) streamTCP(ctx context.Context, recordChan chan<- models.Record) {
 	buffer := make([]byte, 4096)
 
@@ -303,11 +306,7 @@ func (s *SocketDataSource) streamTCP(ctx context.Context, recordChan chan<- mode
 
 				if s.config.ReconnectOnError {
 					time.Sleep(time.Duration(s.config.ReconnectDelay) * time.Millisecond)
-					if s.config.Protocol == "tcp" {
-						s.connectTCP()
-					} else {
-						s.connectUDP()
-					}
+					s.connectTCP()
 					continue
 				}
 				return
@@ -410,9 +409,6 @@ func (s *SocketDataSource) parseMessage(message []byte) models.Record {
 		}
 	case "text":
 		record["data"] = string(message)
-	case "binary":
-		record["data"] = message
-		record["length"] = len(message)
 	default:
 		// Try JSON first, fallback to text
 		if err := json.Unmarshal(message, &record); err != nil {

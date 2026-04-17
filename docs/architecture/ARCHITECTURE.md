@@ -34,9 +34,8 @@ real-time streaming via SSE.
 │                │                                                     │
 │                ├──▶ Datasource adapters ──▶  SQL · REST · CSV        │
 │                │     (registry-based)         MQTT · WebSocket · TCP │
-│                │                               UDP · Prometheus      │
-│                │                               EdgeLake · ts-store   │
-│                │                               Frigate NVR           │
+│                │                               Prometheus · EdgeLake │
+│                │                               ts-store · Frigate NVR│
 │                │                                                     │
 │                └──▶ Streaming engine    ──▶  SSE fan-out             │
 │                      (ring buffer,              to browser           │

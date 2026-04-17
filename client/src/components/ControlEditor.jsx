@@ -39,6 +39,7 @@ import {
 import { CONTROL_TYPES, CONTROL_TYPE_INFO, CONTROL_CATEGORIES } from './controls';
 import { DISPLAY_CONTENT_FORMATS } from './controls/ControlTextLabel';
 import apiClient from '../api/client';
+import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './ControlEditor.scss';
 
 // Available icons for tile/switch controls
@@ -108,6 +109,7 @@ function ControlEditor({
   onControlConfigChange,
   onConnectionIdChange
 }) {
+  const { isControlTypeEnabled } = useEnabledTypes();
   const [typeModalOpen, setTypeModalOpen] = useState(false);
   const [connections, setConnections] = useState([]);
   const [selectedConnection, setSelectedConnection] = useState(null);
@@ -376,8 +378,14 @@ function ControlEditor({
         >
           <div className="control-type-modal-body">
             {Object.entries(CONTROL_CATEGORIES).map(([catId, catInfo]) => {
+              // Filter out admin-disabled control types (the active type is
+              // always shown so editing existing controls still works).
               const typesInCategory = Object.entries(CONTROL_TYPE_INFO)
-                .filter(([, info]) => info.category === catId && !info.hidden);
+                .filter(([type, info]) =>
+                  info.category === catId &&
+                  !info.hidden &&
+                  (isControlTypeEnabled(type) || type === controlType)
+                );
               if (typesInCategory.length === 0) return null;
               return (
                 <div key={catId} className="control-type-category">

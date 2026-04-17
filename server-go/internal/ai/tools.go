@@ -6,10 +6,19 @@ package ai
 
 import (
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
-// GetAnthropicTools returns the list of tools available to the AI agent in Anthropic SDK format
-func GetAnthropicTools() []anthropic.ToolUnionParam {
+// GetAnthropicTools returns the list of tools available to the AI agent in
+// Anthropic SDK format. When `cat` is supplied, the chart_type and
+// control_type enums are derived from the filtered catalog so the AI can't
+// even propose a disabled type as a tool argument. Pass nil for a fully
+// permissive tool set (used as a fallback when no catalog is available).
+func GetAnthropicTools(cat *registry.Catalog) []anthropic.ToolUnionParam {
+	controlEnum := controlTypeEnum(cat)
+	chartEnum := chartTypeEnum(cat)
+	templateEnum := chartTemplateEnum(cat)
+
 	toolParams := []anthropic.ToolParam{
 		{
 			Name:        "update_component_type",
@@ -43,7 +52,7 @@ Control types and their UI config:
 					"control_type": map[string]interface{}{
 						"type":        "string",
 						"description": "Type of control",
-						"enum":        []string{"button", "toggle", "slider", "text_input", "switch", "dimmer", "garage_door", "tile_switch", "tile_dimmer", "tile_garage_door", "text_label"},
+						"enum":        controlEnum,
 					},
 					"connection_id": map[string]interface{}{"type": "string", "description": "ID of the connection to send commands through (e.g., MQTT, WebSocket)"},
 					"target": map[string]interface{}{"type": "string", "description": "Device or endpoint identifier for command targeting"},
@@ -66,7 +75,7 @@ Control types and their UI config:
 					"chart_type": map[string]interface{}{
 						"type":        "string",
 						"description": "Type of chart (only for chart components)",
-						"enum":        []string{"bar", "line", "area", "pie", "scatter", "gauge", "heatmap", "radar", "funnel", "dataview", "custom"},
+						"enum":        chartEnum,
 					},
 				},
 			},
@@ -308,7 +317,7 @@ For non-standard charts, use "custom" to get general formatting guidelines and c
 					"chart_type": map[string]interface{}{
 						"type":        "string",
 						"description": "Chart type to get template for",
-						"enum":        []string{"line", "bar", "area", "pie", "scatter", "gauge", "heatmap", "radar", "funnel", "dataview", "custom"},
+						"enum":        templateEnum,
 					},
 				},
 				Required: []string{"chart_type"},
@@ -361,6 +370,51 @@ const (
 	ToolGetComponentTemplate  = "get_component_template"
 	ToolSuggestMissing        = "suggest_missing_tools" // Deprecated
 )
+
+// controlTypeEnum returns the control_type enum derived from the catalog,
+// or the historical full list when no catalog is supplied.
+func controlTypeEnum(cat *registry.Catalog) []string {
+	if cat == nil {
+		return []string{"button", "toggle", "slider", "text_input", "switch", "dimmer", "garage_door", "tile_switch", "tile_dimmer", "tile_garage_door", "text_label"}
+	}
+	out := make([]string, 0, len(cat.ControlTypes))
+	for _, t := range cat.ControlTypes {
+		if t.Hidden {
+			continue
+		}
+		out = append(out, t.Subtype)
+	}
+	if len(out) == 0 {
+		// Defensive: never emit an empty enum (some Anthropic tool validators
+		// reject zero-length enums). Fall back to a single sentinel.
+		return []string{"button"}
+	}
+	return out
+}
+
+// chartTypeEnum returns the chart_type enum for update_component_config.
+func chartTypeEnum(cat *registry.Catalog) []string {
+	if cat == nil {
+		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "heatmap", "radar", "funnel", "dataview", "custom"}
+	}
+	out := make([]string, 0, len(cat.ChartTypes))
+	for _, t := range cat.ChartTypes {
+		if t.Hidden {
+			continue
+		}
+		out = append(out, t.Subtype)
+	}
+	if len(out) == 0 {
+		return []string{"custom"}
+	}
+	return out
+}
+
+// chartTemplateEnum returns the chart_type enum for get_component_template.
+// Same set as chartTypeEnum today, but isolated so we can diverge if needed.
+func chartTemplateEnum(cat *registry.Catalog) []string {
+	return chartTypeEnum(cat)
+}
 
 // IsComponentUpdateTool returns true if the tool modifies the component
 func IsComponentUpdateTool(toolName string) bool {

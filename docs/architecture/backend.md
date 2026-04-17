@@ -92,7 +92,7 @@ server-go/
     │   └── collation.go      Case-insensitive collation constants
     ├── datasource/           Per-type adapters (SQL, REST, CSV, MQTT,
     │                         Prometheus, EdgeLake, TSStore, Frigate,
-    │                         WebSocket, TCP, UDP)
+    │                         WebSocket, TCP)
     ├── handlers/             HTTP + SSE + WebSocket handlers
     ├── hub/                  ChartHub — real-time chart broadcasts
     ├── mcp/                  MCP server tool registry + handlers

@@ -63,6 +63,7 @@ type ComponentTypeInfo struct {
 	Icon             string                 `json:"icon,omitempty"`              // MDI icon name (e.g. "mdiGestureTap"); frontend resolves to an SVG path
 	UICategory       string                 `json:"ui_category,omitempty"`       // Grouping for widget picker: "carbon", "custom", "tile", "decorative"
 	Hidden           bool                   `json:"hidden,omitempty"`            // True for legacy aliases and backward-compat types kept so old records still edit
+	Integration      string                 `json:"integration,omitempty"`       // Optional: groups types under a named integration (e.g., "frigate", "casita")
 	Capabilities     ComponentCapabilities  `json:"capabilities"`
 	ConfigSchema     []ConfigField          `json:"config_schema,omitempty"`     // Fields the component exposes in the editor
 	DataRequirements *DataRequirements      `json:"data_requirements,omitempty"` // Charts only

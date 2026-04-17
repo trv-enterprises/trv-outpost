@@ -20,6 +20,7 @@ import (
 type SettingsService struct {
 	repo         *repository.SettingsItemRepository
 	fileSettings []config.SettingDefinition
+	observer     func(key string)
 }
 
 // NewSettingsService creates a new SettingsService
@@ -32,6 +33,13 @@ func NewSettingsService(repo *repository.SettingsItemRepository, userConfig *con
 		repo:         repo,
 		fileSettings: settings,
 	}
+}
+
+// SetEnabledTypesObserver registers a callback invoked after every successful
+// UpdateSetting call. Used by the registry TypeFilter so admin saves clear
+// the filter cache without waiting for the TTL. Pass nil to remove.
+func (s *SettingsService) SetEnabledTypesObserver(fn func(key string)) {
+	s.observer = fn
 }
 
 // SyncSettingsFromConfig syncs settings from user-configurable.yaml to MongoDB
@@ -128,6 +136,11 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, key string, value i
 	// Update the value
 	if err := s.repo.UpdateSettingValue(ctx, key, value); err != nil {
 		return nil, fmt.Errorf("failed to update setting: %w", err)
+	}
+
+	// Notify observer (e.g., registry TypeFilter) of the change.
+	if s.observer != nil {
+		s.observer(key)
 	}
 
 	// Return updated setting

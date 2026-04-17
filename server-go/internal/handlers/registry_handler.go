@@ -20,12 +20,24 @@ import (
 // their single source of truth.
 type RegistryHandler struct {
 	deviceTypes *service.DeviceTypeService
+	filter      registry.TypeFilter
 }
 
 // NewRegistryHandler creates a new registry handler. deviceTypes may be nil
-// (the catalog endpoint will omit device types if so).
-func NewRegistryHandler(deviceTypes *service.DeviceTypeService) *RegistryHandler {
-	return &RegistryHandler{deviceTypes: deviceTypes}
+// (the catalog endpoint will omit device types if so). filter may be nil
+// (no filtering applied — useful in tests).
+func NewRegistryHandler(deviceTypes *service.DeviceTypeService, filter registry.TypeFilter) *RegistryHandler {
+	return &RegistryHandler{deviceTypes: deviceTypes, filter: filter}
+}
+
+// activeFilter returns the effective filter for a request: nil if the
+// request opted out via ?include_disabled=true, otherwise the handler's
+// configured filter (which may itself be nil if not wired up).
+func (h *RegistryHandler) activeFilter(c *gin.Context) registry.TypeFilter {
+	if c.Query("include_disabled") == "true" {
+		return nil
+	}
+	return h.filter
 }
 
 // deviceTypeListerAdapter adapts DeviceTypeService to registry.DeviceTypeLister
@@ -91,11 +103,50 @@ func (h *RegistryHandler) ListConnectionTypes(c *gin.Context) {
 		types = registry.List()
 	}
 
+	// Include synthetic connection types declared by integrations (e.g., Frigate).
+	types = appendSyntheticForListing(types)
+
+	if filter := h.activeFilter(c); filter != nil {
+		filtered := types[:0]
+		for _, t := range types {
+			if filter.IsEnabled(registry.CategoryConnection, t.TypeID) {
+				filtered = append(filtered, t)
+			}
+		}
+		types = filtered
+	}
+
 	c.JSON(http.StatusOK, ListConnectionTypesResponse{
 		Types:      types,
 		Categories: registry.Categories(),
 		Count:      len(types),
 	})
+}
+
+// appendSyntheticForListing layers in connection types declared by
+// integrations that aren't in the adapter registry. Mirrors the helper in
+// registry/catalog.go but works directly on the listing endpoint.
+func appendSyntheticForListing(existing []registry.TypeInfo) []registry.TypeInfo {
+	known := make(map[string]bool, len(existing))
+	for _, t := range existing {
+		known[t.TypeID] = true
+	}
+	for _, integ := range registry.ListIntegrations() {
+		if integ.OwnedConnectionType == "" || known[integ.OwnedConnectionType] {
+			continue
+		}
+		existing = append(existing, registry.TypeInfo{
+			TypeID:      integ.OwnedConnectionType,
+			DisplayName: integ.DisplayName,
+			Category:    "integration",
+			Integration: integ.ID,
+			Capabilities: registry.Capabilities{
+				CanRead: true,
+			},
+		})
+		known[integ.OwnedConnectionType] = true
+	}
+	return existing
 }
 
 // GetConnectionType godoc
@@ -188,6 +239,17 @@ type ListComponentTypesResponse struct {
 func (h *RegistryHandler) ListComponentTypes(c *gin.Context) {
 	category := c.Query("category")
 	types := registry.ListComponentTypes(category)
+
+	if filter := h.activeFilter(c); filter != nil {
+		filtered := types[:0]
+		for _, t := range types {
+			if filter.IsEnabled(t.Category, t.Subtype) {
+				filtered = append(filtered, t)
+			}
+		}
+		types = filtered
+	}
+
 	c.JSON(http.StatusOK, ListComponentTypesResponse{
 		Types: types,
 		Count: len(types),
@@ -224,12 +286,43 @@ func (h *RegistryHandler) GetComponentType(c *gin.Context) {
 // @Success 200 {object} registry.Catalog
 // @Router /api/registry/catalog [get]
 func (h *RegistryHandler) GetCatalog(c *gin.Context) {
-	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister())
+	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister(), h.activeFilter(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, cat)
+}
+
+// ListIntegrationsResponse wraps the integration listing.
+type ListIntegrationsResponse struct {
+	Integrations []registry.IntegrationInfo `json:"integrations"`
+	Count        int                        `json:"count"`
+}
+
+// ListIntegrations godoc
+// @Summary List registered integrations
+// @Description Integrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.
+// @Tags registry
+// @Produce json
+// @Param include_disabled query bool false "If true, returns all integrations even if disabled"
+// @Success 200 {object} ListIntegrationsResponse
+// @Router /api/registry/integrations [get]
+func (h *RegistryHandler) ListIntegrations(c *gin.Context) {
+	items := registry.ListIntegrations()
+	if filter := h.activeFilter(c); filter != nil {
+		filtered := items[:0]
+		for _, info := range items {
+			if filter.IsIntegrationEnabled(info.ID) {
+				filtered = append(filtered, info)
+			}
+		}
+		items = filtered
+	}
+	c.JSON(http.StatusOK, ListIntegrationsResponse{
+		Integrations: items,
+		Count:        len(items),
+	})
 }
 
 // GetCatalogMarkdown godoc
@@ -240,7 +333,7 @@ func (h *RegistryHandler) GetCatalog(c *gin.Context) {
 // @Success 200 {string} string "Markdown document"
 // @Router /api/registry/catalog.md [get]
 func (h *RegistryHandler) GetCatalogMarkdown(c *gin.Context) {
-	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister())
+	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister(), h.activeFilter(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

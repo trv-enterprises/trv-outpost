@@ -97,7 +97,11 @@ func newWebSocketAdapterFromConfig(config map[string]interface{}) (*WebSocketAda
 		socketConfig.BufferSize = bufSize
 	}
 
-	// Parser config
+	// Parser config — connection-level. data_path and timestamp_field unwrap
+	// the JSON envelope; timestamp_scale hints how to interpret numeric
+	// timestamps (ns / ms / empty=auto). When the connection is in text mode
+	// (message_format != "json") this config is ignored by the adapter — text
+	// payloads land verbatim in `data`.
 	parser := &models.SocketParserConfig{}
 	if dataPath, ok := config["data_path"].(string); ok {
 		parser.DataPath = dataPath
@@ -105,7 +109,10 @@ func newWebSocketAdapterFromConfig(config map[string]interface{}) (*WebSocketAda
 	if tsField, ok := config["timestamp_field"].(string); ok {
 		parser.TimestampField = tsField
 	}
-	if parser.DataPath != "" || parser.TimestampField != "" {
+	if scale, ok := config["timestamp_scale"].(string); ok {
+		parser.TimestampScale = scale
+	}
+	if parser.DataPath != "" || parser.TimestampField != "" || parser.TimestampScale != "" {
 		socketConfig.Parser = parser
 	}
 
@@ -402,16 +409,17 @@ func (a *WebSocketAdapter) applyParserConfig(record registry.Record) registry.Re
 		return record
 	}
 
-	// Extract timestamp
+	// Extract timestamp from a named field (using the scale hint when set).
 	if parser.TimestampField != "" {
 		if val, exists := record[parser.TimestampField]; exists {
-			record["timestamp"] = normalizeTimestamp(val)
+			record["timestamp"] = normalizeTimestampWithScale(val, parser.TimestampScale)
 		}
 	}
 
-	// Normalize existing timestamp
+	// Normalize whatever timestamp we now hold (covers both the path above
+	// and timestamps that arrived under the conventional `timestamp` key).
 	if ts, exists := record["timestamp"]; exists {
-		record["timestamp"] = normalizeTimestamp(ts)
+		record["timestamp"] = normalizeTimestampWithScale(ts, parser.TimestampScale)
 	}
 
 	// Apply field mappings

@@ -15,8 +15,12 @@ import {
 } from '@carbon/react';
 import { Camera, NotificationNew, PartlyCloudy } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import { useEnabledTypes } from '../context/EnabledTypesContext';
 
-// Available display types
+// Available display types. The picker filters this list against the admin's
+// enabled_types selection so deployments without Frigate (or any future
+// integration) don't see those options. Existing components of disabled
+// types still render — this is creation-only filtering.
 const DISPLAY_TYPES = [
   { id: 'frigate_camera', label: 'Frigate Camera', description: 'Live camera feed from Frigate NVR', icon: Camera },
   { id: 'frigate_alerts', label: 'Frigate Alerts', description: 'Event alerts grid from Frigate NVR', icon: NotificationNew },
@@ -34,9 +38,24 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
   const [connections, setConnections] = useState([]);
   const [cameras, setCameras] = useState([]);
   const [loadingCameras, setLoadingCameras] = useState(false);
+  const { isDisplayTypeEnabled, enabledDisplayTypes } = useEnabledTypes();
 
-  const config = displayConfig || { display_type: 'frigate_camera' };
-  const displayType = config.display_type || 'frigate_camera';
+  // Pick a sensible fallback when no display_type was passed in: the first
+  // enabled display type, or the first DISPLAY_TYPES entry as a last resort
+  // (only relevant if the catalog hasn't loaded yet).
+  const fallbackDisplayType =
+    enabledDisplayTypes?.[0]?.subtype || DISPLAY_TYPES[0]?.id;
+
+  // Filter the display-type list. Always include the type *currently saved
+  // on this component* (even if now disabled) so editing existing components
+  // works. Don't include the unconfigured-fallback default — otherwise a new
+  // component opens to a disabled type.
+  const savedDisplayType = displayConfig?.display_type;
+  const displayType = savedDisplayType || fallbackDisplayType;
+  const config = displayConfig || { display_type: displayType };
+  const availableDisplayTypes = DISPLAY_TYPES.filter(
+    t => isDisplayTypeEnabled(t.id) || t.id === savedDisplayType
+  );
 
   // Fetch connections on mount
   useEffect(() => {
@@ -87,7 +106,7 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
   const mqttConnections = connections.filter(c => c.type === 'mqtt');
 
   const [typeModalOpen, setTypeModalOpen] = useState(false);
-  const currentDisplayType = DISPLAY_TYPES.find(t => t.id === displayType) || DISPLAY_TYPES[0];
+  const currentDisplayType = DISPLAY_TYPES.find(t => t.id === displayType) || availableDisplayTypes[0] || DISPLAY_TYPES[0];
   const CurrentIcon = currentDisplayType.icon;
 
   return (
@@ -119,7 +138,7 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
           className="type-selection-modal"
         >
           <div className="type-selection-grid">
-            {DISPLAY_TYPES.map(type => {
+            {availableDisplayTypes.map(type => {
               const TypeIcon = type.icon;
               return (
                 <div

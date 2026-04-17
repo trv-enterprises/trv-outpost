@@ -36,7 +36,11 @@ func tcpConfigSchema() []registry.ConfigField {
 		{Name: "reconnect_on_error", Type: "bool", Required: false, Default: true, Description: "Auto-reconnect on error"},
 		{Name: "reconnect_delay", Type: "int", Required: false, Default: 1000, Description: "Reconnect delay (ms)"},
 		{Name: "buffer_size", Type: "int", Required: false, Default: 100, Description: "Message buffer size"},
-		{Name: "message_format", Type: "string", Required: false, Default: "json", Options: []string{"json", "text", "binary"}, Description: "Message format"},
+		{Name: "message_format", Type: "string", Required: false, Default: "json", Options: []string{"json", "text"}, Description: "Message format"},
+		// Connection-level JSON parser config — only meaningful when message_format=json.
+		{Name: "data_path", Type: "string", Required: false, Description: "JSON path to the data payload (e.g. 'data', 'payload.readings')"},
+		{Name: "timestamp_field", Type: "string", Required: false, Description: "Field name that carries the timestamp"},
+		{Name: "timestamp_scale", Type: "string", Required: false, Options: []string{"", "ns", "ms"}, Description: "Numeric timestamp scale: ns / ms / empty=auto"},
 	}
 }
 
@@ -72,6 +76,21 @@ func newTCPAdapterFromConfig(config map[string]interface{}) (*TCPAdapter, error)
 	}
 	if format, ok := config["message_format"].(string); ok {
 		socketConfig.MessageFormat = format
+	}
+
+	// Connection-level parser config (mirrors WebSocket adapter).
+	parser := &models.SocketParserConfig{}
+	if dataPath, ok := config["data_path"].(string); ok {
+		parser.DataPath = dataPath
+	}
+	if tsField, ok := config["timestamp_field"].(string); ok {
+		parser.TimestampField = tsField
+	}
+	if scale, ok := config["timestamp_scale"].(string); ok {
+		parser.TimestampScale = scale
+	}
+	if parser.DataPath != "" || parser.TimestampField != "" || parser.TimestampScale != "" {
+		socketConfig.Parser = parser
 	}
 
 	return &TCPAdapter{
@@ -283,7 +302,10 @@ func (a *TCPAdapter) Write(ctx context.Context, cmd registry.Command) (*registry
 	return nil, fmt.Errorf("stream.tcp does not support write operations")
 }
 
-// parseMessage converts raw bytes to a Record
+// parseMessage converts raw bytes to a Record. JSON mode also applies the
+// connection-level parser (data_path / timestamp_field / timestamp_scale)
+// so every consumer of this connection sees the same unwrapped shape. Text
+// mode bypasses the parser entirely — payloads land verbatim in `data`.
 func (a *TCPAdapter) parseMessage(message []byte) registry.Record {
 	record := make(registry.Record)
 
@@ -292,20 +314,63 @@ func (a *TCPAdapter) parseMessage(message []byte) registry.Record {
 		if err := json.Unmarshal(message, &record); err != nil {
 			record["data"] = string(message)
 			record["error"] = err.Error()
+		} else {
+			record = a.applyParserConfig(record)
 		}
 	case "text":
 		record["data"] = string(message)
-	case "binary":
-		record["data"] = message
-		record["length"] = len(message)
 	default:
 		if err := json.Unmarshal(message, &record); err != nil {
 			record["data"] = string(message)
+		} else {
+			record = a.applyParserConfig(record)
 		}
 	}
 
 	if _, hasTimestamp := record["timestamp"]; !hasTimestamp {
 		record["timestamp"] = time.Now().Unix()
+	}
+
+	return record
+}
+
+// applyParserConfig applies connection-level parser config to a parsed
+// JSON record: optionally re-roots at data_path, lifts a named timestamp
+// field, and normalizes numeric timestamps using the scale hint.
+func (a *TCPAdapter) applyParserConfig(record registry.Record) registry.Record {
+	parser := a.config.Parser
+	if parser == nil {
+		return record
+	}
+
+	// Re-root at data_path if set, lifting the timestamp from the envelope
+	// before we replace `record` with the inner object.
+	if parser.DataPath != "" {
+		recordMap := map[string]interface{}(record)
+		var liftedTimestamp interface{}
+		if parser.TimestampField != "" {
+			if ts := extractByPath(recordMap, parser.TimestampField); ts != nil {
+				liftedTimestamp = normalizeTimestampWithScale(ts, parser.TimestampScale)
+			}
+		}
+		extracted := extractByPath(recordMap, parser.DataPath)
+		if dataMap, ok := extracted.(map[string]interface{}); ok {
+			out := make(registry.Record, len(dataMap))
+			for k, v := range dataMap {
+				out[k] = v
+			}
+			if liftedTimestamp != nil {
+				out["timestamp"] = liftedTimestamp
+			}
+			record = out
+		}
+	} else if parser.TimestampField != "" {
+		if val, exists := record[parser.TimestampField]; exists {
+			record["timestamp"] = normalizeTimestampWithScale(val, parser.TimestampScale)
+		}
+	} else if ts, exists := record["timestamp"]; exists {
+		// Conventional `timestamp` field already in the record — normalize it.
+		record["timestamp"] = normalizeTimestampWithScale(ts, parser.TimestampScale)
 	}
 
 	return record

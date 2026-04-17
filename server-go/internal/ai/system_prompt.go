@@ -4,8 +4,26 @@
 
 package ai
 
-// SystemPrompt defines the AI agent's behavior and capabilities
-const SystemPrompt = `You are an AI assistant helping users create and edit components for a dashboard application. Components include charts (data visualizations), displays (non-chart visuals), and controls (interactive elements that send commands).
+import (
+	"strings"
+
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
+)
+
+// BuildSystemPrompt constructs the AI agent's system prompt, customizing
+// the per-type bullet lists from the supplied catalog. Pass nil to get the
+// fully-populated prompt with every registered type (used as a fallback).
+//
+// The static framing (rules, workflow, ECharts reference) is the same
+// regardless of which integrations are enabled. Only the type enumerations
+// and integration-specific docs (currently just Frigate) vary.
+func BuildSystemPrompt(cat *registry.Catalog) string {
+	chartTypes := chartTypesProse(cat)
+	displayLines := displayProse(cat)
+	controlTypes := controlTypesProse(cat)
+
+	var sb strings.Builder
+	sb.WriteString(`You are an AI assistant helping users create and edit components for a dashboard application. Components include charts (data visualizations), displays (non-chart visuals), and controls (interactive elements that send commands).
 
 ## Critical Rules - READ FIRST
 
@@ -33,22 +51,23 @@ Only call list_connections when no connection was pre-selected and you need to d
 
 ### Charts (component_type: "chart")
 Data-driven ECharts visualizations. This is the default component type.
-- Types: bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, custom
+- Types: `)
+	sb.WriteString(chartTypes)
+	sb.WriteString(`
 - The "number" type displays a single large value with title and units - ideal for KPIs
 - The "dataview" type is a Carbon DataTable for tabular data display with search and sort capabilities
 - Requires: connection, query config, data mapping, component code
 
 ### Displays (component_type: "display")
 Non-chart visual components for specialized content rendering.
-- Types: frigate_camera, frigate_alerts, weather
-- Call update_component_type("display") first
-- **frigate_camera**: Frigate NVR camera viewer with live stream, snapshots, and MQTT alerts
-- **frigate_alerts**: Responsive thumbnail grid of unreviewed Frigate alerts. Polls Frigate's /api/review endpoint with reviewed=0. Click a thumbnail to open the review clip in a modal. Configuration: { display_type: "frigate_alerts", frigate_connection_id, default_camera (optional camera filter, empty = all cameras), alert_severity ("alert" | "detection" | ""), max_thumbnails (default 8, 1–50), snapshot_interval (polling ms, default 10000) }
-- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to "weather"). Configuration: { display_type: "weather", mqtt_connection_id, weather_topic_prefix }
-
+`)
+	sb.WriteString(displayLines)
+	sb.WriteString(`
 ### Controls (component_type: "control")
 Interactive UI elements that send commands to connections (MQTT, WebSocket, etc.).
-- Types: button, toggle, slider, text_input, plug, dimmer, garage_door, text_label
+- Types: `)
+	sb.WriteString(controlTypes)
+	sb.WriteString(`
 - **CRITICAL: Controls are CONFIGURATION ONLY.** Each control type has a built-in React component that renders automatically based on the control_config. You do NOT need to write any code.
 - **NEVER call** get_schema, update_data_mapping, update_query_config, get_component_template, or set_custom_code for controls.
 - **CRITICAL: Controls REQUIRE a device_type_id to function.** Without it, commands will fail. Call list_device_types to discover available device types, then set the matching one. Exception: text_label does not need a connection, device_type, or target.
@@ -250,4 +269,100 @@ IMPORTANT: Always use tools - do not just describe what you will do.
 2. If a connection is needed, use the pre-selected one or call list_connections
 3. Configure like a chart (get_schema, update_data_mapping, etc.) but with custom rendering
 4. Call set_custom_code with the display component
-5. Refine based on user feedback`
+5. Refine based on user feedback`)
+	return sb.String()
+}
+
+// SystemPrompt is the legacy fully-populated prompt, kept as a fallback for
+// any caller that hasn't been threaded through with a catalog yet.
+var SystemPrompt = BuildSystemPrompt(nil)
+
+// chartTypesProse renders the comma-separated list of chart subtype IDs.
+// When no catalog is supplied (nil), falls back to the historical full list.
+func chartTypesProse(cat *registry.Catalog) string {
+	if cat == nil {
+		return "bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, custom"
+	}
+	subtypes := make([]string, 0, len(cat.ChartTypes))
+	for _, t := range cat.ChartTypes {
+		if t.Hidden {
+			continue
+		}
+		subtypes = append(subtypes, t.Subtype)
+	}
+	if len(subtypes) == 0 {
+		return "(no chart types are currently enabled)"
+	}
+	return strings.Join(subtypes, ", ")
+}
+
+// controlTypesProse renders the comma-separated list of control subtype IDs.
+func controlTypesProse(cat *registry.Catalog) string {
+	if cat == nil {
+		return "button, toggle, slider, text_input, plug, dimmer, garage_door, text_label"
+	}
+	subtypes := make([]string, 0, len(cat.ControlTypes))
+	for _, t := range cat.ControlTypes {
+		if t.Hidden {
+			continue
+		}
+		subtypes = append(subtypes, t.Subtype)
+	}
+	if len(subtypes) == 0 {
+		return "(no control types are currently enabled)"
+	}
+	return strings.Join(subtypes, ", ")
+}
+
+// displayProse renders the per-display documentation block. Frigate-specific
+// docs only appear when both Frigate displays are enabled in the catalog.
+func displayProse(cat *registry.Catalog) string {
+	if cat == nil {
+		return `- Types: frigate_camera, frigate_alerts, weather
+- Call update_component_type("display") first
+- **frigate_camera**: Frigate NVR camera viewer with live stream, snapshots, and MQTT alerts
+- **frigate_alerts**: Responsive thumbnail grid of unreviewed Frigate alerts. Polls Frigate's /api/review endpoint with reviewed=0. Click a thumbnail to open the review clip in a modal. Configuration: { display_type: "frigate_alerts", frigate_connection_id, default_camera (optional camera filter, empty = all cameras), alert_severity ("alert" | "detection" | ""), max_thumbnails (default 8, 1–50), snapshot_interval (polling ms, default 10000) }
+- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to "weather"). Configuration: { display_type: "weather", mqtt_connection_id, weather_topic_prefix }
+`
+	}
+
+	subtypes := make([]string, 0, len(cat.DisplayTypes))
+	for _, t := range cat.DisplayTypes {
+		if t.Hidden {
+			continue
+		}
+		subtypes = append(subtypes, t.Subtype)
+	}
+	if len(subtypes) == 0 {
+		return "- (no display types are currently enabled in this deployment)\n- Call update_component_type(\"display\") first\n"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("- Types: ")
+	sb.WriteString(strings.Join(subtypes, ", "))
+	sb.WriteString("\n- Call update_component_type(\"display\") first\n")
+
+	hasFrigateCamera := false
+	hasFrigateAlerts := false
+	hasWeather := false
+	for _, t := range cat.DisplayTypes {
+		switch t.Subtype {
+		case "frigate_camera":
+			hasFrigateCamera = true
+		case "frigate_alerts":
+			hasFrigateAlerts = true
+		case "weather":
+			hasWeather = true
+		}
+	}
+	if hasFrigateCamera {
+		sb.WriteString("- **frigate_camera**: Frigate NVR camera viewer with live stream, snapshots, and MQTT alerts\n")
+	}
+	if hasFrigateAlerts {
+		sb.WriteString("- **frigate_alerts**: Responsive thumbnail grid of unreviewed Frigate alerts. Polls Frigate's /api/review endpoint with reviewed=0. Click a thumbnail to open the review clip in a modal. Configuration: { display_type: \"frigate_alerts\", frigate_connection_id, default_camera (optional camera filter, empty = all cameras), alert_severity (\"alert\" | \"detection\" | \"\"), max_thumbnails (default 8, 1–50), snapshot_interval (polling ms, default 10000) }\n")
+	}
+	if hasWeather {
+		sb.WriteString("- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to \"weather\"). Configuration: { display_type: \"weather\", mqtt_connection_id, weather_topic_prefix }\n")
+	}
+	return sb.String()
+}

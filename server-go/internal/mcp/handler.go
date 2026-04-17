@@ -250,7 +250,7 @@ this preamble — call the list tools for those, they change constantly.
 
 `)
 
-	cat, err := registry.BuildCatalog(context.Background(), h.registry.deviceTypeLister())
+	cat, err := registry.BuildCatalog(context.Background(), h.registry.deviceTypeLister(), h.registry.typeFilter)
 	if err != nil {
 		log.Printf("[MCP] Failed to build catalog for initialize instructions: %v", err)
 		sb.WriteString("_(catalog render failed — call get_type_catalog for fresh data)_\n")

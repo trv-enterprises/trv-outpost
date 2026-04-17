@@ -129,11 +129,12 @@ func (d *Datasource) GetEffectiveTypeID() string {
 		if d.Config.Socket != nil {
 			switch d.Config.Socket.Protocol {
 			case "websocket":
+				if d.Config.Socket.Bidirectional {
+					return "stream.websocket-bidir"
+				}
 				return "stream.websocket"
 			case "tcp":
 				return "stream.tcp"
-			case "udp":
-				return "stream.udp"
 			}
 		}
 		return "stream.websocket"
@@ -304,12 +305,13 @@ type CSVConfig struct {
 // SocketConfig represents configuration for socket/WebSocket streams
 type SocketConfig struct {
 	URL              string              `json:"url" bson:"url" binding:"required"`
-	Protocol         string              `json:"protocol" bson:"protocol" binding:"required,oneof=tcp udp websocket"`
+	Protocol         string              `json:"protocol" bson:"protocol" binding:"required,oneof=tcp websocket"`
+	Bidirectional    bool                `json:"bidirectional,omitempty" bson:"bidirectional,omitempty"`     // WebSocket only — when true, resolves to stream.websocket-bidir (write-capable, used for control commands)
 	Headers          map[string]string   `json:"headers,omitempty" bson:"headers,omitempty"`
 	ReconnectOnError bool                `json:"reconnect_on_error" bson:"reconnect_on_error"`
 	ReconnectDelay   int                 `json:"reconnect_delay,omitempty" bson:"reconnect_delay,omitempty"` // milliseconds
 	PingInterval     int                 `json:"ping_interval,omitempty" bson:"ping_interval,omitempty"`     // seconds
-	MessageFormat    string              `json:"message_format,omitempty" bson:"message_format,omitempty"`   // json, text, binary
+	MessageFormat    string              `json:"message_format,omitempty" bson:"message_format,omitempty"`   // json, text
 	BufferSize       int                 `json:"buffer_size,omitempty" bson:"buffer_size,omitempty"`         // number of messages to buffer
 	Parser           *SocketParserConfig `json:"parser,omitempty" bson:"parser,omitempty"`                   // parser configuration
 }
@@ -322,6 +324,9 @@ type SocketParserConfig struct {
 
 	// TimestampField specifies which field contains the timestamp (default: use server receive time)
 	TimestampField string `json:"timestamp_field,omitempty" bson:"timestamp_field,omitempty"`
+
+	// TimestampScale hints how to interpret a numeric timestamp value: "ns" (nanoseconds), "ms" (milliseconds), or empty (auto-detect by magnitude). Mirrors the chart-side parser's timestamp_scale field.
+	TimestampScale string `json:"timestamp_scale,omitempty" bson:"timestamp_scale,omitempty"`
 
 	// TimestampFormat is the Go time format string for parsing timestamps (default: RFC3339)
 	// Common formats: "2006-01-02T15:04:05Z07:00" (RFC3339), "2006-01-02 15:04:05", unix timestamp

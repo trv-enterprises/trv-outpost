@@ -14,15 +14,24 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
+
+// CatalogProvider returns the current type catalog (filtered by enabled_types
+// settings). The agent calls this once per message so admin toggles take
+// effect on the next user turn.
+type CatalogProvider interface {
+	GetCatalog(ctx context.Context) (*registry.Catalog, error)
+}
 
 // Agent handles AI conversations with tool execution
 type Agent struct {
-	client       anthropic.Client
-	toolExecutor *ToolExecutor
-	sessionSvc   SessionService
-	maxTurns     int
-	modelName    string
+	client          anthropic.Client
+	toolExecutor    *ToolExecutor
+	sessionSvc      SessionService
+	maxTurns        int
+	modelName       string
+	catalogProvider CatalogProvider
 }
 
 // SessionService interface for session operations and SSE broadcasting
@@ -44,8 +53,10 @@ type AgentConfig struct {
 	BaseURL  string // for custom endpoints
 }
 
-// NewAgent creates a new AI agent with the Anthropic SDK
-func NewAgent(toolExecutor *ToolExecutor, sessionSvc SessionService, config *AgentConfig) (*Agent, error) {
+// NewAgent creates a new AI agent with the Anthropic SDK. catalogProvider
+// may be nil — when nil the agent ships the historical full enum lists and
+// fully-populated system prompt (no filtering applied).
+func NewAgent(toolExecutor *ToolExecutor, sessionSvc SessionService, catalogProvider CatalogProvider, config *AgentConfig) (*Agent, error) {
 	if config == nil {
 		config = &AgentConfig{
 			Provider: "anthropic",
@@ -71,11 +82,12 @@ func NewAgent(toolExecutor *ToolExecutor, sessionSvc SessionService, config *Age
 	}
 
 	return &Agent{
-		client:       client,
-		toolExecutor: toolExecutor,
-		sessionSvc:   sessionSvc,
-		maxTurns:     maxTurns,
-		modelName:    config.Model,
+		client:          client,
+		toolExecutor:    toolExecutor,
+		sessionSvc:      sessionSvc,
+		maxTurns:        maxTurns,
+		modelName:       config.Model,
+		catalogProvider: catalogProvider,
 	}, nil
 }
 
@@ -91,8 +103,22 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 	// Build conversation history
 	messages := a.buildMessages(session.Messages, userContent)
 
-	// Get tool definitions
-	tools := GetAnthropicTools()
+	// Build the catalog (if a provider is wired) so tools and system prompt
+	// reflect the admin's current enabled_types selection. On error we fall
+	// back to the unfiltered prompt/enum lists.
+	var cat *registry.Catalog
+	if a.catalogProvider != nil {
+		c, err := a.catalogProvider.GetCatalog(ctx)
+		if err == nil {
+			cat = c
+		} else {
+			debug.SendError(session.ID, 0, err, "catalog_error")
+		}
+	}
+
+	// Get tool definitions (filtered by catalog when available)
+	tools := GetAnthropicTools(cat)
+	systemPromptText := BuildSystemPrompt(cat)
 
 	// Debug: Log session start
 	debug.Send(&DebugEvent{
@@ -119,7 +145,7 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			Model:     anthropic.Model(a.modelName),
 			MaxTokens: 4096,
 			System: []anthropic.TextBlockParam{
-				{Text: SystemPrompt},
+				{Text: systemPromptText},
 			},
 			Messages: messages,
 			Tools:    tools,

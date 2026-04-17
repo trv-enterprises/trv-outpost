@@ -14,6 +14,7 @@ import {
 } from '@carbon/react';
 import apiClient from '../api/client';
 import { CONTROL_TYPE_INFO } from './controls';
+import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './AIPreflightModal.scss';
 
 // Chart types for chart components (data-driven ECharts visualizations)
@@ -47,6 +48,7 @@ const CONTROL_TYPES = Object.entries(CONTROL_TYPE_INFO).map(([id, info]) => ({
  * @param {Function} onContinue - Handler when user clicks Continue, receives context object
  */
 function AIPreflightModal({ open, onClose, onContinue }) {
+  const { isChartTypeEnabled, isControlTypeEnabled } = useEnabledTypes();
   const [componentType, setComponentType] = useState(''); // 'chart', 'display', or 'control'
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -206,7 +208,7 @@ function AIPreflightModal({ open, onClose, onContinue }) {
               onChange={(e) => setChartType(e.target.value)}
             >
               <SelectItem value="" text="Select a chart type..." />
-              {CHART_TYPES.map((type) => (
+              {CHART_TYPES.filter((t) => isChartTypeEnabled(t.id)).map((type) => (
                 <SelectItem
                   key={type.id}
                   value={type.id}
@@ -225,7 +227,7 @@ function AIPreflightModal({ open, onClose, onContinue }) {
               onChange={(e) => setControlType(e.target.value)}
             >
               <SelectItem value="" text="Select a control type..." />
-              {CONTROL_TYPES.map((type) => (
+              {CONTROL_TYPES.filter((t) => isControlTypeEnabled(t.id)).map((type) => (
                 <SelectItem
                   key={type.id}
                   value={type.id}

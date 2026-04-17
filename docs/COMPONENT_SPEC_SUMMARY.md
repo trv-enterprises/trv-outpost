@@ -285,15 +285,16 @@ Components can receive data from various connection types:
 
 | Type | Description | Use Case |
 |------|-------------|----------|
-| `sql` | PostgreSQL, MySQL, SQLite, MSSQL | Relational databases |
+| `sql` | PostgreSQL, MySQL, SQLite, MSSQL, Oracle | Relational databases |
 | `api` | REST APIs with JSON responses | External services |
 | `csv` | CSV file parsing | Static data files |
-| `socket` | WebSocket connections | Real-time streaming |
-| `tcp` | Raw TCP connections | IoT devices, sensors |
-| `udp` | UDP connections | High-frequency data |
+| `socket` (WebSocket) | Bi-/uni-directional WebSocket | Real-time streaming, controls |
+| `socket` (TCP) | Raw TCP connections | IoT sensors, line-delimited streams |
+| `mqtt` | MQTT broker (Eclipse Paho) | Topic-multiplexed device telemetry |
 | `prometheus` | Prometheus metrics | Infrastructure monitoring |
 | `edgelake` | EdgeLake distributed DB | Edge/IoT computing |
 | `tsstore` | Time-series store | Time-series data |
+| `frigate` | Frigate NVR proxy (integration) | Camera viewers, alerts |
 
 ---
 
@@ -308,7 +309,7 @@ In addition to display components (charts), the system supports control componen
 | `slider` | Numeric value selection |
 | `text_input` | Text entry for commands |
 
-Controls can send commands to bidirectional connections (WebSocket, TCP, UDP) via the `/api/controls/:id/execute` endpoint.
+Controls can send commands to bidirectional connections (MQTT, WebSocket-bidirectional) via the `/api/controls/:id/execute` endpoint. WebSocket connections must have the **Bidirectional** flag set in the connection editor for write operations to be permitted.
 
 ---
 

@@ -50,6 +50,7 @@ import UserDetailPage from './pages/UserDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import DevicesPage from './pages/DevicesPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
+import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import NotificationPanel from './components/NotificationPanel';
 import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
@@ -465,9 +466,11 @@ function App() {
   // Show main app
   return (
     <NotificationProvider>
-      <Router>
-        <AppContent onDisconnect={handleDisconnect} />
-      </Router>
+      <EnabledTypesProvider>
+        <Router>
+          <AppContent onDisconnect={handleDisconnect} />
+        </Router>
+      </EnabledTypesProvider>
     </NotificationProvider>
   );
 }

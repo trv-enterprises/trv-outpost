@@ -36,3 +36,23 @@ settings:
     category: dashboard
     description: "MQTT connection ID used for dashboard commands"
     value: ""
+
+  - key: enabled_types
+    category: availability
+    description: "Types/subtypes/integrations available for creation, AI suggestions, and MCP catalog. Existing dashboard components remain functional regardless. Empty arrays are populated from the registry on first boot. Managed via Manage → Settings → Type Availability."
+    value:
+      integrations: []
+      connections: []
+      charts: []
+      controls: []
+      displays: []
+
+  - key: known_types
+    category: availability
+    description: "Server-maintained ledger of types/subtypes/integrations the system has seen. Used to detect newly added types after upgrades so they can be enabled by default. Do not edit manually."
+    value:
+      integrations: []
+      connections: []
+      charts: []
+      controls: []
+      displays: []

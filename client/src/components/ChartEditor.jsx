@@ -37,6 +37,7 @@ import { transformData, formatCellValue } from '../utils/dataTransforms';
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
 import { invalidateTagsCache } from './shared/tagsApi';
+import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './ChartEditor.scss';
 
 // Chart types available
@@ -212,6 +213,7 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [nameError, setNameError] = useState('');
   const [title, setTitle] = useState(''); // Display title (defaults to name)
   const [description, setDescription] = useState('');
+  const { isChartTypeEnabled, enabledDisplayTypes, enabledControlTypes } = useEnabledTypes();
   const [tags, setTags] = useState([]);
   const [componentType, setComponentType] = useState('chart'); // 'chart', 'control', or 'display'
   const [chartType, setChartType] = useState('bar');
@@ -276,7 +278,7 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [mqttSampling, setMqttSampling] = useState(false);
 
   // Stream parser config (per-component data extraction for MQTT/streaming)
-  const [parserPreset, setParserPreset] = useState('none'); // 'none', 'tsstore_mqtt', 'custom'
+  const [parserPreset, setParserPreset] = useState('none'); // 'none', 'tsstore', 'custom'
   const [parserDataPath, setParserDataPath] = useState('');
   const [parserTimestampField, setParserTimestampField] = useState('');
   const [parserTimestampScale, setParserTimestampScale] = useState(''); // 's', 'ms', 'ns', or '' for auto
@@ -509,9 +511,10 @@ const ChartEditor = forwardRef(function ChartEditor({
         setParserDataPath(p.data_path || '');
         setParserTimestampField(p.timestamp_field || '');
         setParserTimestampScale(p.timestamp_scale || '');
-        // Detect preset
+        // Detect preset. ts-store covers both MQTT and WebSocket transports
+        // because both ts-store push paths use the same envelope shape.
         if (p.data_path === 'data' && p.timestamp_field === 'timestamp' && p.timestamp_scale === 'ns') {
-          setParserPreset('tsstore_mqtt');
+          setParserPreset('tsstore');
         } else {
           setParserPreset('custom');
         }
@@ -1275,36 +1278,59 @@ const ChartEditor = forwardRef(function ChartEditor({
         />
       )}
 
-      {/* Component type selector - Chart vs Display vs Control */}
+      {/* Component type selector - Chart vs Display vs Control.
+          Tabs hide entirely when no enabled subtypes exist for that category
+          in this deployment. The current component's category is always shown
+          (so editing an existing Display component still works even if all
+          display types are now disabled). */}
       <div className="component-type-section">
-        <ContentSwitcher
-          selectedIndex={componentType === 'display' ? 1 : componentType === 'control' ? 2 : 0}
-          onChange={({ index }) => {
-            const types = ['chart', 'display', 'control'];
-            const newType = types[index];
-            setComponentType(newType);
-            if (newType === 'control' && !controlConfig) {
-              setControlConfig({
-                control_type: 'button',
-                command_config: { action: '', target: '', payload_template: {} },
-                ui_config: { label: 'Execute', kind: 'primary' }
-              });
-            }
-            if (newType === 'display' && !displayConfig) {
-              setDisplayConfig({
-                display_type: 'frigate_camera',
-                frigate_connection_id: '',
-                default_camera: '',
-                snapshot_interval: 10000
-              });
-            }
-          }}
-          className="component-type-switcher"
-        >
-          <Switch name="chart" text="Chart" />
-          <Switch name="display" text="Display" />
-          <Switch name="control" text="Control" />
-        </ContentSwitcher>
+        {(() => {
+          const hasEnabledDisplays = (enabledDisplayTypes?.filter((t) => !t.hidden).length || 0) > 0;
+          const hasEnabledControls = (enabledControlTypes?.filter((t) => !t.hidden).length || 0) > 0;
+          const tabs = [{ name: 'chart', text: 'Chart' }];
+          if (hasEnabledDisplays || componentType === 'display') {
+            tabs.push({ name: 'display', text: 'Display' });
+          }
+          if (hasEnabledControls || componentType === 'control') {
+            tabs.push({ name: 'control', text: 'Control' });
+          }
+          // If the current selection got hidden (e.g., admin disabled all
+          // displays while we were on the Display tab without an existing
+          // component), fall back to chart so the selector index resolves.
+          const visibleNames = tabs.map((t) => t.name);
+          const effectiveType = visibleNames.includes(componentType) ? componentType : 'chart';
+          const selectedIndex = visibleNames.indexOf(effectiveType);
+          if (effectiveType !== componentType) {
+            // Schedule a state correction once on render — no infinite loop
+            // because the next render's componentType will match.
+            setTimeout(() => setComponentType(effectiveType), 0);
+          }
+          return (
+            <ContentSwitcher
+              selectedIndex={Math.max(0, selectedIndex)}
+              onChange={({ index }) => {
+                const newType = tabs[index]?.name;
+                if (!newType) return;
+                setComponentType(newType);
+                if (newType === 'control' && !controlConfig) {
+                  const firstEnabled = enabledControlTypes?.find((t) => !t.hidden)?.subtype || 'button';
+                  setControlConfig({
+                    control_type: firstEnabled,
+                    command_config: { action: '', target: '', payload_template: {} },
+                    ui_config: { label: 'Execute', kind: 'primary' }
+                  });
+                }
+                if (newType === 'display' && !displayConfig) {
+                  const firstEnabled = enabledDisplayTypes?.[0]?.subtype;
+                  if (firstEnabled) setDisplayConfig({ display_type: firstEnabled });
+                }
+              }}
+              className="component-type-switcher"
+            >
+              {tabs.map((t) => <Switch key={t.name} name={t.name} text={t.text} />)}
+            </ContentSwitcher>
+          );
+        })()}
       </div>
 
       {/* Display/Control basic info */}
@@ -1415,7 +1441,9 @@ const ChartEditor = forwardRef(function ChartEditor({
           className="type-selection-modal"
         >
           <div className="type-selection-grid">
-            {CHART_TYPES.map(type => {
+            {/* Disabled chart types are hidden, but the active type stays
+                visible so editing existing charts of that type still works. */}
+            {CHART_TYPES.filter(t => isChartTypeEnabled(t.id) || t.id === chartType).map(type => {
               const TypeIcon = type.icon;
               return (
                 <div
@@ -1686,7 +1714,7 @@ const ChartEditor = forwardRef(function ChartEditor({
                             onChange={(e) => {
                               const preset = e.target.value;
                               setParserPreset(preset);
-                              if (preset === 'tsstore_mqtt') {
+                              if (preset === 'tsstore') {
                                 setParserDataPath('data');
                                 setParserTimestampField('timestamp');
                                 setParserTimestampScale('ns');
@@ -1698,7 +1726,7 @@ const ChartEditor = forwardRef(function ChartEditor({
                             }}
                           >
                             <SelectItem value="none" text="None (flat JSON)" />
-                            <SelectItem value="tsstore_mqtt" text="ts-store MQTT" />
+                            <SelectItem value="tsstore" text="ts-store" />
                             <SelectItem value="custom" text="Custom" />
                           </Select>
                           <TextInput

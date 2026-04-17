@@ -89,6 +89,7 @@ type TypeInfo struct {
 	Category     string         `json:"category"`      // e.g., "db", "stream", "api", "file", "store"
 	Capabilities Capabilities   `json:"capabilities"`
 	ConfigSchema []ConfigField  `json:"config_schema"`
+	Integration  string         `json:"integration,omitempty"` // Optional: groups types under a named integration (e.g., "frigate", "casita")
 }
 
 // SchemaProvider is an optional interface for adapters that support schema discovery

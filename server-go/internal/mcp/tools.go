@@ -27,15 +27,17 @@ type ToolRegistry struct {
 	dashboardService  *service.DashboardService
 	chartService      *service.ChartService
 	deviceTypeService *service.DeviceTypeService
+	typeFilter        registry.TypeFilter
 }
 
 // NewToolRegistry wires services into a fresh tool registry and registers
-// every tool the MCP server exposes.
+// every tool the MCP server exposes. typeFilter may be nil (no filtering).
 func NewToolRegistry(
 	connectionSvc *service.DatasourceService,
 	dashboardSvc *service.DashboardService,
 	chartSvc *service.ChartService,
 	deviceTypeSvc *service.DeviceTypeService,
+	typeFilter registry.TypeFilter,
 ) *ToolRegistry {
 	r := &ToolRegistry{
 		tools:             make(map[string]Tool),
@@ -44,6 +46,7 @@ func NewToolRegistry(
 		dashboardService:  dashboardSvc,
 		chartService:      chartSvc,
 		deviceTypeService: deviceTypeSvc,
+		typeFilter:        typeFilter,
 	}
 
 	r.registerCatalogTools()
@@ -130,7 +133,31 @@ func (r *ToolRegistry) registerCatalogTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return registry.BuildCatalog(context.Background(), r.deviceTypeLister())
+			return registry.BuildCatalog(context.Background(), r.deviceTypeLister(), r.typeFilter)
+		},
+	)
+
+	r.registerTool(
+		Tool{
+			Name:        "list_integrations",
+			Description: "List integrations available on this server. Integrations group related connection / chart / control / display types so they can be enabled or disabled as a bundle from the admin settings. Disabled integrations and any types tagged with them are omitted from the type catalog.",
+			InputSchema: InputSchema{
+				Type:       "object",
+				Properties: map[string]PropertySchema{},
+			},
+		},
+		func(args map[string]interface{}) (interface{}, error) {
+			items := registry.ListIntegrations()
+			if r.typeFilter != nil {
+				filtered := items[:0]
+				for _, info := range items {
+					if r.typeFilter.IsIntegrationEnabled(info.ID) {
+						filtered = append(filtered, info)
+					}
+				}
+				items = filtered
+			}
+			return map[string]interface{}{"integrations": items, "count": len(items)}, nil
 		},
 	)
 
@@ -144,7 +171,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return map[string]interface{}{"types": registry.List()}, nil
+			return map[string]interface{}{"types": r.filterConnectionTypes(registry.List())}, nil
 		},
 	)
 
@@ -158,7 +185,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return map[string]interface{}{"types": registry.ListComponentTypes(registry.CategoryChart)}, nil
+			return map[string]interface{}{"types": r.filterComponentTypes(registry.ListComponentTypes(registry.CategoryChart), registry.CategoryChart)}, nil
 		},
 	)
 
@@ -172,7 +199,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return map[string]interface{}{"types": registry.ListComponentTypes(registry.CategoryControl)}, nil
+			return map[string]interface{}{"types": r.filterComponentTypes(registry.ListComponentTypes(registry.CategoryControl), registry.CategoryControl)}, nil
 		},
 	)
 
@@ -186,7 +213,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return map[string]interface{}{"types": registry.ListComponentTypes(registry.CategoryDisplay)}, nil
+			return map[string]interface{}{"types": r.filterComponentTypes(registry.ListComponentTypes(registry.CategoryDisplay), registry.CategoryDisplay)}, nil
 		},
 	)
 
@@ -1119,6 +1146,36 @@ func parseDisplayConfig(dc map[string]interface{}) *models.DisplayConfig {
 		WeatherTopicPrefix:  getString(dc, "weather_topic_prefix"),
 		WeatherLocation:     getString(dc, "weather_location"),
 	}
+}
+
+// filterConnectionTypes applies the registry TypeFilter to a connection
+// type listing. Returns the input unchanged when no filter is wired.
+func (r *ToolRegistry) filterConnectionTypes(items []registry.TypeInfo) []registry.TypeInfo {
+	if r.typeFilter == nil {
+		return items
+	}
+	out := make([]registry.TypeInfo, 0, len(items))
+	for _, t := range items {
+		if r.typeFilter.IsEnabled(registry.CategoryConnection, t.TypeID) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// filterComponentTypes applies the registry TypeFilter to a component type
+// listing.
+func (r *ToolRegistry) filterComponentTypes(items []registry.ComponentTypeInfo, category string) []registry.ComponentTypeInfo {
+	if r.typeFilter == nil {
+		return items
+	}
+	out := make([]registry.ComponentTypeInfo, 0, len(items))
+	for _, t := range items {
+		if r.typeFilter.IsEnabled(category, t.Subtype) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func parseStringArray(arr []interface{}) []string {

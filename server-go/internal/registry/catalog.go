@@ -20,6 +20,7 @@ import (
 // Device types come from a DB-backed lister supplied at call time — the
 // registry package intentionally has no hard dependency on service/models.
 type Catalog struct {
+	Integrations    []IntegrationInfo   `json:"integrations"`
 	ConnectionTypes []TypeInfo          `json:"connection_types"`
 	ChartTypes      []ComponentTypeInfo `json:"chart_types"`
 	ControlTypes    []ComponentTypeInfo `json:"control_types"`
@@ -47,15 +48,27 @@ type DeviceTypeLister interface {
 	ListDeviceTypesForCatalog(ctx context.Context) ([]DeviceTypeSummary, error)
 }
 
-// BuildCatalog assembles the unified type catalog. Pass nil for deviceTypes
-// to omit them (useful in tests or contexts where DB access isn't available).
-func BuildCatalog(ctx context.Context, deviceTypes DeviceTypeLister) (*Catalog, error) {
+// BuildCatalog assembles the unified type catalog filtered by the given
+// TypeFilter. Pass nil for deviceTypes to omit them. Pass nil for filter to
+// get an unfiltered catalog (equivalent to BuildUnfilteredCatalog).
+//
+// Filter semantics: integration-tagged types are only included when their
+// integration is enabled. Connection types not registered as adapters but
+// declared by an integration's OwnedConnectionType are included as
+// synthetic TypeInfo entries when the integration is enabled, so the
+// frontend picker and AI prompt see them.
+func BuildCatalog(ctx context.Context, deviceTypes DeviceTypeLister, filter TypeFilter) (*Catalog, error) {
 	cat := &Catalog{
+		Integrations:    ListIntegrations(),
 		ConnectionTypes: List(),
 		ChartTypes:      ListComponentTypes(CategoryChart),
 		ControlTypes:    ListComponentTypes(CategoryControl),
 		DisplayTypes:    ListComponentTypes(CategoryDisplay),
 	}
+
+	// Add synthetic connection types declared by integrations (e.g., Frigate).
+	cat.ConnectionTypes = appendSyntheticConnectionTypes(cat.ConnectionTypes, cat.Integrations)
+
 	if deviceTypes != nil {
 		dts, err := deviceTypes.ListDeviceTypesForCatalog(ctx)
 		if err != nil {
@@ -63,7 +76,82 @@ func BuildCatalog(ctx context.Context, deviceTypes DeviceTypeLister) (*Catalog, 
 		}
 		cat.DeviceTypes = dts
 	}
+
+	if filter != nil {
+		cat.Integrations = filterIntegrations(cat.Integrations, filter)
+		cat.ConnectionTypes = filterConnectionTypes(cat.ConnectionTypes, filter)
+		cat.ChartTypes = filterComponentTypes(cat.ChartTypes, CategoryChart, filter)
+		cat.ControlTypes = filterComponentTypes(cat.ControlTypes, CategoryControl, filter)
+		cat.DisplayTypes = filterComponentTypes(cat.DisplayTypes, CategoryDisplay, filter)
+	}
 	return cat, nil
+}
+
+// BuildUnfilteredCatalog returns the catalog with no filtering applied.
+// Used by the settings editor so admins can see every type, including the
+// ones they previously disabled.
+func BuildUnfilteredCatalog(ctx context.Context, deviceTypes DeviceTypeLister) (*Catalog, error) {
+	return BuildCatalog(ctx, deviceTypes, nil)
+}
+
+// appendSyntheticConnectionTypes adds TypeInfo entries for connection types
+// owned by integrations that aren't already in the adapter registry.
+// Frigate's connection type is the canonical example — it has no Go adapter
+// because its requests proxy through frigate_handler.
+func appendSyntheticConnectionTypes(existing []TypeInfo, integrations []IntegrationInfo) []TypeInfo {
+	known := make(map[string]bool, len(existing))
+	for _, t := range existing {
+		known[t.TypeID] = true
+	}
+	for _, integ := range integrations {
+		if integ.OwnedConnectionType == "" || known[integ.OwnedConnectionType] {
+			continue
+		}
+		existing = append(existing, TypeInfo{
+			TypeID:      integ.OwnedConnectionType,
+			DisplayName: integ.DisplayName,
+			Category:    "integration",
+			Integration: integ.ID,
+			Capabilities: Capabilities{
+				CanRead: true,
+			},
+		})
+		known[integ.OwnedConnectionType] = true
+	}
+	sort.Slice(existing, func(i, j int) bool {
+		return existing[i].TypeID < existing[j].TypeID
+	})
+	return existing
+}
+
+func filterIntegrations(items []IntegrationInfo, filter TypeFilter) []IntegrationInfo {
+	out := make([]IntegrationInfo, 0, len(items))
+	for _, info := range items {
+		if filter.IsEnabled(CategoryIntegration, info.ID) {
+			out = append(out, info)
+		}
+	}
+	return out
+}
+
+func filterConnectionTypes(items []TypeInfo, filter TypeFilter) []TypeInfo {
+	out := make([]TypeInfo, 0, len(items))
+	for _, info := range items {
+		if filter.IsEnabled(CategoryConnection, info.TypeID) {
+			out = append(out, info)
+		}
+	}
+	return out
+}
+
+func filterComponentTypes(items []ComponentTypeInfo, category string, filter TypeFilter) []ComponentTypeInfo {
+	out := make([]ComponentTypeInfo, 0, len(items))
+	for _, info := range items {
+		if filter.IsEnabled(category, info.Subtype) {
+			out = append(out, info)
+		}
+	}
+	return out
 }
 
 // RenderMarkdown produces a compact markdown description of the catalog

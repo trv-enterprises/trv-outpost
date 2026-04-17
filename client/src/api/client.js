@@ -723,6 +723,33 @@ class APIClient {
       body: JSON.stringify({ value }),
     });
   }
+
+  // Registry / type catalog endpoints. The catalog is filtered by the
+  // admin's enabled_types selection by default; pass { includeDisabled: true }
+  // when the settings editor needs to render every possible type so admins
+  // can re-enable previously disabled ones.
+  async getRegistryCatalog({ includeDisabled = false } = {}) {
+    const qs = includeDisabled ? '?include_disabled=true' : '';
+    return this.request(`/api/registry/catalog${qs}`);
+  }
+
+  async getRegistryConnectionTypes({ includeDisabled = false } = {}) {
+    const qs = includeDisabled ? '?include_disabled=true' : '';
+    return this.request(`/api/registry/connections${qs}`);
+  }
+
+  async getRegistryComponentTypes({ category = '', includeDisabled = false } = {}) {
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (includeDisabled) params.set('include_disabled', 'true');
+    const qs = params.toString();
+    return this.request(`/api/registry/components${qs ? `?${qs}` : ''}`);
+  }
+
+  async getRegistryIntegrations({ includeDisabled = false } = {}) {
+    const qs = includeDisabled ? '?include_disabled=true' : '';
+    return this.request(`/api/registry/integrations${qs}`);
+  }
 }
 
 export default new APIClient();

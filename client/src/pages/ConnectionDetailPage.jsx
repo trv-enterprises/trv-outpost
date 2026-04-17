@@ -27,6 +27,7 @@ import { Save, Close, TrashCan, Play, ConnectionSignal, Checkmark, ErrorFilled, 
 import apiClient, { API_BASE } from '../api/client';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
+import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -42,6 +43,51 @@ function ConnectionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isCreateMode = id === 'new';
+  const { isConnectionTypeEnabled, enabledConnectionTypes } = useEnabledTypes();
+
+  // The connection editor's Select uses bare legacy names (`sql`, `api`,
+  // `csv`, `socket`, `mqtt`, `frigate`, etc.) because those are the values
+  // persisted on Datasource.Type. The registry uses dotted IDs (`db.postgres`,
+  // `stream.mqtt`, `api.rest`, ...). Each bare name maps to a *family* of
+  // dotted IDs — a bare option should appear in the dropdown when at least
+  // one member of its family is enabled (or when it has no family mapping
+  // and matches a registry ID directly, e.g. `frigate`).
+  const familyEnabledFn = (() => {
+    const enabledIds = new Set((enabledConnectionTypes || []).map((t) => t.type_id));
+    const families = {
+      sql: ['db.'],
+      api: ['api.rest'],
+      csv: ['file.csv'],
+      socket: ['stream.tcp', 'stream.websocket', 'stream.websocket-bidir'],
+      mqtt: ['stream.mqtt'],
+      tsstore: ['store.tsstore'],
+      prometheus: ['api.prometheus'],
+      edgelake: ['api.edgelake'],
+      frigate: ['frigate']
+    };
+    return (bareName) => {
+      const matchers = families[bareName];
+      if (!matchers) return isConnectionTypeEnabled(bareName);
+      return matchers.some((m) => {
+        if (m.endsWith('.')) {
+          for (const id of enabledIds) if (id.startsWith(m)) return true;
+          return false;
+        }
+        return enabledIds.has(m);
+      });
+    };
+  })();
+
+  // Wraps Carbon SelectItem so a disabled connection type only renders for
+  // the user when (a) we're editing an existing connection of that type
+  // (so the form opens to the correct subform), or (b) at least one member
+  // of its registry family is enabled.
+  const renderConnTypeOption = (value, text, currentType) => {
+    if (familyEnabledFn(value) || value === currentType) {
+      return <SelectItem key={value} value={value} text={text} />;
+    }
+    return null;
+  };
 
   const [connection, setConnection] = useState(null);
   const [name, setName] = useState('');
@@ -57,6 +103,11 @@ function ConnectionDetailPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testInput, setTestInput] = useState('{\n  "type": "reading",\n  "data": {\n    "temperature": 23.5,\n    "humidity": 65,\n    "pressure": 1013.25\n  },\n  "timestamp": "2024-01-15T10:30:00Z"\n}');
+  // Tracks the user's explicit preset selection. Without this, picking
+  // "Custom" while all parser fields are empty would re-derive preset back
+  // to "none" on the next render and disable the inputs before the user
+  // could type. Reset to null to fall back to value-based detection.
+  const [parserPresetOverride, setParserPresetOverride] = useState(null);
 
   // Test connection state
   const [testing, setTesting] = useState(false);
@@ -395,26 +446,42 @@ function ConnectionDetailPage() {
     return current;
   };
 
-  // Compute parsed output based on test input, data_path, and timestamp_field
+  // Compute parsed output based on test input, data_path, timestamp_field,
+  // and timestamp_scale. Mirrors the chart-side parser preview so admins
+  // can verify the data_path / scale selection before saving the connection.
   const parsedOutput = useMemo(() => {
     const socketConfig = config.socket || {};
     const parserConfig = socketConfig.parser || {};
     const dataPath = parserConfig.data_path || '';
     const timestampField = parserConfig.timestamp_field || '';
+    const timestampScale = parserConfig.timestamp_scale || '';
 
     try {
       const parsed = JSON.parse(testInput);
 
-      // Step 1: Extract timestamp from original (before data extraction)
+      // Step 1: Lift timestamp from the envelope (BEFORE we re-root) so we
+      // don't lose it when data_path narrows the record.
       let extractedTimestamp = null;
       if (timestampField) {
         extractedTimestamp = extractByPath(parsed, timestampField);
       }
 
-      // Step 2: Extract data from data_path
+      // Apply scale hint to numeric timestamps. Mirrors the backend
+      // normalizeTimestampWithScale logic so the preview agrees with what
+      // the server will store.
+      if (typeof extractedTimestamp === 'number') {
+        if (timestampScale === 'ns') extractedTimestamp = extractedTimestamp / 1e9;
+        else if (timestampScale === 'ms') extractedTimestamp = extractedTimestamp / 1e3;
+        else if (!timestampScale) {
+          if (extractedTimestamp > 1e15) extractedTimestamp = extractedTimestamp / 1e9;
+          else if (extractedTimestamp > 1e12) extractedTimestamp = extractedTimestamp / 1e3;
+        }
+      }
+
+      // Step 2: Re-root at data_path if set.
       let extracted = dataPath ? extractByPath(parsed, dataPath) : parsed;
 
-      // Step 3: If extracted is an object, merge timestamp into it
+      // Step 3: If extracted is an object, merge the lifted timestamp.
       if (extracted && typeof extracted === 'object' && !Array.isArray(extracted)) {
         extracted = { ...extracted };
         if (extractedTimestamp !== null) {
@@ -439,7 +506,12 @@ function ConnectionDetailPage() {
         fields: []
       };
     }
-  }, [testInput, config.socket?.parser?.data_path, config.socket?.parser?.timestamp_field]);
+  }, [
+    testInput,
+    config.socket?.parser?.data_path,
+    config.socket?.parser?.timestamp_field,
+    config.socket?.parser?.timestamp_scale
+  ]);
 
   const renderSQLConfig = () => {
     const sqlConfig = config.sql || {};
@@ -593,6 +665,17 @@ function ConnectionDetailPage() {
   const renderSocketConfig = () => {
     const socketConfig = config.socket || {};
     const parserConfig = socketConfig.parser || {};
+    const messageFormatIsJson = (socketConfig.message_format || 'json') === 'json';
+    // Derive the preset. ts-store covers both MQTT and WebSocket transports
+    // because both use the same envelope: {"timestamp": <ns int64>, "data":
+    // {...}}. The override state stickies the user's explicit selection so
+    // picking "Custom" with empty fields doesn't immediately re-derive back
+    // to "none" and disable the inputs.
+    const parserPreset = parserPresetOverride || (
+      (parserConfig.data_path === 'data' && parserConfig.timestamp_field === 'timestamp' && parserConfig.timestamp_scale === 'ns')
+        ? 'tsstore'
+        : (parserConfig.data_path || parserConfig.timestamp_field || parserConfig.timestamp_scale ? 'custom' : 'none')
+    );
     return (
       <div className="config-form">
         <TextInput
@@ -612,7 +695,6 @@ function ConnectionDetailPage() {
           >
             <SelectItem value="websocket" text="WebSocket" />
             <SelectItem value="tcp" text="TCP" />
-            <SelectItem value="udp" text="UDP" />
           </Select>
 
           <Select
@@ -623,9 +705,18 @@ function ConnectionDetailPage() {
           >
             <SelectItem value="json" text="JSON" />
             <SelectItem value="text" text="Text" />
-            <SelectItem value="binary" text="Binary" />
           </Select>
         </div>
+
+        {socketConfig.protocol === 'websocket' && (
+          <Checkbox
+            id="socket-bidirectional"
+            labelText="Bidirectional (allow sending commands)"
+            helperText="Required for WebSocket connections used by control components. Read-only WebSockets can only receive."
+            checked={socketConfig.bidirectional === true}
+            onChange={(e) => updateConfig('socket.bidirectional', e.target.checked)}
+          />
+        )}
 
         <Checkbox
           id="socket-reconnect"
@@ -662,79 +753,122 @@ function ConnectionDetailPage() {
           max={10000}
         />
 
-        {/* Parser Configuration Section */}
-        <div className="parser-config-section">
-          <h4>Data Parser Configuration</h4>
-          <p className="helper-text">
-            Configure how to extract data fields from incoming messages.
-          </p>
-
-          <div className="parser-fields-row">
-            <TextInput
-              id="socket-data-path"
-              labelText="Data Path"
-              value={parserConfig.data_path || ''}
-              onChange={(e) => updateConfig('socket.parser.data_path', e.target.value)}
-              placeholder="data, payload.readings"
-              helperText="Path to the data object containing metrics"
-            />
-            <TextInput
-              id="socket-timestamp-field"
-              labelText="Timestamp Field"
-              value={parserConfig.timestamp_field || ''}
-              onChange={(e) => updateConfig('socket.parser.timestamp_field', e.target.value)}
-              placeholder="timestamp, ts, time"
-              helperText="Path to the timestamp (extracted before data path)"
-            />
-          </div>
-
-          {/* Test Parse Preview */}
-          <div className="parse-preview-section">
-            <h5>Test Parser</h5>
+        {/* Parser Configuration Section — JSON mode only. Text mode passes
+            payloads through verbatim, so the parser fields wouldn't apply.
+            Rendered without an IIFE wrapper so React keeps each TextInput's
+            instance identity across keystrokes (otherwise focus is lost on
+            every character). */}
+        {messageFormatIsJson && (
+          <div className="parser-config-section">
+            <h4>Data Parser Configuration</h4>
             <p className="helper-text">
-              Paste a sample message to test the data path extraction.
+              Connection-level parser. Applies to every component reading from this connection so the unwrap happens once on the server. (For broker-style connections like MQTT, parsers stay on the chart instead.)
             </p>
 
-            <div className="preview-columns">
-              <div className="preview-column">
-                <label className="preview-label">Sample Input (JSON)</label>
-                <TextArea
-                  id="test-input"
-                  value={testInput}
-                  onChange={(e) => setTestInput(e.target.value)}
-                  rows={8}
-                  className="preview-textarea"
-                />
-              </div>
-              <div className="preview-column">
-                <label className="preview-label">
-                  Extracted Output {parserConfig.data_path && <span className="path-badge">path: {parserConfig.data_path}</span>}
-                </label>
-                {parsedOutput.success ? (
-                  <pre className="preview-output">
-                    {JSON.stringify(parsedOutput.extracted, null, 2)}
-                  </pre>
-                ) : (
-                  <InlineNotification
-                    kind="error"
-                    title="Parse Error"
-                    subtitle={parsedOutput.error}
-                    lowContrast
-                    hideCloseButton
+            <div className="parser-fields-row">
+              <Select
+                id="socket-parser-preset"
+                labelText="Preset"
+                value={parserPreset}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setParserPresetOverride(next);
+                  if (next === 'tsstore') {
+                    updateConfig('socket.parser.data_path', 'data');
+                    updateConfig('socket.parser.timestamp_field', 'timestamp');
+                    updateConfig('socket.parser.timestamp_scale', 'ns');
+                  } else if (next === 'none') {
+                    updateConfig('socket.parser.data_path', '');
+                    updateConfig('socket.parser.timestamp_field', '');
+                    updateConfig('socket.parser.timestamp_scale', '');
+                  }
+                  // 'custom' = leave fields as-is; override stickies "custom"
+                }}
+              >
+                <SelectItem value="none" text="None (flat JSON)" />
+                <SelectItem value="tsstore" text="ts-store" />
+                <SelectItem value="custom" text="Custom" />
+              </Select>
+              <TextInput
+                id="socket-data-path"
+                labelText="Data Path"
+                value={parserConfig.data_path || ''}
+                onChange={(e) => updateConfig('socket.parser.data_path', e.target.value)}
+                placeholder="data, payload.readings"
+                helperText="Dot-path to the data object inside the envelope"
+                disabled={parserPreset === 'none'}
+              />
+              <TextInput
+                id="socket-timestamp-field"
+                labelText="Timestamp Field"
+                value={parserConfig.timestamp_field || ''}
+                onChange={(e) => updateConfig('socket.parser.timestamp_field', e.target.value)}
+                placeholder="timestamp, ts, time"
+                helperText="Lifted before data_path is applied"
+                disabled={parserPreset === 'none'}
+              />
+              <Select
+                id="socket-timestamp-scale"
+                labelText="Timestamp Scale"
+                value={parserConfig.timestamp_scale || ''}
+                onChange={(e) => updateConfig('socket.parser.timestamp_scale', e.target.value)}
+                helperText="ns/ms hint for numeric timestamps; empty = auto-detect"
+                disabled={parserPreset === 'none'}
+              >
+                <SelectItem value="" text="Auto-detect" />
+                <SelectItem value="ns" text="Nanoseconds" />
+                <SelectItem value="ms" text="Milliseconds" />
+              </Select>
+            </div>
+
+            {/* Test Parse Preview */}
+            <div className="parse-preview-section">
+              <h5>Test Parser</h5>
+              <p className="helper-text">
+                Paste a sample message to verify the data path / scale extraction.
+              </p>
+
+              <div className="preview-columns">
+                <div className="preview-column">
+                  <label className="preview-label">Sample Input (JSON)</label>
+                  <TextArea
+                    id="test-input"
+                    value={testInput}
+                    onChange={(e) => setTestInput(e.target.value)}
+                    rows={8}
+                    className="preview-textarea"
                   />
-                )}
-                {parsedOutput.success && parsedOutput.fields.length > 0 && (
-                  <div className="extracted-fields">
-                    <span className="fields-label">Fields: </span>
-                    {parsedOutput.fields.map((field) => (
-                      <span key={field} className="field-tag">{field}</span>
-                    ))}
-                  </div>
-                )}
+                </div>
+                <div className="preview-column">
+                  <label className="preview-label">
+                    Extracted Output {parserConfig.data_path && <span className="path-badge">path: {parserConfig.data_path}</span>}
+                  </label>
+                  {parsedOutput.success ? (
+                    <pre className="preview-output">
+                      {JSON.stringify(parsedOutput.extracted, null, 2)}
+                    </pre>
+                  ) : (
+                    <InlineNotification
+                      kind="error"
+                      title="Parse Error"
+                      subtitle={parsedOutput.error}
+                      lowContrast
+                      hideCloseButton
+                    />
+                  )}
+                  {parsedOutput.success && parsedOutput.fields.length > 0 && (
+                    <div className="extracted-fields">
+                      <span className="fields-label">Fields: </span>
+                      {parsedOutput.fields.map((field) => (
+                        <span key={field} className="field-tag">{field}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -1518,15 +1652,15 @@ function ConnectionDetailPage() {
             onChange={handleTypeChange}
             disabled={!isCreateMode}
           >
-            <SelectItem value="sql" text="SQL Database" />
-            <SelectItem value="csv" text="CSV File" />
-            <SelectItem value="socket" text="Socket/WebSocket" />
-            <SelectItem value="api" text="REST API" />
-            <SelectItem value="tsstore" text="TSStore (Timeseries)" />
-            <SelectItem value="prometheus" text="Prometheus" />
-            <SelectItem value="edgelake" text="EdgeLake" />
-            <SelectItem value="mqtt" text="MQTT Broker" />
-            <SelectItem value="frigate" text="Frigate NVR" />
+            {renderConnTypeOption('sql', 'SQL Database', type)}
+            {renderConnTypeOption('csv', 'CSV File', type)}
+            {renderConnTypeOption('socket', 'Socket/WebSocket', type)}
+            {renderConnTypeOption('api', 'REST API', type)}
+            {renderConnTypeOption('tsstore', 'TSStore (Timeseries)', type)}
+            {renderConnTypeOption('prometheus', 'Prometheus', type)}
+            {renderConnTypeOption('edgelake', 'EdgeLake', type)}
+            {renderConnTypeOption('mqtt', 'MQTT Broker', type)}
+            {renderConnTypeOption('frigate', 'Frigate NVR', type)}
           </Select>
         </div>
 
