@@ -2,6 +2,12 @@
 
 This file provides context and guidance for AI assistants working on this project.
 
+## Release & Deploy
+
+See the `release-deploy` skill for the authoritative runbook (tagging, image build/push, homelab deploy, rollback). Do not duplicate the procedure here — project-specific overrides go in this section only.
+
+**Project-specific defaults:** deploy target is `deploy-dashboard`, images land at `ghcr.io/trv-enterprises/dashboard-{server,client}`, token is `$TRVE_GH_TOKEN`. Everything else follows the skill.
+
 ## Development Rules
 
 ### 1. Build Number Increment
