@@ -55,7 +55,7 @@ Data-driven ECharts visualizations. This is the default component type.
 	sb.WriteString(chartTypes)
 	sb.WriteString(`
 - The "number" type displays a single large value with title and units - ideal for KPIs
-- The "dataview" type is a Carbon DataTable for tabular data display with search and sort capabilities
+- The "dataview" type is a Carbon Datagrid for tabular data display with per-column sort, per-column filter, column resize, column reorder, and a pinned leftmost column
 - Requires: connection, query config, data mapping, component code
 
 ### Displays (component_type: "display")

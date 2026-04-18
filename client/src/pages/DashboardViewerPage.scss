@@ -429,6 +429,19 @@
             padding: 0;
           }
 
+          // Dataview (AG Grid) renders its own title strip. The generic
+          // component-wrapper padding on top leaves a visible gap above
+          // the title; strip only the TOP padding (both on the wrapper
+          // itself and the inner div) and keep left/right/bottom so the
+          // panel still has breathing room on the sides.
+          &.dataview-wrapper {
+            padding-top: 0;
+
+            > div {
+              padding-top: 0;
+            }
+          }
+
           // Control components — centered, extra right padding for slider labels
           &.control-wrapper {
             display: flex;
@@ -453,11 +466,31 @@
             padding: spacing.$spacing-03;
           }
 
+          // Hover-only action icons on chart panels (view-as-table,
+          // future save-png, expand, etc). Hidden by default so charts
+          // look clean; fades in on panel hover.
+          .chart-panel-actions {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            display: flex;
+            gap: 2px;
+          }
+
           // ECharts needs explicit dimensions
           .echarts-for-react {
             width: 100% !important;
             height: 100% !important;
           }
+        }
+
+        // Reveal the action row on panel hover. Edit mode has its own
+        // hover header, so suppress the action row there to avoid overlap.
+        &:hover:not(.edit-mode) .component-wrapper .chart-panel-actions {
+          opacity: 1;
         }
 
         // Empty panels (no chart assigned)

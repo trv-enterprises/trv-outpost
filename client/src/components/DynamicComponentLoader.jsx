@@ -26,12 +26,22 @@ import {
   Loading,
   InlineNotification
 } from '@carbon/react';
+// AG Grid Community — used by the dataview chart type. Virtualized, handles
+// unbounded streaming journal/log data that broke IBM Products Datagrid
+// (200+ useContext per row → OOM). Exposed in the dynamic-eval scope so
+// generated dataview code can render <AgGridReact>. Module registration
+// happens once at app startup in main.jsx.
+import { AgGridReact } from 'ag-grid-react';
 
 // Context to provide transforms to child components
 const TransformsContext = createContext(null);
 
-// Context to provide data fetched by DynamicComponentLoader
-const DataContext = createContext(null);
+// Context that exposes the live data (columns + rows) and stream state
+// for the chart in this subtree. Populated by DynamicComponentLoader so
+// any child UI — notably the "show me the underlying data" modal — can
+// display the exact same data the chart is rendering without opening a
+// second stream or duplicating a fetch.
+export const DataContext = createContext(null);
 
 /**
  * Custom hook that wraps useData and auto-applies transforms from context
@@ -84,7 +94,7 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, dataMapping = null, datasourceId = null, queryConfig = null, dataRefreshInterval = null }) {
+export default function DynamicComponentLoader({ code, props = {}, dataMapping = null, datasourceId = null, queryConfig = null, dataRefreshInterval = null, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
@@ -182,6 +192,7 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
         'TableToolbar',
         'TableToolbarContent',
         'TableToolbarSearch',
+        'AgGridReact',
         `
         ${transformedCode}
         return typeof Component !== 'undefined' ? Component :
@@ -219,7 +230,8 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
         TableContainer,
         TableToolbar,
         TableToolbarContent,
-        TableToolbarSearch
+        TableToolbarSearch,
+        AgGridReact
       );
 
       setComponent(() => LoadedComponent);
@@ -305,8 +317,17 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
 
   return (
     <TransformsContext.Provider value={transforms}>
+      <DataContext.Provider value={{
+        data: transformedFetchedData,
+        loading: dataLoading,
+        error: dataError,
+        isStreaming,
+        reconnecting,
+        disconnectedSince,
+      }}>
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         <Component {...finalProps} />
+        {children}
         {/* Overlay for connection errors when we still have data to display */}
         {showReconnectOverlay && (
           <div style={{
@@ -350,6 +371,7 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
           </div>
         )}
       </div>
+      </DataContext.Provider>
     </TransformsContext.Provider>
   );
 }

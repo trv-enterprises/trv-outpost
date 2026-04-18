@@ -20,6 +20,8 @@
     "@carbon/themes": "^11.62.0",
     "@mdi/js": "^7.4.47",
     "@mdi/react": "^1.6.1",
+    "ag-grid-community": "^35.2.1",
+    "ag-grid-react": "^35.2.1",
     "antd": "^5.28.1",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.5",
