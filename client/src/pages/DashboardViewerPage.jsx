@@ -45,7 +45,7 @@ import {
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
-import ChartDataModal from '../components/ChartDataModal';
+import ChartPanelWithActions from '../components/ChartPanelWithActions';
 import { ControlRenderer } from '../components/controls';
 import FrigateCameraViewer from '../components/frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
@@ -123,27 +123,30 @@ function DashboardViewerPage({ canDesign = false }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
-  // Dashboard fit mode: "actual" | "window" | "width" | "stretch".
-  // Migrated from the legacy `dashboard_reduceToFit` boolean:
-  //   true  → "stretch" (the current behavior before the four-mode work)
-  //   false → "actual"
-  // New key is `dashboard_fit_mode`. See the user preference migration in
-  // the useEffect below that reads from /api/config/user/:user_id.
+  // Dashboard fit mode: "actual" | "window" | "width" | "stretch", stored
+  // per-dashboard-id so switching between dashboards preserves each
+  // dashboard's own selection. Storage layout in user config:
+  //   dashboard_fit_modes: { "<dashboard_id>": "stretch", ... }
+  //   dashboard_fit_mode:  "window"   // last-used global default for new dashboards
+  //
+  // Legacy back-compat chain (oldest → newest):
+  //   1. localStorage.dashboard_reduceToFit (bool) — before four-mode work
+  //   2. localStorage.dashboard_fit_mode (string)  — cross-dashboard default
+  //   3. dashboard_fit_modes[id] in user config    — per-dashboard (current)
+  //
+  // On first visit to a dashboard we fall through 3→2→1 and seed #3 once
+  // the user makes a selection. The garbage-collector in selectFitMode
+  // drops entries for dashboards that no longer exist each save.
   const [fitMode, setFitMode] = useState(() => {
     const stored = localStorage.getItem('dashboard_fit_mode');
     if (stored && ['actual', 'window', 'width', 'stretch'].includes(stored)) {
       return stored;
     }
-    // Legacy fallback: migrate the old boolean so returning users get the
-    // behavior they already had.
     const legacy = localStorage.getItem('dashboard_reduceToFit');
     if (legacy === 'true') return 'stretch';
     if (legacy === 'false') return 'actual';
-    // First-time default: safe uniform fit.
     return 'window';
   });
-  const [dataModalOpen, setDataModalOpen] = useState(false);
-  const [selectedChart, setSelectedChart] = useState(null);
   const [configRefreshInterval, setConfigRefreshInterval] = useState(120);
   const [isDefaultDashboard, setIsDefaultDashboard] = useState(false);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
@@ -269,51 +272,81 @@ function DashboardViewerPage({ canDesign = false }) {
     return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
   }, [layoutDimension]);
 
-  // Load user fit-mode preference from server. Prefer the new
-  // `dashboard_fit_mode` key; fall back to the legacy boolean
-  // `dashboard_reduceToFit` so returning users see their previous behavior
-  // before the four-mode work landed.
+  // Load fit mode for the *current* dashboard from user config. Falls
+  // through: dashboard_fit_modes[id] → dashboard_fit_mode (global default)
+  // → legacy boolean. Re-runs when the dashboard id changes so switching
+  // dashboards restores each one's own fit mode.
   useEffect(() => {
+    if (!id) return;
     const userGuid = apiClient.getCurrentUserGuid();
     if (!userGuid) return;
     apiClient.getUserConfig(userGuid)
       .then(res => {
         const settings = res?.settings || {};
-        const modePref = settings.dashboard_fit_mode;
-        if (modePref && ['actual', 'window', 'width', 'stretch'].includes(modePref)) {
-          setFitMode(modePref);
-          localStorage.setItem('dashboard_fit_mode', modePref);
+        const perDashboard = settings.dashboard_fit_modes || {};
+        const scoped = perDashboard[id];
+        if (scoped && ['actual', 'window', 'width', 'stretch'].includes(scoped)) {
+          setFitMode(scoped);
+          return;
+        }
+        const globalPref = settings.dashboard_fit_mode;
+        if (globalPref && ['actual', 'window', 'width', 'stretch'].includes(globalPref)) {
+          setFitMode(globalPref);
           return;
         }
         const legacyPref = settings.dashboard_reduceToFit;
         if (legacyPref !== undefined) {
-          const migrated = legacyPref ? 'stretch' : 'actual';
-          setFitMode(migrated);
-          localStorage.setItem('dashboard_fit_mode', migrated);
+          setFitMode(legacyPref ? 'stretch' : 'actual');
         }
       })
       .catch(() => {});
-  }, []);
+  }, [id]);
 
-  // Save a new fit-mode selection. Writes both the new key and the legacy
-  // boolean so any lingering code that still reads `dashboard_reduceToFit`
-  // continues to see a sensible value. The legacy writes can be dropped in
-  // a follow-up once all callers are migrated.
+  // Save a fit-mode selection scoped to the current dashboard. Each save
+  // also garbage-collects map entries whose dashboard_id no longer exists —
+  // handles the case where a dashboard was deleted and left a stale entry
+  // behind. The "global default" (dashboard_fit_mode) is updated too so a
+  // brand-new dashboard defaults to the user's most recent choice.
   const selectFitMode = useCallback((next) => {
     if (!['actual', 'window', 'width', 'stretch'].includes(next)) return;
+    if (!id) return;
     setFitMode(next);
-    localStorage.setItem('dashboard_fit_mode', next);
-    // Legacy back-compat: true for stretch (same visual behavior), false otherwise.
-    const legacyBool = next === 'stretch';
-    localStorage.setItem('dashboard_reduceToFit', String(legacyBool));
+
     const userGuid = apiClient.getCurrentUserGuid();
-    if (userGuid) {
+    if (!userGuid) return;
+
+    // Fetch current user config + dashboard list in parallel, merge, GC,
+    // then write once. The list is used to drop entries for deleted
+    // dashboards (keeping the current id even if the list fetch races).
+    Promise.all([
+      apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
+      apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+    ]).then(([cfg, dashboardsRes]) => {
+      const existing = cfg?.settings?.dashboard_fit_modes || {};
+      const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];
+      const liveIds = new Set(liveList.map(d => d.id).filter(Boolean));
+      liveIds.add(id); // always preserve the one we're actively setting
+
+      const pruned = {};
+      for (const [dashId, mode] of Object.entries(existing)) {
+        if (liveIds.has(dashId)) pruned[dashId] = mode;
+      }
+      pruned[id] = next;
+
+      const legacyBool = next === 'stretch';
+      // Keep the old singular key populated as the "global default for new
+      // dashboards" plus the even-older boolean so any straggling readers
+      // still see a sensible value.
+      localStorage.setItem('dashboard_fit_mode', next);
+      localStorage.setItem('dashboard_reduceToFit', String(legacyBool));
+
       apiClient.updateUserConfig(userGuid, {
+        dashboard_fit_modes: pruned,
         dashboard_fit_mode: next,
         dashboard_reduceToFit: legacyBool,
       }).catch(() => {});
-    }
-  }, []);
+    });
+  }, [id]);
 
   // Calculate grid dimensions
   // In edit mode: use layout dimension preset for bounds (allows dragging into empty space)
@@ -693,20 +726,6 @@ function DashboardViewerPage({ canDesign = false }) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
-  // Handle double-click on chart panel to show data modal (view mode only)
-  const handlePanelDoubleClick = (chart) => {
-    if (isEditMode) return;
-    if (chart && chart.connection_id) {
-      setSelectedChart(chart);
-      setDataModalOpen(true);
-    }
-  };
-
-  const handleCloseDataModal = () => {
-    setDataModalOpen(false);
-    setSelectedChart(null);
-  };
-
   // Save thumbnail — captures the live grid at native resolution
   const [savingThumbnail, setSavingThumbnail] = useState(false);
   const saveThumbnail = async () => {
@@ -807,32 +826,20 @@ function DashboardViewerPage({ canDesign = false }) {
     setIsEditMode(true);
   };
 
+  // Edit mode is always entered from the design list (via autoEdit state or
+  // new-dashboard flow). Cancel always returns to that list — viewing a
+  // dashboard read-only is a separate mode-toggle action from the header.
   const exitEditMode = () => {
-    if (isNewDashboard) {
-      if (editHasChanges) {
-        setShowDiscardModal(true);
-      } else {
-        navigate('/design/dashboards', { replace: true });
-      }
-      return;
-    }
     if (editHasChanges) {
       setShowDiscardModal(true);
-    } else {
-      setIsEditMode(false);
+      return;
     }
+    navigate('/design/dashboards', { replace: true });
   };
 
   const confirmDiscard = () => {
     setShowDiscardModal(false);
-    if (isNewDashboard) {
-      navigate('/design/dashboards', { replace: true });
-      return;
-    }
-    setIsEditMode(false);
-    setEditablePanels([]);
-    setOriginalPanels([]);
-    setEditHasChanges(false);
+    navigate('/design/dashboards', { replace: true });
   };
 
   const handleDimensionChange = (newDimension) => {
@@ -1556,7 +1563,6 @@ function DashboardViewerPage({ canDesign = false }) {
                     gridRow: `${panel.y + 1} / span ${panel.h}`,
                     cursor: isEditMode ? 'default' : (hasChart ? 'pointer' : 'default')
                   }}
-                  onDoubleClick={() => handlePanelDoubleClick(chart)}
                 >
                   {/* Edit mode: hover header overlay with title, actions, and delete */}
                   {isEditMode && (
@@ -1651,15 +1657,18 @@ function DashboardViewerPage({ canDesign = false }) {
                               <span className="chart-name">{chart.title || chart.name || 'Untitled Chart'}</span>
                             </div>
                           )}
-                          <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''}`}>
-                            <DynamicComponentLoader
+                          <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''}`}>
+                            <ChartPanelWithActions
                               key={`${panel.chart_id}-${refreshKey}`}
-                              code={chart.component_code}
-                              props={{}}
-                              dataMapping={chart.data_mapping}
-                              datasourceId={chart.connection_id}
-                              queryConfig={chart.query_config}
-                              dataRefreshInterval={!isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null}
+                              chart={chart}
+                              loaderProps={{
+                                code: chart.component_code,
+                                props: {},
+                                dataMapping: chart.data_mapping,
+                                datasourceId: chart.connection_id,
+                                queryConfig: chart.query_config,
+                                dataRefreshInterval: !isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
+                              }}
                             />
                           </div>
                         </>
@@ -1747,13 +1756,6 @@ function DashboardViewerPage({ canDesign = false }) {
           </Button>
         </div>
       )}
-
-      {/* Chart Data Modal - shows data table on double-click */}
-      <ChartDataModal
-        open={dataModalOpen}
-        chart={selectedChart}
-        onClose={handleCloseDataModal}
-      />
 
       {/* Chart Editor Modal (edit mode) */}
       <ChartEditorModal

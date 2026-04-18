@@ -26,6 +26,7 @@ import apiClient from '../api/client';
 import LayoutDimensionsEditorModal from '../components/LayoutDimensionsEditorModal';
 import DefaultLayoutDimensionEditorModal from '../components/DefaultLayoutDimensionEditorModal';
 import TileFontSizeEditorModal from '../components/TileFontSizeEditorModal';
+import NumericChartNumberSizeEditorModal, { DEFAULT_NUMBER_CHART_SIZE } from '../components/NumericChartNumberSizeEditorModal';
 import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './SettingsPage.scss';
@@ -47,6 +48,7 @@ function SettingsPage() {
   const [layoutDimensionsModalOpen, setLayoutDimensionsModalOpen] = useState(false);
   const [defaultLayoutDimensionModalOpen, setDefaultLayoutDimensionModalOpen] = useState(false);
   const [tileFontSizeModalOpen, setTileFontSizeModalOpen] = useState(false);
+  const [numericChartSizeModalOpen, setNumericChartSizeModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
   const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
   const [mqttConnections, setMqttConnections] = useState([]);
@@ -82,6 +84,9 @@ function SettingsPage() {
         break;
       case 'tile_font_size':
         setTileFontSizeModalOpen(true);
+        break;
+      case 'default_numeric_chart_number_size':
+        setNumericChartSizeModalOpen(true);
         break;
       case 'dashboard_command_topic':
       case 'dashboard_command_connection':
@@ -318,6 +323,18 @@ function SettingsPage() {
         onSave={(value) => {
           handleSave('tile_font_size', value);
           handleTileFontSizeClose();
+        }}
+      />
+
+      {/* Default Number Chart Value Size Editor Modal */}
+      <NumericChartNumberSizeEditorModal
+        open={numericChartSizeModalOpen}
+        onClose={() => { setNumericChartSizeModalOpen(false); setEditingSetting(null); }}
+        currentValue={editingSetting?.key === 'default_numeric_chart_number_size' ? editingSetting.value : DEFAULT_NUMBER_CHART_SIZE}
+        onSave={(value) => {
+          handleSave('default_numeric_chart_number_size', value);
+          setNumericChartSizeModalOpen(false);
+          setEditingSetting(null);
         }}
       />
 

@@ -27,6 +27,11 @@ settings:
     description: "Font size for compact tile control labels (xs, sm, md, lg)"
     value: "sm"
 
+  - key: default_numeric_chart_number_size
+    category: appearance
+    description: "Default font size (px) for the value in new Number charts"
+    value: 120
+
   - key: dashboard_command_topic
     category: dashboard
     description: "MQTT topic for dashboard commands (voice control, kiosk integration)"

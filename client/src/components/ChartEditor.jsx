@@ -22,9 +22,10 @@ import {
   NumberInput,
   IconButton,
   Slider,
-  Modal
+  Modal,
+  Checkbox
 } from '@carbon/react';
-import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit } from '@carbon/icons-react';
+import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit, StringInteger } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
 import { API_BASE } from '../api/client';
 import SQLQueryBuilder from './SQLQueryBuilder';
@@ -48,6 +49,7 @@ const CHART_TYPES = [
   { id: 'pie', label: 'Pie Chart', description: 'Show proportions of a whole', icon: ChartPie },
   { id: 'scatter', label: 'Scatter Plot', description: 'Plot data points on two axes', icon: ChartScatter },
   { id: 'gauge', label: 'Gauge', description: 'Display a single value on a dial', icon: Meter },
+  { id: 'number', label: 'Number', description: 'Display a single value as a large number with optional unit', icon: StringInteger },
   { id: 'dataview', label: 'Data Table', description: 'Tabular view of raw data', icon: TableSplit },
   { id: 'custom', label: 'Custom Component', description: 'Write custom React/ECharts code', icon: Code }
 ];
@@ -156,6 +158,22 @@ const CHART_TYPE_CONFIG = {
     xAxisLabel: '',
     yAxisLabel: 'Value Column',
   },
+  // "Number" is gauge's visual twin: same data contract (single value from
+  // one Y column on the first row), no axes, no X column. Differs only in
+  // presentation — a big typographic number instead of a dial — so everything
+  // downstream (aggregation, time-bucket, filters) mirrors gauge exactly.
+  number: {
+    hasXAxis: false,
+    hasYAxis: true,
+    multipleYAxis: false,
+    hasSeriesColumn: false,
+    hasAxisLabels: false,
+    hasXAxisFormat: false,
+    hasTimeBucket: true,
+    hasSortLimit: false,
+    xAxisLabel: '',
+    yAxisLabel: 'Value Column',
+  },
   dataview: {
     hasXAxis: false,
     hasYAxis: false,
@@ -251,6 +269,10 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [sortOrder, setSortOrder] = useState('desc');
   const [limitRows, setLimitRows] = useState(0);
   const [columnAliases, setColumnAliases] = useState({}); // For dataview: column name -> display name
+  // For dataview: which columns to render as table columns. Stored as an
+  // explicit whitelist — null/empty means "show all" (default, back-compat).
+  // When non-null, the table filters data.columns through this list.
+  const [visibleColumns, setVisibleColumns] = useState(null);
 
   // Sliding window for time-series data
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(false);
@@ -355,6 +377,12 @@ const ChartEditor = forwardRef(function ChartEditor({
     gaugeWarningThreshold: 70,  // Where yellow zone starts (%)
     gaugeDangerThreshold: 90,   // Where red zone starts (%)
     gaugeUnit: '',              // Unit suffix (e.g., '°F', '%')
+    // Number (single-value display) options.
+    // numberSize stays unset on create so the editor can lazy-populate it
+    // from the admin default (default_numeric_chart_number_size). Once the
+    // user saves or edits, it's always a concrete number.
+    numberSize: null,           // px size of the value text
+    numberUnit: '',             // Unit suffix (same size as value, inline)
     // Pie options
     pieInnerRadius: 0,          // 0 = pie, >0 = donut
     pieShowLabels: true,
@@ -460,6 +488,24 @@ const ChartEditor = forwardRef(function ChartEditor({
     fetchDatasources();
   }, []);
 
+  // Pull the admin default for number-chart value size so new charts
+  // render at the deployment's preferred size instead of a hard-coded
+  // constant. Only applies when numberSize is still null (i.e. unsaved).
+  useEffect(() => {
+    if (chartOptions.numberSize != null) return;
+    let cancelled = false;
+    apiClient.getSetting('default_numeric_chart_number_size')
+      .then((s) => {
+        if (cancelled) return;
+        const n = Number(s?.value);
+        if (Number.isFinite(n) && n > 0) {
+          setChartOptions((prev) => prev.numberSize == null ? { ...prev, numberSize: n } : prev);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [chartOptions.numberSize]);
+
   // Initialize form when chart changes
   useEffect(() => {
     if (chart) {
@@ -503,6 +549,10 @@ const ChartEditor = forwardRef(function ChartEditor({
       setSortOrder(chart.data_mapping?.sort_order || 'desc');
       setLimitRows(chart.data_mapping?.limit || 0);
       setColumnAliases(chart.data_mapping?.column_aliases || {});
+      // Visible columns: null means "show all" (default). Only populated when
+      // the admin has actively hidden some.
+      const loadedVisible = chart.data_mapping?.visible_columns;
+      setVisibleColumns(Array.isArray(loadedVisible) && loadedVisible.length > 0 ? loadedVisible : null);
       // Sliding window initialization
       const sw = chart.data_mapping?.sliding_window;
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
@@ -1063,6 +1113,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       xAxisLabel: xAxisLabel || '',
       yAxisLabel: yAxisLabel || '',
       yAxisLabels: yAxisLabels || [],
+      visibleColumns: Array.isArray(visibleColumns) ? visibleColumns : null,
       chartName: title || name || '' // Display Title takes precedence, falls back to Chart Name
     };
 
@@ -1075,7 +1126,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser);
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1232,6 +1283,7 @@ const ChartEditor = forwardRef(function ChartEditor({
         sort_order: sortOrder || 'desc',
         limit: limitRows || 0,
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
+        visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
           timestamp_field: parserTimestampField || undefined,
@@ -2028,39 +2080,80 @@ const ChartEditor = forwardRef(function ChartEditor({
                   {/* Show column aliases UI for dataview type */}
                   {chartType === 'dataview' && (
                     <div className="dataview-config">
-                      <p className="mapping-hint">Data tables display all columns from your query. Use filters below to refine the data.</p>
-                      {availableColumns.length > 0 && (
-                        <div className="column-aliases-section">
-                          <h5>Column Display Names</h5>
-                          <p className="aliases-hint">Set custom display names for columns in the table header.</p>
-                          <div className="aliases-grid">
-                            {availableColumns.map(col => (
-                              <div key={col} className="alias-row">
-                                <span className="column-name" title={col}>{col}</span>
-                                <TextInput
-                                  id={`alias-${col}`}
-                                  labelText=""
-                                  placeholder={col}
-                                  value={columnAliases[col] || ''}
-                                  onChange={(e) => {
-                                    const newValue = e.target.value;
-                                    setColumnAliases(prev => {
-                                      const updated = { ...prev };
-                                      if (newValue) {
-                                        updated[col] = newValue;
-                                      } else {
-                                        delete updated[col];
-                                      }
-                                      return updated;
-                                    });
-                                  }}
-                                  size="sm"
-                                />
-                              </div>
-                            ))}
+                      <p className="mapping-hint">Data tables display the columns below. Uncheck any column to hide it; set a display name to rename its header.</p>
+                      {availableColumns.length > 0 && (() => {
+                        // Visible-column semantics: visibleColumns=null means
+                        // "show all" (the default + back-compat path). As soon
+                        // as the admin touches a checkbox, we switch to an
+                        // explicit whitelist. We derive the current state for
+                        // display by falling back to availableColumns when the
+                        // stored list is null.
+                        const effectiveVisible = Array.isArray(visibleColumns) ? visibleColumns : availableColumns;
+                        const isVisible = (col) => effectiveVisible.includes(col);
+                        const toggleVisible = (col) => {
+                          if (isVisible(col)) {
+                            // Hiding: drop the column. If that empties the
+                            // list, keep it as `[]` (explicit hide-all) rather
+                            // than reverting to null/show-all.
+                            setVisibleColumns(effectiveVisible.filter((c) => c !== col));
+                          } else {
+                            // Showing: add it back, preserving availableColumns
+                            // order so the table columns render in a stable
+                            // sequence regardless of click order.
+                            const reordered = availableColumns.filter((c) => effectiveVisible.includes(c) || c === col);
+                            setVisibleColumns(reordered);
+                          }
+                        };
+                        const allVisible = availableColumns.every(isVisible);
+                        return (
+                          <div className="column-aliases-section">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+                              <h5 style={{ margin: 0 }}>Columns</h5>
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => setVisibleColumns(allVisible ? [] : null)}
+                              >
+                                {allVisible ? 'Hide all' : 'Show all'}
+                              </Button>
+                            </div>
+                            <p className="aliases-hint">Check to include the column in the table. Optional display name renames the header.</p>
+                            <div className="aliases-grid">
+                              {availableColumns.map(col => (
+                                <div key={col} className="alias-row" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                  <Checkbox
+                                    id={`visible-${col}`}
+                                    labelText=""
+                                    checked={isVisible(col)}
+                                    onChange={() => toggleVisible(col)}
+                                  />
+                                  <span className="column-name" title={col} style={{ flex: '0 0 auto' }}>{col}</span>
+                                  <TextInput
+                                    id={`alias-${col}`}
+                                    labelText=""
+                                    placeholder={col}
+                                    value={columnAliases[col] || ''}
+                                    onChange={(e) => {
+                                      const newValue = e.target.value;
+                                      setColumnAliases(prev => {
+                                        const updated = { ...prev };
+                                        if (newValue) {
+                                          updated[col] = newValue;
+                                        } else {
+                                          delete updated[col];
+                                        }
+                                        return updated;
+                                      });
+                                    }}
+                                    size="sm"
+                                    disabled={!isVisible(col)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
                   {/* Show mapping fields for applicable chart types */}
@@ -2264,6 +2357,37 @@ const ChartEditor = forwardRef(function ChartEditor({
                 </div>
 
                 {/* Chart Options Section - Gauge */}
+                {chartType === 'number' && (
+                  <div className="chart-options-section">
+                    <h4>Number Options</h4>
+                    <Grid narrow>
+                      <Column lg={4} md={4} sm={4}>
+                        <Select
+                          id="number-size"
+                          labelText="Value Size (px)"
+                          value={String(chartOptions.numberSize ?? 120)}
+                          onChange={(e) => updateChartOption('numberSize', Number(e.target.value))}
+                          size="sm"
+                        >
+                          {[24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400].map((s) => (
+                            <SelectItem key={s} value={String(s)} text={`${s} px`} />
+                          ))}
+                        </Select>
+                      </Column>
+                      <Column lg={4} md={4} sm={4}>
+                        <TextInput
+                          id="number-unit"
+                          labelText="Unit Suffix"
+                          value={chartOptions.numberUnit || ''}
+                          onChange={(e) => updateChartOption('numberUnit', e.target.value)}
+                          placeholder="e.g., °F, %, psi"
+                          helperText="Rendered inline after the value, same size"
+                        />
+                      </Column>
+                    </Grid>
+                  </div>
+                )}
+
                 {chartType === 'gauge' && (
                   <div className="chart-options-section">
                     <h4>Gauge Options</h4>
@@ -3201,7 +3325,7 @@ function getStaticChartCode(chartType) {
 
 function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
-  const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], chartName = '' } = transforms;
+  const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 
   // Y-axis name policy:
   //   - Single y column: emit the axis name (y_axis_labels[0] | y_axis_label | column name).
@@ -3378,8 +3502,13 @@ ${xAxisFormatCode}
   }
 
   if (chartType === 'dataview') {
-    // Generate DataTable component with column aliases support
-    const aliasesJson = JSON.stringify(columnAliases);
+    // AG Grid Community emit. Virtualized, Quartz theme skinned with
+    // Carbon tokens. Per-column sort, filter, resize, reorder, pin all
+    // built-in. Handles streaming journal data that broke the IBM
+    // Products Datagrid. visible_columns + column_aliases honored.
+    const aliasesJson = JSON.stringify(columnAliases || {});
+    const visibleJson = visibleColumns === null || visibleColumns === undefined ? 'null' : JSON.stringify(visibleColumns);
+    const dataSrc = hasTransforms ? 'transformed' : 'data';
     return `const Component = () => {
   const ${useDataFields} = useData({
     datasourceId: '${datasourceId}',
@@ -3390,94 +3519,182 @@ ${xAxisFormatCode}
     }${extraOptionsLine}
   });
 
+  const columnAliases = ${aliasesJson};
+  const visibleColumnsConfig = ${visibleJson};
+
+  const allColumns = (!loading && !error && ${dataSrc}?.columns) || [];
+  const orderedColumns = visibleColumnsConfig
+    ? visibleColumnsConfig.filter(c => allColumns.includes(c))
+    : allColumns;
+
+  const columnsKey = orderedColumns.join('|');
+  // Row objects derived from the latest snapshot. Stable __id (content
+  // hash + index) so AG Grid's filter, sort, menu state, and scroll
+  // position survive streaming buffer slices.
+  const latestRowObjs = useMemo(() => {
+    if (!${dataSrc}?.rows) return [];
+    return ${dataSrc}.rows.map((row, idx) => {
+      const o = {};
+      allColumns.forEach((c, i) => { o[c] = row[i]; });
+      let h = 0;
+      for (let i = 0; i < row.length; i++) {
+        const s = row[i] == null ? '' : String(row[i]);
+        for (let j = 0; j < s.length; j++) { h = ((h << 5) - h + s.charCodeAt(j)) | 0; }
+      }
+      o.__id = String(h) + '-' + idx;
+      return o;
+    });
+  }, [${dataSrc}?.rows, columnsKey]);
+
+  // Grid mount strategy: feed only the first snapshot as rowData, then
+  // switch to imperative applyTransaction() so the grid stays mounted
+  // and open filter menus don't close on every streaming batch.
+  const gridRef = useRef(null);
+  const initialRowDataRef = useRef(null);
+  if (initialRowDataRef.current === null && latestRowObjs.length > 0) {
+    initialRowDataRef.current = latestRowObjs;
+  }
+
+  useEffect(() => {
+    const api = gridRef.current?.api;
+    if (!api || latestRowObjs.length === 0) return;
+    const existingIds = new Set();
+    api.forEachNode(node => { if (node.data?.__id) existingIds.add(node.data.__id); });
+    const incomingIds = new Set(latestRowObjs.map(r => r.__id));
+    const toAdd = latestRowObjs.filter(r => !existingIds.has(r.__id));
+    const toRemove = [];
+    api.forEachNode(node => {
+      if (node.data?.__id && !incomingIds.has(node.data.__id)) {
+        toRemove.push(node.data);
+      }
+    });
+    if (toAdd.length || toRemove.length) {
+      api.applyTransaction({ add: toAdd, remove: toRemove });
+    }
+  }, [latestRowObjs]);
+
+  const columnDefs = useMemo(() => {
+    return orderedColumns.map(col => {
+      const isTimeCol = /time/i.test(col) || col === 'ts';
+      const sampleVal = latestRowObjs[0]?.[col];
+      const isNumCol = !isTimeCol && typeof sampleVal === 'number';
+      return {
+        field: col,
+        headerName: columnAliases[col] || col,
+        sortable: true,
+        resizable: true,
+        filter: isNumCol ? 'agNumberColumnFilter' : (isTimeCol ? 'agDateColumnFilter' : 'agTextColumnFilter'),
+        floatingFilter: false,
+        valueFormatter: (params) => {
+          const v = params.value;
+          if (v == null) return '';
+          const f = formatCellValue(v, col);
+          return f == null ? '' : String(f);
+        },
+        minWidth: isNumCol ? 100 : (isTimeCol ? 170 : 120),
+      };
+    });
+  }, [columnsKey]);
+
+  const defaultColDef = useMemo(() => ({
+    sortable: true,
+    resizable: true,
+    filter: true,
+    flex: 1,
+  }), []);
+
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
   if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
-  ${noDataLine}
-${transformsConfig}
-
-  // Column aliases for display names
-  const columnAliases = ${aliasesJson};
-  const getDisplayName = (col) => columnAliases[col] || col;
-
-  // Format cell value for display
-  const formatValue = (val, colName) => {
-    if (val === null || val === undefined) return '—';
-    if (colName === 'timestamp' || colName.includes('time') || colName.includes('Time')) {
-      return new Date(val).toLocaleString();
-    }
-    if (typeof val === 'number') {
-      return val.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    }
-    if (typeof val === 'object') {
-      return JSON.stringify(val);
-    }
-    return String(val);
-  };
-
-  const columns = ${hasTransforms ? 'transformed' : 'data'}.columns;
+  if (!${dataSrc}?.rows?.length) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6f6f6f' }}>{typeof connected !== 'undefined' && connected === false ? 'Connecting...' : (typeof connected !== 'undefined' ? 'Waiting for data...' : 'No data')}</div>;
+  }
 
   return (
-    <div style={{
-      height: '100%',
-      width: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      backgroundColor: 'transparent',
-      color: '#f4f4f4',
-      overflow: 'hidden'
-    }}>
-      ${transforms.chartName ? `<div style={{
-        textAlign: 'center',
-        fontSize: '1rem',
-        fontWeight: '600',
-        padding: '0.75rem',
-        color: '#f4f4f4'
-      }}>
+    <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'transparent', overflow: 'hidden' }}>
+      ${transforms.chartName ? `<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center' }}>
         ${transforms.chartName.replace(/'/g, "\\'")}
       </div>` : ''}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontSize: '0.875rem'
-        }}>
-          <thead>
-            <tr style={{ backgroundColor: '#262626' }}>
-              {columns.map((col, i) => (
-                <th key={i} style={{
-                  padding: '0.5rem 0.75rem',
-                  textAlign: 'left',
-                  borderBottom: '1px solid #525252',
-                  color: '#c6c6c6',
-                  fontWeight: '600',
-                  whiteSpace: 'nowrap'
-                }}>
-                  {getDisplayName(col)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, rowIdx) => (
-              <tr key={rowIdx} style={{ backgroundColor: rowIdx % 2 === 0 ? '#161616' : '#1c1c1c' }}>
-                {row.map((cell, cellIdx) => (
-                  <td key={cellIdx} style={{
-                    padding: '0.5rem 0.75rem',
-                    borderBottom: '1px solid #393939',
-                    color: '#f4f4f4'
-                  }}>
-                    {formatValue(cell, columns[cellIdx])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="ag-theme-quartz-dark" style={{ flex: 1, minHeight: 0 }}>
+        <AgGridReact
+          ref={gridRef}
+          theme="legacy"
+          rowData={initialRowDataRef.current || []}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          animateRows={false}
+          suppressCellFocus={true}
+          getRowId={(params) => String(params.data.__id)}
+          maintainColumnOrder={true}
+        />
       </div>
     </div>
   );
 };`;
   }
+
+
+  if (chartType === 'number') {
+    // "Number" chart: display title + a single large numeric value + optional
+    // inline unit at the same size. Reads the first y-axis column from the
+    // first post-aggregation row — same data contract as the gauge.
+    //
+    // Title is rendered inline (like gauge's ECharts `title:` option) rather
+    // than via the panel chrome, so it sits in the chart's own coord space
+    // and can be styled consistently.
+    const size = Number(chartOptions?.numberSize) > 0 ? Number(chartOptions.numberSize) : 120;
+    const unit = (chartOptions?.numberUnit || '').replace(/'/g, "\\'");
+    const titleText = (chartName || '').replace(/'/g, "\\'");
+
+    return `const Component = () => {
+  const ${useDataFields} = useData({
+    datasourceId: '${datasourceId}',
+    query: {
+      raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
+      type: '${queryType}',
+      params: ${JSON.stringify(queryParams)}
+    }${extraOptionsLine}
+  });
+
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#c6c6c6' }}>Loading...</div>;
+  if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
+  ${noDataLine}
+${transformsConfig}
+
+  const yCol = ${yAxisStr.split(',')[0]};
+  const yIdx = ${hasTransforms ? 'transformed' : 'data'}.columns.indexOf(yCol);
+  const raw = rows.length > 0 ? rows[0][yIdx] : null;
+  const formatted = raw == null ? '' : formatCellValue(raw, yCol);
+
+  // Title sits absolutely at the top (matches gauge's ECharts top=16 placement
+  // so titles align across chart types in a dashboard row). Value absolute-
+  // centers in the full panel — its vertical position is independent of
+  // whether a title is shown, so swapping between titled/untitled doesn't
+  // reflow the number.
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      ${titleText ? `<div style={{ position: 'absolute', top: 0, left: 0, right: 0, fontSize: '1rem', lineHeight: 1.5, fontWeight: 600, color: '#f4f4f4', textAlign: 'center', padding: '0 0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>${titleText}</div>` : ''}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{
+          fontSize: '${size}px',
+          fontWeight: 600,
+          lineHeight: 1,
+          color: '#f4f4f4',
+          fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'nowrap',
+        }}>
+          {formatted}${unit ? `<span style={{ marginLeft: '0.25em' }}>${unit}</span>` : ''}
+        </span>
+      </div>
+    </div>
+  );
+};`;
+  }
+
 
   if (chartType === 'gauge') {
     // Extract gauge options with defaults

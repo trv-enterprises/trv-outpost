@@ -1,0 +1,40 @@
+/*
+ * Carbon g100 skin for AG Grid Community (Quartz dark theme).
+ *
+ * AG Grid exposes its colors as --ag-* CSS variables. Most downstream
+ * colors (borders, panels, row-hover, column-hover) are computed via
+ * color-mix from --ag-background-color and --ag-foreground-color, so
+ * overriding the handful of seed colors propagates through the whole
+ * grid automatically.
+ *
+ * We target .ag-theme-quartz-dark so these overrides only apply to the
+ * dataview chart; they don't leak to other AG Grid themes if we ever
+ * add them.
+ */
+.ag-theme-quartz-dark {
+  --ag-background-color: var(--cds-layer-01);            /* #262626 — softer than #161616 base */
+  --ag-foreground-color: var(--cds-text-primary);        /* #f4f4f4 */
+  --ag-header-background-color: var(--cds-layer-02);     /* #393939 — one step up for header */
+  --ag-header-foreground-color: var(--cds-text-secondary);  /* #c6c6c6 */
+  --ag-odd-row-background-color: var(--cds-layer-hover-01); /* #353535 — softer stripe, keeps header distinct */
+  --ag-border-color: var(--cds-border-subtle-01);        /* #393939 */
+  --ag-secondary-border-color: var(--cds-border-subtle-01);
+  --ag-panel-background-color: var(--cds-layer);
+  --ag-menu-background-color: var(--cds-layer);
+  --ag-tooltip-background-color: var(--cds-layer);
+  --ag-control-panel-background-color: var(--cds-layer);
+  --ag-row-hover-color: var(--cds-layer-hover);          /* #353535 */
+  --ag-selected-row-background-color: var(--cds-layer-selected);
+  --ag-active-color: var(--cds-interactive);             /* #0f62fe — Carbon blue 60 */
+  --ag-input-focus-border-color: var(--cds-focus);
+  --ag-input-background-color: var(--cds-field-01);
+  --ag-input-border-color: var(--cds-border-strong-01);
+  --ag-font-family: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --ag-font-size: 14px;
+  /* Grid internals that don't key off the two seeds */
+  --ag-icon-font-color: var(--cds-text-secondary);
+  --ag-disabled-foreground-color: var(--cds-text-disabled);
+  /* Kill the default bluish glow on the focused cell — our grid has
+     suppressCellFocus anyway, but this covers stray cases. */
+  --ag-cell-horizontal-border: solid var(--ag-border-color);
+}

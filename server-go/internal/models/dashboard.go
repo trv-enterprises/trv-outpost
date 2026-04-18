@@ -90,6 +90,7 @@ type ChartDataMapping struct {
 	SortOrder     string            `json:"sort_order" bson:"sort_order"`             // asc or desc
 	Limit         int               `json:"limit" bson:"limit"`                       // Max rows to return
 	ColumnAliases map[string]string `json:"column_aliases" bson:"column_aliases"`     // Display names for columns (column name -> display name), primarily for dataview
+	VisibleColumns []string         `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
 	Parser        *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"` // Per-component data extraction for streaming (MQTT, ts-store MQTT)
 }
 
