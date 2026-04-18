@@ -131,6 +131,7 @@ func main() {
 	settingsRepo := repository.NewSettingsItemRepository(mongodb.Database)
 	deviceTypeRepo := repository.NewDeviceTypeRepository(mongodb.Database)
 	deviceRepo := repository.NewDeviceRepository(mongodb.Database)
+	namespaceRepo := repository.NewNamespaceRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := chartRepo.CreateIndexes(ctx); err != nil {
@@ -167,6 +168,11 @@ func main() {
 		log.Printf("Warning: Failed to create device indexes: %v", err)
 	}
 
+	// Create namespace indexes
+	if err := namespaceRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create namespace indexes: %v", err)
+	}
+
 	// Initialize services
 	datasourceService := service.NewDatasourceService(datasourceRepo)
 	chartService := service.NewChartService(chartRepo)
@@ -177,6 +183,17 @@ func main() {
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, datasourceRepo)
 	deviceDiscoveryService := service.NewDeviceDiscoveryService(datasourceRepo, deviceTypeRepo, deviceRepo)
+
+	// Namespace service. Entity dependencies (for delete-guard counting and
+	// rename-cascade) land in a follow-up task when datasource/chart/dashboard
+	// repos gain CountByNamespace + RenameNamespace. Passing nil here keeps
+	// SeedDefault working in the meantime; the service has nil guards.
+	namespaceService := service.NewNamespaceService(namespaceRepo, nil, nil, nil)
+	if err := namespaceService.SeedDefault(ctx); err != nil {
+		log.Printf("Warning: Failed to seed default namespace: %v", err)
+	} else {
+		fmt.Println("✓ Default namespace ensured")
+	}
 
 	// Load user-configurable settings from separate YAML file
 	userConfig, err := config.LoadUserConfigurableSettings()
@@ -274,6 +291,7 @@ func main() {
 	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
+	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
@@ -420,6 +438,17 @@ func main() {
 			frigate.GET("/review/:review_id/thumbnail", frigateHandler.GetReviewThumbnail)
 			frigate.GET("/info", frigateHandler.GetInfo)
 			frigate.GET("/live/:camera", frigateHandler.ProxyLiveStream)
+		}
+
+		// Namespace routes
+		namespaces := api.Group("/namespaces")
+		{
+			namespaces.GET("", namespaceHandler.ListNamespaces)
+			namespaces.POST("", namespaceHandler.CreateNamespace)
+			namespaces.GET("/:id", namespaceHandler.GetNamespace)
+			namespaces.PUT("/:id", namespaceHandler.UpdateNamespace)
+			namespaces.DELETE("/:id", namespaceHandler.DeleteNamespace)
+			namespaces.GET("/:id/usage", namespaceHandler.GetUsage)
 		}
 
 		// Device Type routes
