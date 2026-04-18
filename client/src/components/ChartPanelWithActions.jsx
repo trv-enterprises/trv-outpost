@@ -132,6 +132,7 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
           kind="ghost"
           size="sm"
           label="View data as table"
+          align="bottom-right"
           onClick={(e) => { e.stopPropagation(); onOpenModal(); }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -143,6 +144,7 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
         iconDescription="Download"
         size="sm"
         flipped
+        align="bottom-right"
         onClick={(e) => e.stopPropagation?.()}
         onMouseDown={(e) => e.stopPropagation()}
       >
