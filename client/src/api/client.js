@@ -750,6 +750,74 @@ class APIClient {
     const qs = includeDisabled ? '?include_disabled=true' : '';
     return this.request(`/api/registry/integrations${qs}`);
   }
+
+  // ── Namespaces ────────────────────────────────────────────────────
+  // Namespaces partition connection/component/dashboard records into
+  // separate conflict domains — uniqueness is (namespace, name) not name.
+  async getNamespaces() {
+    return this.request('/api/namespaces');
+  }
+
+  async getNamespace(id) {
+    return this.request(`/api/namespaces/${id}`);
+  }
+
+  async createNamespace(body) {
+    return this.request('/api/namespaces', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async updateNamespace(id, body) {
+    return this.request(`/api/namespaces/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async deleteNamespace(id) {
+    return this.request(`/api/namespaces/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getNamespaceUsage(id) {
+    return this.request(`/api/namespaces/${id}/usage`);
+  }
+
+  // ── Dashboard export / import ─────────────────────────────────────
+  async previewExportDashboards(dashboardIds) {
+    return this.request('/api/dashboards/export/preview', {
+      method: 'POST',
+      body: JSON.stringify({ dashboard_ids: dashboardIds }),
+    });
+  }
+
+  async exportDashboards(dashboardIds) {
+    return this.request('/api/dashboards/export', {
+      method: 'POST',
+      body: JSON.stringify({ dashboard_ids: dashboardIds }),
+    });
+  }
+
+  async preflightImport(bundle, targetNamespace = '') {
+    return this.request('/api/dashboards/import/preflight', {
+      method: 'POST',
+      body: JSON.stringify({ bundle, target_namespace: targetNamespace }),
+    });
+  }
+
+  async applyImport(bundle, targetNamespace = '', overwriteDecisions = {}) {
+    return this.request('/api/dashboards/import/apply', {
+      method: 'POST',
+      body: JSON.stringify({
+        bundle,
+        target_namespace: targetNamespace,
+        overwrite_decisions: overwriteDecisions,
+      }),
+    });
+  }
 }
 
 export default new APIClient();
