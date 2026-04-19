@@ -104,16 +104,20 @@ func (r *DatasourceRepository) FindByType(ctx context.Context, dsType models.Dat
 	return datasources, nil
 }
 
-// List retrieves datasources with optional type and tag filters, sorted by
-// created_at descending, with pagination. Tags are matched with OR semantics
-// via $in. Pass empty typeFilter ("") and nil/empty tags to get all
-// datasources.
+// List retrieves datasources with optional namespace, type, and tag
+// filters, sorted by created_at descending, with pagination. Tags are
+// matched with OR semantics via $in. Pass empty namespace ("") to get
+// records across all namespaces (cross-namespace toggle). Empty
+// typeFilter and nil/empty tags = no filter on those dimensions.
 //
 // This is the preferred list method for UI-driven filtering. FindAll,
 // FindByType, and FindByTags are kept for back-compat with existing call
 // sites that pass a single filter.
-func (r *DatasourceRepository) List(ctx context.Context, typeFilter string, tags []string, limit, offset int64) ([]*models.Datasource, int64, error) {
+func (r *DatasourceRepository) List(ctx context.Context, namespace, typeFilter string, tags []string, limit, offset int64) ([]*models.Datasource, int64, error) {
 	filter := bson.M{}
+	if namespace != "" {
+		filter["namespace"] = namespace
+	}
 	if typeFilter != "" {
 		filter["type"] = typeFilter
 	}
@@ -247,10 +251,11 @@ func (r *DatasourceRepository) CountByType(ctx context.Context, dsType models.Da
 	return r.collection.CountDocuments(ctx, bson.M{"type": dsType})
 }
 
-// FindByName retrieves a datasource by name (for uniqueness check)
-func (r *DatasourceRepository) FindByName(ctx context.Context, name string) (*models.Datasource, error) {
+// FindByName retrieves a datasource by (namespace, name) — the compound
+// uniqueness key. Returns (nil, nil) if not found.
+func (r *DatasourceRepository) FindByName(ctx context.Context, namespace, name string) (*models.Datasource, error) {
 	var datasource models.Datasource
-	err := r.collection.FindOne(ctx, bson.M{"name": name}).Decode(&datasource)
+	err := r.collection.FindOne(ctx, bson.M{"namespace": namespace, "name": name}).Decode(&datasource)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -259,6 +264,27 @@ func (r *DatasourceRepository) FindByName(ctx context.Context, name string) (*mo
 	}
 
 	return &datasource, nil
+}
+
+// CountByNamespace returns the number of datasources in a namespace.
+// Used by the namespace-delete guard. Implements service.NamespaceCounter.
+func (r *DatasourceRepository) CountByNamespace(ctx context.Context, namespace string) (int64, error) {
+	return r.collection.CountDocuments(ctx, bson.M{"namespace": namespace})
+}
+
+// RenameNamespace updates every datasource record currently in oldName
+// to newName. Used by the namespace rename cascade. Implements
+// service.NamespaceRenamer.
+func (r *DatasourceRepository) RenameNamespace(ctx context.Context, oldName, newName string) (int64, error) {
+	res, err := r.collection.UpdateMany(
+		ctx,
+		bson.M{"namespace": oldName},
+		bson.M{"$set": bson.M{"namespace": newName}},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
 }
 
 // FindUnhealthy retrieves all datasources with unhealthy status

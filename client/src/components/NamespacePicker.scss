@@ -1,0 +1,59 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// The Carbon header's HeaderGlobalAction slots are square icon buttons
+// sized to match the 3rem header height. The namespace picker needs
+// to show the namespace name as well, so we override the width and
+// horizontal padding while keeping the vertical rhythm.
+.namespace-picker {
+  // Default OverflowMenu is 3rem wide (icon-sized). Make it
+  // content-width so the chip doesn't get clipped.
+  width: auto;
+  min-width: 8rem;
+  max-width: 16rem;
+  padding: 0 0.75rem;
+
+  &:hover, &:focus {
+    background-color: var(--cds-header-hover, #333333);
+  }
+
+  &__chip {
+    // The chip itself visually owns the action area. Padding + rounded
+    // corners so it reads as a pill independent of the surrounding
+    // hover background.
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    max-width: 100%;
+  }
+
+  &__chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__item-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  &__item-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+  }
+}

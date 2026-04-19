@@ -49,8 +49,11 @@ import UsersListPage from './pages/UsersListPage';
 import UserDetailPage from './pages/UserDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import DevicesPage from './pages/DevicesPage';
+import NamespacesPage from './pages/NamespacesPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
+import { NamespaceProvider } from './context/NamespaceContext';
+import NamespacePicker from './components/NamespacePicker';
 import NotificationPanel from './components/NotificationPanel';
 import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
@@ -215,6 +218,7 @@ function AppContent({ onDisconnect }) {
   };
 
   return (
+    <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
     <div className={electronMode ? 'electron-mode' : ''}>
       <HeaderContainer
         render={() => (
@@ -244,6 +248,7 @@ function AppContent({ onDisconnect }) {
               />
             </div>
             <HeaderGlobalBar>
+              <NamespacePicker />
               <HeaderGlobalAction
                 aria-label={`Help - Build ${buildInfo.buildNumber}`}
                 tooltipAlignment="end"
@@ -373,6 +378,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/manage/users/:id" element={<UserDetailPage />} />
           <Route path="/manage/devices" element={<DevicesPage />} />
           <Route path="/manage/settings" element={<SettingsPage />} />
+          <Route path="/manage/namespaces" element={<NamespacesPage />} />
 
           {/* Legacy routes for backwards compatibility - redirect to design mode */}
           <Route path="/dashboard" element={<Navigate to="/design/dashboards" replace />} />
@@ -384,6 +390,7 @@ function AppContent({ onDisconnect }) {
         </Routes>
       </Content>
     </div>
+    </NamespaceProvider>
   );
 }
 

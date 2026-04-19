@@ -98,7 +98,8 @@ type Chart struct {
 	Version       int                    `json:"version" bson:"version"`                 // Version number (1, 2, 3...)
 	Status        string                 `json:"status" bson:"status"`                   // "draft" | "final"
 	ComponentType string                 `json:"component_type" bson:"component_type"`   // "chart" (default) | "control"
-	Name          string                 `json:"name" bson:"name" binding:"required"`    // Unique identifier
+	Namespace     string                 `json:"namespace" bson:"namespace"`             // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
+	Name          string                 `json:"name" bson:"name" binding:"required"`    // Unique identifier within namespace
 	Title         string                 `json:"title" bson:"title"`                     // Display title (defaults to Name if empty)
 	Description   string                 `json:"description" bson:"description"`
 	ChartType     string                 `json:"chart_type" bson:"chart_type"`           // bar, line, pie, gauge, etc. (charts only)
@@ -121,6 +122,7 @@ type Chart struct {
 // @Description Request body for creating a new chart or control
 type CreateChartRequest struct {
 	ComponentType string                 `json:"component_type"` // "chart" (default) | "control"
+	Namespace     string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
 	Name          string                 `json:"name" binding:"required"`
 	Title         string                 `json:"title"`
 	Description   string                 `json:"description"`
@@ -141,6 +143,7 @@ type CreateChartRequest struct {
 // @Description Request body for updating an existing chart, control, or display
 type UpdateChartRequest struct {
 	ComponentType *string                 `json:"component_type,omitempty"`
+	Namespace     *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
 	Name          *string                 `json:"name,omitempty"`
 	Title         *string                 `json:"title,omitempty"`
 	Description   *string                 `json:"description,omitempty"`
@@ -169,6 +172,7 @@ type ChartListResponse struct {
 // ChartQueryParams defines query parameters for listing charts
 // @Description Query parameters for filtering and pagination
 type ChartQueryParams struct {
+	Namespace     string   `form:"namespace"`      // Empty = all namespaces; non-empty = exact match
 	Name          string   `form:"name"`
 	ChartType     string   `form:"chart_type"`
 	ComponentType string   `form:"component_type"` // "chart", "control", "display"
@@ -187,6 +191,7 @@ type ChartSummary struct {
 	Version       int      `json:"version"`
 	Status        string   `json:"status"`
 	ComponentType string   `json:"component_type"`
+	Namespace     string   `json:"namespace"`
 	Name          string   `json:"name"`
 	Description   string   `json:"description"`
 	ChartType     string   `json:"chart_type"`

@@ -46,6 +46,15 @@ definitions:
           $ref: '#/definitions/handlers.CategoryInfo'
         type: array
     type: object
+  handlers.ListComponentTypesResponse:
+    properties:
+      count:
+        type: integer
+      types:
+        items:
+          $ref: '#/definitions/registry.ComponentTypeInfo'
+        type: array
+    type: object
   handlers.ListConnectionTypesResponse:
     properties:
       categories:
@@ -57,6 +66,15 @@ definitions:
       types:
         items:
           $ref: '#/definitions/registry.TypeInfo'
+        type: array
+    type: object
+  handlers.ListIntegrationsResponse:
+    properties:
+      count:
+        type: integer
+      integrations:
+        items:
+          $ref: '#/definitions/registry.IntegrationInfo'
         type: array
     type: object
   handlers.LoginRequest:
@@ -325,7 +343,10 @@ definitions:
         description: UUID - same across versions
         type: string
       name:
-        description: Unique identifier
+        description: Unique identifier within namespace
+        type: string
+      namespace:
+        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
         type: string
       options:
         additionalProperties: true
@@ -387,6 +408,10 @@ definitions:
       limit:
         description: Max rows to return
         type: integer
+      parser:
+        allOf:
+        - $ref: '#/definitions/models.StreamParserConfig'
+        description: Per-component data extraction for streaming (MQTT, ts-store MQTT)
       series:
         description: Column that identifies each series (e.g., "location") - used
           for time bucket partitioning
@@ -405,6 +430,12 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.TimeBucket'
         description: Time-bucketed aggregation for streaming data
+      visible_columns:
+        description: 'For dataview only: columns to render as table columns. Empty/missing
+          = show all (default). Preserves the order given.'
+        items:
+          type: string
+        type: array
       x_axis:
         description: Column for X axis (categories)
         type: string
@@ -413,7 +444,8 @@ definitions:
           short, long, etc.'
         type: string
       x_axis_label:
-        description: Label for X axis (e.g., "Time", "Date")
+        description: Label for X axis (e.g., "Time", "Date"). Empty = render no x-axis
+          name; most charts are time-based and don't need one.
         type: string
       y_axis:
         description: Columns for Y axis (values/series)
@@ -421,8 +453,18 @@ definitions:
           type: string
         type: array
       y_axis_label:
-        description: Label for Y axis (e.g., "Temperature (°F)", "Count")
+        description: Legacy single y-axis label — kept for backwards compat. Prefer
+          YAxisLabels (plural) going forward; this is populated from YAxisLabels[0]
+          on save.
         type: string
+      y_axis_labels:
+        description: Per-column y-axis labels. When shorter than YAxis, missing entries
+          fall back to the column name. Dual-axis charts use [0] for the left axis
+          and [1] for the right. Three+ y-columns suppress axis names entirely (series
+          legend carries the identity).
+        items:
+          type: string
+        type: array
     type: object
   models.ChartListResponse:
     description: Response containing a list of charts with pagination
@@ -466,6 +508,8 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      namespace:
         type: string
       status:
         type: string
@@ -632,6 +676,9 @@ definitions:
         $ref: '#/definitions/models.DisplayConfig'
       name:
         type: string
+      namespace:
+        description: Empty defaults to "default" in the handler.
+        type: string
       options:
         additionalProperties: true
         type: object
@@ -660,6 +707,9 @@ definitions:
         type: object
       name:
         type: string
+      namespace:
+        description: Empty defaults to "default" in the handler.
+        type: string
       panels:
         description: Panels with optional chart_id
         items:
@@ -684,6 +734,9 @@ definitions:
         description: 'If true, secrets are masked in API responses (default: true)'
         type: boolean
       name:
+        type: string
+      namespace:
+        description: Empty defaults to "default" in the handler.
         type: string
       supported_schemas:
         items:
@@ -776,6 +829,18 @@ definitions:
     - name
     - protocol
     type: object
+  models.CreateNamespaceRequest:
+    description: Request body for creating a new namespace
+    properties:
+      color:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
   models.CreateUserRequest:
     description: Request body for creating a new user
     properties:
@@ -803,6 +868,9 @@ definitions:
         additionalProperties: true
         type: object
       name:
+        type: string
+      namespace:
+        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
         type: string
       panels:
         description: Panels with chart_id references
@@ -897,6 +965,8 @@ definitions:
         type: string
       name:
         type: string
+      namespace:
+        type: string
       panel_count:
         type: integer
       settings:
@@ -970,6 +1040,9 @@ definitions:
         description: If true, secrets are masked in API responses
         type: boolean
       name:
+        type: string
+      namespace:
+        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
         type: string
       supported_schemas:
         description: Control schema support - which control schemas this connection
@@ -1259,6 +1332,65 @@ definitions:
     - host
     - port
     type: object
+  models.ExportBundle:
+    description: Portable bundle representing one or more dashboards plus their dependencies
+    properties:
+      exported_at:
+        type: string
+      exported_by:
+        type: string
+      format_version:
+        type: integer
+      objects:
+        $ref: '#/definitions/models.ExportObjects'
+      source_namespace:
+        description: Empty string when the export spans multiple namespaces
+        type: string
+    type: object
+  models.ExportObjects:
+    description: Entity arrays inside an export bundle, in dependency order
+    properties:
+      components:
+        items:
+          $ref: '#/definitions/models.Chart'
+        type: array
+      connections:
+        items:
+          $ref: '#/definitions/models.Datasource'
+        type: array
+      dashboards:
+        items:
+          $ref: '#/definitions/models.Dashboard'
+        type: array
+    type: object
+  models.ExportPreview:
+    description: Counts of the entities that would be included in an export
+    properties:
+      component_count:
+        type: integer
+      connection_count:
+        type: integer
+      dashboard_count:
+        type: integer
+      source_namespace:
+        description: Empty when the selection spans multiple namespaces
+        type: string
+      warnings:
+        description: e.g., "dashboard X references chart Y which has no final version"
+        items:
+          type: string
+        type: array
+    type: object
+  models.ExportRequest:
+    description: Request to export one or more dashboards
+    properties:
+      dashboard_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - dashboard_ids
+    type: object
   models.FrigateConfig:
     properties:
       go2rtc_port:
@@ -1305,6 +1437,68 @@ definitions:
     - HealthStatusHealthy
     - HealthStatusUnhealthy
     - HealthStatusDegraded
+  models.ImportApplyRequest:
+    description: Request to actually apply an import bundle
+    properties:
+      bundle:
+        $ref: '#/definitions/models.ExportBundle'
+      overwrite_decisions:
+        additionalProperties:
+          type: boolean
+        description: 'Key: "kind:id". Default for missing key = true.'
+        type: object
+      target_namespace:
+        type: string
+    required:
+    - bundle
+    type: object
+  models.ImportApplyResponse:
+    description: Result counts and per-object errors from an import apply
+    properties:
+      created:
+        type: integer
+      errors:
+        items:
+          type: string
+        type: array
+      skipped:
+        type: integer
+      updated:
+        type: integer
+    type: object
+  models.ImportBlocked:
+    description: One name-collision that prevents the import from proceeding
+    properties:
+      existing_id:
+        type: string
+      incoming_id:
+        type: string
+      incoming_name:
+        type: string
+      kind:
+        type: string
+      reason:
+        type: string
+      target_namespace:
+        type: string
+    type: object
+  models.ImportConflict:
+    description: One conflict between an incoming object and an existing one with
+      the same ID
+    properties:
+      existing:
+        description: Existing object as a JSON string
+        type: string
+      id:
+        type: string
+      incoming:
+        description: Incoming object as a JSON string
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+    type: object
   models.ImportDeviceEntry:
     properties:
       device_type_id:
@@ -1332,6 +1526,54 @@ definitions:
     required:
     - connection_id
     - devices
+    type: object
+  models.ImportObjectRef:
+    description: Identifier for a single object inside an import bundle
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+      namespace:
+        description: Source namespace from the bundle
+        type: string
+    type: object
+  models.ImportPreflightRequest:
+    description: Request to dry-run an import bundle against the target system
+    properties:
+      bundle:
+        $ref: '#/definitions/models.ExportBundle'
+      target_namespace:
+        description: 'Empty falls back per the plan: bundle.SourceNamespace if it
+          exists locally, else "default"'
+        type: string
+    required:
+    - bundle
+    type: object
+  models.ImportPreflightResponse:
+    description: Per-object classification produced by the import preflight
+    properties:
+      blocked:
+        items:
+          $ref: '#/definitions/models.ImportBlocked'
+        type: array
+      conflicts:
+        items:
+          $ref: '#/definitions/models.ImportConflict'
+        type: array
+      identical:
+        items:
+          $ref: '#/definitions/models.ImportObjectRef'
+        type: array
+      new:
+        items:
+          $ref: '#/definitions/models.ImportObjectRef'
+        type: array
+      target_namespace:
+        description: The namespace the importer will write into (after fallbacks)
+        type: string
     type: object
   models.LayoutDimensionDTO:
     properties:
@@ -1373,6 +1615,44 @@ definitions:
         type: string
     required:
     - broker_url
+    type: object
+  models.Namespace:
+    description: Namespace groups connections, components, and dashboards into conflict
+      domains
+    properties:
+      color:
+        description: Carbon-safe hex; UI picks from a fixed palette
+        type: string
+      created:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated:
+        type: string
+    type: object
+  models.NamespaceListResponse:
+    description: Response containing a list of namespaces
+    properties:
+      namespaces:
+        items:
+          $ref: '#/definitions/models.Namespace'
+        type: array
+      total:
+        type: integer
+    type: object
+  models.NamespaceUsage:
+    description: Usage counts by entity type for a namespace
+    properties:
+      components:
+        type: integer
+      connections:
+        type: integer
+      dashboards:
+        type: integer
     type: object
   models.PanelTextConfig:
     description: Configuration for native text panels — section headers, date/time,
@@ -1615,6 +1895,10 @@ definitions:
     type: object
   models.SocketConfig:
     properties:
+      bidirectional:
+        description: WebSocket only — when true, resolves to stream.websocket-bidir
+          (write-capable, used for control commands)
+        type: boolean
       buffer_size:
         description: number of messages to buffer
         type: integer
@@ -1623,7 +1907,7 @@ definitions:
           type: string
         type: object
       message_format:
-        description: json, text, binary
+        description: json, text
         type: string
       parser:
         allOf:
@@ -1635,7 +1919,6 @@ definitions:
       protocol:
         enum:
         - tcp
-        - udp
         - websocket
         type: string
       reconnect_delay:
@@ -1682,6 +1965,11 @@ definitions:
           TimestampFormat is the Go time format string for parsing timestamps (default: RFC3339)
           Common formats: "2006-01-02T15:04:05Z07:00" (RFC3339), "2006-01-02 15:04:05", unix timestamp
         type: string
+      timestamp_scale:
+        description: 'TimestampScale hints how to interpret a numeric timestamp value:
+          "ns" (nanoseconds), "ms" (milliseconds), or empty (auto-detect by magnitude).
+          Mirrors the chart-side parser''s timestamp_scale field.'
+        type: string
     type: object
   models.StateQueryDef:
     description: Configuration for querying control state
@@ -1693,6 +1981,18 @@ definitions:
         additionalProperties: true
         description: Query message template
         type: object
+    type: object
+  models.StreamParserConfig:
+    properties:
+      data_path:
+        description: Dot-notation path to data object (e.g., "data", "payload.readings")
+        type: string
+      timestamp_field:
+        description: Field containing timestamp (extracted before data_path)
+        type: string
+      timestamp_scale:
+        description: '"s", "ms", "ns" — auto-detected if empty'
+        type: string
     type: object
   models.SystemConfigResponse:
     properties:
@@ -1740,15 +2040,19 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.TSStorePushConfig'
         description: |-
-          Push connection configuration for streaming (ts-store v0.2.2+)
-          When streaming is enabled, dashboard calls ts-store API to create a push connection
-          and ts-store dials out to dashboard's inbound WebSocket endpoint
+          Push connection configuration for streaming transport (ts-store v0.2.2+)
+          Only used when Transport is "streaming". Dashboard calls ts-store API to create
+          a push connection and ts-store dials out to dashboard's inbound WebSocket endpoint.
       store_name:
         description: Name of the store to query
         type: string
       timeout:
         description: 'Request timeout in seconds (default: 30)'
         type: integer
+      transport:
+        allOf:
+        - $ref: '#/definitions/models.TSStoreTransport'
+        description: 'Transport mode: "rest" (default) or "streaming"'
     required:
     - host
     - port
@@ -1815,6 +2119,17 @@ definitions:
           -1 = current time/realtime only)
         type: integer
     type: object
+  models.TSStoreTransport:
+    enum:
+    - rest
+    - streaming
+    type: string
+    x-enum-comments:
+      TSStoreTransportREST: HTTP polling (default)
+      TSStoreTransportStreaming: WebSocket push (real-time)
+    x-enum-varnames:
+    - TSStoreTransportREST
+    - TSStoreTransportStreaming
   models.TableInfo:
     properties:
       columns:
@@ -1935,6 +2250,9 @@ definitions:
         $ref: '#/definitions/models.DisplayConfig'
       name:
         type: string
+      namespace:
+        description: Omitted = leave current namespace unchanged.
+        type: string
       options:
         additionalProperties: true
         type: object
@@ -1969,6 +2287,9 @@ definitions:
         type: object
       name:
         type: string
+      namespace:
+        description: Omitted = leave current namespace unchanged.
+        type: string
       panels:
         description: Panels with optional chart_id
         items:
@@ -1995,6 +2316,9 @@ definitions:
         description: If provided, updates secret masking setting
         type: boolean
       name:
+        type: string
+      namespace:
+        description: Empty = leave current namespace unchanged.
         type: string
       supported_schemas:
         items:
@@ -2068,6 +2392,16 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  models.UpdateNamespaceRequest:
+    description: Request body for updating an existing namespace
+    properties:
+      color:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
     type: object
   models.UpdateSettingRequest:
     properties:
@@ -2166,6 +2500,100 @@ definitions:
         description: Bidirectional adapters only
         type: boolean
     type: object
+  registry.Catalog:
+    properties:
+      chart_types:
+        items:
+          $ref: '#/definitions/registry.ComponentTypeInfo'
+        type: array
+      connection_types:
+        items:
+          $ref: '#/definitions/registry.TypeInfo'
+        type: array
+      control_types:
+        items:
+          $ref: '#/definitions/registry.ComponentTypeInfo'
+        type: array
+      device_types:
+        items:
+          $ref: '#/definitions/registry.DeviceTypeSummary'
+        type: array
+      display_types:
+        items:
+          $ref: '#/definitions/registry.ComponentTypeInfo'
+        type: array
+      integrations:
+        items:
+          $ref: '#/definitions/registry.IntegrationInfo'
+        type: array
+    type: object
+  registry.ComponentCapabilities:
+    properties:
+      can_read:
+        description: Subscribes to live state
+        type: boolean
+      can_write:
+        description: Sends commands
+        type: boolean
+      requires_connection:
+        description: Must be bound to a connection (false for e.g. text labels)
+        type: boolean
+      requires_device_type:
+        description: Needs a device_type_id to translate commands
+        type: boolean
+      supports_streaming:
+        description: Consumes streaming data (as opposed to polling)
+        type: boolean
+    type: object
+  registry.ComponentTypeInfo:
+    properties:
+      capabilities:
+        $ref: '#/definitions/registry.ComponentCapabilities'
+      category:
+        description: CategoryChart | CategoryControl | CategoryDisplay
+        type: string
+      config_schema:
+        description: Fields the component exposes in the editor
+        items:
+          $ref: '#/definitions/registry.ConfigField'
+        type: array
+      data_requirements:
+        allOf:
+        - $ref: '#/definitions/registry.DataRequirements'
+        description: Charts only
+      default_config:
+        additionalProperties: true
+        description: Seed values for a freshly-created instance
+        type: object
+      description:
+        description: One-line description for selection UIs and AI prompts
+        type: string
+      display_name:
+        description: Human-readable label
+        type: string
+      hidden:
+        description: True for legacy aliases and backward-compat types kept so old
+          records still edit
+        type: boolean
+      icon:
+        description: MDI icon name (e.g. "mdiGestureTap"); frontend resolves to an
+          SVG path
+        type: string
+      integration:
+        description: 'Optional: groups types under a named integration (e.g., "frigate",
+          "casita")'
+        type: string
+      subtype:
+        description: '"bar", "toggle", "frigate" — the value stored in chart_type
+          / control_type / display_type'
+        type: string
+      type_id:
+        description: '"chart.bar", "control.toggle", "display.frigate"'
+        type: string
+      ui_category:
+        description: 'Grouping for widget picker: "carbon", "custom", "tile", "decorative"'
+        type: string
+    type: object
   registry.ConfigField:
     properties:
       default: {}
@@ -2184,6 +2612,82 @@ definitions:
         description: string, int, bool, password, select
         type: string
     type: object
+  registry.DataRequirements:
+    properties:
+      has_axis_labels:
+        type: boolean
+      has_series_column:
+        type: boolean
+      has_sort_limit:
+        type: boolean
+      has_time_bucket:
+        type: boolean
+      has_visible_columns:
+        type: boolean
+      has_x_axis_format:
+        type: boolean
+      multiple_y_axis:
+        type: boolean
+      requires_x_axis:
+        type: boolean
+      requires_y_axis:
+        type: boolean
+      x_axis_label:
+        description: 'UI label hint: "X-Axis (Categories)", "Category Column", etc.'
+        type: string
+      y_axis_label:
+        type: string
+    type: object
+  registry.DeviceTypeSummary:
+    properties:
+      category:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_built_in:
+        type: boolean
+      name:
+        type: string
+      protocol:
+        type: string
+      supported_types:
+        items:
+          type: string
+        type: array
+    type: object
+  registry.IntegrationInfo:
+    properties:
+      description:
+        description: One-line description for the settings UI
+        type: string
+      display_name:
+        description: Human-readable label
+        type: string
+      id:
+        description: Stable identifier (e.g., "frigate", "casita")
+        type: string
+      owned_chart_types:
+        description: Subtype IDs of charts owned by this integration
+        items:
+          type: string
+        type: array
+      owned_connection_type:
+        description: 'Optional: connection type ID this integration adds beyond the
+          standard adapter registry (e.g., "frigate")'
+        type: string
+      owned_control_types:
+        description: Subtype IDs of controls owned by this integration
+        items:
+          type: string
+        type: array
+      owned_display_types:
+        description: Subtype IDs of displays owned by this integration
+        items:
+          type: string
+        type: array
+    type: object
   registry.TypeInfo:
     properties:
       capabilities:
@@ -2196,6 +2700,10 @@ definitions:
           $ref: '#/definitions/registry.ConfigField'
         type: array
       display_name:
+        type: string
+      integration:
+        description: 'Optional: groups types under a named integration (e.g., "frigate",
+          "casita")'
         type: string
       type_id:
         type: string
@@ -2517,6 +3025,123 @@ paths:
       summary: Execute a control component command
       tags:
       - controls
+  /api/dashboards/export:
+    post:
+      consumes:
+      - application/json
+      description: Returns a JSON bundle containing the selected dashboards plus all
+        components and connections they reference.
+      parameters:
+      - description: Dashboard IDs to export
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExportBundle'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export dashboards as a portable bundle
+      tags:
+      - dashboards
+  /api/dashboards/export/preview:
+    post:
+      consumes:
+      - application/json
+      description: Returns counts of entities that would be included in an export
+        of the given dashboards
+      parameters:
+      - description: Dashboard IDs to preview
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExportPreview'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preview a dashboard export
+      tags:
+      - dashboards
+  /api/dashboards/import/apply:
+    post:
+      consumes:
+      - application/json
+      description: Writes the bundle's objects into the target namespace. Identical
+        objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly
+        opts out; blocked objects cause the whole apply to refuse.
+      parameters:
+      - description: Bundle, target namespace, and per-object overwrite decisions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ImportApplyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ImportApplyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Apply an import bundle
+      tags:
+      - dashboards
+  /api/dashboards/import/preflight:
+    post:
+      consumes:
+      - application/json
+      description: Classifies each object in the bundle as identical/conflict/new/blocked
+        so the UI can show what would change before the user commits.
+      parameters:
+      - description: Bundle and target namespace
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ImportPreflightRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ImportPreflightResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preflight an import bundle
+      tags:
+      - dashboards
   /api/datasources/{id}/command:
     post:
       consumes:
@@ -3246,6 +3871,178 @@ paths:
       summary: Get camera snapshot
       tags:
       - Frigate
+  /api/namespaces:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NamespaceListResponse'
+      summary: List namespaces
+      tags:
+      - namespaces
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Namespace to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateNamespaceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Namespace'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a namespace
+      tags:
+      - namespaces
+  /api/namespaces/{id}:
+    delete:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a namespace
+      tags:
+      - namespaces
+    get:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Namespace'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a namespace
+      tags:
+      - namespaces
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateNamespaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Namespace'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a namespace
+      tags:
+      - namespaces
+  /api/namespaces/{id}/usage:
+    get:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NamespaceUsage'
+      summary: Get namespace usage counts
+      tags:
+      - namespaces
+  /api/registry/catalog:
+    get:
+      description: Returns connection types, chart/control/display subtypes, and device
+        types in one payload. This is what the AI builder and MCP server consume so
+        they never duplicate enum lists.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/registry.Catalog'
+      summary: Unified type catalog (single source of truth)
+      tags:
+      - registry
+  /api/registry/catalog.md:
+    get:
+      description: Same data as /catalog but formatted as a markdown document. Useful
+        for embedding directly in an LLM system prompt or pasting into chat.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Markdown document
+          schema:
+            type: string
+      summary: Catalog rendered as markdown
+      tags:
+      - registry
   /api/registry/categories:
     get:
       description: Get all available categories with their type counts
@@ -3257,6 +4054,51 @@ paths:
           schema:
             $ref: '#/definitions/handlers.ListCategoriesResponse'
       summary: List all connection type categories
+      tags:
+      - registry
+  /api/registry/components:
+    get:
+      description: Returns registered component types. Pass ?category=chart, ?category=control,
+        or ?category=display to filter; omit for all. Hidden types are included so
+        legacy editors still work.
+      parameters:
+      - description: 'Filter: chart, control, display'
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListComponentTypesResponse'
+      summary: List component subtypes (chart/control/display)
+      tags:
+      - registry
+  /api/registry/components/{typeId}:
+    get:
+      description: Returns metadata for a single component subtype like "chart.bar"
+        or "control.toggle".
+      parameters:
+      - description: Component type ID
+        in: path
+        name: typeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/registry.ComponentTypeInfo'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a single component type by ID
       tags:
       - registry
   /api/registry/connections:
@@ -3301,6 +4143,27 @@ paths:
             additionalProperties: true
             type: object
       summary: Get a specific connection type
+      tags:
+      - registry
+  /api/registry/integrations:
+    get:
+      description: Integrations group related connection / chart / control / display
+        types so admins can enable or disable them as a bundle from the settings UI.
+        Pass ?include_disabled=true to see every integration regardless of the current
+        enabled_types setting.
+      parameters:
+      - description: If true, returns all integrations even if disabled
+        in: query
+        name: include_disabled
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListIntegrationsResponse'
+      summary: List registered integrations
       tags:
       - registry
   /api/settings:
@@ -4212,7 +5075,7 @@ paths:
       - dashboards
   /datasources:
     get:
-      description: Retrieve all datasources with pagination and optional type/tag
+      description: Retrieve all datasources with pagination and optional namespace/type/tag
         filters
       parameters:
       - default: 20
@@ -4225,6 +5088,10 @@ paths:
         in: query
         name: offset
         type: integer
+      - description: Filter by namespace (empty = all namespaces)
+        in: query
+        name: namespace
+        type: string
       - description: Filter by datasource type (api, websocket, file)
         in: query
         name: type

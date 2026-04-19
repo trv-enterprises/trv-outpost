@@ -72,11 +72,12 @@ func (h *DatasourceHandler) CreateDatasource(c *gin.Context) {
 
 // ListDatasources handles datasource listing
 // @Summary List all datasources
-// @Description Retrieve all datasources with pagination and optional type/tag filters
+// @Description Retrieve all datasources with pagination and optional namespace/type/tag filters
 // @Tags datasources
 // @Produce json
 // @Param limit query int false "Number of items per page" default(20)
 // @Param offset query int false "Number of items to skip" default(0)
+// @Param namespace query string false "Filter by namespace (empty = all namespaces)"
 // @Param type query string false "Filter by datasource type (api, websocket, file)"
 // @Param tags query []string false "Filter by tags (OR semantics, repeat param)"
 // @Success 200 {object} map[string]interface{}
@@ -84,10 +85,11 @@ func (h *DatasourceHandler) CreateDatasource(c *gin.Context) {
 func (h *DatasourceHandler) ListDatasources(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "20"), 10, 64)
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	namespace := c.Query("namespace")
 	typeFilter := c.Query("type")
 	tags := c.QueryArray("tags")
 
-	datasources, total, err := h.service.ListDatasourcesFiltered(c.Request.Context(), typeFilter, tags, limit, offset)
+	datasources, total, err := h.service.ListDatasourcesFiltered(c.Request.Context(), namespace, typeFilter, tags, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -322,13 +322,14 @@ func (s *AISessionService) SaveSession(ctx context.Context, sessionID string, ch
 		return nil, fmt.Errorf("please provide a name for your chart before saving")
 	}
 
-	// Validate name uniqueness across different chart IDs
-	existingChart, err := s.chartRepo.FindByName(ctx, draft.Name)
+	// Validate name uniqueness across different chart IDs, scoped to the
+	// draft's namespace (uniqueness is (namespace, name) end-to-end).
+	existingChart, err := s.chartRepo.FindByName(ctx, draft.Namespace, draft.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 	}
 	if existingChart != nil && existingChart.ID != draft.ID {
-		return nil, fmt.Errorf("a chart with name '%s' already exists", draft.Name)
+		return nil, fmt.Errorf("a chart with name '%s' already exists in namespace '%s'", draft.Name, draft.Namespace)
 	}
 
 	// Update draft to final

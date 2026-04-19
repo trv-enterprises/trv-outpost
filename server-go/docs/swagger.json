@@ -446,6 +446,178 @@
                 }
             }
         },
+        "/api/dashboards/export": {
+            "post": {
+                "description": "Returns a JSON bundle containing the selected dashboards plus all components and connections they reference.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Export dashboards as a portable bundle",
+                "parameters": [
+                    {
+                        "description": "Dashboard IDs to export",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportBundle"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboards/export/preview": {
+            "post": {
+                "description": "Returns counts of entities that would be included in an export of the given dashboards",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Preview a dashboard export",
+                "parameters": [
+                    {
+                        "description": "Dashboard IDs to preview",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportPreview"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboards/import/apply": {
+            "post": {
+                "description": "Writes the bundle's objects into the target namespace. Identical objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly opts out; blocked objects cause the whole apply to refuse.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Apply an import bundle",
+                "parameters": [
+                    {
+                        "description": "Bundle, target namespace, and per-object overwrite decisions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportApplyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportApplyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboards/import/preflight": {
+            "post": {
+                "description": "Classifies each object in the bundle as identical/conflict/new/blocked so the UI can show what would change before the user commits.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Preflight an import bundle",
+                "parameters": [
+                    {
+                        "description": "Bundle and target namespace",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportPreflightRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportPreflightResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/datasources/{id}/command": {
             "post": {
                 "description": "Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)",
@@ -1533,6 +1705,265 @@
                 }
             }
         },
+        "/api/namespaces": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "List namespaces",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.NamespaceListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Create a namespace",
+                "parameters": [
+                    {
+                        "description": "Namespace to create",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateNamespaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Namespace"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/namespaces/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Get a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Namespace"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Update a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateNamespaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Namespace"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Delete a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/namespaces/{id}/usage": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Get namespace usage counts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.NamespaceUsage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registry/catalog": {
+            "get": {
+                "description": "Returns connection types, chart/control/display subtypes, and device types in one payload. This is what the AI builder and MCP server consume so they never duplicate enum lists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Unified type catalog (single source of truth)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/registry.Catalog"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registry/catalog.md": {
+            "get": {
+                "description": "Same data as /catalog but formatted as a markdown document. Useful for embedding directly in an LLM system prompt or pasting into chat.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Catalog rendered as markdown",
+                "responses": {
+                    "200": {
+                        "description": "Markdown document",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/registry/categories": {
             "get": {
                 "description": "Get all available categories with their type counts",
@@ -1548,6 +1979,70 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/handlers.ListCategoriesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registry/components": {
+            "get": {
+                "description": "Returns registered component types. Pass ?category=chart, ?category=control, or ?category=display to filter; omit for all. Hidden types are included so legacy editors still work.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "List component subtypes (chart/control/display)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter: chart, control, display",
+                        "name": "category",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListComponentTypesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registry/components/{typeId}": {
+            "get": {
+                "description": "Returns metadata for a single component subtype like \"chart.bar\" or \"control.toggle\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Get a single component type by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Component type ID",
+                        "name": "typeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/registry.ComponentTypeInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -1612,6 +2107,34 @@
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registry/integrations": {
+            "get": {
+                "description": "Integrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "List registered integrations",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "If true, returns all integrations even if disabled",
+                        "name": "include_disabled",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListIntegrationsResponse"
                         }
                     }
                 }
@@ -2960,7 +3483,7 @@
         },
         "/datasources": {
             "get": {
-                "description": "Retrieve all datasources with pagination and optional type/tag filters",
+                "description": "Retrieve all datasources with pagination and optional namespace/type/tag filters",
                 "produces": [
                     "application/json"
                 ],
@@ -2981,6 +3504,12 @@
                         "default": 0,
                         "description": "Number of items to skip",
                         "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by namespace (empty = all namespaces)",
+                        "name": "namespace",
                         "in": "query"
                     },
                     {
@@ -4167,6 +4696,20 @@
                 }
             }
         },
+        "handlers.ListComponentTypesResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.ComponentTypeInfo"
+                    }
+                }
+            }
+        },
         "handlers.ListConnectionTypesResponse": {
             "type": "object",
             "properties": {
@@ -4183,6 +4726,20 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/registry.TypeInfo"
+                    }
+                }
+            }
+        },
+        "handlers.ListIntegrationsResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "integrations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.IntegrationInfo"
                     }
                 }
             }
@@ -4576,7 +5133,11 @@
                     "type": "string"
                 },
                 "name": {
-                    "description": "Unique identifier",
+                    "description": "Unique identifier within namespace",
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
                     "type": "string"
                 },
                 "options": {
@@ -4662,6 +5223,14 @@
                     "description": "Max rows to return",
                     "type": "integer"
                 },
+                "parser": {
+                    "description": "Per-component data extraction for streaming (MQTT, ts-store MQTT)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.StreamParserConfig"
+                        }
+                    ]
+                },
                 "series": {
                     "description": "Column that identifies each series (e.g., \"location\") - used for time bucket partitioning",
                     "type": "string"
@@ -4690,6 +5259,13 @@
                         }
                     ]
                 },
+                "visible_columns": {
+                    "description": "For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "x_axis": {
                     "description": "Column for X axis (categories)",
                     "type": "string"
@@ -4699,7 +5275,7 @@
                     "type": "string"
                 },
                 "x_axis_label": {
-                    "description": "Label for X axis (e.g., \"Time\", \"Date\")",
+                    "description": "Label for X axis (e.g., \"Time\", \"Date\"). Empty = render no x-axis name; most charts are time-based and don't need one.",
                     "type": "string"
                 },
                 "y_axis": {
@@ -4710,8 +5286,15 @@
                     }
                 },
                 "y_axis_label": {
-                    "description": "Label for Y axis (e.g., \"Temperature (°F)\", \"Count\")",
+                    "description": "Legacy single y-axis label — kept for backwards compat. Prefer YAxisLabels (plural) going forward; this is populated from YAxisLabels[0] on save.",
                     "type": "string"
+                },
+                "y_axis_labels": {
+                    "description": "Per-column y-axis labels. When shorter than YAxis, missing entries fall back to the column name. Dual-axis charts use [0] for the left axis and [1] for the right. Three+ y-columns suppress axis names entirely (series legend carries the identity).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -4775,6 +5358,9 @@
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "namespace": {
                     "type": "string"
                 },
                 "status": {
@@ -5011,6 +5597,10 @@
                 "name": {
                     "type": "string"
                 },
+                "namespace": {
+                    "description": "Empty defaults to \"default\" in the handler.",
+                    "type": "string"
+                },
                 "options": {
                     "type": "object",
                     "additionalProperties": true
@@ -5052,6 +5642,10 @@
                 "name": {
                     "type": "string"
                 },
+                "namespace": {
+                    "description": "Empty defaults to \"default\" in the handler.",
+                    "type": "string"
+                },
                 "panels": {
                     "description": "Panels with optional chart_id",
                     "type": "array",
@@ -5087,6 +5681,10 @@
                     "type": "boolean"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Empty defaults to \"default\" in the handler.",
                     "type": "string"
                 },
                 "supported_schemas": {
@@ -5220,6 +5818,24 @@
                 }
             }
         },
+        "models.CreateNamespaceRequest": {
+            "description": "Request body for creating a new namespace",
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "color": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "models.CreateUserRequest": {
             "description": "Request body for creating a new user",
             "type": "object",
@@ -5262,6 +5878,10 @@
                     "additionalProperties": true
                 },
                 "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
                     "type": "string"
                 },
                 "panels": {
@@ -5398,6 +6018,9 @@
                 "name": {
                     "type": "string"
                 },
+                "namespace": {
+                    "type": "string"
+                },
                 "panel_count": {
                     "type": "integer"
                 },
@@ -5504,6 +6127,10 @@
                     "type": "boolean"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
                     "type": "string"
                 },
                 "supported_schemas": {
@@ -5910,6 +6537,93 @@
                 }
             }
         },
+        "models.ExportBundle": {
+            "description": "Portable bundle representing one or more dashboards plus their dependencies",
+            "type": "object",
+            "properties": {
+                "exported_at": {
+                    "type": "string"
+                },
+                "exported_by": {
+                    "type": "string"
+                },
+                "format_version": {
+                    "type": "integer"
+                },
+                "objects": {
+                    "$ref": "#/definitions/models.ExportObjects"
+                },
+                "source_namespace": {
+                    "description": "Empty string when the export spans multiple namespaces",
+                    "type": "string"
+                }
+            }
+        },
+        "models.ExportObjects": {
+            "description": "Entity arrays inside an export bundle, in dependency order",
+            "type": "object",
+            "properties": {
+                "components": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Chart"
+                    }
+                },
+                "connections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Datasource"
+                    }
+                },
+                "dashboards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Dashboard"
+                    }
+                }
+            }
+        },
+        "models.ExportPreview": {
+            "description": "Counts of the entities that would be included in an export",
+            "type": "object",
+            "properties": {
+                "component_count": {
+                    "type": "integer"
+                },
+                "connection_count": {
+                    "type": "integer"
+                },
+                "dashboard_count": {
+                    "type": "integer"
+                },
+                "source_namespace": {
+                    "description": "Empty when the selection spans multiple namespaces",
+                    "type": "string"
+                },
+                "warnings": {
+                    "description": "e.g., \"dashboard X references chart Y which has no final version\"",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.ExportRequest": {
+            "description": "Request to export one or more dashboards",
+            "type": "object",
+            "required": [
+                "dashboard_ids"
+            ],
+            "properties": {
+                "dashboard_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "models.FrigateConfig": {
             "type": "object",
             "required": [
@@ -5974,6 +6688,96 @@
                 "HealthStatusDegraded"
             ]
         },
+        "models.ImportApplyRequest": {
+            "description": "Request to actually apply an import bundle",
+            "type": "object",
+            "required": [
+                "bundle"
+            ],
+            "properties": {
+                "bundle": {
+                    "$ref": "#/definitions/models.ExportBundle"
+                },
+                "overwrite_decisions": {
+                    "description": "Key: \"kind:id\". Default for missing key = true.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "boolean"
+                    }
+                },
+                "target_namespace": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ImportApplyResponse": {
+            "description": "Result counts and per-object errors from an import apply",
+            "type": "object",
+            "properties": {
+                "created": {
+                    "type": "integer"
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skipped": {
+                    "type": "integer"
+                },
+                "updated": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ImportBlocked": {
+            "description": "One name-collision that prevents the import from proceeding",
+            "type": "object",
+            "properties": {
+                "existing_id": {
+                    "type": "string"
+                },
+                "incoming_id": {
+                    "type": "string"
+                },
+                "incoming_name": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "target_namespace": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ImportConflict": {
+            "description": "One conflict between an incoming object and an existing one with the same ID",
+            "type": "object",
+            "properties": {
+                "existing": {
+                    "description": "Existing object as a JSON string",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "incoming": {
+                    "description": "Incoming object as a JSON string",
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "models.ImportDeviceEntry": {
             "type": "object",
             "required": [
@@ -6012,6 +6816,75 @@
                     "items": {
                         "$ref": "#/definitions/models.ImportDeviceEntry"
                     }
+                }
+            }
+        },
+        "models.ImportObjectRef": {
+            "description": "Identifier for a single object inside an import bundle",
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Source namespace from the bundle",
+                    "type": "string"
+                }
+            }
+        },
+        "models.ImportPreflightRequest": {
+            "description": "Request to dry-run an import bundle against the target system",
+            "type": "object",
+            "required": [
+                "bundle"
+            ],
+            "properties": {
+                "bundle": {
+                    "$ref": "#/definitions/models.ExportBundle"
+                },
+                "target_namespace": {
+                    "description": "Empty falls back per the plan: bundle.SourceNamespace if it exists locally, else \"default\"",
+                    "type": "string"
+                }
+            }
+        },
+        "models.ImportPreflightResponse": {
+            "description": "Per-object classification produced by the import preflight",
+            "type": "object",
+            "properties": {
+                "blocked": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ImportBlocked"
+                    }
+                },
+                "conflicts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ImportConflict"
+                    }
+                },
+                "identical": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ImportObjectRef"
+                    }
+                },
+                "new": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ImportObjectRef"
+                    }
+                },
+                "target_namespace": {
+                    "description": "The namespace the importer will write into (after fallbacks)",
+                    "type": "string"
                 }
             }
         },
@@ -6070,6 +6943,61 @@
                 "username": {
                     "description": "Auth username (optional)",
                     "type": "string"
+                }
+            }
+        },
+        "models.Namespace": {
+            "description": "Namespace groups connections, components, and dashboards into conflict domains",
+            "type": "object",
+            "properties": {
+                "color": {
+                    "description": "Carbon-safe hex; UI picks from a fixed palette",
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.NamespaceListResponse": {
+            "description": "Response containing a list of namespaces",
+            "type": "object",
+            "properties": {
+                "namespaces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Namespace"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.NamespaceUsage": {
+            "description": "Usage counts by entity type for a namespace",
+            "type": "object",
+            "properties": {
+                "components": {
+                    "type": "integer"
+                },
+                "connections": {
+                    "type": "integer"
+                },
+                "dashboards": {
+                    "type": "integer"
                 }
             }
         },
@@ -6422,6 +7350,10 @@
                 "url"
             ],
             "properties": {
+                "bidirectional": {
+                    "description": "WebSocket only — when true, resolves to stream.websocket-bidir (write-capable, used for control commands)",
+                    "type": "boolean"
+                },
                 "buffer_size": {
                     "description": "number of messages to buffer",
                     "type": "integer"
@@ -6433,7 +7365,7 @@
                     }
                 },
                 "message_format": {
-                    "description": "json, text, binary",
+                    "description": "json, text",
                     "type": "string"
                 },
                 "parser": {
@@ -6452,7 +7384,6 @@
                     "type": "string",
                     "enum": [
                         "tcp",
-                        "udp",
                         "websocket"
                     ]
                 },
@@ -6503,6 +7434,10 @@
                 "timestamp_format": {
                     "description": "TimestampFormat is the Go time format string for parsing timestamps (default: RFC3339)\nCommon formats: \"2006-01-02T15:04:05Z07:00\" (RFC3339), \"2006-01-02 15:04:05\", unix timestamp",
                     "type": "string"
+                },
+                "timestamp_scale": {
+                    "description": "TimestampScale hints how to interpret a numeric timestamp value: \"ns\" (nanoseconds), \"ms\" (milliseconds), or empty (auto-detect by magnitude). Mirrors the chart-side parser's timestamp_scale field.",
+                    "type": "string"
                 }
             }
         },
@@ -6518,6 +7453,23 @@
                     "description": "Query message template",
                     "type": "object",
                     "additionalProperties": true
+                }
+            }
+        },
+        "models.StreamParserConfig": {
+            "type": "object",
+            "properties": {
+                "data_path": {
+                    "description": "Dot-notation path to data object (e.g., \"data\", \"payload.readings\")",
+                    "type": "string"
+                },
+                "timestamp_field": {
+                    "description": "Field containing timestamp (extracted before data_path)",
+                    "type": "string"
+                },
+                "timestamp_scale": {
+                    "description": "\"s\", \"ms\", \"ns\" — auto-detected if empty",
+                    "type": "string"
                 }
             }
         },
@@ -6592,7 +7544,7 @@
                     ]
                 },
                 "push": {
-                    "description": "Push connection configuration for streaming (ts-store v0.2.2+)\nWhen streaming is enabled, dashboard calls ts-store API to create a push connection\nand ts-store dials out to dashboard's inbound WebSocket endpoint",
+                    "description": "Push connection configuration for streaming transport (ts-store v0.2.2+)\nOnly used when Transport is \"streaming\". Dashboard calls ts-store API to create\na push connection and ts-store dials out to dashboard's inbound WebSocket endpoint.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.TSStorePushConfig"
@@ -6606,6 +7558,14 @@
                 "timeout": {
                     "description": "Request timeout in seconds (default: 30)",
                     "type": "integer"
+                },
+                "transport": {
+                    "description": "Transport mode: \"rest\" (default) or \"streaming\"",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TSStoreTransport"
+                        }
+                    ]
                 }
             }
         },
@@ -6678,6 +7638,21 @@
                     "type": "integer"
                 }
             }
+        },
+        "models.TSStoreTransport": {
+            "type": "string",
+            "enum": [
+                "rest",
+                "streaming"
+            ],
+            "x-enum-comments": {
+                "TSStoreTransportREST": "HTTP polling (default)",
+                "TSStoreTransportStreaming": "WebSocket push (real-time)"
+            },
+            "x-enum-varnames": [
+                "TSStoreTransportREST",
+                "TSStoreTransportStreaming"
+            ]
         },
         "models.TableInfo": {
             "type": "object",
@@ -6854,6 +7829,10 @@
                 "name": {
                     "type": "string"
                 },
+                "namespace": {
+                    "description": "Omitted = leave current namespace unchanged.",
+                    "type": "string"
+                },
                 "options": {
                     "type": "object",
                     "additionalProperties": true
@@ -6904,6 +7883,10 @@
                 "name": {
                     "type": "string"
                 },
+                "namespace": {
+                    "description": "Omitted = leave current namespace unchanged.",
+                    "type": "string"
+                },
                 "panels": {
                     "description": "Panels with optional chart_id",
                     "type": "array",
@@ -6944,6 +7927,10 @@
                     "type": "boolean"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Empty = leave current namespace unchanged.",
                     "type": "string"
                 },
                 "supported_schemas": {
@@ -7051,6 +8038,21 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "models.UpdateNamespaceRequest": {
+            "description": "Request body for updating an existing namespace",
+            "type": "object",
+            "properties": {
+                "color": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -7196,6 +8198,136 @@
                 }
             }
         },
+        "registry.Catalog": {
+            "type": "object",
+            "properties": {
+                "chart_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.ComponentTypeInfo"
+                    }
+                },
+                "connection_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.TypeInfo"
+                    }
+                },
+                "control_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.ComponentTypeInfo"
+                    }
+                },
+                "device_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.DeviceTypeSummary"
+                    }
+                },
+                "display_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.ComponentTypeInfo"
+                    }
+                },
+                "integrations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.IntegrationInfo"
+                    }
+                }
+            }
+        },
+        "registry.ComponentCapabilities": {
+            "type": "object",
+            "properties": {
+                "can_read": {
+                    "description": "Subscribes to live state",
+                    "type": "boolean"
+                },
+                "can_write": {
+                    "description": "Sends commands",
+                    "type": "boolean"
+                },
+                "requires_connection": {
+                    "description": "Must be bound to a connection (false for e.g. text labels)",
+                    "type": "boolean"
+                },
+                "requires_device_type": {
+                    "description": "Needs a device_type_id to translate commands",
+                    "type": "boolean"
+                },
+                "supports_streaming": {
+                    "description": "Consumes streaming data (as opposed to polling)",
+                    "type": "boolean"
+                }
+            }
+        },
+        "registry.ComponentTypeInfo": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "$ref": "#/definitions/registry.ComponentCapabilities"
+                },
+                "category": {
+                    "description": "CategoryChart | CategoryControl | CategoryDisplay",
+                    "type": "string"
+                },
+                "config_schema": {
+                    "description": "Fields the component exposes in the editor",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.ConfigField"
+                    }
+                },
+                "data_requirements": {
+                    "description": "Charts only",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/registry.DataRequirements"
+                        }
+                    ]
+                },
+                "default_config": {
+                    "description": "Seed values for a freshly-created instance",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "description": "One-line description for selection UIs and AI prompts",
+                    "type": "string"
+                },
+                "display_name": {
+                    "description": "Human-readable label",
+                    "type": "string"
+                },
+                "hidden": {
+                    "description": "True for legacy aliases and backward-compat types kept so old records still edit",
+                    "type": "boolean"
+                },
+                "icon": {
+                    "description": "MDI icon name (e.g. \"mdiGestureTap\"); frontend resolves to an SVG path",
+                    "type": "string"
+                },
+                "integration": {
+                    "description": "Optional: groups types under a named integration (e.g., \"frigate\", \"casita\")",
+                    "type": "string"
+                },
+                "subtype": {
+                    "description": "\"bar\", \"toggle\", \"frigate\" — the value stored in chart_type / control_type / display_type",
+                    "type": "string"
+                },
+                "type_id": {
+                    "description": "\"chart.bar\", \"control.toggle\", \"display.frigate\"",
+                    "type": "string"
+                },
+                "ui_category": {
+                    "description": "Grouping for widget picker: \"carbon\", \"custom\", \"tile\", \"decorative\"",
+                    "type": "string"
+                }
+            }
+        },
         "registry.ConfigField": {
             "type": "object",
             "properties": {
@@ -7222,6 +8354,116 @@
                 }
             }
         },
+        "registry.DataRequirements": {
+            "type": "object",
+            "properties": {
+                "has_axis_labels": {
+                    "type": "boolean"
+                },
+                "has_series_column": {
+                    "type": "boolean"
+                },
+                "has_sort_limit": {
+                    "type": "boolean"
+                },
+                "has_time_bucket": {
+                    "type": "boolean"
+                },
+                "has_visible_columns": {
+                    "type": "boolean"
+                },
+                "has_x_axis_format": {
+                    "type": "boolean"
+                },
+                "multiple_y_axis": {
+                    "type": "boolean"
+                },
+                "requires_x_axis": {
+                    "type": "boolean"
+                },
+                "requires_y_axis": {
+                    "type": "boolean"
+                },
+                "x_axis_label": {
+                    "description": "UI label hint: \"X-Axis (Categories)\", \"Category Column\", etc.",
+                    "type": "string"
+                },
+                "y_axis_label": {
+                    "type": "string"
+                }
+            }
+        },
+        "registry.DeviceTypeSummary": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_built_in": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "type": "string"
+                },
+                "supported_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "registry.IntegrationInfo": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "One-line description for the settings UI",
+                    "type": "string"
+                },
+                "display_name": {
+                    "description": "Human-readable label",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Stable identifier (e.g., \"frigate\", \"casita\")",
+                    "type": "string"
+                },
+                "owned_chart_types": {
+                    "description": "Subtype IDs of charts owned by this integration",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "owned_connection_type": {
+                    "description": "Optional: connection type ID this integration adds beyond the standard adapter registry (e.g., \"frigate\")",
+                    "type": "string"
+                },
+                "owned_control_types": {
+                    "description": "Subtype IDs of controls owned by this integration",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "owned_display_types": {
+                    "description": "Subtype IDs of displays owned by this integration",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "registry.TypeInfo": {
             "type": "object",
             "properties": {
@@ -7239,6 +8481,10 @@
                     }
                 },
                 "display_name": {
+                    "type": "string"
+                },
+                "integration": {
+                    "description": "Optional: groups types under a named integration (e.g., \"frigate\", \"casita\")",
                     "type": "string"
                 },
                 "type_id": {

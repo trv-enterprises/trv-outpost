@@ -41,7 +41,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Home
+  Home,
+  Download
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -59,6 +60,9 @@ import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient from '../api/client';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
+import NamespaceSelect from '../components/shared/NamespaceSelect';
+import { useNamespaces } from '../context/NamespaceContext';
+import DashboardExportModal from '../components/DashboardExportModal';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize } from '../config/layoutConfig';
 import './DashboardViewerPage.scss';
@@ -156,6 +160,12 @@ function DashboardViewerPage({ canDesign = false }) {
   const [switchIndicator, setSwitchIndicator] = useState(null);
   const switchTimerRef = useRef(null);
 
+  // "Preview from design" mode: user just saved/opened this dashboard from the
+  // designer. Hide multi-dashboard navigation (prev/next/home, Alt+arrow) and
+  // route the back arrow to the design list instead of the viewer list — the
+  // user came from design and should return there, not jump into view mode.
+  const [fromDesign, setFromDesign] = useState(() => !!location.state?.fromDesign);
+
   // ── Edit mode state ──────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
   const [editablePanels, setEditablePanels] = useState([]);
@@ -164,6 +174,8 @@ function DashboardViewerPage({ canDesign = false }) {
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
+  const [editableNamespace, setEditableNamespace] = useState('');
+  const { activeNamespace } = useNamespaces();
 
   // Dashboard settings (editable in settings modal)
   const [editableDescription, setEditableDescription] = useState('');
@@ -174,6 +186,7 @@ function DashboardViewerPage({ canDesign = false }) {
   const [editableIsPublic, setEditableIsPublic] = useState(false);
   const [editableAllowExport, setEditableAllowExport] = useState(true);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Zoom state (edit mode only)
   const [zoom, setZoom] = useState(100);
@@ -551,9 +564,10 @@ function DashboardViewerPage({ canDesign = false }) {
     navigate(`/view/dashboards/${defaultDashboardId}`);
   }, [defaultDashboardId, id, dashboardList, showSwitchIndicator, navigate]);
 
-  // Keyboard navigation: Alt+Left/Right to switch dashboards (disabled in edit mode)
+  // Keyboard navigation: Alt+Left/Right to switch dashboards (disabled in edit mode
+  // and in "from design" preview mode, where we want a single-dashboard view)
   useEffect(() => {
-    if (dashboardList.length < 2 || isEditMode) return;
+    if (dashboardList.length < 2 || isEditMode || fromDesign) return;
 
     const handleKeyDown = (e) => {
       if (!e.altKey) return;
@@ -580,7 +594,7 @@ function DashboardViewerPage({ canDesign = false }) {
       window.removeEventListener('keydown', handleKeyDown);
       if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
     };
-  }, [dashboardList, id, navigate, showSwitchIndicator, isEditMode]);
+  }, [dashboardList, id, navigate, showSwitchIndicator, isEditMode, fromDesign]);
 
   // Initial load
   useEffect(() => {
@@ -720,7 +734,13 @@ function DashboardViewerPage({ canDesign = false }) {
     fetchDashboard();
   };
 
-  const handleBack = () => navigate('/view/dashboards');
+  const handleBack = () => {
+    if (fromDesign) {
+      navigate('/design/dashboards');
+    } else {
+      navigate('/view/dashboards');
+    }
+  };
 
   const formatTime = (date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -814,6 +834,10 @@ function DashboardViewerPage({ canDesign = false }) {
     setEditablePanels(panelsCopy);
     setOriginalPanels(panelsCopy.map(p => ({ ...p })));
     setEditableName(dashboard?.name || '');
+    // On a new dashboard the dashboard stub has no namespace yet; fall
+    // back to the header's active namespace so newly-created dashboards
+    // land where the user currently thinks they are.
+    setEditableNamespace(dashboard?.namespace || activeNamespace || 'default');
     setEditableDescription(dashboard?.description || '');
     setEditableTags(dashboard?.tags || []);
     setEditableTheme(dashboard?.settings?.theme || 'dark');
@@ -861,6 +885,7 @@ function DashboardViewerPage({ canDesign = false }) {
       };
       const payload = {
         name: editableName,
+        namespace: editableNamespace,
         description: editableDescription,
         tags: editableTags,
         panels: editablePanels,
@@ -870,12 +895,19 @@ function DashboardViewerPage({ canDesign = false }) {
       if (isNewDashboard) {
         const created = await apiClient.createDashboard(payload);
         invalidateTagsCache();
-        navigate(`/view/dashboards/${created.id}`, { replace: true });
+        navigate(`/view/dashboards/${created.id}`, {
+          replace: true,
+          state: { fromDesign: true }
+        });
       } else {
         await apiClient.updateDashboard(id, { ...dashboard, ...payload });
         invalidateTagsCache();
         setIsEditMode(false);
         setEditHasChanges(false);
+        // After Save from the designer, show the finished dashboard in a
+        // single-dashboard view (no prev/next/home). The user returned to
+        // this route from design, so mark it as a design-origin preview.
+        setFromDesign(true);
         fetchDashboard();
       }
     } catch (err) {
@@ -1267,7 +1299,7 @@ function DashboardViewerPage({ canDesign = false }) {
         </div>
 
         <div className="toolbar-center">
-          {!isEditMode && dashboardList.length > 1 && (
+          {!isEditMode && !fromDesign && dashboardList.length > 1 && (
             <div className="dashboard-nav-buttons">
               <IconButton
                 kind="ghost"
@@ -1399,6 +1431,16 @@ function DashboardViewerPage({ canDesign = false }) {
               <span className="last-refresh">
                 Last refresh: {formatTime(lastRefresh)}
               </span>
+              {canDesign && dashboard?.id && !isNewDashboard && (
+                <IconButton
+                  kind="ghost"
+                  label="Export this dashboard"
+                  align="bottom"
+                  onClick={() => setExportModalOpen(true)}
+                >
+                  <Download size={20} />
+                </IconButton>
+              )}
               <IconButton
                 kind="ghost"
                 label="Refresh"
@@ -1795,6 +1837,12 @@ function DashboardViewerPage({ canDesign = false }) {
       )}
 
       {/* Dashboard settings modal */}
+      <DashboardExportModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        dashboardIds={dashboard?.id ? [dashboard.id] : []}
+        dashboards={dashboard ? [dashboard] : []}
+      />
       <Modal
         open={settingsModalOpen}
         onRequestClose={() => setSettingsModalOpen(false)}
@@ -1814,6 +1862,11 @@ function DashboardViewerPage({ canDesign = false }) {
             value={editableDescription}
             onChange={(e) => setEditableDescription(e.target.value)}
             placeholder="Enter dashboard description"
+          />
+          <NamespaceSelect
+            id="settings-namespace"
+            value={editableNamespace}
+            onChange={(v) => { setEditableNamespace(v); setEditHasChanges(true); }}
           />
           <TagInput
             id="settings-tags"

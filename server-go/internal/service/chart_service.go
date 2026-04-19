@@ -24,16 +24,22 @@ func NewChartService(repo *repository.ChartRepository) *ChartService {
 	}
 }
 
-// CreateChart creates a new chart with validation
-// Creates as version 1 with status "final"
+// CreateChart creates a new chart with validation. Creates as version 1
+// with status "final". Namespace defaults to "default" — clients should
+// pass the user's active namespace.
 func (s *ChartService) CreateChart(ctx context.Context, req *models.CreateChartRequest) (*models.Chart, error) {
-	// Check name uniqueness
-	existing, err := s.repo.FindByName(ctx, req.Name)
+	namespace := req.Namespace
+	if namespace == "" {
+		namespace = models.DefaultNamespace
+	}
+
+	// Check (namespace, name) uniqueness — same name allowed across namespaces.
+	existing, err := s.repo.FindByName(ctx, namespace, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("chart with name '%s' already exists", req.Name)
+		return nil, fmt.Errorf("chart with name '%s' already exists in namespace '%s'", req.Name, namespace)
 	}
 
 	// Default title to name if not provided
@@ -52,6 +58,7 @@ func (s *ChartService) CreateChart(ctx context.Context, req *models.CreateChartR
 		Version:       1,
 		Status:        models.ChartStatusFinal,
 		ComponentType: componentType,
+		Namespace:     namespace,
 		Name:          req.Name,
 		Title:         title,
 		Description:   req.Description,
@@ -205,16 +212,28 @@ func (s *ChartService) UpdateChart(ctx context.Context, id string, req *models.U
 		return nil, fmt.Errorf("chart not found")
 	}
 
-	// Check name uniqueness if changing
-	if req.Name != nil && *req.Name != chart.Name {
-		existing, err := s.repo.FindByName(ctx, *req.Name)
+	// Resolve post-update (namespace, name) and check uniqueness if either
+	// changed. Both can change in the same request. Capture the original
+	// namespace before mutating so we can detect a real move below.
+	originalNamespace := chart.Namespace
+	newNamespace := chart.Namespace
+	if req.Namespace != nil && *req.Namespace != "" {
+		newNamespace = *req.Namespace
+	}
+	newName := chart.Name
+	if req.Name != nil {
+		newName = *req.Name
+	}
+	if newNamespace != chart.Namespace || newName != chart.Name {
+		existing, err := s.repo.FindByName(ctx, newNamespace, newName)
 		if err != nil {
 			return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 		}
 		if existing != nil && existing.ID != chart.ID {
-			return nil, fmt.Errorf("chart with name '%s' already exists", *req.Name)
+			return nil, fmt.Errorf("chart with name '%s' already exists in namespace '%s'", newName, newNamespace)
 		}
-		chart.Name = *req.Name
+		chart.Namespace = newNamespace
+		chart.Name = newName
 	}
 
 	// Update fields if provided
@@ -264,6 +283,15 @@ func (s *ChartService) UpdateChart(ctx context.Context, id string, req *models.U
 	// Update in place (same version)
 	if err := s.repo.Update(ctx, id, chart.Version, chart); err != nil {
 		return nil, fmt.Errorf("error updating chart: %w", err)
+	}
+
+	// If namespace actually changed, stamp the new value onto every other
+	// version row of this chart so list/filter queries are consistent
+	// regardless of which version row they hit.
+	if chart.Namespace != originalNamespace {
+		if err := s.repo.SetNamespaceForAllVersions(ctx, id, chart.Namespace); err != nil {
+			return nil, fmt.Errorf("error syncing namespace across chart versions: %w", err)
+		}
 	}
 
 	return chart, nil

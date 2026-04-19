@@ -121,6 +121,7 @@ type EmbeddedChart struct {
 // @Description Dashboard with panels that reference standalone charts
 type Dashboard struct {
 	ID          string                 `json:"id" bson:"_id"`
+	Namespace   string                 `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 	Name        string                 `json:"name" bson:"name" binding:"required"`
 	Description string                 `json:"description" bson:"description"`
 	Panels      []DashboardPanel       `json:"panels" bson:"panels"`           // Panels with chart_id references
@@ -148,6 +149,7 @@ type DashboardSettings struct {
 // CreateDashboardRequest represents a request to create a dashboard
 // @Description Request body for creating a new dashboard
 type CreateDashboardRequest struct {
+	Namespace   string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
 	Name        string                 `json:"name" binding:"required"`
 	Description string                 `json:"description"`
 	Panels      []DashboardPanel       `json:"panels"` // Panels with optional chart_id
@@ -159,6 +161,7 @@ type CreateDashboardRequest struct {
 // UpdateDashboardRequest represents a request to update a dashboard
 // @Description Request body for updating an existing dashboard
 type UpdateDashboardRequest struct {
+	Namespace   *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
 	Name        *string                 `json:"name,omitempty"`
 	Description *string                 `json:"description,omitempty"`
 	Panels      *[]DashboardPanel       `json:"panels,omitempty"` // Panels with optional chart_id
@@ -180,6 +183,7 @@ type DashboardListResponse struct {
 // DashboardQueryParams defines query parameters for listing dashboards
 // @Description Query parameters for filtering and pagination
 type DashboardQueryParams struct {
+	Namespace          string   `form:"namespace"`           // Empty = all namespaces; non-empty = exact match
 	Name               string   `form:"name"`
 	IsPublic           *bool    `form:"is_public"`
 	ChartID            string   `form:"chart_id"`            // Filter dashboards using a specific chart
@@ -193,6 +197,7 @@ type DashboardQueryParams struct {
 // @Description Dashboard info with optional data source names for display in tiles
 type DashboardSummary struct {
 	ID              string            `json:"id"`
+	Namespace       string            `json:"namespace"`
 	Name            string            `json:"name"`
 	Description     string            `json:"description"`
 	Thumbnail       string            `json:"thumbnail,omitempty"`

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -19,16 +18,6 @@ import (
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
-
-var serverPort = 3001
-
-// SetServerPort is called once at startup so this package can build reachable
-// callback URLs for ts-store push connections without needing DASHBOARD_HOST.
-func SetServerPort(p int) {
-	if p > 0 {
-		serverPort = p
-	}
-}
 
 // TSStoreStream represents a streaming connection from a TSStore datasource
 // In ts-store v0.2.2+, streaming works via outbound push:
@@ -313,70 +302,13 @@ func (ts *TSStoreStream) deletePushConnection(ctx context.Context) error {
 }
 
 // getDashboardHost returns the dashboard host address for the inbound WebSocket URL.
-// DASHBOARD_HOST takes precedence when set. Otherwise the server's own LAN IPv4 is
-// auto-discovered so ts-store on another host can reach back. If nothing usable is
-// found, falls back to localhost which only works when ts-store runs on this host.
+// Reads from DASHBOARD_HOST environment variable, falling back to localhost:3001.
+// Set DASHBOARD_HOST to the address reachable by ts-store (e.g., Tailscale IP).
 func (ts *TSStoreStream) getDashboardHost() string {
 	if host := os.Getenv("DASHBOARD_HOST"); host != "" {
 		return host
 	}
-	if ip := discoverLANIP(); ip != "" {
-		return fmt.Sprintf("%s:%d", ip, serverPort)
-	}
-	log.Printf("[TSStoreStream] WARNING: could not discover LAN IP, falling back to localhost:%d (ts-store push will not work from a different host)", serverPort)
-	return fmt.Sprintf("localhost:%d", serverPort)
-}
-
-func discoverLANIP() string {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-	var fallback string
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip4 := ipNet.IP.To4()
-			if ip4 == nil || ip4.IsLoopback() || ip4.IsLinkLocalUnicast() {
-				continue
-			}
-			if isReachableRange(ip4) {
-				return ip4.String()
-			}
-			if fallback == "" {
-				fallback = ip4.String()
-			}
-		}
-	}
-	return fallback
-}
-
-// isReachableRange returns true for IPv4 ranges expected to be reachable between
-// lab hosts: RFC1918 private space and Tailscale CGNAT (100.64.0.0/10).
-func isReachableRange(ip net.IP) bool {
-	if ip4 := ip.To4(); ip4 != nil {
-		switch {
-		case ip4[0] == 10:
-			return true
-		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
-			return true
-		case ip4[0] == 192 && ip4[1] == 168:
-			return true
-		case ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127:
-			return true
-		}
-	}
-	return false
+	return "localhost:3001"
 }
 
 // getTimeout returns the configured timeout or default

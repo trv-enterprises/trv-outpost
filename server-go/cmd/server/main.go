@@ -131,6 +131,7 @@ func main() {
 	settingsRepo := repository.NewSettingsItemRepository(mongodb.Database)
 	deviceTypeRepo := repository.NewDeviceTypeRepository(mongodb.Database)
 	deviceRepo := repository.NewDeviceRepository(mongodb.Database)
+	namespaceRepo := repository.NewNamespaceRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := chartRepo.CreateIndexes(ctx); err != nil {
@@ -167,16 +168,31 @@ func main() {
 		log.Printf("Warning: Failed to create device indexes: %v", err)
 	}
 
+	// Create namespace indexes
+	if err := namespaceRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create namespace indexes: %v", err)
+	}
+
 	// Initialize services
 	datasourceService := service.NewDatasourceService(datasourceRepo)
 	chartService := service.NewChartService(chartRepo)
-	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database)
+	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, chartRepo, datasourceRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, chartRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg)
 	userService := service.NewUserService(userRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, datasourceRepo)
 	deviceDiscoveryService := service.NewDeviceDiscoveryService(datasourceRepo, deviceTypeRepo, deviceRepo)
+
+	// Namespace service with the three entity repos wired in. Each repo
+	// implements CountByNamespace + RenameNamespace so the service's
+	// delete-guard and rename-cascade paths work end-to-end.
+	namespaceService := service.NewNamespaceService(namespaceRepo, datasourceRepo, chartRepo, dashboardRepo)
+	if err := namespaceService.SeedDefault(ctx); err != nil {
+		log.Printf("Warning: Failed to seed default namespace: %v", err)
+	} else {
+		fmt.Println("✓ Default namespace ensured")
+	}
 
 	// Load user-configurable settings from separate YAML file
 	userConfig, err := config.LoadUserConfigurableSettings()
@@ -243,7 +259,6 @@ func main() {
 	// Initialize inbound WebSocket handler for ts-store push connections
 	inboundHandler := streaming.GetInboundHandler()
 	_ = inboundHandler // Used in routes below
-	streaming.SetServerPort(cfg.Server.Port)
 	fmt.Println("✓ InboundHandler initialized for ts-store push connections")
 
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
@@ -275,6 +290,7 @@ func main() {
 	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
+	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
@@ -423,6 +439,17 @@ func main() {
 			frigate.GET("/live/:camera", frigateHandler.ProxyLiveStream)
 		}
 
+		// Namespace routes
+		namespaces := api.Group("/namespaces")
+		{
+			namespaces.GET("", namespaceHandler.ListNamespaces)
+			namespaces.POST("", namespaceHandler.CreateNamespace)
+			namespaces.GET("/:id", namespaceHandler.GetNamespace)
+			namespaces.PUT("/:id", namespaceHandler.UpdateNamespace)
+			namespaces.DELETE("/:id", namespaceHandler.DeleteNamespace)
+			namespaces.GET("/:id/usage", namespaceHandler.GetUsage)
+		}
+
 		// Device Type routes
 		deviceTypes := api.Group("/device-types")
 		{
@@ -454,6 +481,15 @@ func main() {
 			dashboards.GET("/:id", dashboardHandler.GetDashboard)
 			dashboards.PUT("/:id", dashboardHandler.UpdateDashboard)
 			dashboards.DELETE("/:id", dashboardHandler.DeleteDashboard)
+
+			// Export — POST /api/dashboards/export[/preview]. Both POST
+			// because they take a JSON body listing dashboard IDs.
+			dashboards.POST("/export/preview", dashboardHandler.PreviewExport)
+			dashboards.POST("/export", dashboardHandler.ExportDashboards)
+
+			// Import — two phases. Preflight is read-only; apply writes.
+			dashboards.POST("/import/preflight", dashboardHandler.PreflightImport)
+			dashboards.POST("/import/apply", dashboardHandler.ApplyImport)
 		}
 
 		// AI Session routes

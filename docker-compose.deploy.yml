@@ -5,6 +5,8 @@
 #   ANTHROPIC_API_KEY - API key for AI features
 #   DOMAIN - Domain for HTTPS (e.g., dashboard.example.com or localhost)
 #   IMAGE_TAG - Version tag to deploy (e.g., v0.2.0 or latest)
+#   DASHBOARD_HOST - host:port reachable by ts-store for push callbacks
+#                    (e.g., 192.168.1.216:3001 or <tailscale-ip>:3001)
 
 version: '3.8'
 
@@ -34,6 +36,9 @@ services:
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
       - DASHBOARD_MONGODB_DATABASE=dashboard
       - DASHBOARD_LLM_API_KEY=${ANTHROPIC_API_KEY}
+      # Address where ts-store dials back to reach this server's inbound WebSocket.
+      # Must be reachable from the host running ts-store (LAN IP or Tailscale IP with port).
+      - DASHBOARD_HOST=${DASHBOARD_HOST}
     depends_on:
       mongodb:
         condition: service_healthy

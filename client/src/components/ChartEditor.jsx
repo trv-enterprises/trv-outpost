@@ -39,6 +39,8 @@ import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
 import { invalidateTagsCache } from './shared/tagsApi';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
+import { useNamespaces } from '../context/NamespaceContext';
+import NamespaceSelect from './shared/NamespaceSelect';
 import './ChartEditor.scss';
 
 // Chart types available
@@ -230,6 +232,8 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [title, setTitle] = useState(''); // Display title (defaults to name)
+  const { activeNamespace } = useNamespaces();
+  const [namespace, setNamespace] = useState('');
   const [description, setDescription] = useState('');
   const { isChartTypeEnabled, enabledDisplayTypes, enabledControlTypes } = useEnabledTypes();
   const [tags, setTags] = useState([]);
@@ -513,6 +517,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       setName(chart.name || '');
       setTitle(chart.title || '');
       setDescription(chart.description || '');
+      setNamespace(chart.namespace || 'default');
       setTags(chart.tags || []);
       setComponentType(chart.component_type || 'chart');
       setChartType(chart.chart_type || 'bar');
@@ -847,6 +852,7 @@ const ChartEditor = forwardRef(function ChartEditor({
   const resetForm = () => {
     setName('');
     setDescription('');
+    setNamespace(activeNamespace || 'default');
     setChartType('bar');
     setSelectedDatasourceId('');
     setSelectedDatasource(null);
@@ -1224,6 +1230,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       name: name.trim(),
       title: title.trim() || name.trim(), // Default to name if no title provided
       description: description.trim(),
+      namespace,
       tags,
       component_type: componentType,
       chart_type: componentType === 'chart' ? chartType : '',
@@ -1442,6 +1449,13 @@ const ChartEditor = forwardRef(function ChartEditor({
             label="Tags"
             value={tags}
             onChange={setTags}
+          />
+        </div>
+        <div className="metadata-row">
+          <NamespaceSelect
+            id="chart-namespace"
+            value={namespace}
+            onChange={setNamespace}
           />
         </div>
       </div>

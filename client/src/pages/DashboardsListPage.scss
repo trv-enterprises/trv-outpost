@@ -397,4 +397,38 @@
       margin: 2px;
     }
   }
+
+  // Export-mode bulk action bar — sits between the toolbar and the
+  // table so the selected count stays visible while scrolling.
+  .export-mode-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: spacing.$spacing-03 spacing.$spacing-05;
+    background-color: var(--cds-layer-01);
+    border-left: 4px solid var(--cds-interactive);
+    margin-bottom: spacing.$spacing-03;
+
+    &__count {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--cds-text-primary);
+    }
+
+    &__actions {
+      display: flex;
+      gap: spacing.$spacing-03;
+    }
+  }
+
+  // Selected-in-export-mode row gets a highlight so the user can see
+  // what they've picked without squinting at checkboxes.
+  .clickable-row.is-selected {
+    background-color: var(--cds-layer-selected, rgba(15, 98, 254, 0.15));
+  }
+
+  .export-select-cell {
+    width: 3rem;
+    text-align: center;
+  }
 }

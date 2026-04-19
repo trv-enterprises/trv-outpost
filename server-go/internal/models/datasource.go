@@ -84,6 +84,7 @@ type Datasource struct {
 	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Name        string             `json:"name" bson:"name" binding:"required"`
 	Description string             `json:"description" bson:"description"`
+	Namespace   string             `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 
 	// NEW: Registry-based type system (preferred)
 	// TypeID format: "category.name" (e.g., "db.postgres", "stream.websocket-bidir")
@@ -576,6 +577,7 @@ type HealthInfo struct {
 type CreateDatasourceRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
+	Namespace   string `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
 
 	// NEW: Registry-based type system (preferred)
 	TypeID     string                 `json:"type_id,omitempty"`
@@ -594,6 +596,7 @@ type CreateDatasourceRequest struct {
 type UpdateDatasourceRequest struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
+	Namespace   string `json:"namespace,omitempty"` // Empty = leave current namespace unchanged.
 
 	// NEW: Registry-based type system
 	TypeID     string                 `json:"type_id,omitempty"`

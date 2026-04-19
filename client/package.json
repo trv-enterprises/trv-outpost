@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "0.6.3",
+  "version": "0.6.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,7 @@
     "ag-grid-community": "^35.2.1",
     "ag-grid-react": "^35.2.1",
     "antd": "^5.28.1",
+    "diff": "^9.0.0",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.5",
     "echarts-gl": "^2.0.9",
