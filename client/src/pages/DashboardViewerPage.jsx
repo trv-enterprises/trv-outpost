@@ -59,6 +59,8 @@ import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient from '../api/client';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
+import NamespaceSelect from '../components/shared/NamespaceSelect';
+import { useNamespaces } from '../context/NamespaceContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize } from '../config/layoutConfig';
 import './DashboardViewerPage.scss';
@@ -170,6 +172,8 @@ function DashboardViewerPage({ canDesign = false }) {
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
+  const [editableNamespace, setEditableNamespace] = useState('');
+  const { activeNamespace } = useNamespaces();
 
   // Dashboard settings (editable in settings modal)
   const [editableDescription, setEditableDescription] = useState('');
@@ -827,6 +831,10 @@ function DashboardViewerPage({ canDesign = false }) {
     setEditablePanels(panelsCopy);
     setOriginalPanels(panelsCopy.map(p => ({ ...p })));
     setEditableName(dashboard?.name || '');
+    // On a new dashboard the dashboard stub has no namespace yet; fall
+    // back to the header's active namespace so newly-created dashboards
+    // land where the user currently thinks they are.
+    setEditableNamespace(dashboard?.namespace || activeNamespace || 'default');
     setEditableDescription(dashboard?.description || '');
     setEditableTags(dashboard?.tags || []);
     setEditableTheme(dashboard?.settings?.theme || 'dark');
@@ -874,6 +882,7 @@ function DashboardViewerPage({ canDesign = false }) {
       };
       const payload = {
         name: editableName,
+        namespace: editableNamespace,
         description: editableDescription,
         tags: editableTags,
         panels: editablePanels,
@@ -1834,6 +1843,11 @@ function DashboardViewerPage({ canDesign = false }) {
             value={editableDescription}
             onChange={(e) => setEditableDescription(e.target.value)}
             placeholder="Enter dashboard description"
+          />
+          <NamespaceSelect
+            id="settings-namespace"
+            value={editableNamespace}
+            onChange={(v) => { setEditableNamespace(v); setEditHasChanges(true); }}
           />
           <TagInput
             id="settings-tags"

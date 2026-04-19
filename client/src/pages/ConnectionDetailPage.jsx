@@ -28,6 +28,8 @@ import apiClient, { API_BASE } from '../api/client';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
+import { useNamespaces } from '../context/NamespaceContext';
+import NamespaceSelect from '../components/shared/NamespaceSelect';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -92,6 +94,12 @@ function ConnectionDetailPage() {
   const [connection, setConnection] = useState(null);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const { activeNamespace } = useNamespaces();
+  // Create mode seeds from the header's active namespace; edit mode
+  // reads from the record once it loads. An empty string here means
+  // "not yet resolved" — we only render the Select once we have a real
+  // slug so it doesn't briefly show the Carbon empty-state.
+  const [namespace, setNamespace] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('sql');
   const [config, setConfig] = useState({});
@@ -124,6 +132,15 @@ function ConnectionDetailPage() {
     }
   }, [id]);
 
+  // In create mode, inherit the header's active namespace whenever it
+  // resolves (which may be after the component mounts — context loads
+  // async). Only sets if we haven't already picked one.
+  useEffect(() => {
+    if (isCreateMode && !namespace && activeNamespace) {
+      setNamespace(activeNamespace);
+    }
+  }, [isCreateMode, activeNamespace, namespace]);
+
   const fetchConnection = async () => {
     try {
       setLoading(true);
@@ -136,6 +153,7 @@ function ConnectionDetailPage() {
       setType(data.type);
       setConfig(data.config || {});
       setTags(data.tags || []);
+      setNamespace(data.namespace || 'default');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -367,7 +385,8 @@ function ConnectionDetailPage() {
         description,
         type,
         config: preparedConfig,
-        tags
+        tags,
+        namespace,
       };
 
       if (isCreateMode) {
@@ -1627,6 +1646,15 @@ function ConnectionDetailPage() {
               setHasChanges(true);
             }}
             placeholder="Enter connection description"
+          />
+        </div>
+
+        {/* Namespace */}
+        <div className="form-row">
+          <NamespaceSelect
+            id="connection-namespace"
+            value={namespace}
+            onChange={(v) => { setNamespace(v); setHasChanges(true); }}
           />
         </div>
 
