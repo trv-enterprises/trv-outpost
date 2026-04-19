@@ -24,6 +24,7 @@ See the `release-deploy` skill for the authoritative runbook (tagging, image bui
 - Use "control" for interactive components (buttons, sliders, toggles)
 - Internal code uses `component_type: 'chart'` in DB for displays (backward compatibility), but UI shows "Display"
 - "Component" is the umbrella term for both displays and controls
+- **Namespace** = the conflict-domain grouping on connections/components/dashboards. Uniqueness is `(namespace, name)` — two namespaces can each have an entity called `Home`. Slug-safe strings like `default`, `tviviano-homelab`. Namespaces are first-class records (name, description, color) managed at `/manage/namespaces`; active namespace is a per-user preference keyed on `active_namespace` in app_config. **Don't conflate with tags** — tags are descriptive (`environment:prod`), namespace is structural.
 
 ### 3. Full-Stack Awareness
 - **Always consider frontend impact**: When making backend changes (API endpoints, models, response formats), identify and implement the corresponding frontend changes (API client, components, forms, types).
@@ -378,6 +379,17 @@ dashboard/
 | GET | `/api/dashboards/:id/details` | Get with expanded data |
 | PUT | `/api/dashboards/:id` | Update dashboard |
 | DELETE | `/api/dashboards/:id` | Delete dashboard |
+| POST | `/api/dashboards/export/preview` | Export preview — counts + warnings for the selected dashboard IDs |
+| POST | `/api/dashboards/export` | Build an ExportBundle JSON for the selected dashboard IDs |
+| POST | `/api/dashboards/import/preflight` | Classify each object in a bundle as identical/conflict/new/blocked |
+| POST | `/api/dashboards/import/apply` | Apply a bundle with per-conflict overwrite decisions |
+| **Namespaces** |||
+| GET | `/api/namespaces` | List namespaces |
+| POST | `/api/namespaces` | Create namespace |
+| GET | `/api/namespaces/:id` | Get namespace |
+| PUT | `/api/namespaces/:id` | Update (rename cascades into referring records) |
+| DELETE | `/api/namespaces/:id` | Delete (409 when in use, with per-type counts) |
+| GET | `/api/namespaces/:id/usage` | Per-entity usage counts |
 | **AI Sessions** |||
 | POST | `/api/ai/sessions` | Create AI session |
 | GET | `/api/ai/sessions/:id` | Get session state |
@@ -451,6 +463,7 @@ Per-user preferences stored as a key-value map. No predefined schema — any key
 | Key | Description | Used In |
 |-----|-------------|---------|
 | `dashboard_reduceToFit` | Whether dashboard view uses "fit to screen" mode (boolean) | `DashboardViewerPage.jsx` |
+| `active_namespace` | Currently-selected namespace slug for this user — drives the header picker, the default namespace for newly-created records, and the scope filter on list pages. Falls back to `"default"` when unset. | `NamespaceContext.jsx` |
 
 **Pattern for adding a new user preference:**
 ```javascript
