@@ -486,6 +486,10 @@ func main() {
 			// because they take a JSON body listing dashboard IDs.
 			dashboards.POST("/export/preview", dashboardHandler.PreviewExport)
 			dashboards.POST("/export", dashboardHandler.ExportDashboards)
+
+			// Import — two phases. Preflight is read-only; apply writes.
+			dashboards.POST("/import/preflight", dashboardHandler.PreflightImport)
+			dashboards.POST("/import/apply", dashboardHandler.ApplyImport)
 		}
 
 		// AI Session routes

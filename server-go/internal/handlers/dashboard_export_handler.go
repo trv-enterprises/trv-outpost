@@ -69,3 +69,57 @@ func (h *DashboardHandler) ExportDashboards(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, bundle)
 }
+
+// PreflightImport classifies every object in the incoming bundle into
+// identical / conflicts / new / blocked. Read-only — the UI calls this
+// repeatedly as the user changes target namespace or reviews diffs.
+//
+// @Summary Preflight an import bundle
+// @Description Classifies each object in the bundle as identical/conflict/new/blocked so the UI can show what would change before the user commits.
+// @Tags dashboards
+// @Accept json
+// @Produce json
+// @Param body body models.ImportPreflightRequest true "Bundle and target namespace"
+// @Success 200 {object} models.ImportPreflightResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/dashboards/import/preflight [post]
+func (h *DashboardHandler) PreflightImport(c *gin.Context) {
+	var req models.ImportPreflightRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	resp, err := h.service.PreflightImport(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// ApplyImport commits the bundle. The server re-runs preflight
+// internally so a changed target_namespace or a race with another
+// writer can't slip a blocked record through.
+//
+// @Summary Apply an import bundle
+// @Description Writes the bundle's objects into the target namespace. Identical objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly opts out; blocked objects cause the whole apply to refuse.
+// @Tags dashboards
+// @Accept json
+// @Produce json
+// @Param body body models.ImportApplyRequest true "Bundle, target namespace, and per-object overwrite decisions"
+// @Success 200 {object} models.ImportApplyResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/dashboards/import/apply [post]
+func (h *DashboardHandler) ApplyImport(c *gin.Context) {
+	var req models.ImportApplyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	resp, err := h.service.ApplyImport(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
