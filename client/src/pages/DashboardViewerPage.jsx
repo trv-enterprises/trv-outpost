@@ -63,6 +63,7 @@ import { invalidateTagsCache } from '../components/shared/tagsApi';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
+import { useModeGuard } from '../context/ModeGuardContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize } from '../config/layoutConfig';
 import './DashboardViewerPage.scss';
@@ -172,6 +173,12 @@ function DashboardViewerPage({ canDesign = false }) {
   const [originalPanels, setOriginalPanels] = useState([]);
   const [editHasChanges, setEditHasChanges] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  // Mode-switch intercept when the user has dirty edits. The pendingResolve
+  // ref carries the guard's promise resolver so each button in the modal
+  // can decide proceed/stay.
+  const [modeSwitchPromptOpen, setModeSwitchPromptOpen] = useState(false);
+  const modeSwitchResolveRef = useRef(null);
+  const { setModeGuard, clearModeGuard } = useModeGuard();
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
   const [editableNamespace, setEditableNamespace] = useState('');
@@ -915,6 +922,58 @@ function DashboardViewerPage({ canDesign = false }) {
     } finally {
       setEditSaving(false);
     }
+  };
+
+  // Intercept app-level mode switches while we're in edit mode. Clean
+  // state → silently leave edit mode and let the switch proceed (the
+  // user clearly meant to move on). Dirty state → pop a Save / Discard
+  // / Stay prompt and wait for the user to pick.
+  useEffect(() => {
+    if (!isEditMode) {
+      clearModeGuard();
+      return undefined;
+    }
+    const guard = () => {
+      if (!editHasChanges) {
+        // Clean: drop out of edit mode so the destination page doesn't
+        // render with stale isEditMode styling, then proceed.
+        setIsEditMode(false);
+        return Promise.resolve(true);
+      }
+      return new Promise((resolve) => {
+        modeSwitchResolveRef.current = resolve;
+        setModeSwitchPromptOpen(true);
+      });
+    };
+    setModeGuard(guard);
+    return () => {
+      clearModeGuard();
+    };
+  }, [isEditMode, editHasChanges, setModeGuard, clearModeGuard]);
+
+  // Mode-switch prompt actions. Each resolves the pending guard
+  // promise with proceed=true/false so the App's mode toggle knows
+  // whether to continue.
+  const modeSwitchSave = async () => {
+    setModeSwitchPromptOpen(false);
+    await saveEditMode();
+    const resolver = modeSwitchResolveRef.current;
+    modeSwitchResolveRef.current = null;
+    if (resolver) resolver(true);
+  };
+  const modeSwitchDiscard = () => {
+    setModeSwitchPromptOpen(false);
+    setIsEditMode(false);
+    setEditHasChanges(false);
+    const resolver = modeSwitchResolveRef.current;
+    modeSwitchResolveRef.current = null;
+    if (resolver) resolver(true);
+  };
+  const modeSwitchStay = () => {
+    setModeSwitchPromptOpen(false);
+    const resolver = modeSwitchResolveRef.current;
+    modeSwitchResolveRef.current = null;
+    if (resolver) resolver(false);
   };
 
   // Update a single panel's properties
@@ -1930,6 +1989,27 @@ function DashboardViewerPage({ canDesign = false }) {
           danger
         >
           <p>You have unsaved layout changes. Are you sure you want to discard them?</p>
+        </Modal>
+      )}
+
+      {/* Mode-switch interception: three options so "cancel" can't be
+          misread as either "abandon edits" or "abandon the mode switch". */}
+      {modeSwitchPromptOpen && (
+        <Modal
+          open={true}
+          onRequestClose={modeSwitchStay}
+          modalHeading="Unsaved changes"
+          passiveModal
+          size="sm"
+        >
+          <p style={{ marginBottom: '1.5rem' }}>
+            This dashboard has unsaved changes. Save before switching modes?
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <Button kind="ghost" onClick={modeSwitchStay}>Stay and keep editing</Button>
+            <Button kind="danger--ghost" onClick={modeSwitchDiscard}>Discard and switch</Button>
+            <Button kind="primary" onClick={modeSwitchSave}>Save and switch</Button>
+          </div>
         </Modal>
       )}
     </div>

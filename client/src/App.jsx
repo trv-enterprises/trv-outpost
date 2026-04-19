@@ -54,6 +54,7 @@ import { NotificationProvider, useNotifications } from './context/NotificationCo
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { NamespaceProvider } from './context/NamespaceContext';
 import NamespacePicker from './components/NamespacePicker';
+import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
@@ -173,8 +174,15 @@ function AppContent({ onDisconnect }) {
     return null;
   };
 
-  // Handle mode change and persist to localStorage
+  const { runModeGuard } = useModeGuard();
+
+  // Handle mode change and persist to localStorage. If a page registered
+  // a guard (e.g., dirty dashboard editor), consult it first — the guard
+  // can show a confirmation, save, or block the switch entirely.
   const handleModeChange = async (newMode) => {
+    if (newMode === currentMode) return;
+    const proceed = await runModeGuard();
+    if (!proceed) return;
     setCurrentMode(newMode);
     localStorage.setItem('dashboardMode', newMode);
     // Navigate to appropriate default route for the mode
@@ -474,9 +482,11 @@ function App() {
   return (
     <NotificationProvider>
       <EnabledTypesProvider>
-        <Router>
-          <AppContent onDisconnect={handleDisconnect} />
-        </Router>
+        <ModeGuardProvider>
+          <Router>
+            <AppContent onDisconnect={handleDisconnect} />
+          </Router>
+        </ModeGuardProvider>
       </EnabledTypesProvider>
     </NotificationProvider>
   );

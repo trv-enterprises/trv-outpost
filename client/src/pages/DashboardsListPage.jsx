@@ -155,10 +155,12 @@ function DashboardsListPage() {
   };
 
   // "View this dashboard" — skip the edit flow and drop straight into
-  // the read-only viewer. Used by the eye icon on both list + tile.
+  // the read-only viewer. `fromDesign: true` tells the viewer we came
+  // from the design list, which suppresses prev/next/home nav and
+  // routes the back-arrow back here rather than into /view mode.
   const handleView = (e, dashboard) => {
     e.stopPropagation();
-    navigate(`/view/dashboards/${dashboard.id}`);
+    navigate(`/view/dashboards/${dashboard.id}`, { state: { fromDesign: true } });
   };
 
   const handleDelete = async (e, dashboard) => {

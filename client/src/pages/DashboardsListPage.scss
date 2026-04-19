@@ -126,17 +126,22 @@
     position: relative;
 
     // Export-mode checkbox sits in the top-left corner over the
-    // thumbnail. Full tile stays clickable (toggle fires via the
-    // tile's own onClick) — the checkbox is purely visual feedback
-    // but we still make it a real control for keyboard users.
+    // thumbnail. No background by default so it doesn't read as a
+    // heavy block against the thumbnail — fade a subtle dark plate
+    // in only on hover to keep the control legible against
+    // light-colored thumbnails at that point.
     .tile-export-checkbox {
       position: absolute;
       top: spacing.$spacing-03;
       left: spacing.$spacing-03;
       z-index: 2;
-      background: rgba(22, 22, 22, 0.8);
-      border-radius: 2px;
       padding: 0.1rem 0.3rem;
+      border-radius: 2px;
+      transition: background 0.15s ease;
+    }
+
+    &:hover .tile-export-checkbox {
+      background: rgba(22, 22, 22, 0.6);
     }
 
     &.is-selected {
