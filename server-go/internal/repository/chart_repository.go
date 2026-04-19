@@ -77,6 +77,12 @@ func (r *ChartRepository) CreateIndexes(ctx context.Context) error {
 				{Key: "updated", Value: -1},
 			},
 		},
+		// Namespace-scoped list queries. No unique constraint — chart name
+		// uniqueness across (namespace, name) is enforced in the service
+		// layer, since the versioning scheme means multiple rows share a
+		// (namespace, name) for the same logical chart.
+		{Keys: bson.D{{Key: "namespace", Value: 1}, {Key: "updated", Value: -1}}},
+		{Keys: bson.D{{Key: "namespace", Value: 1}, {Key: "name", Value: 1}}},
 		// Covers "charts using connection X" queries with recency sort.
 		{
 			Keys: bson.D{

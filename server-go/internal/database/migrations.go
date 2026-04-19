@@ -23,6 +23,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 	}{
 		{"double_panel_cells_32px", migratePanelCellsTo32px},
 		{"collation_case_insensitive_v1", migrateCollationCaseInsensitive},
+		{"namespacing_v1", migrateNamespacingV1},
 	}
 
 	coll := db.Collection("migrations")

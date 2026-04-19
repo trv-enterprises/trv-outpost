@@ -134,10 +134,17 @@ func createIndexes(ctx context.Context, collection *mongo.Collection, models []m
 
 func datasourceIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
+		// Uniqueness is scoped to (namespace, name) — two namespaces can
+		// each have a connection called "Home". The old name-only unique
+		// index is dropped by the namespacing_v1 migration before this
+		// index is created.
 		{
-			Keys:    bson.D{{Key: "name", Value: 1}},
+			Keys:    bson.D{{Key: "namespace", Value: 1}, {Key: "name", Value: 1}},
 			Options: options.Index().SetUnique(true),
 		},
+		// Hot path: list by namespace (matches the active-namespace
+		// filter on the connections list page) with newest-first sort.
+		{Keys: bson.D{{Key: "namespace", Value: 1}, {Key: "created_at", Value: -1}}},
 		// Hot path: list by type with newest-first sort.
 		{Keys: bson.D{{Key: "type", Value: 1}, {Key: "created_at", Value: -1}}},
 		// Tag filtering (Part 3) with newest-first sort.
@@ -152,10 +159,14 @@ func datasourceIndexes() []mongo.IndexModel {
 
 func dashboardIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
+		// Uniqueness is scoped to (namespace, name). Old name-only index
+		// dropped by namespacing_v1 migration.
 		{
-			Keys:    bson.D{{Key: "name", Value: 1}},
+			Keys:    bson.D{{Key: "namespace", Value: 1}, {Key: "name", Value: 1}},
 			Options: options.Index().SetUnique(true),
 		},
+		// Namespace filter + recency — the default dashboards list query.
+		{Keys: bson.D{{Key: "namespace", Value: 1}, {Key: "updated", Value: -1}}},
 		// "Dashboards using chart X" lookups + newest-first sort.
 		{Keys: bson.D{{Key: "panels.chart_id", Value: 1}, {Key: "updated", Value: -1}}},
 		// Public-dashboard listing with newest-first sort.
