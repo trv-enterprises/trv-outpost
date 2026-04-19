@@ -30,7 +30,7 @@ import {
   Tooltip,
   Checkbox
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype, Download, Close } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype, Download, Close, View } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
@@ -152,6 +152,13 @@ function DashboardsListPage() {
 
   const handleRowClick = (dashboard) => {
     navigate(`/design/dashboards/${dashboard.id}`);
+  };
+
+  // "View this dashboard" — skip the edit flow and drop straight into
+  // the read-only viewer. Used by the eye icon on both list + tile.
+  const handleView = (e, dashboard) => {
+    e.stopPropagation();
+    navigate(`/view/dashboards/${dashboard.id}`);
   };
 
   const handleDelete = async (e, dashboard) => {
@@ -446,12 +453,34 @@ function DashboardsListPage() {
             </div>
           ) : (
             <div className="dashboards-grid">
-              {filteredAndSortedDashboards.map((dashboard) => (
+              {filteredAndSortedDashboards.map((dashboard) => {
+                const isTileSelected = exportMode && selectedForExport.has(dashboard.id);
+                const toggleTileSelection = () => {
+                  setSelectedForExport((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(dashboard.id)) next.delete(dashboard.id); else next.add(dashboard.id);
+                    return next;
+                  });
+                };
+                return (
                 <Tile
                   key={dashboard.id}
-                  className="dashboard-tile"
-                  onClick={() => handleRowClick(dashboard)}
+                  className={`dashboard-tile ${isTileSelected ? 'is-selected' : ''}`}
+                  onClick={() => exportMode ? toggleTileSelection() : handleRowClick(dashboard)}
                 >
+                  {exportMode && (
+                    <div
+                      className="tile-export-checkbox"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        id={`export-tile-${dashboard.id}`}
+                        labelText=""
+                        checked={isTileSelected}
+                        onChange={toggleTileSelection}
+                      />
+                    </div>
+                  )}
                   {/* Thumbnail */}
                   <div className="tile-thumbnail">
                     {dashboard.thumbnail ? (
@@ -509,27 +538,39 @@ function DashboardsListPage() {
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="tile-actions">
-                    <IconButton
-                      kind="ghost"
-                      label="Edit"
-                      onClick={(e) => { e.stopPropagation(); handleRowClick(dashboard); }}
-                      size="sm"
-                    >
-                      <Edit size={16} />
-                    </IconButton>
-                    <IconButton
-                      kind="ghost"
-                      label="Delete"
-                      onClick={(e) => handleDelete(e, dashboard)}
-                      size="sm"
-                    >
-                      <TrashCan size={16} />
-                    </IconButton>
-                  </div>
+                  {/* Actions — hidden in export mode so the tile is a
+                      pure toggle target. */}
+                  {!exportMode && (
+                    <div className="tile-actions">
+                      <IconButton
+                        kind="ghost"
+                        label="View"
+                        onClick={(e) => handleView(e, dashboard)}
+                        size="sm"
+                      >
+                        <View size={16} />
+                      </IconButton>
+                      <IconButton
+                        kind="ghost"
+                        label="Edit"
+                        onClick={(e) => { e.stopPropagation(); handleRowClick(dashboard); }}
+                        size="sm"
+                      >
+                        <Edit size={16} />
+                      </IconButton>
+                      <IconButton
+                        kind="ghost"
+                        label="Delete"
+                        onClick={(e) => handleDelete(e, dashboard)}
+                        size="sm"
+                      >
+                        <TrashCan size={16} />
+                      </IconButton>
+                    </div>
+                  )}
                 </Tile>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -646,6 +687,14 @@ function DashboardsListPage() {
                             if (cell.info.header === 'actions') {
                               return (
                                 <TableCell key={cell.id} className="actions-cell">
+                                  <IconButton
+                                    kind="ghost"
+                                    label="View"
+                                    onClick={(e) => handleView(e, dashboard)}
+                                    size="sm"
+                                  >
+                                    <View size={16} />
+                                  </IconButton>
                                   <IconButton
                                     kind="ghost"
                                     label="Delete"
