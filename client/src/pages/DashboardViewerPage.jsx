@@ -156,6 +156,12 @@ function DashboardViewerPage({ canDesign = false }) {
   const [switchIndicator, setSwitchIndicator] = useState(null);
   const switchTimerRef = useRef(null);
 
+  // "Preview from design" mode: user just saved/opened this dashboard from the
+  // designer. Hide multi-dashboard navigation (prev/next/home, Alt+arrow) and
+  // route the back arrow to the design list instead of the viewer list — the
+  // user came from design and should return there, not jump into view mode.
+  const [fromDesign, setFromDesign] = useState(() => !!location.state?.fromDesign);
+
   // ── Edit mode state ──────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
   const [editablePanels, setEditablePanels] = useState([]);
@@ -551,9 +557,10 @@ function DashboardViewerPage({ canDesign = false }) {
     navigate(`/view/dashboards/${defaultDashboardId}`);
   }, [defaultDashboardId, id, dashboardList, showSwitchIndicator, navigate]);
 
-  // Keyboard navigation: Alt+Left/Right to switch dashboards (disabled in edit mode)
+  // Keyboard navigation: Alt+Left/Right to switch dashboards (disabled in edit mode
+  // and in "from design" preview mode, where we want a single-dashboard view)
   useEffect(() => {
-    if (dashboardList.length < 2 || isEditMode) return;
+    if (dashboardList.length < 2 || isEditMode || fromDesign) return;
 
     const handleKeyDown = (e) => {
       if (!e.altKey) return;
@@ -580,7 +587,7 @@ function DashboardViewerPage({ canDesign = false }) {
       window.removeEventListener('keydown', handleKeyDown);
       if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
     };
-  }, [dashboardList, id, navigate, showSwitchIndicator, isEditMode]);
+  }, [dashboardList, id, navigate, showSwitchIndicator, isEditMode, fromDesign]);
 
   // Initial load
   useEffect(() => {
@@ -720,7 +727,13 @@ function DashboardViewerPage({ canDesign = false }) {
     fetchDashboard();
   };
 
-  const handleBack = () => navigate('/view/dashboards');
+  const handleBack = () => {
+    if (fromDesign) {
+      navigate('/design/dashboards');
+    } else {
+      navigate('/view/dashboards');
+    }
+  };
 
   const formatTime = (date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -870,12 +883,19 @@ function DashboardViewerPage({ canDesign = false }) {
       if (isNewDashboard) {
         const created = await apiClient.createDashboard(payload);
         invalidateTagsCache();
-        navigate(`/view/dashboards/${created.id}`, { replace: true });
+        navigate(`/view/dashboards/${created.id}`, {
+          replace: true,
+          state: { fromDesign: true }
+        });
       } else {
         await apiClient.updateDashboard(id, { ...dashboard, ...payload });
         invalidateTagsCache();
         setIsEditMode(false);
         setEditHasChanges(false);
+        // After Save from the designer, show the finished dashboard in a
+        // single-dashboard view (no prev/next/home). The user returned to
+        // this route from design, so mark it as a design-origin preview.
+        setFromDesign(true);
         fetchDashboard();
       }
     } catch (err) {
@@ -1267,7 +1287,7 @@ function DashboardViewerPage({ canDesign = false }) {
         </div>
 
         <div className="toolbar-center">
-          {!isEditMode && dashboardList.length > 1 && (
+          {!isEditMode && !fromDesign && dashboardList.length > 1 && (
             <div className="dashboard-nav-buttons">
               <IconButton
                 kind="ghost"
