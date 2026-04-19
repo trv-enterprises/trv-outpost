@@ -13,17 +13,30 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// DashboardService handles business logic for dashboards
+// DashboardService handles business logic for dashboards.
+//
+// Carries refs to the chart and datasource repos as well so the
+// export/import flows can walk the dashboard → component → connection
+// dependency graph without crossing service boundaries (which would
+// either circular-import or duplicate the graph traversal in two
+// services). Both extra repos are optional and will only be exercised
+// by the export/import endpoints.
 type DashboardService struct {
-	repo *repository.DashboardRepository
-	db   *mongo.Database
+	repo            *repository.DashboardRepository
+	db              *mongo.Database
+	chartRepo       *repository.ChartRepository
+	datasourceRepo  *repository.DatasourceRepository
 }
 
-// NewDashboardService creates a new dashboard service
-func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database) *DashboardService {
+// NewDashboardService creates a new dashboard service. Pass nil for
+// chartRepo/datasourceRepo if export/import isn't needed (legacy
+// callers); production main.go always passes the live repos.
+func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database, chartRepo *repository.ChartRepository, datasourceRepo *repository.DatasourceRepository) *DashboardService {
 	return &DashboardService{
-		repo: repo,
-		db:   db,
+		repo:           repo,
+		db:             db,
+		chartRepo:      chartRepo,
+		datasourceRepo: datasourceRepo,
 	}
 }
 

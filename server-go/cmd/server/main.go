@@ -176,7 +176,7 @@ func main() {
 	// Initialize services
 	datasourceService := service.NewDatasourceService(datasourceRepo)
 	chartService := service.NewChartService(chartRepo)
-	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database)
+	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, chartRepo, datasourceRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, chartRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg)
 	userService := service.NewUserService(userRepo)
@@ -481,6 +481,11 @@ func main() {
 			dashboards.GET("/:id", dashboardHandler.GetDashboard)
 			dashboards.PUT("/:id", dashboardHandler.UpdateDashboard)
 			dashboards.DELETE("/:id", dashboardHandler.DeleteDashboard)
+
+			// Export — POST /api/dashboards/export[/preview]. Both POST
+			// because they take a JSON body listing dashboard IDs.
+			dashboards.POST("/export/preview", dashboardHandler.PreviewExport)
+			dashboards.POST("/export", dashboardHandler.ExportDashboards)
 		}
 
 		// AI Session routes
