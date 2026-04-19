@@ -36,6 +36,7 @@ import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
+import DashboardImportModal from '../components/DashboardImportModal';
 import './DashboardsListPage.scss';
 
 /**
@@ -76,6 +77,7 @@ function DashboardsListPage() {
   const [exportMode, setExportMode] = useState(false);
   const [selectedForExport, setSelectedForExport] = useState(new Set());
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -373,23 +375,30 @@ function DashboardsListPage() {
         </div>
         <div className="toolbar-actions">
           {!exportMode && (
-            <Button
-              onClick={() => { setExportMode(true); setSelectedForExport(new Set()); }}
-              size="md"
-              kind="tertiary"
-              renderIcon={Download}
-            >
-              Export
-            </Button>
-          )}
-          {!exportMode && (
-            <Button
-              onClick={handleCreate}
-              size="md"
-              kind="primary"
-            >
-              Create
-            </Button>
+            <>
+              <Button
+                onClick={() => setImportModalOpen(true)}
+                size="md"
+                kind="tertiary"
+              >
+                Import
+              </Button>
+              <Button
+                onClick={() => { setExportMode(true); setSelectedForExport(new Set()); }}
+                size="md"
+                kind="tertiary"
+                renderIcon={Download}
+              >
+                Export
+              </Button>
+              <Button
+                onClick={handleCreate}
+                size="md"
+                kind="primary"
+              >
+                Create
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -672,6 +681,11 @@ function DashboardsListPage() {
         }}
         dashboardIds={Array.from(selectedForExport)}
         dashboards={dashboards}
+      />
+      <DashboardImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImported={() => fetchData()}
       />
     </div>
   );

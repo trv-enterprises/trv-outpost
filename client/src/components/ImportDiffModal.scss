@@ -1,0 +1,91 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.import-diff-modal {
+  &__intro {
+    font-size: 0.875rem;
+    color: var(--cds-text-secondary);
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  &__bulk {
+    display: flex;
+    gap: spacing.$spacing-03;
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  &__item {
+    border: 1px solid var(--cds-border-subtle-01);
+    border-radius: 2px;
+    background-color: var(--cds-layer-01);
+  }
+
+  &__item-header {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+    padding: spacing.$spacing-03 spacing.$spacing-04;
+  }
+
+  &__expand {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    color: var(--cds-text-primary);
+    padding: 0.15rem;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &__kind {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--cds-text-secondary);
+    padding: 0.1rem 0.5rem;
+    border-radius: 2px;
+    background-color: var(--cds-layer-02);
+  }
+
+  &__name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--cds-text-primary);
+    flex: 1;
+  }
+
+  &__id {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6875rem;
+    color: var(--cds-text-secondary);
+  }
+
+  &__diff {
+    margin: 0;
+    padding: spacing.$spacing-04;
+    background-color: #0b0b0b;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 24rem;
+    overflow-y: auto;
+
+    .add    { color: #42be65; }
+    .remove { color: #fa4d56; }
+    .hunk   { color: #82cfff; }
+  }
+}
