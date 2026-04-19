@@ -98,10 +98,13 @@ export default function DashboardImportModal({ open, onClose, onImported }) {
         throw new Error('Bundle is missing an "objects" block');
       }
       setBundle(parsed);
-      // Seed target: source_namespace if it exists locally, else active.
-      const seed = (parsed.source_namespace && localNames.has(parsed.source_namespace))
-        ? parsed.source_namespace
-        : (activeNamespace || 'default');
+      // Seed target: the user's active namespace always wins. The
+      // bundle's source_namespace is informational (shown in a notice
+      // below) but shouldn't auto-override the user's current working
+      // context. Common case: "I'm working in tviviano-homelab, I just
+      // want my import to land here." User can still explicitly pick
+      // the source namespace from the select if that's what they want.
+      const seed = activeNamespace || 'default';
       setTargetNamespace(seed);
       runPreflight(parsed, seed);
     } catch (err) {
@@ -248,7 +251,7 @@ export default function DashboardImportModal({ open, onClose, onImported }) {
                   <InlineNotification
                     kind="info"
                     title="Source namespace not found here"
-                    subtitle={`This bundle was exported from "${bundle.source_namespace}", which doesn't exist locally. Importing to ${targetNamespace} instead.`}
+                    subtitle={`This bundle was exported from "${bundle.source_namespace}", which doesn't exist locally. Defaulting to your active namespace "${targetNamespace}" — pick another target below, or create the source namespace to import there.`}
                     lowContrast
                     hideCloseButton
                     actions={
@@ -259,6 +262,26 @@ export default function DashboardImportModal({ open, onClose, onImported }) {
                         disabled={creatingNamespace}
                       >
                         Create “{bundle.source_namespace}”
+                      </Button>
+                    }
+                    style={{ marginBottom: '0.75rem' }}
+                  />
+                )}
+
+                {bundle.source_namespace && sourceNamespaceExistsLocally && bundle.source_namespace !== targetNamespace && (
+                  <InlineNotification
+                    kind="info"
+                    title="Default target is your active namespace"
+                    subtitle={`This bundle came from "${bundle.source_namespace}", which exists here. Importing to "${targetNamespace}" by default — switch below if you want to use the source namespace instead.`}
+                    lowContrast
+                    hideCloseButton
+                    actions={
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => handleTargetChange(bundle.source_namespace)}
+                      >
+                        Use “{bundle.source_namespace}”
                       </Button>
                     }
                     style={{ marginBottom: '0.75rem' }}

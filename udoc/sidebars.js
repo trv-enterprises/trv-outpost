@@ -41,6 +41,11 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Sharing & Organization',
+      items: ['namespaces', 'export-import'],
+    },
+    {
+      type: 'category',
       label: 'Administration',
       items: ['user-management', 'system-settings', 'device-types'],
     },

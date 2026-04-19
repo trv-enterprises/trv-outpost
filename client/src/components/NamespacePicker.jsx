@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { OverflowMenu, OverflowMenuItem } from '@carbon/react';
-import { Checkmark, Settings } from '@carbon/icons-react';
+import { Checkmark, Settings, ChevronDown } from '@carbon/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useNamespaces } from '../context/NamespaceContext';
 import { namespaceChipStyle, NAMESPACE_DEFAULT_COLOR } from '../utils/namespaceColor';
@@ -30,12 +30,16 @@ export default function NamespacePicker() {
   return (
     <OverflowMenu
       aria-label="Active namespace"
+      iconDescription="Default namespace for new dashboards, components, and connections"
       className="namespace-picker"
       menuOptionsClass="namespace-picker-menu"
       flipped
       renderIcon={() => (
-        <div className="namespace-picker__chip" style={namespaceChipStyle(activeColor)}>
-          <span className="namespace-picker__chip-name">{activeNamespace}</span>
+        <div className="namespace-picker__trigger">
+          <span className="namespace-picker__chip" style={namespaceChipStyle(activeColor)}>
+            <span className="namespace-picker__chip-name">{activeNamespace}</span>
+          </span>
+          <ChevronDown size={14} className="namespace-picker__caret" />
         </div>
       )}
     >

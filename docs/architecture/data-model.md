@@ -9,6 +9,43 @@ All entities use UUID string IDs assigned at create time; none rely
 on MongoDB's `ObjectId`. Most entities carry `created` and `updated`
 timestamps; the ones that don't are explicitly noted.
 
+## Namespace
+
+A namespace is a conflict-domain grouping for connections, components,
+and dashboards. Two namespaces can each have a record with the same
+name without colliding — uniqueness on those entities is `(namespace,
+name)`, not just `name`.
+
+```json
+{
+  "id": "default",
+  "name": "default",
+  "description": "Default namespace — legacy records migrate here and new records land here unless an active namespace is selected.",
+  "color": "#6f6f6f",
+  "created": "2026-04-18T22:10:02Z",
+  "updated": "2026-04-18T22:10:02Z"
+}
+```
+
+- **Collection**: `namespaces`
+- **Slug** (`name`): `^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$` — case-sensitive,
+  globally unique. The `default` slug is immutable; the server's
+  startup seed and the `namespacing_v1` migration depend on it.
+- **Color**: hex from a Carbon-safe palette; used by the header
+  picker and list-page chips so the same namespace reads as the
+  same color across the app.
+- **Active namespace** is a per-user preference stored in
+  `app_config.settings.active_namespace`. It drives the default for
+  newly-created records but is independent from the multi-select
+  namespace filter on list pages — users can peek at other
+  namespaces without changing where new records land.
+- **Rename** is a single PUT that cascades the new slug into every
+  referring record (datasources, charts, dashboards) in the same
+  request.
+- **Delete** is guarded — returns 409 with per-type usage counts
+  when any records still reference the namespace. The user must
+  move or delete those records first.
+
 ## Dashboard
 
 A dashboard is a named grid layout plus a set of panels, each panel
@@ -18,6 +55,7 @@ text label onto grid cells.
 ```json
 {
   "id": "9f8b...e4",
+  "namespace": "default",
   "name": "Home Kiosk",
   "description": "Main living-room kiosk dashboard",
   "tags": ["home", "kiosk"],
@@ -58,7 +96,9 @@ captured preview used on list pages. `settings.layout_dimension`
 names a preset from the `layouts` collection.
 
 - **Collection**: `dashboards`
-- **Name**: case-insensitive unique
+- **Name**: case-insensitive unique within a namespace
+  (compound `(namespace, name)` index). The same name can exist
+  in multiple namespaces.
 - **Grid geometry**: `{x, y, w, h}` are in grid cells, not pixels.
   See [grid-system.md](grid-system.md).
 
@@ -75,6 +115,7 @@ historical reasons — the frontend now consistently calls them
   "version": 3,
   "status": "final",
   "component_type": "chart",
+  "namespace": "default",
   "name": "Temperature by Location",
   "title": "Temperature by Location",
   "description": "Last hour, binned per minute",
@@ -140,9 +181,12 @@ promoted.
   a logical `id`.
 - **Name**: not a unique index in the database because the same name
   is shared across versions. The `ChartService` enforces
-  case-insensitive name uniqueness in application code by querying
-  for an existing chart with the same name whose logical `id`
-  differs.
+  case-insensitive name uniqueness within a namespace
+  (`(namespace, name)`) in application code by querying for an
+  existing chart with the same name whose logical `id` differs.
+  Renaming a chart's namespace fans out to every version row of
+  that id so list/filter queries stay consistent regardless of which
+  version they hit.
 
 ## Datasource (connection)
 
@@ -153,6 +197,7 @@ MongoDB collection name.
 ```json
 {
   "_id": "67ff...3a",
+  "namespace": "default",
   "name": "Home MQTT Broker",
   "description": "Mosquitto on services-lxc",
   "type": "mqtt",
@@ -189,6 +234,9 @@ MongoDB collection name.
   indicator reads from it.
 - `_id` is a MongoDB `ObjectId` here (not a UUID) — datasources
   predate the convention.
+- **Name**: case-insensitive unique within a namespace
+  (compound `(namespace, name)` index). The same connection name
+  can exist in multiple namespaces.
 
 See [connections.md](connections.md) for the per-type `config`
 fields.

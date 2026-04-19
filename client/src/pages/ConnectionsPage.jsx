@@ -27,14 +27,13 @@ import {
   ContentSwitcher,
   Switch,
   Tooltip,
-  Toggle,
   Dropdown
 } from '@carbon/react';
 import { TrashCan, DataBase, List, Grid, Edit, Information, Sql, Api, Document, NetworkEnterprise, ChartLineSmooth, Meter, Db2Database, Tree, Video } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
-import { useNamespaces } from '../context/NamespaceContext';
+import NamespaceFilter from '../components/shared/NamespaceFilter';
 import './ConnectionsPage.scss';
 
 /**
@@ -62,10 +61,7 @@ function ConnectionsPage() {
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
   const [typeFilter, setTypeFilter] = useState(savedFilters.type || 'all'); // 'all' or specific type
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
-  const [showAllNamespaces, setShowAllNamespaces] = useState(
-    savedFilters.showAllNamespaces === true
-  );
-  const { activeNamespace } = useNamespaces();
+  const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -76,7 +72,7 @@ function ConnectionsPage() {
       view: viewMode,
       type: typeFilter,
       tags: tagFilter,
-      showAllNamespaces,
+      namespaces: namespaceFilter,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('connections', {
@@ -84,7 +80,7 @@ function ConnectionsPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter, showAllNamespaces]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter, namespaceFilter]);
 
   // Connection types for filter dropdown
   // Keep in sync with server-go/internal/models/datasource.go DatasourceType* constants
@@ -214,9 +210,10 @@ function ConnectionsPage() {
   const filteredAndSortedConnections = useMemo(() => {
     let result = [...connections];
 
-    // Active-namespace scope unless the user opted into all.
-    if (!showAllNamespaces && activeNamespace) {
-      result = result.filter((c) => !c.namespace || c.namespace === activeNamespace);
+    // Multi-select namespace filter; empty = no filter.
+    if (namespaceFilter.length > 0) {
+      const wanted = new Set(namespaceFilter);
+      result = result.filter((c) => !c.namespace || wanted.has(c.namespace));
     }
 
     // Filter by type
@@ -270,7 +267,7 @@ function ConnectionsPage() {
     });
 
     return result;
-  }, [connections, chartCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter, showAllNamespaces, activeNamespace]);
+  }, [connections, chartCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter, namespaceFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -359,14 +356,10 @@ function ConnectionsPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
-          <Toggle
-            id="toggle-all-namespaces-connections"
-            size="sm"
-            labelText=""
-            labelA="Current namespace"
-            labelB="All namespaces"
-            toggled={showAllNamespaces}
-            onToggle={setShowAllNamespaces}
+          <NamespaceFilter
+            id="namespace-filter-connections"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
           />
         </div>
         <div className="toolbar-actions">

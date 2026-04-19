@@ -27,7 +27,6 @@ import {
   ContentSwitcher,
   Switch,
   Tooltip,
-  Toggle,
   InlineNotification,
   Dropdown,
   Checkbox
@@ -43,7 +42,7 @@ import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
-import { useNamespaces } from '../context/NamespaceContext';
+import NamespaceFilter from '../components/shared/NamespaceFilter';
 import './ChartsListPage.scss';
 
 /**
@@ -77,10 +76,7 @@ function ChartsListPage() {
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.ds || 'all'); // 'all' or connection id
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
-  const [showAllNamespaces, setShowAllNamespaces] = useState(
-    savedFilters.showAllNamespaces === true
-  );
-  const { activeNamespace } = useNamespaces();
+  const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const [collapsedTypes, setCollapsedTypes] = useState(new Set(['display', 'control'])); // Display and Control start collapsed
   const typeFilterRef = useRef(null); // Ref for click-outside detection
@@ -255,7 +251,7 @@ function ChartsListPage() {
       ds: connectionFilter,
       types: selectedTypes !== null && selectedTypes.size > 0 ? Array.from(selectedTypes).join(',') : '',
       tags: tagFilter,
-      showAllNamespaces,
+      namespaces: namespaceFilter,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('charts', {
@@ -263,7 +259,7 @@ function ChartsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, showAllNamespaces]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter]);
 
   // Close type filter popover when clicking outside
   useEffect(() => {
@@ -453,9 +449,10 @@ function ChartsListPage() {
   const filteredAndSortedCharts = useMemo(() => {
     let result = [...charts];
 
-    // Active-namespace scope unless the user opted into all.
-    if (!showAllNamespaces && activeNamespace) {
-      result = result.filter((c) => !c.namespace || c.namespace === activeNamespace);
+    // Multi-select namespace filter; empty = no filter.
+    if (namespaceFilter.length > 0) {
+      const wanted = new Set(namespaceFilter);
+      result = result.filter((c) => !c.namespace || wanted.has(c.namespace));
     }
 
     // Filter by hierarchical type selection
@@ -545,7 +542,7 @@ function ChartsListPage() {
     });
 
     return result;
-  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, showAllNamespaces, activeNamespace]);
+  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, namespaceFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -718,14 +715,10 @@ function ChartsListPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
-          <Toggle
-            id="toggle-all-namespaces-components"
-            size="sm"
-            labelText=""
-            labelA="Current namespace"
-            labelB="All namespaces"
-            toggled={showAllNamespaces}
-            onToggle={setShowAllNamespaces}
+          <NamespaceFilter
+            id="namespace-filter-components"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
           />
         </div>
         <div className="toolbar-actions">

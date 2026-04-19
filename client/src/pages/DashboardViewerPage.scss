@@ -526,6 +526,15 @@
       font-weight: 400;
     }
 
+    // Wrapper holds the input + the error badge inline. The header
+    // strip is vertically tight (60px-ish) so the error has to ride
+    // beside the input, not below it.
+    .dashboard-name-wrapper {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+    }
+
     .dashboard-name-input {
       background: transparent;
       border: none;
@@ -541,7 +550,20 @@
       &:focus {
         border-bottom-color: #0f62fe;
       }
+
+      // Server-rejected name (e.g., duplicate). Red underline mirrors
+      // Carbon's invalid-state TextInput visual.
+      &.has-error {
+        border-bottom-color: var(--cds-support-error, #fa4d56);
+
+        &:focus {
+          border-bottom-color: var(--cds-support-error, #fa4d56);
+        }
+      }
     }
+
+    // (Inline error badge moved to its own component — NameErrorBadge.
+    // Lives in client/src/components/NameErrorBadge.{jsx,scss}.)
   }
 
   // Edit mode: crosshair cursor on empty grid space for drawing new panels

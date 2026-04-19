@@ -18,6 +18,20 @@
     background-color: var(--cds-header-hover, #333333);
   }
 
+  // Group chip + caret so the whole thing reads as "this dropdown
+  // controls the current namespace" — matches the Manage menu's look.
+  &__trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+  }
+
+  &__caret {
+    color: var(--cds-text-secondary, #c6c6c6);
+    flex-shrink: 0;
+  }
+
   &__chip {
     // The chip itself visually owns the action area. Padding + rounded
     // corners so it reads as a pill independent of the surrounding

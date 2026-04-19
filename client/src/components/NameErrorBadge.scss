@@ -1,0 +1,43 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Trigger icon — renders inline next to the input it's reporting on.
+.name-error-badge__icon {
+  background: transparent;
+  border: 0;
+  padding: spacing.$spacing-02;
+  cursor: default;
+  color: var(--cds-support-error, #fa4d56);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover, &:focus {
+    color: #ff8389;
+  }
+}
+
+// Tooltip — rendered via portal to document.body so it escapes any
+// ancestor `overflow: hidden`. Selector lives at the top level (not
+// nested) because the portaled element has no parent class chain.
+// `position: fixed` so the top/left coordinates set inline are
+// viewport-relative (computed via getBoundingClientRect at hover).
+.name-error-badge__tip {
+  position: fixed;
+  z-index: 10000;
+  padding: spacing.$spacing-03 spacing.$spacing-04;
+  background-color: #1c1c1c;
+  border: 1px solid var(--cds-support-error, #fa4d56);
+  border-radius: 2px;
+  color: var(--cds-support-error, #fa4d56);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.3;
+  max-width: 28rem;
+  white-space: normal;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}

@@ -258,12 +258,15 @@ function NamespacesPage() {
           )}
           <TextInput
             id="ns-name"
-            labelText="Name (slug)"
-            helperText="Lowercase letters, numbers, and hyphens. 3–32 characters."
+            labelText={editing?.name === 'default' ? 'Name (slug) — locked' : 'Name (slug)'}
+            helperText={editing?.name === 'default'
+              ? 'The "default" slug is fixed — it\'s used by server-side fallbacks and the startup seed. Description and color are editable.'
+              : 'Lowercase letters, numbers, and hyphens. 3–32 characters.'}
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
-            // Editing the `default` namespace name is rejected server-side,
-            // but disable client-side as well for clarity.
+            // The `default` slug is the server's fallback target and
+            // startup-seed identity; renaming it would break those
+            // invariants. Description and color stay editable.
             disabled={editing?.name === 'default'}
           />
           <TextArea

@@ -1,0 +1,26 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Top-right toast surface. Sits above everything except true modals so
+// new notifications catch attention without covering page chrome the
+// user might need (header navigation, etc).
+.toast-stack {
+  position: fixed;
+  top: calc(3rem + #{spacing.$spacing-04}); // Carbon header is 3rem tall
+  right: spacing.$spacing-05;
+  z-index: 9000; // below Carbon Modal (z=10000), above page content
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+  pointer-events: none; // Don't block clicks on the page underneath
+
+  // Toasts themselves DO accept clicks (the close button needs to work)
+  > .cds--toast-notification {
+    pointer-events: auto;
+    min-width: 18rem;
+    max-width: 24rem;
+  }
+}

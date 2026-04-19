@@ -56,6 +56,7 @@ import { NamespaceProvider } from './context/NamespaceContext';
 import NamespacePicker from './components/NamespacePicker';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
+import ToastStack from './components/ToastStack';
 import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
 import './App.scss';
@@ -178,10 +179,13 @@ function AppContent({ onDisconnect }) {
 
   // Handle mode change and persist to localStorage. If a page registered
   // a guard (e.g., dirty dashboard editor), consult it first — the guard
-  // can show a confirmation, save, or block the switch entirely.
+  // can show a confirmation, save, or block the switch entirely. The
+  // guard can also return a dashboardId to land on after the switch
+  // (e.g., switching to View while editing dashboard X lands on X
+  // rather than the user's default).
   const handleModeChange = async (newMode) => {
     if (newMode === currentMode) return;
-    const proceed = await runModeGuard();
+    const { proceed, dashboardId } = await runModeGuard(newMode);
     if (!proceed) return;
     setCurrentMode(newMode);
     localStorage.setItem('dashboardMode', newMode);
@@ -189,12 +193,17 @@ function AppContent({ onDisconnect }) {
     if (newMode === MODES.DESIGN) {
       navigate('/design/dashboards');
     } else if (newMode === MODES.VIEW) {
-      // Fetch fresh default dashboard when switching to View mode
-      const defaultId = await fetchDefaultDashboard();
-      if (defaultId) {
-        navigate(`/view/dashboards/${defaultId}`);
+      // Prefer the dashboard the guard handed us (e.g., the one we
+      // were just editing). Otherwise fall back to the user's default.
+      if (dashboardId) {
+        navigate(`/view/dashboards/${dashboardId}`);
       } else {
-        navigate('/view/dashboards');
+        const defaultId = await fetchDefaultDashboard();
+        if (defaultId) {
+          navigate(`/view/dashboards/${defaultId}`);
+        } else {
+          navigate('/view/dashboards');
+        }
       }
     } else if (newMode === MODES.MANAGE) {
       navigate('/manage');
@@ -338,6 +347,7 @@ function AppContent({ onDisconnect }) {
         open={notificationPanelOpen}
         onClose={() => setNotificationPanelOpen(false)}
       />
+      <ToastStack />
 
       {/* Hide sidebar in View mode - uses tile view instead */}
       {currentMode !== MODES.VIEW && (

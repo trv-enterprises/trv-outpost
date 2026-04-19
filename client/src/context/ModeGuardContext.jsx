@@ -11,9 +11,12 @@ const ModeGuardContext = createContext(null);
  *
  * Lets a page (notably DashboardViewerPage in edit mode) register a
  * guard function that runs before the app's mode toggle actually
- * changes modes. The guard returns a promise:
- *   - resolve(true)  → proceed with the mode switch
- *   - resolve(false) → stay in the current mode
+ * changes modes. The guard's promise resolves to either:
+ *   - a boolean — true to proceed with the switch, false to stay
+ *   - an object — { proceed: bool, dashboardId?: string }
+ *     The optional dashboardId tells the mode router which dashboard
+ *     to land on after a mode switch (e.g., switching to View while
+ *     editing dashboard X should land on X, not the user's default).
  *
  * Pages register via `setModeGuard(fn)` and MUST call `clearModeGuard()`
  * on unmount or when they no longer need to block (e.g., on save).
@@ -33,14 +36,21 @@ export function ModeGuardProvider({ children }) {
     guardRef.current = null;
   }, []);
 
-  const runModeGuard = useCallback(async () => {
-    if (!guardRef.current) return true;
+  const runModeGuard = useCallback(async (newMode) => {
+    if (!guardRef.current) return { proceed: true };
     try {
-      return await guardRef.current();
+      const result = await guardRef.current(newMode);
+      // Normalize to { proceed, dashboardId? } regardless of whether
+      // the guard returned a primitive or an object.
+      if (typeof result === 'boolean') return { proceed: result };
+      if (result && typeof result === 'object') {
+        return { proceed: !!result.proceed, dashboardId: result.dashboardId };
+      }
+      return { proceed: true };
     } catch {
       // If the guard blew up, fail-safe = block the mode change so
       // the user doesn't silently lose in-progress work.
-      return false;
+      return { proceed: false };
     }
   }, []);
 
@@ -61,7 +71,7 @@ export function useModeGuard() {
     return {
       setModeGuard: () => {},
       clearModeGuard: () => {},
-      runModeGuard: async () => true,
+      runModeGuard: async () => ({ proceed: true }),
     };
   }
   return ctx;

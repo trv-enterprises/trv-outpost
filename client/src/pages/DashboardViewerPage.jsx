@@ -17,7 +17,8 @@ import {
   TextInput,
   NumberInput,
   Slider,
-  Checkbox
+  Checkbox,
+  Tooltip
 } from '@carbon/react';
 import {
   ArrowLeft,
@@ -63,7 +64,9 @@ import { invalidateTagsCache } from '../components/shared/tagsApi';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
+import NameErrorBadge from '../components/NameErrorBadge';
 import { useModeGuard } from '../context/ModeGuardContext';
+import { useNotifications } from '../context/NotificationContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize } from '../config/layoutConfig';
 import './DashboardViewerPage.scss';
@@ -179,8 +182,13 @@ function DashboardViewerPage({ canDesign = false }) {
   const [modeSwitchPromptOpen, setModeSwitchPromptOpen] = useState(false);
   const modeSwitchResolveRef = useRef(null);
   const { setModeGuard, clearModeGuard } = useModeGuard();
+  const { pushToast } = useNotifications();
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
+  // Server-rejection error for the dashboard name (e.g., duplicate
+  // name in the target namespace). Cleared when the user edits the
+  // name input, set when the save fails with a name-related error.
+  const [nameError, setNameError] = useState('');
   const [editableNamespace, setEditableNamespace] = useState('');
   const { activeNamespace } = useNamespaces();
 
@@ -878,7 +886,13 @@ function DashboardViewerPage({ canDesign = false }) {
     setEditHasChanges(true);
   };
 
-  const saveEditMode = async () => {
+  // saveEditMode persists current edits and returns the resolved
+  // dashboard ID (existing or freshly-minted for a new dashboard).
+  // Callers that don't care can ignore the return; the mode-switch
+  // guard uses it to land the post-switch route on the right id.
+  // options.skipNavigate=true suppresses the post-create navigate so
+  // a caller (the mode guard) can do its own navigation instead.
+  const saveEditMode = async (options) => {
     setEditSaving(true);
     try {
       const updatedSettings = {
@@ -902,10 +916,20 @@ function DashboardViewerPage({ canDesign = false }) {
       if (isNewDashboard) {
         const created = await apiClient.createDashboard(payload);
         invalidateTagsCache();
-        navigate(`/view/dashboards/${created.id}`, {
-          replace: true,
-          state: { fromDesign: true }
-        });
+        // Reset edit-mode state regardless of who's navigating after.
+        // Without this, the new-dashboard route param changes from
+        // "new" to <created.id>, the component instance survives, and
+        // isEditMode stays true — the user lands in the new viewer
+        // route still in edit mode with stale dirty state.
+        setIsEditMode(false);
+        setEditHasChanges(false);
+        if (!options?.skipNavigate) {
+          navigate(`/view/dashboards/${created.id}`, {
+            replace: true,
+            state: { fromDesign: true }
+          });
+        }
+        return created.id;
       } else {
         await apiClient.updateDashboard(id, { ...dashboard, ...payload });
         invalidateTagsCache();
@@ -916,9 +940,23 @@ function DashboardViewerPage({ canDesign = false }) {
         // this route from design, so mark it as a design-origin preview.
         setFromDesign(true);
         fetchDashboard();
+        return id;
       }
     } catch (err) {
       console.error('Failed to save dashboard:', err);
+      const msg = err?.message || 'Unknown error';
+      // Pin the message under the name input when the server's error
+      // points at a name collision so the user sees what to fix
+      // without rereading the toast.
+      if (/already exists|name/i.test(msg)) {
+        setNameError(msg);
+      }
+      pushToast({
+        kind: 'error',
+        title: 'Failed to save dashboard',
+        subtitle: msg,
+      });
+      return null;
     } finally {
       setEditSaving(false);
     }
@@ -926,19 +964,24 @@ function DashboardViewerPage({ canDesign = false }) {
 
   // Intercept app-level mode switches while we're in edit mode. Clean
   // state → silently leave edit mode and let the switch proceed (the
-  // user clearly meant to move on). Dirty state → pop a Save / Discard
-  // / Stay prompt and wait for the user to pick.
+  // user clearly meant to move on); when switching to View, hand the
+  // current dashboard id back so the user lands on it instead of
+  // their default dashboard. Dirty state → pop a Save / Discard /
+  // Stay prompt and wait for the user to pick.
   useEffect(() => {
     if (!isEditMode) {
       clearModeGuard();
       return undefined;
     }
     const guard = () => {
+      // For new dashboards we don't have a saved id to hand back —
+      // App.jsx will fall back to the default dashboard.
+      const currentId = isNewDashboard ? null : id;
       if (!editHasChanges) {
         // Clean: drop out of edit mode so the destination page doesn't
         // render with stale isEditMode styling, then proceed.
         setIsEditMode(false);
-        return Promise.resolve(true);
+        return Promise.resolve({ proceed: true, dashboardId: currentId });
       }
       return new Promise((resolve) => {
         modeSwitchResolveRef.current = resolve;
@@ -949,17 +992,29 @@ function DashboardViewerPage({ canDesign = false }) {
     return () => {
       clearModeGuard();
     };
-  }, [isEditMode, editHasChanges, setModeGuard, clearModeGuard]);
+  }, [isEditMode, editHasChanges, isNewDashboard, id, setModeGuard, clearModeGuard]);
 
   // Mode-switch prompt actions. Each resolves the pending guard
-  // promise with proceed=true/false so the App's mode toggle knows
-  // whether to continue.
+  // promise with { proceed, dashboardId? }. The dashboardId tells the
+  // App-level router to land View mode on the just-edited dashboard
+  // (Save) or fall back to the user's default (Discard on a new
+  // dashboard).
   const modeSwitchSave = async () => {
     setModeSwitchPromptOpen(false);
-    await saveEditMode();
+    // Skip the post-save navigate inside saveEditMode — App.jsx is
+    // about to handle the destination based on the new mode.
+    const savedId = await saveEditMode({ skipNavigate: true });
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
-    if (resolver) resolver(true);
+    if (!resolver) return;
+    if (savedId) {
+      resolver({ proceed: true, dashboardId: savedId });
+    } else {
+      // Save failed (e.g., duplicate name). saveEditMode already
+      // pushed an error notification — block the mode switch so the
+      // user can fix the problem and try again.
+      resolver({ proceed: false });
+    }
   };
   const modeSwitchDiscard = () => {
     setModeSwitchPromptOpen(false);
@@ -967,13 +1022,17 @@ function DashboardViewerPage({ canDesign = false }) {
     setEditHasChanges(false);
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
-    if (resolver) resolver(true);
+    // New unsaved dashboards have no id to land on; existing ones
+    // keep theirs. App.jsx falls back to default when dashboardId is
+    // null/undefined.
+    const currentId = isNewDashboard ? null : id;
+    if (resolver) resolver({ proceed: true, dashboardId: currentId });
   };
   const modeSwitchStay = () => {
     setModeSwitchPromptOpen(false);
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
-    if (resolver) resolver(false);
+    if (resolver) resolver({ proceed: false });
   };
 
   // Update a single panel's properties
@@ -1342,15 +1401,21 @@ function DashboardViewerPage({ canDesign = false }) {
           )}
           <div className="dashboard-info">
             {isEditMode ? (
-              <input
-                className="dashboard-name-input"
-                type="text"
-                value={editableName}
-                onChange={(e) => {
-                  setEditableName(e.target.value);
-                  setEditHasChanges(true);
-                }}
-              />
+              <div className="dashboard-name-wrapper">
+                <input
+                  className={`dashboard-name-input ${nameError ? 'has-error' : ''}`}
+                  type="text"
+                  value={editableName}
+                  onChange={(e) => {
+                    setEditableName(e.target.value);
+                    setEditHasChanges(true);
+                    if (nameError) setNameError('');
+                  }}
+                />
+                {nameError && (
+                  <NameErrorBadge message={nameError} />
+                )}
+              </div>
             ) : (
               <h1>{dashboard?.name}</h1>
             )}

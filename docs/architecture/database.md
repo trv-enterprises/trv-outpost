@@ -71,6 +71,20 @@ temporary copy with the correct collation, copies documents in batches
 of 500, drops the original, and renames the copy into place. Safe to
 rerun — the migration tracking row is only written on success.
 
+The namespacing migration (`namespacing_v1`) introduces the
+namespace dimension to existing data:
+
+1. Upserts the `default` namespace row in the `namespaces` collection.
+2. UpdateMany on `datasources`, `charts`, `dashboards` to set
+   `namespace: "default"` where the field is missing or empty.
+3. Resolves `(namespace=default, name)` collisions by auto-renaming
+   the younger duplicates (`name-2`, `name-3`, …). Charts handle
+   versioning by grouping per logical id first; every version row of
+   a renamed chart picks up the same new name.
+4. Drops the legacy `name_1` unique indexes on `datasources` and
+   `dashboards`. The next `CreateIndexes` call replaces them with
+   compound `(namespace, name)` unique indexes (see mongodb.go).
+
 ## Indexing strategy
 
 Indexes are created per collection from functions in either
@@ -78,8 +92,11 @@ Indexes are created per collection from functions in either
 repository file's `CreateIndexes` method. The general patterns:
 
 - **Unique indexes on name** where case-insensitive uniqueness is
-  wanted (datasources, dashboards, layouts, users, devices,
-  device_types). These inherit the collection's collation.
+  wanted (layouts, users, devices, device_types). These inherit the
+  collection's collation. For namespaced entities (datasources,
+  charts, dashboards), the unique index is compound on
+  `(namespace, name)` so the same name can exist in different
+  namespaces — see [data-model.md#namespace](data-model.md#namespace).
 - **Compound filter + sort indexes** for common list queries — the
   leading fields cover the filter, the trailing field covers the
   sort. Example: `{type: 1, created_at: -1}` on datasources supports

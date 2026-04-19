@@ -21,6 +21,19 @@ real-time streaming, and smart device control.
   and component types (and bundled integrations like Frigate or
   Weather) per deployment from the Settings UI, propagating to
   pickers, the AI agent, and the MCP catalog
+- **Namespaces** — every connection, component, and dashboard
+  belongs to a namespace; uniqueness is `(namespace, name)` so two
+  namespaces can each have a dashboard called `Home` without
+  colliding. The active namespace lives in the header (drives
+  defaults for new records); list pages multi-select-filter by
+  namespace
+- **Dashboard export / import** — bundle one or more dashboards plus
+  their referenced components and connections into a single JSON
+  file. Re-import to update in place (preserved IDs, same target
+  namespace) or to copy into a different namespace (re-minted IDs).
+  Import preflight classifies every object as identical / conflict
+  / new / blocked and surfaces per-object diffs for review before
+  any writes
 - **MQTT retained-state replay** so panels repopulate instantly on
   dashboard switches instead of waiting for the next publish
 - **Shared tag filtering** across connections, components, and

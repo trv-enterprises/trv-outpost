@@ -26,7 +26,6 @@ import {
   ContentSwitcher,
   Switch,
   Tag,
-  Toggle,
   Tooltip,
   Checkbox
 } from '@carbon/react';
@@ -34,6 +33,7 @@ import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMult
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
+import NamespaceFilter from '../components/shared/NamespaceFilter';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
@@ -64,13 +64,11 @@ function DashboardsListPage() {
   const [sortDirection, setSortDirection] = useState(savedFilters.sortDir || 'desc');
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
-  // showAllNamespaces widens the list to every namespace the user can
-  // see. Default off — the implicit filter is the header's active
-  // namespace, which matches how most users think about their work.
-  const [showAllNamespaces, setShowAllNamespaces] = useState(
-    savedFilters.showAllNamespaces === true
-  );
-  const { activeNamespace } = useNamespaces();
+  // Multi-select namespace filter. Empty array = show all (the user
+  // hasn't filtered). Independent from the header's active namespace,
+  // so users can peek at other namespaces without changing where new
+  // records land.
+  const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   // Export mode layers a selection UI on top of the table. When on:
   // the Create button hides, rows show a checkbox, and a batch-action
   // bar at the top of the list shows selection count + Export button.
@@ -87,7 +85,7 @@ function DashboardsListPage() {
       sortDir: sortDirection,
       view: viewMode,
       tags: tagFilter,
-      showAllNamespaces,
+      namespaces: namespaceFilter,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('dashboards', {
@@ -95,7 +93,7 @@ function DashboardsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, showAllNamespaces]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter]);
 
   // Fetch dashboards, charts, and datasources from API
   useEffect(() => {
@@ -218,12 +216,12 @@ function DashboardsListPage() {
   const filteredAndSortedDashboards = useMemo(() => {
     let result = [...dashboards];
 
-    // Filter to active namespace unless the user has asked for all.
-    // Records missing a namespace (shouldn't happen post-migration, but
-    // defensive) stay visible so the UI never goes empty because of
-    // bad data.
-    if (!showAllNamespaces && activeNamespace) {
-      result = result.filter((d) => !d.namespace || d.namespace === activeNamespace);
+    // Namespace filter: empty selection = no filter (show all). Records
+    // missing a namespace (shouldn't happen post-migration, but
+    // defensive) stay visible to avoid empty lists from bad data.
+    if (namespaceFilter.length > 0) {
+      const wanted = new Set(namespaceFilter);
+      result = result.filter((d) => !d.namespace || wanted.has(d.namespace));
     }
 
     // Filter by tags (OR semantics)
@@ -274,7 +272,7 @@ function DashboardsListPage() {
     });
 
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, charts, datasources, tagFilter, showAllNamespaces, activeNamespace]);
+  }, [dashboards, searchTerm, sortKey, sortDirection, charts, datasources, tagFilter, namespaceFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -372,14 +370,10 @@ function DashboardsListPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
-          <Toggle
-            id="toggle-all-namespaces-dashboards"
-            size="sm"
-            labelText=""
-            labelA="Current namespace"
-            labelB="All namespaces"
-            toggled={showAllNamespaces}
-            onToggle={setShowAllNamespaces}
+          <NamespaceFilter
+            id="namespace-filter-dashboards"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
           />
         </div>
         <div className="toolbar-actions">
@@ -392,14 +386,19 @@ function DashboardsListPage() {
               >
                 Import
               </Button>
-              <Button
-                onClick={() => { setExportMode(true); setSelectedForExport(new Set()); }}
-                size="md"
-                kind="tertiary"
-                renderIcon={Download}
+              <Tooltip
+                label="Export selected dashboards and their related components and connections"
+                align="bottom"
               >
-                Export
-              </Button>
+                <Button
+                  onClick={() => { setExportMode(true); setSelectedForExport(new Set()); }}
+                  size="md"
+                  kind="tertiary"
+                  renderIcon={Download}
+                >
+                  Export
+                </Button>
+              </Tooltip>
               <Button
                 onClick={handleCreate}
                 size="md"

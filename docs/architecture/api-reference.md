@@ -73,12 +73,51 @@ all live in the `charts` collection.
 
 | Method | Endpoint                     | Description                                   |
 | ------ | ---------------------------- | --------------------------------------------- |
-| GET    | `/api/dashboards`            | List dashboards (filter + page + tags)        |
+| GET    | `/api/dashboards`            | List dashboards (filter + page + tags + namespace) |
 | POST   | `/api/dashboards`            | Create                                        |
 | GET    | `/api/dashboards/:id`        | Get one                                       |
 | GET    | `/api/dashboards/:id/details`| Get with expanded layout + referenced charts  |
 | PUT    | `/api/dashboards/:id`        | Update                                        |
 | DELETE | `/api/dashboards/:id`        | Delete                                        |
+| POST   | `/api/dashboards/export/preview` | Counts + warnings for the dashboards a bundle would carry |
+| POST   | `/api/dashboards/export`     | Build the ExportBundle JSON for the selected dashboards |
+| POST   | `/api/dashboards/import/preflight` | Classify each object as identical / conflict / new / blocked |
+| POST   | `/api/dashboards/import/apply` | Write the bundle (with per-conflict overwrite decisions) |
+
+The export endpoint walks the dependency graph: dashboards →
+components → connections. Connections are sanitized (secrets masked).
+Bundle shape carries `format_version`, `source_namespace`, an
+`exported_at` timestamp, and arrays in dependency order so the
+importer can replay them as-is.
+
+The import flow is two-phase. Preflight is read-only and called
+repeatedly by the UI while the user picks a target namespace. Apply
+re-runs preflight server-side as a safety net before writing. When
+target namespace == bundle source namespace, IDs are preserved
+(idempotent update path); when they differ, every ID is re-minted
+and the dependency graph is rewritten so the result is independent
+copies in the new namespace. Name collisions in the target namespace
+are auto-suffixed with `-copy` rather than blocked.
+
+## Namespaces
+
+| Method | Endpoint                       | Description                                              |
+| ------ | ------------------------------ | -------------------------------------------------------- |
+| GET    | `/api/namespaces`              | List all namespaces                                      |
+| POST   | `/api/namespaces`              | Create                                                   |
+| GET    | `/api/namespaces/:id`          | Get one                                                  |
+| PUT    | `/api/namespaces/:id`          | Update (rename cascades into all referring records)      |
+| DELETE | `/api/namespaces/:id`          | Delete (409 with usage counts when in use)               |
+| GET    | `/api/namespaces/:id/usage`    | Per-entity usage counts                                  |
+
+The `default` namespace is immutable: PUT renaming it returns 409,
+DELETE returns 409 unconditionally. Other namespaces can be renamed
+freely; the rename cascades into `datasources.namespace`,
+`charts.namespace`, and `dashboards.namespace` in the same request.
+Connection / component / dashboard write endpoints accept a
+`namespace` field in the JSON body; empty defaults to `"default"`.
+List endpoints accept a `namespace` query parameter; empty means
+"all namespaces."
 
 ## Tags
 
