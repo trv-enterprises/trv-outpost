@@ -52,6 +52,7 @@ import DevicesPage from './pages/DevicesPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { NamespaceProvider } from './context/NamespaceContext';
+import NamespacePicker from './components/NamespacePicker';
 import NotificationPanel from './components/NotificationPanel';
 import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
@@ -246,6 +247,7 @@ function AppContent({ onDisconnect }) {
               />
             </div>
             <HeaderGlobalBar>
+              <NamespacePicker />
               <HeaderGlobalAction
                 aria-label={`Help - Build ${buildInfo.buildNumber}`}
                 tooltipAlignment="end"
