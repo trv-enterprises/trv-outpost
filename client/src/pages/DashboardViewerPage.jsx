@@ -41,7 +41,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Home
+  Home,
+  Download
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -61,6 +62,7 @@ import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
 import { useNamespaces } from '../context/NamespaceContext';
+import DashboardExportModal from '../components/DashboardExportModal';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize } from '../config/layoutConfig';
 import './DashboardViewerPage.scss';
@@ -184,6 +186,7 @@ function DashboardViewerPage({ canDesign = false }) {
   const [editableIsPublic, setEditableIsPublic] = useState(false);
   const [editableAllowExport, setEditableAllowExport] = useState(true);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Zoom state (edit mode only)
   const [zoom, setZoom] = useState(100);
@@ -1428,6 +1431,16 @@ function DashboardViewerPage({ canDesign = false }) {
               <span className="last-refresh">
                 Last refresh: {formatTime(lastRefresh)}
               </span>
+              {canDesign && dashboard?.id && !isNewDashboard && (
+                <IconButton
+                  kind="ghost"
+                  label="Export this dashboard"
+                  align="bottom"
+                  onClick={() => setExportModalOpen(true)}
+                >
+                  <Download size={20} />
+                </IconButton>
+              )}
               <IconButton
                 kind="ghost"
                 label="Refresh"
@@ -1824,6 +1837,12 @@ function DashboardViewerPage({ canDesign = false }) {
       )}
 
       {/* Dashboard settings modal */}
+      <DashboardExportModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        dashboardIds={dashboard?.id ? [dashboard.id] : []}
+        dashboards={dashboard ? [dashboard] : []}
+      />
       <Modal
         open={settingsModalOpen}
         onRequestClose={() => setSettingsModalOpen(false)}

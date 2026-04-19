@@ -27,13 +27,15 @@ import {
   Switch,
   Tag,
   Toggle,
-  Tooltip
+  Tooltip,
+  Checkbox
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype, Download, Close } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import { useNamespaces } from '../context/NamespaceContext';
+import DashboardExportModal from '../components/DashboardExportModal';
 import './DashboardsListPage.scss';
 
 /**
@@ -68,6 +70,12 @@ function DashboardsListPage() {
     savedFilters.showAllNamespaces === true
   );
   const { activeNamespace } = useNamespaces();
+  // Export mode layers a selection UI on top of the table. When on:
+  // the Create button hides, rows show a checkbox, and a batch-action
+  // bar at the top of the list shows selection count + Export button.
+  const [exportMode, setExportMode] = useState(false);
+  const [selectedForExport, setSelectedForExport] = useState(new Set());
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -364,15 +372,55 @@ function DashboardsListPage() {
           />
         </div>
         <div className="toolbar-actions">
-          <Button
-            onClick={handleCreate}
-            size="md"
-            kind="primary"
-          >
-            Create
-          </Button>
+          {!exportMode && (
+            <Button
+              onClick={() => { setExportMode(true); setSelectedForExport(new Set()); }}
+              size="md"
+              kind="tertiary"
+              renderIcon={Download}
+            >
+              Export
+            </Button>
+          )}
+          {!exportMode && (
+            <Button
+              onClick={handleCreate}
+              size="md"
+              kind="primary"
+            >
+              Create
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Export mode bulk-action bar */}
+      {exportMode && (
+        <div className="export-mode-bar">
+          <div className="export-mode-bar__count">
+            {selectedForExport.size} selected
+          </div>
+          <div className="export-mode-bar__actions">
+            <Button
+              kind="ghost"
+              size="sm"
+              renderIcon={Close}
+              onClick={() => { setExportMode(false); setSelectedForExport(new Set()); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              size="sm"
+              renderIcon={Download}
+              disabled={selectedForExport.size === 0}
+              onClick={() => setExportModalOpen(true)}
+            >
+              Export ({selectedForExport.size})
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Tile View */}
       {viewMode === 'tile' && (
@@ -486,18 +534,28 @@ function DashboardsListPage() {
               <Table {...getTableProps()}>
                 <TableHead>
                   <TableRow>
-                    {headers.map((header) => (
-                      <TableHeader
-                        {...getHeaderProps({ header })}
-                        key={header.key}
-                        isSortable={header.isSortable}
-                        isSortHeader={sortKey === header.key}
-                        sortDirection={sortKey === header.key ? sortDirection.toUpperCase() : 'NONE'}
-                        onClick={() => header.isSortable && handleSort(header.key)}
-                      >
-                        {header.header}
+                    {exportMode && (
+                      <TableHeader className="export-select-cell" onClick={(e) => e.stopPropagation()}>
+                        {/* Header intentionally blank — clicking the body
+                            row toggles selection; a header-level select-all
+                            would be useful later but isn't part of v1. */}
                       </TableHeader>
-                    ))}
+                    )}
+                    {headers.map((header) => {
+                      if (exportMode && header.key === 'actions') return null;
+                      return (
+                        <TableHeader
+                          {...getHeaderProps({ header })}
+                          key={header.key}
+                          isSortable={header.isSortable}
+                          isSortHeader={sortKey === header.key}
+                          sortDirection={sortKey === header.key ? sortDirection.toUpperCase() : 'NONE'}
+                          onClick={() => header.isSortable && handleSort(header.key)}
+                        >
+                          {header.header}
+                        </TableHeader>
+                      );
+                    })}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -518,14 +576,35 @@ function DashboardsListPage() {
                   ) : (
                     rows.map((row) => {
                       const dashboard = getDashboardById(row.id);
+                      const isSelected = selectedForExport.has(row.id);
+                      const toggleSelection = () => {
+                        setSelectedForExport((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row.id)) next.delete(row.id); else next.add(row.id);
+                          return next;
+                        });
+                      };
                       return (
                         <TableRow
                           {...getRowProps({ row })}
                           key={row.id}
-                          onClick={() => handleRowClick(dashboard)}
-                          className="clickable-row"
+                          onClick={() => exportMode ? toggleSelection() : handleRowClick(dashboard)}
+                          className={`clickable-row ${exportMode && isSelected ? 'is-selected' : ''}`}
                         >
+                          {exportMode && (
+                            <TableCell className="export-select-cell" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                id={`export-select-${row.id}`}
+                                labelText=""
+                                checked={isSelected}
+                                onChange={toggleSelection}
+                              />
+                            </TableCell>
+                          )}
                           {row.cells.map((cell) => {
+                            if (exportMode && cell.info.header === 'actions') {
+                              return null; // Hide action column in export mode
+                            }
                             if (cell.info.header === 'namespace') {
                               return (
                                 <TableCell key={cell.id} className="namespace-cell">
@@ -581,6 +660,19 @@ function DashboardsListPage() {
           )}
         </DataTable>
       )}
+
+      <DashboardExportModal
+        open={exportModalOpen}
+        onClose={() => {
+          setExportModalOpen(false);
+          // If the modal closed after a successful download, drop out of
+          // export mode so the UI returns to its normal state.
+          setExportMode(false);
+          setSelectedForExport(new Set());
+        }}
+        dashboardIds={Array.from(selectedForExport)}
+        dashboards={dashboards}
+      />
     </div>
   );
 }
