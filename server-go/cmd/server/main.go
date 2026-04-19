@@ -184,11 +184,10 @@ func main() {
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, datasourceRepo)
 	deviceDiscoveryService := service.NewDeviceDiscoveryService(datasourceRepo, deviceTypeRepo, deviceRepo)
 
-	// Namespace service. Entity dependencies (for delete-guard counting and
-	// rename-cascade) land in a follow-up task when datasource/chart/dashboard
-	// repos gain CountByNamespace + RenameNamespace. Passing nil here keeps
-	// SeedDefault working in the meantime; the service has nil guards.
-	namespaceService := service.NewNamespaceService(namespaceRepo, nil, nil, nil)
+	// Namespace service with the three entity repos wired in. Each repo
+	// implements CountByNamespace + RenameNamespace so the service's
+	// delete-guard and rename-cascade paths work end-to-end.
+	namespaceService := service.NewNamespaceService(namespaceRepo, datasourceRepo, chartRepo, dashboardRepo)
 	if err := namespaceService.SeedDefault(ctx); err != nil {
 		log.Printf("Warning: Failed to seed default namespace: %v", err)
 	} else {

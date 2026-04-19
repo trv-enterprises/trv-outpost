@@ -180,11 +180,11 @@ func (r *ChartRepository) FindDraft(ctx context.Context, id string) (*models.Cha
 	return &chart, nil
 }
 
-// FindByName retrieves the latest version of a chart by name
-func (r *ChartRepository) FindByName(ctx context.Context, name string) (*models.Chart, error) {
-	// First find charts with this name, then get the latest version
+// FindByName retrieves the latest version of a chart by (namespace, name).
+// Returns (nil, nil) when no chart matches.
+func (r *ChartRepository) FindByName(ctx context.Context, namespace, name string) (*models.Chart, error) {
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"name": name}}},
+		{{Key: "$match", Value: bson.M{"namespace": namespace, "name": name}}},
 		{{Key: "$sort", Value: bson.D{{Key: "version", Value: -1}}}},
 		{{Key: "$limit", Value: 1}},
 	}
@@ -206,10 +206,41 @@ func (r *ChartRepository) FindByName(ctx context.Context, name string) (*models.
 	return &charts[0], nil
 }
 
+// CountByNamespace returns the number of charts (counting unique chart
+// IDs, not versions) in a namespace. Implements service.NamespaceCounter.
+func (r *ChartRepository) CountByNamespace(ctx context.Context, namespace string) (int64, error) {
+	// Distinct chart ids in this namespace — versioning means a single
+	// logical chart has many rows, but the user-visible count is the id
+	// count.
+	ids, err := r.collection.Distinct(ctx, "id", bson.M{"namespace": namespace})
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(ids)), nil
+}
+
+// RenameNamespace updates every chart row currently in oldName to
+// newName. All versions of every chart in the namespace are touched.
+// Implements service.NamespaceRenamer.
+func (r *ChartRepository) RenameNamespace(ctx context.Context, oldName, newName string) (int64, error) {
+	res, err := r.collection.UpdateMany(
+		ctx,
+		bson.M{"namespace": oldName},
+		bson.M{"$set": bson.M{"namespace": newName}},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // FindAllLatest retrieves the latest version of each chart with pagination
 func (r *ChartRepository) FindAllLatest(ctx context.Context, params models.ChartQueryParams) ([]models.Chart, int64, error) {
 	// Build match filter
 	matchFilter := bson.M{}
+	if params.Namespace != "" {
+		matchFilter["namespace"] = params.Namespace
+	}
 	if params.Name != "" {
 		// $regex does NOT respect collection collation (MongoDB limitation),
 		// so we must explicitly request case-insensitive matching.
@@ -401,6 +432,19 @@ func (r *ChartRepository) UpdateLatest(ctx context.Context, id string, chart *mo
 		return mongo.ErrNoDocuments
 	}
 	return r.Update(ctx, id, latest.Version, chart)
+}
+
+// SetNamespaceForAllVersions stamps newNamespace onto every version row
+// of a chart id. Used when a chart's namespace changes via the editor —
+// all historical versions move with it so list/filter queries stay
+// consistent regardless of which version they hit.
+func (r *ChartRepository) SetNamespaceForAllVersions(ctx context.Context, id, newNamespace string) error {
+	_, err := r.collection.UpdateMany(
+		ctx,
+		bson.M{"id": id},
+		bson.M{"$set": bson.M{"namespace": newNamespace}},
+	)
+	return err
 }
 
 // DeleteVersion removes a specific version of a chart

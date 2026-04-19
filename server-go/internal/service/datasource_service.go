@@ -33,15 +33,23 @@ func NewDatasourceService(repo *repository.DatasourceRepository) *DatasourceServ
 	}
 }
 
-// CreateDatasource creates a new datasource with validation
+// CreateDatasource creates a new datasource with validation. Namespace
+// defaults to "default" if the caller doesn't provide one — clients
+// should normally pass the user's active namespace from the header.
 func (s *DatasourceService) CreateDatasource(ctx context.Context, req *models.CreateDatasourceRequest) (*models.Datasource, error) {
-	// Check name uniqueness
-	existing, err := s.repo.FindByName(ctx, req.Name)
+	namespace := req.Namespace
+	if namespace == "" {
+		namespace = models.DefaultNamespace
+	}
+
+	// Check (namespace, name) uniqueness — same name is allowed in
+	// different namespaces.
+	existing, err := s.repo.FindByName(ctx, namespace, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("datasource with name '%s' already exists", req.Name)
+		return nil, fmt.Errorf("datasource with name '%s' already exists in namespace '%s'", req.Name, namespace)
 	}
 
 	// Validate config based on type
@@ -56,6 +64,7 @@ func (s *DatasourceService) CreateDatasource(ctx context.Context, req *models.Cr
 	}
 
 	datasource := &models.Datasource{
+		Namespace:   namespace,
 		Name:        req.Name,
 		Description: req.Description,
 		Type:        req.Type,
@@ -130,9 +139,10 @@ func (s *DatasourceService) ListDatasourcesByType(ctx context.Context, dsType mo
 	return datasources, total, nil
 }
 
-// ListDatasourcesFiltered retrieves datasources with optional type and tag
-// filters. Tags are OR-matched; normalized before the query.
-func (s *DatasourceService) ListDatasourcesFiltered(ctx context.Context, typeFilter string, tags []string, limit, offset int64) ([]*models.Datasource, int64, error) {
+// ListDatasourcesFiltered retrieves datasources with optional namespace,
+// type, and tag filters. Empty namespace = all namespaces (cross-namespace
+// toggle). Tags are OR-matched; normalized before the query.
+func (s *DatasourceService) ListDatasourcesFiltered(ctx context.Context, namespace, typeFilter string, tags []string, limit, offset int64) ([]*models.Datasource, int64, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -143,7 +153,7 @@ func (s *DatasourceService) ListDatasourcesFiltered(ctx context.Context, typeFil
 		tags = models.NormalizeTags(tags)
 	}
 
-	return s.repo.List(ctx, typeFilter, tags, limit, offset)
+	return s.repo.List(ctx, namespace, typeFilter, tags, limit, offset)
 }
 
 // UpdateDatasource updates an existing datasource
@@ -157,17 +167,27 @@ func (s *DatasourceService) UpdateDatasource(ctx context.Context, id string, req
 		return nil, fmt.Errorf("datasource not found")
 	}
 
-	// Update fields if provided
-	if req.Name != "" && req.Name != datasource.Name {
-		// Check name uniqueness
-		existing, err := s.repo.FindByName(ctx, req.Name)
+	// Resolve the post-update namespace + name. Both can change in the
+	// same request; uniqueness is checked against the new (namespace, name)
+	// pair, not the old one.
+	newNamespace := datasource.Namespace
+	if req.Namespace != "" {
+		newNamespace = req.Namespace
+	}
+	newName := datasource.Name
+	if req.Name != "" {
+		newName = req.Name
+	}
+	if newNamespace != datasource.Namespace || newName != datasource.Name {
+		existing, err := s.repo.FindByName(ctx, newNamespace, newName)
 		if err != nil {
 			return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 		}
 		if existing != nil && existing.ID != datasource.ID {
-			return nil, fmt.Errorf("datasource with name '%s' already exists", req.Name)
+			return nil, fmt.Errorf("datasource with name '%s' already exists in namespace '%s'", newName, newNamespace)
 		}
-		datasource.Name = req.Name
+		datasource.Namespace = newNamespace
+		datasource.Name = newName
 	}
 
 	if req.Description != "" {

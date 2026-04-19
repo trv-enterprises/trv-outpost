@@ -27,15 +27,20 @@ func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Databas
 	}
 }
 
-// CreateDashboard creates a new dashboard
+// CreateDashboard creates a new dashboard. Namespace defaults to
+// "default" when the request omits it.
 func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.CreateDashboardRequest) (*models.Dashboard, error) {
-	// Check for duplicate dashboard name
-	existing, err := s.repo.FindByName(ctx, req.Name)
+	if req.Namespace == "" {
+		req.Namespace = models.DefaultNamespace
+	}
+
+	// Uniqueness is (namespace, name) — same name allowed across namespaces.
+	existing, err := s.repo.FindByName(ctx, req.Namespace, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error checking for existing dashboard: %w", err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("dashboard with name '%s' already exists", req.Name)
+		return nil, fmt.Errorf("dashboard with name '%s' already exists in namespace '%s'", req.Name, req.Namespace)
 	}
 
 	// Normalize tags before persistence.
@@ -130,14 +135,23 @@ func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *
 		return nil, fmt.Errorf("dashboard not found")
 	}
 
-	// If name is being updated, check for duplicates
-	if req.Name != nil && *req.Name != existing.Name {
-		duplicate, err := s.repo.FindByName(ctx, *req.Name)
+	// Resolve post-update (namespace, name) and check uniqueness if either
+	// changed. Both can move in the same request.
+	newNamespace := existing.Namespace
+	if req.Namespace != nil && *req.Namespace != "" {
+		newNamespace = *req.Namespace
+	}
+	newName := existing.Name
+	if req.Name != nil {
+		newName = *req.Name
+	}
+	if newNamespace != existing.Namespace || newName != existing.Name {
+		duplicate, err := s.repo.FindByName(ctx, newNamespace, newName)
 		if err != nil {
 			return nil, fmt.Errorf("error checking for duplicate name: %w", err)
 		}
-		if duplicate != nil {
-			return nil, fmt.Errorf("dashboard with name '%s' already exists", *req.Name)
+		if duplicate != nil && duplicate.ID != existing.ID {
+			return nil, fmt.Errorf("dashboard with name '%s' already exists in namespace '%s'", newName, newNamespace)
 		}
 	}
 

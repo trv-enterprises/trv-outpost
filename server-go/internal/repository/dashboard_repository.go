@@ -57,6 +57,7 @@ func (r *DashboardRepository) Create(ctx context.Context, req *models.CreateDash
 
 	dashboard := &models.Dashboard{
 		ID:          uuid.New().String(),
+		Namespace:   req.Namespace,
 		Name:        req.Name,
 		Description: req.Description,
 		Panels:      panels,
@@ -88,10 +89,10 @@ func (r *DashboardRepository) FindByID(ctx context.Context, id string) (*models.
 	return &dashboard, nil
 }
 
-// FindByName retrieves a dashboard by name
-func (r *DashboardRepository) FindByName(ctx context.Context, name string) (*models.Dashboard, error) {
+// FindByName retrieves a dashboard by (namespace, name).
+func (r *DashboardRepository) FindByName(ctx context.Context, namespace, name string) (*models.Dashboard, error) {
 	var dashboard models.Dashboard
-	err := r.collection.FindOne(ctx, bson.M{"name": name}).Decode(&dashboard)
+	err := r.collection.FindOne(ctx, bson.M{"namespace": namespace, "name": name}).Decode(&dashboard)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -101,10 +102,33 @@ func (r *DashboardRepository) FindByName(ctx context.Context, name string) (*mod
 	return &dashboard, nil
 }
 
+// CountByNamespace returns the number of dashboards in a namespace.
+// Implements service.NamespaceCounter.
+func (r *DashboardRepository) CountByNamespace(ctx context.Context, namespace string) (int64, error) {
+	return r.collection.CountDocuments(ctx, bson.M{"namespace": namespace})
+}
+
+// RenameNamespace updates every dashboard record currently in oldName
+// to newName. Implements service.NamespaceRenamer.
+func (r *DashboardRepository) RenameNamespace(ctx context.Context, oldName, newName string) (int64, error) {
+	res, err := r.collection.UpdateMany(
+		ctx,
+		bson.M{"namespace": oldName},
+		bson.M{"$set": bson.M{"namespace": newName}},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // List retrieves dashboards with optional filtering and pagination
 func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQueryParams) ([]models.Dashboard, int64, error) {
 	// Build filter
 	filter := bson.M{}
+	if params.Namespace != "" {
+		filter["namespace"] = params.Namespace
+	}
 	if params.Name != "" {
 		// $regex does NOT respect collection collation (MongoDB limitation),
 		// so we must explicitly request case-insensitive matching.
@@ -172,6 +196,9 @@ func (r *DashboardRepository) Update(ctx context.Context, id string, req *models
 
 	setFields := update["$set"].(bson.M)
 
+	if req.Namespace != nil {
+		setFields["namespace"] = *req.Namespace
+	}
 	if req.Name != nil {
 		setFields["name"] = *req.Name
 	}
@@ -271,6 +298,9 @@ func (r *DashboardRepository) FindByChartID(ctx context.Context, chartID string)
 func (r *DashboardRepository) ListWithDatasources(ctx context.Context, params models.DashboardQueryParams, db *mongo.Database) ([]models.DashboardSummary, int64, error) {
 	// Build filter
 	filter := bson.M{}
+	if params.Namespace != "" {
+		filter["namespace"] = params.Namespace
+	}
 	if params.Name != "" {
 		// $regex does NOT respect collection collation (MongoDB limitation),
 		// so we must explicitly request case-insensitive matching.
