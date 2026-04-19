@@ -27,11 +27,14 @@ import {
   ContentSwitcher,
   Switch,
   Tooltip,
+  Toggle,
   Dropdown
 } from '@carbon/react';
 import { TrashCan, DataBase, List, Grid, Edit, Information, Sql, Api, Document, NetworkEnterprise, ChartLineSmooth, Meter, Db2Database, Tree, Video } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
+import NamespaceChip from '../components/shared/NamespaceChip';
+import { useNamespaces } from '../context/NamespaceContext';
 import './ConnectionsPage.scss';
 
 /**
@@ -59,6 +62,10 @@ function ConnectionsPage() {
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
   const [typeFilter, setTypeFilter] = useState(savedFilters.type || 'all'); // 'all' or specific type
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
+  const [showAllNamespaces, setShowAllNamespaces] = useState(
+    savedFilters.showAllNamespaces === true
+  );
+  const { activeNamespace } = useNamespaces();
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -68,7 +75,8 @@ function ConnectionsPage() {
       sortDir: sortDirection,
       view: viewMode,
       type: typeFilter,
-      tags: tagFilter
+      tags: tagFilter,
+      showAllNamespaces,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('connections', {
@@ -76,7 +84,7 @@ function ConnectionsPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter, showAllNamespaces]);
 
   // Connection types for filter dropdown
   // Keep in sync with server-go/internal/models/datasource.go DatasourceType* constants
@@ -206,6 +214,11 @@ function ConnectionsPage() {
   const filteredAndSortedConnections = useMemo(() => {
     let result = [...connections];
 
+    // Active-namespace scope unless the user opted into all.
+    if (!showAllNamespaces && activeNamespace) {
+      result = result.filter((c) => !c.namespace || c.namespace === activeNamespace);
+    }
+
     // Filter by type
     if (typeFilter !== 'all') {
       result = result.filter(connection => connection.type?.toLowerCase() === typeFilter);
@@ -257,10 +270,11 @@ function ConnectionsPage() {
     });
 
     return result;
-  }, [connections, chartCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter]);
+  }, [connections, chartCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter, showAllNamespaces, activeNamespace]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
+    { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'type', header: 'Type', isSortable: true },
     { key: 'charts', header: 'Charts', isSortable: true },
     { key: 'tags', header: 'Tags', isSortable: false },
@@ -272,6 +286,7 @@ function ConnectionsPage() {
   const rows = filteredAndSortedConnections.map((connection) => ({
     id: connection.id,
     name: connection.name,
+    namespace: connection.namespace || 'default',
     type: connection.type,
     charts: chartCounts[connection.id] || 0,
     tags: connection.tags || [],
@@ -344,6 +359,15 @@ function ConnectionsPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
+          <Toggle
+            id="toggle-all-namespaces-connections"
+            size="sm"
+            labelText=""
+            labelA="Current namespace"
+            labelB="All namespaces"
+            toggled={showAllNamespaces}
+            onToggle={setShowAllNamespaces}
+          />
         </div>
         <div className="toolbar-actions">
           <Button
@@ -505,6 +529,13 @@ function ConnectionsPage() {
                           className="clickable-row"
                         >
                           {row.cells.map((cell) => {
+                            if (cell.info.header === 'namespace') {
+                              return (
+                                <TableCell key={cell.id} className="namespace-cell">
+                                  <NamespaceChip name={cell.value} />
+                                </TableCell>
+                              );
+                            }
                             if (cell.info.header === 'type') {
                               return (
                                 <TableCell key={cell.id}>

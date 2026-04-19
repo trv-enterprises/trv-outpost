@@ -26,11 +26,14 @@ import {
   ContentSwitcher,
   Switch,
   Tag,
+  Toggle,
   Tooltip
 } from '@carbon/react';
 import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
+import NamespaceChip from '../components/shared/NamespaceChip';
+import { useNamespaces } from '../context/NamespaceContext';
 import './DashboardsListPage.scss';
 
 /**
@@ -58,6 +61,13 @@ function DashboardsListPage() {
   const [sortDirection, setSortDirection] = useState(savedFilters.sortDir || 'desc');
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
+  // showAllNamespaces widens the list to every namespace the user can
+  // see. Default off — the implicit filter is the header's active
+  // namespace, which matches how most users think about their work.
+  const [showAllNamespaces, setShowAllNamespaces] = useState(
+    savedFilters.showAllNamespaces === true
+  );
+  const { activeNamespace } = useNamespaces();
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -66,7 +76,8 @@ function DashboardsListPage() {
       sortKey,
       sortDir: sortDirection,
       view: viewMode,
-      tags: tagFilter
+      tags: tagFilter,
+      showAllNamespaces,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('dashboards', {
@@ -74,7 +85,7 @@ function DashboardsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, showAllNamespaces]);
 
   // Fetch dashboards, charts, and datasources from API
   useEffect(() => {
@@ -188,6 +199,14 @@ function DashboardsListPage() {
   const filteredAndSortedDashboards = useMemo(() => {
     let result = [...dashboards];
 
+    // Filter to active namespace unless the user has asked for all.
+    // Records missing a namespace (shouldn't happen post-migration, but
+    // defensive) stay visible so the UI never goes empty because of
+    // bad data.
+    if (!showAllNamespaces && activeNamespace) {
+      result = result.filter((d) => !d.namespace || d.namespace === activeNamespace);
+    }
+
     // Filter by tags (OR semantics)
     if (tagFilter.length > 0) {
       result = result.filter(dashboard => {
@@ -236,10 +255,11 @@ function DashboardsListPage() {
     });
 
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, charts, datasources, tagFilter]);
+  }, [dashboards, searchTerm, sortKey, sortDirection, charts, datasources, tagFilter, showAllNamespaces, activeNamespace]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
+    { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'panels', header: 'Panels', isSortable: true },
     { key: 'datasources', header: 'Data Sources', isSortable: false },
@@ -270,6 +290,7 @@ function DashboardsListPage() {
   const rows = filteredAndSortedDashboards.map((dashboard) => ({
     id: dashboard.id,
     name: dashboard.name,
+    namespace: dashboard.namespace || 'default',
     description: dashboard.description || '',
     panels: getPanelCount(dashboard),
     datasources: getDatasourceNames(dashboard),
@@ -332,6 +353,15 @@ function DashboardsListPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
+          <Toggle
+            id="toggle-all-namespaces-dashboards"
+            size="sm"
+            labelText=""
+            labelA="Current namespace"
+            labelB="All namespaces"
+            toggled={showAllNamespaces}
+            onToggle={setShowAllNamespaces}
+          />
         </div>
         <div className="toolbar-actions">
           <Button
@@ -496,6 +526,13 @@ function DashboardsListPage() {
                           className="clickable-row"
                         >
                           {row.cells.map((cell) => {
+                            if (cell.info.header === 'namespace') {
+                              return (
+                                <TableCell key={cell.id} className="namespace-cell">
+                                  <NamespaceChip name={cell.value} />
+                                </TableCell>
+                              );
+                            }
                             if (cell.info.header === 'tags') {
                               const cellTags = Array.isArray(cell.value) ? cell.value : [];
                               return (

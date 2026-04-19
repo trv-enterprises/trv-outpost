@@ -27,6 +27,7 @@ import {
   ContentSwitcher,
   Switch,
   Tooltip,
+  Toggle,
   InlineNotification,
   Dropdown,
   Checkbox
@@ -41,6 +42,8 @@ import CreateMenu from '../components/CreateMenu';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
+import NamespaceChip from '../components/shared/NamespaceChip';
+import { useNamespaces } from '../context/NamespaceContext';
 import './ChartsListPage.scss';
 
 /**
@@ -74,6 +77,10 @@ function ChartsListPage() {
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.ds || 'all'); // 'all' or connection id
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
+  const [showAllNamespaces, setShowAllNamespaces] = useState(
+    savedFilters.showAllNamespaces === true
+  );
+  const { activeNamespace } = useNamespaces();
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const [collapsedTypes, setCollapsedTypes] = useState(new Set(['display', 'control'])); // Display and Control start collapsed
   const typeFilterRef = useRef(null); // Ref for click-outside detection
@@ -247,7 +254,8 @@ function ChartsListPage() {
       view: viewMode,
       ds: connectionFilter,
       types: selectedTypes !== null && selectedTypes.size > 0 ? Array.from(selectedTypes).join(',') : '',
-      tags: tagFilter
+      tags: tagFilter,
+      showAllNamespaces,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('charts', {
@@ -255,7 +263,7 @@ function ChartsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, showAllNamespaces]);
 
   // Close type filter popover when clicking outside
   useEffect(() => {
@@ -445,6 +453,11 @@ function ChartsListPage() {
   const filteredAndSortedCharts = useMemo(() => {
     let result = [...charts];
 
+    // Active-namespace scope unless the user opted into all.
+    if (!showAllNamespaces && activeNamespace) {
+      result = result.filter((c) => !c.namespace || c.namespace === activeNamespace);
+    }
+
     // Filter by hierarchical type selection
     // null = all selected (no filter), Set = specific selection
     if (selectedTypes !== null) {
@@ -532,10 +545,11 @@ function ChartsListPage() {
     });
 
     return result;
-  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter]);
+  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, showAllNamespaces, activeNamespace]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
+    { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'component_type', header: 'Component', isSortable: true },
     { key: 'chart_type', header: 'Type', isSortable: true },
     { key: 'connection', header: 'Connection', isSortable: true },
@@ -549,6 +563,7 @@ function ChartsListPage() {
   const rows = filteredAndSortedCharts.map((chart) => ({
     id: chart.id,
     name: chart.name,
+    namespace: chart.namespace || 'default',
     component_type: chart.component_type || 'chart',
     chart_type: chart.chart_type || chart.control_config?.control_type || chart.display_config?.display_type || '',
     connection: connections[chart.connection_id || chart.datasource_id] || 'None',
@@ -703,6 +718,15 @@ function ChartsListPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
+          <Toggle
+            id="toggle-all-namespaces-components"
+            size="sm"
+            labelText=""
+            labelA="Current namespace"
+            labelB="All namespaces"
+            toggled={showAllNamespaces}
+            onToggle={setShowAllNamespaces}
+          />
         </div>
         <div className="toolbar-actions">
           <CreateMenu
@@ -880,6 +904,13 @@ function ChartsListPage() {
                           className="clickable-row"
                         >
                           {row.cells.map((cell) => {
+                            if (cell.info.header === 'namespace') {
+                              return (
+                                <TableCell key={cell.id} className="namespace-cell">
+                                  <NamespaceChip name={cell.value} />
+                                </TableCell>
+                              );
+                            }
                             if (cell.info.header === 'name') {
                               const chartTags = chart?.tags || [];
                               return (
