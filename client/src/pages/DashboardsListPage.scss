@@ -95,11 +95,13 @@
     border-radius: 4px;
   }
 
-  // Dashboards content area (for tile view)
+  // Dashboards content area (for tile view). Top padding + extra
+  // headroom on the scroll viewport so the tile hover lift doesn't
+  // clip under the toolbar / export-mode bar above.
   .dashboards-content {
     flex: 1;
     overflow-y: auto;
-    padding: 0 spacing.$spacing-06 spacing.$spacing-06;
+    padding: spacing.$spacing-03 spacing.$spacing-06 spacing.$spacing-06;
   }
 
   // Dashboards grid (tile view)
@@ -121,6 +123,26 @@
     flex-direction: column;
     min-height: 280px;
     overflow: visible;
+    position: relative;
+
+    // Export-mode checkbox sits in the top-left corner over the
+    // thumbnail. Full tile stays clickable (toggle fires via the
+    // tile's own onClick) — the checkbox is purely visual feedback
+    // but we still make it a real control for keyboard users.
+    .tile-export-checkbox {
+      position: absolute;
+      top: spacing.$spacing-03;
+      left: spacing.$spacing-03;
+      z-index: 2;
+      background: rgba(22, 22, 22, 0.8);
+      border-radius: 2px;
+      padding: 0.1rem 0.3rem;
+    }
+
+    &.is-selected {
+      border-color: var(--cds-interactive, #0f62fe);
+      box-shadow: 0 0 0 2px rgba(15, 98, 254, 0.25);
+    }
 
     &:hover {
       background-color: #262626;
