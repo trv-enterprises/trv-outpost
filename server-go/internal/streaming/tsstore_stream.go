@@ -301,14 +301,35 @@ func (ts *TSStoreStream) deletePushConnection(ctx context.Context) error {
 	return nil
 }
 
-// getDashboardHost returns the dashboard host address for the inbound WebSocket URL.
-// Reads from DASHBOARD_HOST environment variable, falling back to localhost:3001.
-// Set DASHBOARD_HOST to the address reachable by ts-store (e.g., Tailscale IP).
+// getDashboardHost returns the dashboard host address for the inbound
+// WebSocket URL. Resolution order:
+//
+//  1. DASHBOARD_HOST env var — explicit, always wins. This is what
+//     the homelab Ansible role sets from `lan_ip`, and what users
+//     should set in shell/.env for local dev with a remote ts-store.
+//  2. discoverReachableHostIP() — autodiscovery picks an interface
+//     on a safe private subnet (RFC1918 minus Docker, plus CGNAT
+//     for Tailscale). Overlay networks like Tailscale are preferred
+//     over physical LAN since they're more likely to be reachable
+//     from another host in dev setups.
+//  3. localhost:<port> with a warning — only works when ts-store
+//     runs on this host.
+//
+// The discovery fallback is intentionally conservative — it only
+// returns an address we can confidently advertise. The v0.6.4
+// version returned the first non-loopback IP it found, which often
+// turned out to be a Docker bridge IP. The current implementation
+// allowlists subnets and excludes Docker bridges by both subnet and
+// interface name.
 func (ts *TSStoreStream) getDashboardHost() string {
 	if host := os.Getenv("DASHBOARD_HOST"); host != "" {
 		return host
 	}
-	return "localhost:3001"
+	if ip := discoverReachableHostIP(); ip != "" {
+		return fmt.Sprintf("%s:%d", ip, serverPort)
+	}
+	log.Printf("[TSStoreStream] WARNING: DASHBOARD_HOST not set and no reachable LAN/overlay IP found — falling back to localhost:%d (push will only work if ts-store runs on this host)", serverPort)
+	return fmt.Sprintf("localhost:%d", serverPort)
 }
 
 // getTimeout returns the configured timeout or default

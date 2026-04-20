@@ -30,6 +30,7 @@ import { invalidateTagsCache } from '../components/shared/tagsApi';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
+import SecretTextInput, { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -38,8 +39,6 @@ import './ConnectionDetailPage.scss';
  * Create/Edit connection with type-specific configuration forms.
  * Supports connection types: SQL, CSV, Socket, API, TSStore, Prometheus, EdgeLake
  */
-// Constant for masked secret value - must match backend SecretMaskedValue
-const SECRET_MASKED_VALUE = '********';
 
 function ConnectionDetailPage() {
   const { id } = useParams();
@@ -587,13 +586,12 @@ function ConnectionDetailPage() {
                 value={sqlConfig.username || ''}
                 onChange={(e) => updateConfig('sql.username', e.target.value)}
               />
-              <TextInput
+              <SecretTextInput
                 id="sql-password"
                 labelText="Password"
-                type="password"
-                value={sqlConfig.password === SECRET_MASKED_VALUE ? '' : (sqlConfig.password || '')}
+                value={sqlConfig.password || ''}
                 onChange={(e) => updateConfig('sql.password', e.target.value)}
-                placeholder={sqlConfig.password === SECRET_MASKED_VALUE ? 'Password is set (enter new value to change)' : 'Enter password'}
+                placeholder="Enter password"
               />
             </div>
 
@@ -935,13 +933,12 @@ function ConnectionDetailPage() {
 
         {/* Bearer Token auth */}
         {apiConfig.auth_type === 'bearer' && (
-          <TextInput
+          <SecretTextInput
             id="api-auth-bearer-token"
             labelText="Bearer Token"
-            type="password"
-            value={apiConfig.auth_credentials?.token === SECRET_MASKED_VALUE ? '' : (apiConfig.auth_credentials?.token || '')}
+            value={apiConfig.auth_credentials?.token || ''}
             onChange={(e) => updateConfig('api.auth_credentials', { ...apiConfig.auth_credentials, token: e.target.value })}
-            placeholder={apiConfig.auth_credentials?.token === SECRET_MASKED_VALUE ? 'Token is set (enter new value to change)' : 'Enter bearer token'}
+            placeholder="Enter bearer token"
           />
         )}
 
@@ -955,13 +952,12 @@ function ConnectionDetailPage() {
               onChange={(e) => updateConfig('api.auth_credentials', { ...apiConfig.auth_credentials, username: e.target.value })}
               placeholder="Enter username"
             />
-            <TextInput
+            <SecretTextInput
               id="api-auth-basic-password"
               labelText="Password"
-              type="password"
-              value={apiConfig.auth_credentials?.password === SECRET_MASKED_VALUE ? '' : (apiConfig.auth_credentials?.password || '')}
+              value={apiConfig.auth_credentials?.password || ''}
               onChange={(e) => updateConfig('api.auth_credentials', { ...apiConfig.auth_credentials, password: e.target.value })}
-              placeholder={apiConfig.auth_credentials?.password === SECRET_MASKED_VALUE ? 'Password is set (enter new value to change)' : 'Enter password'}
+              placeholder="Enter password"
             />
           </div>
         )}
@@ -977,13 +973,12 @@ function ConnectionDetailPage() {
               placeholder="X-API-Key"
               helperText="HTTP header name for the API key"
             />
-            <TextInput
+            <SecretTextInput
               id="api-auth-apikey-value"
               labelText="API Key"
-              type="password"
-              value={apiConfig.auth_credentials?.key === SECRET_MASKED_VALUE ? '' : (apiConfig.auth_credentials?.key || '')}
+              value={apiConfig.auth_credentials?.key || ''}
               onChange={(e) => updateConfig('api.auth_credentials', { ...apiConfig.auth_credentials, key: e.target.value })}
-              placeholder={apiConfig.auth_credentials?.key === SECRET_MASKED_VALUE ? 'API key is set (enter new value to change)' : 'Enter API key'}
+              placeholder="Enter API key"
             />
           </div>
         )}
@@ -1100,13 +1095,12 @@ function ConnectionDetailPage() {
           helperText="Name of the timeseries store to connect to"
         />
 
-        <TextInput
+        <SecretTextInput
           id="tsstore-api-key"
           labelText="API Key (optional)"
-          type="password"
-          value={tsstoreConfig.api_key === SECRET_MASKED_VALUE ? '' : (tsstoreConfig.api_key || '')}
+          value={tsstoreConfig.api_key || ''}
           onChange={(e) => updateConfig('tsstore.api_key', e.target.value)}
-          placeholder={tsstoreConfig.api_key === SECRET_MASKED_VALUE ? 'API key is set (enter new value to change)' : 'Enter API key'}
+          placeholder="Enter API key"
           helperText="API key for authentication (if required)"
         />
 
@@ -1351,13 +1345,12 @@ function ConnectionDetailPage() {
           helperText="Username for basic authentication (if required)"
         />
 
-        <TextInput
+        <SecretTextInput
           id="prometheus-password"
           labelText="Password (optional)"
-          type="password"
-          value={prometheusConfig.password === SECRET_MASKED_VALUE ? '' : (prometheusConfig.password || '')}
+          value={prometheusConfig.password || ''}
           onChange={(e) => updateConfig('prometheus.password', e.target.value)}
-          placeholder={prometheusConfig.password === SECRET_MASKED_VALUE ? 'Password is set (enter new value to change)' : 'Enter password'}
+          placeholder="Enter password"
           helperText="Password for basic authentication (if required)"
         />
 
@@ -1448,13 +1441,12 @@ function ConnectionDetailPage() {
             onChange={(e) => updateConfig('mqtt.username', e.target.value)}
             placeholder="(optional)"
           />
-          <TextInput
+          <SecretTextInput
             id="mqtt-password"
-            type="password"
             labelText="Password"
-            value={mqttConfig.password === SECRET_MASKED_VALUE ? '' : (mqttConfig.password || '')}
+            value={mqttConfig.password || ''}
             onChange={(e) => updateConfig('mqtt.password', e.target.value)}
-            placeholder={connection?.config?.mqtt?.password === SECRET_MASKED_VALUE ? '(secret set)' : '(optional)'}
+            placeholder="(optional)"
           />
         </div>
 
@@ -1539,13 +1531,12 @@ function ConnectionDetailPage() {
             onChange={(e) => updateConfig('frigate.username', e.target.value)}
             placeholder="(optional)"
           />
-          <TextInput
+          <SecretTextInput
             id="frigate-password"
-            type="password"
             labelText="Password"
-            value={frigateConfig.password === SECRET_MASKED_VALUE ? '' : (frigateConfig.password || '')}
+            value={frigateConfig.password || ''}
             onChange={(e) => updateConfig('frigate.password', e.target.value)}
-            placeholder={connection?.config?.frigate?.password === SECRET_MASKED_VALUE ? '(secret set)' : '(optional)'}
+            placeholder="(optional)"
           />
         </div>
 

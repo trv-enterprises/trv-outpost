@@ -61,19 +61,25 @@ import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
 import './App.scss';
 
-// Redirect /design/dashboards/:id to /view/dashboards/:id with auto-edit
+// Redirect /design/dashboards/:id to /view/dashboards/:id with auto-edit.
+// fromDesign is set so cancel/save from the editor routes back to the
+// design list, and the mode-sync effect keeps the header pill on DESIGN
+// while the user is editing (see App.jsx mode-sync effect below).
 function DashboardEditRedirect() {
   const { id } = useParams();
   if (id === 'new') {
-    return <Navigate to="/view/dashboards/new" state={{ autoEdit: true, isNew: true }} replace />;
+    return <Navigate to="/view/dashboards/new" state={{ autoEdit: true, isNew: true, fromDesign: true }} replace />;
   }
-  return <Navigate to={`/view/dashboards/${id}`} state={{ autoEdit: true }} replace />;
+  return <Navigate to={`/view/dashboards/${id}`} state={{ autoEdit: true, fromDesign: true }} replace />;
 }
 
 function AppContent({ onDisconnect }) {
   const [isSideNavExpanded, setIsSideNavExpanded] = useState(true);
   const [currentMode, setCurrentMode] = useState(() => {
-    // Load mode from localStorage or default to VIEW
+    // Load mode from localStorage or default to VIEW. The URL-sync
+    // effect below corrects this if the route says otherwise — that
+    // way a refresh on /view/dashboards/X always lands in VIEW even
+    // if the last persisted mode was MANAGE.
     const savedMode = localStorage.getItem('dashboardMode');
     return savedMode || MODES.VIEW;
   });
@@ -175,7 +181,30 @@ function AppContent({ onDisconnect }) {
     return null;
   };
 
-  const { runModeGuard } = useModeGuard();
+  const { runModeGuard, isEditingDashboard } = useModeGuard();
+
+  // Sync the mode to the URL prefix on every navigation. The URL is
+  // the source of truth — a refresh on /view/dashboards/X should land
+  // in VIEW mode even if the last persisted mode was MANAGE. Without
+  // this the header pill and side nav can desync from the route.
+  //
+  // Exception: when the viewer signals isEditingDashboard (either in
+  // active edit mode from the design list / eye icon preview, or as a
+  // design-origin preview via fromDesign), we keep the pill on DESIGN
+  // so the user understands they're still in the design workflow. As
+  // soon as the viewer clears the flag (exit edit / navigate away),
+  // the /view/... → VIEW mapping takes over.
+  useEffect(() => {
+    const path = location.pathname;
+    let routeMode = null;
+    if (path.startsWith('/design/')) routeMode = MODES.DESIGN;
+    else if (path.startsWith('/view/')) routeMode = isEditingDashboard ? MODES.DESIGN : MODES.VIEW;
+    else if (path.startsWith('/manage')) routeMode = MODES.MANAGE;
+    if (routeMode && routeMode !== currentMode) {
+      setCurrentMode(routeMode);
+      localStorage.setItem('dashboardMode', routeMode);
+    }
+  }, [location.pathname, isEditingDashboard, currentMode]);
 
   // Handle mode change and persist to localStorage. If a page registered
   // a guard (e.g., dirty dashboard editor), consult it first — the guard

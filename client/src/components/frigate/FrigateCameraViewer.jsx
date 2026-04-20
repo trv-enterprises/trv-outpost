@@ -97,17 +97,21 @@ function FrigateCameraViewer({ config }) {
   useEffect(() => {
     if (!mqttConnectionId || !selectedCamera) return;
 
-    // Dynamic import to avoid circular dependencies
+    // Dynamic import to avoid circular dependencies.
     const setupMqtt = async () => {
       try {
-        const { streamConnectionManager } = await import('../../hooks/useData');
+        const { default: StreamConnectionManager } = await import('../../utils/streamConnectionManager');
+        const manager = StreamConnectionManager.getInstance();
 
-        const handleMessage = (message) => {
+        const handleMessage = (record) => {
           try {
-            const payload = typeof message === 'string' ? JSON.parse(message) : message;
+            // Manager emits SSE records with { topic, data, ... }; unwrap
+            // to the Frigate review event payload.
+            const payload = record?.data != null
+              ? (typeof record.data === 'string' ? JSON.parse(record.data) : record.data)
+              : record;
 
-            // Frigate review event format
-            if (payload.type === 'new' && payload.after) {
+            if (payload?.type === 'new' && payload.after) {
               const event = payload.after;
               if (event.camera === selectedCamera && event.severity === 'alert') {
                 setAlertEvent({
@@ -126,13 +130,11 @@ function FrigateCameraViewer({ config }) {
           }
         };
 
-        const cleanup = streamConnectionManager.subscribe(
+        mqttCleanupRef.current = manager.subscribe(
           mqttConnectionId,
-          alertTopic,
-          handleMessage
+          handleMessage,
+          { topics: alertTopic }
         );
-
-        mqttCleanupRef.current = cleanup;
       } catch (err) {
         console.warn('Failed to subscribe to MQTT alerts:', err);
       }

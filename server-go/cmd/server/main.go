@@ -259,6 +259,10 @@ func main() {
 	// Initialize inbound WebSocket handler for ts-store push connections
 	inboundHandler := streaming.GetInboundHandler()
 	_ = inboundHandler // Used in routes below
+	// Hand the configured port to the streaming package so its
+	// DASHBOARD_HOST autodiscovery fallback can build the inbound
+	// callback URL with the right port.
+	streaming.SetServerPort(cfg.Server.Port)
 	fmt.Println("✓ InboundHandler initialized for ts-store push connections")
 
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)

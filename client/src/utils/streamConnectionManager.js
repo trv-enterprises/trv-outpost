@@ -34,6 +34,12 @@ class StreamConnectionManager {
     // Grace period: defer cleanup when last subscriber leaves
     this.gracePeriodTimeouts = new Map();
     this.gracePeriodMs = 30000; // 30 seconds
+    // Debounce: coalesce rapid subscribe/unsubscribe bursts (e.g. a dashboard
+    // mounting N MQTT controls) into one reconnect. Without this, every new
+    // subscriber triggers a full disconnect + reconnect of the shared SSE
+    // connection, producing an O(N) CORS-error storm at first paint.
+    this.reconnectDebounceTimeouts = new Map();
+    this.reconnectDebounceMs = 150;
   }
 
   static getInstance() {
@@ -119,10 +125,10 @@ class StreamConnectionManager {
         }
       }
 
-      // If topics changed, reconnect with updated set
+      // If topics changed, schedule a debounced reconnect so a burst of
+      // new subscribers during dashboard mount produces one reconnect.
       if (newTopics !== connection.topics) {
-        console.log(`[StreamConnectionManager] Topics changed for ${datasourceId}, reconnecting`);
-        this._reconnectWithTopics(datasourceId, newTopics);
+        this._scheduleTopicReconnect(datasourceId, 'Topics changed');
       }
     } else {
       // No connection yet — create one
@@ -190,11 +196,40 @@ class StreamConnectionManager {
   }
 
   /**
+   * Internal: Debounce a topic-change reconnect. Successive calls within
+   * reconnectDebounceMs reset the timer; only the last topic set wins.
+   * This is what lets a dashboard mounting N controls produce one
+   * reconnect instead of N.
+   */
+  _scheduleTopicReconnect(datasourceId, reason) {
+    const existing = this.reconnectDebounceTimeouts.get(datasourceId);
+    if (existing) clearTimeout(existing);
+    const timeout = setTimeout(() => {
+      this.reconnectDebounceTimeouts.delete(datasourceId);
+      const connection = this.connections.get(datasourceId);
+      if (!connection) return;
+      const targetTopics = this._getCombinedTopics(datasourceId);
+      if (targetTopics === connection.topics) return; // already converged
+      console.log(`[StreamConnectionManager] ${reason} for ${datasourceId}, reconnecting`);
+      this._reconnectWithTopics(datasourceId, targetTopics);
+    }, this.reconnectDebounceMs);
+    this.reconnectDebounceTimeouts.set(datasourceId, timeout);
+  }
+
+  /**
    * Internal: Reconnect with new topic set (topics added/removed)
    */
   _reconnectWithTopics(datasourceId, newTopics) {
     const connection = this.connections.get(datasourceId);
     if (!connection) return;
+
+    // A concrete reconnect is happening — drop any still-pending debounce
+    // timer so it doesn't fire again immediately after.
+    const pending = this.reconnectDebounceTimeouts.get(datasourceId);
+    if (pending) {
+      clearTimeout(pending);
+      this.reconnectDebounceTimeouts.delete(datasourceId);
+    }
 
     // Close existing EventSource
     this._stopHeartbeatWatchdog(datasourceId);
@@ -349,13 +384,14 @@ class StreamConnectionManager {
         this._cleanup(datasourceId);
       }
     } else {
-      // Check if topics changed (a topic may no longer be needed)
+      // Check if topics changed (a topic may no longer be needed).
+      // Debounced so rapid unmount bursts (e.g. dashboard switch) don't
+      // trigger a reconnect per departing subscriber.
       const connection = this.connections.get(datasourceId);
       if (connection) {
         const newTopics = this._getCombinedTopics(datasourceId);
         if (newTopics !== connection.topics) {
-          console.log(`[StreamConnectionManager] Topics reduced for ${datasourceId}, reconnecting`);
-          this._reconnectWithTopics(datasourceId, newTopics);
+          this._scheduleTopicReconnect(datasourceId, 'Topics reduced');
         }
       }
     }
@@ -371,6 +407,12 @@ class StreamConnectionManager {
     if (graceTimeout) {
       clearTimeout(graceTimeout);
       this.gracePeriodTimeouts.delete(datasourceId);
+    }
+
+    const debounceTimeout = this.reconnectDebounceTimeouts.get(datasourceId);
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+      this.reconnectDebounceTimeouts.delete(datasourceId);
     }
 
     const connection = this.connections.get(datasourceId);

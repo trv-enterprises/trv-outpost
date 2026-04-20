@@ -329,6 +329,11 @@ function ConnectionsPage() {
             placeholder="Search"
             persistent
           />
+          <NamespaceFilter
+            id="namespace-filter-connections"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
+          />
           <Dropdown
             id="type-filter"
             label="Filter by type"
@@ -356,11 +361,6 @@ function ConnectionsPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
-          <NamespaceFilter
-            id="namespace-filter-connections"
-            selected={namespaceFilter}
-            onChange={setNamespaceFilter}
-          />
         </div>
         <div className="toolbar-actions">
           <Button

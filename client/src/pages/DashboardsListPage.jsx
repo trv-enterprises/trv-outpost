@@ -353,6 +353,11 @@ function DashboardsListPage() {
             placeholder="Search"
             persistent
           />
+          <NamespaceFilter
+            id="namespace-filter-dashboards"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
+          />
           <TagFilter
             entityType="dashboards"
             selected={tagFilter}
@@ -370,11 +375,6 @@ function DashboardsListPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
-          <NamespaceFilter
-            id="namespace-filter-dashboards"
-            selected={namespaceFilter}
-            onChange={setNamespaceFilter}
-          />
         </div>
         <div className="toolbar-actions">
           {!exportMode && (

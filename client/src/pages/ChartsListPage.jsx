@@ -609,6 +609,11 @@ function ChartsListPage() {
             persistent
             value={searchTerm}
           />
+          <NamespaceFilter
+            id="namespace-filter-components"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
+          />
           <div ref={typeFilterRef} className="type-filter-dropdown">
             <button
               type="button"
@@ -683,6 +688,11 @@ function ChartsListPage() {
             </div>
             )}
           </div>
+          <TagFilter
+            entityType="components"
+            selected={tagFilter}
+            onChange={setTagFilter}
+          />
           <Dropdown
             id="connection-filter"
             label="Filter by connection"
@@ -698,11 +708,6 @@ function ChartsListPage() {
             }}
             size="md"
           />
-          <TagFilter
-            entityType="components"
-            selected={tagFilter}
-            onChange={setTagFilter}
-          />
           <ContentSwitcher
             onChange={(e) => setViewMode(e.name)}
             selectedIndex={viewMode === 'list' ? 0 : 1}
@@ -715,11 +720,6 @@ function ChartsListPage() {
               <Grid size={16} />
             </Switch>
           </ContentSwitcher>
-          <NamespaceFilter
-            id="namespace-filter-components"
-            selected={namespaceFilter}
-            onChange={setNamespaceFilter}
-          />
         </div>
         <div className="toolbar-actions">
           <CreateMenu

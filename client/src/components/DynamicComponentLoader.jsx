@@ -32,6 +32,7 @@ import {
 // generated dataview code can render <AgGridReact>. Module registration
 // happens once at app startup in main.jsx.
 import { AgGridReact } from 'ag-grid-react';
+import { useDataviewLayout } from '../hooks/useDataviewLayout';
 
 // Context to provide transforms to child components
 const TransformsContext = createContext(null);
@@ -193,6 +194,7 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
         'TableToolbarContent',
         'TableToolbarSearch',
         'AgGridReact',
+        'useDataviewLayout',
         `
         ${transformedCode}
         return typeof Component !== 'undefined' ? Component :
@@ -231,7 +233,8 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
         TableToolbar,
         TableToolbarContent,
         TableToolbarSearch,
-        AgGridReact
+        AgGridReact,
+        useDataviewLayout
       );
 
       setComponent(() => LoadedComponent);

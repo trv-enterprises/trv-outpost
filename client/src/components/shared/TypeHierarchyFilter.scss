@@ -1,0 +1,144 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing';
+
+.type-hierarchy-filter {
+  position: relative;
+  flex-shrink: 0;
+
+  .thf-button {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+    padding: spacing.$spacing-03 spacing.$spacing-04;
+    background-color: var(--cds-layer-01);
+    border: none;
+    border-bottom: 1px solid var(--cds-border-strong-01);
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    height: 40px;
+
+    &.thf-button--open {
+      border-bottom-color: transparent;
+    }
+
+    span {
+      flex: 1;
+      text-align: left;
+    }
+
+    svg {
+      color: var(--cds-icon-secondary);
+    }
+  }
+
+  .thf-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 99999;
+    padding: 0;
+    margin-top: 0;
+    background-color: var(--cds-layer-01);
+    border: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+
+    .thf-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: spacing.$spacing-03 spacing.$spacing-04;
+      border-bottom: 1px solid var(--cds-border-subtle-01);
+      font-size: 0.75rem;
+      color: var(--cds-text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+
+      .thf-clear {
+        background: none;
+        border: none;
+        color: var(--cds-link-primary);
+        font-size: 0.75rem;
+        cursor: pointer;
+        text-transform: none;
+        letter-spacing: normal;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+
+    .thf-list {
+      padding: spacing.$spacing-03 0;
+      max-height: 400px;
+      overflow-y: auto;
+
+      .thf-group {
+        padding: spacing.$spacing-02 spacing.$spacing-04;
+
+        .thf-parent {
+          display: flex;
+          align-items: center;
+          gap: spacing.$spacing-02;
+
+          .thf-collapse {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--cds-icon-secondary);
+            border-radius: 4px;
+
+            &:hover {
+              background-color: var(--cds-layer-hover-01);
+              color: var(--cds-icon-primary);
+            }
+          }
+
+          .cds--checkbox-wrapper {
+            cursor: pointer;
+
+            .cds--checkbox-label {
+              cursor: pointer;
+            }
+
+            .cds--checkbox-label-text {
+              font-weight: 600;
+              color: var(--cds-text-primary);
+              cursor: pointer;
+            }
+          }
+        }
+
+        .thf-subtypes {
+          margin-left: calc(24px + spacing.$spacing-02 + spacing.$spacing-05);
+          padding-top: spacing.$spacing-02;
+
+          .cds--checkbox-wrapper {
+            padding: spacing.$spacing-02 0;
+            cursor: pointer;
+
+            .cds--checkbox-label {
+              cursor: pointer;
+            }
+
+            .cds--checkbox-label-text {
+              font-weight: 400;
+              color: var(--cds-text-secondary);
+              cursor: pointer;
+            }
+          }
+        }
+      }
+    }
+  }
+}

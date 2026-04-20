@@ -91,6 +91,7 @@ type ChartDataMapping struct {
 	Limit         int               `json:"limit" bson:"limit"`                       // Max rows to return
 	ColumnAliases map[string]string `json:"column_aliases" bson:"column_aliases"`     // Display names for columns (column name -> display name), primarily for dataview
 	VisibleColumns []string         `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
+	ColumnWidths  map[string]int    `json:"column_widths,omitempty" bson:"column_widths,omitempty"` // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
 	Parser        *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"` // Per-component data extraction for streaming (MQTT, ts-store MQTT)
 }
 

@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { createContext, useCallback, useContext, useRef } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 
 const ModeGuardContext = createContext(null);
 
@@ -27,6 +27,12 @@ const ModeGuardContext = createContext(null);
  */
 export function ModeGuardProvider({ children }) {
   const guardRef = useRef(null);
+  // Tracks whether the dashboard viewer is currently in edit mode.
+  // App.jsx's URL→mode sync reads this so that a user editing a
+  // dashboard at /view/dashboards/:id (reached via the design-list
+  // click or the Edit button) keeps the mode pill on DESIGN, and
+  // flips back to VIEW once edit is exited.
+  const [isEditingDashboard, setIsEditingDashboard] = useState(false);
 
   const setModeGuard = useCallback((fn) => {
     guardRef.current = fn;
@@ -54,7 +60,13 @@ export function ModeGuardProvider({ children }) {
     }
   }, []);
 
-  const value = { setModeGuard, clearModeGuard, runModeGuard };
+  const value = {
+    setModeGuard,
+    clearModeGuard,
+    runModeGuard,
+    isEditingDashboard,
+    setIsEditingDashboard,
+  };
 
   return (
     <ModeGuardContext.Provider value={value}>
@@ -72,6 +84,8 @@ export function useModeGuard() {
       setModeGuard: () => {},
       clearModeGuard: () => {},
       runModeGuard: async () => ({ proceed: true }),
+      isEditingDashboard: false,
+      setIsEditingDashboard: () => {},
     };
   }
   return ctx;

@@ -181,7 +181,16 @@ function DashboardViewerPage({ canDesign = false }) {
   // can decide proceed/stay.
   const [modeSwitchPromptOpen, setModeSwitchPromptOpen] = useState(false);
   const modeSwitchResolveRef = useRef(null);
-  const { setModeGuard, clearModeGuard } = useModeGuard();
+  const { setModeGuard, clearModeGuard, setIsEditingDashboard } = useModeGuard();
+
+  // Tell App.jsx's mode sync to keep the header pill on DESIGN while we're
+  // editing, or while we're viewing this dashboard as a design-mode preview
+  // (eye icon in the design list). When neither applies, clear the flag so
+  // the normal /view/... → VIEW sync takes over.
+  useEffect(() => {
+    setIsEditingDashboard(isEditMode || fromDesign);
+    return () => setIsEditingDashboard(false);
+  }, [isEditMode, fromDesign, setIsEditingDashboard]);
   const { pushToast } = useNotifications();
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
@@ -865,20 +874,34 @@ function DashboardViewerPage({ canDesign = false }) {
     setIsEditMode(true);
   };
 
-  // Edit mode is always entered from the design list (via autoEdit state or
-  // new-dashboard flow). Cancel always returns to that list — viewing a
-  // dashboard read-only is a separate mode-toggle action from the header.
+  // Cancel returns to wherever the user came from:
+  //   - Came from design list (fromDesign=true) → back to /design/dashboards
+  //   - Came from view mode (clicked Edit on a dashboard they were
+  //     viewing) → drop edit mode in place; the viewer keeps showing
+  //     the same dashboard with normal view-mode chrome restored.
+  // For new dashboards there's nothing to view, so always go to the
+  // design list.
   const exitEditMode = () => {
     if (editHasChanges) {
       setShowDiscardModal(true);
       return;
     }
-    navigate('/design/dashboards', { replace: true });
+    finishCancelNavigation();
   };
 
   const confirmDiscard = () => {
     setShowDiscardModal(false);
-    navigate('/design/dashboards', { replace: true });
+    finishCancelNavigation();
+  };
+
+  const finishCancelNavigation = () => {
+    if (isNewDashboard || fromDesign) {
+      navigate('/design/dashboards', { replace: true });
+      return;
+    }
+    // Stay on this dashboard but drop out of edit mode.
+    setIsEditMode(false);
+    setEditHasChanges(false);
   };
 
   const handleDimensionChange = (newDimension) => {

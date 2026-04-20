@@ -25,7 +25,7 @@ import {
   Modal,
   Checkbox
 } from '@carbon/react';
-import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit, StringInteger } from '@carbon/icons-react';
+import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
 import { API_BASE } from '../api/client';
 import SQLQueryBuilder from './SQLQueryBuilder';
@@ -273,6 +273,7 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [sortOrder, setSortOrder] = useState('desc');
   const [limitRows, setLimitRows] = useState(0);
   const [columnAliases, setColumnAliases] = useState({}); // For dataview: column name -> display name
+  const [columnWidths, setColumnWidths] = useState({}); // For dataview: column name -> px width (chart default; users can override per-user via dataview_layouts)
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -554,6 +555,7 @@ const ChartEditor = forwardRef(function ChartEditor({
       setSortOrder(chart.data_mapping?.sort_order || 'desc');
       setLimitRows(chart.data_mapping?.limit || 0);
       setColumnAliases(chart.data_mapping?.column_aliases || {});
+      setColumnWidths(chart.data_mapping?.column_widths || {});
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
@@ -1131,8 +1133,8 @@ const ChartEditor = forwardRef(function ChartEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser);
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, columnWidths, chart?.id || '');
+  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, columnWidths, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1290,6 +1292,7 @@ const ChartEditor = forwardRef(function ChartEditor({
         sort_order: sortOrder || 'desc',
         limit: limitRows || 0,
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
+        column_widths: Object.keys(columnWidths).length > 0 ? columnWidths : null,
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -2131,9 +2134,24 @@ const ChartEditor = forwardRef(function ChartEditor({
                                 {allVisible ? 'Hide all' : 'Show all'}
                               </Button>
                             </div>
-                            <p className="aliases-hint">Check to include the column in the table. Optional display name renames the header.</p>
-                            <div className="aliases-grid">
-                              {availableColumns.map(col => (
+                            <p className="aliases-hint">Check to include the column. Drag the ↕ handle to reorder, set width in px, set an optional display name.</p>
+                            {(() => {
+                              // Visible columns render in their saved
+                              // order (effectiveVisible), then hidden
+                              // columns at the bottom. Reorder buttons
+                              // only act inside the visible group.
+                              const visibleList = effectiveVisible.filter(c => availableColumns.includes(c));
+                              const hiddenList = availableColumns.filter(c => !visibleList.includes(c));
+                              const moveColumn = (col, delta) => {
+                                const idx = visibleList.indexOf(col);
+                                const target = idx + delta;
+                                if (idx < 0 || target < 0 || target >= visibleList.length) return;
+                                const next = [...visibleList];
+                                next.splice(idx, 1);
+                                next.splice(target, 0, col);
+                                setVisibleColumns(next);
+                              };
+                              const renderRow = (col, opts) => (
                                 <div key={col} className="alias-row" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                   <Checkbox
                                     id={`visible-${col}`}
@@ -2141,7 +2159,49 @@ const ChartEditor = forwardRef(function ChartEditor({
                                     checked={isVisible(col)}
                                     onChange={() => toggleVisible(col)}
                                   />
-                                  <span className="column-name" title={col} style={{ flex: '0 0 auto' }}>{col}</span>
+                                  <div style={{ display: 'inline-flex', flexDirection: 'column', visibility: opts.canReorder ? 'visible' : 'hidden' }}>
+                                    <IconButton
+                                      kind="ghost"
+                                      size="sm"
+                                      label="Move up"
+                                      onClick={() => moveColumn(col, -1)}
+                                      disabled={!opts.canMoveUp}
+                                    >
+                                      <CaretUp size={14} />
+                                    </IconButton>
+                                    <IconButton
+                                      kind="ghost"
+                                      size="sm"
+                                      label="Move down"
+                                      onClick={() => moveColumn(col, 1)}
+                                      disabled={!opts.canMoveDown}
+                                    >
+                                      <CaretDown size={14} />
+                                    </IconButton>
+                                  </div>
+                                  <span className="column-name" title={col} style={{ flex: '0 0 9rem' }}>{col}</span>
+                                  <NumberInput
+                                    id={`width-${col}`}
+                                    label=""
+                                    hideLabel
+                                    placeholder="auto"
+                                    value={columnWidths[col] || ''}
+                                    onChange={(_e, { value }) => {
+                                      setColumnWidths(prev => {
+                                        const next = { ...prev };
+                                        const num = Number(value);
+                                        if (!num || num <= 0) delete next[col]; else next[col] = num;
+                                        return next;
+                                      });
+                                    }}
+                                    min={40}
+                                    max={1000}
+                                    step={10}
+                                    hideSteppers
+                                    size="sm"
+                                    disabled={!isVisible(col)}
+                                    style={{ width: '5rem' }}
+                                  />
                                   <TextInput
                                     id={`alias-${col}`}
                                     labelText=""
@@ -2163,8 +2223,18 @@ const ChartEditor = forwardRef(function ChartEditor({
                                     disabled={!isVisible(col)}
                                   />
                                 </div>
-                              ))}
-                            </div>
+                              );
+                              return (
+                                <div className="aliases-grid">
+                                  {visibleList.map((col, i) => renderRow(col, {
+                                    canReorder: true,
+                                    canMoveUp: i > 0,
+                                    canMoveDown: i < visibleList.length - 1,
+                                  }))}
+                                  {hiddenList.map(col => renderRow(col, { canReorder: false, canMoveUp: false, canMoveDown: false }))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })()}
@@ -3337,7 +3407,7 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null) {
+function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, columnWidths = {}, chartId = '') {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 
@@ -3519,9 +3589,13 @@ ${xAxisFormatCode}
     // AG Grid Community emit. Virtualized, Quartz theme skinned with
     // Carbon tokens. Per-column sort, filter, resize, reorder, pin all
     // built-in. Handles streaming journal data that broke the IBM
-    // Products Datagrid. visible_columns + column_aliases honored.
+    // Products Datagrid. visible_columns + column_aliases + column_widths
+    // honored as chart defaults; useDataviewLayout (injected by
+    // DynamicComponentLoader) layers per-user overrides on top.
     const aliasesJson = JSON.stringify(columnAliases || {});
     const visibleJson = visibleColumns === null || visibleColumns === undefined ? 'null' : JSON.stringify(visibleColumns);
+    const widthsJson = JSON.stringify(columnWidths || {});
+    const chartIdLiteral = JSON.stringify(chartId || '');
     const dataSrc = hasTransforms ? 'transformed' : 'data';
     return `const Component = () => {
   const ${useDataFields} = useData({
@@ -3535,11 +3609,32 @@ ${xAxisFormatCode}
 
   const columnAliases = ${aliasesJson};
   const visibleColumnsConfig = ${visibleJson};
+  const chartDefaultWidths = ${widthsJson};
+  const chartId = ${chartIdLiteral};
+
+  // Per-user layout override — order + widths layered on top of the
+  // chart defaults. useDataviewLayout is injected into the eval scope
+  // by DynamicComponentLoader; it returns the user's stored layout
+  // for this chart_id and a saver to push changes back.
+  const { layout: userLayout, saveLayout } = (typeof useDataviewLayout === 'function')
+    ? useDataviewLayout(chartId)
+    : { layout: null, saveLayout: () => {} };
 
   const allColumns = (!loading && !error && ${dataSrc}?.columns) || [];
-  const orderedColumns = visibleColumnsConfig
-    ? visibleColumnsConfig.filter(c => allColumns.includes(c))
-    : allColumns;
+  // Effective order: user's saved order if it covers the same columns,
+  // else chart's visible_columns config, else all columns.
+  const orderedColumns = (() => {
+    const baseOrder = visibleColumnsConfig
+      ? visibleColumnsConfig.filter(c => allColumns.includes(c))
+      : allColumns;
+    if (userLayout?.order && Array.isArray(userLayout.order) && userLayout.order.length > 0) {
+      const known = new Set(baseOrder);
+      const fromUser = userLayout.order.filter(c => known.has(c));
+      const missing = baseOrder.filter(c => !userLayout.order.includes(c));
+      return [...fromUser, ...missing];
+    }
+    return baseOrder;
+  })();
 
   const columnsKey = orderedColumns.join('|');
   // Row objects derived from the latest snapshot. Stable __id (content
@@ -3592,7 +3687,13 @@ ${xAxisFormatCode}
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
-      return {
+      // Width precedence: user override → chart default → typed default.
+      const userWidth = userLayout?.widths?.[col];
+      const chartWidth = chartDefaultWidths[col];
+      const explicitWidth = (userWidth && userWidth > 0)
+        ? userWidth
+        : (chartWidth && chartWidth > 0 ? chartWidth : null);
+      const def = {
         field: col,
         headerName: columnAliases[col] || col,
         sortable: true,
@@ -3607,8 +3708,14 @@ ${xAxisFormatCode}
         },
         minWidth: isNumCol ? 100 : (isTimeCol ? 170 : 120),
       };
+      if (explicitWidth) {
+        def.width = explicitWidth;
+        // Disable flex on this column so the explicit width sticks.
+        def.flex = 0;
+      }
+      return def;
     });
-  }, [columnsKey]);
+  }, [columnsKey, userLayout]);
 
   const defaultColDef = useMemo(() => ({
     sortable: true,
@@ -3616,6 +3723,24 @@ ${xAxisFormatCode}
     filter: true,
     flex: 1,
   }), []);
+
+  // Persist user layout changes (resize + reorder) to app_config.
+  // Debounced via the saver itself in useDataviewLayout.
+  const handleColumnResized = (event) => {
+    if (!event.finished || !event.column || !chartId) return;
+    saveLayout((prev) => {
+      const widths = { ...(prev?.widths || {}) };
+      widths[event.column.getColId()] = event.column.getActualWidth();
+      return { ...prev, widths };
+    });
+  };
+  const handleColumnMoved = (event) => {
+    if (!chartId) return;
+    const api = gridRef.current?.api;
+    if (!api) return;
+    const ids = api.getColumnDefs().map((c) => c.field);
+    saveLayout((prev) => ({ ...prev, order: ids }));
+  };
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading...</div>;
   if (error) return <div style={{ color: '#da1e28', padding: '1rem' }}>Error: {error.message}</div>;
@@ -3639,6 +3764,8 @@ ${xAxisFormatCode}
           suppressCellFocus={true}
           getRowId={(params) => String(params.data.__id)}
           maintainColumnOrder={true}
+          onColumnResized={handleColumnResized}
+          onColumnMoved={handleColumnMoved}
         />
       </div>
     </div>
@@ -3822,8 +3949,13 @@ ${transformsConfig}
 
   // Show legend when using series column (multiple series by value) or multiple y columns
   const showLegend = seriesCol || yAxisCols.length > 1;
-  // Position legend at top, below title if present (title at 8px, legend needs more gap below title)
-  const legendTop = chartName ? 28 : 8;
+  // Title is rendered in React (outside ECharts) so it's centered on the
+  // full panel width regardless of y-axis label width or legend presence.
+  // This keeps line/area/bar titles visually consistent with the dataview
+  // and number chart types (which also render their title in React).
+  // Legend goes at top of the ECharts canvas; no extra gap needed since
+  // the title no longer competes with it.
+  const legendTop = 8;
   // Legend entries must match series.name exactly — for the dual-y path we
   // emit a `seriesNames` array (column name, or the user's override if set),
   // so the legend has to read from that same array. Otherwise the legend
@@ -3832,6 +3964,9 @@ ${transformsConfig}
     ? (seriesCol
         ? `legend: { data: seriesValues.map(String), top: ${legendTop} },`
         : `legend: { data: typeof seriesNames !== 'undefined' ? seriesNames : yColumns, top: ${legendTop} },`)
+    : '';
+  const titleHeader = chartName
+    ? `<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center' }}>${chartName.replace(/'/g, "\\'")}</div>`
     : '';
 
   return `const Component = () => {
@@ -3855,10 +3990,9 @@ ${categoriesCode}
 
   const option = {
     backgroundColor: 'transparent',
-    ${chartName ? `title: { text: '${chartName.replace(/'/g, "\\'")}', left: 'center', top: 0, textStyle: { color: '#f4f4f4', fontSize: 16 } },` : ''}
     tooltip: { trigger: 'axis' },
     ${legendCode}
-    grid: { top: ${showLegend ? (chartName ? 55 : 35) : (chartName ? 30 : 10)}, left: ${showSingleYName ? 50 : 10}, right: 10, bottom: ${showXAxisName ? 40 : 10}, containLabel: true },
+    grid: { top: ${showLegend ? 35 : 10}, left: ${showSingleYName ? 70 : 50}, right: 20, bottom: ${showXAxisName ? 50 : 30}, containLabel: false },
     xAxis: { type: 'category', data: categories${chartType === 'area' ? ', boundaryGap: false' : ''}${showXAxisName ? `, name: '${xAxisLabel.replace(/'/g, "\\'")}', nameLocation: 'middle', nameGap: 30` : ''} },
     ${yAxisCols.length === 2 ? `yAxis: [
       { type: 'value', axisLabel: { color: '#0f62fe' }, axisLine: { show: true, lineStyle: { color: '#0f62fe' } } },
@@ -3867,7 +4001,14 @@ ${categoriesCode}
     series: series
   };
 
-  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />;
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      ${titleHeader}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />
+      </div>
+    </div>
+  );
 };`;
 }
 

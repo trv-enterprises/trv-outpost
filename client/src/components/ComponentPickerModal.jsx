@@ -4,8 +4,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Modal, Search, Tag, Tile, Loading,
-  Dropdown
+  Modal, Search, Tag, Tile, Loading
 } from '@carbon/react';
 import {
   ChartLineSmooth, ChartBar, ChartArea, ChartPie,
@@ -15,6 +14,7 @@ import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from './controls/controlTypes';
 import apiClient from '../api/client';
 import TagFilter from './shared/TagFilter';
+import TypeHierarchyFilter, { matchesTypeSelection } from './shared/TypeHierarchyFilter';
 import './ComponentPickerModal.scss';
 
 // Chart type icon mapping
@@ -42,26 +42,36 @@ const CHART_TYPE_COLORS = {
   custom: 'gray'
 };
 
-// Filter categories for the dropdown
-const CATEGORIES = [
-  { id: 'all', text: 'All Components' },
-  { id: 'chart', text: 'Charts' },
-  { id: 'control', text: 'Controls' },
-  { id: 'display', text: 'Displays' }
-];
+// Map a legacy `category` prop ('chart' | 'control' | 'display' | 'all') to
+// a Set of typed keys so the hierarchy filter starts pre-scoped to the parent.
+function categoryToTypeSet(category) {
+  if (!category || category === 'all') return null;
+  // Build set of all subtype keys for this parent
+  const keys = [];
+  if (category === 'chart') {
+    ['bar', 'line', 'area', 'pie', 'scatter', 'gauge', 'dataview', 'number', 'custom']
+      .forEach(s => keys.push(`chart:${s}`));
+  } else if (category === 'display') {
+    ['frigate_camera', 'weather'].forEach(s => keys.push(`display:${s}`));
+  } else if (category === 'control') {
+    Object.keys(CONTROL_TYPE_INFO).forEach(s => keys.push(`control:${s}`));
+  }
+  return new Set(keys);
+}
 
 /**
  * ComponentPickerModal Component
  *
  * Modal for browsing and selecting existing components (charts, controls, displays).
- * Features categorized filtering, search, and per-type icons.
+ * Features hierarchical type filter, tag filter, search, and per-type icons.
  */
 function ComponentPickerModal({ open, onClose, onSelect, category: initialCategory }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selected, setSelected] = useState(null);
-  const [activeCategory, setActiveCategory] = useState(initialCategory || 'all');
+  // null = all selected; Set of "parent:subtype" keys otherwise.
+  const [selectedTypes, setSelectedTypes] = useState(() => categoryToTypeSet(initialCategory));
   const [tagFilter, setTagFilter] = useState([]);
 
   useEffect(() => {
@@ -69,7 +79,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       fetchItems();
       setSelected(null);
       setSearchTerm('');
-      setActiveCategory(initialCategory || 'all');
+      setSelectedTypes(categoryToTypeSet(initialCategory));
       setTagFilter([]);
     }
   }, [open, initialCategory]);
@@ -93,13 +103,8 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   const filtered = useMemo(() => {
     let result = items;
 
-    // Category filter
-    if (activeCategory !== 'all') {
-      result = result.filter(item => {
-        const type = item.component_type || 'chart';
-        return type === activeCategory;
-      });
-    }
+    // Hierarchical type filter
+    result = result.filter(item => matchesTypeSelection(item, selectedTypes));
 
     // Tag filter (OR semantics — matches the behavior on the list pages)
     if (tagFilter.length > 0) {
@@ -121,17 +126,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
     }
 
     return result;
-  }, [items, activeCategory, tagFilter, searchTerm]);
-
-  // Category counts for dropdown labels
-  const categoryCounts = useMemo(() => {
-    const counts = { all: items.length, chart: 0, control: 0, display: 0 };
-    items.forEach(item => {
-      const type = item.component_type || 'chart';
-      if (counts[type] !== undefined) counts[type]++;
-    });
-    return counts;
-  }, [items]);
+  }, [items, selectedTypes, tagFilter, searchTerm]);
 
   const handleSelect = () => {
     if (selected) onSelect(selected);
@@ -194,18 +189,9 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
     >
       <div className="picker-content">
         <div className="picker-toolbar">
-          <Dropdown
-            id="picker-category"
-            label="Category"
-            titleText=""
-            items={CATEGORIES.map(c => ({
-              ...c,
-              text: `${c.text} (${categoryCounts[c.id] || 0})`
-            }))}
-            selectedItem={CATEGORIES.find(c => c.id === activeCategory)}
-            itemToString={(item) => item?.text || ''}
-            onChange={({ selectedItem }) => setActiveCategory(selectedItem?.id || 'all')}
-            size="md"
+          <TypeHierarchyFilter
+            selectedTypes={selectedTypes}
+            onChange={setSelectedTypes}
           />
           <TagFilter
             entityType="components"
