@@ -13,23 +13,23 @@ builder, a smart-device control plane (MQTT, WebSocket), and
 real-time streaming via SSE.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────┐
 │                        React frontend (5173)                         │
 │    Vite · Carbon Design System (g100)· ECharts · React Router        │
-├─────────────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────────┤
 │  Design mode      │  View mode           │  Manage mode              │
 │  - Connections    │  - Dashboard viewer  │  - Users                  │
 │  - Components     │  - Real-time data    │  - Settings               │
 │  - Dashboards     │  - Fit modes         │  - Devices + Device types │
 │  - AI Builder     │  - Fullscreen        │                           │
-└─────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────┘
                              │
                              │ REST · SSE · WebSocket
                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────┐
 │                      Go backend (port 3001)                          │
 │               Gin · Eclipse Paho (MQTT) · Anthropic SDK              │
-├─────────────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────────┤
 │  Handlers ──▶ Services ──▶ Repositories  ──▶  MongoDB 7              │
 │                │                                                     │
 │                ├──▶ Datasource adapters ──▶  SQL · REST · CSV        │
@@ -41,7 +41,7 @@ real-time streaming via SSE.
 │                      (ring buffer,              to browser           │
 │                       retained-state cache,     subscribers          │
 │                       aggregators)                                   │
-└─────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Technology stack
