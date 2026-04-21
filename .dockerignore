@@ -1,0 +1,41 @@
+# Repo-root .dockerignore used when building the dashboard-server image
+# from the repo root (so the Dockerfile can see both server-go/ and udoc/).
+# Keeps the build context small by excluding anything the image doesn't need.
+
+# VCS
+.git
+.gitignore
+.github
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Top-level junk that isn't part of any image
+dist/
+simulators/
+docs/
+scripts/
+
+# Client is a separate image
+client/node_modules
+client/dist
+
+# udoc: let Docker COPY the sources, but ignore the caches/outputs —
+# the docs-build stage produces udoc/build fresh.
+udoc/node_modules
+udoc/build
+udoc/.docusaurus
+
+# server-go artifacts
+server-go/bin/
+server-go/coverage.out
+server-go/*_test.go
+server-go/docs/swagger.json
+server-go/docs/swagger.yaml
+server-go/config.local.yaml
+server-go/*.local.yaml

@@ -551,9 +551,12 @@ func main() {
 	fmt.Println("✓ TSStore inbound WebSocket at ws://localhost:3001/api/streams/inbound/:datasourceId")
 	fmt.Println("✓ Status WebSocket at ws://localhost:3001/api/ws/status?interval=5s")
 
-	// Serve documentation site at /docs
-	docsPath := filepath.Join(".", "../udoc/build")
-	if _, err := os.Stat(docsPath); !os.IsNotExist(err) {
+	// Serve documentation site at /docs.
+	// Resolve relative to the binary so the container image (where docs are
+	// baked in next to the binary at /app/udoc/build) and local dev builds
+	// (binary under server-go/bin/, docs under repo-root udoc/build) both work.
+	docsPath := resolveDocsPath()
+	if docsPath != "" {
 		router.Static("/docs", docsPath)
 		fmt.Printf("✓ Documentation site enabled at http://localhost:%d/docs\n", cfg.Server.Port)
 	}
@@ -682,4 +685,28 @@ func healthCheck(mongodb *database.MongoDB) gin.HandlerFunc {
 			c.JSON(http.StatusServiceUnavailable, status)
 		}
 	}
+}
+
+// resolveDocsPath finds the Docusaurus build output relative to the server
+// binary. Returns "" if no docs directory is found.
+//
+// Container layout (baked by Dockerfile):    /app/server  +  /app/udoc/build
+// Dev layout (go build -o bin/server):       server-go/bin/server  +  udoc/build (one dir above server-go)
+func resolveDocsPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	exeDir := filepath.Dir(exe)
+	candidates := []string{
+		filepath.Join(exeDir, "udoc", "build"),          // container: /app/udoc/build
+		filepath.Join(exeDir, "..", "udoc", "build"),    // dev: server-go/bin -> server-go/udoc (unused today)
+		filepath.Join(exeDir, "..", "..", "udoc", "build"), // dev: server-go/bin/server -> repo/udoc
+	}
+	for _, p := range candidates {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return p
+		}
+	}
+	return ""
 }

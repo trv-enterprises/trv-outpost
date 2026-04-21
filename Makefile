@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server tarballs docker-push release release-tag clean version-bump
+.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump
 
 # Configuration
 REGISTRY := ghcr.io
@@ -22,12 +22,17 @@ help: ## Show this help message
 	@echo 'Current: $(VERSION)+$(BUILD_NUM)'
 	@echo 'Registry: $(REGISTRY)/$(GITHUB_OWNER)'
 
-build: build-client build-server ## Build client and server
+build: build-client build-docs build-server ## Build client, docs, and server
 
 build-client: ## Build client
 	@echo "Building client..."
 	cd client && npm ci --legacy-peer-deps && npm run build
 	@echo "✓ Client built"
+
+build-docs: ## Build Docusaurus docs site
+	@echo "Building docs..."
+	cd udoc && npm ci && npm run build
+	@echo "✓ Docs built"
 
 build-server: ## Build server binaries (multi-arch)
 	@echo "Building server binaries..."
@@ -61,9 +66,10 @@ docker-push: ## Build and push multi-arch images to ghcr.io
 	@docker buildx use multiarch-builder
 	@echo "Building dashboard-server..."
 	docker buildx build --platform linux/amd64,linux/arm64 \
+		-f ./server-go/Dockerfile \
 		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-server:$(VERSION) \
 		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-server:latest \
-		--push ./server-go
+		--push .
 	@echo "Building dashboard-client..."
 	docker buildx build --platform linux/amd64,linux/arm64 \
 		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-client:$(VERSION) \
