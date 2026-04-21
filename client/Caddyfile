@@ -1,10 +1,13 @@
 {$DOMAIN:localhost} {
-    # Serve static files
-    root * /srv
-    file_server
+    encode gzip
 
     # API proxy to Go backend
     handle /api/* {
+        reverse_proxy server:3001
+    }
+
+    # WebSocket support for streaming endpoints
+    handle /api/streams/* {
         reverse_proxy server:3001
     }
 
@@ -26,31 +29,31 @@
     }
 
     # Docs site (Docusaurus) — served by the Go server from the bundled
-    # /app/udoc/build. The bare /docs hit needs its own handler so it
-    # doesn't fall through to the SPA fallback and render index.html.
-    handle /docs/* {
-        reverse_proxy server:3001
-    }
+    # /app/udoc/build. Both the bare /docs hit and asset subpaths need
+    # handlers so they reach the Go server instead of falling through
+    # to the SPA fallback below.
     handle /docs {
         reverse_proxy server:3001
     }
-
-    # WebSocket support for streaming endpoints
-    handle /api/streams/* {
+    handle /docs/* {
         reverse_proxy server:3001
     }
 
-    # SPA fallback - serve index.html for client-side routing
-    try_files {path} /index.html
+    # SPA fallback — must be last and wrapped in its own terminal handle
+    # so Caddy's directive ordering doesn't hoist try_files above the
+    # /docs handlers. handle blocks are first-match-wins, so once a
+    # /docs request lands in the block above, this one is skipped.
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
 
-    # index.html: always revalidate (304 if unchanged, fresh copy on new build)
-    @html path /index.html /
-    header @html Cache-Control "no-cache"
+        # index.html: always revalidate (304 if unchanged, fresh copy on new build)
+        @html path /index.html /
+        header @html Cache-Control "no-cache"
 
-    # Cache static assets with hashed filenames
-    @assets path /assets/*
-    header @assets Cache-Control "public, max-age=31536000, immutable"
-
-    # Enable compression
-    encode gzip
+        # Cache static assets with hashed filenames
+        @assets path /assets/*
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+    }
 }
