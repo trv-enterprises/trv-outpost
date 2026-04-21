@@ -294,7 +294,7 @@ function AppContent({ onDisconnect }) {
               />
             </div>
             <HeaderGlobalBar>
-              <NamespacePicker />
+              {(userCapabilities.can_design || userCapabilities.can_manage) && <NamespacePicker />}
               <HeaderGlobalAction
                 aria-label={`Help - Build ${buildInfo.buildNumber}`}
                 tooltipAlignment="end"
