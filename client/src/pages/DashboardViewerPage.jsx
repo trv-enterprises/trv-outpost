@@ -1581,7 +1581,7 @@ function DashboardViewerPage({ canDesign = false }) {
               {canDesign && dashboard?.id && !isNewDashboard && (
                 <IconButton
                   kind="ghost"
-                  label="Export this dashboard"
+                  label="Export this dashboard and its related components and connections"
                   align="bottom"
                   onClick={() => setExportModalOpen(true)}
                 >
