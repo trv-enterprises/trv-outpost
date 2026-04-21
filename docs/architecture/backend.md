@@ -1,9 +1,10 @@
 # Backend architecture
 
-The backend is a single Go binary (`cmd/server`) plus an auxiliary
-MCP server binary (`cmd/mcp-server`). It talks to MongoDB for
-persistence, to external data sources via adapters, and to the
-browser over REST, SSE, and a few WebSocket endpoints.
+The backend is a single Go binary (`cmd/server`). It talks to MongoDB
+for persistence, to external data sources via adapters, and to the
+browser over REST, SSE, and a few WebSocket endpoints. The same
+binary also serves the MCP endpoint at `/mcp/sse` — see
+[MCP server](#mcp-server) below.
 
 ## Layered architecture
 
@@ -75,9 +76,8 @@ MongoDB at all.
 ```
 server-go/
 ├── cmd/
-│   ├── server/               Main HTTP server binary
-│   └── mcp-server/           Standalone MCP-over-stdio server (for
-│                             external AI clients like Claude Desktop)
+│   └── server/               Main HTTP server binary — also serves
+│                             the MCP SSE endpoint at /mcp/sse
 ├── config/
 │   ├── config.go             Viper loader
 │   └── config.yaml           Base config (env-override-able)
@@ -167,22 +167,21 @@ in source control contains no credentials.
 
 ## MCP server
 
-Two MCP surfaces exist:
-
-1. **Integrated SSE endpoint** at `GET /mcp/sse` inside the main
-   server. This is what the internal AI Builder uses to call tools
-   during a chart-generation session.
-
-2. **Standalone MCP-over-stdio binary** at `cmd/mcp-server/main.go`.
-   This binary is designed for external AI clients like Claude
-   Desktop to connect to and call the same tool set. It shares the
-   `internal/mcp/` tool registry with the main server so the two
-   surfaces stay in sync.
+The main server exposes a single MCP surface over SSE at
+`GET /mcp/sse` (with JSON-RPC ingress at `POST /mcp/message`). There
+is no standalone stdio binary — stdio-only clients like Claude
+Desktop connect via [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy),
+which bridges stdio to the SSE endpoint.
 
 The tool registry lives in `internal/mcp/` and exposes
-connection-introspection, query, and command execution tools. Each
+connection-introspection, query, and command-execution tools. Each
 registered tool has a schema and a handler; the handler calls into
-the usual service layer.
+the usual service layer. The internal AI Builder and the MCP
+endpoint share this same registry, so adding a tool exposes it to
+both surfaces at once.
+
+See [docs/mcp.md](../mcp.md) for the full tool inventory, the typical
+agent flow, and Claude Desktop setup.
 
 ## Related docs
 

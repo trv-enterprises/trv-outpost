@@ -44,43 +44,42 @@ real-time streaming, and smart device control.
 - **Frigate NVR integration** with camera snapshots, live streams,
   and a thumbnail grid of unreviewed alerts
 - **Role-based user management** (Admin, Designer, Support)
-- **MCP server** — both an integrated SSE endpoint and a standalone
-  MCP-over-stdio binary — so external AI clients like Claude Desktop
+- **MCP server** — integrated SSE endpoint at `/mcp/sse` so external
+  AI clients like Claude Desktop (via [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy))
   can introspect and query connections
 
 ## High-level architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                 React frontend (Vite, port 5173)                 │
-│     Carbon Design System · ECharts · React Router                │
-│  Design mode     │  View mode       │  Manage mode               │
-│  - Connections   │  - Dashboard     │  - Users                   │
-│  - Components    │    viewer        │  - Settings                │
-│  - Dashboards    │  - Live data     │  - Devices                 │
-│  - AI Builder    │  - Fit modes     │                            │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               │  REST · SSE · WebSocket
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Go backend (port 3001)                        │
-│           Gin · Eclipse Paho · Anthropic SDK · Swaggo            │
-│  /api/connections  /api/charts  /api/dashboards  /api/devices    │
-│  /api/tags  /api/ai/sessions  /api/frigate  /api/users  ...      │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-               ┌───────────────┼───────────────────────┐
-               ▼                                       ▼
-        ┌────────────┐                         ┌────────────────┐
-        │  MongoDB 7 │                         │  External      │
-        │            │                         │  connections   │
-        │ Dashboards │                         │  (SQL, REST,   │
-        │ Components │                         │  MQTT, ...)    │
-        │ Datasources│                         └────────────────┘
-        │ Users      │
-        │ Devices    │
-        └────────────┘
+┌──────────────────────────────────────────────────────┐  ┌────────────────────────┐
+│         React frontend (Vite, port 5173)             │  │   External AI agents   │
+│   Carbon Design System · ECharts · React Router      │  │   (Claude Desktop,     │
+│  Design mode    │  View mode      │  Manage mode     │  │   other MCP clients    │
+│  - Connections  │  - Dashboard    │  - Users         │  │    via mcp-proxy)      │
+│  - Components   │    viewer       │  - Settings      │  └────────────┬───────────┘
+│  - Dashboards   │  - Live data    │  - Devices       │               │
+│  - AI Builder   │  - Fit modes    │                  │               │ MCP / SSE
+└─────────────────────────┬────────────────────────────┘               │
+                          │  REST · SSE · WebSocket                    │
+                          ▼                                            ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                           Go backend (port 3001)                                 │
+│                 Gin · Eclipse Paho · Anthropic SDK · Swaggo                      │
+│  /api/connections  /api/charts  /api/dashboards  /api/devices  /api/users        │
+│  /api/tags  /api/ai/sessions  /api/frigate      /mcp/sse  /mcp/message   ...     │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+                         ┌───────────────┼────────────────────────┐
+                         ▼                                        ▼
+                  ┌────────────┐                          ┌────────────────┐
+                  │  MongoDB 7 │                          │  External      │
+                  │            │                          │  connections   │
+                  │ Dashboards │                          │  (SQL, REST,   │
+                  │ Components │                          │  MQTT, ...)    │
+                  │ Datasources│                          └────────────────┘
+                  │ Users      │
+                  │ Devices    │
+                  └────────────┘
 ```
 
 For the full architecture — data model, streaming internals,
@@ -137,6 +136,8 @@ restore).
   start here for anything technical. Sub-documents cover data
   model, backend, frontend, streaming, connections, database, API
   reference, and the grid system.
+- [MCP server](docs/mcp.md) — tool inventory, agent flow, and
+  Claude Desktop setup via `mcp-proxy`
 - [Deployment guide](docs/DEPLOYMENT.md) — production deployment
 - [Test plan](docs/TEST_PLAN.md)
 - [Project CLAUDE.md](CLAUDE.md) — conventions for contributors

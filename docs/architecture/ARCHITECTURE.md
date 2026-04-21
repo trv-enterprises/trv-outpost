@@ -13,19 +13,18 @@ builder, a smart-device control plane (MQTT, WebSocket), and
 real-time streaming via SSE.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        React frontend (5173)                         │
-│    Vite · Carbon Design System (g100)· ECharts · React Router        │
-├──────────────────────────────────────────────────────────────────────┤
-│  Design mode      │  View mode           │  Manage mode              │
-│  - Connections    │  - Dashboard viewer  │  - Users                  │
-│  - Components     │  - Real-time data    │  - Settings               │
-│  - Dashboards     │  - Fit modes         │  - Devices + Device types │
-│  - AI Builder     │  - Fullscreen        │                           │
-└──────────────────────────────────────────────────────────────────────┘
-                             │
-                             │ REST · SSE · WebSocket
-                             ▼
+┌───────────────────────────────────────────┐  ┌────────────────────────┐
+│           React frontend (5173)           │  │  External AI agents    │
+│  Vite · Carbon · ECharts · React Router   │  │  (Claude Desktop +     │
+├───────────────────────────────────────────┤  │  other MCP clients     │
+│  Design    │  View        │  Manage       │  │  via mcp-proxy)        │
+│  - Conns   │  - Viewer    │  - Users      │  └───────────┬────────────┘
+│  - Comps   │  - Live data │  - Settings   │              │             
+│  - Dashes  │  - Fit modes │  - Devices    │              │             
+│  - AI      │  - Fullscrn  │               │              │ MCP / SSE   
+└──────────────────────┬────────────────────┘              │             
+                       │ REST · SSE · WebSocket            │             
+                       ▼                                   ▼             
 ┌──────────────────────────────────────────────────────────────────────┐
 │                      Go backend (port 3001)                          │
 │               Gin · Eclipse Paho (MQTT) · Anthropic SDK              │
@@ -37,10 +36,14 @@ real-time streaming via SSE.
 │                │                               Prometheus · EdgeLake │
 │                │                               ts-store · Frigate NVR│
 │                │                                                     │
-│                └──▶ Streaming engine    ──▶  SSE fan-out             │
-│                      (ring buffer,              to browser           │
-│                       retained-state cache,     subscribers          │
-│                       aggregators)                                   │
+│                ├──▶ Streaming engine    ──▶  SSE fan-out             │
+│                │     (ring buffer,              to browser           │
+│                │      retained-state cache,     subscribers          │
+│                │      aggregators)                                   │
+│                │                                                     │
+│                └──▶ MCP surface          ──▶  /mcp/sse  + /mcp/msg   │
+│                      (tool registry,            (external agents)    │
+│                       shared w/ AI Builder)                          │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 

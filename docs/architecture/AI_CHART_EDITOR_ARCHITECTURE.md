@@ -6,9 +6,9 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              FRONTEND (React)                                        │
+│                              FRONTEND (React)                                       │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│  AIBuilderPage.jsx                                                                   │
+│  AIBuilderPage.jsx                                                                  │
 │       │                                                                             │
 │       └── useAISession.js (hook)                                                    │
 │              │  - manages session state                                             │
@@ -25,9 +25,9 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
                       │ HTTP/WebSocket
                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              BACKEND (Go)                                            │
+│                              BACKEND (Go)                                           │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│  handlers/ai_session_handler.go                                                      │
+│  handlers/ai_session_handler.go                                                     │
 │       │                                                                             │
 │       ├── POST /api/ai/sessions          → CreateSession()                          │
 │       ├── GET  /api/ai/sessions/:id      → GetSession()                             │
@@ -36,7 +36,7 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
 │       ├── DELETE /api/ai/sessions/:id    → CancelSession()                          │
 │       └── GET  /api/ai/sessions/:id/ws   → HandleWebSocket()                        │
 │                                                                                     │
-│  service/ai_session_service.go                                                       │
+│  service/ai_session_service.go                                                      │
 │       │  - Session lifecycle management                                             │
 │       │  - Chart draft creation/management                                          │
 │       │  - WebSocket client registry                                                │
@@ -65,11 +65,11 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           ANTHROPIC CLAUDE API                                       │
+│                           ANTHROPIC CLAUDE API                                      │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│  Model: claude-sonnet-4-20250514                                                     │
-│  Max Tokens: 4096 per response                                                       │
-│  Tool Choice: Forced on first turn (ToolChoiceAny)                                   │
+│  Model: claude-sonnet-4-20250514                                                    │
+│  Max Tokens: 4096 per response                                                      │
+│  Tool Choice: Forced on first turn (ToolChoiceAny)                                  │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

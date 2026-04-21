@@ -694,14 +694,14 @@ Tiles (`tile_*`) and `text_label` skip the top `.control-title` entirely — the
 
 ## Simulator Services
 
-Simulators are hosted on **trv-srv-001 (100.127.19.27)** with port range 21xxx:
+Simulators run on a homelab host and expose the port range 21xxx:
 
-| Service | Endpoint |
-|---------|----------|
-| ts-store | http://100.127.19.27:21080 |
-| WebSocket | ws://100.127.19.27:21081/ws |
-| REST API | http://100.127.19.27:21082 |
-| CSV Server | http://100.127.19.27:21083 |
-| PostgreSQL | 100.127.19.27:21432 |
+| Service    | Port  | Protocol |
+|------------|-------|----------|
+| ts-store   | 21080 | HTTP     |
+| WebSocket  | 21081 | WS (`/ws`) |
+| REST API   | 21082 | HTTP     |
+| CSV Server | 21083 | HTTP     |
+| PostgreSQL | 21432 | TCP      |
 
-See `simulators/README.md` for full documentation.
+The host is deployment-specific. Use the `homelab-deploy` MCP tools to resolve the current simulator host — don't hard-code an address here. See `simulators/README.md` for full documentation.
