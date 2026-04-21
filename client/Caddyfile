@@ -25,6 +25,16 @@
         }
     }
 
+    # Docs site (Docusaurus) — served by the Go server from the bundled
+    # /app/udoc/build. The bare /docs hit needs its own handler so it
+    # doesn't fall through to the SPA fallback and render index.html.
+    handle /docs/* {
+        reverse_proxy server:3001
+    }
+    handle /docs {
+        reverse_proxy server:3001
+    }
+
     # WebSocket support for streaming endpoints
     handle /api/streams/* {
         reverse_proxy server:3001
