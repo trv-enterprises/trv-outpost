@@ -106,10 +106,6 @@ server-go/
     └── version/              Version info for /version endpoint
 ```
 
-Empty directories under `internal/` (`services/`, `tasks/`) are
-scaffolding from earlier plans that were not adopted — they're not
-wired in and can be ignored.
-
 ## Startup sequence
 
 `cmd/server/main.go` does this, in order:

@@ -16,7 +16,6 @@ import (
 type Config struct {
 	Server           ServerConfig                `mapstructure:"server"`
 	MongoDB          MongoDBConfig               `mapstructure:"mongodb"`
-	Asynq            AsynqConfig                 `mapstructure:"asynq"`
 	WebSocket        WebSocketConfig             `mapstructure:"websocket"`
 	LLM              LLMConfig                   `mapstructure:"llm"`
 	Validation       ValidationConfig            `mapstructure:"validation"`
@@ -70,13 +69,6 @@ type MongoDBConfig struct {
 	ConnectionTimeout time.Duration `mapstructure:"connection_timeout"`
 	MaxPoolSize       uint64        `mapstructure:"max_pool_size"`
 	MinPoolSize       uint64        `mapstructure:"min_pool_size"`
-}
-
-type AsynqConfig struct {
-	Concurrency      int            `mapstructure:"concurrency"`
-	Queues           map[string]int `mapstructure:"queues"`
-	RetryMaxAttempts int            `mapstructure:"retry_max_attempts"`
-	ShutdownTimeout  time.Duration  `mapstructure:"shutdown_timeout"`
 }
 
 type WebSocketConfig struct {
