@@ -39,10 +39,11 @@ func (s *DashboardService) PreviewExport(ctx context.Context, dashboardIDs []str
 // returned bundle's arrays are already in dependency order — the
 // importer can apply them in array order without sorting.
 //
-// Connections come back via SanitizeForAPI() so secrets ride out as
-// "********" placeholders. The importer handles those specially: on
-// update it preserves the existing stored value, on create it leaves
-// the literal placeholder for the user to fix.
+// Connections come back via SanitizeForExport() so secrets ride out as
+// "********" placeholders regardless of the per-connection MaskSecrets
+// flag. The importer handles those specially: on update it preserves
+// the existing stored value, on create it leaves the literal
+// placeholder for the user to fix.
 //
 // exportedBy is opaque — the handler typically passes the requester's
 // user GUID so the bundle metadata records who built it.
@@ -120,7 +121,7 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 			// block the export.
 			continue
 		}
-		connections = append(connections, *ds.SanitizeForAPI())
+		connections = append(connections, *ds.SanitizeForExport())
 	}
 
 	// Stable ordering inside each array so the bundle is deterministic

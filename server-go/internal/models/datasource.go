@@ -7,6 +7,8 @@ package models
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -757,87 +759,185 @@ type UnifiedSchemaColumn struct {
 	Sample interface{} `json:"sample,omitempty"`
 }
 
-// SanitizeForAPI returns a copy of the datasource with sensitive fields masked.
-// This should be called before returning datasource data via API responses.
-// Sensitive fields are replaced with SecretMaskedValue ("********") if they have a value.
+// authHeaderNames is the set of HTTP header names whose values are treated
+// as secrets and redacted on sanitize. Matched case-insensitively.
+var authHeaderNames = map[string]struct{}{
+	"authorization":       {},
+	"proxy-authorization": {},
+	"cookie":              {},
+	"set-cookie":          {},
+	"x-api-key":           {},
+	"x-auth-token":        {},
+	"x-access-token":      {},
+}
+
+// maskAuthHeaders returns a copy of headers with any header whose name
+// matches authHeaderNames (case-insensitive) replaced with the masked
+// placeholder. Preserves the original key casing.
+func maskAuthHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return headers
+	}
+	out := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if _, ok := authHeaderNames[strings.ToLower(k)]; ok {
+			out[k] = SecretMaskedValue
+		} else {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// maskURLUserinfo strips `user:password@` from a URL. If the string
+// does not parse as a URL or has no userinfo component, it is returned
+// unchanged.
+func maskURLUserinfo(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
+}
+
+// maskSQLOptions redacts password-like segments inside a SQL connection
+// options string (e.g. "sslmode=require&password=hunter2&connect_timeout=10").
+// Supports `&`-separated, `;`-separated, and space-separated key=value
+// pairs — the three common driver conventions. Keys matched case-insensitively.
+func maskSQLOptions(opts string) string {
+	if opts == "" {
+		return opts
+	}
+	sensitiveKeys := map[string]struct{}{
+		"password":    {},
+		"passwd":      {},
+		"pwd":         {},
+		"sslpassword": {},
+	}
+	mask := func(kv string) string {
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			return kv
+		}
+		key := strings.ToLower(strings.TrimSpace(kv[:eq]))
+		if _, ok := sensitiveKeys[key]; ok {
+			return kv[:eq+1] + SecretMaskedValue
+		}
+		return kv
+	}
+	// Pick the separator the string already uses; default to &.
+	sep := "&"
+	if strings.ContainsRune(opts, ';') && !strings.ContainsRune(opts, '&') {
+		sep = ";"
+	} else if !strings.ContainsRune(opts, '&') && !strings.ContainsRune(opts, ';') && strings.ContainsRune(opts, ' ') {
+		sep = " "
+	}
+	parts := strings.Split(opts, sep)
+	for i, p := range parts {
+		parts[i] = mask(p)
+	}
+	return strings.Join(parts, sep)
+}
+
+// SanitizeForAPI returns a copy of the datasource with sensitive fields
+// masked, but honors the MaskSecrets flag on the record. This is used
+// for API responses where an internal UI may need to round-trip the
+// full object (MaskSecrets=false). Use SanitizeForExport for any
+// artifact that leaves the system.
 func (d *Datasource) SanitizeForAPI() *Datasource {
 	if !d.MaskSecrets {
 		return d
 	}
+	return d.sanitize()
+}
 
-	// Create a deep copy to avoid modifying the original
+// SanitizeForExport returns a copy of the datasource with sensitive
+// fields masked, regardless of the MaskSecrets flag. Exported bundles
+// are publishable artifacts and must never carry credentials.
+func (d *Datasource) SanitizeForExport() *Datasource {
+	return d.sanitize()
+}
+
+// sanitize returns a masked copy of the datasource. Every secret-bearing
+// field across every ConnectionConfig sub-struct is redacted.
+func (d *Datasource) sanitize() *Datasource {
 	sanitized := *d
 
-	// Sanitize SQL config
 	if d.Config.SQL != nil {
 		sqlCopy := *d.Config.SQL
 		if sqlCopy.Password != "" {
 			sqlCopy.Password = SecretMaskedValue
 		}
+		sqlCopy.Options = maskSQLOptions(sqlCopy.Options)
 		sanitized.Config.SQL = &sqlCopy
 	}
 
-	// Sanitize API config
 	if d.Config.API != nil {
 		apiCopy := *d.Config.API
+		apiCopy.URL = maskURLUserinfo(apiCopy.URL)
 		if len(apiCopy.AuthCredentials) > 0 {
-			maskedCreds := make(map[string]string)
+			maskedCreds := make(map[string]string, len(apiCopy.AuthCredentials))
 			for k := range apiCopy.AuthCredentials {
 				maskedCreds[k] = SecretMaskedValue
 			}
 			apiCopy.AuthCredentials = maskedCreds
 		}
-		// Also mask Authorization header if present
-		if len(apiCopy.Headers) > 0 {
-			headersCopy := make(map[string]string)
-			for k, v := range apiCopy.Headers {
-				if k == "Authorization" || k == "authorization" || k == "X-API-Key" || k == "x-api-key" {
-					headersCopy[k] = SecretMaskedValue
-				} else {
-					headersCopy[k] = v
-				}
+		apiCopy.Headers = maskAuthHeaders(apiCopy.Headers)
+		// Body and QueryParams are user-authored freeform fields that
+		// commonly contain tokens or api keys. We can't reliably
+		// redact inside them, so mask them whole on any non-empty
+		// value. Importer will prompt the user to re-enter.
+		if apiCopy.Body != "" {
+			apiCopy.Body = SecretMaskedValue
+		}
+		if len(apiCopy.QueryParams) > 0 {
+			maskedParams := make(map[string]string, len(apiCopy.QueryParams))
+			for k := range apiCopy.QueryParams {
+				maskedParams[k] = SecretMaskedValue
 			}
-			apiCopy.Headers = headersCopy
+			apiCopy.QueryParams = maskedParams
 		}
 		sanitized.Config.API = &apiCopy
 	}
 
-	// Sanitize TSStore config
 	if d.Config.TSStore != nil {
 		tsCopy := *d.Config.TSStore
 		if tsCopy.APIKey != "" {
 			tsCopy.APIKey = SecretMaskedValue
 		}
+		tsCopy.Headers = maskAuthHeaders(tsCopy.Headers)
 		sanitized.Config.TSStore = &tsCopy
 	}
 
-	// Sanitize Socket config (headers may contain auth tokens)
 	if d.Config.Socket != nil {
 		socketCopy := *d.Config.Socket
-		if len(socketCopy.Headers) > 0 {
-			headersCopy := make(map[string]string)
-			for k, v := range socketCopy.Headers {
-				if k == "Authorization" || k == "authorization" || k == "X-API-Key" || k == "x-api-key" {
-					headersCopy[k] = SecretMaskedValue
-				} else {
-					headersCopy[k] = v
-				}
-			}
-			socketCopy.Headers = headersCopy
-		}
+		socketCopy.URL = maskURLUserinfo(socketCopy.URL)
+		socketCopy.Headers = maskAuthHeaders(socketCopy.Headers)
 		sanitized.Config.Socket = &socketCopy
 	}
 
-	// Sanitize MQTT config
+	if d.Config.Prometheus != nil {
+		promCopy := *d.Config.Prometheus
+		promCopy.URL = maskURLUserinfo(promCopy.URL)
+		if promCopy.Password != "" {
+			promCopy.Password = SecretMaskedValue
+		}
+		sanitized.Config.Prometheus = &promCopy
+	}
+
 	if d.Config.MQTT != nil {
 		mqttCopy := *d.Config.MQTT
+		mqttCopy.BrokerURL = maskURLUserinfo(mqttCopy.BrokerURL)
 		if mqttCopy.Password != "" {
 			mqttCopy.Password = SecretMaskedValue
 		}
 		sanitized.Config.MQTT = &mqttCopy
 	}
 
-	// Sanitize Frigate config
 	if d.Config.Frigate != nil {
 		frigateCopy := *d.Config.Frigate
 		if frigateCopy.Password != "" {
