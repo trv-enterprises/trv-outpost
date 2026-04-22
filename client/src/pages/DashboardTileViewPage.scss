@@ -5,9 +5,16 @@
 @use '@carbon/styles/scss/spacing' as spacing;
 @use '@carbon/colors' as colors;
 
+// Higher-specificity selector (matches App.scss `.app-content.cds--content > *`)
+// so overflow-y: auto wins over the parent's `overflow: hidden` rule.
+.app-content.cds--content > .dashboard-tile-view-page {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .dashboard-tile-view-page {
   padding: spacing.$spacing-05;
-  min-height: 100%;
+  height: 100%;
   background: var(--cds-background);
 
   .tile-view-header {
