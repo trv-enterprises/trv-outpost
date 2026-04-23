@@ -3,8 +3,8 @@
 // See LICENSE file for details.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Dropdown, Button, Tag, IconButton } from '@carbon/react';
-import { VideoPlayer, ViewOff, Renew } from '@carbon/icons-react';
+import { Dropdown, Button } from '@carbon/react';
+import { VideoPlayer } from '@carbon/icons-react';
 import JSMpeg from 'jsmpeg-player';
 import apiClient from '../../api/client';
 import './FrigateCameraViewer.scss';
@@ -12,31 +12,26 @@ import './FrigateCameraViewer.scss';
 /**
  * FrigateCameraViewer Component
  *
- * Displays a Frigate NVR camera feed with three modes:
+ * Displays a Frigate NVR camera feed with two modes:
  * - idle: Polls latest.jpg snapshot every N seconds
  * - live: go2rtc MSE live stream via WebSocket
- * - alert: Shows alert event snapshot with "Play Clip" option
  *
- * This is explicitly a Frigate-specific component — not a generic camera viewer.
+ * Alerts are intentionally NOT handled here — that is the FrigateAlertsGrid
+ * component's responsibility. This widget is purely a camera viewer.
  */
 function FrigateCameraViewer({ config }) {
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(config?.default_camera || '');
-  const [mode, setMode] = useState('idle'); // 'idle' | 'live' | 'alert'
+  const [mode, setMode] = useState('idle'); // 'idle' | 'live'
   const [snapshotUrl, setSnapshotUrl] = useState('');
   const [snapshotKey, setSnapshotKey] = useState(0); // Force img reload
-  const [alertEvent, setAlertEvent] = useState(null);
-  const [playingClip, setPlayingClip] = useState(false);
   const [error, setError] = useState(null);
 
   const canvasRef = useRef(null);
   const playerRef = useRef(null);
   const snapshotIntervalRef = useRef(null);
-  const mqttCleanupRef = useRef(null);
 
   const connectionId = config?.frigate_connection_id;
-  const mqttConnectionId = config?.mqtt_connection_id;
-  const alertTopic = config?.alert_topic || 'frigate/reviews';
   const snapshotInterval = config?.snapshot_interval || 10000;
 
   // Fetch camera list on mount
@@ -93,63 +88,6 @@ function FrigateCameraViewer({ config }) {
     };
   }, [mode, selectedCamera, connectionId, snapshotInterval]);
 
-  // MQTT alert subscription
-  useEffect(() => {
-    if (!mqttConnectionId || !selectedCamera) return;
-
-    // Dynamic import to avoid circular dependencies.
-    const setupMqtt = async () => {
-      try {
-        const { default: StreamConnectionManager } = await import('../../utils/streamConnectionManager');
-        const manager = StreamConnectionManager.getInstance();
-
-        const handleMessage = (record) => {
-          try {
-            // Manager emits SSE records with { topic, data, ... }; unwrap
-            // to the Frigate review event payload.
-            const payload = record?.data != null
-              ? (typeof record.data === 'string' ? JSON.parse(record.data) : record.data)
-              : record;
-
-            if (payload?.type === 'new' && payload.after) {
-              const event = payload.after;
-              if (event.camera === selectedCamera && event.severity === 'alert') {
-                setAlertEvent({
-                  id: event.id,
-                  camera: event.camera,
-                  startTime: event.start_time,
-                  objects: event.data?.objects || [],
-                  label: (event.data?.objects || []).join(', ') || 'motion'
-                });
-                setMode('alert');
-                setPlayingClip(false);
-              }
-            }
-          } catch {
-            // Ignore unparseable messages
-          }
-        };
-
-        mqttCleanupRef.current = manager.subscribe(
-          mqttConnectionId,
-          handleMessage,
-          { topics: alertTopic }
-        );
-      } catch (err) {
-        console.warn('Failed to subscribe to MQTT alerts:', err);
-      }
-    };
-
-    setupMqtt();
-
-    return () => {
-      if (mqttCleanupRef.current) {
-        mqttCleanupRef.current();
-        mqttCleanupRef.current = null;
-      }
-    };
-  }, [mqttConnectionId, selectedCamera, alertTopic]);
-
   const cleanupLiveStream = useCallback(() => {
     if (playerRef.current) {
       try {
@@ -201,8 +139,6 @@ function FrigateCameraViewer({ config }) {
     if (selectedItem) {
       if (mode === 'live') cleanupLiveStream();
       setMode('idle');
-      setAlertEvent(null);
-      setPlayingClip(false);
       setSelectedCamera(selectedItem);
     }
   };
@@ -214,28 +150,6 @@ function FrigateCameraViewer({ config }) {
     } else {
       setMode('live');
     }
-  };
-
-  const handleBackToIdle = () => {
-    cleanupLiveStream();
-    setMode('idle');
-    setAlertEvent(null);
-    setPlayingClip(false);
-  };
-
-  const handlePlayClip = () => {
-    if (!alertEvent?.id || !connectionId) return;
-    setPlayingClip(true);
-  };
-
-  const formatTimestamp = (ts) => {
-    if (!ts) return '';
-    const date = new Date(ts * 1000);
-    const now = new Date();
-    const diffSec = Math.floor((now - date) / 1000);
-    if (diffSec < 60) return `${diffSec}s ago`;
-    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-    return date.toLocaleTimeString();
   };
 
   if (!connectionId) {
@@ -284,11 +198,6 @@ function FrigateCameraViewer({ config }) {
               {mode === 'live' ? 'Stop' : 'Live'}
             </Button>
           )}
-          {mode === 'alert' && (
-            <Button kind="ghost" size="sm" onClick={handleBackToIdle}>
-              Back
-            </Button>
-          )}
         </div>
       </div>
 
@@ -312,43 +221,7 @@ function FrigateCameraViewer({ config }) {
             className="frigate-camera-viewer__canvas"
           />
         )}
-
-        {/* Alert mode — event snapshot or clip */}
-        {mode === 'alert' && alertEvent && (
-          <>
-            {playingClip ? (
-              <video
-                src={apiClient.getFrigateEventClipUrl(connectionId, alertEvent.id)}
-                className="frigate-camera-viewer__video"
-                autoPlay
-                controls
-                playsInline
-              />
-            ) : (
-              <img
-                src={apiClient.getFrigateEventSnapshotUrl(connectionId, alertEvent.id)}
-                alt={`Alert: ${alertEvent.label}`}
-                className="frigate-camera-viewer__snapshot"
-              />
-            )}
-          </>
-        )}
       </div>
-
-      {/* Alert bar */}
-      {mode === 'alert' && alertEvent && (
-        <div className="frigate-camera-viewer__alert-bar">
-          <Tag type="red" size="sm">{alertEvent.label}</Tag>
-          <span className="frigate-camera-viewer__alert-time">
-            {formatTimestamp(alertEvent.startTime)}
-          </span>
-          {!playingClip && (
-            <Button kind="ghost" size="sm" onClick={handlePlayClip}>
-              Play Clip
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

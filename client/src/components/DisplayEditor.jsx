@@ -304,29 +304,6 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
             />
           )}
 
-          <Dropdown
-            id="mqtt-connection"
-            titleText="MQTT Connection (optional)"
-            label="Select MQTT connection for alerts"
-            items={[{ id: '', name: 'None' }, ...mqttConnections]}
-            itemToString={(item) => item?.name || ''}
-            selectedItem={mqttConnections.find(c => c.id === config.mqtt_connection_id) || { id: '', name: 'None' }}
-            onChange={({ selectedItem }) => {
-              updateConfig({ mqtt_connection_id: selectedItem?.id || '' });
-            }}
-          />
-
-          {config.mqtt_connection_id && (
-            <TextInput
-              id="alert-topic"
-              labelText="Alert Topic"
-              value={config.alert_topic || 'frigate/reviews'}
-              onChange={(e) => updateConfig({ alert_topic: e.target.value })}
-              helperText="MQTT topic for Frigate review events"
-              size="md"
-            />
-          )}
-
           <NumberInput
             id="snapshot-interval"
             label="Snapshot Interval (ms)"
