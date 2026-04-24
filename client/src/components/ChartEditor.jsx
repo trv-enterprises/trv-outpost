@@ -273,7 +273,6 @@ const ChartEditor = forwardRef(function ChartEditor({
   const [sortOrder, setSortOrder] = useState('desc');
   const [limitRows, setLimitRows] = useState(0);
   const [columnAliases, setColumnAliases] = useState({}); // For dataview: column name -> display name
-  const [columnWidths, setColumnWidths] = useState({}); // For dataview: column name -> px width (chart default; users can override per-user via dataview_layouts)
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -555,7 +554,6 @@ const ChartEditor = forwardRef(function ChartEditor({
       setSortOrder(chart.data_mapping?.sort_order || 'desc');
       setLimitRows(chart.data_mapping?.limit || 0);
       setColumnAliases(chart.data_mapping?.column_aliases || {});
-      setColumnWidths(chart.data_mapping?.column_widths || {});
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
@@ -1133,8 +1131,8 @@ const ChartEditor = forwardRef(function ChartEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, columnWidths, chart?.id || '');
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, columnWidths, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '');
+  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1292,7 +1290,6 @@ const ChartEditor = forwardRef(function ChartEditor({
         sort_order: sortOrder || 'desc',
         limit: limitRows || 0,
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
-        column_widths: Object.keys(columnWidths).length > 0 ? columnWidths : null,
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -2134,7 +2131,7 @@ const ChartEditor = forwardRef(function ChartEditor({
                                 {allVisible ? 'Hide all' : 'Show all'}
                               </Button>
                             </div>
-                            <p className="aliases-hint">Check to include the column. Drag the ↕ handle to reorder, set width in px, set an optional display name.</p>
+                            <p className="aliases-hint">Check to include the column. Use the ↕ arrows to reorder and set an optional display name. Column widths auto-size to fit the data; drag the header in the live table to override.</p>
                             {(() => {
                               // Visible columns render in their saved
                               // order (effectiveVisible), then hidden
@@ -2152,7 +2149,7 @@ const ChartEditor = forwardRef(function ChartEditor({
                                 setVisibleColumns(next);
                               };
                               const renderRow = (col, opts) => (
-                                <div key={col} className="alias-row" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <div key={col} className="alias-row">
                                   <Checkbox
                                     id={`visible-${col}`}
                                     labelText=""
@@ -2179,33 +2176,11 @@ const ChartEditor = forwardRef(function ChartEditor({
                                       <CaretDown size={14} />
                                     </IconButton>
                                   </div>
-                                  <span className="column-name" title={col} style={{ flex: '0 0 9rem' }}>{col}</span>
-                                  <NumberInput
-                                    id={`width-${col}`}
-                                    label=""
-                                    hideLabel
-                                    placeholder="auto"
-                                    value={columnWidths[col] || ''}
-                                    onChange={(_e, { value }) => {
-                                      setColumnWidths(prev => {
-                                        const next = { ...prev };
-                                        const num = Number(value);
-                                        if (!num || num <= 0) delete next[col]; else next[col] = num;
-                                        return next;
-                                      });
-                                    }}
-                                    min={40}
-                                    max={1000}
-                                    step={10}
-                                    hideSteppers
-                                    size="sm"
-                                    disabled={!isVisible(col)}
-                                    style={{ width: '5rem' }}
-                                  />
+                                  <span className="column-name" title={col}>{col}</span>
                                   <TextInput
                                     id={`alias-${col}`}
                                     labelText=""
-                                    placeholder={col}
+                                    placeholder="rename"
                                     value={columnAliases[col] || ''}
                                     onChange={(e) => {
                                       const newValue = e.target.value;
@@ -3407,7 +3382,7 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, columnWidths = {}, chartId = '') {
+function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '') {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 
@@ -3589,12 +3564,13 @@ ${xAxisFormatCode}
     // AG Grid Community emit. Virtualized, Quartz theme skinned with
     // Carbon tokens. Per-column sort, filter, resize, reorder, pin all
     // built-in. Handles streaming journal data that broke the IBM
-    // Products Datagrid. visible_columns + column_aliases + column_widths
-    // honored as chart defaults; useDataviewLayout (injected by
-    // DynamicComponentLoader) layers per-user overrides on top.
+    // Products Datagrid. visible_columns + column_aliases honored as
+    // chart defaults; columns auto-size to their content via AG Grid's
+    // fitCellContents strategy. useDataviewLayout (injected by
+    // DynamicComponentLoader) layers per-user resize/reorder overrides
+    // on top.
     const aliasesJson = JSON.stringify(columnAliases || {});
     const visibleJson = visibleColumns === null || visibleColumns === undefined ? 'null' : JSON.stringify(visibleColumns);
-    const widthsJson = JSON.stringify(columnWidths || {});
     const chartIdLiteral = JSON.stringify(chartId || '');
     const dataSrc = hasTransforms ? 'transformed' : 'data';
     return `const Component = () => {
@@ -3609,7 +3585,6 @@ ${xAxisFormatCode}
 
   const columnAliases = ${aliasesJson};
   const visibleColumnsConfig = ${visibleJson};
-  const chartDefaultWidths = ${widthsJson};
   const chartId = ${chartIdLiteral};
 
   // Per-user layout override — order + widths layered on top of the
@@ -3687,12 +3662,11 @@ ${xAxisFormatCode}
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
-      // Width precedence: user override → chart default → typed default.
+      // User-override widths (set by live drag-resize, persisted via
+      // useDataviewLayout) take precedence over the grid's autosize.
+      // Without a user override, the grid's autoSizeStrategy sizes
+      // the column to its content on mount.
       const userWidth = userLayout?.widths?.[col];
-      const chartWidth = chartDefaultWidths[col];
-      const explicitWidth = (userWidth && userWidth > 0)
-        ? userWidth
-        : (chartWidth && chartWidth > 0 ? chartWidth : null);
       const def = {
         field: col,
         headerName: columnAliases[col] || col,
@@ -3708,20 +3682,22 @@ ${xAxisFormatCode}
         },
         minWidth: isNumCol ? 100 : (isTimeCol ? 170 : 120),
       };
-      if (explicitWidth) {
-        def.width = explicitWidth;
-        // Disable flex on this column so the explicit width sticks.
+      if (userWidth && userWidth > 0) {
+        def.width = userWidth;
         def.flex = 0;
       }
       return def;
     });
   }, [columnsKey, userLayout]);
 
+  // No default flex — columns size to their content via the grid's
+  // autoSizeStrategy=fitCellContents. A default flex=1 would cause
+  // AG Grid to redistribute leftover row space evenly across columns,
+  // overriding the autosize.
   const defaultColDef = useMemo(() => ({
     sortable: true,
     resizable: true,
     filter: true,
-    flex: 1,
   }), []);
 
   // Persist user layout changes (resize + reorder) to app_config.
@@ -3760,6 +3736,7 @@ ${xAxisFormatCode}
           rowData={initialRowDataRef.current || []}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
+          autoSizeStrategy={{ type: 'fitCellContents' }}
           animateRows={false}
           suppressCellFocus={true}
           getRowId={(params) => String(params.data.__id)}
