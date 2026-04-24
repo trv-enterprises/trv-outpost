@@ -89,8 +89,17 @@ Topic-focused sub-docs. Start wherever matches your question.
 | [Connections](connections.md)                       | Connection registry and per-type adapters                                    |
 | [Database](database.md)                             | Collations, migrations, indexing strategy, secret masking                    |
 | [API reference](api-reference.md)                   | Full endpoint tables by domain                                               |
-| [Grid system](grid-system.md)                       | 32px cells, 12 columns, fit modes, layout-dimension presets                  |
+| [Grid system](grid-system.md)                       | 32×32 px cells, canvas-derived cols/rows, fit modes, layout-dimension presets |
 | [AI Chart Editor](AI_CHART_EDITOR_ARCHITECTURE.md)  | AI Builder session lifecycle, tools, system prompt                           |
+| [MCP server](../mcp.md)                             | External-agent tool surface: endpoints, tool inventory, `mcp-proxy` setup     |
+
+External reference implementations:
+
+- [`cmd/dashboard-agent`](../../server-go/cmd/dashboard-agent) — CLI
+  agent that drives the MCP server end-to-end; see
+  [examples/dashboard-agent](../../examples/dashboard-agent/) for a
+  full walkthrough of a 14-panel Prometheus dashboard built in 12
+  turns against a minimal natural-language prompt.
 
 ## Application modes
 

@@ -274,48 +274,7 @@ func (a *PrometheusAdapter) executeInstantQueryRegistry(ctx context.Context, pro
 
 // parseTimeInternal parses time formats
 func (a *PrometheusAdapter) parseTimeInternal(timeStr string) (time.Time, error) {
-	timeStr = strings.TrimSpace(timeStr)
-
-	if strings.HasPrefix(timeStr, "now") {
-		now := time.Now()
-		if timeStr == "now" {
-			return now, nil
-		}
-		offset := strings.TrimPrefix(timeStr, "now")
-		if len(offset) > 0 {
-			if offset[0] == '-' {
-				duration, err := time.ParseDuration(offset[1:])
-				if err != nil {
-					return time.Time{}, fmt.Errorf("invalid duration: %s", offset)
-				}
-				return now.Add(-duration), nil
-			} else if offset[0] == '+' {
-				duration, err := time.ParseDuration(offset[1:])
-				if err != nil {
-					return time.Time{}, fmt.Errorf("invalid duration: %s", offset)
-				}
-				return now.Add(duration), nil
-			}
-		}
-		return now, nil
-	}
-
-	if ts, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-		return time.Unix(ts, 0), nil
-	}
-
-	if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
-		return t, nil
-	}
-
-	formats := []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02"}
-	for _, format := range formats {
-		if t, err := time.Parse(format, timeStr); err == nil {
-			return t, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("unrecognized time format: %s", timeStr)
+	return parsePromTime(timeStr)
 }
 
 // doRequestInternal executes an HTTP request
@@ -625,53 +584,80 @@ func (p *PrometheusDataSource) executeInstantQuery(ctx context.Context, promQL s
 
 // parseTime parses various time formats: RFC3339, unix timestamp, or relative (now-1h)
 func (p *PrometheusDataSource) parseTime(timeStr string) (time.Time, error) {
-	timeStr = strings.TrimSpace(timeStr)
+	return parsePromTime(timeStr)
+}
 
-	// Handle "now" and relative times
+// parsePromTime is the shared time-string parser used by both
+// PrometheusAdapter and PrometheusDataSource. It accepts:
+//
+//   - "now", "now-1h", "now+5m"  — relative to the current instant
+//   - "-1h", "+30m", "1h"        — bare durations, treated as offsets
+//     from now (unsigned = past)
+//   - Unix seconds as an integer
+//   - RFC3339
+//   - "2006-01-02T15:04:05" / "2006-01-02 15:04:05" / "2006-01-02"
+//
+// The bare-duration form matters for agent compatibility — LLMs and
+// humans both commonly write "-1h" when they mean "one hour ago," and
+// rejecting that form is a pointless papercut.
+func parsePromTime(timeStr string) (time.Time, error) {
+	timeStr = strings.TrimSpace(timeStr)
+	if timeStr == "" {
+		return time.Time{}, fmt.Errorf("empty time string")
+	}
+
+	// "now" / "now-..." / "now+..."
 	if strings.HasPrefix(timeStr, "now") {
 		now := time.Now()
 		if timeStr == "now" {
 			return now, nil
 		}
-
-		// Parse relative offset (e.g., "now-1h", "now-30m")
 		offset := strings.TrimPrefix(timeStr, "now")
 		if len(offset) > 0 {
-			// Handle negative offsets
 			if offset[0] == '-' {
-				duration, err := time.ParseDuration(offset[1:])
+				d, err := time.ParseDuration(offset[1:])
 				if err != nil {
 					return time.Time{}, fmt.Errorf("invalid duration: %s", offset)
 				}
-				return now.Add(-duration), nil
-			} else if offset[0] == '+' {
-				duration, err := time.ParseDuration(offset[1:])
+				return now.Add(-d), nil
+			}
+			if offset[0] == '+' {
+				d, err := time.ParseDuration(offset[1:])
 				if err != nil {
 					return time.Time{}, fmt.Errorf("invalid duration: %s", offset)
 				}
-				return now.Add(duration), nil
+				return now.Add(d), nil
 			}
 		}
 		return now, nil
 	}
 
-	// Try unix timestamp
+	// Bare duration: "-1h", "+30m", "1h". Treat as offset from now
+	// (unsigned = past, to match Grafana / most monitoring UIs).
+	if timeStr[0] == '-' || timeStr[0] == '+' {
+		if d, err := time.ParseDuration(timeStr[1:]); err == nil {
+			now := time.Now()
+			if timeStr[0] == '-' {
+				return now.Add(-d), nil
+			}
+			return now.Add(d), nil
+		}
+	}
+	if d, err := time.ParseDuration(timeStr); err == nil {
+		// "1h" style — ambiguous, but "past 1h" is the overwhelmingly
+		// common intent in dashboard query params.
+		return time.Now().Add(-d), nil
+	}
+
 	if ts, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
 		return time.Unix(ts, 0), nil
 	}
 
-	// Try RFC3339
 	if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
 		return t, nil
 	}
 
-	// Try common formats
-	formats := []string{
-		"2006-01-02T15:04:05",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, format := range formats {
+	for _, format := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02"} {
 		if t, err := time.Parse(format, timeStr); err == nil {
 			return t, nil
 		}

@@ -211,7 +211,7 @@ func (h *Handler) buildInstructions() string {
 exposes tools for managing **connections** (external data sources like SQL,
 MQTT, EdgeLake, Prometheus, REST APIs), **components** (charts, controls,
 and displays — all stored in one collection, discriminated by component_type),
-and **dashboards** (a name plus a 12-column panel grid where each panel
+and **dashboards** (a name plus a 32x32-px cell panel grid where each panel
 references a component or carries inline text).
 
 # Workflow hints
@@ -227,12 +227,77 @@ When the user asks you to build a dashboard:
 4. Create components with ` + "`create_component`" + ` — pass component_type=chart,
    control, or display and the matching sub-config (query_config+data_mapping
    for charts, control_config for controls, display_config for displays).
-5. Create the dashboard with ` + "`create_dashboard`" + ` passing a panels array that
-   references the component IDs via chart_id. Grid is 12 columns wide.
+5. Create the dashboard with ` + "`create_dashboard`" + ` passing a panels array
+   that references the component IDs via chart_id. See the Grid contract
+   section below for how panel x/y/w/h map to the viewer's 32x32 cell grid.
 
 The ` + "`chart.custom`" + ` subtype is the escape hatch for anything outside the
 canonical chart types: pass use_custom_code=true and provide component_code
 with React source that renders your visualization.
+
+# Grid contract
+
+Dashboards are a flat matrix of 32 x 32 pixel cells with 4 px gaps
+between cells. Panel positions and sizes are expressed in cells via
+` + "`x`" + `, ` + "`y`" + `, ` + "`w`" + `, ` + "`h`" + `.
+
+Available cols/rows depend on the canvas AND on a fixed viewer-chrome
+budget (the app header + toolbar + 4-px padding). The viewer computes:
+
+    cols = floor( canvas_width_px               / 36 )
+    rows = floor( (canvas_height_px - 105)      / 36 )
+
+Worked examples (canvas -> grid):
+
+    2560 x 1440  ->  71 cols x 37 rows
+    1920 x 1080  ->  53 cols x 27 rows
+    1280 x  720  ->  35 cols x 17 rows
+
+Panels must not overlap, and every panel must satisfy
+` + "`x + w <= cols`" + ` and ` + "`y + h <= rows`" + `. When packing N equal panels into
+an A x B grid, compute panel_w = floor(cols / A) and
+panel_h = floor(rows / B).
+
+Don't hardcode "12 columns" — that's a Carbon responsive-breakpoint
+convention, not this app's runtime grid.
+
+# Connection-specific query hints
+
+## Prometheus
+
+When building components against a Prometheus connection, the
+` + "`query_config`" + ` field you pass to ` + "`create_component`" + ` has the form:
+
+    {
+      "raw":    "<PromQL expression>",
+      "type":   "prometheus",           // required — this is the adapter routing key
+      "params": { ... }                 // optional; shape below
+    }
+
+Parameters the Prometheus adapter reads out of ` + "`params`" + `:
+
+- ` + "`query_type`" + ` — ` + "`\"instant\"`" + ` for a single current-value query (gauges,
+  number/stat panels, pie charts), ` + "`\"range\"`" + ` for a time-series query
+  (line/area/bar over time). Default is ` + "`\"range\"`" + `.
+- ` + "`start`" + `, ` + "`end`" + ` — range queries only. Accept:
+    ` + "`\"now\"`" + `, ` + "`\"now-1h\"`" + `, ` + "`\"now-30m\"`" + `
+    ` + "`\"-1h\"`" + `, ` + "`\"+5m\"`" + `, ` + "`\"1h\"`" + ` (all read as offsets from now)
+    Unix seconds as an integer
+    RFC3339 timestamps
+  Default is ` + "`start=\"now-1h\"`" + `, ` + "`end=\"now\"`" + `.
+- ` + "`step`" + ` — range queries only. Go duration string (` + "`\"60s\"`" + `,
+  ` + "`\"1m\"`" + `, ` + "`\"30s\"`" + `). Default ` + "`\"1m\"`" + `.
+
+Omitting ` + "`params`" + ` entirely is fine and gives sensible defaults.
+
+Returned columns for range queries: ` + "`timestamp`" + ` (unix seconds),
+` + "`value`" + ` (number), plus one column per PromQL label (e.g. ` + "`mode`" + `,
+` + "`instance`" + `) when the query produces multiple series. When filling the
+line/area/bar templates, map ` + "`d.value`" + ` → the ` + "`value`" + ` column and
+` + "`d.timestamp`" + ` → the ` + "`timestamp`" + ` column — they already match.
+
+Returned columns for instant queries: same shape but one row only.
+The gauge template reads ` + "`getValue(data, 'value')`" + ` which lines up.
 
 # Staleness
 

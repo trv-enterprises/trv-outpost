@@ -1,40 +1,60 @@
 # Grid system and fit modes
 
-The dashboard grid is a pixel-based CSS grid with fixed-size cells and
-a configurable column count. Panels are placed onto that grid by cell
-coordinates, and the grid is scaled to the viewport in one of four
-ways depending on the user's fit-mode preference.
+The dashboard grid is a pixel-based CSS grid with fixed-size cells.
+Panels are placed onto that grid by cell coordinates, and the grid is
+scaled to the viewport in one of four ways depending on the user's
+fit-mode preference.
 
 ## Cells
 
-- **Cell size**: 32 × 32 px (based on Carbon's `$spacing-08`)
-- **Column count**: 12 columns at the default layout-dimension preset;
-  admins can define additional presets with more or fewer columns via
-  Manage mode
-- **Gap**: 4 px between cells (`$spacing-02`)
+- **Cell size**: 32 × 32 px in both axes (based on Carbon's
+  `$spacing-08`), hardcoded in `DashboardViewerPage.jsx` as
+  `CELL_WIDTH = CELL_HEIGHT = 32`.
+- **Gap**: 4 px between cells (`$spacing-02`).
+- **Chrome**: 109 px vertical (48 app header + 57 toolbar + 4 padding),
+  4 px horizontal (padding). Subtracted from the canvas before the
+  cell count is computed.
 
-A panel's geometry is stored as `{x, y, w, h}` in cell units, so a
-panel that starts at column 0 row 0 and spans 6 columns by 8 rows is
-`{x: 0, y: 0, w: 6, h: 8}`.
+The available cell grid for a given canvas is:
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  1   2   3   4   5   6   7   8   9  10  11  12                │
-├────────────────────────────────────────────────────────────────┤
-│ Panel A (x:0, y:0, w:6, h:8)  │  Panel B (x:6, y:0, w:6, h:4) │
-│                               ├────────────────────────────────┤
-│                               │  Panel C (x:6, y:4, w:6, h:4) │
-└───────────────────────────────┴────────────────────────────────┘
+cols = floor( canvas_width                  / 36 )
+rows = floor( (canvas_height - 105)         / 36 )
 ```
+
+(The stride is `cell + gap = 36`; the `-105` is
+`chrome_v - gap = 109 - 4`; the horizontal chrome and gap cancel.)
+
+Worked examples:
+
+- 2560 × 1440 → **71 cols × 37 rows**
+- 1920 × 1080 → **53 cols × 27 rows**
+- 1280 × 720 → **35 cols × 17 rows**
+
+A panel's geometry is stored as `{x, y, w, h}` in cell units. Example
+on a 1280 × 720 canvas (35 cols × 17 rows):
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  columns 0..34                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│ Panel A (x:0,  y:0, w:17, h:12) │ Panel B (x:17, y:0, w:18, h:6)│
+│                                 ├───────────────────────────────┤
+│                                 │ Panel C (x:17, y:6, w:18, h:6)│
+└─────────────────────────────────┴───────────────────────────────┘
+```
+
+Note: the older "12-column" framing is a Carbon responsive-breakpoint
+convention and is not the runtime grid. Don't conflate them.
 
 ## Layout dimension presets
 
-Admins define layout dimension presets in Manage mode. A preset
-specifies the number of columns and rows the dashboard grid should
-use, plus optional minimum panel sizes. When a dashboard is created,
-the user picks a preset; the preset is stored on
-`dashboard.settings.layout_dimension` and applied whenever the
-dashboard is opened.
+Admins define layout dimension presets in Manage mode. Each preset is
+a pair of `max_width` × `max_height` values in pixels; when a
+dashboard is created the user picks a preset and the pixel canvas is
+stored on `dashboard.settings.layout_dimension`. The cell-count grid
+then falls out of canvas ÷ 32 in each axis — there is no
+preset-specific column override.
 
 ## Fit modes
 

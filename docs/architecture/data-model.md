@@ -332,20 +332,20 @@ etc.).
 
 ## Layout (preset)
 
-```json
-{
-  "id": "default-12col",
-  "name": "Default 12-column",
-  "cols": 12,
-  "rows": 24,
-  "cell_size": 32,
-  "gap": 4
-}
+Layout presets are pixel-canvas sizes (`max_width`, `max_height`) that
+a dashboard's `settings.layout_dimension` picks from. Example preset
+keyed by a human name:
+
+```yaml
+1920x1080-HD: {max_width: 1920, max_height: 1080}
+2560x1440-2k: {max_width: 2560, max_height: 1440}
 ```
 
-Layout presets are referenced from dashboards via
-`dashboard.settings.layout_dimension`. Admins manage the preset
-library through Manage mode.
+The cell-count grid (cols × rows) is not preset-specific; it's
+derived from the canvas dimensions minus a fixed viewer-chrome
+budget. See [grid-system.md](grid-system.md) for the exact formula
+and worked examples. Admins manage the preset library through Manage
+mode.
 
 ## App config and settings
 

@@ -109,9 +109,9 @@ func (b *PromptBuilder) runtimeContext(rc *RequestContext) string {
 	}
 	if rc.DimensionsWidth > 0 {
 		rows, cols := rc.GridRowsCols()
-		fmt.Fprintf(&sb, "- Canvas: %dx%d pixels → %d rows × %d columns grid\n",
-			rc.DimensionsWidth, rc.DimensionsHeight, rows, cols)
-		sb.WriteString("  (grid is 32px-per-row, 12 columns always)\n")
+		fmt.Fprintf(&sb, "- Canvas: %dx%d pixels → %d cols × %d rows grid (32x32 px cells)\n",
+			rc.DimensionsWidth, rc.DimensionsHeight, cols, rows)
+		sb.WriteString("  (see the MCP preamble's \"Grid contract\" section for panel-sizing math)\n")
 	} else {
 		sb.WriteString("- Canvas: unspecified — if the prompt doesn't pin this, ask via request_clarification\n")
 	}
@@ -139,10 +139,11 @@ create a dashboard whose panels reference those components.
   their namespace. If your first-choice name collides with an
   existing record, add a short disambiguator (` + "`" + `— CPU Detail` + "`" + `,
   ` + "`" + `v2` + "`" + `). Do not delete or overwrite pre-existing records.
-- **Grid**: dashboards use a 12-column grid with 32px rows. Every
-  panel has x, y, width (1–12), height (≥1). Panels cannot overlap.
-  If the user gives canvas dimensions, keep the total layout within
-  the available rows; no off-canvas panels.
+- **Grid**: dashboards are a 32x32 px cell matrix. Panels cannot
+  overlap. Keep the total layout within the canvas — no off-canvas
+  panels. The MCP preamble's "Grid contract" section has the full
+  cell math and worked examples; use those cols/rows values, don't
+  hardcode "12 columns."
 - **Titles**: every chart/display should have a human-readable title.
   Use title case, avoid jargon, keep titles under ~40 chars.
 - **Color**: prefer Carbon Design System colors. When in doubt, use

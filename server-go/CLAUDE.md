@@ -45,7 +45,7 @@ models → repository → service → handlers → routes
 ```
 
 **Key Features:**
-- 12-column grid system (32px = $spacing-08)
+- 32×32 px cell grid (cell size = $spacing-08); cols and rows derive from canvas ÷ 32
 - Panel positioning with x, y, width, height
 - Panel validation (bounds checking, ID uniqueness)
 - Default grid configuration

@@ -45,9 +45,10 @@ type RequestContext struct {
 	DashboardName string
 
 	// DimensionsWidth and DimensionsHeight describe the target
-	// dashboard canvas in pixels. With the 32px / 12-col grid this
-	// maps to a specific row-count × column-count grid. Both must be
-	// set or both empty; mixed is an error.
+	// dashboard canvas in pixels. The viewer uses 32x32 px cells in
+	// both axes, so cols = width/32 and rows = height/32 (see
+	// GridRowsCols below). Both must be set or both empty; mixed is
+	// an error.
 	DimensionsWidth  int
 	DimensionsHeight int
 
@@ -76,15 +77,36 @@ func (c *RequestContext) Validate() error {
 	return nil
 }
 
-// GridRowsCols returns the 12-column × N-row grid footprint for the
-// configured dimensions. Returns (0, 0) when dimensions are unset.
-// Row height is hard-coded to 32px (Carbon $spacing-08) per the
-// project's grid contract.
+// GridRowsCols returns the cell-grid footprint for the configured
+// canvas. The viewer uses 32x32 px cells with 4 px gaps, minus a
+// fixed chrome budget (app header + toolbar + padding, 109 px
+// vertical, 4 px horizontal), matching the computation in
+// client/src/pages/DashboardViewerPage.jsx (gridCols/gridRows).
+//
+// Concretely:
+//
+//	cols = floor( canvas_width                  / 36 )
+//	rows = floor( (canvas_height - 105)         / 36 )
+//
+// Worked examples:
+//
+//	2560x1440 -> 71 cols x 37 rows
+//	1920x1080 -> 53 cols x 27 rows
+//	1280x 720 -> 35 cols x 17 rows
+//
+// Returns (0, 0) when dimensions are unset.
 func (c *RequestContext) GridRowsCols() (rows, cols int) {
-	if c.DimensionsHeight == 0 {
+	if c.DimensionsHeight == 0 || c.DimensionsWidth == 0 {
 		return 0, 0
 	}
-	return c.DimensionsHeight / 32, 12
+	const cellStride = 36 // 32-px cell + 4-px gap
+	const chromeV = 105   // 109 px chrome - 4 px "extra gap" that cancels in the formula
+	cols = c.DimensionsWidth / cellStride
+	rows = (c.DimensionsHeight - chromeV) / cellStride
+	if rows < 0 {
+		rows = 0
+	}
+	return rows, cols
 }
 
 // ParseDimensions accepts "2560x1440" / "2560X1440" / "2560,1440" and

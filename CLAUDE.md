@@ -279,7 +279,7 @@ Use the most abstract (semantic) token available. This ensures theme compatibili
 
 ### Design Mode (`/design/*`)
 Create and configure dashboard components:
-- **Layouts** (`/design/layouts`) - Define 12-column grid layouts with panels
+- **Layouts** (`/design/layouts`) - Define cell-grid layouts with panels (32 × 32 px cells; cols/rows derive from canvas)
 - **Connections** (`/design/connections`) - Configure SQL, API, CSV, WebSocket connections
 - **Components** (`/design/charts`) - Build displays (charts, gauges, tables) and controls (buttons, sliders)
 - **Dashboards** (`/design/dashboards`) - Combine components with layouts
@@ -610,17 +610,20 @@ Tiles (`tile_*`) and `text_label` skip the top `.control-title` entirely — the
 
 ## Grid System
 
-12-column grid with 32px row height (based on Carbon $spacing-08):
+32 × 32 px cells in both axes (cell size = Carbon `$spacing-08`),
+4 px gaps between cells. Column and row counts derive from canvas
+size minus a fixed viewer-chrome budget (109 px vertical, 4 px
+horizontal):
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  1   2   3   4   5   6   7   8   9  10  11  12                │
-├────────────────────────────────────────────────────────────────┤
-│ Panel A (x:0, y:0, w:6, h:8)  │  Panel B (x:6, y:0, w:6, h:4) │
-│                               ├────────────────────────────────┤
-│                               │  Panel C (x:6, y:4, w:6, h:4) │
-└───────────────────────────────┴────────────────────────────────┘
+cols = floor( canvas_width            / 36 )
+rows = floor( (canvas_height - 105)   / 36 )
 ```
+
+A 2560 × 1440 canvas is **71 cols × 37 rows**. Panel geometry is
+stored as `{x, y, w, h}` in cell units. See
+[docs/architecture/grid-system.md](docs/architecture/grid-system.md)
+for fit-mode behavior and layout-dimension presets.
 
 ## Current Status (2026-04-17)
 
