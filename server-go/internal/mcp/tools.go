@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -807,6 +808,37 @@ func (r *ToolRegistry) registerComponentTools() {
 				return nil, err
 			}
 			return map[string]interface{}{"dashboards": result.Dashboards, "count": result.Total}, nil
+		},
+	)
+
+	r.registerTool(
+		Tool{
+			Name: "get_component_template",
+			Description: "Return the raw React component-code template (skeleton) for a chart type. After creating a chart component and learning the data schema, fetch the template, substitute real column names into it (e.g. replace `d.value` / `d.timestamp` with your actual fields), and then call update_component with the filled-in code in the `component_code` field. Templates use a small set of runtime helpers the viewer injects: toObjects(data), getValue(data, col), formatTimestamp(ts, format), formatCellValue(value, column) — do not import them. Use chart_type='custom' for a freeform ECharts skeleton when no specific template fits.",
+			InputSchema: InputSchema{
+				Type: "object",
+				Properties: map[string]PropertySchema{
+					"chart_type": {
+						Type:        "string",
+						Description: "Chart type whose template to return (line, bar, area, pie, scatter, number, gauge, heatmap, radar, funnel, dataview, custom).",
+					},
+				},
+				Required: []string{"chart_type"},
+			},
+		},
+		func(args map[string]interface{}) (interface{}, error) {
+			ct := getString(args, "chart_type")
+			if ct == "" {
+				return nil, fmt.Errorf("chart_type is required")
+			}
+			tmpl, ok := componenttemplates.Get(ct)
+			if !ok {
+				return nil, fmt.Errorf("no template for chart type %q — try one of: %v", ct, componenttemplates.List())
+			}
+			return map[string]interface{}{
+				"chart_type": ct,
+				"template":   tmpl,
+			}, nil
 		},
 	)
 }
