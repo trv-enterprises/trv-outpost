@@ -26,6 +26,7 @@ import apiClient from '../api/client';
 import LayoutDimensionsEditorModal from '../components/LayoutDimensionsEditorModal';
 import DefaultLayoutDimensionEditorModal from '../components/DefaultLayoutDimensionEditorModal';
 import TileFontSizeEditorModal from '../components/TileFontSizeEditorModal';
+import DefaultDashboardFitModeEditorModal from '../components/DefaultDashboardFitModeEditorModal';
 import NumericChartNumberSizeEditorModal, { DEFAULT_NUMBER_CHART_SIZE } from '../components/NumericChartNumberSizeEditorModal';
 import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -48,6 +49,7 @@ function SettingsPage() {
   const [layoutDimensionsModalOpen, setLayoutDimensionsModalOpen] = useState(false);
   const [defaultLayoutDimensionModalOpen, setDefaultLayoutDimensionModalOpen] = useState(false);
   const [tileFontSizeModalOpen, setTileFontSizeModalOpen] = useState(false);
+  const [defaultFitModeModalOpen, setDefaultFitModeModalOpen] = useState(false);
   const [numericChartSizeModalOpen, setNumericChartSizeModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
   const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
@@ -84,6 +86,9 @@ function SettingsPage() {
         break;
       case 'tile_font_size':
         setTileFontSizeModalOpen(true);
+        break;
+      case 'default_dashboard_fit_mode':
+        setDefaultFitModeModalOpen(true);
         break;
       case 'default_numeric_chart_number_size':
         setNumericChartSizeModalOpen(true);
@@ -132,6 +137,11 @@ function SettingsPage() {
 
   const handleTileFontSizeClose = () => {
     setTileFontSizeModalOpen(false);
+    setEditingSetting(null);
+  };
+
+  const handleDefaultFitModeClose = () => {
+    setDefaultFitModeModalOpen(false);
     setEditingSetting(null);
   };
 
@@ -323,6 +333,17 @@ function SettingsPage() {
         onSave={(value) => {
           handleSave('tile_font_size', value);
           handleTileFontSizeClose();
+        }}
+      />
+
+      {/* Default Dashboard Fit Mode Editor Modal */}
+      <DefaultDashboardFitModeEditorModal
+        open={defaultFitModeModalOpen}
+        onClose={handleDefaultFitModeClose}
+        currentValue={editingSetting?.key === 'default_dashboard_fit_mode' ? editingSetting.value : 'stretch'}
+        onSave={(value) => {
+          handleSave('default_dashboard_fit_mode', value);
+          handleDefaultFitModeClose();
         }}
       />
 

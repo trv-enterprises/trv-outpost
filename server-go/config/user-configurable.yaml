@@ -32,6 +32,11 @@ settings:
     description: "Default font size (px) for the value in new Number charts"
     value: 120
 
+  - key: default_dashboard_fit_mode
+    category: dashboard
+    description: "Default viewer fit mode for dashboards a user has not explicitly set. One of: actual, window, width, stretch."
+    value: "stretch"
+
   - key: dashboard_command_topic
     category: dashboard
     description: "MQTT topic for dashboard commands (voice control, kiosk integration)"

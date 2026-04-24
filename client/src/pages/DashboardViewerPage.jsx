@@ -131,30 +131,13 @@ function DashboardViewerPage({ canDesign = false }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
-  // Dashboard fit mode: "actual" | "window" | "width" | "stretch", stored
-  // per-dashboard-id so switching between dashboards preserves each
-  // dashboard's own selection. Storage layout in user config:
-  //   dashboard_fit_modes: { "<dashboard_id>": "stretch", ... }
-  //   dashboard_fit_mode:  "window"   // last-used global default for new dashboards
-  //
-  // Legacy back-compat chain (oldest → newest):
-  //   1. localStorage.dashboard_reduceToFit (bool) — before four-mode work
-  //   2. localStorage.dashboard_fit_mode (string)  — cross-dashboard default
-  //   3. dashboard_fit_modes[id] in user config    — per-dashboard (current)
-  //
-  // On first visit to a dashboard we fall through 3→2→1 and seed #3 once
-  // the user makes a selection. The garbage-collector in selectFitMode
-  // drops entries for dashboards that no longer exist each save.
-  const [fitMode, setFitMode] = useState(() => {
-    const stored = localStorage.getItem('dashboard_fit_mode');
-    if (stored && ['actual', 'window', 'width', 'stretch'].includes(stored)) {
-      return stored;
-    }
-    const legacy = localStorage.getItem('dashboard_reduceToFit');
-    if (legacy === 'true') return 'stretch';
-    if (legacy === 'false') return 'actual';
-    return 'window';
-  });
+  // Dashboard fit mode: "actual" | "window" | "width" | "stretch".
+  // Storage is strictly per-user-per-dashboard; the load effect below
+  // resolves: user's dashboard_fit_modes[id] → admin setting
+  // default_dashboard_fit_mode → "stretch" hardcoded fallback.
+  // Initial state is "stretch" to avoid a visible flicker before the
+  // async load completes.
+  const [fitMode, setFitMode] = useState('stretch');
   const [configRefreshInterval, setConfigRefreshInterval] = useState(120);
   const [isDefaultDashboard, setIsDefaultDashboard] = useState(false);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
@@ -309,41 +292,44 @@ function DashboardViewerPage({ canDesign = false }) {
     return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
   }, [layoutDimension]);
 
-  // Load fit mode for the *current* dashboard from user config. Falls
-  // through: dashboard_fit_modes[id] → dashboard_fit_mode (global default)
-  // → legacy boolean. Re-runs when the dashboard id changes so switching
-  // dashboards restores each one's own fit mode.
+  // Load fit mode for the *current* dashboard. Resolution order:
+  //   1. user's dashboard_fit_modes[id] — explicit per-user per-dashboard
+  //   2. admin setting default_dashboard_fit_mode — deployment-wide default
+  //   3. "stretch" — hardcoded last-resort safety
+  //
+  // One user's selection NEVER affects another user, and a selection on
+  // dashboard X NEVER affects dashboard Y. The old "user's last-used
+  // global default" (dashboard_fit_mode singleton) is no longer
+  // consulted — it caused fit modes to bleed across un-touched
+  // dashboards.
   useEffect(() => {
     if (!id) return;
     const userGuid = apiClient.getCurrentUserGuid();
     if (!userGuid) return;
-    apiClient.getUserConfig(userGuid)
-      .then(res => {
-        const settings = res?.settings || {};
-        const perDashboard = settings.dashboard_fit_modes || {};
-        const scoped = perDashboard[id];
-        if (scoped && ['actual', 'window', 'width', 'stretch'].includes(scoped)) {
-          setFitMode(scoped);
-          return;
-        }
-        const globalPref = settings.dashboard_fit_mode;
-        if (globalPref && ['actual', 'window', 'width', 'stretch'].includes(globalPref)) {
-          setFitMode(globalPref);
-          return;
-        }
-        const legacyPref = settings.dashboard_reduceToFit;
-        if (legacyPref !== undefined) {
-          setFitMode(legacyPref ? 'stretch' : 'actual');
-        }
-      })
-      .catch(() => {});
+    Promise.all([
+      apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
+      apiClient.getSetting('default_dashboard_fit_mode').catch(() => null),
+    ]).then(([userCfg, adminDefault]) => {
+      const valid = (v) => v && ['actual', 'window', 'width', 'stretch'].includes(v);
+      const perDashboard = userCfg?.settings?.dashboard_fit_modes || {};
+      if (valid(perDashboard[id])) {
+        setFitMode(perDashboard[id]);
+        return;
+      }
+      const adminValue = adminDefault?.value ?? adminDefault;
+      if (valid(adminValue)) {
+        setFitMode(adminValue);
+        return;
+      }
+      setFitMode('stretch');
+    });
   }, [id]);
 
-  // Save a fit-mode selection scoped to the current dashboard. Each save
-  // also garbage-collects map entries whose dashboard_id no longer exists —
-  // handles the case where a dashboard was deleted and left a stale entry
-  // behind. The "global default" (dashboard_fit_mode) is updated too so a
-  // brand-new dashboard defaults to the user's most recent choice.
+  // Save a fit-mode selection scoped to the current dashboard only.
+  // Writes a single key on the current user's config — never touches
+  // any user-level global and never touches other dashboards.
+  // Also garbage-collects stale entries for dashboards the user no
+  // longer has access to.
   const selectFitMode = useCallback((next) => {
     if (!['actual', 'window', 'width', 'stretch'].includes(next)) return;
     if (!id) return;
@@ -352,9 +338,6 @@ function DashboardViewerPage({ canDesign = false }) {
     const userGuid = apiClient.getCurrentUserGuid();
     if (!userGuid) return;
 
-    // Fetch current user config + dashboard list in parallel, merge, GC,
-    // then write once. The list is used to drop entries for deleted
-    // dashboards (keeping the current id even if the list fetch races).
     Promise.all([
       apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
       apiClient.getDashboards().catch(() => ({ dashboards: [] })),
@@ -370,17 +353,8 @@ function DashboardViewerPage({ canDesign = false }) {
       }
       pruned[id] = next;
 
-      const legacyBool = next === 'stretch';
-      // Keep the old singular key populated as the "global default for new
-      // dashboards" plus the even-older boolean so any straggling readers
-      // still see a sensible value.
-      localStorage.setItem('dashboard_fit_mode', next);
-      localStorage.setItem('dashboard_reduceToFit', String(legacyBool));
-
       apiClient.updateUserConfig(userGuid, {
         dashboard_fit_modes: pruned,
-        dashboard_fit_mode: next,
-        dashboard_reduceToFit: legacyBool,
       }).catch(() => {});
     });
   }, [id]);

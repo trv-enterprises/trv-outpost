@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -247,35 +249,50 @@ func (a *Agent) Run(ctx context.Context, rc *RequestContext) (*Result, error) {
 	return nil, fmt.Errorf("exceeded max turns (%d) without yielding a final answer", a.cfg.MaxTurns)
 }
 
-// sendWithRetry wraps Messages.New with backoff on HTTP 429 (rate
-// limit). Other errors fail fast. When the server provides a
-// retry-after header we honor it (plus a small jitter); otherwise we
-// exponentially back off starting at 15s. Capped at maxRateLimitRetries
-// attempts — beyond that, the environment is congested enough that
-// a human should decide what to do.
+// sendWithRetry wraps Messages.New with backoff. Two retry classes:
+//   - HTTP 429 (rate limit) — honor retry-after header when provided,
+//     otherwise exponential backoff starting at 15s.
+//   - Transient network errors (DNS lookup failure, connection
+//     refused, connection reset) — short fixed backoff at 5s, since
+//     these usually resolve in seconds.
+// Other errors fail fast. Both retry classes share a single attempt
+// budget so a degraded environment doesn't loop forever.
 func (a *Agent) sendWithRetry(ctx context.Context, params anthropic.MessageNewParams) (*anthropic.Message, error) {
-	const maxRateLimitRetries = 4
-	const baseBackoff = 15 * time.Second
-	const maxBackoff = 90 * time.Second
+	const maxRetries = 4
+	const rateLimitBaseBackoff = 15 * time.Second
+	const rateLimitMaxBackoff = 90 * time.Second
+	const networkBackoff = 5 * time.Second
 
-	backoff := baseBackoff
+	rateLimitBackoff := rateLimitBaseBackoff
 	for attempt := 0; ; attempt++ {
 		resp, err := a.claude.Messages.New(ctx, params)
 		if err == nil {
 			return resp, nil
 		}
-		if attempt >= maxRateLimitRetries || !isRateLimit(err) {
+		if attempt >= maxRetries {
 			return nil, err
 		}
-		wait := retryAfterFrom(err)
-		if wait <= 0 {
-			wait = backoff
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
+
+		var wait time.Duration
+		switch {
+		case isRateLimit(err):
+			wait = retryAfterFrom(err)
+			if wait <= 0 {
+				wait = rateLimitBackoff
+				rateLimitBackoff *= 2
+				if rateLimitBackoff > rateLimitMaxBackoff {
+					rateLimitBackoff = rateLimitMaxBackoff
+				}
 			}
+			a.traceln("== 429 from Anthropic; sleeping %s before retry %d/%d", wait, attempt+1, maxRetries)
+		case isTransientNetworkError(err):
+			wait = networkBackoff
+			a.traceln("== transient network error (%v); sleeping %s before retry %d/%d", err, wait, attempt+1, maxRetries)
+		default:
+			// Not retryable — fail fast.
+			return nil, err
 		}
-		a.traceln("== 429 from Anthropic; sleeping %s before retry %d/%d", wait, attempt+1, maxRateLimitRetries)
+
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -289,6 +306,53 @@ func isRateLimit(err error) bool {
 	var apiErr *anthropic.Error
 	if errors.As(err, &apiErr) {
 		return apiErr.StatusCode == 429
+	}
+	return false
+}
+
+// isTransientNetworkError returns true if err looks like something
+// that'll probably work if we wait a few seconds and try again — DNS
+// resolution failure, connection refused, connection reset, TLS
+// handshake timeout. All are common on home networks and warrant a
+// short automatic retry before surfacing to the user.
+func isTransientNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// net.OpError wraps the underlying cause (dial, read, write).
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		// DNS failures wrap a net.DNSError.
+		var dnsErr *net.DNSError
+		if errors.As(opErr.Err, &dnsErr) {
+			return true
+		}
+		// "connection refused" / "connection reset" / "broken pipe" /
+		// "network is unreachable" all show up as SyscallError or bare
+		// string errors on the OpErr. Match by message as a fallback.
+		msg := opErr.Err.Error()
+		for _, frag := range []string{
+			"connection refused",
+			"connection reset",
+			"no route to host",
+			"network is unreachable",
+			"broken pipe",
+			"i/o timeout",
+		} {
+			if strings.Contains(msg, frag) {
+				return true
+			}
+		}
+		return false
+	}
+	// url.Error wraps most net/http client errors. Unwrap and recurse.
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		// url.Error has a Temporary() method but it's unreliable.
+		// Check the wrapped error directly.
+		if urlErr.Err != nil && isTransientNetworkError(urlErr.Err) {
+			return true
+		}
 	}
 	return false
 }

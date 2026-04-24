@@ -7,6 +7,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -425,17 +426,77 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 	r.registerTool(
 		Tool{
 			Name:        "get_connection_schema",
-			Description: "Discover the schema of a connection. SQL connections return tables and columns. Prometheus connections return available metrics and labels. Returns a not-supported error for connection types that don't expose schema (CSV, raw socket, etc).",
+			Description: "Discover the schema of a connection. SQL connections return tables and columns. Prometheus connections return available metrics and labels — at scale this can be hundreds of metrics, so use `metric_prefix` to keep the response focused (e.g. `node_` for node-exporter, `kube_` for kube-state-metrics). Returns a not-supported error for connection types that don't expose schema (CSV, raw socket, etc).",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"connection_id": {Type: "string", Description: "Connection ID"},
+					"connection_id":  {Type: "string", Description: "Connection ID"},
+					"metric_prefix":  {Type: "string", Description: "Prometheus only: return only metric names that start with this prefix. Recommended on any Prometheus server exposing more than a few dozen metrics — otherwise the response can bloat your context with hundreds of irrelevant names."},
+					"metric_contains": {Type: "string", Description: "Prometheus only: return only metric names that contain this substring. Takes precedence over metric_prefix if both are given."},
+					"max_metrics":    {Type: "integer", Description: "Prometheus only: cap the number of metric names returned. Default 150. Set a negative value for unlimited."},
 				},
 				Required: []string{"connection_id"},
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return r.connectionService.GetSchema(context.Background(), getString(args, "connection_id"))
+			resp, err := r.connectionService.GetSchema(context.Background(), getString(args, "connection_id"))
+			if err != nil || resp == nil || resp.PrometheusSchema == nil {
+				return resp, err
+			}
+
+			// Prometheus-specific filter pass. The service returns every
+			// metric the server has ever scraped; for real deployments
+			// (kube-state-metrics, node-exporter, cadvisor, istio, etc.
+			// all in one cluster) that's easily 1000+ names and blows up
+			// the agent's context budget. The caller-provided filters
+			// let an agent ask for exactly what it's going to build
+			// charts against.
+			prefix := getString(args, "metric_prefix")
+			contains := getString(args, "metric_contains")
+			maxMetrics := getInt(args, "max_metrics")
+			if maxMetrics == 0 {
+				maxMetrics = 150 // default cap; agent can pass a larger value to override
+			}
+			if maxMetrics < 0 {
+				maxMetrics = 0 // negative = unlimited
+			}
+
+			all := resp.PrometheusSchema.Metrics
+			filtered := make([]models.PrometheusMetricInfo, 0, len(all))
+			for _, m := range all {
+				if contains != "" && !strings.Contains(m.Name, contains) {
+					continue
+				}
+				if contains == "" && prefix != "" && !strings.HasPrefix(m.Name, prefix) {
+					continue
+				}
+				filtered = append(filtered, m)
+			}
+			totalMatched := len(filtered)
+			truncated := false
+			if maxMetrics > 0 && len(filtered) > maxMetrics {
+				filtered = filtered[:maxMetrics]
+				truncated = true
+			}
+
+			// Return the usual envelope but with the filtered metric
+			// list and a small footer so the agent knows whether the
+			// answer was narrowed.
+			out := map[string]interface{}{
+				"success":  resp.Success,
+				"duration": resp.Duration,
+				"prometheus_schema": map[string]interface{}{
+					"metrics":       filtered,
+					"labels":        resp.PrometheusSchema.Labels,
+					"total_metrics": len(all),
+					"total_matched": totalMatched,
+					"truncated":     truncated,
+				},
+			}
+			if resp.Error != "" {
+				out["error"] = resp.Error
+			}
+			return out, nil
 		},
 	)
 
@@ -691,7 +752,11 @@ func (r *ToolRegistry) registerComponentTools() {
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
-			return r.chartService.CreateChart(context.Background(), req)
+			out, err := r.chartService.CreateChart(context.Background(), req)
+			if err != nil {
+				return nil, err
+			}
+			return componentWriteAck(out), nil
 		},
 	)
 
@@ -760,7 +825,11 @@ func (r *ToolRegistry) registerComponentTools() {
 				tags := parseStringArray(tagsRaw)
 				req.Tags = &tags
 			}
-			return r.chartService.UpdateChart(context.Background(), id, req)
+			out, err := r.chartService.UpdateChart(context.Background(), id, req)
+			if err != nil {
+				return nil, err
+			}
+			return componentWriteAck(out), nil
 		},
 	)
 
@@ -887,7 +956,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 	r.registerTool(
 		Tool{
 			Name:        "create_dashboard",
-			Description: "Create a new dashboard. Panels live directly on the dashboard (there is no separate Layout entity). Each panel is `{id, x, y, w, h, chart_id?, text_config?}`. Grid is 12 columns wide. Use chart_id to reference an existing component, or text_config for native inline text. Empty panels (no chart_id and no text_config) are valid placeholders.",
+			Description: "Create a new dashboard. Panels live directly on the dashboard (there is no separate Layout entity). Each panel is `{id, x, y, w, h, chart_id?, text_config?}` in 32x32 px cell units — see the session-init \"Grid contract\" section for how cols/rows derive from canvas size. Use chart_id to reference an existing component, or text_config for native inline text. Empty panels (no chart_id and no text_config) are valid placeholders.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
@@ -1009,6 +1078,36 @@ func getBool(m map[string]interface{}, key string) bool {
 		return v
 	}
 	return false
+}
+
+// componentWriteAck is the compact response envelope returned to MCP
+// clients from create_component / update_component. The full Chart
+// record is large (~2KB of component_code, plus query_config,
+// data_mapping, thumbnail, options) and the client already knows the
+// values it sent in the request — echoing them back just inflates
+// the LLM's context history for no benefit. This envelope carries
+// only what a caller can't compute: id, version, status, timestamps,
+// and a code-length signal so the agent can sanity-check that its
+// component_code landed.
+func componentWriteAck(c *models.Chart) map[string]interface{} {
+	if c == nil {
+		return nil
+	}
+	return map[string]interface{}{
+		"id":              c.ID,
+		"version":         c.Version,
+		"status":          c.Status,
+		"component_type":  c.ComponentType,
+		"namespace":       c.Namespace,
+		"name":            c.Name,
+		"title":           c.Title,
+		"chart_type":      c.ChartType,
+		"connection_id":   c.DatasourceID,
+		"use_custom_code": c.UseCustomCode,
+		"component_code_length": len(c.ComponentCode),
+		"created":         c.Created,
+		"updated":         c.Updated,
+	}
 }
 
 func getMap(m map[string]interface{}, key string) map[string]interface{} {
