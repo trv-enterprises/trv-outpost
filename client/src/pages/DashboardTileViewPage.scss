@@ -40,9 +40,22 @@
     }
   }
 
-  .header-search {
+  // Toolbar row holding the search box plus the namespace and tag
+  // filter dropdowns. Mirrors the layout of the design-mode list
+  // toolbar (DashboardsListPage) so view and design modes feel the
+  // same. Wraps on narrow widths so mobile / tablet doesn't push
+  // controls off-screen.
+  .header-toolbar {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
     margin-bottom: spacing.$spacing-05;
-    max-width: 400px;
+    flex-wrap: wrap;
+
+    .header-search {
+      flex: 1 1 240px;
+      max-width: 400px;
+    }
   }
 
   .no-dashboards {

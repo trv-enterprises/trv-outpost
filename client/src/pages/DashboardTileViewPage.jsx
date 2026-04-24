@@ -18,6 +18,8 @@ import {
   StarFilled
 } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import NamespaceFilter from '../components/shared/NamespaceFilter';
+import TagFilter from '../components/shared/TagFilter';
 import './DashboardTileViewPage.scss';
 
 /**
@@ -39,6 +41,12 @@ function DashboardTileViewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // Multi-select filters mirroring the design-mode dashboard list
+  // (DashboardsListPage). Empty arrays = "show all"; selecting any
+  // value narrows the visible tiles. View mode keeps these in
+  // component state only — no session/user-config persistence yet.
+  const [namespaceFilter, setNamespaceFilter] = useState([]);
+  const [tagFilter, setTagFilter] = useState([]);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
 
   useEffect(() => {
@@ -132,10 +140,37 @@ function DashboardTileViewPage() {
     navigate(`/view/dashboards/${dashboardId}`);
   };
 
-  const filteredDashboards = dashboards.filter(dashboard =>
-    dashboard.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (dashboard.description && dashboard.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Apply namespace, tag, and search filters. Same semantics as the
+  // design-mode list (DashboardsListPage): namespace is OR within the
+  // selection, tags are OR (any tag matches), search is substring on
+  // name or description.
+  const filteredDashboards = useMemo(() => {
+    let result = [...dashboards];
+
+    if (namespaceFilter.length > 0) {
+      const wanted = new Set(namespaceFilter);
+      // Records missing a namespace stay visible — defensive against
+      // any pre-namespace records that survived the migration.
+      result = result.filter(d => !d.namespace || wanted.has(d.namespace));
+    }
+
+    if (tagFilter.length > 0) {
+      result = result.filter(d => {
+        const dTags = d.tags || [];
+        return tagFilter.some(t => dTags.includes(t));
+      });
+    }
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(d =>
+        d.name.toLowerCase().includes(term) ||
+        (d.description && d.description.toLowerCase().includes(term))
+      );
+    }
+
+    return result;
+  }, [dashboards, namespaceFilter, tagFilter, searchTerm]);
 
   if (loading) {
     return (
@@ -161,21 +196,33 @@ function DashboardTileViewPage() {
           <h1>Dashboards</h1>
         </div>
       </div>
-      <div className="header-search">
-        <Search
-          size="lg"
-          placeholder="Search dashboards..."
-          labelText="Search"
-          closeButtonLabelText="Clear search"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+      <div className="header-toolbar">
+        <div className="header-search">
+          <Search
+            size="lg"
+            placeholder="Search dashboards..."
+            labelText="Search"
+            closeButtonLabelText="Clear search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <NamespaceFilter
+          id="namespace-filter-view-dashboards"
+          selected={namespaceFilter}
+          onChange={setNamespaceFilter}
+        />
+        <TagFilter
+          entityType="dashboards"
+          selected={tagFilter}
+          onChange={setTagFilter}
         />
       </div>
 
       {filteredDashboards.length === 0 ? (
         <div className="no-dashboards">
-          {searchTerm ? (
-            <p>No dashboards match your search.</p>
+          {(searchTerm || namespaceFilter.length > 0 || tagFilter.length > 0) ? (
+            <p>No dashboards match your filters.</p>
           ) : (
             <p>No dashboards available. Create one in Design mode.</p>
           )}
