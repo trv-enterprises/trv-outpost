@@ -46,41 +46,56 @@ real-time streaming, and smart device control.
 - **Role-based user management** (Admin, Designer, Support)
 - **MCP server** — integrated SSE endpoint at `/mcp/sse` so external
   AI clients like Claude Desktop (via [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy))
-  can introspect and query connections
+  can introspect connections, create components, and build whole
+  dashboards via a single tool surface
+- **Dashboard-builder agent** (`cmd/dashboard-agent`) — a reference
+  CLI agent that drives the same MCP tools as an external client
+  would, producing a complete dashboard from a one-line natural-
+  language prompt. See [examples/dashboard-agent](examples/dashboard-agent/)
+  for a walkthrough of a 14-panel Prometheus monitoring dashboard
+  built in 12 turns.
 
 ## High-level architecture
 
 ```
-┌──────────────────────────────────────────────────────┐  ┌────────────────────────┐
-│         React frontend (Vite, port 5173)             │  │   External AI agents   │
-│   Carbon Design System · ECharts · React Router      │  │   (Claude Desktop,     │
-│  Design mode    │  View mode      │  Manage mode     │  │   other MCP clients    │
-│  - Connections  │  - Dashboard    │  - Users         │  │    via mcp-proxy)      │
-│  - Components   │    viewer       │  - Settings      │  └────────────┬───────────┘
-│  - Dashboards   │  - Live data    │  - Devices       │               │
-│  - AI Builder   │  - Fit modes    │                  │               │ MCP / SSE
-└─────────────────────────┬────────────────────────────┘               │
-                          │  REST · SSE · WebSocket                    │
-                          ▼                                            ▼
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                           Go backend (port 3001)                                 │
-│                 Gin · Eclipse Paho · Anthropic SDK · Swaggo                      │
-│  /api/connections  /api/charts  /api/dashboards  /api/devices  /api/users        │
-│  /api/tags  /api/ai/sessions  /api/frigate      /mcp/sse  /mcp/message   ...     │
-└──────────────────────────────────────────────────────────────────────────────────┘
-                                         │
-                         ┌───────────────┼────────────────────────┐
-                         ▼                                        ▼
-                  ┌────────────┐                          ┌────────────────┐
-                  │  MongoDB 7 │                          │  External      │
-                  │            │                          │  connections   │
-                  │ Dashboards │                          │  (SQL, REST,   │
-                  │ Components │                          │  MQTT, ...)    │
-                  │ Datasources│                          └────────────────┘
-                  │ Users      │
-                  │ Devices    │
-                  └────────────┘
+┌─────────────────────────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│      React frontend (Vite, :5173)       │  │  cmd/dashboard-agent │  │  External AI agents  │
+│  Carbon · ECharts · React Router        │  │  (CLI, ships in repo)│  │  (Claude Desktop +   │
+│ Design mode  │ View mode  │ Manage mode │  │                      │  │   other MCP clients  │
+│ - Conns      │ - Viewer   │ - Users     │  │  inputs:             │  │   via mcp-proxy)     │
+│ - Components │ - Live data│ - Settings  │  │  --user, --prompt,   │  │                      │
+│ - Dashboards │ - Fit modes│ - Devices   │  │  [--connection-id],  │  │  inputs:             │
+│ - AI Builder │            │             │  │  [--dimensions], ... │  │  user-driven chat    │
+│              │            │             │  │  + ANTHROPIC_API_KEY │  │  + ANTHROPIC_API_KEY │
+└──────────────────┬──────────────────────┘  └──────────┬───────────┘  └──────────┬───────────┘
+                   │  REST · SSE · WebSocket            │  MCP / SSE              │  MCP / SSE
+                   ▼                                    ▼                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                Go backend (port 3001)                                       │
+│                       Gin · Eclipse Paho · Anthropic SDK · Swaggo                           │
+│  /api/connections  /api/charts  /api/dashboards  /api/devices  /api/users                   │
+│  /api/tags  /api/ai/sessions  /api/frigate      /mcp/sse  /mcp/message   ...                │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                              ┌───────────────┼────────────────────────┐
+                              ▼                                        ▼
+                       ┌────────────┐                          ┌────────────────┐
+                       │  MongoDB 7 │                          │  External      │
+                       │            │                          │  connections   │
+                       │ Dashboards │                          │  (SQL, REST,   │
+                       │ Components │                          │  MQTT, ...)    │
+                       │ Datasources│                          └────────────────┘
+                       │ Users      │
+                       │ Devices    │
+                       └────────────┘
 ```
+
+`cmd/dashboard-agent` is a reference MCP client we ship with the
+repo — it consumes the same `/mcp/sse` surface as Claude Desktop. The
+agent calls Anthropic directly for its LLM turns, then issues tool
+calls back through MCP to build connections, components, and
+dashboards. See [examples/dashboard-agent](examples/dashboard-agent/)
+for a full end-to-end run.
 
 For the full architecture — data model, streaming internals,
 connection adapters, grid system, API reference, etc. — see the
@@ -138,6 +153,9 @@ restore).
   reference, and the grid system.
 - [MCP server](docs/mcp.md) — tool inventory, agent flow, and
   Claude Desktop setup via `mcp-proxy`
+- [Examples](examples/) — reference runs and demos
+  ([dashboard-agent](examples/dashboard-agent/) shows the CLI agent
+  building a 14-panel Prometheus dashboard end-to-end)
 - [Deployment guide](docs/DEPLOYMENT.md) — production deployment
 - [Test plan](docs/TEST_PLAN.md)
 - [Project CLAUDE.md](CLAUDE.md) — conventions for contributors

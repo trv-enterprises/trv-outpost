@@ -76,16 +76,27 @@ MongoDB at all.
 ```
 server-go/
 ├── cmd/
-│   └── server/               Main HTTP server binary — also serves
-│                             the MCP SSE endpoint at /mcp/sse
+│   ├── server/               Main HTTP server binary — also serves
+│   │                         the MCP SSE endpoint at /mcp/sse
+│   └── dashboard-agent/      CLI reference agent that drives the MCP
+│                             server end-to-end; ships as a separate
+│                             binary so the server stays free of
+│                             Anthropic SDK dependencies at runtime
 ├── config/
 │   ├── config.go             Viper loader
 │   └── config.yaml           Base config (env-override-able)
 ├── docs/                     Generated swagger docs
 └── internal/
-    ├── agent/                Agentic workflow scaffolding
-    ├── ai/                   AI Builder (session, tools, system prompt)
-    ├── api/                  Shared API helpers
+    ├── agent/
+    │   └── dashboard/        Dashboard-builder agent core: loop,
+    │                         MCP client, prompt assembly, runtime
+    │                         tools (request_clarification,
+    │                         yield_final_answer), typed request
+    │                         context
+    ├── ai/                   AI Builder (in-process component agent)
+    ├── componenttemplates/   React chart-skeleton templates shared
+    │                         by internal/ai and the MCP
+    │                         get_component_template tool
     ├── database/
     │   ├── mongodb.go        Client setup, shared index helpers
     │   ├── migrations.go     Startup migration framework

@@ -44,3 +44,11 @@ server-go/bin/
 # Release artifacts
 dist/
 server-go/dist/
+
+# Per-run dashboard-agent transcripts (default --log-dir; the agent's
+# working directory determines which path actually gets written).
+docs/agent-runs/
+server-go/docs/agent-runs/
+
+# Stray dashboard-agent binary built without -o bin/...
+server-go/dashboard-agent
