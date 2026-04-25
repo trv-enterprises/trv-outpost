@@ -68,7 +68,7 @@ import NameErrorBadge from '../components/NameErrorBadge';
 import { useModeGuard } from '../context/ModeGuardContext';
 import { useNotifications } from '../context/NotificationContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
-import { getComponentMinSize } from '../config/layoutConfig';
+import { getComponentMinSize, MODES } from '../config/layoutConfig';
 import './DashboardViewerPage.scss';
 
 // Icon wrapper components for Carbon's OverflowMenu `renderIcon` prop.
@@ -970,7 +970,7 @@ function DashboardViewerPage({ canDesign = false }) {
       clearModeGuard();
       return undefined;
     }
-    const guard = () => {
+    const guard = (newMode) => {
       // For new dashboards we don't have a saved id to hand back —
       // App.jsx will fall back to the default dashboard.
       const currentId = isNewDashboard ? null : id;
@@ -978,6 +978,18 @@ function DashboardViewerPage({ canDesign = false }) {
         // Clean: drop out of edit mode so the destination page doesn't
         // render with stale isEditMode styling, then proceed.
         setIsEditMode(false);
+        // Switching INTO view mode is the user explicitly leaving
+        // the design workflow. Clear the design-origin preview flag
+        // so isEditingDashboard goes false and the header pill
+        // settles on VIEW immediately, instead of the App's
+        // /view/* → DESIGN exception (set when fromDesign is true)
+        // snapping the pill back. Without this clear, a same-URL
+        // VIEW press while in clean preview leaves the pill on
+        // DESIGN until a *different* URL renavigation forces a
+        // page remount.
+        if (newMode === MODES.VIEW) {
+          setFromDesign(false);
+        }
         return Promise.resolve({ proceed: true, dashboardId: currentId });
       }
       return new Promise((resolve) => {
