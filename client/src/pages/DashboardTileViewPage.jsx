@@ -169,6 +169,16 @@ function DashboardTileViewPage() {
       );
     }
 
+    // Default order: most-recently-updated first, matching the
+    // design-mode list (DashboardsListPage). The server returns
+    // dashboards sorted by name; we resort here so view and design
+    // modes show the same ordering at the top of the list.
+    result.sort((a, b) => {
+      const aT = new Date(a.updated || a.created || 0).getTime();
+      const bT = new Date(b.updated || b.created || 0).getTime();
+      return bT - aT;
+    });
+
     return result;
   }, [dashboards, namespaceFilter, tagFilter, searchTerm]);
 
