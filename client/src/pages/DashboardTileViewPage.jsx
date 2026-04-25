@@ -2,20 +2,22 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Loading,
   Tag,
   Search,
   OverflowMenu,
-  OverflowMenuItem
+  OverflowMenuItem,
+  Button
 } from '@carbon/react';
 import {
   Dashboard,
   Time,
   DataBase,
-  StarFilled
+  StarFilled,
+  Reset
 } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
@@ -48,6 +50,27 @@ function DashboardTileViewPage() {
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [tagFilter, setTagFilter] = useState([]);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
+  // User-authored tile order: array of dashboard IDs the user has
+  // explicitly placed via drag-and-drop. Partial coverage is fine —
+  // dashboards not present here fall through to the default
+  // most-recently-updated sort. Stored at
+  // app_config.settings.dashboard_tile_order.
+  //   null  → not yet loaded from server (treat like empty)
+  //   []    → user has no manual ordering yet
+  //   [...] → user's pinned order, partial allowed
+  const [tileOrder, setTileOrder] = useState(null);
+  // Drag state — null when no drag is in progress. Held in a ref so
+  // we don't re-render the tile grid on every dragover.
+  const dragSrcIdRef = useRef(null);
+  // {id, side: 'left' | 'right'} — which tile we're hovering over and
+  // which half. Drop inserts the dragged tile before (left) or after
+  // (right) the target. Tracked together so the indicator can render
+  // on the correct edge.
+  const [dragOver, setDragOver] = useState(null);
+  // Used to suppress click-after-drag — HTML5 drag fires both a drop
+  // and a synthetic click on some browsers if the drag distance is
+  // small. We also need it to gate a "did we just navigate?" race.
+  const justDraggedRef = useRef(false);
 
   useEffect(() => {
     fetchData();
@@ -60,13 +83,30 @@ function DashboardTileViewPage() {
 
     try {
       const config = await apiClient.getUserConfig(userGuid);
-      if (config.settings?.default_dashboard_id) {
-        setDefaultDashboardId(config.settings.default_dashboard_id);
+      const settings = config?.settings || {};
+      if (settings.default_dashboard_id) {
+        setDefaultDashboardId(settings.default_dashboard_id);
       }
+      const stored = settings.dashboard_tile_order;
+      setTileOrder(Array.isArray(stored) ? stored : []);
     } catch {
-      // User may not have config yet
+      // User may not have config yet — treat as empty manual order.
+      setTileOrder([]);
     }
   };
+
+  // Persist the user's tile order. Caller passes the new order array;
+  // we save and update local state. GC: drop entries pointing at
+  // dashboards the user no longer has access to (parallel to the
+  // fit-mode map's GC pattern in DashboardViewerPage.selectFitMode).
+  const persistTileOrder = useCallback((nextOrder) => {
+    setTileOrder(nextOrder);
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) return;
+    apiClient.updateUserConfig(userGuid, {
+      dashboard_tile_order: nextOrder,
+    }).catch(() => {});
+  }, []);
 
   const handleSetDefault = async (e, dashboardId) => {
     e.stopPropagation();
@@ -137,7 +177,84 @@ function DashboardTileViewPage() {
   };
 
   const handleTileClick = (dashboardId) => {
+    // Suppress click immediately following a drop. Some browsers fire
+    // a click after a successful drop on the source tile; we don't
+    // want that to navigate.
+    if (justDraggedRef.current) {
+      justDraggedRef.current = false;
+      return;
+    }
     navigate(`/view/dashboards/${dashboardId}`);
+  };
+
+  // --- Drag-and-drop tile reorder ---
+  // Native HTML5 dnd. Whole-tile drag with a small grab cursor; the
+  // drop target is the tile being dragged-over, and the dropped tile
+  // is inserted immediately before it. Touch devices won't get
+  // reorder; that's intentional (mobile users can use a desktop).
+  const handleDragStart = (e, dashboardId) => {
+    dragSrcIdRef.current = dashboardId;
+    // Required by Firefox to actually initiate the drag
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dashboardId); } catch { /* no-op */ }
+  };
+
+  const handleDragOver = (e, overId) => {
+    if (!dragSrcIdRef.current) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // Decide which half of the target tile the cursor is on. Insert
+    // before if the pointer is left-of-center, after if right-of-
+    // center. This is the pattern Trello / Notion / GitHub Projects
+    // use for grid reorder, and it gives us a clear visual indicator
+    // (a vertical bar on the left or right edge).
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = (e.clientX - rect.left) < (rect.width / 2) ? 'left' : 'right';
+    if (!dragOver || dragOver.id !== overId || dragOver.side !== side) {
+      setDragOver({ id: overId, side });
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(null);
+  };
+
+  const handleDrop = (e, dropTargetId) => {
+    e.preventDefault();
+    const srcId = dragSrcIdRef.current;
+    // Capture side BEFORE clearing — handleDragEnd may also fire and
+    // wipe state, but we already have what we need.
+    const side = dragOver?.id === dropTargetId ? dragOver.side : 'left';
+    dragSrcIdRef.current = null;
+    setDragOver(null);
+    if (!srcId || srcId === dropTargetId) return;
+
+    // Build the new order from the *currently rendered* sequence,
+    // remove srcId, then re-insert at the chosen position relative
+    // to the drop target.
+    //
+    // The off-by-one trap: when we filter out srcId first, every
+    // index to the right of srcId's old position shifts down by one.
+    // The "insert at targetIdx" math is computed AFTER the filter,
+    // so it already accounts for that. The only adjustment is
+    // appending +1 when dropping on the right half.
+    const currentOrder = filteredDashboards.map(d => d.id);
+    const without = currentOrder.filter(id => id !== srcId);
+    const targetIdx = without.indexOf(dropTargetId);
+    if (targetIdx < 0) return;
+    const insertAt = side === 'left' ? targetIdx : targetIdx + 1;
+    const next = [...without.slice(0, insertAt), srcId, ...without.slice(insertAt)];
+    persistTileOrder(next);
+    justDraggedRef.current = true;
+  };
+
+  const handleDragEnd = () => {
+    dragSrcIdRef.current = null;
+    setDragOver(null);
+  };
+
+  const handleResetOrder = () => {
+    persistTileOrder([]);
   };
 
   // Apply namespace, tag, and search filters. Same semantics as the
@@ -169,18 +286,41 @@ function DashboardTileViewPage() {
       );
     }
 
-    // Default order: most-recently-updated first, matching the
-    // design-mode list (DashboardsListPage). The server returns
-    // dashboards sorted by name; we resort here so view and design
-    // modes show the same ordering at the top of the list.
+    // Order resolution:
+    //   1. Default — most-recently-updated first, matching the
+    //      design-mode list (DashboardsListPage). Used as the
+    //      starting order and as the fallback for any dashboard the
+    //      user hasn't explicitly placed.
+    //   2. User order (tileOrder) — array of IDs the user has dragged
+    //      into a chosen sequence. Anything in tileOrder appears
+    //      first, in the order given.
+    //   3. New dashboards (anything not in tileOrder) are prepended
+    //      to the front, NOT appended. A new dashboard the user
+    //      hasn't seen should be the first thing they notice.
     result.sort((a, b) => {
       const aT = new Date(a.updated || a.created || 0).getTime();
       const bT = new Date(b.updated || b.created || 0).getTime();
       return bT - aT;
     });
+    if (tileOrder && tileOrder.length > 0) {
+      const orderIdx = new Map(tileOrder.map((id, i) => [id, i]));
+      const pinned = [];
+      const unpinned = [];
+      for (const d of result) {
+        if (orderIdx.has(d.id)) {
+          pinned.push(d);
+        } else {
+          unpinned.push(d);
+        }
+      }
+      pinned.sort((a, b) => orderIdx.get(a.id) - orderIdx.get(b.id));
+      // unpinned (new-to-the-user) dashboards come first; pinned
+      // follow in the user's chosen sequence.
+      result = [...unpinned, ...pinned];
+    }
 
     return result;
-  }, [dashboards, namespaceFilter, tagFilter, searchTerm]);
+  }, [dashboards, namespaceFilter, tagFilter, searchTerm, tileOrder]);
 
   if (loading) {
     return (
@@ -205,6 +345,17 @@ function DashboardTileViewPage() {
           <Dashboard size={24} />
           <h1>Dashboards</h1>
         </div>
+        {tileOrder && tileOrder.length > 0 && (
+          <Button
+            kind="ghost"
+            size="sm"
+            renderIcon={Reset}
+            onClick={handleResetOrder}
+            title="Discard your manual tile order and revert to most-recently-updated first"
+          >
+            Reset order
+          </Button>
+        )}
       </div>
       <div className="header-toolbar">
         <div className="header-search">
@@ -239,10 +390,23 @@ function DashboardTileViewPage() {
         </div>
       ) : (
         <div className="dashboard-tiles-grid">
-          {filteredDashboards.map((dashboard) => (
+          {filteredDashboards.map((dashboard) => {
+            const dropSide = dragOver?.id === dashboard.id ? dragOver.side : null;
+            return (
             <div
               key={dashboard.id}
-              className={`dashboard-tile ${defaultDashboardId === dashboard.id ? 'dashboard-tile--default' : ''}`}
+              className={[
+                'dashboard-tile',
+                defaultDashboardId === dashboard.id ? 'dashboard-tile--default' : '',
+                dropSide === 'left' ? 'dashboard-tile--drop-before' : '',
+                dropSide === 'right' ? 'dashboard-tile--drop-after' : '',
+              ].filter(Boolean).join(' ')}
+              draggable
+              onDragStart={(e) => handleDragStart(e, dashboard.id)}
+              onDragOver={(e) => handleDragOver(e, dashboard.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, dashboard.id)}
+              onDragEnd={handleDragEnd}
               onClick={() => handleTileClick(dashboard.id)}
             >
               <div className="tile-thumbnail">
@@ -299,7 +463,8 @@ function DashboardTileViewPage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
