@@ -36,4 +36,11 @@ Each user has a set of capabilities that control access:
 
 The mode toggle in the header only shows modes you have access to.
 
----
+## Header Pills at a Glance
+
+Once you're logged in, the application header shows two contextual pills next to the mode toggle:
+
+- **Mode pill** — the current mode (View / Design / Manage). Click to switch.
+- **Namespace pill** — your active [namespace](namespaces.md). Determines the default namespace for any new connection, component, or dashboard you create. Click to switch.
+
+Both pills persist across sessions, so each user keeps their own working context.

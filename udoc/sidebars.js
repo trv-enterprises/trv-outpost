@@ -51,6 +51,11 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Automation & Integration',
+      items: ['mcp', 'dashboard-agent'],
+    },
+    {
+      type: 'category',
       label: 'Reference',
       items: ['keyboard-shortcuts', 'grid-layout'],
     },

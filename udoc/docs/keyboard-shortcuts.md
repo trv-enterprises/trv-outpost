@@ -8,7 +8,7 @@ sidebar_position: 20
 
 | Shortcut | Action |
 |----------|--------|
-| **Alt + Right Arrow** | Next dashboard (alphabetical) |
+| **Alt + Right Arrow** | Next dashboard (matches the View Mode tile order) |
 | **Alt + Left Arrow** | Previous dashboard |
 | **F11** | Toggle browser fullscreen |
 | **Escape** | Exit fullscreen |

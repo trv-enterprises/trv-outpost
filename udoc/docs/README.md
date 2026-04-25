@@ -37,11 +37,21 @@ Welcome to TRVE Dashboards, a full-stack application for creating, managing, and
 - [Connections Overview](connections-overview.md)
 - [Connection Types](connection-types.md)
 
+## Sharing & Organization
+
+- [Namespaces](namespaces.md)
+- [Export & Import](export-import.md)
+
 ## Administration
 
 - [User Management](user-management.md)
 - [System Settings](system-settings.md)
 - [Device Types](device-types.md)
+
+## Automation & Integration
+
+- [MCP Server (External Agents)](mcp.md)
+- [Dashboard-Builder Agent](dashboard-agent.md)
 
 ## Reference
 
