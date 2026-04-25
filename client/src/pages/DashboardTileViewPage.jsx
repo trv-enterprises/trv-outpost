@@ -67,10 +67,15 @@ function DashboardTileViewPage() {
   // (right) the target. Tracked together so the indicator can render
   // on the correct edge.
   const [dragOver, setDragOver] = useState(null);
-  // Used to suppress click-after-drag — HTML5 drag fires both a drop
-  // and a synthetic click on some browsers if the drag distance is
-  // small. We also need it to gate a "did we just navigate?" race.
-  const justDraggedRef = useRef(false);
+  // Used to suppress the synthetic click some browsers fire on a
+  // tile right after it's been dropped. Stores {id, expiresAt}: the
+  // dropped tile's ID and a millisecond timestamp after which the
+  // suppression no longer applies. A bare boolean was too sticky
+  // (intentional clicks on the dropped tile minutes later got
+  // swallowed); a tile-scoped + time-bounded gate lets every other
+  // click — including later intentional clicks on the same tile —
+  // through.
+  const droppedRef = useRef({ id: null, expiresAt: 0 });
 
   useEffect(() => {
     fetchData();
@@ -177,11 +182,13 @@ function DashboardTileViewPage() {
   };
 
   const handleTileClick = (dashboardId) => {
-    // Suppress click immediately following a drop. Some browsers fire
-    // a click after a successful drop on the source tile; we don't
-    // want that to navigate.
-    if (justDraggedRef.current) {
-      justDraggedRef.current = false;
+    // Swallow the synthetic click that fires on the dropped tile
+    // immediately after a drop. Scope is tight: only THIS tile, only
+    // for ~250ms after the drop. Clicks on other tiles, and later
+    // intentional clicks on this tile, navigate normally.
+    const dropped = droppedRef.current;
+    if (dropped.id === dashboardId && Date.now() < dropped.expiresAt) {
+      droppedRef.current = { id: null, expiresAt: 0 };
       return;
     }
     navigate(`/view/dashboards/${dashboardId}`);
@@ -245,7 +252,12 @@ function DashboardTileViewPage() {
     const insertAt = side === 'left' ? targetIdx : targetIdx + 1;
     const next = [...without.slice(0, insertAt), srcId, ...without.slice(insertAt)];
     persistTileOrder(next);
-    justDraggedRef.current = true;
+    // Mark the source tile as just-dropped for a short window so the
+    // synthetic post-drop click on it doesn't navigate. Anything
+    // longer than ~150ms is fine; 250ms gives a margin without
+    // being noticeable as latency to a user actually trying to
+    // double-click their tile to open it.
+    droppedRef.current = { id: srcId, expiresAt: Date.now() + 250 };
   };
 
   const handleDragEnd = () => {
