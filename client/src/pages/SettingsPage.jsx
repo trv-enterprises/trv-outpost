@@ -27,6 +27,8 @@ import LayoutDimensionsEditorModal from '../components/LayoutDimensionsEditorMod
 import DefaultLayoutDimensionEditorModal from '../components/DefaultLayoutDimensionEditorModal';
 import TileFontSizeEditorModal from '../components/TileFontSizeEditorModal';
 import DefaultDashboardFitModeEditorModal from '../components/DefaultDashboardFitModeEditorModal';
+import DashboardConfigRefreshIntervalEditorModal, { DEFAULT_DASHBOARD_CONFIG_REFRESH_INTERVAL } from '../components/DashboardConfigRefreshIntervalEditorModal';
+import DefaultBrowserUserEditorModal from '../components/DefaultBrowserUserEditorModal';
 import NumericChartNumberSizeEditorModal, { DEFAULT_NUMBER_CHART_SIZE } from '../components/NumericChartNumberSizeEditorModal';
 import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -50,6 +52,8 @@ function SettingsPage() {
   const [defaultLayoutDimensionModalOpen, setDefaultLayoutDimensionModalOpen] = useState(false);
   const [tileFontSizeModalOpen, setTileFontSizeModalOpen] = useState(false);
   const [defaultFitModeModalOpen, setDefaultFitModeModalOpen] = useState(false);
+  const [dashboardConfigRefreshModalOpen, setDashboardConfigRefreshModalOpen] = useState(false);
+  const [defaultBrowserUserModalOpen, setDefaultBrowserUserModalOpen] = useState(false);
   const [numericChartSizeModalOpen, setNumericChartSizeModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
   const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
@@ -89,6 +93,12 @@ function SettingsPage() {
         break;
       case 'default_dashboard_fit_mode':
         setDefaultFitModeModalOpen(true);
+        break;
+      case 'dashboard_config_refresh_interval':
+        setDashboardConfigRefreshModalOpen(true);
+        break;
+      case 'default_browser_user_guid':
+        setDefaultBrowserUserModalOpen(true);
         break;
       case 'default_numeric_chart_number_size':
         setNumericChartSizeModalOpen(true);
@@ -142,6 +152,16 @@ function SettingsPage() {
 
   const handleDefaultFitModeClose = () => {
     setDefaultFitModeModalOpen(false);
+    setEditingSetting(null);
+  };
+
+  const handleDashboardConfigRefreshClose = () => {
+    setDashboardConfigRefreshModalOpen(false);
+    setEditingSetting(null);
+  };
+
+  const handleDefaultBrowserUserClose = () => {
+    setDefaultBrowserUserModalOpen(false);
     setEditingSetting(null);
   };
 
@@ -344,6 +364,28 @@ function SettingsPage() {
         onSave={(value) => {
           handleSave('default_dashboard_fit_mode', value);
           handleDefaultFitModeClose();
+        }}
+      />
+
+      {/* Dashboard Config Refresh Interval Editor Modal */}
+      <DashboardConfigRefreshIntervalEditorModal
+        open={dashboardConfigRefreshModalOpen}
+        onClose={handleDashboardConfigRefreshClose}
+        currentValue={editingSetting?.key === 'dashboard_config_refresh_interval' ? editingSetting.value : DEFAULT_DASHBOARD_CONFIG_REFRESH_INTERVAL}
+        onSave={(value) => {
+          handleSave('dashboard_config_refresh_interval', value);
+          handleDashboardConfigRefreshClose();
+        }}
+      />
+
+      {/* Default Browser User Editor Modal */}
+      <DefaultBrowserUserEditorModal
+        open={defaultBrowserUserModalOpen}
+        onClose={handleDefaultBrowserUserClose}
+        currentValue={editingSetting?.key === 'default_browser_user_guid' ? editingSetting.value : ''}
+        onSave={(value) => {
+          handleSave('default_browser_user_guid', value);
+          handleDefaultBrowserUserClose();
         }}
       />
 

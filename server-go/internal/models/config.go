@@ -39,10 +39,9 @@ type ConfigItem struct {
 
 // SystemConfigResponse is the API response for system configuration
 type SystemConfigResponse struct {
-	Settings              map[string]interface{}        `json:"settings"`
-	LayoutDimensions      map[string]LayoutDimensionDTO `json:"layout_dimensions"`
-	DefaultDimension      string                        `json:"default_dimension"`
-	ConfigRefreshInterval int                           `json:"config_refresh_interval"` // seconds - how often frontend should refresh dashboard/chart config
+	Settings         map[string]interface{}        `json:"settings"`
+	LayoutDimensions map[string]LayoutDimensionDTO `json:"layout_dimensions"`
+	DefaultDimension string                        `json:"default_dimension"`
 }
 
 // UserConfigResponse is the API response for user configuration

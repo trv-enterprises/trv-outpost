@@ -5211,6 +5211,13 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "column_widths": {
+                    "description": "For dataview only: column name -\u003e pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
                 "filters": {
                     "description": "Client-side filters applied after data fetch",
                     "type": "array",
@@ -7483,10 +7490,6 @@ const docTemplate = `{
         "models.SystemConfigResponse": {
             "type": "object",
             "properties": {
-                "config_refresh_interval": {
-                    "description": "seconds - how often frontend should refresh dashboard/chart config",
-                    "type": "integer"
-                },
                 "default_dimension": {
                     "type": "string"
                 },

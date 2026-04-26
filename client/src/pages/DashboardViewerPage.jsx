@@ -136,6 +136,14 @@ function DashboardViewerPage({ canDesign = false }) {
   // Initial state is "stretch" to avoid a visible flicker before the
   // async load completes.
   const [fitMode, setFitMode] = useState('stretch');
+  // Cadence (seconds) for the slow-poll refresh of the dashboard
+  // record itself — picks up edits made by another author so an
+  // unattended kiosk display reflects them without manual reload.
+  // Loaded from the admin setting `dashboard_config_refresh_interval`
+  // (default 300 s, set to 0 to disable). Null means "not yet
+  // loaded"; the polling effect waits for a real value before
+  // starting.
+  const [configRefreshIntervalSec, setConfigRefreshIntervalSec] = useState(null);
   const [isDefaultDashboard, setIsDefaultDashboard] = useState(false);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
 
@@ -508,6 +516,25 @@ function DashboardViewerPage({ canDesign = false }) {
     fetchDashboardList();
   }, []);
 
+  // Load the deployment-wide dashboard config-refresh cadence on mount.
+  // The setting is stored under app_config (system tier) — see
+  // server-go/config/user-configurable.yaml. Default 300 s. Failures
+  // resolve to 0 (disabled) so a missing/unreachable settings endpoint
+  // never starts surprise polling.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getSetting('dashboard_config_refresh_interval')
+      .then(item => {
+        if (cancelled) return;
+        const n = Number(item?.value);
+        setConfigRefreshIntervalSec(Number.isFinite(n) && n >= 0 ? n : 300);
+      })
+      .catch(() => {
+        if (!cancelled) setConfigRefreshIntervalSec(0);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // Show switch indicator briefly
   const showSwitchIndicator = useCallback((name, index, total) => {
     setSwitchIndicator({ name, index, total });
@@ -636,14 +663,36 @@ function DashboardViewerPage({ canDesign = false }) {
     }
   };
 
-  // (Removed: a former useEffect here polled fetchDashboard() on a
-  // configRefreshInterval timer. That re-fetched the dashboard
-  // *record* — its panels, settings — not chart data, which is what
-  // the user actually wants refreshed. Per-chart data refresh is
-  // driven by the dashboard's settings.refresh_interval flowing
-  // through to useData via DynamicComponentLoader's
-  // dataRefreshInterval prop, with visibility-gated polling
-  // happening inside useData itself.)
+  // Config refresh — poll the dashboard record on a slow cadence so
+  // an unattended viewer (kiosk display, wall monitor) picks up
+  // dashboard edits made by another author without a manual reload.
+  //
+  //   - Cadence is the deployment-wide admin setting
+  //     `dashboard_config_refresh_interval` (seconds; 0 disables).
+  //   - Paused while the user is editing the dashboard they're
+  //     viewing — never overwrite in-progress edits.
+  //   - Paused while the browser tab is hidden so backgrounded tabs
+  //     don't poll. Resumes immediately on visibility return.
+  //   - fetchDashboard() updates state via setDashboard / setChartsMap.
+  //     React diffs and re-renders only what changed; chart panels
+  //     remount only when chart.updated changes (key includes it).
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!configRefreshIntervalSec || configRefreshIntervalSec <= 0) return;
+    const intervalMs = configRefreshIntervalSec * 1000;
+
+    let timer = null;
+    const start = () => { if (timer == null) timer = setInterval(fetchDashboard, intervalMs); };
+    const stop = () => { if (timer != null) { clearInterval(timer); timer = null; } };
+    const onVisibility = () => { if (document.hidden) stop(); else start(); };
+
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isEditMode, configRefreshIntervalSec, fetchDashboard]);
 
   // Dashboard command subscription — listen for voice/kiosk commands via MQTT
   // Subscribes once on mount (not gated by isEditMode — commands are ignored during edit
@@ -1830,7 +1879,11 @@ function DashboardViewerPage({ canDesign = false }) {
                           )}
                           <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''}`}>
                             <ChartPanelWithActions
-                              key={`${panel.chart_id}-${refreshKey}`}
+                              // Key includes chart.updated so a config-refresh poll
+                              // that picks up a server-side chart edit forces this
+                              // panel to remount and the DynamicComponentLoader to
+                              // re-eval the new component_code.
+                              key={`${panel.chart_id}-${chart.updated || ''}-${refreshKey}`}
                               chart={chart}
                               loaderProps={{
                                 code: chart.component_code,

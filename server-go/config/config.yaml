@@ -49,9 +49,6 @@ validation:
     - "@carbon/react"
     - "@carbon/icons-react"
 
-dashboard:
-  config_refresh_interval: 120  # seconds - how often to refresh dashboard/chart config from database
-
 layout:
   spacing: 32  # pixels - $spacing-08
   max_width: 1920
@@ -153,12 +150,6 @@ settings:
       - name: "3840x2160-4K"
         max_width: 3840
         max_height: 2160
-
-  - key: config_refresh_interval
-    category: dashboard
-    description: "How often (in seconds) the frontend should refresh dashboard/chart config from the database"
-    hidden: false
-    value: 120
 
   - key: default_layout_dimension
     category: layout

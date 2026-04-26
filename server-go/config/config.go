@@ -19,7 +19,6 @@ type Config struct {
 	WebSocket        WebSocketConfig             `mapstructure:"websocket"`
 	LLM              LLMConfig                   `mapstructure:"llm"`
 	Validation       ValidationConfig            `mapstructure:"validation"`
-	Dashboard        DashboardConfig             `mapstructure:"dashboard"`
 	Layout           LayoutConfig                `mapstructure:"layout"`
 	LayoutDimensions map[string]LayoutDimension  `mapstructure:"layout_dimensions"`
 	Logging          LoggingConfig               `mapstructure:"logging"`
@@ -41,11 +40,6 @@ type SettingDefinition struct {
 // UserConfigurableSettings holds settings loaded from user-configurable.yaml
 type UserConfigurableSettings struct {
 	Settings []SettingDefinition `mapstructure:"settings"`
-}
-
-// DashboardConfig holds dashboard-specific settings
-type DashboardConfig struct {
-	ConfigRefreshInterval int `mapstructure:"config_refresh_interval" json:"config_refresh_interval"` // seconds
 }
 
 // LayoutDimension represents a preset layout dimension

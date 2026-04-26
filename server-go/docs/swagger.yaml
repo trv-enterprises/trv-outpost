@@ -394,6 +394,12 @@ definitions:
         description: Display names for columns (column name -> display name), primarily
           for dataview
         type: object
+      column_widths:
+        additionalProperties:
+          type: integer
+        description: 'For dataview only: column name -> pixel width. Default if a
+          per-user override isn''t set in app_config.dataview_layouts.'
+        type: object
       filters:
         description: Client-side filters applied after data fetch
         items:
@@ -1996,9 +2002,6 @@ definitions:
     type: object
   models.SystemConfigResponse:
     properties:
-      config_refresh_interval:
-        description: seconds - how often frontend should refresh dashboard/chart config
-        type: integer
       default_dimension:
         type: string
       layout_dimensions:

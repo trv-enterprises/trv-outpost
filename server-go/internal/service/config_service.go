@@ -16,25 +16,17 @@ import (
 
 // ConfigService handles business logic for app configuration
 type ConfigService struct {
-	repo                  *repository.ConfigRepository
-	settingsRepo          *repository.SettingsItemRepository
-	layoutDimensions      map[string]config.LayoutDimension // fallback from config file
-	configRefreshInterval int                               // seconds - how often frontend should refresh config
+	repo             *repository.ConfigRepository
+	settingsRepo     *repository.SettingsItemRepository
+	layoutDimensions map[string]config.LayoutDimension // fallback from config file
 }
 
 // NewConfigService creates a new ConfigService
 func NewConfigService(repo *repository.ConfigRepository, settingsRepo *repository.SettingsItemRepository, cfg *config.Config) *ConfigService {
-	// Default to 120 seconds if not configured
-	configRefreshInterval := cfg.Dashboard.ConfigRefreshInterval
-	if configRefreshInterval <= 0 {
-		configRefreshInterval = 120
-	}
-
 	return &ConfigService{
-		repo:                  repo,
-		settingsRepo:          settingsRepo,
-		layoutDimensions:      cfg.LayoutDimensions,
-		configRefreshInterval: configRefreshInterval,
+		repo:             repo,
+		settingsRepo:     settingsRepo,
+		layoutDimensions: cfg.LayoutDimensions,
 	}
 }
 
@@ -200,10 +192,9 @@ func (s *ConfigService) GetSystemConfig(ctx context.Context) (*models.SystemConf
 	}
 
 	return &models.SystemConfigResponse{
-		Settings:              appConfig.Settings,
-		LayoutDimensions:      dimensions,
-		DefaultDimension:      defaultDimension,
-		ConfigRefreshInterval: s.configRefreshInterval,
+		Settings:         appConfig.Settings,
+		LayoutDimensions: dimensions,
+		DefaultDimension: defaultDimension,
 	}, nil
 }
 

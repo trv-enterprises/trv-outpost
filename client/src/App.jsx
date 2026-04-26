@@ -89,35 +89,95 @@ function AppContent({ onDisconnect }) {
   const { notifications } = useNotifications();
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  // Goes true once the bootstrap chain has finished trying (success
+  // or fail). Used to distinguish "still loading" from "tried,
+  // nothing resolved" so we can show the right stub vs. spinner.
+  const [identityResolved, setIdentityResolved] = useState(false);
   const [userCapabilities, setUserCapabilities] = useState({ can_design: false, can_manage: false });
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
 
-  // Fetch users list on mount
+  // Bootstrap the visitor's identity on mount. Resolution chain:
+  //
+  //   1. ?user_id=<guid> in the URL  — kiosk/share-URL pattern.
+  //      The param is consumed and stripped from the URL bar so it
+  //      doesn't get bookmarked; the GUID lands in localStorage.
+  //   2. localStorage.currentUserGuid  — set by a prior session
+  //      (including a prior Tier-1 visit or a dev-mode dropdown
+  //      selection in Electron).
+  //   3. Admin setting `default_browser_user_guid`  — deployment-
+  //      wide default for visitors who didn't bring an identity.
+  //   4. Nothing  — render the "sign-in not configured" stub so a
+  //      visitor without an identity can't blunder into the app.
+  //
+  // Electron mode is unchanged — its credential flow runs separately
+  // and `currentUser` is set by the Electron init path.
   useEffect(() => {
-    const fetchUsers = async () => {
+    const bootstrap = async () => {
       try {
-        const response = await apiClient.getUsers();
-        if (response.users) {
-          setUsers(response.users);
-          // If no current user set, use the saved one from localStorage or default to first user
-          const savedGuid = apiClient.getCurrentUserGuid();
-          const savedUser = savedGuid ? response.users.find(u => u.guid === savedGuid) : null;
-          if (savedUser) {
-            setCurrentUser(savedUser);
-            // Sync the API client with the restored user
-            apiClient.setCurrentUser(savedUser.guid);
-          } else if (response.users.length > 0) {
-            // Default to first user (Admin)
-            handleUserChange(response.users[0]);
+        const response = await apiClient.getUsers().catch(() => ({ users: [] }));
+        const list = response?.users || [];
+        setUsers(list);
+
+        // Tier 1: URL param. Strip from address bar after capture so
+        // a refresh doesn't perpetually re-apply (and so it doesn't
+        // sit in the user's history bar).
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromUrl = urlParams.get('user_id');
+        if (fromUrl) {
+          urlParams.delete('user_id');
+          const cleanQuery = urlParams.toString();
+          const cleanUrl = window.location.pathname +
+            (cleanQuery ? '?' + cleanQuery : '') +
+            window.location.hash;
+          window.history.replaceState(null, '', cleanUrl);
+          apiClient.setCurrentUser(fromUrl);
+        }
+
+        // Tier 2: whatever is now in localStorage (just-set above
+        // OR persisted from a prior session).
+        let guid = apiClient.getCurrentUserGuid();
+        let user = guid ? list.find((u) => u.guid === guid) : null;
+
+        // Tier 3: admin-configured default. Only consulted when no
+        // identity has been established yet for this browser.
+        if (!user) {
+          try {
+            const adminDefault = await apiClient.getSetting('default_browser_user_guid');
+            const def = (adminDefault?.value || '').toString().trim();
+            if (def) {
+              user = list.find((u) => u.guid === def) || null;
+              if (user) {
+                apiClient.setCurrentUser(user.guid);
+              }
+            }
+          } catch {
+            // Setting may not exist on older deployments — fall through
+            // to Tier 4.
           }
         }
+
+        // Tier 4 (dev only): default to first user. In production
+        // this is intentionally skipped — a fresh visitor with no
+        // URL param, no localStorage, and no admin default sees the
+        // sign-in stub instead of being silently logged in as
+        // someone.
+        if (!user && import.meta.env.DEV && list.length > 0) {
+          user = list[0];
+          apiClient.setCurrentUser(user.guid);
+        }
+
+        if (user) {
+          setCurrentUser(user);
+        }
       } catch (err) {
-        console.error('Failed to fetch users:', err);
+        console.error('Failed to bootstrap user identity:', err);
+      } finally {
+        setIdentityResolved(true);
       }
     };
-    fetchUsers();
+    bootstrap();
   }, []);
 
   // Fetch current user capabilities when user changes
@@ -263,6 +323,39 @@ function AppContent({ onDisconnect }) {
     }
   };
 
+  // Production browser-mode visitor with no resolved identity:
+  // show a stub. We never want to silently grant access to whoever
+  // hits the URL, but we also don't want a blank screen — give the
+  // visitor enough context to know what to do next.
+  // Dev mode and Electron mode are intentionally excluded; the
+  // dropdown / Electron credential flow handles those.
+  if (!electronMode && !import.meta.env.DEV && identityResolved && !currentUser) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        padding: '2rem',
+        textAlign: 'center',
+        color: 'var(--cds-text-primary)',
+        background: 'var(--cds-background)',
+      }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 300, marginBottom: '1rem' }}>
+          Sign-in not configured
+        </h1>
+        <p style={{ maxWidth: '36rem', color: 'var(--cds-text-secondary)', lineHeight: 1.5 }}>
+          This deployment doesn't have a default user assigned and no
+          identity was supplied with this request. An administrator
+          can either set <code style={{ background: 'var(--cds-layer-01)', padding: '0.125rem 0.375rem', borderRadius: 3 }}>default_browser_user_guid</code> in
+          Manage&nbsp;→&nbsp;Settings, or share a personal launch URL of
+          the form <code style={{ background: 'var(--cds-layer-01)', padding: '0.125rem 0.375rem', borderRadius: 3 }}>?user_id=&lt;your-guid&gt;</code>.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
     <div className={electronMode ? 'electron-mode' : ''}>
@@ -343,8 +436,10 @@ function AppContent({ onDisconnect }) {
                     hasDivider
                   />
                 </OverflowMenu>
-              ) : (
-                // Browser mode: Show user selection dropdown
+              ) : import.meta.env.DEV ? (
+                // Dev mode: full user-switching dropdown so different
+                // roles can be exercised against a local server.
+                // Stripped from production bundles by Vite.
                 <OverflowMenu
                   aria-label="User Account"
                   renderIcon={() => <UserAvatar size={20} />}
@@ -366,6 +461,21 @@ function AppContent({ onDisconnect }) {
                     />
                   ))}
                 </OverflowMenu>
+              ) : (
+                // Production browser mode: read-only label showing
+                // the bootstrapped identity. Clicking does not open
+                // a switcher — to act as a different user, visit
+                // with `?user_id=<their-guid>` in the URL.
+                <HeaderGlobalAction
+                  aria-label="Current user"
+                  tooltipAlignment="end"
+                  // Use HeaderGlobalAction's tooltip to surface the name
+                  title={currentUser?.name ? `Signed in as ${currentUser.name}` : 'No user'}
+                  onClick={(e) => e.preventDefault()}
+                  style={{ cursor: 'default' }}
+                >
+                  <UserAvatar size={20} />
+                </HeaderGlobalAction>
               )}
             </HeaderGlobalBar>
           </Header>
