@@ -89,8 +89,7 @@ function generateFromOptions(chart) {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: {}
-    },
-    refreshInterval: 30000
+    }
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--cds-text-secondary)' }}>Loading...</div>;
@@ -254,8 +253,7 @@ function generateDataDrivenCode(chart) {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },
-    refreshInterval: 30000
+    }
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--cds-text-secondary)' }}>Loading...</div>;
@@ -456,8 +454,7 @@ function generatePieCode(datasourceId, queryRaw, queryType, xAxis, yAxis, transf
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },
-    refreshInterval: 30000
+    }
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--cds-text-secondary)' }}>Loading...</div>;
@@ -531,8 +528,7 @@ function generateGaugeCode(datasourceId, queryRaw, queryType, yAxis, transforms,
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },
-    refreshInterval: 30000
+    }
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--cds-text-secondary)' }}>Loading...</div>;
@@ -600,8 +596,7 @@ function generateScatterCode(datasourceId, queryRaw, queryType, xAxis, yAxis, tr
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },
-    refreshInterval: 30000
+    }
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--cds-text-secondary)' }}>Loading...</div>;
@@ -642,8 +637,7 @@ function generateDataViewCode(datasourceId, queryRaw, queryType, dataMapping, tr
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
       params: ${JSON.stringify(queryParams)}
-    },
-    refreshInterval: 30000
+    }
   });
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--cds-text-secondary)' }}>Loading...</div>;

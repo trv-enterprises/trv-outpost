@@ -7,7 +7,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Tile,
   Loading,
-  Tag,
   Search,
   Tooltip,
   OverflowMenu,
@@ -200,15 +199,6 @@ function ViewDashboardsPage() {
                   </div>
                 </div>
               )}
-
-              <div className="tile-tags">
-                {dashboard.settings?.theme && (
-                  <Tag type="blue" size="sm">{dashboard.settings.theme} theme</Tag>
-                )}
-                {dashboard.settings?.is_public && (
-                  <Tag type="purple" size="sm">Public</Tag>
-                )}
-              </div>
 
               <div className="tile-action">
                 <span>Click to view</span>

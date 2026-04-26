@@ -558,24 +558,61 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
     };
   }, [datasourceId, queryKey, datasourceType, datasourceTransport, typeLoading, fetchData]);
 
-  // Auto-refresh interval for non-socket datasources
+  // Auto-refresh interval for non-socket datasources, gated on
+  // document visibility. When the browser tab is hidden (user
+  // switched tabs, screen locked, kiosk dormant), the polling timer
+  // is paused so backgrounded dashboards don't keep hitting the
+  // server. When visibility returns we kick off an immediate
+  // refetch and re-arm the timer so the user sees fresh data the
+  // moment they return.
   useEffect(() => {
     if (typeLoading || isStreamingType) {
       return; // Streaming handles its own updates
     }
+    if (!refreshInterval || refreshInterval <= 0) {
+      return; // Polling disabled
+    }
 
-    if (refreshInterval && refreshInterval > 0) {
-      intervalRef.current = setInterval(() => {
+    let intervalId = null;
+
+    const startTimer = () => {
+      if (intervalId != null) return;
+      intervalId = setInterval(() => {
         fetchData();
       }, refreshInterval);
+      intervalRef.current = intervalId;
+    };
 
-      return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-        }
-      };
+    const stopTimer = () => {
+      if (intervalId != null) {
+        clearInterval(intervalId);
+        intervalId = null;
+        intervalRef.current = null;
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopTimer();
+      } else {
+        // Returning to a visible tab — refetch immediately so the
+        // user sees fresh data without waiting for the next tick,
+        // then resume polling on the configured cadence.
+        fetchData();
+        startTimer();
+      }
+    };
+
+    if (!document.hidden) {
+      startTimer();
     }
-  }, [refreshInterval, fetchData, datasourceType, datasourceTransport, typeLoading]);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      stopTimer();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [refreshInterval, fetchData, datasourceType, datasourceTransport, typeLoading, isStreamingType]);
 
   // Refetch function (bypasses cache for polling, clears buffer for streaming)
   // showLoading: if true, shows loading spinner during refetch (default: false for seamless updates)

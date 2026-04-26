@@ -78,9 +78,6 @@ function ViewModeNav({ location, navigate }) {
                     {dashboard.description || 'No description'}
                   </div>
                   <div className="tile-tags">
-                    {dashboard.settings?.theme && (
-                      <Tag type="blue" size="sm">{dashboard.settings.theme}</Tag>
-                    )}
                     {dashboard.settings?.refresh_interval > 0 && (
                       <Tag type="green" size="sm">{dashboard.settings.refresh_interval}s</Tag>
                     )}

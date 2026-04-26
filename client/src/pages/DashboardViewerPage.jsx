@@ -16,8 +16,6 @@ import {
   SelectItem,
   TextInput,
   NumberInput,
-  Slider,
-  Checkbox,
   Tooltip
 } from '@carbon/react';
 import {
@@ -138,7 +136,6 @@ function DashboardViewerPage({ canDesign = false }) {
   // Initial state is "stretch" to avoid a visible flicker before the
   // async load completes.
   const [fitMode, setFitMode] = useState('stretch');
-  const [configRefreshInterval, setConfigRefreshInterval] = useState(120);
   const [isDefaultDashboard, setIsDefaultDashboard] = useState(false);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
 
@@ -184,14 +181,16 @@ function DashboardViewerPage({ canDesign = false }) {
   const [editableNamespace, setEditableNamespace] = useState('');
   const { activeNamespace } = useNamespaces();
 
-  // Dashboard settings (editable in settings modal)
+  // Dashboard settings (editable in settings modal). Theme, is_public,
+  // allow_export, and title_scale were removed from the modal — they
+  // were never wired to runtime behavior in the current chart pipeline
+  // (title_scale only scaled `.chart-name` on the legacy `datatable`
+  // chart type, which nothing can create anymore). The fields still
+  // exist on the server-side model as no-ops for back-compat; we just
+  // stop reading or writing them from this UI.
   const [editableDescription, setEditableDescription] = useState('');
   const [editableTags, setEditableTags] = useState([]);
-  const [editableTheme, setEditableTheme] = useState('dark');
-  const [editableRefreshInterval, setEditableRefreshInterval] = useState(0);
-  const [editableTitleScale, setEditableTitleScale] = useState(100);
-  const [editableIsPublic, setEditableIsPublic] = useState(false);
-  const [editableAllowExport, setEditableAllowExport] = useState(true);
+  const [editableRefreshInterval, setEditableRefreshInterval] = useState(30);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
 
@@ -493,20 +492,6 @@ function DashboardViewerPage({ canDesign = false }) {
     }
   }, [id]);
 
-  // Fetch system config on mount
-  useEffect(() => {
-    const fetchSystemConfig = async () => {
-      try {
-        const config = await apiClient.getSystemConfig();
-        if (config?.config_refresh_interval > 0) {
-          setConfigRefreshInterval(config.config_refresh_interval);
-        }
-      } catch (err) {
-        console.warn('Failed to fetch system config, using default refresh interval:', err);
-      }
-    };
-    fetchSystemConfig();
-  }, []);
 
   // Fetch dashboard list for keyboard switching
   useEffect(() => {
@@ -602,7 +587,10 @@ function DashboardViewerPage({ canDesign = false }) {
         name: 'Untitled Dashboard',
         description: '',
         panels: [],
-        settings: { theme: 'dark', refresh_interval: 0, title_scale: 100, is_public: false, allow_export: true }
+        // refresh_interval defaults to 30s — polling is gated on tab
+        // visibility, so a backgrounded tab doesn't poll. Set to 0
+        // in the editor to disable entirely.
+        settings: { refresh_interval: 30 }
       };
       setDashboard(emptyDashboard);
       setLoading(false);
@@ -648,13 +636,14 @@ function DashboardViewerPage({ canDesign = false }) {
     }
   };
 
-  // Auto-refresh (paused in edit mode)
-  useEffect(() => {
-    if (configRefreshInterval <= 0 || isEditMode) return;
-    const intervalMs = configRefreshInterval * 1000;
-    const interval = setInterval(() => fetchDashboard(), intervalMs);
-    return () => clearInterval(interval);
-  }, [configRefreshInterval, fetchDashboard, isEditMode]);
+  // (Removed: a former useEffect here polled fetchDashboard() on a
+  // configRefreshInterval timer. That re-fetched the dashboard
+  // *record* — its panels, settings — not chart data, which is what
+  // the user actually wants refreshed. Per-chart data refresh is
+  // driven by the dashboard's settings.refresh_interval flowing
+  // through to useData via DynamicComponentLoader's
+  // dataRefreshInterval prop, with visibility-gated polling
+  // happening inside useData itself.)
 
   // Dashboard command subscription — listen for voice/kiosk commands via MQTT
   // Subscribes once on mount (not gated by isEditMode — commands are ignored during edit
@@ -727,9 +716,16 @@ function DashboardViewerPage({ canDesign = false }) {
   }, []);
 
   const handleManualRefresh = () => {
-    setLoading(true);
-    setRefreshKey(k => k + 1); // Force all DynamicComponentLoaders to re-mount and re-query
-    fetchDashboard();
+    // Force every chart panel to re-mount and re-query. The keying
+    // pattern at <ChartPanelWithActions key={`${panel.chart_id}-${refreshKey}`}>
+    // tears down each useData instance and starts a fresh fetch.
+    // We deliberately do NOT re-fetch the dashboard record here —
+    // that would reload the panel layout and config, which is
+    // unrelated to the user's intent (they want fresh data, not a
+    // fresh layout). If the dashboard record itself changed, the
+    // user should reload the page.
+    setRefreshKey(k => k + 1);
+    setLastRefresh(new Date());
   };
 
   const handleBack = () => {
@@ -838,11 +834,12 @@ function DashboardViewerPage({ canDesign = false }) {
     setEditableNamespace(dashboard?.namespace || activeNamespace || 'default');
     setEditableDescription(dashboard?.description || '');
     setEditableTags(dashboard?.tags || []);
-    setEditableTheme(dashboard?.settings?.theme || 'dark');
-    setEditableRefreshInterval(dashboard?.settings?.refresh_interval || 0);
-    setEditableTitleScale(dashboard?.settings?.title_scale || 100);
-    setEditableIsPublic(dashboard?.settings?.is_public || false);
-    setEditableAllowExport(dashboard?.settings?.allow_export ?? true);
+    // refresh_interval defaults to 30s when unset on legacy dashboards.
+    // The editor's number input lets the user explicitly set 0 to
+    // disable polling.
+    setEditableRefreshInterval(
+      dashboard?.settings?.refresh_interval == null ? 30 : dashboard.settings.refresh_interval
+    );
     setEditHasChanges(false);
     setZoom(100);
     setIsEditMode(true);
@@ -892,14 +889,14 @@ function DashboardViewerPage({ canDesign = false }) {
   const saveEditMode = async (options) => {
     setEditSaving(true);
     try {
+      // Spread the existing settings first so removed-from-editor fields
+      // (theme, is_public, allow_export, title_scale) round-trip
+      // unchanged. We only overwrite the fields the user can actually
+      // edit now.
       const updatedSettings = {
         ...dashboard.settings,
         layout_dimension: currentDimension,
-        theme: editableTheme,
         refresh_interval: editableRefreshInterval,
-        title_scale: editableTitleScale,
-        is_public: editableIsPublic,
-        allow_export: editableAllowExport
       };
       const payload = {
         name: editableName,
@@ -1708,7 +1705,6 @@ function DashboardViewerPage({ canDesign = false }) {
             style={{
               gridTemplateColumns: `repeat(${maxGridCol}, ${CELL_WIDTH}px)`,
               gridTemplateRows: `repeat(${maxGridRow}, ${CELL_HEIGHT}px)`,
-              '--title-scale': (isEditMode ? editableTitleScale : (dashboard?.settings?.title_scale || 100)) / 100,
               // Fit-mode transform: varies by mode. See `fitTransform` useMemo.
               ...(!isEditMode && fitTransform.transform ? {
                 transform: fitTransform.transform,
@@ -2007,16 +2003,6 @@ function DashboardViewerPage({ canDesign = false }) {
             value={editableTags}
             onChange={setEditableTags}
           />
-          <Select
-            id="settings-theme"
-            labelText="Theme"
-            value={editableTheme}
-            onChange={(e) => setEditableTheme(e.target.value)}
-          >
-            <SelectItem value="light" text="Light" />
-            <SelectItem value="dark" text="Dark" />
-            <SelectItem value="auto" text="Auto" />
-          </Select>
           <NumberInput
             id="settings-refresh"
             label="Auto Refresh (seconds)"
@@ -2025,28 +2011,7 @@ function DashboardViewerPage({ canDesign = false }) {
             min={0}
             max={3600}
             step={5}
-            helperText="Set to 0 to disable auto refresh"
-          />
-          <Slider
-            id="settings-title-scale"
-            labelText="Title Scale (%)"
-            value={editableTitleScale}
-            onChange={({ value }) => setEditableTitleScale(value)}
-            min={50}
-            max={200}
-            step={10}
-          />
-          <Checkbox
-            id="settings-public"
-            labelText="Make dashboard public"
-            checked={editableIsPublic}
-            onChange={(_, { checked }) => setEditableIsPublic(checked)}
-          />
-          <Checkbox
-            id="settings-export"
-            labelText="Allow export"
-            checked={editableAllowExport}
-            onChange={(_, { checked }) => setEditableAllowExport(checked)}
+            helperText="Polling pauses while the browser tab is hidden. Set to 0 to disable auto refresh entirely."
           />
         </div>
       </Modal>

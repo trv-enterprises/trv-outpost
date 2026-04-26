@@ -3404,11 +3404,14 @@ function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xA
   })();
   const showXAxisName = !!(xAxisLabel && xAxisLabel.trim());
   const showSingleYName = !!singleYName;
-  // Build extra useData options (refreshInterval, backfill) — each prefixed with `,\n    `
+  // Build extra useData options (backfill, parser) — each prefixed with `,\n    `.
+  // refreshInterval is intentionally not emitted here. Polling cadence is
+  // driven by the dashboard's settings.refresh_interval, applied via
+  // DynamicComponentLoader's dataRefreshInterval prop. A hardcoded
+  // refreshInterval here would override the dashboard setting silently,
+  // which is confusing and was the previous behavior. Leave it off and
+  // let the loader-level value take effect.
   const extraOptions = [];
-  if (!isStreaming) {
-    extraOptions.push('refreshInterval: 30000');
-  }
   if (isStreaming && slidingWindow?.duration > 0) {
     // Convert seconds to ts-store since format (e.g., 300 -> "5m", 3600 -> "1h", 30 -> "30s")
     const dur = slidingWindow.duration;
