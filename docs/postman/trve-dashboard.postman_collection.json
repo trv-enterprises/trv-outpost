@@ -4445,7 +4445,7 @@
             "description": "Update a user\n\nUpdates an existing user's information\n\n\nResponses: 200, 400, 404",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"active\": false,\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"email\": \"\",\n  \"name\": \"\"\n}",
+              "raw": "{\n  \"active\": false,\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"clerk_user_id\": \"\",\n  \"email\": \"\",\n  \"name\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

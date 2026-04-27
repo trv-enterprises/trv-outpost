@@ -19,9 +19,16 @@ import './ag-grid-carbon-overrides.css'
 ModuleRegistry.registerModules([AllCommunityModule])
 import './index.css'
 import App from './App.jsx'
+import ClerkBootstrap from './auth/ClerkBootstrap.jsx'
 
+// ClerkBootstrap fetches /api/config/system at startup and decides
+// whether to mount the app inside a <ClerkProvider> (Clerk-enabled
+// deployment) or render the legacy v0.9.x auth path (Clerk-disabled).
+// See client/src/auth/ClerkBootstrap.jsx for the soft-switch logic.
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ClerkBootstrap>
+      <App />
+    </ClerkBootstrap>
   </StrictMode>,
 )

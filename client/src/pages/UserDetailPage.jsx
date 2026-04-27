@@ -30,6 +30,7 @@ function UserDetailPage() {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [email, setEmail] = useState('');
+  const [clerkUserID, setClerkUserID] = useState('');
   const [active, setActive] = useState(true);
   const [capabilities, setCapabilities] = useState({
     view: true,
@@ -57,6 +58,7 @@ function UserDetailPage() {
       setUser(data);
       setName(data.name);
       setEmail(data.email || '');
+      setClerkUserID(data.clerk_user_id || '');
       setActive(data.active !== false);
 
       // Convert capabilities array to object
@@ -120,8 +122,17 @@ function UserDetailPage() {
         name,
         email: email || undefined,
         capabilities: capsArray,
-        active
+        active,
       };
+
+      // Only send clerk_user_id when editing — admins use this to
+      // re-link or pre-link a user to a Clerk identity. Send the
+      // string value directly (including "" to clear an existing
+      // link). Skipped on create because Clerk IDs come from a
+      // sign-in event, not an admin form.
+      if (!isCreateMode) {
+        payload.clerk_user_id = clerkUserID;
+      }
 
       if (isCreateMode) {
         await apiClient.createUser(payload);
@@ -237,8 +248,28 @@ function UserDetailPage() {
             }}
             placeholder="Enter email address"
             type="email"
+            helperText="Used by Clerk sign-in to JIT-link this user to their Clerk identity on first sign-in."
           />
         </div>
+
+        {/* Clerk user ID — admin override for the Clerk JIT link.
+            Hidden on create because Clerk IDs are issued by a Clerk
+            sign-in event, not by the dashboard admin form. */}
+        {!isCreateMode && (
+          <div className="form-row">
+            <TextInput
+              id="user-clerk-id"
+              labelText="Clerk user ID (advanced)"
+              value={clerkUserID}
+              onChange={(e) => {
+                setClerkUserID(e.target.value);
+                setHasChanges(true);
+              }}
+              placeholder="user_2abc...XYZ (auto-populated on first Clerk sign-in)"
+              helperText="Set automatically the first time this user signs in via Clerk. Edit only to manually re-link to a different Clerk identity, or clear to break the link."
+            />
+          </div>
+        )}
 
         {/* Active Status */}
         <div className="form-row">

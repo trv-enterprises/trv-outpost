@@ -7703,6 +7703,10 @@ const docTemplate = `{
         "models.SystemConfigResponse": {
             "type": "object",
             "properties": {
+                "clerk_publishable_key": {
+                    "description": "ClerkPublishableKey, when present, signals to the SPA that the\ndeployment is configured with Clerk-backed sign-in. The value is\nthe publishable key (` + "`" + `pk_test_…` + "`" + ` or ` + "`" + `pk_live_…` + "`" + `) needed to\ninitialize the React ClerkProvider. Empty string means Clerk is\ndisabled and the SPA uses the v0.8.5 bootstrap chain instead.",
+                    "type": "string"
+                },
                 "default_dimension": {
                     "type": "string"
                 },
@@ -8298,6 +8302,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.Capability"
                     }
                 },
+                "clerk_user_id": {
+                    "description": "ClerkUserID lets an admin manually link or re-link a user to a\nClerk identity. Send \"\" to clear the link. Most deployments\nwon't need this — first sign-in JIT-links automatically — but\nit's available for cases where the email in Clerk has drifted\nfrom what's stored on the User record.",
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -8320,6 +8328,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.Capability"
                     }
+                },
+                "clerk_user_id": {
+                    "description": "ClerkUserID links this dashboard user to a Clerk identity. Set on\nfirst sign-in via JIT-link from email match, or by an admin from\nthe Users page. Subsequent sign-ins resolve via this field\ndirectly so an email change in Clerk doesn't break the link.\nEmpty when the deployment isn't using Clerk or the user hasn't\nsigned in via Clerk yet.",
+                    "type": "string"
                 },
                 "created": {
                     "type": "string"

@@ -50,6 +50,22 @@ class APIClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL;
     this.currentUserGuid = null;
+    // Optional async function that returns a Clerk session JWT.
+    // Set by ClerkSessionBridge when ClerkProvider mounts. When set
+    // and it returns a non-empty string, every outbound request
+    // attaches `Authorization: Bearer <jwt>`. When it returns null
+    // (Clerk session signed out) or throws, we fall through to the
+    // legacy X-User-ID path. Unset entirely on Clerk-disabled
+    // deployments — no async overhead in that case.
+    this.tokenProvider = null;
+  }
+
+  // setTokenProvider lets the Clerk integration plug in a
+  // `() => Promise<string|null>` that returns a fresh session JWT.
+  // Pass null to disable Clerk-token attachment (sign-out, mode
+  // switch, tests).
+  setTokenProvider(provider) {
+    this.tokenProvider = typeof provider === 'function' ? provider : null;
   }
 
   // Set the current user GUID for authentication
@@ -77,9 +93,35 @@ class APIClient {
       ...options.headers,
     };
 
-    // Add user authentication header if we have a current user
+    // Prefer Clerk JWT when a session token is available; the server
+    // dispatches Bearer tokens by shape (`trve_…` is an API key,
+    // anything else is a Clerk JWT) and resolves the user from the
+    // verified `sub` claim. Falls through silently to X-User-ID when
+    // no provider is configured, the provider returns null (signed
+    // out), or the token call errors. Token-fetch errors are
+    // non-fatal here — the legacy path is still authenticated for
+    // dev / non-Clerk deployments.
+    let bearerSet = false;
+    if (this.tokenProvider) {
+      try {
+        const token = await this.tokenProvider();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          bearerSet = true;
+        }
+      } catch (err) {
+        // Don't block the request on a token-fetch hiccup; let the
+        // legacy header path try. Server will 401 if neither works.
+        console.warn('apiClient: tokenProvider error, falling back to X-User-ID', err);
+      }
+    }
+
+    // Add user authentication header if we have a current user.
+    // Sent alongside Bearer when both exist: the server prefers
+    // Bearer (Clerk JWT or API key) and only falls back to
+    // X-User-ID when no Bearer is present, so this is harmless.
     const userGuid = this.getCurrentUserGuid();
-    if (userGuid) {
+    if (userGuid && !bearerSet) {
       headers['X-User-ID'] = userGuid;
     }
 

@@ -6,7 +6,14 @@ sidebar_position: 2
 
 ## Browser Mode
 
-When accessing TRVE Dashboards through a web browser, identity is resolved on first load using one of these channels (in order):
+The dashboard supports two browser-mode auth backends, chosen at deploy time by env vars on the server:
+
+- **Clerk sign-in (recommended)** — when admin sets `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` in the server's environment, the dashboard renders Clerk's hosted sign-in widget (email/password, Google, Apple, etc.). This is real authentication. See [Clerk Sign-In](clerk-sso.md) for setup, the JIT-link behavior, and admin overrides.
+- **Bootstrap chain (default)** — without Clerk env vars, the dashboard uses the legacy identity-assertion flow described below. Suitable for single-user homelabs or deployments that already sit behind a VPN / authenticating reverse proxy.
+
+### Bootstrap chain (when Clerk is disabled)
+
+When accessing the dashboard through a web browser, identity is resolved on first load using one of these channels (in order):
 
 1. **`?user_id=<guid>` in the URL.** A personal launch URL that bakes in the visitor's identity. After the page loads, the URL bar drops the parameter — the GUID is captured to local storage so subsequent visits to the bare URL keep the same identity.
 2. **A previous session.** If you've visited before in this browser, your identity is remembered.
@@ -15,9 +22,9 @@ When accessing TRVE Dashboards through a web browser, identity is resolved on fi
 
 Your capabilities (View, Design, Manage) determine which application modes are available to you, regardless of how identity was resolved.
 
-### Important — this is not authentication
+### Important — bootstrap chain is not authentication
 
-The browser-mode identity flow is **identity assertion**, not authentication. Anyone who knows a personal launch URL or visits the bare URL of a deployment with a default user becomes that user. Treat launch URLs like shared passwords. For real access control, place the dashboard behind a VPN, reverse proxy with auth, or single-user homelab boundary. A real login (cookies + password) is on the roadmap; this is the bootstrap layer it will replace.
+The bootstrap chain is **identity assertion**, not authentication. Anyone who knows a personal launch URL or visits the bare URL of a deployment with a default user becomes that user. Treat launch URLs like shared passwords. For real access control either enable [Clerk Sign-In](clerk-sso.md), put the dashboard behind a VPN / reverse proxy with auth, or stay within a single-user homelab boundary.
 
 ### Switching identity in production
 

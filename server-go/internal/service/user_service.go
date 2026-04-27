@@ -117,6 +117,17 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *models.Upd
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
+	// ClerkUserID is updated via a separate $set/$unset path so the
+	// sparse-unique index doesn't reject an empty string. We do this
+	// after the main update so the timestamp on the record reflects
+	// both changes.
+	if req.ClerkUserID != nil {
+		if err := s.repo.SetClerkID(ctx, user.ID, *req.ClerkUserID); err != nil {
+			return nil, fmt.Errorf("failed to update clerk_user_id: %w", err)
+		}
+		user.ClerkUserID = *req.ClerkUserID
+	}
+
 	return user, nil
 }
 

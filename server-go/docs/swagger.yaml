@@ -2038,6 +2038,14 @@ definitions:
     type: object
   models.SystemConfigResponse:
     properties:
+      clerk_publishable_key:
+        description: |-
+          ClerkPublishableKey, when present, signals to the SPA that the
+          deployment is configured with Clerk-backed sign-in. The value is
+          the publishable key (`pk_test_…` or `pk_live_…`) needed to
+          initialize the React ClerkProvider. Empty string means Clerk is
+          disabled and the SPA uses the v0.8.5 bootstrap chain instead.
+        type: string
       default_dimension:
         type: string
       layout_dimensions:
@@ -2455,6 +2463,14 @@ definitions:
         items:
           $ref: '#/definitions/models.Capability'
         type: array
+      clerk_user_id:
+        description: |-
+          ClerkUserID lets an admin manually link or re-link a user to a
+          Clerk identity. Send "" to clear the link. Most deployments
+          won't need this — first sign-in JIT-links automatically — but
+          it's available for cases where the email in Clerk has drifted
+          from what's stored on the User record.
+        type: string
       email:
         type: string
       name:
@@ -2471,6 +2487,15 @@ definitions:
         items:
           $ref: '#/definitions/models.Capability'
         type: array
+      clerk_user_id:
+        description: |-
+          ClerkUserID links this dashboard user to a Clerk identity. Set on
+          first sign-in via JIT-link from email match, or by an admin from
+          the Users page. Subsequent sign-ins resolve via this field
+          directly so an email change in Clerk doesn't break the link.
+          Empty when the deployment isn't using Clerk or the user hasn't
+          signed in via Clerk yet.
+        type: string
       created:
         type: string
       email:
