@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump
+.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check
 
 # Configuration
 REGISTRY := ghcr.io
@@ -38,6 +38,31 @@ build-server: ## Build server binaries (multi-arch)
 	@echo "Building server binaries..."
 	cd server-go && make release-build VERSION=$(VERSION) BUILD_NUM=$(BUILD_NUM)
 	@echo "✓ Server binaries built"
+
+api-docs: ## Regenerate Swagger spec + Postman collection from Go annotations
+	@echo "Regenerating Swagger spec..."
+	cd server-go && $(MAKE) swagger
+	@echo "Rebuilding Postman collection..."
+	cd docs/postman && node build-collection.js
+	@echo "✓ API docs regenerated (server-go/docs/swagger.{json,yaml}, docs/postman/trve-dashboard.postman_collection.json)"
+
+# Guardrail used by `release`: regenerate the API docs and fail if the
+# working tree picks up changes — that means the committed Swagger
+# spec or Postman collection was stale. Forces the developer to
+# refresh + commit before tagging, rather than shipping a tag that
+# disagrees with the running server.
+api-docs-check: api-docs
+	@if [ -n "$$(git status --porcelain server-go/docs/swagger.json server-go/docs/swagger.yaml server-go/docs/docs.go docs/postman/trve-dashboard.postman_collection.json 2>/dev/null)" ]; then \
+		echo ""; \
+		echo "❌  API docs are out of date. Diff:"; \
+		git status --short server-go/docs/swagger.json server-go/docs/swagger.yaml server-go/docs/docs.go docs/postman/trve-dashboard.postman_collection.json; \
+		echo ""; \
+		echo "    Review the regenerated files, then commit them:"; \
+		echo "      git add server-go/docs/ docs/postman/trve-dashboard.postman_collection.json"; \
+		echo "      git commit -m 'Regenerate API docs'"; \
+		exit 1; \
+	fi
+	@echo "✓ API docs are current"
 
 tarballs: build ## Create architecture-specific tarballs
 	@echo "Creating release tarballs for $(VERSION)..."
@@ -122,6 +147,7 @@ release: ## Full release: build, tarballs, commit, tag, push (use with VERSION=v
 	@echo "============================================"
 	@echo "Starting release $(VERSION)+$(BUILD_NUM)"
 	@echo "============================================"
+	@$(MAKE) api-docs-check
 	@$(MAKE) version-bump VERSION=$(VERSION)
 	@$(MAKE) tarballs VERSION=$(VERSION)
 	@echo ""

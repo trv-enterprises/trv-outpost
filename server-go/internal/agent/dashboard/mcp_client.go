@@ -32,6 +32,7 @@ import (
 type MCPClient struct {
 	messageURL string
 	userGUID   string
+	apiKey     string // optional `trve_…` token; takes precedence over X-User-ID
 	httpClient *http.Client
 	nextID     atomic.Int64
 }
@@ -56,11 +57,18 @@ type InitializeResult struct {
 }
 
 // NewMCPClient builds a client. messageURL is the JSON-RPC POST
-// endpoint (e.g. http://localhost:3001/mcp/message).
-func NewMCPClient(messageURL, userGUID string) *MCPClient {
+// endpoint (e.g. http://localhost:3001/mcp/message). When apiKey is
+// non-empty the client sends `Authorization: Bearer <apiKey>` and
+// the server resolves the calling user from the key — userGUID is
+// used only as a build-time hint (audit fields, namespace defaults)
+// and may be empty in that case. When apiKey is empty the client
+// falls back to the legacy `X-User-ID: <userGUID>` identity
+// assertion path.
+func NewMCPClient(messageURL, userGUID, apiKey string) *MCPClient {
 	return &MCPClient{
 		messageURL: messageURL,
 		userGUID:   userGUID,
+		apiKey:     apiKey,
 		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
@@ -157,7 +165,13 @@ func (c *MCPClient) request(ctx context.Context, method string, params interface
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.userGUID != "" {
+	// Prefer Bearer auth when an API key is set; fall back to the
+	// legacy X-User-ID identity assertion. Both are sent ONLY when
+	// non-empty so unit tests that pass empty values to a stub server
+	// don't accidentally trip auth middleware.
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	} else if c.userGUID != "" {
 		req.Header.Set("X-User-ID", c.userGUID)
 	}
 	resp, err := c.httpClient.Do(req)

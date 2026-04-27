@@ -1,0 +1,4591 @@
+{
+  "info": {
+    "_postman_id": "fa89438f-b5f4-48d8-81d2-b665dd94dad7",
+    "name": "TRVE Dashboard API",
+    "description": "Auto-generated from server-go/docs/swagger.json. Re-run docs/postman/build-collection.js to refresh after API changes.\n\nAuth: collection-level `Authorization: Bearer {{apiKey}}` is on every request. The legacy `X-User-ID: {{userId}}` header is added to every request as a *disabled* header — flip it on per-request if you need the legacy identity-assertion path (dev only).\n\nVariables you set in the environment:\n- `baseUrl` — e.g. `http://localhost:3001`\n- `apiKey`  — `trve_…` token from Manage Mode → API Keys\n- `userId`  — optional GUID, only used if you switch a request to the legacy header path",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "AI",
+      "description": "ai endpoints (6).",
+      "item": [
+        {
+          "name": "Cancel AI session",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/sessions/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "sessions",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Session ID"
+                }
+              ]
+            },
+            "description": "Cancel AI session\n\nCancel the AI session and discard the draft\n\n\nResponses: 204, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Create a new AI session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "sessions"
+              ]
+            },
+            "description": "Create a new AI session\n\nCreate a new AI session for chart creation or editing. Creates a chart draft.\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chart_id\": \"\",\n  \"chart_type\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_type\": \"\",\n  \"dashboard_id\": \"\",\n  \"initial_message\": \"\",\n  \"panel_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get AI session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/sessions/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "sessions",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Session ID"
+                }
+              ]
+            },
+            "description": "Get AI session\n\nGet an AI session by ID with current chart state\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Save AI session (publish draft)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/sessions/{id}/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "sessions",
+                ":id",
+                "save"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Session ID"
+                }
+              ]
+            },
+            "description": "Save AI session (publish draft)\n\nSave the AI session by publishing the draft as a new final version\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send message to AI session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/sessions/{id}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "sessions",
+                ":id",
+                "messages"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Session ID"
+                }
+              ]
+            },
+            "description": "Send message to AI session\n\nSend a user message to an AI session. The AI agent will process the message asynchronously.\n\n\nResponses: 202, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Subscribe to AI session events via WebSocket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/sessions/{id}/ws",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "sessions",
+                ":id",
+                "ws"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Session ID"
+                }
+              ]
+            },
+            "description": "Subscribe to AI session events via WebSocket\n\nSubscribe to real-time updates for an AI session via WebSocket\n\n\nResponses: 101, 404"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API Keys",
+      "description": "api-keys endpoints (4).",
+      "item": [
+        {
+          "name": "Create an API key for the calling user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "api-keys"
+              ]
+            },
+            "description": "Create an API key for the calling user\n\n\nResponses: 201, 400, 401",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expires_at\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List every API key in the deployment (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/api-keys/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "api-keys",
+                "all"
+              ]
+            },
+            "description": "List every API key in the deployment (admin)\n\n\nResponses: 200, 401, 403"
+          },
+          "response": []
+        },
+        {
+          "name": "List the calling user's API keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "api-keys"
+              ]
+            },
+            "description": "List the calling user's API keys\n\n\nResponses: 200, 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke an API key",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/api-keys/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "api-keys",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "API key ID"
+                }
+              ]
+            },
+            "description": "Revoke an API key\n\n\nResponses: 204, 401, 404"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "auth endpoints (2).",
+      "item": [
+        {
+          "name": "Get current user capabilities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Get current user capabilities\n\nReturns the authenticated user's ID, name, and capabilities\n\n\nResponses: 200, 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Login with key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login with key\n\nValidates a user key (GUID) and returns user info if valid\n\n\nResponses: 200, 400, 401",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Charts",
+      "description": "charts endpoints (12).",
+      "item": [
+        {
+          "name": "Create a new chart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts"
+              ]
+            },
+            "description": "Create a new chart\n\nCreate a new chart with data source binding and visualization config. Creates as version 1 with status \"final\".\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a chart",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "Delete a chart\n\nDelete all versions of a chart by ID\n\n\nResponses: 204, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a chart version",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}/versions/{version}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id",
+                "versions",
+                ":version"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                },
+                {
+                  "key": "version",
+                  "value": "",
+                  "description": "Version number"
+                }
+              ]
+            },
+            "description": "Delete a chart version\n\nDelete a specific version of a chart\n\n\nResponses: 204, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete chart draft",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id",
+                "draft"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "Delete chart draft\n\nDelete the draft version of a chart (if exists)\n\n\nResponses: 204, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a chart",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "Get a chart\n\nGet the latest version of a chart by ID\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a specific chart version",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}/versions/{version}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id",
+                "versions",
+                ":version"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                },
+                {
+                  "key": "version",
+                  "value": "",
+                  "description": "Version number"
+                }
+              ]
+            },
+            "description": "Get a specific chart version\n\nGet a specific version of a chart by ID and version number\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get chart draft",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id",
+                "draft"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "Get chart draft\n\nGet the draft version of a chart (if exists)\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get chart summaries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/summaries?limit=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                "summaries"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "Maximum number of summaries",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get chart summaries\n\nGet lightweight chart summaries for card-based selection UI\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get chart version info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}/version-info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id",
+                "version-info"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "Get chart version info\n\nGet version metadata for a chart (version count, has draft, etc.)\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "List chart versions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}/versions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id",
+                "versions"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "List chart versions\n\nGet all versions of a chart by ID\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "List charts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts?name=&chart_type=&component_type=&status=&datasource_id=&tag=&page=&page_size=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "",
+                  "description": "Filter by name (partial match)",
+                  "disabled": true
+                },
+                {
+                  "key": "chart_type",
+                  "value": "",
+                  "description": "Filter by chart type",
+                  "disabled": true
+                },
+                {
+                  "key": "component_type",
+                  "value": "",
+                  "description": "Filter by component type (chart, control, display)",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filter by status (draft, final)",
+                  "disabled": true
+                },
+                {
+                  "key": "datasource_id",
+                  "value": "",
+                  "description": "Filter by data source ID",
+                  "disabled": true
+                },
+                {
+                  "key": "tag",
+                  "value": "",
+                  "description": "Filter by tag",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "Page number",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "Page size",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List charts\n\nGet a paginated list of charts (latest version of each) with optional filtering\n\n\nResponses: 200, 400, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a chart",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/charts/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "charts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Chart ID"
+                }
+              ]
+            },
+            "description": "Update a chart\n\nUpdate the latest version of a chart in-place (for manual edits)\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Config",
+      "description": "config endpoints (4).",
+      "item": [
+        {
+          "name": "Get system configuration",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/config/system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "config",
+                "system"
+              ]
+            },
+            "description": "Get system configuration\n\nRetrieves system-wide configuration including layout dimensions\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get user configuration",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/config/user/{user_id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "config",
+                "user",
+                ":user_id"
+              ],
+              "variable": [
+                {
+                  "key": "user_id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Get user configuration\n\nRetrieves configuration for a specific user\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Update system configuration",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/config/system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "config",
+                "system"
+              ]
+            },
+            "description": "Update system configuration\n\nUpdates system-wide configuration settings\n\n\nResponses: 200, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update user configuration",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/config/user/{user_id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "config",
+                "user",
+                ":user_id"
+              ],
+              "variable": [
+                {
+                  "key": "user_id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Update user configuration\n\nUpdates configuration for a specific user\n\n\nResponses: 200, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Controls",
+      "description": "controls endpoints (1).",
+      "item": [
+        {
+          "name": "Execute a control component command",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/controls/{id}/execute",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "controls",
+                ":id",
+                "execute"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Control (Chart) ID"
+                }
+              ]
+            },
+            "description": "Execute a control component command\n\nExecutes the command configured on a control component, using either schema-based or legacy template interpolation\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboards",
+      "description": "dashboards endpoints (9).",
+      "item": [
+        {
+          "name": "Apply an import bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/import/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "import",
+                "apply"
+              ]
+            },
+            "description": "Apply an import bundle\n\nWrites the bundle's objects into the target namespace. Identical objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly opts out; blocked objects cause the whole apply to refuse.\n\n\nResponses: 200, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bundle\": {\n    \"exported_at\": \"\",\n    \"exported_by\": \"\",\n    \"format_version\": 0,\n    \"objects\": {\n      \"components\": null,\n      \"connections\": null,\n      \"dashboards\": null\n    },\n    \"source_namespace\": \"\"\n  },\n  \"overwrite_decisions\": {\n    \"<key>\": false\n  },\n  \"target_namespace\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create a new dashboard",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards"
+              ]
+            },
+            "description": "Create a new dashboard\n\nCreate a new dashboard with panels and embedded charts\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"chart_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0\n  },\n  \"tags\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a dashboard",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Dashboard ID"
+                }
+              ]
+            },
+            "description": "Delete a dashboard\n\nDelete a dashboard by ID\n\n\nResponses: 204, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Export dashboards as a portable bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "export"
+              ]
+            },
+            "description": "Export dashboards as a portable bundle\n\nReturns a JSON bundle containing the selected dashboards plus all components and connections they reference.\n\n\nResponses: 200, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dashboard_ids\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get a dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Dashboard ID"
+                }
+              ]
+            },
+            "description": "Get a dashboard\n\nGet a dashboard by ID (includes panels and charts)\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "List dashboards",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&include_datasources=&page=&page_size=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "",
+                  "description": "Filter by name (partial match)",
+                  "disabled": true
+                },
+                {
+                  "key": "is_public",
+                  "value": "",
+                  "description": "Filter by public status",
+                  "disabled": true
+                },
+                {
+                  "key": "include_datasources",
+                  "value": "",
+                  "description": "Include data source names from charts",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "Page number",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "Page size",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List dashboards\n\nGet a paginated list of dashboards with optional filtering. Use include_datasources=true to get data source names for each dashboard.\n\n\nResponses: 200, 400, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Preflight an import bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/import/preflight",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "import",
+                "preflight"
+              ]
+            },
+            "description": "Preflight an import bundle\n\nClassifies each object in the bundle as identical/conflict/new/blocked so the UI can show what would change before the user commits.\n\n\nResponses: 200, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bundle\": {\n    \"exported_at\": \"\",\n    \"exported_by\": \"\",\n    \"format_version\": 0,\n    \"objects\": {\n      \"components\": null,\n      \"connections\": null,\n      \"dashboards\": null\n    },\n    \"source_namespace\": \"\"\n  },\n  \"target_namespace\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Preview a dashboard export",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/export/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "export",
+                "preview"
+              ]
+            },
+            "description": "Preview a dashboard export\n\nReturns counts of entities that would be included in an export of the given dashboards\n\n\nResponses: 200, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dashboard_ids\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update a dashboard",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Dashboard ID"
+                }
+              ]
+            },
+            "description": "Update a dashboard\n\nUpdate an existing dashboard\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"chart_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"thumbnail\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Datasources (legacy alias of /connections)",
+      "description": "datasources endpoints (21).",
+      "item": [
+        {
+          "name": "Check datasource health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "health"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Check datasource health\n\nCheck the health of a specific datasource and update its status\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Create a new datasource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources"
+              ]
+            },
+            "description": "Create a new datasource\n\nCreate a new data source (API, WebSocket, or File)\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"description\": \"\",\n  \"mask_secrets\": false,\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a datasource",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Delete a datasource\n\nDelete a datasource by ID\n\n\nResponses: 204, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute a command on a bidirectional datasource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/command",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "command"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Execute a command on a bidirectional datasource\n\nSend a command to a datasource that supports write operations (e.g., stream.websocket-bidir)\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"\",\n  \"payload\": {},\n  \"target\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Execute a query against a datasource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "query"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Execute a query against a datasource\n\nExecute a query and return normalized results\n\n\nResponses: 200, 400, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get a datasource by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get a datasource by ID\n\nRetrieve a single datasource by its ID\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get aggregator statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/aggregators",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                "aggregators"
+              ]
+            },
+            "description": "Get aggregator statistics\n\nGet statistics about active bucket aggregators\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get database schema for a SQL datasource",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/schema",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "schema"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get database schema for a SQL datasource\n\nRetrieve tables and columns for SQL datasources. Only SQL-type datasources support this endpoint.\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get databases from an EdgeLake data source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/edgelake/databases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "edgelake",
+                "databases"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get databases from an EdgeLake data source\n\nRetrieve all database names from an EdgeLake node's blockchain registry\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get stream status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/stream/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "stream",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get stream status\n\nGet status information for an active stream\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get table schema from an EdgeLake data source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/edgelake/schema?database=&table=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "edgelake",
+                "schema"
+              ],
+              "query": [
+                {
+                  "key": "database",
+                  "value": "",
+                  "description": "Database name",
+                  "disabled": false
+                },
+                {
+                  "key": "table",
+                  "value": "",
+                  "description": "Table name",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get table schema from an EdgeLake data source\n\nRetrieve column names and types for a specific table from an EdgeLake node\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get tables from an EdgeLake data source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/edgelake/tables?database=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "edgelake",
+                "tables"
+              ],
+              "query": [
+                {
+                  "key": "database",
+                  "value": "",
+                  "description": "Database name",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get tables from an EdgeLake data source\n\nRetrieve table names for a specific database from an EdgeLake node\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get topics from an MQTT broker",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/mqtt/topics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "mqtt",
+                "topics"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Get topics from an MQTT broker\n\nSubscribe briefly to discover available topics on an MQTT broker\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get values for a Prometheus label",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/prometheus/labels/{label}/values",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "prometheus",
+                "labels",
+                ":label",
+                "values"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                },
+                {
+                  "key": "label",
+                  "value": "",
+                  "description": "Label name"
+                }
+              ]
+            },
+            "description": "Get values for a Prometheus label\n\nRetrieve all possible values for a specific label from a Prometheus datasource\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List active streams",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/streams",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                "streams"
+              ]
+            },
+            "description": "List active streams\n\nGet a list of all active streaming connections\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List all datasources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources?limit=&offset=&namespace=&type=&tags=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "Number of items per page",
+                  "disabled": true
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "description": "Number of items to skip",
+                  "disabled": true
+                },
+                {
+                  "key": "namespace",
+                  "value": "",
+                  "description": "Filter by namespace (empty = all namespaces)",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "",
+                  "description": "Filter by datasource type (api, websocket, file)",
+                  "disabled": true
+                },
+                {
+                  "key": "tags",
+                  "value": "",
+                  "description": "Filter by tags (OR semantics, repeat param)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all datasources\n\nRetrieve all datasources with pagination and optional namespace/type/tag filters\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Sample a single MQTT topic",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/mqtt/sample?topic=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "mqtt",
+                "sample"
+              ],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "",
+                  "description": "MQTT topic to sample",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Sample a single MQTT topic\n\nSubscribe to a topic and return the first message's schema (columns and sample values)\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Stream aggregated data from a socket datasource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/stream/aggregated",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "stream",
+                "aggregated"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Stream aggregated data from a socket datasource\n\nOpens an SSE connection to stream time-bucketed aggregated data\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"function\": \"\",\n  \"interval\": 0,\n  \"series_col\": \"\",\n  \"timestamp_col\": \"\",\n  \"value_cols\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stream data from a socket datasource",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id",
+                "stream"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Stream data from a socket datasource\n\nOpens an SSE connection to stream real-time data from a socket datasource\n\n\nResponses: 200, 400, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Test a datasource connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                "test"
+              ]
+            },
+            "description": "Test a datasource connection\n\nTest a datasource connection without saving it\n\n\nResponses: 200, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"id\": \"\",\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update a datasource",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasources/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "datasources",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Datasource ID"
+                }
+              ]
+            },
+            "description": "Update a datasource\n\nUpdate an existing datasource by ID\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": null,\n  \"description\": \"\",\n  \"mask_secrets\": false,\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI Debug",
+      "description": "debug endpoints (2).",
+      "item": [
+        {
+          "name": "Connect to AI debug WebSocket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/debug",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "debug"
+              ]
+            },
+            "description": "Connect to AI debug WebSocket\n\nStream real-time debug events from the AI agent including LLM requests, responses, and tool calls\n\n\nResponses: 101"
+          },
+          "response": []
+        },
+        {
+          "name": "Get debug status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/debug/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "debug",
+                "status"
+              ]
+            },
+            "description": "Get debug status\n\nGet the current status of the AI debug system\n\n\nResponses: 200"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Device Types",
+      "description": "device-types endpoints (7).",
+      "item": [
+        {
+          "name": "Create a device type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types"
+              ]
+            },
+            "description": "Create a device type\n\nCreate a new device type template\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capabilities\": [\n    {\n      \"description\": \"\",\n      \"name\": \"\",\n      \"state_path\": \"\",\n      \"type\": \"\",\n      \"unit\": \"\",\n      \"value_max\": 0,\n      \"value_min\": 0,\n      \"value_step\": 0,\n      \"values\": [\n        null\n      ]\n    }\n  ],\n  \"category\": \"\",\n  \"commands\": {\n    \"<key>\": {\n      \"template\": {},\n      \"value_map\": {}\n    }\n  },\n  \"description\": \"\",\n  \"id\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"protocol\": \"\",\n  \"response\": {\n    \"error_path\": \"\",\n    \"state_path\": \"\",\n    \"success_path\": \"\",\n    \"value_map\": {}\n  },\n  \"state_query\": {\n    \"interval_ms\": 0,\n    \"template\": {}\n  },\n  \"subtype\": \"\",\n  \"supported_types\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a device type",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Device type ID"
+                }
+              ]
+            },
+            "description": "Delete a device type\n\nDelete a device type by ID\n\n\nResponses: 204, 400, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a device type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Device type ID"
+                }
+              ]
+            },
+            "description": "Get a device type\n\nGet a device type by ID\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get valid control types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types/control-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types",
+                "control-types"
+              ]
+            },
+            "description": "Get valid control types\n\nGet the list of valid control UI types (toggle, scalar, button, text, plug, dimmer)\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get valid device categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types",
+                "categories"
+              ]
+            },
+            "description": "Get valid device categories\n\nGet the list of valid device categories\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List device types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types?category=&protocol=&built_in_only=&page=&page_size=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "",
+                  "description": "Filter by category",
+                  "disabled": true
+                },
+                {
+                  "key": "protocol",
+                  "value": "",
+                  "description": "Filter by protocol",
+                  "disabled": true
+                },
+                {
+                  "key": "built_in_only",
+                  "value": "",
+                  "description": "Show only built-in types",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "Page number",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "Page size",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List device types\n\nList device types with optional filtering and pagination\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a device type",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-types/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "device-types",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Device type ID"
+                }
+              ]
+            },
+            "description": "Update a device type\n\nUpdate an existing device type\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capabilities\": [\n    {\n      \"description\": \"\",\n      \"name\": \"\",\n      \"state_path\": \"\",\n      \"type\": \"\",\n      \"unit\": \"\",\n      \"value_max\": 0,\n      \"value_min\": 0,\n      \"value_step\": 0,\n      \"values\": [\n        null\n      ]\n    }\n  ],\n  \"category\": \"\",\n  \"commands\": {\n    \"<key>\": {\n      \"template\": {},\n      \"value_map\": {}\n    }\n  },\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"protocol\": \"\",\n  \"response\": {\n    \"error_path\": \"\",\n    \"state_path\": \"\",\n    \"success_path\": \"\",\n    \"value_map\": {}\n  },\n  \"state_query\": {\n    \"interval_ms\": 0,\n    \"template\": {}\n  },\n  \"subtype\": \"\",\n  \"supported_types\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "description": "devices endpoints (7).",
+      "item": [
+        {
+          "name": "Create a device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "devices"
+              ]
+            },
+            "description": "Create a device\n\nCreate a new device instance\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connection_id\": \"\",\n  \"device_type_id\": \"\",\n  \"enabled\": false,\n  \"metadata\": {},\n  \"name\": \"\",\n  \"room\": \"\",\n  \"state_topic\": \"\",\n  \"tags\": [\n    \"\"\n  ],\n  \"target\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a device",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "devices",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Device ID"
+                }
+              ]
+            },
+            "description": "Delete a device\n\nDelete a device by ID\n\n\nResponses: 204, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Discover devices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/discover-devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "discover-devices"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Discover devices\n\nDiscover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)\n\n\nResponses: 200, 400, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a device",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "devices",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Device ID"
+                }
+              ]
+            },
+            "description": "Get a device\n\nGet a device by ID\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Import devices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "devices",
+                "import"
+              ]
+            },
+            "description": "Import devices\n\nBulk import devices from discovery\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connection_id\": \"\",\n  \"devices\": [\n    {\n      \"device_type_id\": \"\",\n      \"friendly_name\": \"\",\n      \"name\": \"\",\n      \"room\": \"\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices?device_type_id=&connection_id=&room=&enabled=&page=&page_size=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "devices"
+              ],
+              "query": [
+                {
+                  "key": "device_type_id",
+                  "value": "",
+                  "description": "Filter by device type ID",
+                  "disabled": true
+                },
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Filter by connection ID",
+                  "disabled": true
+                },
+                {
+                  "key": "room",
+                  "value": "",
+                  "description": "Filter by room",
+                  "disabled": true
+                },
+                {
+                  "key": "enabled",
+                  "value": "",
+                  "description": "Filter by enabled status",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "Page number",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "Page size",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List devices\n\nList devices with optional filtering and pagination\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a device",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "devices",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Device ID"
+                }
+              ]
+            },
+            "description": "Update a device\n\nUpdate an existing device\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connection_id\": \"\",\n  \"device_type_id\": \"\",\n  \"enabled\": false,\n  \"metadata\": {},\n  \"name\": \"\",\n  \"room\": \"\",\n  \"state_topic\": \"\",\n  \"tags\": [\n    \"\"\n  ],\n  \"target\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Frigate (NVR)",
+      "description": "frigate endpoints (10).",
+      "item": [
+        {
+          "name": "Get camera events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/events/{camera}?limit=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "events",
+                ":camera"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "Max events to return",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "camera",
+                  "value": "",
+                  "description": "Camera name"
+                }
+              ]
+            },
+            "description": "Get camera events\n\nReturns recent detection events for a camera\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get camera review segments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/reviews?limit=&camera=&severity=&reviewed=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "Max reviews to return",
+                  "disabled": true
+                },
+                {
+                  "key": "camera",
+                  "value": "",
+                  "description": "Filter by camera name",
+                  "disabled": true
+                },
+                {
+                  "key": "severity",
+                  "value": "",
+                  "description": "Filter by severity (alert, detection)",
+                  "disabled": true
+                },
+                {
+                  "key": "reviewed",
+                  "value": "",
+                  "description": "Include reviewed (1) or only unreviewed (0)",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get camera review segments\n\nReturns Frigate review segments, defaulted to unreviewed alerts. Used by the Frigate Alerts widget.\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get camera snapshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/snapshot/{camera}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "snapshot",
+                ":camera"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "camera",
+                  "value": "",
+                  "description": "Camera name"
+                }
+              ]
+            },
+            "description": "Get camera snapshot\n\nReturns the latest JPEG snapshot for a camera\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get event clip",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/event/{event_id}/clip",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "event",
+                ":event_id",
+                "clip"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "event_id",
+                  "value": "",
+                  "description": "Event ID"
+                }
+              ]
+            },
+            "description": "Get event clip\n\nReturns the MP4 clip for a detection event (supports Range headers)\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get event snapshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/event/{event_id}/snapshot",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "event",
+                ":event_id",
+                "snapshot"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "event_id",
+                  "value": "",
+                  "description": "Event ID"
+                }
+              ]
+            },
+            "description": "Get event snapshot\n\nReturns the JPEG snapshot for a detection event\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Frigate camera list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/cameras",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "cameras"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get Frigate camera list\n\nReturns camera names from a Frigate NVR connection\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Frigate connection info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "info"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get Frigate connection info\n\nReturns connection metadata needed for direct WebSocket access (go2rtc MSE)\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get review thumbnail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/review/{review_id}/thumbnail?camera=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "review",
+                ":review_id",
+                "thumbnail"
+              ],
+              "query": [
+                {
+                  "key": "camera",
+                  "value": "",
+                  "description": "Camera name (required — encoded into the thumbnail filename)",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "review_id",
+                  "value": "",
+                  "description": "Review segment ID"
+                }
+              ]
+            },
+            "description": "Get review thumbnail\n\nReturns the WebP thumbnail for a review segment\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark review segments as reviewed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/reviews/viewed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "reviews",
+                "viewed"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Mark review segments as reviewed\n\nMarks one or more Frigate review segments as reviewed (viewed), removing them from unreviewed listings\n\n\nResponses: 200",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Proxy Frigate JSMPEG live stream",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/frigate/{connection_id}/live/{camera}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "frigate",
+                ":connection_id",
+                "live",
+                ":camera"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "camera",
+                  "value": "",
+                  "description": "Camera name"
+                }
+              ]
+            },
+            "description": "Proxy Frigate JSMPEG live stream\n\nProxies the JSMPEG WebSocket stream for a camera through the backend\n\n\nResponses: "
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MCP",
+      "description": "mcp endpoints (2).",
+      "item": [
+        {
+          "name": "Handle MCP Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "message"
+              ]
+            },
+            "description": "Handle MCP Message\n\nProcess a JSON-RPC message for MCP protocol\n\n\nResponses: 200, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": null,\n  \"jsonrpc\": \"\",\n  \"method\": \"\",\n  \"params\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "MCP SSE Connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/sse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "sse"
+              ]
+            },
+            "description": "MCP SSE Connection\n\nEstablish an SSE connection for MCP protocol\n\n\nResponses: 200"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Namespaces",
+      "description": "namespaces endpoints (6).",
+      "item": [
+        {
+          "name": "Create a namespace",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces"
+              ]
+            },
+            "description": "Create a namespace\n\n\nResponses: 201, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"color\": \"\",\n  \"description\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a namespace",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Namespace ID"
+                }
+              ]
+            },
+            "description": "Delete a namespace\n\n\nResponses: 204, 404, 409"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a namespace",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Namespace ID"
+                }
+              ]
+            },
+            "description": "Get a namespace\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get namespace usage counts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces/{id}/usage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces",
+                ":id",
+                "usage"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Namespace ID"
+                }
+              ]
+            },
+            "description": "Get namespace usage counts\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List namespaces",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces"
+              ]
+            },
+            "description": "List namespaces\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a namespace",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Namespace ID"
+                }
+              ]
+            },
+            "description": "Update a namespace\n\n\nResponses: 200, 400, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"color\": \"\",\n  \"description\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Registry (type catalog)",
+      "description": "registry endpoints (8).",
+      "item": [
+        {
+          "name": "Catalog rendered as markdown",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/catalog.md",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "catalog.md"
+              ]
+            },
+            "description": "Catalog rendered as markdown\n\nSame data as /catalog but formatted as a markdown document. Useful for embedding directly in an LLM system prompt or pasting into chat.\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a single component type by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/components/{typeId}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "components",
+                ":typeId"
+              ],
+              "variable": [
+                {
+                  "key": "typeId",
+                  "value": "",
+                  "description": "Component type ID"
+                }
+              ]
+            },
+            "description": "Get a single component type by ID\n\nReturns metadata for a single component subtype like \"chart.bar\" or \"control.toggle\".\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get a specific connection type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/connections/{typeId}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "connections",
+                ":typeId"
+              ],
+              "variable": [
+                {
+                  "key": "typeId",
+                  "value": "",
+                  "description": "Type ID (e.g., 'db.postgres', 'stream.websocket-bidir')"
+                }
+              ]
+            },
+            "description": "Get a specific connection type\n\nGet details about a specific adapter type including configuration schema\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List all available connection types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/connections?category=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "connections"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "",
+                  "description": "Filter by category (e.g., 'db', 'stream', 'api')",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all available connection types\n\nGet all registered adapter types with their capabilities and configuration schema\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List all connection type categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "categories"
+              ]
+            },
+            "description": "List all connection type categories\n\nGet all available categories with their type counts\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List component subtypes (chart/control/display)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/components?category=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "components"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "",
+                  "description": "Filter: chart, control, display",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List component subtypes (chart/control/display)\n\nReturns registered component types. Pass ?category=chart, ?category=control, or ?category=display to filter; omit for all. Hidden types are included so legacy editors still work.\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List registered integrations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/integrations?include_disabled=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "integrations"
+              ],
+              "query": [
+                {
+                  "key": "include_disabled",
+                  "value": "",
+                  "description": "If true, returns all integrations even if disabled",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List registered integrations\n\nIntegrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Unified type catalog (single source of truth)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/catalog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "catalog"
+              ]
+            },
+            "description": "Unified type catalog (single source of truth)\n\nReturns connection types, chart/control/display subtypes, and device types in one payload. This is what the AI builder and MCP server consume so they never duplicate enum lists.\n\n\nResponses: 200"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "description": "settings endpoints (3).",
+      "item": [
+        {
+          "name": "Get a single setting",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/{key}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                ":key"
+              ],
+              "variable": [
+                {
+                  "key": "key",
+                  "value": "",
+                  "description": "Setting key"
+                }
+              ]
+            },
+            "description": "Get a single setting\n\nGet a single setting by key\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get all user-configurable settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings"
+              ]
+            },
+            "description": "Get all user-configurable settings\n\nGet all settings that can be modified by administrators\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a setting",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/{key}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                ":key"
+              ],
+              "variable": [
+                {
+                  "key": "key",
+                  "value": "",
+                  "description": "Setting key"
+                }
+              ]
+            },
+            "description": "Update a setting\n\nUpdate the value of a user-configurable setting\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "description": "system endpoints (2).",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Health check\n\nCheck if the server and dependencies are healthy\n\n\nResponses: 200, 503"
+          },
+          "response": []
+        },
+        {
+          "name": "Subscribe to server status via WebSocket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ws/status?interval=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ws",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "interval",
+                  "value": "",
+                  "description": "Update interval (e.g., '5s', '1s'). Default: 5s, Min: 1s, 0 means one-shot",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Subscribe to server status via WebSocket\n\nWebSocket endpoint that pushes server status at specified intervals\n\n\nResponses: 101"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "description": "tags endpoints (1).",
+      "item": [
+        {
+          "name": "List all tags with usage counts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tags"
+              ]
+            },
+            "description": "List all tags with usage counts\n\nReturns a merged list of tags across connections, components, and dashboards with per-entity-type counts\n\n\nResponses: 200"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "users endpoints (5).",
+      "item": [
+        {
+          "name": "Create a new user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "Create a new user\n\nCreates a new user account\n\n\nResponses: 201, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"email\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a user",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Delete a user\n\nDeletes a user account\n\n\nResponses: 204, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get user by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Get user by ID\n\nReturns a user by their ID\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List all users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?page=&page_size=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "Page number",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "Page size",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all users\n\nReturns a paginated list of all users\n\n\nResponses: 200, 403"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a user",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Update a user\n\nUpdates an existing user's information\n\n\nResponses: 200, 400, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false,\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"email\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MCP (JSON-RPC, /mcp/*)",
+      "description": "External-agent MCP surface. Same Bearer auth as `/api/*` since v0.9.0. Not in Swagger; these requests are hand-authored.",
+      "item": [
+        {
+          "name": "initialize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy path — prefer collection-level Bearer.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"initialize\",\n  \"params\": {\n    \"protocolVersion\": \"2024-11-05\",\n    \"capabilities\": {\n      \"tools\": {}\n    },\n    \"clientInfo\": {\n      \"name\": \"postman\",\n      \"version\": \"1.0\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "JSON-RPC request to the MCP message endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "tools/list",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy path — prefer collection-level Bearer.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "JSON-RPC request to the MCP message endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "tools/call (list_connections)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy path — prefer collection-level Bearer.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp",
+                "message"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 3,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_connections\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "JSON-RPC request to the MCP message endpoint."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001",
+      "type": "string"
+    }
+  ]
+}

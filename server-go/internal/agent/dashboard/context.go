@@ -54,7 +54,19 @@ type RequestContext struct {
 
 	// UserGUID is the acting user for any records the agent creates.
 	// Required — the service layer uses this for audit fields.
+	//
+	// When APIKey is set, UserGUID becomes the *target* user for audit
+	// fields and the server reconciles it against the key's owner. When
+	// APIKey is empty, UserGUID is sent as `X-User-ID` (legacy identity
+	// assertion path) and the server trusts it directly.
 	UserGUID string
+
+	// APIKey is the optional `trve_…` token issued via Manage Mode →
+	// API Keys. When set, the agent's outbound HTTP requests carry an
+	// `Authorization: Bearer <APIKey>` header instead of relying on
+	// the legacy `X-User-ID` identity assertion. Strongly preferred for
+	// non-browser callers.
+	APIKey string
 }
 
 // Validate checks the envelope for *internal* consistency (not
@@ -65,8 +77,8 @@ func (c *RequestContext) Validate() error {
 	if strings.TrimSpace(c.Prompt) == "" {
 		return fmt.Errorf("prompt is required")
 	}
-	if c.UserGUID == "" {
-		return fmt.Errorf("user GUID is required")
+	if c.UserGUID == "" && c.APIKey == "" {
+		return fmt.Errorf("either user GUID or API key is required")
 	}
 	if (c.DimensionsWidth == 0) != (c.DimensionsHeight == 0) {
 		return fmt.Errorf("dimensions width and height must both be set or both empty")

@@ -29,8 +29,12 @@ type PromptBuilder struct {
 	HTTPClient *http.Client
 
 	// UserGUID is stamped into the X-User-ID header for the fallback
-	// fetch.
+	// fetch when APIKey is empty.
 	UserGUID string
+
+	// APIKey, when set, is sent as `Authorization: Bearer <APIKey>`
+	// for the fallback catalog fetch. Takes precedence over UserGUID.
+	APIKey string
 }
 
 // Build assembles the final system prompt. If mcpInstructions is
@@ -69,7 +73,9 @@ func (b *PromptBuilder) fetchCatalog(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if b.UserGUID != "" {
+	if b.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+b.APIKey)
+	} else if b.UserGUID != "" {
 		req.Header.Set("X-User-ID", b.UserGUID)
 	}
 	resp, err := hc.Do(req)
@@ -89,7 +95,13 @@ func (b *PromptBuilder) fetchCatalog(ctx context.Context) (string, error) {
 
 func (b *PromptBuilder) runtimeContext(rc *RequestContext) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "- Acting user GUID: %s\n", rc.UserGUID)
+	if rc.UserGUID != "" {
+		fmt.Fprintf(&sb, "- Acting user GUID: %s\n", rc.UserGUID)
+	} else {
+		// API-key-only run — server resolves the calling user from the
+		// Bearer token. The agent doesn't need to know the GUID.
+		sb.WriteString("- Acting user: resolved server-side from API key\n")
+	}
 	if rc.Namespace != "" {
 		fmt.Fprintf(&sb, "- Target namespace: %s\n", rc.Namespace)
 	} else {

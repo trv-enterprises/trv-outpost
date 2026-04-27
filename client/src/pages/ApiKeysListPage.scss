@@ -1,0 +1,185 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.api-keys-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--cds-background);
+  overflow: hidden;
+
+  .page-header {
+    flex-shrink: 0;
+    padding: spacing.$spacing-06;
+    padding-bottom: spacing.$spacing-05;
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--cds-text-primary);
+      margin: 0 0 spacing.$spacing-03 0;
+    }
+
+    .page-description {
+      font-size: 0.875rem;
+      color: var(--cds-text-secondary);
+      margin: 0;
+      line-height: 1.5;
+      max-width: 720px;
+
+      code {
+        background-color: var(--cds-layer-02);
+        color: var(--cds-text-primary);
+        padding: 0 spacing.$spacing-02;
+        border-radius: 2px;
+        font-size: 0.8125rem;
+      }
+
+      a {
+        color: var(--cds-link-primary);
+        text-decoration: none;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+
+  .page-error {
+    margin: 0 spacing.$spacing-06 spacing.$spacing-05;
+  }
+
+  .page-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 spacing.$spacing-06 spacing.$spacing-05;
+    gap: spacing.$spacing-04;
+    flex-shrink: 0;
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-04;
+
+      .cds--search {
+        width: 300px;
+        background-color: var(--cds-layer-01);
+      }
+    }
+  }
+
+  .cds--data-table-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin: 0 spacing.$spacing-06 spacing.$spacing-06;
+    background-color: var(--cds-layer-01);
+    overflow: hidden;
+  }
+
+  .cds--data-table-content {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: spacing.$spacing-09 spacing.$spacing-05;
+    text-align: center;
+
+    svg {
+      color: var(--cds-icon-secondary);
+      margin-bottom: spacing.$spacing-05;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 400;
+      color: var(--cds-text-primary);
+      margin: 0 0 spacing.$spacing-03 0;
+    }
+
+    p {
+      font-size: 0.875rem;
+      color: var(--cds-text-secondary);
+      margin: 0;
+      max-width: 480px;
+
+      a {
+        color: var(--cds-link-primary);
+        text-decoration: none;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+
+  .cds--data-table {
+    background-color: var(--cds-layer-01);
+    color: var(--cds-text-primary);
+  }
+
+  .cds--data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: var(--cds-layer-02);
+  }
+
+  .cds--data-table th {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-layer-02);
+    border-bottom: 1px solid var(--cds-border-strong-01);
+  }
+
+  .cds--data-table td {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-layer-01);
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+  }
+
+  .prefix-code {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125rem;
+    background-color: var(--cds-layer-02);
+    padding: spacing.$spacing-02 spacing.$spacing-03;
+    border-radius: 2px;
+    color: var(--cds-text-primary);
+  }
+
+  .actions-cell {
+    width: 48px;
+    text-align: right;
+
+    .cds--btn--icon-only {
+      color: var(--cds-text-primary) !important;
+
+      svg {
+        fill: var(--cds-text-primary) !important;
+      }
+
+      &:hover {
+        color: #fa4d56 !important;
+        background-color: rgba(218, 30, 40, 0.1);
+
+        svg {
+          fill: #fa4d56 !important;
+        }
+      }
+    }
+  }
+
+  .cds--tag {
+    margin: 0;
+  }
+}

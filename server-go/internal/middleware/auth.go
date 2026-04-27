@@ -32,15 +32,19 @@ type RouteCapability struct {
 
 // AuthMiddleware provides authentication and authorization
 type AuthMiddleware struct {
-	userService *service.UserService
-	rules       []RouteCapability
+	userService   *service.UserService
+	apiKeyService *service.APIKeyService
+	rules         []RouteCapability
 }
 
-// NewAuthMiddleware creates a new auth middleware
-func NewAuthMiddleware(userService *service.UserService) *AuthMiddleware {
+// NewAuthMiddleware creates a new auth middleware. The API key service
+// is optional only in tests; production callers always pass a live
+// service so `Authorization: Bearer trve_...` works.
+func NewAuthMiddleware(userService *service.UserService, apiKeyService *service.APIKeyService) *AuthMiddleware {
 	return &AuthMiddleware{
-		userService: userService,
-		rules:       buildRouteRules(),
+		userService:   userService,
+		apiKeyService: apiKeyService,
+		rules:         buildRouteRules(),
 	}
 }
 
@@ -81,26 +85,77 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/namespaces", Method: "POST", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "DELETE", Required: models.CapabilityManage, WriteOnly: true},
+
+		// API keys — every authenticated user can create/list/revoke
+		// their OWN keys (no capability required). The deployment-wide
+		// /api/api-keys/all view is admin-only, gated by a more specific
+		// rule that wins because it appears first in the slice.
+		{PathPrefix: "/api/api-keys/all", Method: "GET", Required: models.CapabilityManage},
 	}
 }
 
-// Authenticate validates the user GUID and attaches user to context
+// Authenticate resolves the calling user from one of the supported
+// credential channels and attaches the User to gin context for
+// downstream handlers. Channels, in precedence order:
+//
+//  1. `Authorization: Bearer trve_...` — API key (preferred for
+//     non-browser callers: dashboard-agent CLI, MCP clients, scripts).
+//  2. `X-User-ID` header — legacy identity assertion (no real auth);
+//     still used by the in-browser SPA. To be replaced by a real
+//     session cookie in the v0.10.0 Clerk integration.
+//  3. `?user_id=...` query param — fallback for EventSource, which
+//     can't set custom headers. Same trust model as X-User-ID.
+//  4. None of the above — continue unauthenticated. Route
+//     authorization decides whether the unauthenticated path is
+//     acceptable for the requested endpoint.
+//
+// A request that supplies both Bearer and X-User-ID is treated as
+// Bearer-authenticated; X-User-ID is ignored when a valid bearer is
+// present. This keeps the migration story sane: a caller can opt into
+// the new path simply by adding the Authorization header.
 func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get user GUID from header first, then query param as fallback
-		// Query param is needed for EventSource which doesn't support custom headers
+		// 1. Bearer token (API key)
+		if token := extractBearerToken(c); token != "" && m.apiKeyService != nil {
+			key, err := m.apiKeyService.Validate(c.Request.Context(), token)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+				c.Abort()
+				return
+			}
+			user, err := m.userService.GetUserByGUID(c.Request.Context(), key.UserGUID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate"})
+				c.Abort()
+				return
+			}
+			if user == nil {
+				// Key references a deleted user — treat as invalid.
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+				c.Abort()
+				return
+			}
+			if !user.Active {
+				c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
+				c.Abort()
+				return
+			}
+			c.Set(UserContextKey, user)
+			c.Next()
+			return
+		}
+
+		// 2 & 3. Legacy X-User-ID header / ?user_id query param
 		guid := c.GetHeader(AuthHeader)
 		if guid == "" {
 			guid = c.Query(AuthQueryParam)
 		}
 		if guid == "" {
-			// No auth header or query param - continue without user (public access)
-			// Route authorization will handle whether this is allowed
+			// 4. No credentials — let route authorization decide.
 			c.Next()
 			return
 		}
 
-		// Look up user by GUID
 		user, err := m.userService.GetUserByGUID(c.Request.Context(), guid)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate"})
@@ -120,10 +175,28 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Attach user to context
 		c.Set(UserContextKey, user)
 		c.Next()
 	}
+}
+
+// extractBearerToken pulls the token out of an `Authorization: Bearer
+// <token>` header. Returns "" when the header is absent, empty, or
+// uses a non-Bearer scheme. Case-insensitive on the scheme to match
+// RFC 7235.
+func extractBearerToken(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if auth == "" {
+		return ""
+	}
+	const prefix = "Bearer "
+	if len(auth) <= len(prefix) {
+		return ""
+	}
+	if !strings.EqualFold(auth[:len(prefix)], prefix) {
+		return ""
+	}
+	return strings.TrimSpace(auth[len(prefix):])
 }
 
 // Authorize checks if the current user has permission for the route

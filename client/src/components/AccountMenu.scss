@@ -1,0 +1,69 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Carbon's OverflowMenu portals into a `<ul>` we don't render here;
+// styles target `.account-menu-options` (passed via menuOptionsClass).
+.account-menu-options {
+  min-width: 240px;
+
+  // Identity header item — read-only, not focusable styling
+  .account-menu-identity {
+    pointer-events: none;
+    cursor: default;
+    background: var(--cds-layer-02) !important;
+    border-bottom: 1px solid var(--cds-border-subtle-01) !important;
+
+    .cds--overflow-menu-options__btn {
+      cursor: default;
+      padding: spacing.$spacing-04 spacing.$spacing-05;
+      height: auto;
+      min-height: 0;
+
+      // Carbon dims `disabled`; we don't want the identity faded out
+      &[disabled] {
+        opacity: 1;
+        color: var(--cds-text-primary);
+      }
+    }
+  }
+
+  .account-menu-identity__inner {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+    width: 100%;
+  }
+
+  .account-menu-identity__text {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .account-menu-identity__name {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--cds-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-menu-identity__email {
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-menu-action {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+    width: 100%;
+  }
+}

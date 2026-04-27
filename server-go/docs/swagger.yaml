@@ -263,6 +263,31 @@ definitions:
     required:
     - url
     type: object
+  models.APIKey:
+    properties:
+      created:
+        type: string
+      expires_at:
+        type: string
+      id:
+        description: UUID
+        type: string
+      last_used:
+        type: string
+      name:
+        description: Human label
+        type: string
+      prefix:
+        description: First 8 chars of the random token, plaintext
+        type: string
+      revoked:
+        type: boolean
+      revoked_at:
+        type: string
+      user_guid:
+        description: Owner
+        type: string
+    type: object
   models.APIResponseConfig:
     properties:
       data_path:
@@ -364,9 +389,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        description: Base64 preview image for card display
-        type: string
       title:
         description: Display title (defaults to Name if empty)
         type: string
@@ -523,8 +545,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        type: string
       version:
         type: integer
     type: object
@@ -660,6 +680,24 @@ definitions:
         description: Panel within the dashboard
         type: string
     type: object
+  models.CreateAPIKeyRequest:
+    properties:
+      expires_at:
+        description: Optional — null = never expires
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  models.CreateAPIKeyResponse:
+    properties:
+      api_key:
+        $ref: '#/definitions/models.APIKey'
+      token:
+        description: PLAINTEXT — shown once, never persisted
+        type: string
+    type: object
   models.CreateChartRequest:
     description: Request body for creating a new chart or control
     properties:
@@ -694,8 +732,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        type: string
       title:
         type: string
       use_custom_code:
@@ -2265,8 +2301,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        type: string
       title:
         type: string
       use_custom_code:
@@ -2954,6 +2988,110 @@ paths:
       summary: Get debug status
       tags:
       - debug
+  /api/api-keys:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.APIKey'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List the calling user's API keys
+      tags:
+      - api-keys
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Key parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.CreateAPIKeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create an API key for the calling user
+      tags:
+      - api-keys
+  /api/api-keys/{id}:
+    delete:
+      parameters:
+      - description: API key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Revoke an API key
+      tags:
+      - api-keys
+  /api/api-keys/all:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.APIKey'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List every API key in the deployment (admin)
+      tags:
+      - api-keys
   /api/connections/{id}/discover-devices:
     post:
       description: Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)

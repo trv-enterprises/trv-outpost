@@ -683,7 +683,7 @@ func (r *ToolRegistry) registerComponentTools() {
 	r.registerTool(
 		Tool{
 			Name:        "list_component_summaries",
-			Description: "Lightweight component summary list (id + name + type + thumbnail) for selection UIs. Cheaper than list_components when you don't need the full record.",
+			Description: "Lightweight component summary list (id + name + type) for selection UIs. Cheaper than list_components when you don't need the full record.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
@@ -1083,7 +1083,7 @@ func getBool(m map[string]interface{}, key string) bool {
 // componentWriteAck is the compact response envelope returned to MCP
 // clients from create_component / update_component. The full Chart
 // record is large (~2KB of component_code, plus query_config,
-// data_mapping, thumbnail, options) and the client already knows the
+// data_mapping, options) and the client already knows the
 // values it sent in the request — echoing them back just inflates
 // the LLM's context history for no benefit. This envelope carries
 // only what a caller can't compute: id, version, status, timestamps,

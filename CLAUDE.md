@@ -8,6 +8,8 @@ See the `release-deploy` skill for the authoritative runbook (tagging, image bui
 
 **Project-specific defaults:** deploy target is `deploy-dashboard`, images land at `ghcr.io/trv-enterprises/dashboard-{server,client}`, token is `$TRVE_GH_TOKEN`. Everything else follows the skill.
 
+**API docs regeneration is part of release.** `make release` calls `make api-docs-check`, which regenerates `server-go/docs/swagger.{json,yaml,go}` (via `swag init`) and `docs/postman/trve-dashboard.postman_collection.json` (via `docs/postman/build-collection.js`), then fails if any of those files diff. If you've added or changed an API handler since the last release, run `make api-docs` and commit the result before tagging — otherwise the release target stops you with a one-line `git add … && git commit` recipe.
+
 ## Development Rules
 
 ### 1. Build Number Increment

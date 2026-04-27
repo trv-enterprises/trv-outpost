@@ -344,6 +344,166 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/api-keys": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "List the calling user's API keys",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.APIKey"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "Create an API key for the calling user",
+                "parameters": [
+                    {
+                        "description": "Key parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateAPIKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateAPIKeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/api-keys/all": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "List every API key in the deployment (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.APIKey"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/api-keys/{id}": {
+            "delete": {
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "Revoke an API key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "API key ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/connections/{id}/discover-devices": {
             "post": {
                 "description": "Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)",
@@ -5023,6 +5183,42 @@ const docTemplate = `{
                 }
             }
         },
+        "models.APIKey": {
+            "type": "object",
+            "properties": {
+                "created": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "description": "UUID",
+                    "type": "string"
+                },
+                "last_used": {
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Human label",
+                    "type": "string"
+                },
+                "prefix": {
+                    "description": "First 8 chars of the random token, plaintext",
+                    "type": "string"
+                },
+                "revoked": {
+                    "type": "boolean"
+                },
+                "revoked_at": {
+                    "type": "string"
+                },
+                "user_guid": {
+                    "description": "Owner",
+                    "type": "string"
+                }
+            }
+        },
         "models.APIResponseConfig": {
             "type": "object",
             "properties": {
@@ -5170,10 +5366,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "thumbnail": {
-                    "description": "Base64 preview image for card display",
-                    "type": "string"
                 },
                 "title": {
                     "description": "Display title (defaults to Name if empty)",
@@ -5386,9 +5578,6 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "thumbnail": {
-                    "type": "string"
-                },
                 "version": {
                     "type": "integer"
                 }
@@ -5576,6 +5765,33 @@ const docTemplate = `{
                 }
             }
         },
+        "models.CreateAPIKeyRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "expires_at": {
+                    "description": "Optional — null = never expires",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CreateAPIKeyResponse": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "$ref": "#/definitions/models.APIKey"
+                },
+                "token": {
+                    "description": "PLAINTEXT — shown once, never persisted",
+                    "type": "string"
+                }
+            }
+        },
         "models.CreateChartRequest": {
             "description": "Request body for creating a new chart or control",
             "type": "object",
@@ -5627,9 +5843,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "thumbnail": {
-                    "type": "string"
                 },
                 "title": {
                     "type": "string"
@@ -7855,9 +8068,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "thumbnail": {
-                    "type": "string"
                 },
                 "title": {
                     "type": "string"

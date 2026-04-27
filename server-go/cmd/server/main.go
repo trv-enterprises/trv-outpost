@@ -132,6 +132,7 @@ func main() {
 	deviceTypeRepo := repository.NewDeviceTypeRepository(mongodb.Database)
 	deviceRepo := repository.NewDeviceRepository(mongodb.Database)
 	namespaceRepo := repository.NewNamespaceRepository(mongodb.Database)
+	apiKeyRepo := repository.NewAPIKeyRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := chartRepo.CreateIndexes(ctx); err != nil {
@@ -173,6 +174,11 @@ func main() {
 		log.Printf("Warning: Failed to create namespace indexes: %v", err)
 	}
 
+	// Create API key indexes
+	if err := apiKeyRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create API key indexes: %v", err)
+	}
+
 	// Initialize services
 	datasourceService := service.NewDatasourceService(datasourceRepo)
 	chartService := service.NewChartService(chartRepo)
@@ -183,6 +189,7 @@ func main() {
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, datasourceRepo)
 	deviceDiscoveryService := service.NewDeviceDiscoveryService(datasourceRepo, deviceTypeRepo, deviceRepo)
+	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
 
 	// Namespace service with the three entity repos wired in. Each repo
 	// implements CountByNamespace + RenameNamespace so the service's
@@ -295,11 +302,14 @@ func main() {
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
+	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
-	// Initialize auth middleware
-	authMiddleware := middleware.NewAuthMiddleware(userService)
+	// Initialize auth middleware. The API key service is passed so the
+	// middleware can resolve `Authorization: Bearer trve_...` tokens to a
+	// user, in addition to the legacy X-User-ID header path.
+	authMiddleware := middleware.NewAuthMiddleware(userService, apiKeyService)
 
 	// Initialize MCP
 	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, chartService, deviceTypeService, typeFilter)
@@ -443,6 +453,18 @@ func main() {
 			frigate.GET("/live/:camera", frigateHandler.ProxyLiveStream)
 		}
 
+		// API key routes. POST/GET/DELETE all live under /api/api-keys.
+		// Owners can manage their own keys; admins (manage capability) can
+		// list every key and revoke any key — gated by the route rules in
+		// auth middleware.
+		apiKeys := api.Group("/api-keys")
+		{
+			apiKeys.GET("", apiKeyHandler.ListMyAPIKeys)
+			apiKeys.POST("", apiKeyHandler.CreateAPIKey)
+			apiKeys.GET("/all", apiKeyHandler.ListAllAPIKeys) // admin
+			apiKeys.DELETE("/:id", apiKeyHandler.RevokeAPIKey)
+		}
+
 		// Namespace routes
 		namespaces := api.Group("/namespaces")
 		{
@@ -530,8 +552,17 @@ func main() {
 		api.GET("/tags", tagHandler.ListTags)
 	}
 
-	// MCP routes (outside /api group)
-	mcpHandler.SetupRoutes(router.Group(""))
+	// MCP routes — gated by the same Authenticate middleware as /api so
+	// external agents (Claude Desktop via mcp-proxy, the dashboard-agent
+	// CLI) must present a valid API key in `Authorization: Bearer
+	// trve_...`. Routes intentionally stay at the top-level `/mcp/*` path
+	// (not under /api) because mcp-proxy / Claude Desktop expect them
+	// there. Authorization runs after Authenticate so the route
+	// capability rules in auth middleware still apply.
+	mcpGroup := router.Group("")
+	mcpGroup.Use(authMiddleware.Authenticate())
+	mcpGroup.Use(authMiddleware.Authorize())
+	mcpHandler.SetupRoutes(mcpGroup)
 
 	// Inbound WebSocket endpoint for ts-store push connections (outside /api group, no auth required)
 	// ts-store dials out to this endpoint to push data

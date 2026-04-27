@@ -371,7 +371,6 @@ func (r *ChartRepository) FindSummaries(ctx context.Context, limit int64) ([]mod
 			"description":   1,
 			"chart_type":    1,
 			"datasource_id": 1,
-			"thumbnail":     1,
 			"tags":          1,
 		}}},
 	}
@@ -397,7 +396,6 @@ func (r *ChartRepository) FindSummaries(ctx context.Context, limit int64) ([]mod
 			Description:  getString(doc, "description"),
 			ChartType:    getString(doc, "chart_type"),
 			DatasourceID: getString(doc, "datasource_id"),
-			Thumbnail:    getString(doc, "thumbnail"),
 		}
 
 		if tags, ok := doc["tags"].(bson.A); ok {

@@ -11,22 +11,27 @@ agent-as-MCP-client pattern — same tool surface any external agent
 
 ## What went in
 
-**Command:**
+**Command (v0.9.0+, API-key auth — preferred):**
 
 ```bash
+export DASHBOARD_API_KEY=trve_…   # issued from Manage Mode → API Keys
 caffeinate -s go run ./cmd/dashboard-agent \
-  --user 232e068f-75d8-446b-9043-12401eec3881 \
   --connection-id 697a702e130b47674f259b99 \
   --dimensions 2560x1440 \
   --dashboard-name "Node Exporter Monitoring (agent)" \
   --prompt "Build a node-exporter monitoring dashboard on the Prometheus connection from the runtime context. Show at least 12 charts filling the canvas; more are fine if the layout stays readable and there's additional node-exporter data worth surfacing. Give each chart a concise title."
 ```
 
+The CLI also accepts `--api-key trve_…` as a flag if you'd rather not
+use the env var. The legacy `--user <guid>` flag still works and uses
+the unauthenticated `X-User-ID` identity-assertion path — keep it for
+local dev, but for any real deployment issue an API key.
+
 **Inputs summary:**
 
 | Flag                | Required?     | Value                                                                                                |
 | ------------------- | ------------- | ---------------------------------------------------------------------------------------------------- |
-| `--user`            | yes           | Tom Viviano (admin GUID)                                                                             |
+| `--api-key` *or* `--user` | yes     | API key (preferred; resolves the user from the Bearer token) **or** legacy GUID identity assertion   |
 | `--connection-id`   | this run only | `697a702e130b47674f259b99` — `TRV-SRV-001 K3S Prometheus` (an existing connection in the user's deployment) |
 | `--dimensions`      | optional      | `2560x1440` → 71 cols × 37 rows at 32 × 32 px cells                                                  |
 | `--dashboard-name`  | optional      | `Node Exporter Monitoring (agent)`                                                                   |
@@ -150,7 +155,7 @@ Prerequisites:
 
 - A running dashboard server (`go build -o bin/server ./cmd/server && ./bin/server`)
 - An Anthropic API key in `ANTHROPIC_API_KEY` or `DASHBOARD_ANTHROPIC_API_KEY`
-- A user GUID with `design` capability
+- A dashboard API key (issued from **Manage Mode → API Keys**) exported as `DASHBOARD_API_KEY`, owned by a user with `design` capability. (`--user <guid>` still works for the legacy identity-assertion path.)
 
 If you want to reproduce this exact node-exporter dashboard, you'll
 also need a Prometheus connection that's scraping
@@ -162,10 +167,19 @@ let the agent pick (or create) one.
 Run the CLI:
 
 ```bash
+export DASHBOARD_API_KEY=trve_…             # one-time setup — preferred
+go run ./cmd/dashboard-agent \
+  --connection-id <your-connection-id>      `# optional` \
+  --dimensions 2560x1440                    `# optional` \
+  --prompt "Build a node-exporter monitoring dashboard ..."
+```
+
+Or, with the legacy GUID path:
+
+```bash
 go run ./cmd/dashboard-agent \
   --user <your-user-guid> \
-  --connection-id <your-connection-id>   `# optional` \
-  --dimensions 2560x1440                  `# optional` \
+  --connection-id <your-connection-id> \
   --prompt "Build a node-exporter monitoring dashboard ..."
 ```
 

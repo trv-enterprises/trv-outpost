@@ -103,7 +103,6 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 			ComponentCode: latestFinal.ComponentCode,
 			UseCustomCode: latestFinal.UseCustomCode,
 			Options:       latestFinal.Options,
-			Thumbnail:     latestFinal.Thumbnail,
 			Tags:          latestFinal.Tags,
 		}
 	} else {

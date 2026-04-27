@@ -33,6 +33,7 @@ func main() {
 		dimensions    string
 		prompt        string
 		userGUID      string
+		dashboardKey  string
 		model         string
 		maxTurns      int
 		logDir        string
@@ -45,7 +46,8 @@ func main() {
 	flag.StringVar(&dashboardName, "dashboard-name", "", "Explicit dashboard name (optional — agent picks if empty)")
 	flag.StringVar(&dimensions, "dimensions", "", "Canvas dimensions as WxH, e.g. 2560x1440")
 	flag.StringVar(&prompt, "prompt", "", "User request text (required)")
-	flag.StringVar(&userGUID, "user", "", "Acting user GUID (required)")
+	flag.StringVar(&userGUID, "user", "", "Acting user GUID (legacy — prefer --api-key). Defaults to the DASHBOARD_USER_GUID env var when unset.")
+	flag.StringVar(&dashboardKey, "api-key", "", "Dashboard API key (trve_…). Sent as Authorization: Bearer. Defaults to the DASHBOARD_API_KEY env var when unset.")
 	flag.StringVar(&model, "model", "claude-sonnet-4-6", "Claude model ID")
 	flag.IntVar(&maxTurns, "max-turns", 50, "Cap on agentic loop iterations")
 	flag.StringVar(&logDir, "log-dir", "docs/agent-runs", "Directory where each run's transcript is saved as a markdown file (relative to the working directory). Use --no-log to disable.")
@@ -53,11 +55,24 @@ func main() {
 
 	flag.Parse()
 
+	// Env-var fallbacks so a user can keep credentials out of shell
+	// history. Explicit flags always win.
+	if dashboardKey == "" {
+		dashboardKey = os.Getenv("DASHBOARD_API_KEY")
+	}
+	if userGUID == "" {
+		userGUID = os.Getenv("DASHBOARD_USER_GUID")
+	}
+
 	if prompt == "" {
 		die("--prompt is required")
 	}
-	if userGUID == "" {
-		die("--user is required")
+	if dashboardKey == "" && userGUID == "" {
+		die("either --api-key (preferred) or --user is required")
+	}
+	if dashboardKey == "" {
+		fmt.Fprintln(os.Stderr,
+			"warning: --user is the legacy identity-assertion path; create an API key under Manage Mode → API Keys and pass --api-key (or DASHBOARD_API_KEY env var) instead.")
 	}
 
 	apiKey := os.Getenv("DASHBOARD_ANTHROPIC_API_KEY")
@@ -87,7 +102,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "warning: could not open run log (%v); continuing without file transcript\n", err)
 		} else {
 			defer logFile.Close()
-			writeLogHeader(logFile, serverURL, connectionID, userGUID, namespace, dashboardName, width, height, prompt, model)
+			authMode := "X-User-ID (legacy)"
+			if dashboardKey != "" {
+				authMode = "Bearer (API key)"
+			}
+			writeLogHeader(logFile, serverURL, connectionID, userGUID, namespace, dashboardName, width, height, prompt, model, authMode)
 			transcriptWriter = io.MultiWriter(os.Stderr, logFile)
 		}
 	}
@@ -109,6 +128,7 @@ func main() {
 		DimensionsWidth:  width,
 		DimensionsHeight: height,
 		UserGUID:         userGUID,
+		APIKey:           dashboardKey,
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -191,11 +211,14 @@ func openRunLog(logDir, dashboardName, prompt string) (*os.File, string, error) 
 // writeLogHeader stamps the run's metadata at the top of the
 // transcript file so someone reading it later has context without
 // having to cross-reference shell history.
-func writeLogHeader(w io.Writer, serverURL, connectionID, userGUID, namespace, dashboardName string, width, height int, prompt, model string) {
+func writeLogHeader(w io.Writer, serverURL, connectionID, userGUID, namespace, dashboardName string, width, height int, prompt, model, authMode string) {
 	fmt.Fprintf(w, "# Dashboard-agent run — %s\n\n", time.Now().Format(time.RFC3339))
 	fmt.Fprintf(w, "- server: %s\n", serverURL)
 	fmt.Fprintf(w, "- connection_id: %s\n", connectionID)
-	fmt.Fprintf(w, "- user_guid: %s\n", userGUID)
+	fmt.Fprintf(w, "- auth: %s\n", authMode)
+	if userGUID != "" {
+		fmt.Fprintf(w, "- user_guid: %s\n", userGUID)
+	}
 	fmt.Fprintf(w, "- namespace: %s\n", namespace)
 	if dashboardName != "" {
 		fmt.Fprintf(w, "- dashboard_name: %q\n", dashboardName)

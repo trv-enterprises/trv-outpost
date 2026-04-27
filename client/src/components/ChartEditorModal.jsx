@@ -35,24 +35,13 @@ function ChartEditorModal({ open, onClose, onSave, chart, panelId }) {
   const handleSave = async (chartPayload) => {
     setSaving(true);
     try {
-      // Capture thumbnail now that "Saving..." is visible
-      // Skip thumbnail for controls — html2canvas hangs on SSE-connected components
-      let thumbnail = null;
-      const isControl = chartPayload.component_type === 'control';
-      if (!isControl && editorRef.current?.captureThumbnail) {
-        thumbnail = await editorRef.current.captureThumbnail();
-      }
-
-      // Add thumbnail to payload
-      const payloadWithThumbnail = { ...chartPayload, thumbnail };
-
       let savedChart;
       if (chart?.id) {
         // Update existing chart
-        savedChart = await apiClient.updateChart(chart.id, payloadWithThumbnail);
+        savedChart = await apiClient.updateChart(chart.id, chartPayload);
       } else {
         // Create new chart
-        savedChart = await apiClient.createChart(payloadWithThumbnail);
+        savedChart = await apiClient.createChart(chartPayload);
       }
 
       // Drop the shared tag cache so the next TagInput/TagFilter mount

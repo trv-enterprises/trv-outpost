@@ -12,20 +12,15 @@ import {
   HeaderGlobalAction,
   SideNav,
   Content,
-  OverflowMenu,
-  OverflowMenuItem,
   Loading
 } from '@carbon/react';
 import {
   Help,
 
   Notification,
-  UserAvatar,
   ChartMultitype,
   Menu,
   Close,
-  Checkmark,
-  Logout
 } from '@carbon/icons-react';
 import apiClient, { API_BASE } from './api/client';
 import { isElectron } from './utils/electron';
@@ -50,10 +45,13 @@ import UserDetailPage from './pages/UserDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import DevicesPage from './pages/DevicesPage';
 import NamespacesPage from './pages/NamespacesPage';
+import ApiKeysListPage from './pages/ApiKeysListPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { NamespaceProvider } from './context/NamespaceContext';
 import NamespacePicker from './components/NamespacePicker';
+import AccountMenu from './components/AccountMenu';
+import DevUserSwitcher from './components/DevUserSwitcher';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
@@ -388,6 +386,20 @@ function AppContent({ onDisconnect }) {
             </div>
             <HeaderGlobalBar>
               {(userCapabilities.can_design || userCapabilities.can_manage) && <NamespacePicker />}
+
+              {/* Dev-only user impersonation pill. Sits between
+                  NamespacePicker and the help/notification icons so
+                  it reads as a context control alongside the
+                  namespace picker. Vite tree-shakes this out of
+                  production bundles via import.meta.env.DEV. */}
+              {import.meta.env.DEV && !electronMode && (
+                <DevUserSwitcher
+                  currentUser={currentUser}
+                  users={users}
+                  onUserChange={handleUserChange}
+                />
+              )}
+
               <HeaderGlobalAction
                 aria-label={`Help - Build ${buildInfo.buildNumber}`}
                 tooltipAlignment="end"
@@ -408,75 +420,17 @@ function AppContent({ onDisconnect }) {
                   </span>
                 )}
               </HeaderGlobalAction>
-              {electronMode ? (
-                // Electron mode: Show current user with disconnect option
-                <OverflowMenu
-                  aria-label="User Account"
-                  renderIcon={() => <UserAvatar size={20} />}
-                  flipped
-                  menuOptionsClass="user-menu-options"
-                >
-                  <OverflowMenuItem
-                    itemText={
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <UserAvatar size={16} />
-                        <span>{currentUser?.name || 'Connected'}</span>
-                      </span>
-                    }
-                    disabled
-                  />
-                  <OverflowMenuItem
-                    itemText={
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Logout size={16} />
-                        <span>Disconnect</span>
-                      </span>
-                    }
-                    onClick={onDisconnect}
-                    hasDivider
-                  />
-                </OverflowMenu>
-              ) : import.meta.env.DEV ? (
-                // Dev mode: full user-switching dropdown so different
-                // roles can be exercised against a local server.
-                // Stripped from production bundles by Vite.
-                <OverflowMenu
-                  aria-label="User Account"
-                  renderIcon={() => <UserAvatar size={20} />}
-                  flipped
-                  menuOptionsClass="user-menu-options"
-                >
-                  {users.map((user) => (
-                    <OverflowMenuItem
-                      key={user.guid}
-                      itemText={
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {currentUser?.guid === user.guid && <Checkmark size={16} />}
-                          <span style={{ marginLeft: currentUser?.guid === user.guid ? 0 : '1.5rem' }}>
-                            {user.name}
-                          </span>
-                        </span>
-                      }
-                      onClick={() => handleUserChange(user)}
-                    />
-                  ))}
-                </OverflowMenu>
-              ) : (
-                // Production browser mode: read-only label showing
-                // the bootstrapped identity. Clicking does not open
-                // a switcher — to act as a different user, visit
-                // with `?user_id=<their-guid>` in the URL.
-                <HeaderGlobalAction
-                  aria-label="Current user"
-                  tooltipAlignment="end"
-                  // Use HeaderGlobalAction's tooltip to surface the name
-                  title={currentUser?.name ? `Signed in as ${currentUser.name}` : 'No user'}
-                  onClick={(e) => e.preventDefault()}
-                  style={{ cursor: 'default' }}
-                >
-                  <UserAvatar size={20} />
-                </HeaderGlobalAction>
-              )}
+
+              {/* Avatar / account menu — single component for
+                  prod, dev, and electron. The dev user-switcher
+                  above handles impersonation; this menu is always
+                  the *current* user's account actions (API keys
+                  today; sign-out / MFA when Clerk lands). */}
+              <AccountMenu
+                currentUser={currentUser}
+                electronMode={electronMode}
+                onDisconnect={onDisconnect}
+              />
             </HeaderGlobalBar>
           </Header>
         )}
@@ -536,6 +490,13 @@ function AppContent({ onDisconnect }) {
           <Route path="/manage/devices" element={<DevicesPage />} />
           <Route path="/manage/settings" element={<SettingsPage />} />
           <Route path="/manage/namespaces" element={<NamespacesPage />} />
+
+          {/* API Keys is per-user account settings, not Manage Mode.
+              The old /manage/api-keys path redirects to the new
+              /account/* surface so prior links and bookmarks still
+              land in the right place. */}
+          <Route path="/account/api-keys" element={<ApiKeysListPage />} />
+          <Route path="/manage/api-keys" element={<Navigate to="/account/api-keys" replace />} />
 
           {/* Legacy routes for backwards compatibility - redirect to design mode */}
           <Route path="/dashboard" element={<Navigate to="/design/dashboards" replace />} />

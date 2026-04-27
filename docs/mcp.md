@@ -78,11 +78,45 @@ URL — but see the **authentication** note below first.
 
 ## Authentication
 
-`/mcp/sse` and `/mcp/message` are currently mounted **outside** the
-authenticated `/api` group, so anyone who can reach the port can drive
-the tools. That's fine on `localhost` but not for any deployment that
-opens port 3001 to the network.
+As of v0.9.0, `/mcp/sse` and `/mcp/message` are gated by the same
+authentication middleware as `/api/*`. Every MCP request must carry one
+of the supported credential channels:
 
-Adding MCP-side auth (a shared secret header, or an API key check) is a
-known follow-up — see the related auth work tracked in CLAUDE.md. Until
-that lands, only run the MCP endpoint behind a trusted boundary.
+1. **`Authorization: Bearer trve_…`** — the API key path (preferred).
+   Issue a key from **Manage Mode → API Keys** in the UI; the
+   plaintext token is shown exactly once at creation. Each key
+   inherits the full capability set of its owning user.
+2. **`X-User-ID: <user-guid>`** — the legacy identity-assertion path.
+   Still accepted for migration and local dev under
+   `npm run dev`, but should not be used in any deployment that
+   exposes port 3001 to the network — it's an unauthenticated user
+   ID, not a credential.
+
+When both headers are present, the Bearer token wins.
+
+For Claude Desktop wired through `mcp-proxy`, set the header in the
+proxy launcher:
+
+```jsonc
+{
+  "mcpServers": {
+    "trve-dashboard": {
+      "command": "/Users/you/.local/bin/mcp-proxy",
+      "args": [
+        "--headers", "Authorization=Bearer trve_…",
+        "http://localhost:3001/mcp/sse"
+      ]
+    }
+  }
+}
+```
+
+For curl-style probing:
+
+```sh
+curl -H "Authorization: Bearer trve_…" http://localhost:3001/mcp/message \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+A request with no recognised credential gets a 401 from the
+middleware before reaching the MCP handler.

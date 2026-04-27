@@ -71,7 +71,6 @@ func (s *ChartService) CreateChart(ctx context.Context, req *models.CreateChartR
 		ComponentCode: req.ComponentCode,
 		UseCustomCode: req.UseCustomCode,
 		Options:       req.Options,
-		Thumbnail:     req.Thumbnail,
 		Tags:          models.NormalizeTags(req.Tags),
 	}
 
@@ -272,9 +271,6 @@ func (s *ChartService) UpdateChart(ctx context.Context, id string, req *models.U
 	}
 	if req.Options != nil {
 		chart.Options = *req.Options
-	}
-	if req.Thumbnail != nil {
-		chart.Thumbnail = *req.Thumbnail
 	}
 	if req.Tags != nil {
 		chart.Tags = models.NormalizeTags(*req.Tags)

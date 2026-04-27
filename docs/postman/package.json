@@ -1,0 +1,6 @@
+{
+  "name": "trve-dashboard-postman",
+  "private": true,
+  "type": "module",
+  "description": "Tooling that builds the Postman collection from server-go/docs/swagger.json. See README.md."
+}

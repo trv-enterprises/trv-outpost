@@ -111,7 +111,6 @@ type Chart struct {
 	ComponentCode string                 `json:"component_code" bson:"component_code"`   // React component code
 	UseCustomCode bool                   `json:"use_custom_code" bson:"use_custom_code"` // Whether custom code mode is enabled
 	Options       map[string]interface{} `json:"options" bson:"options"`                 // ECharts options overrides (charts only)
-	Thumbnail     string                 `json:"thumbnail,omitempty" bson:"thumbnail"`   // Base64 preview image for card display
 	Tags          []string               `json:"tags,omitempty" bson:"tags,omitempty"`   // Searchable tags
 	AISessionID   string                 `json:"ai_session_id,omitempty" bson:"ai_session_id,omitempty"` // Active AI session (drafts only)
 	Created       time.Time              `json:"created" bson:"created"`
@@ -135,7 +134,6 @@ type CreateChartRequest struct {
 	ComponentCode string                 `json:"component_code"`
 	UseCustomCode bool                   `json:"use_custom_code"`
 	Options       map[string]interface{} `json:"options"`
-	Thumbnail     string                 `json:"thumbnail"`
 	Tags          []string               `json:"tags"`
 }
 
@@ -156,7 +154,6 @@ type UpdateChartRequest struct {
 	ComponentCode *string                 `json:"component_code,omitempty"`
 	UseCustomCode *bool                   `json:"use_custom_code,omitempty"`
 	Options       *map[string]interface{} `json:"options,omitempty"`
-	Thumbnail     *string                 `json:"thumbnail,omitempty"`
 	Tags          *[]string               `json:"tags,omitempty"`
 }
 
@@ -196,7 +193,6 @@ type ChartSummary struct {
 	Description   string   `json:"description"`
 	ChartType     string   `json:"chart_type"`
 	DatasourceID  string   `json:"connection_id"`
-	Thumbnail     string   `json:"thumbnail,omitempty"`
 	Tags          []string `json:"tags,omitempty"`
 }
 

@@ -101,8 +101,9 @@ func (a *Agent) Run(ctx context.Context, rc *RequestContext) (*Result, error) {
 		return nil, err
 	}
 
-	// Connect to MCP and initialize.
-	a.mcp = NewMCPClient(a.cfg.MessageURL, rc.UserGUID)
+	// Connect to MCP and initialize. The client prefers Bearer auth
+	// when rc.APIKey is set; otherwise it falls back to X-User-ID.
+	a.mcp = NewMCPClient(a.cfg.MessageURL, rc.UserGUID, rc.APIKey)
 	init, err := a.mcp.Initialize(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("MCP initialize: %w", err)
@@ -116,6 +117,7 @@ func (a *Agent) Run(ctx context.Context, rc *RequestContext) (*Result, error) {
 	pb := &PromptBuilder{
 		CatalogURL: a.cfg.CatalogURL,
 		UserGUID:   rc.UserGUID,
+		APIKey:     rc.APIKey,
 	}
 	systemPrompt, err := pb.Build(ctx, rc, init.Instructions)
 	if err != nil {

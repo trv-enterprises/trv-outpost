@@ -66,7 +66,28 @@ A typical "build me a dashboard" agent flow:
 
 ## Authentication
 
-The dashboard's MCP endpoint reads the same `X-User-ID` header as the REST API. Whatever user GUID the MCP client sends becomes the acting user for any records the agent creates. If you expose the endpoint beyond your own machine, treat it like any other authenticated API and put it behind a reverse proxy with the appropriate auth.
+As of v0.9.0 the MCP endpoints (`/mcp/sse`, `/mcp/message`) require authentication, just like `/api/*`. There are two supported credential channels:
+
+1. **API key (preferred)** — `Authorization: Bearer trve_…`. Create a key from **Manage Mode → API Keys**; the plaintext token is shown exactly once at creation, then only the bcrypt hash and a short prefix are stored. Each key inherits the full capability set of its owning user.
+2. **Legacy `X-User-ID` header** — Still accepted for migration and local dev, but it's an unauthenticated identity assertion (anyone who knows a user GUID becomes that user). Use API keys for any deployment that's not single-user-behind-VPN.
+
+If both headers are present, the Bearer token wins.
+
+For Claude Desktop wired through [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy), pass the header in the launcher:
+
+```jsonc
+{
+  "mcpServers": {
+    "trve-dashboard": {
+      "command": "/Users/you/.local/bin/mcp-proxy",
+      "args": [
+        "--headers", "Authorization=Bearer trve_…",
+        "http://localhost:3001/mcp/sse"
+      ]
+    }
+  }
+}
+```
 
 ## See Also
 

@@ -24,6 +24,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"double_panel_cells_32px", migratePanelCellsTo32px},
 		{"collation_case_insensitive_v1", migrateCollationCaseInsensitive},
 		{"namespacing_v1", migrateNamespacingV1},
+		{"strip_chart_thumbnail_v1", migrateStripChartThumbnail},
 	}
 
 	coll := db.Collection("migrations")
@@ -274,5 +275,25 @@ func rebuildCollectionWithCollation(ctx context.Context, db *mongo.Database, nam
 	}
 
 	log.Printf("  %s: rebuilt with collation (%d documents)", name, copied)
+	return nil
+}
+
+// migrateStripChartThumbnail removes the legacy `thumbnail` field
+// from every document in the `charts` collection. Component
+// thumbnails were captured on chart save and stored as base64 PNGs
+// (often 50–200 KB each) but never read by any UI. The field was
+// dead weight in every backup. This migration is idempotent — once
+// it runs, the field is gone and the migrations registry blocks it
+// from re-running.
+func migrateStripChartThumbnail(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("charts").UpdateMany(
+		ctx,
+		bson.M{"thumbnail": bson.M{"$exists": true}},
+		bson.M{"$unset": bson.M{"thumbnail": ""}},
+	)
+	if err != nil {
+		return fmt.Errorf("strip thumbnail: %w", err)
+	}
+	log.Printf("  charts: stripped thumbnail from %d documents", res.ModifiedCount)
 	return nil
 }

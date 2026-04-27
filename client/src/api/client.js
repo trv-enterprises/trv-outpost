@@ -786,6 +786,32 @@ class APIClient {
     return this.request(`/api/namespaces/${id}/usage`);
   }
 
+  // ── API Keys ──────────────────────────────────────────────────────
+  // Per-user authentication tokens for non-browser callers (the
+  // dashboard-agent CLI, MCP clients, scripts). The plaintext token
+  // is returned exactly once on creation — the UI must surface it
+  // immediately and warn that it can't be recovered.
+  async getAPIKeys() {
+    return this.request('/api/api-keys');
+  }
+
+  async getAllAPIKeys() {
+    return this.request('/api/api-keys/all');
+  }
+
+  async createAPIKey({ name, expires_at = null } = {}) {
+    return this.request('/api/api-keys', {
+      method: 'POST',
+      body: JSON.stringify({ name, expires_at }),
+    });
+  }
+
+  async revokeAPIKey(id) {
+    return this.request(`/api/api-keys/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ── Dashboard export / import ─────────────────────────────────────
   async previewExportDashboards(dashboardIds) {
     return this.request('/api/dashboards/export/preview', {
