@@ -42,6 +42,12 @@ type SystemConfigResponse struct {
 	Settings         map[string]interface{}        `json:"settings"`
 	LayoutDimensions map[string]LayoutDimensionDTO `json:"layout_dimensions"`
 	DefaultDimension string                        `json:"default_dimension"`
+	// ClerkPublishableKey, when present, signals to the SPA that the
+	// deployment is configured with Clerk-backed sign-in. The value is
+	// the publishable key (`pk_test_…` or `pk_live_…`) needed to
+	// initialize the React ClerkProvider. Empty string means Clerk is
+	// disabled and the SPA uses the v0.8.5 bootstrap chain instead.
+	ClerkPublishableKey string `json:"clerk_publishable_key,omitempty"`
 }
 
 // UserConfigResponse is the API response for user configuration

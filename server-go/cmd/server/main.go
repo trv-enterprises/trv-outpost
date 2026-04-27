@@ -20,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/auth"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
 	"github.com/trv-enterprises/trve-dashboard/internal/handlers"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
@@ -179,12 +180,21 @@ func main() {
 		log.Printf("Warning: Failed to create API key indexes: %v", err)
 	}
 
+	// Read Clerk env vars early — both feed into services constructed
+	// below. CLERK_SECRET_KEY drives the verifier (and is the soft
+	// switch for Clerk mode). CLERK_PUBLISHABLE_KEY is forwarded to
+	// the SPA via /api/config/system so the React SDK can initialize.
+	// Both must be set for Clerk mode to be useful end-to-end; we
+	// don't enforce that here so admins can stage rollouts.
+	clerkSecret := os.Getenv("CLERK_SECRET_KEY")
+	clerkPublishable := os.Getenv("CLERK_PUBLISHABLE_KEY")
+
 	// Initialize services
 	datasourceService := service.NewDatasourceService(datasourceRepo)
 	chartService := service.NewChartService(chartRepo)
 	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, chartRepo, datasourceRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, chartRepo, dashboardRepo)
-	configService := service.NewConfigService(configRepo, settingsRepo, cfg)
+	configService := service.NewConfigService(configRepo, settingsRepo, cfg, clerkPublishable)
 	userService := service.NewUserService(userRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, datasourceRepo)
@@ -306,10 +316,34 @@ func main() {
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
+	// Initialize Clerk verifier when CLERK_SECRET_KEY is set. Same
+	// soft-switch pattern as the AI agent on DASHBOARD_ANTHROPIC_API_KEY:
+	// the env var's presence is the activation signal. Empty → fall
+	// through to API-key + legacy auth only. (clerkSecret/clerkPublishable
+	// are read at the top of services init so configService can pipe
+	// the publishable key to the SPA.)
+	var identityVerifier auth.IdentityVerifier
+	if clerkSecret != "" {
+		cv, err := auth.NewClerkVerifier(clerkSecret)
+		if err != nil {
+			log.Printf("⚠️  Clerk verifier init failed: %v — Clerk auth disabled", err)
+		} else {
+			identityVerifier = cv
+			fmt.Println("✓ Clerk identity verifier enabled (CLERK_SECRET_KEY detected)")
+			if clerkPublishable == "" {
+				log.Printf("⚠️  CLERK_PUBLISHABLE_KEY is empty — the SPA can't initialize Clerk without it")
+			}
+		}
+	} else {
+		fmt.Println("· Clerk identity verifier disabled (CLERK_SECRET_KEY not set)")
+	}
+
 	// Initialize auth middleware. The API key service is passed so the
 	// middleware can resolve `Authorization: Bearer trve_...` tokens to a
-	// user, in addition to the legacy X-User-ID header path.
-	authMiddleware := middleware.NewAuthMiddleware(userService, apiKeyService)
+	// user, in addition to the legacy X-User-ID header path. The
+	// identity verifier (when non-nil) handles `Authorization: Bearer
+	// <jwt>` for browser sessions issued by Clerk.
+	authMiddleware := middleware.NewAuthMiddleware(userService, apiKeyService, identityVerifier, userRepo)
 
 	// Initialize MCP
 	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, chartService, deviceTypeService, typeFilter)

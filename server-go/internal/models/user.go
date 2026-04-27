@@ -29,6 +29,13 @@ type User struct {
 	Email        string       `json:"email,omitempty" bson:"email"`       // Optional email
 	Capabilities []Capability `json:"capabilities" bson:"capabilities"`   // User capabilities
 	Active       bool         `json:"active" bson:"active"`               // Whether user is active
+	// ClerkUserID links this dashboard user to a Clerk identity. Set on
+	// first sign-in via JIT-link from email match, or by an admin from
+	// the Users page. Subsequent sign-ins resolve via this field
+	// directly so an email change in Clerk doesn't break the link.
+	// Empty when the deployment isn't using Clerk or the user hasn't
+	// signed in via Clerk yet.
+	ClerkUserID  string       `json:"clerk_user_id,omitempty" bson:"clerk_user_id,omitempty"`
 	Created      time.Time    `json:"created" bson:"created"`
 	Updated      time.Time    `json:"updated" bson:"updated"`
 }
@@ -78,6 +85,12 @@ type UpdateUserRequest struct {
 	Email        *string       `json:"email,omitempty"`
 	Capabilities *[]Capability `json:"capabilities,omitempty"`
 	Active       *bool         `json:"active,omitempty"`
+	// ClerkUserID lets an admin manually link or re-link a user to a
+	// Clerk identity. Send "" to clear the link. Most deployments
+	// won't need this — first sign-in JIT-links automatically — but
+	// it's available for cases where the email in Clerk has drifted
+	// from what's stored on the User record.
+	ClerkUserID  *string       `json:"clerk_user_id,omitempty"`
 }
 
 // UserListResponse represents a paginated list of users

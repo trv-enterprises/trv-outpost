@@ -48,6 +48,22 @@ func (r *UserRepository) CreateIndexes(ctx context.Context) error {
 		{
 			Keys: bson.D{{Key: "guid", Value: 1}, {Key: "active", Value: 1}},
 		},
+		// Clerk-linked sign-in path: FindByClerkID is the hot lookup
+		// after first JIT-link. Sparse so users without a clerk_user_id
+		// (everyone in non-Clerk deployments) don't create a unique-key
+		// collision on empty strings.
+		{
+			Keys:    bson.D{{Key: "clerk_user_id", Value: 1}},
+			Options: options.Index().SetUnique(true).SetSparse(true),
+		},
+		// Email lookup is the JIT-link path on first Clerk sign-in.
+		// Sparse because email is optional on User records. NOT marked
+		// unique — historical users may share an email (defensive); the
+		// app layer enforces uniqueness on create when it matters.
+		{
+			Keys:    bson.D{{Key: "email", Value: 1}},
+			Options: options.Index().SetSparse(true),
+		},
 	}
 
 	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
@@ -215,4 +231,98 @@ func (r *UserRepository) UpsertByName(ctx context.Context, user *models.User) er
 // Count returns the total number of users
 func (r *UserRepository) Count(ctx context.Context) (int64, error) {
 	return r.collection.CountDocuments(ctx, bson.M{})
+}
+
+// FindByClerkID returns the active user whose ClerkUserID matches the
+// given Clerk subject claim (`sub` from a verified JWT). Returns
+// (nil, nil) when no row matches — the caller falls back to email-
+// based JIT linking in that case.
+func (r *UserRepository) FindByClerkID(ctx context.Context, clerkID string) (*models.User, error) {
+	if clerkID == "" {
+		return nil, nil
+	}
+	var user models.User
+	err := r.collection.FindOne(ctx, bson.M{
+		"clerk_user_id": clerkID,
+		"active":        true,
+	}).Decode(&user)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// FindByEmail returns the active user whose stored email matches
+// (case-insensitive). Used by the Clerk JIT-linking path on first
+// sign-in. Returns (nil, nil) when no row matches.
+func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	if email == "" {
+		return nil, nil
+	}
+	// Case-insensitive exact match. The collection collation isn't
+	// guaranteed to apply here, so we use a regex-anchored compare.
+	// Email is short and the index is sparse; this is fast in practice.
+	pattern := "^" + regexEscape(email) + "$"
+	var user models.User
+	err := r.collection.FindOne(ctx, bson.M{
+		"email":  bson.M{"$regex": pattern, "$options": "i"},
+		"active": true,
+	}).Decode(&user)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// SetClerkID writes the given Clerk subject onto the user record.
+// Used by the JIT-linking path: when a Clerk JWT's email matches a
+// User but the User has no ClerkUserID yet, we persist the link so
+// future sign-ins resolve via the (more stable) ClerkUserID lookup.
+// Pass "" to clear the link (admin override).
+func (r *UserRepository) SetClerkID(ctx context.Context, userID, clerkID string) error {
+	update := bson.M{"updated": time.Now()}
+	if clerkID == "" {
+		// $unset rather than $set:"" so the sparse index doesn't trip.
+		_, err := r.collection.UpdateOne(
+			ctx,
+			bson.M{"_id": userID},
+			bson.M{
+				"$set":   update,
+				"$unset": bson.M{"clerk_user_id": ""},
+			},
+		)
+		return err
+	}
+	update["clerk_user_id"] = clerkID
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": userID},
+		bson.M{"$set": update},
+	)
+	return err
+}
+
+// regexEscape quotes regex metacharacters for safe inclusion in a
+// `$regex` filter. Lifted to package-level so we don't pay the
+// allocation on every email lookup.
+func regexEscape(s string) string {
+	const meta = `\.+*?()[]{}|^$`
+	out := make([]byte, 0, len(s)+8)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		for j := 0; j < len(meta); j++ {
+			if c == meta[j] {
+				out = append(out, '\\')
+				break
+			}
+		}
+		out = append(out, c)
+	}
+	return string(out)
 }

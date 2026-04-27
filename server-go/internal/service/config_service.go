@@ -16,17 +16,22 @@ import (
 
 // ConfigService handles business logic for app configuration
 type ConfigService struct {
-	repo             *repository.ConfigRepository
-	settingsRepo     *repository.SettingsItemRepository
-	layoutDimensions map[string]config.LayoutDimension // fallback from config file
+	repo                *repository.ConfigRepository
+	settingsRepo        *repository.SettingsItemRepository
+	layoutDimensions    map[string]config.LayoutDimension // fallback from config file
+	clerkPublishableKey string                            // empty when Clerk auth is disabled
 }
 
-// NewConfigService creates a new ConfigService
-func NewConfigService(repo *repository.ConfigRepository, settingsRepo *repository.SettingsItemRepository, cfg *config.Config) *ConfigService {
+// NewConfigService creates a new ConfigService. clerkPublishableKey
+// is non-empty only when the deployment has Clerk auth enabled. The
+// value flows through to the SPA via /api/config/system so the React
+// ClerkProvider can initialize without needing its own env var.
+func NewConfigService(repo *repository.ConfigRepository, settingsRepo *repository.SettingsItemRepository, cfg *config.Config, clerkPublishableKey string) *ConfigService {
 	return &ConfigService{
-		repo:             repo,
-		settingsRepo:     settingsRepo,
-		layoutDimensions: cfg.LayoutDimensions,
+		repo:                repo,
+		settingsRepo:        settingsRepo,
+		layoutDimensions:    cfg.LayoutDimensions,
+		clerkPublishableKey: clerkPublishableKey,
 	}
 }
 
@@ -192,9 +197,10 @@ func (s *ConfigService) GetSystemConfig(ctx context.Context) (*models.SystemConf
 	}
 
 	return &models.SystemConfigResponse{
-		Settings:         appConfig.Settings,
-		LayoutDimensions: dimensions,
-		DefaultDimension: defaultDimension,
+		Settings:            appConfig.Settings,
+		LayoutDimensions:    dimensions,
+		DefaultDimension:    defaultDimension,
+		ClerkPublishableKey: s.clerkPublishableKey,
 	}, nil
 }
 
