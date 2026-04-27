@@ -15,8 +15,8 @@ import './AccountMenu.scss';
  *
  * The avatar dropdown on the right edge of the header. Shows the
  * signed-in user's name + email at the top (read-only), then
- * personal-account actions: API keys today; sign-out, MFA, etc.
- * once Clerk lands in v0.10.0.
+ * personal-account actions: API keys, sign-out (Clerk), or
+ * disconnect (electron).
  *
  * This menu is intentionally NOT a user switcher — production users
  * have one identity per browser. Dev-mode user switching lives in a
@@ -27,8 +27,13 @@ import './AccountMenu.scss';
  *   currentUser     — { name, email, guid } | null
  *   electronMode    — boolean; when true, adds a "Disconnect" item
  *   onDisconnect    — handler invoked from the Disconnect item
+ *   onSignOut       — when supplied, adds a "Sign out" item. App.jsx
+ *                     supplies this only when Clerk is the active
+ *                     auth path; legacy-bootstrap deployments don't
+ *                     show sign-out because there's nothing to sign
+ *                     out of (the default user just rebootstraps).
  */
-function AccountMenu({ currentUser, electronMode = false, onDisconnect }) {
+function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOut }) {
   const navigate = useNavigate();
 
   const displayName = currentUser?.name || (electronMode ? 'Connected' : 'No user');
@@ -78,6 +83,19 @@ function AccountMenu({ currentUser, electronMode = false, onDisconnect }) {
             </span>
           }
           onClick={onDisconnect}
+          hasDivider
+        />
+      )}
+
+      {onSignOut && (
+        <OverflowMenuItem
+          itemText={
+            <span className="account-menu-action">
+              <Logout size={16} />
+              <span>Sign out</span>
+            </span>
+          }
+          onClick={onSignOut}
           hasDivider
         />
       )}

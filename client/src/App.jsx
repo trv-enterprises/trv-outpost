@@ -91,6 +91,12 @@ function AppContent({ onDisconnect }) {
   // or fail). Used to distinguish "still loading" from "tried,
   // nothing resolved" so we can show the right stub vs. spinner.
   const [identityResolved, setIdentityResolved] = useState(false);
+  // Goes true when the Clerk auth path resolves a user (i.e. when
+  // ClerkAuthGate's bridge fires `clerk-user-resolved`). Used to
+  // decide whether to show the "Sign out" item in the avatar menu —
+  // legacy-bootstrap deployments have nothing to sign out of, so
+  // we hide it there to avoid a misleading affordance.
+  const [clerkActive, setClerkActive] = useState(false);
   const [userCapabilities, setUserCapabilities] = useState({ can_design: false, can_manage: false });
   const location = useLocation();
   const navigate = useNavigate();
@@ -176,6 +182,57 @@ function AppContent({ onDisconnect }) {
       }
     };
     bootstrap();
+  }, []);
+
+  // Clerk-resolved-user event hook. ClerkAuthGate dispatches this
+  // event after a successful sign-in once /api/auth/me + the full
+  // user fetch have completed. Listening here lets the avatar / name
+  // / capability gates update the moment Clerk hands us an identity,
+  // even if the legacy bootstrap chain ran first and resolved
+  // nothing. Safe in non-Clerk deployments — the event simply never
+  // fires.
+  useEffect(() => {
+    const onClerkUser = (e) => {
+      const u = e?.detail?.user;
+      if (!u) return;
+      setUsers((prev) => {
+        // Make sure the resolved user is in the local users list so
+        // header lookups by GUID find them.
+        const exists = prev.some((x) => x.guid === u.guid);
+        return exists ? prev : [...prev, u];
+      });
+      setCurrentUser(u);
+      setIdentityResolved(true);
+      setClerkActive(true);
+    };
+    window.addEventListener('clerk-user-resolved', onClerkUser);
+    return () => window.removeEventListener('clerk-user-resolved', onClerkUser);
+  }, []);
+
+  // Sign-out handler — only meaningful when Clerk is the active
+  // auth path. Clears the cross-domain Clerk session via the SDK
+  // (which clears its cookies via Clerk's API), then strips local
+  // identity state and reloads to drop any in-flight components
+  // that still hold a stale currentUser. Reload is the simplest
+  // way to re-enter ClerkAuthGate's signed-out branch.
+  const handleClerkSignOut = useCallback(async () => {
+    try {
+      if (window.Clerk?.signOut) {
+        await window.Clerk.signOut();
+      }
+    } catch (err) {
+      console.warn('Clerk sign-out failed', err);
+    }
+    apiClient.setTokenProvider(null);
+    apiClient.setCurrentUser(null);
+    try {
+      sessionStorage.clear();
+    } catch (err) {
+      // sessionStorage can throw in private-mode or with strict
+      // cookie policies; ignore — we've already cleared what we can.
+      console.warn('sessionStorage.clear failed', err);
+    }
+    window.location.reload();
   }, []);
 
   // Fetch current user capabilities when user changes
@@ -430,6 +487,7 @@ function AppContent({ onDisconnect }) {
                 currentUser={currentUser}
                 electronMode={electronMode}
                 onDisconnect={onDisconnect}
+                onSignOut={clerkActive ? handleClerkSignOut : undefined}
               />
             </HeaderGlobalBar>
           </Header>

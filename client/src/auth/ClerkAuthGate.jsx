@@ -63,14 +63,44 @@ function ClerkLegacyIDBridge() {
     (async () => {
       try {
         // /api/auth/me validates the bearer (set by ClerkSessionBridge)
-        // and returns the resolved dashboard user. The very first
-        // call on a deployment also creates the JIT-link in MongoDB.
+        // and returns the resolved dashboard user's capabilities.
+        // The very first call on a deployment also creates the
+        // JIT-link in MongoDB. The response shape is
+        // UserCapabilitiesResponse: { user_id (mongo _id), name,
+        // capabilities, can_design, can_manage } — note `user_id`
+        // is the internal _id, NOT the GUID. We then fetch the full
+        // user record to get the GUID and stash it where App.jsx
+        // expects it.
         const me = await apiClient.request('/api/auth/me');
         if (cancelled) return;
-        const guid = me?.user_id || me?.guid;
-        if (guid) {
-          apiClient.setCurrentUser(guid);
+        const userID = me?.user_id;
+        if (!userID) {
+          console.warn('Clerk auth bridge: /api/auth/me returned no user_id', me);
+          setSynced(true);
+          return;
         }
+
+        // Fetch full user record so we have the GUID + email.
+        const fullUser = await apiClient.getUser(userID);
+        if (cancelled || !fullUser?.guid) {
+          setSynced(true);
+          return;
+        }
+
+        // Persist the GUID into apiClient + localStorage so the
+        // legacy X-User-ID fallback path also works (e.g. for
+        // requests that fire before ClerkSessionBridge attaches a
+        // token, or for tools that read currentUserGuid directly).
+        apiClient.setCurrentUser(fullUser.guid);
+
+        // Notify App.jsx so its `currentUser` state updates and the
+        // header/dropdown show the right name. App.jsx listens for
+        // this event in its bootstrap effect; using an event keeps
+        // the bridge decoupled from App's shape.
+        window.dispatchEvent(new CustomEvent('clerk-user-resolved', {
+          detail: { user: fullUser },
+        }));
+
         setSynced(true);
       } catch (err) {
         // 401 here means the server couldn't match the Clerk
