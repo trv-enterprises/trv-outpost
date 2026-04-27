@@ -6,6 +6,7 @@ package repository
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -242,9 +243,16 @@ func (r *ChartRepository) FindAllLatest(ctx context.Context, params models.Chart
 		matchFilter["namespace"] = params.Namespace
 	}
 	if params.Name != "" {
-		// $regex does NOT respect collection collation (MongoDB limitation),
-		// so we must explicitly request case-insensitive matching.
-		matchFilter["name"] = bson.M{"$regex": params.Name, "$options": "i"}
+		// Word-prefix match: anchor at \b so a search for "ts" hits
+		// "TS-Store" but not "Lights" / "Alerts". QuoteMeta escapes
+		// regex metacharacters so a name with `.` or `(` doesn't blow
+		// up the query. $regex doesn't respect collection collation
+		// (MongoDB limitation), so case-insensitivity is requested
+		// explicitly via $options.
+		matchFilter["name"] = bson.M{
+			"$regex":   `\b` + regexp.QuoteMeta(params.Name),
+			"$options": "i",
+		}
 	}
 	if params.ChartType != "" {
 		matchFilter["chart_type"] = params.ChartType

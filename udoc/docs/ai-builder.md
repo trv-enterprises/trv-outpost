@@ -73,6 +73,34 @@ Ask the AI to refine the component:
 
 When launched from a dashboard panel, the saved component is automatically assigned to that panel.
 
+## Versions and drafts
+
+The AI builder uses **versioning to checkpoint your work in progress**:
+
+- The first time you ask the AI to change something on an existing
+  component, the server creates a new row in the database with the
+  same component ID, the next version number, and `status: draft`.
+- Every subsequent edit during this session updates that draft
+  in place — no new row per turn. The conversation tab shows a
+  preview powered by the draft.
+- The previous *final* version stays untouched. Dashboards using
+  the component continue to render the final version, not the
+  draft.
+- Clicking **Save** flips the draft's `status` from `draft` to
+  `final`. The previous final stays in history; the new final
+  becomes what dashboards render.
+- Clicking **Discard** deletes the draft row entirely, leaving the
+  previous final as the latest version.
+
+Old final versions are preserved indefinitely. The `/api/charts/:id/versions`
+endpoint and the version-history UI on the component detail page let you
+inspect or roll back to any earlier version.
+
+The **manual editor** does *not* create a draft on every save —
+manual edits update the latest version in place. Versioning is an
+AI-builder-specific safeguard so you can experiment freely without
+breaking what's already on dashboards.
+
 ## Sessions
 
 AI builder sessions are temporary (24-hour expiry). Each session maintains conversation history so you can return to a previous session if the browser tab stays open.

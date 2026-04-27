@@ -4480,7 +4480,8 @@ paths:
       description: Get a paginated list of charts (latest version of each) with optional
         filtering
       parameters:
-      - description: Filter by name (partial match)
+      - description: Filter by name (case-insensitive word-prefix match — `ts` matches
+          `TS-Store` but not `Lights`)
         in: query
         name: name
         type: string

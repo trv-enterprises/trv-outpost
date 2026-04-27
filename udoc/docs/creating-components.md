@@ -56,4 +56,25 @@ From the component list or a dashboard panel:
 
 Changes to a component update it everywhere it's used.
 
+## Versioning
+
+Components are stored as a sequence of versions in the database (each
+version is its own row sharing a component ID). Lists, dashboard
+panels, and the component detail view always show the **latest
+version**. Behavior depends on which editor you use:
+
+- **Manual editor save** updates the latest version *in place* —
+  the version number doesn't change. Dashboards see the new state
+  immediately.
+- **AI builder** creates a new draft version while you iterate
+  (status: `draft`). Your previous saved component stays the
+  rendered version everywhere it's used until you click **Save**,
+  which promotes the draft to `final`. **Discard** deletes the
+  draft and leaves the previous final as the latest. See
+  [AI Component Builder](ai-builder.md#versions-and-drafts).
+
+Older final versions stay in history; the version list on the
+component detail page lets you inspect or roll back to any prior
+state.
+
 ---

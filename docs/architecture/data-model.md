@@ -170,11 +170,27 @@ See [frontend.md](frontend.md) for how each type is rendered and
 
 ### Versioning
 
-Charts support version history: editing an existing chart creates a
-new version with an incremented `version` number but the same `id`.
-The most recent `status: "final"` version is what dashboards render;
-`status: "draft"` is a work-in-progress save that hasn't been
-promoted.
+Charts (and controls / displays — same collection) keep a version
+history in the database. Each version is its own row, sharing a
+logical `id` and differing in `version` (1, 2, 3, …) and `status`
+(`draft` | `final`). New versions are created **only by the AI
+builder flow**, not by every save:
+
+- **`POST /api/charts`** creates `(id, version=1, status=final)`.
+- **`PUT /api/charts/:id`** (manual editor / API client) updates
+  the latest version *in place*. The version number does not bump.
+  This means manual edits don't accumulate history rows.
+- **AI sessions** create a new draft row when an existing component
+  is opened for editing — `(id, version=N+1, status=draft)`. The
+  prior final stays untouched and dashboards continue to render it.
+  All AI-driven edits during the session update the same draft row
+  (no row per turn). On **Save** the draft is promoted to
+  `status=final` and becomes the latest. On **Discard** the draft
+  row is deleted and the prior final remains the latest.
+- **List endpoints** (`GET /api/charts`, summaries, dashboard
+  expand) always return the latest version per `id`. Old finals
+  are reachable only through `/api/charts/:id/versions` and the
+  per-version GET / DELETE endpoints.
 
 - **Collection**: `charts`
 - **Uniqueness**: `(id, version)` is unique. Multiple versions share

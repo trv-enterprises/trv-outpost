@@ -2574,7 +2574,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Filter by name (partial match)",
+                        "description": "Filter by name (case-insensitive word-prefix match — ` + "`" + `ts` + "`" + ` matches ` + "`" + `TS-Store` + "`" + ` but not ` + "`" + `Lights` + "`" + `)",
                         "name": "name",
                         "in": "query"
                     },

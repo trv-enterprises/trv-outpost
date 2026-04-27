@@ -200,7 +200,7 @@ func (h *ChartHandler) GetChartDraft(c *gin.Context) {
 // @Description Get a paginated list of charts (latest version of each) with optional filtering
 // @Tags charts
 // @Produce json
-// @Param name query string false "Filter by name (partial match)"
+// @Param name query string false "Filter by name (case-insensitive word-prefix match — `ts` matches `TS-Store` but not `Lights`)"
 // @Param chart_type query string false "Filter by chart type"
 // @Param component_type query string false "Filter by component type (chart, control, display)"
 // @Param status query string false "Filter by status (draft, final)"
