@@ -942,16 +942,6 @@ function ControlEditor({
           )}
         </Grid>
       </div>
-
-      {/* Preview section */}
-      <div className="preview-section">
-        <h4>Preview</h4>
-        <div className="control-preview">
-          <div className="preview-placeholder">
-            Control preview will appear here when saved to a dashboard
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

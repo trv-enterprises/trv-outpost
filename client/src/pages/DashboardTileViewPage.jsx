@@ -22,6 +22,7 @@ import {
 import apiClient from '../api/client';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import TagFilter from '../components/shared/TagFilter';
+import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import './DashboardTileViewPage.scss';
 
 /**
@@ -298,40 +299,10 @@ function DashboardTileViewPage() {
       );
     }
 
-    // Order resolution:
-    //   1. Default — most-recently-updated first, matching the
-    //      design-mode list (DashboardsListPage). Used as the
-    //      starting order and as the fallback for any dashboard the
-    //      user hasn't explicitly placed.
-    //   2. User order (tileOrder) — array of IDs the user has dragged
-    //      into a chosen sequence. Anything in tileOrder appears
-    //      first, in the order given.
-    //   3. New dashboards (anything not in tileOrder) are prepended
-    //      to the front, NOT appended. A new dashboard the user
-    //      hasn't seen should be the first thing they notice.
-    result.sort((a, b) => {
-      const aT = new Date(a.updated || a.created || 0).getTime();
-      const bT = new Date(b.updated || b.created || 0).getTime();
-      return bT - aT;
-    });
-    if (tileOrder && tileOrder.length > 0) {
-      const orderIdx = new Map(tileOrder.map((id, i) => [id, i]));
-      const pinned = [];
-      const unpinned = [];
-      for (const d of result) {
-        if (orderIdx.has(d.id)) {
-          pinned.push(d);
-        } else {
-          unpinned.push(d);
-        }
-      }
-      pinned.sort((a, b) => orderIdx.get(a.id) - orderIdx.get(b.id));
-      // unpinned (new-to-the-user) dashboards come first; pinned
-      // follow in the user's chosen sequence.
-      result = [...unpinned, ...pinned];
-    }
-
-    return result;
+    // Order resolution lives in utils/dashboardOrder so the View
+    // Mode tile page and the dashboard viewer's prev/next arrows
+    // walk dashboards in the same sequence.
+    return orderDashboardsForViewer(result, tileOrder);
   }, [dashboards, namespaceFilter, tagFilter, searchTerm, tileOrder]);
 
   if (loading) {

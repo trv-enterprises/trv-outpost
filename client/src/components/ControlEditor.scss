@@ -148,26 +148,6 @@
     }
   }
 
-  // Preview Section
-  .preview-section {
-    .control-preview {
-      padding: spacing.$spacing-06;
-      background-color: var(--cds-layer-01);
-      border: 1px solid var(--cds-border-subtle-01);
-      border-radius: 4px;
-      min-height: 150px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      .preview-placeholder {
-        color: var(--cds-text-helper);
-        font-size: 0.875rem;
-        text-align: center;
-      }
-    }
-  }
-
   // Form field styling overrides
   .cds--label {
     color: var(--cds-text-secondary);

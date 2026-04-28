@@ -57,6 +57,7 @@ import ChartEditorModal from '../components/ChartEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient from '../api/client';
+import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
@@ -501,14 +502,30 @@ function DashboardViewerPage({ canDesign = false }) {
   }, [id]);
 
 
-  // Fetch dashboard list for keyboard switching
+  // Fetch dashboard list for keyboard switching + prev/next arrow
+  // navigation. Orders the list to match the View Mode tile page so
+  // the arrow buttons walk dashboards in the same sequence the user
+  // arranged via drag-and-drop on the listing page (stored under
+  // app_config.user.<guid>.settings.dashboard_tile_order). Falls
+  // back to most-recently-updated first when the user hasn't
+  // arranged anything yet — same default the tile page uses.
   useEffect(() => {
     const fetchDashboardList = async () => {
       try {
         const data = await apiClient.getDashboards();
         const dashboards = data.dashboards || [];
-        dashboards.sort((a, b) => a.name.localeCompare(b.name));
-        setDashboardList(dashboards);
+        let tileOrder = null;
+        const userGuid = apiClient.getCurrentUserGuid();
+        if (userGuid) {
+          try {
+            const config = await apiClient.getUserConfig(userGuid);
+            const stored = config?.settings?.dashboard_tile_order;
+            tileOrder = Array.isArray(stored) ? stored : null;
+          } catch {
+            // No user config yet — use the default sort.
+          }
+        }
+        setDashboardList(orderDashboardsForViewer(dashboards, tileOrder));
       } catch (err) {
         console.warn('Failed to fetch dashboard list:', err);
       }
