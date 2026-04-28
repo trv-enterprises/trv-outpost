@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check
+.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release
 
 # Configuration
 REGISTRY := ghcr.io
@@ -161,6 +161,7 @@ release: ## Full release: build, tarballs, commit, tag, push (use with VERSION=v
 	@echo "Pushing to origin..."
 	git push origin main
 	git push origin "$(VERSION)"
+	@$(MAKE) gh-release VERSION=$(VERSION)
 	@echo ""
 	@echo "============================================"
 	@echo "Release $(VERSION) complete!"
@@ -172,9 +173,38 @@ release: ## Full release: build, tarballs, commit, tag, push (use with VERSION=v
 	@echo "GitHub Actions is now publishing to ghcr.io:"
 	@echo "  - $(REGISTRY)/$(GITHUB_OWNER)/dashboard-server:$(VERSION)"
 	@echo "  - $(REGISTRY)/$(GITHUB_OWNER)/dashboard-client:$(VERSION)"
+
+# Publish (or update) the GitHub Release entry for VERSION sourced from
+# the annotated tag's body. Idempotent: if the release already exists
+# (e.g. backfilled by hand or re-run), we update its notes instead of
+# failing. Failures here are warned-not-fatal so an auth / network
+# hiccup never undoes the rest of the release flow — the tag and
+# images are already pushed by the time this runs.
+#
+# Marks the release as `--latest` explicitly because GitHub picks
+# "Latest" by *creation timestamp*, not version number — backfilling
+# old releases later would otherwise demote the current one.
+gh-release: ## Publish GitHub Release entry from the annotated tag (auto-called by `release`)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION must be set"; exit 1; \
+	fi
 	@echo ""
-	@echo "Create GitHub release (optional):"
-	@echo "  gh release create $(VERSION) dist/dashboard-$(VERSION)-*.tar.gz"
+	@echo "Publishing GitHub Release for $(VERSION)..."
+	@notes="$$(git tag -l $(VERSION) --format='%(contents)')"; \
+	if [ -z "$$notes" ]; then \
+		echo "  ⚠️  Tag $(VERSION) has no annotation — using version string as notes."; \
+		notes="$(VERSION)"; \
+	fi; \
+	title="$$(echo "$$notes" | head -1)"; \
+	if [ -z "$$title" ]; then title="$(VERSION)"; fi; \
+	if gh release view "$(VERSION)" >/dev/null 2>&1; then \
+		echo "  · Release exists; refreshing notes."; \
+		gh release edit "$(VERSION)" --title "$$title" --notes "$$notes" --latest 2>&1 || \
+			echo "  ⚠️  gh release edit failed (continuing)."; \
+	else \
+		gh release create "$(VERSION)" --title "$$title" --notes "$$notes" --latest 2>&1 || \
+			echo "  ⚠️  gh release create failed (continuing). Run manually:  gh release create $(VERSION) --notes \"\$$(git tag -l $(VERSION) --format='%(contents)')\""; \
+	fi
 
 clean: ## Clean build artifacts
 	rm -rf dist/
