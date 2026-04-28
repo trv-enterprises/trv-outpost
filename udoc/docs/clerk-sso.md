@@ -41,42 +41,130 @@ the [dashboard-agent](dashboard-agent.md) CLI, [MCP](mcp.md) clients,
 and any script using `Authorization: Bearer trve_…` continue to work
 the same way.
 
+## Supported sign-in methods
+
+The dashboard supports the following Clerk-managed sign-in methods:
+
+- **Email + password** (recommended starter) — Clerk hosts the
+  signup, sign-in, password reset, and email verification flows
+  end-to-end. **Zero third-party setup, zero additional cost.**
+  Clerk sends the verification + reset emails from their own
+  infrastructure on their free tier; you don't configure SMTP or
+  buy a sending domain.
+- **Email + one-time code** ("magic link" style) — Clerk emails a
+  6-digit code or one-click link instead of using a password.
+  Same zero-setup story as email + password; pick whichever UX
+  you prefer.
+- **Sign in with Google** *(optional)* — In Clerk's Development
+  instance type, Clerk uses its own shared OAuth credentials so
+  enabling Google is a single checkbox. In Production instance
+  type you must create your own Google Cloud project and OAuth
+  consent screen — straightforward but ~30 minutes of work.
+- **Sign in with Apple** *(optional)* — Requires an
+  [Apple Developer Account](https://developer.apple.com/programs/)
+  ($99 USD per year) **even in Development mode.** Skip unless
+  you specifically want it; Email + Google covers the same
+  use case for free.
+
+Other methods Clerk offers (SMS / phone, GitHub, Microsoft,
+enterprise SSO via SAML, etc.) will likely also work — the JWT
+validation surface is identical — but we don't formally support
+them and won't troubleshoot method-specific issues. If you need
+one, file an issue and we'll evaluate adding it to the supported
+list.
+
+### What the user sees
+
+The sign-in widget that the dashboard renders is the standard
+`<SignIn />` component from Clerk's React SDK with no method
+overrides. **Whichever methods you enable in the Clerk dashboard
+are the only ones that appear** — nothing to configure on the
+dashboard side. If you want email-only, enable just email; the
+sign-in screen will show only the email field with no social
+buttons.
+
+## Development vs Production instance — pick one
+
+Clerk distinguishes two instance types per application. The
+dashboard works with either, but the trade is real and most
+self-hosters are best off **staying in Development mode**.
+
+| | Development (`pk_test_…` / `sk_test_…`) | Production (`pk_live_…` / `sk_live_…`) |
+|---|---|---|
+| Cost | Free (no time limit) | Free up to 10k MAU; paid above |
+| Sign-in widget hosted at | `*.clerk.accounts.dev` (Clerk's domain) | `accounts.your-domain.com` (your custom domain) |
+| Dev banner shown to users | Yes — "this app is using development keys" | No |
+| Monthly active user cap | 100 | 10,000 (free tier) |
+| Google OAuth setup | Use Clerk's shared dev credentials (one click) | Bring your own Google Cloud project |
+| Apple OAuth setup | Apple Developer Account required ($99/yr) — same as prod | Apple Developer Account + domain-association file |
+| Right for | Homelab, personal, small-team self-host (≤100 users) | Public deployments, organizational sign-in |
+
+**Recommendation:** stay in Development mode unless you have a
+specific reason not to. The 100-MAU cap is plenty for personal /
+small-team use, and it spares you the Google Cloud + custom-domain
+setup work. The "development keys" banner is the only real
+downside and most users learn to ignore it. You can always switch
+to a Production instance later — you create a separate instance
+under the same Clerk application, your existing user records and
+configuration carry over.
+
 ## Admin setup
 
-### 1. Create a Clerk application
+### 1. Create a Clerk account and application
 
-Sign up at [clerk.com](https://clerk.com) and create a new application.
-Enable the sign-in methods you want under **User & Authentication →
-Email, Phone, Username** and **Social Connections**. Email + Google +
-Apple is a sensible default; the dashboard doesn't care which
-methods you enable, the validation surface is identical.
+1. Sign up at [clerk.com](https://clerk.com). The free tier is
+   sufficient.
+2. Click **Create application**. Name it something like "TRVE
+   Dashboard". The new application starts in Development mode by
+   default.
+3. On the "Choose how your users will sign in" screen, enable
+   **Email address** at minimum. The dashboard uses email as the
+   JIT-link identifier — see
+   [user mapping](#how-clerk-identities-map-to-dashboard-users)
+   below — so it must be on. Then pick a **first-factor strategy**
+   (Clerk asks for one of):
+   - **Password** — most familiar UX; Clerk hosts password reset.
+   - **Email code / link** — no password to remember; Clerk emails
+     a one-time code or click-link on each sign-in.
+   Either works fine. Pick what you prefer.
+4. *(Optional)* enable social methods if you want them. Each is a
+   single checkbox in Clerk's wizard:
+   - **Google** — free in Development mode (shared OAuth creds);
+     in Production mode you'll do a Google Cloud OAuth setup.
+   - **Apple** — requires an Apple Developer Account ($99/yr)
+     even in Development. Skip unless you specifically want it.
+5. The wizard will produce your two keys at the end. **Don't
+   close that page yet** — you'll copy them in step 2.
 
-Under **Domains**, add the dashboard's URL(s) — `localhost:5173` for
-local dev, plus your production hostname.
+### 2. Copy the publishable + secret keys
 
-### 2. Get the keys
+From the Clerk dashboard, **Configure → API Keys**:
 
-From the Clerk dashboard's **API Keys** page, copy:
-
-- **Publishable key** (starts with `pk_test_` or `pk_live_`) — safe
-  to expose in browser code.
-- **Secret key** (starts with `sk_test_` or `sk_live_`) — server-only;
+- **Publishable key** — starts with `pk_test_` (Development) or
+  `pk_live_` (Production). Safe to expose in browser code; the
+  dashboard SPA reads it via the dashboard server's
+  `/api/config/system` endpoint.
+- **Secret key** — starts with `sk_test_` or `sk_live_`. Server-only;
   treat like a password.
 
 ### 3. Set the env vars on the dashboard server
 
 ```sh
-export CLERK_SECRET_KEY="sk_test_…"
 export CLERK_PUBLISHABLE_KEY="pk_test_…"
+export CLERK_SECRET_KEY="sk_test_…"
 ```
 
-Add these to whatever your deployment uses for environment
-configuration — `~/.zshrc` for local dev, the homelab Ansible
-playbook's secrets file for production, the orchestrator's secret
-manager for k8s, etc.
+How you make these persist depends on your deployment:
+
+| Deployment style | Where to put them |
+|---|---|
+| `docker-compose.deploy.yml` | A `.env` file next to the compose file. See [.env.example](https://github.com/trv-enterprises/trve-dashboard/blob/main/.env.example) for the full list of optional env vars. |
+| Native dev (`go run` / `./bin/server`) | `~/.zshrc` or `~/.bashrc`, then `source` it. |
+| Kubernetes / Nomad | Your orchestrator's secret manager. |
+| Ansible | Group/host vars or vault. |
 
 Both must be set for Clerk to be useful end-to-end. The server
-checks `CLERK_SECRET_KEY` at startup; presence flips the soft
+checks `CLERK_SECRET_KEY` at startup; its presence flips the soft
 switch. `CLERK_PUBLISHABLE_KEY` flows through `/api/config/system`
 to the SPA so the React Clerk SDK can initialize without its own
 env var.
@@ -98,6 +186,39 @@ On startup the server prints one of:
 If you see the "enabled" line but the SPA still shows the old
 non-Clerk login flow, check that `CLERK_PUBLISHABLE_KEY` is also
 set — the SPA needs that one too.
+
+### 5. Pre-provision your dashboard user
+
+Before signing in for the first time, **create a User record in
+Manage Mode → Users with an email that matches the email on your
+Clerk account**. This is what the JIT-link policy uses to connect
+your Clerk identity to a dashboard user — without a matching email,
+your first sign-in returns "Account not authorized for this
+deployment."
+
+Most homelab self-hosters can edit the seeded `Tom Viviano` user (or
+similar) in place rather than creating a new one. After the first
+sign-in, the dashboard saves your Clerk user ID to that record
+automatically and email matching is no longer used; future
+sign-ins resolve via the (more stable) Clerk user ID.
+
+## What you (probably) don't need to set up
+
+- **Domains page in Clerk dashboard.** Development instances pre-allow
+  `localhost:*` and `127.0.0.1:*` automatically. You only configure
+  Domains when switching to a Production instance with your own
+  hostname.
+- **Webhooks.** The dashboard doesn't consume Clerk webhooks. (We
+  use the JIT-link policy to react to first sign-ins instead.)
+- **Custom JWT templates.** Clerk's default session JWT works as-is.
+  We fetch the user's email via the Clerk Users API on first
+  sign-in, so we don't need email embedded in the JWT.
+- **Sessions config.** Default 60-second session token works well.
+  Customize only if you have a specific reason (e.g., you want
+  MFA-on-every-sign-in for regulated industries).
+- **Account Portal.** Clerk's hosted "manage your account" pages
+  work but the dashboard doesn't link to them today. Treat as
+  Clerk-side feature; users discover it via Clerk's UI.
 
 ## What users see
 

@@ -106,17 +106,38 @@ connection adapters, grid system, API reference, etc. — see the
 
 ## Quick start
 
-### Prerequisites
+### Option 1 — Docker (try it without installing anything else)
 
-- Go (version in [`server-go/go.mod`](server-go/go.mod))
-- Node.js 18+
-- Docker + Docker Compose
-- MongoDB 7 (via Docker Compose below)
-
-### Run locally
+If you have Docker, you can have the dashboard running in one
+command. Pulls the published images from `ghcr.io`; no source build,
+no language toolchains required.
 
 ```bash
-# Start MongoDB
+git clone https://github.com/trv-enterprises/trve-dashboard
+cd trve-dashboard
+docker compose -f docker-compose.deploy.yml up -d
+```
+
+Open <http://localhost> (Caddy serves the SPA on port 80; the
+self-signed HTTPS cert on 443 also works if you accept the warning).
+
+To customize anything — pin a specific release, set an Anthropic key
+to enable the AI Builder, enable Clerk sign-in, change ports — copy
+`.env.example` to `.env` and edit. The defaults are tuned for "I want
+to see the dashboard on my laptop right now."
+
+### Option 2 — Native (run Go + React directly for development)
+
+For active development on the codebase. Starts the Go server and
+Vite dev server with hot reload.
+
+#### Prerequisites
+- Go (version in [`server-go/go.mod`](server-go/go.mod))
+- Node.js 18+
+- Docker + Docker Compose (for the bundled MongoDB)
+
+```bash
+# Start MongoDB only
 docker compose up -d mongodb
 
 # Start the Go backend (Terminal 1)
@@ -135,8 +156,8 @@ npm run dev
 Then open <http://localhost:5173>.
 
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production
-deployment (Docker Compose, Caddy reverse proxy, HTTPS, backup +
-restore).
+deployment options (HTTPS via Let's Encrypt, building images from
+source, backup + restore).
 
 ## Application modes
 

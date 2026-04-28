@@ -1,6 +1,44 @@
 # Dashboard Deployment Guide
 
-## Quick Start (Docker Compose)
+There are two ways to deploy the dashboard with Docker Compose:
+
+- **Quick start** — pull pre-built images from `ghcr.io`. No source
+  build, no toolchain. Right for evaluators and for production
+  deploys that don't need code changes. **Verified end-to-end on
+  macOS Docker Desktop and on the project maintainer's homelab
+  (Ubuntu, Docker Compose v2).**
+- **Build from source** — `docker-compose.prod.yml` builds the
+  client and server images locally from `./client/Dockerfile` and
+  `./server-go/Dockerfile`. Right when you've forked, customized,
+  or want to deploy off `main` between tagged releases.
+
+## Quick Start (deploy from published images)
+
+```bash
+git clone https://github.com/trv-enterprises/trve-dashboard
+cd trve-dashboard
+
+# Optional: copy and edit .env to set DOMAIN, IMAGE_TAG,
+# ANTHROPIC_API_KEY (for AI Builder), CLERK_SECRET_KEY +
+# CLERK_PUBLISHABLE_KEY (for sign-in), or non-default ports.
+# The defaults work for `http://localhost` evaluation as-is.
+cp .env.example .env
+
+docker compose -f docker-compose.deploy.yml up -d
+docker compose -f docker-compose.deploy.yml ps
+```
+
+Your dashboard will be available at:
+- `http://localhost` (defaults — port 80 + self-signed cert on 443)
+- `https://your-domain.com` (set `DOMAIN=your-domain.com` in `.env`
+  with public DNS pointing at the host; Caddy requests a Let's
+  Encrypt cert automatically on first start)
+
+Pin a specific release with `IMAGE_TAG=v0.10.0` in `.env`; otherwise
+`latest` is used. Available tags:
+<https://github.com/trv-enterprises/trve-dashboard/releases>.
+
+## Build from source
 
 ```bash
 # 1. Copy and configure environment
@@ -14,9 +52,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml ps
 ```
 
-Your dashboard will be available at:
-- `http://localhost` (if DOMAIN=localhost)
-- `https://your-domain.com` (if using a real domain with DNS configured)
+Same URLs as the quick start path. Re-run with `--build` after any
+local code change.
 
 ---
 

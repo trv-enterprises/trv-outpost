@@ -1,21 +1,30 @@
-# Docker Compose for deploying from registry images
-# Usage: docker compose -f docker-compose.deploy.yml up -d
+# Docker Compose for evaluators / self-hosters who want a one-command
+# deployment from the published container images. No build required —
+# pulls multi-arch images straight from ghcr.io.
 #
-# Required environment variables (in .env file):
-#   ANTHROPIC_API_KEY - API key for AI features
-#   DOMAIN - Domain for HTTPS (e.g., dashboard.example.com or localhost)
-#   IMAGE_TAG - Version tag to deploy (e.g., v0.2.0 or latest)
-#   DASHBOARD_HOST - host:port reachable by ts-store for push callbacks
-#                    (e.g., 192.168.1.216:3001 or <tailscale-ip>:3001)
-
-version: '3.8'
+# Quickstart:
+#   docker compose -f docker-compose.deploy.yml up -d
+#   open http://localhost
+#
+# All env vars below have working defaults; no .env file is required to
+# get to a running dashboard. Copy .env.example to .env if you want to
+# customize anything (AI features, custom domain + HTTPS, MQTT, etc.).
+#
+# Defaults are tuned for "I want to see the dashboard on my laptop":
+#   - DOMAIN=localhost              → Caddy serves on :80 with self-
+#                                     signed cert; no DNS or LE needed
+#   - IMAGE_TAG=latest              → most recent tagged release
+#   - ANTHROPIC_API_KEY (unset)     → AI builder is disabled, the rest
+#                                     of the app works fine
+#
+# For HTTPS with a real domain, see docs/DEPLOYMENT.md.
 
 services:
   caddy:
-    image: 100.127.19.27:5000/dashboard-client:${IMAGE_TAG:-latest}
+    image: ghcr.io/trv-enterprises/dashboard-client:${IMAGE_TAG:-latest}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       - DOMAIN=${DOMAIN:-localhost}
     volumes:
@@ -27,7 +36,7 @@ services:
     restart: unless-stopped
 
   server:
-    image: 100.127.19.27:5000/dashboard-server:${IMAGE_TAG:-latest}
+    image: ghcr.io/trv-enterprises/dashboard-server:${IMAGE_TAG:-latest}
     expose:
       - "3001"
     environment:
@@ -35,10 +44,18 @@ services:
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
       - DASHBOARD_MONGODB_DATABASE=dashboard
-      - DASHBOARD_LLM_API_KEY=${ANTHROPIC_API_KEY}
-      # Address where ts-store dials back to reach this server's inbound WebSocket.
-      # Must be reachable from the host running ts-store (LAN IP or Tailscale IP with port).
-      - DASHBOARD_HOST=${DASHBOARD_HOST}
+      # Optional: leave empty to disable the AI Builder. The rest of
+      # the dashboard (charts, controls, displays, MQTT, etc.) works
+      # without it.
+      - DASHBOARD_LLM_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional: only set if you have an external service (e.g.
+      # ts-store) that needs to dial back to this server's inbound
+      # WebSocket. Leave empty for the standard quickstart.
+      - DASHBOARD_HOST=${DASHBOARD_HOST:-}
+      # Optional: enable Clerk-backed sign-in by setting both vars.
+      # See udoc/docs/clerk-sso.md.
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY:-}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY:-}
     depends_on:
       mongodb:
         condition: service_healthy
