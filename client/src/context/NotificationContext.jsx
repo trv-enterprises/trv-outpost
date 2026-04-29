@@ -2,7 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { createContext, useContext, useReducer, useCallback, useState } from 'react';
+import { createContext, useContext, useReducer, useCallback, useState, useEffect } from 'react';
+import apiClient from '../api/client';
 
 const NotificationContext = createContext();
 
@@ -65,6 +66,16 @@ export function NotificationProvider({ children }) {
   const dismissToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Wire the apiClient up to our notification surface so it can
+  // surface connection-unreachable failures detected inside its
+  // central request() wrapper. Mirrors the Clerk token-provider
+  // bridge pattern. Registered once per NotificationProvider mount;
+  // unregistered on unmount so tests / hot-reloads don't leak.
+  useEffect(() => {
+    apiClient.setNotificationHandlers({ pushToast, addNotification });
+    return () => apiClient.setNotificationHandlers(null);
+  }, [pushToast, addNotification]);
 
   return (
     <NotificationContext.Provider value={{

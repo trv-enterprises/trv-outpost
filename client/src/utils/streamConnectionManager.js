@@ -330,6 +330,12 @@ class StreamConnectionManager {
         return;
       }
 
+      // Surface the disconnect to the user. Same debounced helper
+      // the HTTP path uses, so a dashboard with multiple panels
+      // streaming from the same broken connection still produces
+      // exactly one toast per 30s window.
+      apiClient._reportConnectionFailure(datasourceId);
+
       subscribers.forEach(sub => sub.onDisconnect());
 
       connection.reconnecting = true;

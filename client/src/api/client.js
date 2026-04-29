@@ -43,6 +43,33 @@ function buildListParams(filters = {}) {
   return params.toString();
 }
 
+// Substrings on the server-side error string that mean "the
+// connection itself is unreachable" — emitted by adapters wrapping
+// network/HTTP failures. Other 500s (validation errors, query
+// syntax) don't match these and stay as plain inline panel errors.
+const CONNECTION_FAILURE_HINTS = [
+  'connection failed',
+  'connection refused',
+  'failed to fetch',
+  'context deadline exceeded',
+  'no such host',
+  'i/o timeout',
+];
+
+// How long after firing one connection-failure notification we stay
+// silent on the same key. 30s feels right: long enough to swallow a
+// dashboard's worth of parallel panel queries, short enough that the
+// next refresh cycle re-alerts if the outage continues.
+const FAILURE_DEBOUNCE_MS = 30_000;
+
+// Default per-request timeout. Without this, a fully unreachable
+// network (Wi-Fi down, route black-holed) leaves fetch() hanging
+// indefinitely — the user sees only a spinner with no signal that
+// anything is wrong. 15s is long enough to absorb a slow query but
+// short enough to feel responsive when something is actually broken.
+// Overridable per-call via options.timeout (set to 0 to disable).
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+
 /**
  * API Client for Dashboard Server
  */
@@ -58,6 +85,19 @@ class APIClient {
     // legacy X-User-ID path. Unset entirely on Clerk-disabled
     // deployments — no async overhead in that case.
     this.tokenProvider = null;
+    // Notification surface plumbed in by NotificationProvider on
+    // mount. When unset, connection-failure detection is silent.
+    // Two callbacks: pushToast(transient corner toast) and
+    // addNotification(persistent bell-panel entry).
+    this.notificationHandlers = null;
+    // id → human name, populated opportunistically when getConnections
+    // / getConnection responses come back. Used to render
+    // "Connection unreachable — <name>" instead of a UUID.
+    this.connectionNameCache = new Map();
+    // key → epoch ms of last fired notification. Key is connection_id
+    // for connection failures, '__server__' for connectionless server
+    // failures (network down / 5xx from a non-connection endpoint).
+    this.connectionFailureDebounce = new Map();
   }
 
   // setTokenProvider lets the Clerk integration plug in a
@@ -66,6 +106,60 @@ class APIClient {
   // switch, tests).
   setTokenProvider(provider) {
     this.tokenProvider = typeof provider === 'function' ? provider : null;
+  }
+
+  // setNotificationHandlers wires in the toast + bell push points.
+  // NotificationProvider calls this once on mount; pass null to
+  // disable (tests, sign-out cleanup).
+  setNotificationHandlers(handlers) {
+    if (handlers && typeof handlers.pushToast === 'function' && typeof handlers.addNotification === 'function') {
+      this.notificationHandlers = handlers;
+    } else {
+      this.notificationHandlers = null;
+    }
+  }
+
+  // Internal — called from request() and the stream manager when a
+  // call looks like a connection-unreachable failure. Debounces
+  // per-key so a 12-panel dashboard fires one toast, not twelve. The
+  // original error still propagates to whoever called request(); this
+  // is purely additive notification.
+  _reportConnectionFailure(connectionId) {
+    if (!this.notificationHandlers) return;
+    const key = connectionId || '__server__';
+    const now = Date.now();
+    const last = this.connectionFailureDebounce.get(key) || 0;
+    if (now - last < FAILURE_DEBOUNCE_MS) return;
+    this.connectionFailureDebounce.set(key, now);
+
+    let title;
+    let subtitle;
+    if (connectionId) {
+      const name = this.connectionNameCache.get(connectionId);
+      title = 'Connection unreachable';
+      subtitle = name
+        ? `${name} did not respond. Check the connection or its endpoint.`
+        : 'A connection did not respond. Check the connection or its endpoint.';
+    } else {
+      title = 'Server unreachable';
+      subtitle = 'The dashboard server is not responding. Check that it is running.';
+    }
+
+    const payload = { kind: 'error', title, subtitle };
+    try {
+      this.notificationHandlers.pushToast(payload);
+      this.notificationHandlers.addNotification(payload);
+    } catch (err) {
+      console.warn('apiClient: notification handler error', err);
+    }
+  }
+
+  // Cache a connection's name so the next failure notification can
+  // render a friendly label. Called from getConnections/getConnection.
+  _cacheConnectionName(connection) {
+    if (connection && connection.id && connection.name) {
+      this.connectionNameCache.set(connection.id, connection.name);
+    }
   }
 
   // Set the current user GUID for authentication
@@ -125,13 +219,40 @@ class APIClient {
       headers['X-User-ID'] = userGuid;
     }
 
-    const config = {
-      headers,
-      ...options,
-    };
+    // Pull internal options out before spreading into fetch — fetch
+    // ignores unknown keys but better not to leak them into the
+    // network layer.
+    const connectionId = options.connectionId || null;
+    const explicitTimeout = options.timeout;
+    const config = { headers, ...options };
+    delete config.connectionId;
+    delete config.timeout;
+
+    // Apply a default timeout via AbortController unless the caller
+    // supplied their own signal (their abort policy wins) or asked
+    // for no timeout (timeout: 0). Streaming endpoints that want to
+    // stay open should opt out. The abort below classifies as a
+    // connection failure so the user sees a toast — same path as a
+    // network error, but driven by the timeout instead of by the
+    // browser detecting a network problem.
+    let timeoutHandle = null;
+    let timedOut = false;
+    if (!config.signal) {
+      const timeoutMs =
+        typeof explicitTimeout === 'number' ? explicitTimeout : DEFAULT_REQUEST_TIMEOUT_MS;
+      if (timeoutMs > 0) {
+        const ctl = new AbortController();
+        config.signal = ctl.signal;
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          ctl.abort();
+        }, timeoutMs);
+      }
+    }
 
     try {
       const response = await fetch(url, config);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
 
       // Handle 204 No Content (successful DELETE)
       if (response.status === 204) {
@@ -147,11 +268,45 @@ class APIClient {
       }
 
       if (!response.ok) {
+        // Two failure shapes count as connection-unreachable:
+        //   (1) Gateway-style 5xx — 502 / 503 / 504 — typically a
+        //       reverse proxy reporting the backend is down.
+        //   (2) 500 with an error body whose text matches one of
+        //       the adapter-level connection failure hints.
+        // Other non-2xx responses (400, 401, 404, 422, plain 500
+        // for query syntax errors etc.) are NOT connection
+        // failures and shouldn't toast.
+        const status = response.status;
+        const errStr = (data && data.error ? String(data.error) : '').toLowerCase();
+        const isConnectionFailure =
+          status === 502 || status === 503 || status === 504 ||
+          (status === 500 && CONNECTION_FAILURE_HINTS.some((h) => errStr.includes(h)));
+        if (isConnectionFailure) {
+          this._reportConnectionFailure(connectionId);
+        }
         throw new Error(data.error || `HTTP ${response.status}`);
       }
 
       return data;
     } catch (error) {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      // Three failure shapes land here:
+      //   - TypeError: fetch() couldn't reach the server (network
+      //     down, DNS, TLS, server crashed before responding).
+      //   - AbortError: our timeout fired (timedOut = true) OR the
+      //     caller's own AbortController fired (timedOut = false —
+      //     don't toast then; the caller intentionally cancelled).
+      //   - The HTTP-error rethrow from above (already reported).
+      const isAbortError = error && error.name === 'AbortError';
+      const isNetworkError = error instanceof TypeError;
+      if (isNetworkError || (isAbortError && timedOut)) {
+        this._reportConnectionFailure(connectionId);
+        // Re-shape the timeout error so callers see a clearer
+        // message in inline UI (the panel error chip etc.).
+        if (isAbortError && timedOut) {
+          throw new Error('Request timed out');
+        }
+      }
       console.error('API Error:', error);
       throw error;
     }
@@ -278,22 +433,31 @@ class APIClient {
   // Connection endpoints (new terminology - preferred)
   async getConnections(filters = {}) {
     const params = buildListParams(filters);
-    return this.request(`/api/connections?${params}`);
+    const result = await this.request(`/api/connections?${params}`);
+    // Opportunistically warm the name cache so failure toasts can
+    // render real names instead of UUIDs. Shape: { connections: [...] }
+    // for the paged response, plain array for some legacy callers.
+    const list = Array.isArray(result) ? result : result?.connections || result?.datasources || [];
+    list.forEach((c) => this._cacheConnectionName(c));
+    return result;
   }
 
   async getConnection(id) {
-    return this.request(`/api/connections/${id}`);
+    const result = await this.request(`/api/connections/${id}`, { connectionId: id });
+    this._cacheConnectionName(result);
+    return result;
   }
 
   async queryConnection(id, query) {
     return this.request(`/api/connections/${id}/query`, {
       method: 'POST',
       body: JSON.stringify(query),
+      connectionId: id,
     });
   }
 
   async getConnectionSchema(id) {
-    return this.request(`/api/connections/${id}/schema`);
+    return this.request(`/api/connections/${id}/schema`, { connectionId: id });
   }
 
   async createConnection(connection) {
@@ -331,31 +495,32 @@ class APIClient {
   async checkConnectionHealth(id) {
     return this.request(`/api/connections/${id}/health`, {
       method: 'POST',
+      connectionId: id,
     });
   }
 
   async getPrometheusLabelValues(connectionId, labelName) {
-    return this.request(`/api/connections/${connectionId}/prometheus/labels/${encodeURIComponent(labelName)}/values`);
+    return this.request(`/api/connections/${connectionId}/prometheus/labels/${encodeURIComponent(labelName)}/values`, { connectionId });
   }
 
   async getEdgeLakeDatabases(connectionId) {
-    return this.request(`/api/connections/${connectionId}/edgelake/databases`);
+    return this.request(`/api/connections/${connectionId}/edgelake/databases`, { connectionId });
   }
 
   async getEdgeLakeTables(connectionId, database) {
-    return this.request(`/api/connections/${connectionId}/edgelake/tables?database=${encodeURIComponent(database)}`);
+    return this.request(`/api/connections/${connectionId}/edgelake/tables?database=${encodeURIComponent(database)}`, { connectionId });
   }
 
   async getEdgeLakeSchema(connectionId, database, table) {
-    return this.request(`/api/connections/${connectionId}/edgelake/schema?database=${encodeURIComponent(database)}&table=${encodeURIComponent(table)}`);
+    return this.request(`/api/connections/${connectionId}/edgelake/schema?database=${encodeURIComponent(database)}&table=${encodeURIComponent(table)}`, { connectionId });
   }
 
   async getMQTTTopics(connectionId) {
-    return this.request(`/api/connections/${connectionId}/mqtt/topics`);
+    return this.request(`/api/connections/${connectionId}/mqtt/topics`, { connectionId });
   }
 
   async sampleMQTTTopic(connectionId, topic) {
-    return this.request(`/api/connections/${connectionId}/mqtt/sample?topic=${encodeURIComponent(topic)}`);
+    return this.request(`/api/connections/${connectionId}/mqtt/sample?topic=${encodeURIComponent(topic)}`, { connectionId });
   }
 
   // Get connections that support write operations (for controls)
