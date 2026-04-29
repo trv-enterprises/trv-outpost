@@ -23,7 +23,7 @@ TSStore is a time-series database that stores arbitrary JSON objects at timestam
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────────────┐  │
-│  │   ChartEditor    │    │    useData Hook   │    │  DynamicComponentLoader  │  │
+│  │   ComponentEditor    │    │    useData Hook   │    │  DynamicComponentLoader  │  │
 │  │                  │    │                  │    │                          │  │
 │  │  - Query Config  │───▶│  - Fetch data    │───▶│  - Render ECharts        │  │
 │  │  - Data Mapping  │    │  - Transform     │    │  - Apply transforms      │  │
@@ -66,7 +66,7 @@ TSStore is a time-series database that stores arbitrary JSON objects at timestam
 
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌────────────────┐     ┌─────────┐
-│  User   │     │ ChartEditor │     │  Go Server  │     │TSStoreDataSource│    │ TSStore │
+│  User   │     │ ComponentEditor │     │  Go Server  │     │TSStoreDataSource│    │ TSStore │
 └────┬────┘     └──────┬──────┘     └──────┬──────┘     └───────┬────────┘     └────┬────┘
      │                 │                   │                    │                   │
      │ Click "Preview" │                   │                    │                   │
@@ -243,9 +243,9 @@ func (t *TSStoreDataSource) jsonToResultSet(objects []jsonObjectResponse) (*mode
 
 ## Frontend Implementation
 
-### File: `client/src/components/ChartEditor.jsx`
+### File: `client/src/components/ComponentEditor.jsx`
 
-The ChartEditor provides the UI for configuring TSStore queries.
+The ComponentEditor provides the UI for configuring TSStore queries.
 
 #### TSStore-Specific State
 
@@ -329,7 +329,7 @@ export async function queryData(datasourceId, query, useCache = true) {
 
 ### Example: Temperature Chart from TSStore
 
-**1. User Configuration (ChartEditor)**
+**1. User Configuration (ComponentEditor)**
 ```
 Datasource: "TS-STORE SENSOR-READINGS"
 Query Type: Time Range
@@ -501,7 +501,7 @@ if (error) {
 | `server-go/internal/datasource/tsstore.go` | TSStore adapter implementation |
 | `server-go/internal/models/datasource.go` | TSStoreConfig model definition |
 | `server-go/internal/service/datasource_service.go` | Query routing and validation |
-| `client/src/components/ChartEditor.jsx` | TSStore query configuration UI |
+| `client/src/components/ComponentEditor.jsx` | TSStore query configuration UI |
 | `client/src/hooks/useData.js` | Data fetching hook |
 | `client/src/api/dataClient.js` | API client wrapper |
 | `client/src/utils/chartCodeGenerator.js` | Generated chart code templates |

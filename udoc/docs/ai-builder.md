@@ -92,7 +92,7 @@ The AI builder uses **versioning to checkpoint your work in progress**:
 - Clicking **Discard** deletes the draft row entirely, leaving the
   previous final as the latest version.
 
-Old final versions are preserved indefinitely. The `/api/charts/:id/versions`
+Old final versions are preserved indefinitely. The `/api/components/:id/versions`
 endpoint and the version-history UI on the component detail page let you
 inspect or roll back to any earlier version.
 

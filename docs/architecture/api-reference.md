@@ -48,26 +48,29 @@ are served by the same handler.
 | GET        | `/api/connections/:id/edgelake/schema`      | EdgeLake table schema                     |
 | GET        | `/api/connections/streams`                  | List active stream subscriptions          |
 
-## Components (charts, controls, displays)
+## Components (chart, control, display)
 
-Component is the umbrella term for chart + control + display. They
-all live in the `charts` collection.
+Component is the umbrella entity. The `component_type` field
+discriminates the three sub-types: `chart` (ECharts visualizations),
+`control` (interactive: buttons, toggles, sliders), and `display`
+(non-chart visuals: cameras, weather). All three live in the
+`components` collection.
 
-| Method | Endpoint                                     | Description                          |
-| ------ | -------------------------------------------- | ------------------------------------ |
-| GET    | `/api/charts`                                | List components (filter + page)      |
-| POST   | `/api/charts`                                | Create component                     |
-| GET    | `/api/charts/summaries`                      | Lightweight list for pickers         |
-| GET    | `/api/charts/:id`                            | Get the latest version               |
-| PUT    | `/api/charts/:id`                            | Update (creates a new version)       |
-| DELETE | `/api/charts/:id`                            | Delete all versions                  |
-| GET    | `/api/charts/:id/versions`                   | List all versions                    |
-| GET    | `/api/charts/:id/versions/:version`          | Get a specific version               |
-| DELETE | `/api/charts/:id/versions/:version`          | Delete a specific version            |
-| GET    | `/api/charts/:id/version-info`               | Version chain summary                |
-| GET    | `/api/charts/:id/draft`                      | Get the draft version (if any)       |
-| DELETE | `/api/charts/:id/draft`                      | Delete the draft version             |
-| POST   | `/api/controls/:id/execute`                  | Execute a control command            |
+| Method | Endpoint                                        | Description                          |
+| ------ | ----------------------------------------------- | ------------------------------------ |
+| GET    | `/api/components`                               | List components (filter + page)      |
+| POST   | `/api/components`                               | Create component                     |
+| GET    | `/api/components/summaries`                     | Lightweight list for pickers         |
+| GET    | `/api/components/:id`                           | Get the latest version               |
+| PUT    | `/api/components/:id`                           | Update (creates a new version)       |
+| DELETE | `/api/components/:id`                           | Delete all versions                  |
+| GET    | `/api/components/:id/versions`                  | List all versions                    |
+| GET    | `/api/components/:id/versions/:version`         | Get a specific version               |
+| DELETE | `/api/components/:id/versions/:version`         | Delete a specific version            |
+| GET    | `/api/components/:id/version-info`              | Version chain summary                |
+| GET    | `/api/components/:id/draft`                     | Get the draft version (if any)       |
+| DELETE | `/api/components/:id/draft`                     | Delete the draft version             |
+| POST   | `/api/controls/:id/execute`                     | Execute a control command            |
 
 ## Dashboards
 
@@ -76,7 +79,7 @@ all live in the `charts` collection.
 | GET    | `/api/dashboards`            | List dashboards (filter + page + tags + namespace) |
 | POST   | `/api/dashboards`            | Create                                        |
 | GET    | `/api/dashboards/:id`        | Get one                                       |
-| GET    | `/api/dashboards/:id/details`| Get with expanded layout + referenced charts  |
+| GET    | `/api/dashboards/:id/details`| Get with expanded layout + referenced components |
 | PUT    | `/api/dashboards/:id`        | Update                                        |
 | DELETE | `/api/dashboards/:id`        | Delete                                        |
 | POST   | `/api/dashboards/export/preview` | Counts + warnings for the dashboards a bundle would carry |
@@ -113,7 +116,7 @@ are auto-suffixed with `-copy` rather than blocked.
 The `default` namespace is immutable: PUT renaming it returns 409,
 DELETE returns 409 unconditionally. Other namespaces can be renamed
 freely; the rename cascades into `datasources.namespace`,
-`charts.namespace`, and `dashboards.namespace` in the same request.
+`components.namespace`, and `dashboards.namespace` in the same request.
 Connection / component / dashboard write endpoints accept a
 `namespace` field in the JSON body; empty defaults to `"default"`.
 List endpoints accept a `namespace` query parameter; empty means
@@ -175,7 +178,7 @@ doesn't need direct network access to the NVR host. All require a
 | GET    | `/api/ai/sessions/:id`                    | Get session state                    |
 | POST   | `/api/ai/sessions/:id/messages`           | Send a message (SSE response stream) |
 | GET    | `/api/ai/sessions/:id/ws`                 | WebSocket channel for the session    |
-| POST   | `/api/ai/sessions/:id/save`               | Save the draft chart                 |
+| POST   | `/api/ai/sessions/:id/save`               | Save the draft component             |
 | DELETE | `/api/ai/sessions/:id`                    | Cancel the session                   |
 | GET    | `/api/ai/debug`                           | AI debug WebSocket                   |
 | GET    | `/api/ai/debug/status`                    | AI debug status                      |

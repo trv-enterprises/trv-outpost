@@ -31,7 +31,7 @@ client/src/
 │   ├── mode/                 Mode toggle (Design / View / Manage)
 │   ├── navigation/           Per-mode nav
 │   ├── DynamicComponentLoader.jsx   Runtime React code evaluator
-│   ├── ChartEditor / ChartEditorModal / ControlEditor / DisplayEditor
+│   ├── ComponentEditor / ComponentEditorModal / ControlEditor / DisplayEditor
 │   ├── SQLQueryBuilder / PrometheusQueryBuilder / EdgeLakeQueryBuilder
 │   ├── MQTTTopicSelector / ComponentPickerModal / ...
 │   └── ...                   editor modals, preview panes, pickers
@@ -60,7 +60,7 @@ frontend goes through it. The singleton holds the current user's
 GUID (the value sent in the `X-User-ID` header), normalizes query
 parameters (array-aware so tag filters send repeated params
 correctly), and exposes typed methods per domain:
-`getConnections`, `testConnection`, `getCharts`, `updateChart`,
+`getConnections`, `testConnection`, `getComponents`, `updateComponent`,
 `getDashboard`, `getFrigateReviews`, `markFrigateReviewsViewed`,
 `getAllTags`, etc.
 
@@ -105,19 +105,19 @@ components on the same page.
 
 ## DynamicComponentLoader
 
-Charts are stored in MongoDB as strings of JavaScript source code.
-At render time, `DynamicComponentLoader.jsx` evaluates that source
-inside a controlled scope and returns the resulting React component.
-The scope contains:
+Components (the chart sub-type, primarily) are stored in MongoDB as
+strings of JavaScript source code. At render time,
+`DynamicComponentLoader.jsx` evaluates that source inside a controlled
+scope and returns the resulting React component. The scope contains:
 
 - React hooks: `useState`, `useEffect`, `useMemo`, `useCallback`,
   `useRef`, `useContext`
 - ECharts: `echarts`, `ReactECharts`
 - Carbon themes: `carbonTheme`, `carbonDarkTheme`
 - Data utilities: `toObjects`, `getValue`, `formatTimestamp`
-- Data props: the chart's query result as `{ columns, rows }`
+- Data props: the component's query result as `{ columns, rows }`
 
-This is how AI-generated chart code makes it from the AI Builder
+This is how AI-generated component code makes it from the AI Builder
 session into a live dashboard panel without a build/deploy cycle.
 
 ## Control renderer and registry

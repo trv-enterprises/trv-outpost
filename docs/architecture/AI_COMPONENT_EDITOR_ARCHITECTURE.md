@@ -54,7 +54,7 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
 │              ├── ai/tool_executor.go (Tool Implementation)                          │
 │              │      - ExecuteTool() dispatches to handlers                          │
 │              │      - Updates charts in MongoDB                                     │
-│              │      - Broadcasts updates via ChartHub                               │
+│              │      - Broadcasts updates via ComponentHub                               │
 │              │                                                                      │
 │              └── ai/system_prompt.go                                                │
 │                     - ~500 lines of instructions                                    │
@@ -371,7 +371,7 @@ WebSocket connection for real-time updates.
 {"type": "connected", "data": {"session_id": "..."}, "timestamp": "..."}
 {"type": "thinking", "data": {"thinking": true}, "timestamp": "..."}
 {"type": "message", "data": {"message": {...}}, "timestamp": "..."}
-{"type": "chart_update", "data": {"chart": {...}}, "timestamp": "..."}
+{"type": "component_update", "data": {"chart": {...}}, "timestamp": "..."}
 {"type": "error", "data": {"error": "...", "code": "..."}, "timestamp": "..."}
 {"type": "ping", "data": {"timestamp": "..."}, "timestamp": "..."}
 ```
@@ -465,7 +465,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
      4c. If tool calls:
          - Execute each tool via ToolExecutor
          - Update chart in MongoDB
-         - Broadcast chart_update via ChartHub
+         - Broadcast component_update via ComponentHub
          - Add tool results to conversation
          - Continue loop
            │
@@ -476,7 +476,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
            │
 5. WebSocket delivers events to frontend:
    - "thinking" → show spinner
-   - "chart_update" → update preview
+   - "component_update" → update preview
    - "message" → add to chat history
            │
 6. User sees updated chart preview and AI response
@@ -526,7 +526,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
 | `server-go/internal/ai/tool_executor.go` | Tool implementations |
 | `server-go/internal/ai/system_prompt.go` | LLM instructions |
 | `server-go/internal/models/ai_session.go` | Data models |
-| `server-go/internal/hub/chart_hub.go` | Real-time chart updates |
+| `server-go/internal/hub/component_hub.go` | Real-time chart updates |
 
 ---
 

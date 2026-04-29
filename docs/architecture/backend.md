@@ -50,7 +50,7 @@ directly.
 
 **Services** own business logic — tag normalization, duplicate-name
 checks, secret masking/unmasking, cross-entity references (e.g.
-"can't delete a chart that a dashboard references"). Most services
+"can't delete a component that a dashboard references"). Most services
 accept a context and a request struct, return a response struct.
 
 **Repositories** are the only layer that talks to MongoDB. They own
@@ -105,7 +105,7 @@ server-go/
     │                         Prometheus, EdgeLake, TSStore, Frigate,
     │                         WebSocket, TCP)
     ├── handlers/             HTTP + SSE + WebSocket handlers
-    ├── hub/                  ChartHub — real-time chart broadcasts
+    ├── hub/                  ComponentHub — real-time component broadcasts
     ├── mcp/                  MCP server tool registry + handlers
     ├── middleware/           Auth middleware (X-User-ID resolver)
     ├── models/               Data model structs + request/response DTOs
@@ -129,7 +129,7 @@ server-go/
    and per-repo `CreateIndexes`)
 6. Instantiate services
 7. Seed built-in data (pseudo-users, built-in device types)
-8. Start the stream manager, chart hub, inbound WebSocket handler
+8. Start the stream manager, component hub, inbound WebSocket handler
 9. Initialize the AI agent if the Anthropic key is set
 10. Wire handlers and register Gin routes (under `/api/*` plus
     `/mcp/*` and a few top-level routes)
@@ -144,14 +144,15 @@ created after migrations complete. See [database.md](database.md).
 - **DatasourceService** — create, update, delete, list, test, health
   check. Normalizes tags on write, masks/unmasks secrets on the
   test path.
-- **ChartService** — create, update, delete, list. Manages the
-  version chain (`status: "draft"` vs `"final"`). Enforces
+- **ComponentService** — create, update, delete, list. Manages the
+  version chain (`status: "draft"` vs `"final"`) and the three
+  sub-types via `component_type` (chart, control, display). Enforces
   case-insensitive name uniqueness at the application layer because
   the DB uniqueness can't be applied (multiple versions share a
   name).
 - **DashboardService** — create, update, delete, list with filters.
   Also offers `ListWithDatasources` which joins dashboards ➝ their
-  panels ➝ referenced charts ➝ referenced datasources in a single
+  panels ➝ referenced components ➝ referenced datasources in a single
   aggregation for the list-page sidebar.
 - **UserService** — CRUD, auth lookup by GUID, pseudo-user seeding.
 - **ConfigService** — system + per-user runtime config.
@@ -199,7 +200,7 @@ agent flow, and Claude Desktop setup.
   consumers
 - [Connections](connections.md) — per-type adapter details
 - [API reference](api-reference.md) — full endpoint tables
-- [AI chart editor architecture](AI_CHART_EDITOR_ARCHITECTURE.md) —
+- [AI component editor architecture](AI_COMPONENT_EDITOR_ARCHITECTURE.md) —
   AI Builder internals (separate doc)
 - [Datasource processing](../datasources/DATASOURCE_PROCESSING.md) —
   deep dive on how raw connection results flow through filters,

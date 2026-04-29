@@ -102,12 +102,12 @@ names a preset from the `layouts` collection.
 - **Grid geometry**: `{x, y, w, h}` are in grid cells, not pixels.
   See [grid-system.md](grid-system.md).
 
-## Chart (component)
+## Component
 
-Charts, controls, and displays are all stored in the same `charts`
-collection with a `component_type` discriminator. This is for
-historical reasons — the frontend now consistently calls them
-"components" in the UI.
+Charts, controls, and displays are all stored in the `components`
+collection with a `component_type` discriminator. The umbrella entity
+is **Component**; the word "chart" refers strictly to the chart
+sub-type (ECharts visualizations).
 
 ```json
 {
@@ -170,14 +170,14 @@ See [frontend.md](frontend.md) for how each type is rendered and
 
 ### Versioning
 
-Charts (and controls / displays — same collection) keep a version
-history in the database. Each version is its own row, sharing a
+Components keep a version history in the database (all three sub-types).
+Each version is its own row, sharing a
 logical `id` and differing in `version` (1, 2, 3, …) and `status`
 (`draft` | `final`). New versions are created **only by the AI
 builder flow**, not by every save:
 
-- **`POST /api/charts`** creates `(id, version=1, status=final)`.
-- **`PUT /api/charts/:id`** (manual editor / API client) updates
+- **`POST /api/components`** creates `(id, version=1, status=final)`.
+- **`PUT /api/components/:id`** (manual editor / API client) updates
   the latest version *in place*. The version number does not bump.
   This means manual edits don't accumulate history rows.
 - **AI sessions** create a new draft row when an existing component
@@ -187,20 +187,20 @@ builder flow**, not by every save:
   (no row per turn). On **Save** the draft is promoted to
   `status=final` and becomes the latest. On **Discard** the draft
   row is deleted and the prior final remains the latest.
-- **List endpoints** (`GET /api/charts`, summaries, dashboard
+- **List endpoints** (`GET /api/components`, summaries, dashboard
   expand) always return the latest version per `id`. Old finals
-  are reachable only through `/api/charts/:id/versions` and the
+  are reachable only through `/api/components/:id/versions` and the
   per-version GET / DELETE endpoints.
 
-- **Collection**: `charts`
+- **Collection**: `components`
 - **Uniqueness**: `(id, version)` is unique. Multiple versions share
   a logical `id`.
 - **Name**: not a unique index in the database because the same name
-  is shared across versions. The `ChartService` enforces
+  is shared across versions. The `ComponentService` enforces
   case-insensitive name uniqueness within a namespace
   (`(namespace, name)`) in application code by querying for an
-  existing chart with the same name whose logical `id` differs.
-  Renaming a chart's namespace fans out to every version row of
+  existing component with the same name whose logical `id` differs.
+  Renaming a component's namespace fans out to every version row of
   that id so list/filter queries stay consistent regardless of which
   version they hit.
 

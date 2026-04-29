@@ -82,7 +82,7 @@ Topic-focused sub-docs. Start wherever matches your question.
 
 | Document                                            | What it covers                                                               |
 | --------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Data model](data-model.md)                         | Entity schemas (dashboards, charts, connections, users, devices, AI sessions) |
+| [Data model](data-model.md)                         | Entity schemas (dashboards, components, connections, users, devices, AI sessions) |
 | [Backend architecture](backend.md)                  | Layered architecture, directory layout, startup sequence, services           |
 | [Frontend architecture](frontend.md)                | Vite app, DynamicComponentLoader, StreamConnectionManager, control renderer   |
 | [Streaming](streaming.md)                           | SSE, MQTT stream, retained-state cache, ring buffer, aggregators             |
@@ -90,7 +90,7 @@ Topic-focused sub-docs. Start wherever matches your question.
 | [Database](database.md)                             | Collations, migrations, indexing strategy, secret masking                    |
 | [API reference](api-reference.md)                   | Full endpoint tables by domain                                               |
 | [Grid system](grid-system.md)                       | 32×32 px cells, canvas-derived cols/rows, fit modes, layout-dimension presets |
-| [AI Chart Editor](AI_CHART_EDITOR_ARCHITECTURE.md)  | AI Builder session lifecycle, tools, system prompt                           |
+| [AI Component Editor](AI_COMPONENT_EDITOR_ARCHITECTURE.md)  | AI Builder session lifecycle, tools, system prompt                           |
 | [MCP server](../mcp.md)                             | External-agent tool surface: endpoints, tool inventory, `mcp-proxy` setup     |
 
 External reference implementations:

@@ -331,14 +331,14 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] `POST /api/datasources/:id/query` executes query
 - [ ] `GET /api/datasources/:id/schema` returns schema
 
-### 8.4 Chart Endpoints
-- [ ] `POST /api/charts` creates chart
-- [ ] `GET /api/charts` lists with pagination
-- [ ] `GET /api/charts/:id` returns latest version
-- [ ] `PUT /api/charts/:id` updates chart
-- [ ] `DELETE /api/charts/:id` deletes chart
-- [ ] `GET /api/charts/:id/versions` returns version history
-- [ ] `GET /api/charts/:id/draft` returns draft
+### 8.4 Component Endpoints
+- [ ] `POST /api/components` creates component
+- [ ] `GET /api/components` lists with pagination
+- [ ] `GET /api/components/:id` returns latest version
+- [ ] `PUT /api/components/:id` updates component
+- [ ] `DELETE /api/components/:id` deletes component
+- [ ] `GET /api/components/:id/versions` returns version history
+- [ ] `GET /api/components/:id/draft` returns draft
 
 ### 8.5 Dashboard Endpoints
 - [ ] `POST /api/dashboards` creates dashboard
