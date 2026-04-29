@@ -10,37 +10,37 @@
     position: relative;
   }
 
-  &__suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    background: $layer;
-    border: 1px solid $border-subtle;
-    max-height: 12rem;
-    overflow-y: auto;
-  }
-
-  &__suggestion {
-    padding: $spacing-03 $spacing-05;
-    cursor: pointer;
-    color: $text-primary;
-    font-size: 0.875rem;
-
-    &:hover,
-    &--highlighted {
-      background: $layer-hover;
-    }
-  }
-
   &__chips {
     display: flex;
     flex-wrap: wrap;
     gap: $spacing-02;
     margin-top: $spacing-02;
+  }
+}
+
+// Rendered via portal to document.body so the dropdown escapes the
+// modal body's overflow + stacking context. Position is set inline
+// from getBoundingClientRect of the input field.
+.tag-input__suggestions {
+  position: fixed;
+  z-index: 9100;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: $layer;
+  border: 1px solid $border-subtle;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.tag-input__suggestion {
+  padding: $spacing-03 $spacing-05;
+  cursor: pointer;
+  color: $text-primary;
+  font-size: 0.875rem;
+
+  &:hover,
+  &--highlighted {
+    background: $layer-hover;
   }
 }

@@ -38,6 +38,7 @@ function ChartDetailPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
   const [isValid, setIsValid] = useState(false);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
   const editorRef = useRef(null);
 
   useEffect(() => {
@@ -86,6 +87,15 @@ function ChartDetailPage() {
   };
 
   const handleCancel = () => {
+    if (editorRef.current?.hasUnsavedChanges?.()) {
+      setShowDiscardModal(true);
+      return;
+    }
+    navigate('/design/charts');
+  };
+
+  const confirmDiscard = () => {
+    setShowDiscardModal(false);
     navigate('/design/charts');
   };
 
@@ -158,6 +168,21 @@ function ChartDetailPage() {
         className="chart-detail-editor"
         onValidityChange={setIsValid}
       />
+
+      {/* Discard changes confirmation */}
+      {showDiscardModal && (
+        <Modal
+          open={true}
+          danger
+          onRequestClose={() => setShowDiscardModal(false)}
+          onRequestSubmit={confirmDiscard}
+          modalHeading="Discard changes?"
+          primaryButtonText="Discard"
+          secondaryButtonText="Keep editing"
+        >
+          <p>You have unsaved changes. Discard them and leave?</p>
+        </Modal>
+      )}
 
       {/* Save confirmation modal */}
       {showSaveModal && (

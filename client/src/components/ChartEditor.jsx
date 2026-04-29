@@ -1289,8 +1289,9 @@ const ChartEditor = forwardRef(function ChartEditor({
   useImperativeHandle(ref, () => ({
     save: handleSave,
     getName: () => name,
-    isValid: () => !!name.trim()
-  }));
+    isValid: () => !!name.trim(),
+    hasUnsavedChanges: () => hasChanges,
+  }), [name, hasChanges]);
 
   return (
     <div className={`chart-editor ${className}`}>
