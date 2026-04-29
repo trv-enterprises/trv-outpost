@@ -124,7 +124,7 @@ func main() {
 
 	// Initialize repositories
 	datasourceRepo := repository.NewDatasourceRepository(mongodb.Database)
-	chartRepo := repository.NewChartRepository(mongodb.Database)
+	componentRepo := repository.NewComponentRepository(mongodb.Database)
 	dashboardRepo := repository.NewDashboardRepository(mongodb.Database)
 	aiSessionRepo := repository.NewAISessionRepository(mongodb.Database)
 	configRepo := repository.NewConfigRepository(mongodb.Database)
@@ -136,7 +136,7 @@ func main() {
 	apiKeyRepo := repository.NewAPIKeyRepository(mongodb.Database)
 
 	// Create chart indexes
-	if err := chartRepo.CreateIndexes(ctx); err != nil {
+	if err := componentRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create chart indexes: %v", err)
 	}
 
@@ -191,9 +191,9 @@ func main() {
 
 	// Initialize services
 	datasourceService := service.NewDatasourceService(datasourceRepo)
-	chartService := service.NewChartService(chartRepo)
-	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, chartRepo, datasourceRepo)
-	aiSessionService := service.NewAISessionService(aiSessionRepo, chartRepo, dashboardRepo)
+	componentService := service.NewComponentService(componentRepo)
+	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, componentRepo, datasourceRepo)
+	aiSessionService := service.NewAISessionService(aiSessionRepo, componentRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg, clerkPublishable)
 	userService := service.NewUserService(userRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
@@ -204,7 +204,7 @@ func main() {
 	// Namespace service with the three entity repos wired in. Each repo
 	// implements CountByNamespace + RenameNamespace so the service's
 	// delete-guard and rename-cascade paths work end-to-end.
-	namespaceService := service.NewNamespaceService(namespaceRepo, datasourceRepo, chartRepo, dashboardRepo)
+	namespaceService := service.NewNamespaceService(namespaceRepo, datasourceRepo, componentRepo, dashboardRepo)
 	if err := namespaceService.SeedDefault(ctx); err != nil {
 		log.Printf("Warning: Failed to seed default namespace: %v", err)
 	} else {
@@ -266,7 +266,7 @@ func main() {
 	}
 
 	// Get the global ChartHub for real-time chart update broadcasts
-	chartHub := hub.GetChartHub()
+	chartHub := hub.GetComponentHub()
 	fmt.Println("✓ ChartHub initialized for real-time chart updates")
 
 	// Initialize StreamManager for socket datasource streaming
@@ -283,7 +283,7 @@ func main() {
 	fmt.Println("✓ InboundHandler initialized for ts-store push connections")
 
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
-	toolExecutor := ai.NewToolExecutor(chartRepo, datasourceRepo, datasourceService, deviceTypeRepo, chartHub)
+	toolExecutor := ai.NewToolExecutor(componentRepo, datasourceRepo, datasourceService, deviceTypeRepo, chartHub)
 	deviceTypeLister := &service.DeviceTypeListerAdapter{Service: deviceTypeService}
 	catalogProvider := service.NewCatalogProvider(deviceTypeLister, typeFilter)
 	var aiAgent *ai.Agent
@@ -298,7 +298,7 @@ func main() {
 
 	// Initialize handlers
 	datasourceHandler := handlers.NewDatasourceHandler(datasourceService)
-	chartHandler := handlers.NewChartHandler(chartService)
+	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chartHub)
 	debugHandler := handlers.NewDebugHandler()
@@ -306,7 +306,7 @@ func main() {
 	configHandler := handlers.NewConfigHandler(configService)
 	authHandler := handlers.NewAuthHandler(userService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
-	commandHandler := handlers.NewCommandHandler(datasourceService, chartService, deviceTypeService)
+	commandHandler := handlers.NewCommandHandler(datasourceService, componentService, deviceTypeService)
 	frigateHandler := handlers.NewFrigateHandler(datasourceService)
 	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
@@ -346,7 +346,7 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(userService, apiKeyService, identityVerifier, userRepo)
 
 	// Initialize MCP
-	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, chartService, deviceTypeService, typeFilter)
+	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, componentService, deviceTypeService, typeFilter)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
 	// Public API routes (no authentication required)
@@ -448,25 +448,25 @@ func main() {
 			registryRoutes.GET("/integrations", registryHandler.ListIntegrations)
 		}
 
-		// Chart routes
-		charts := api.Group("/charts")
+		// Component routes (umbrella for chart, control, and display sub-types)
+		components := api.Group("/components")
 		{
-			charts.GET("/summaries", chartHandler.GetChartSummaries)
-			charts.POST("", chartHandler.CreateChart)
-			charts.GET("", chartHandler.ListCharts)
-			charts.GET("/:id", chartHandler.GetChart)
-			charts.PUT("/:id", chartHandler.UpdateChart)
-			charts.DELETE("/:id", chartHandler.DeleteChart)
+			components.GET("/summaries", componentHandler.GetComponentSummaries)
+			components.POST("", componentHandler.CreateComponent)
+			components.GET("", componentHandler.ListComponents)
+			components.GET("/:id", componentHandler.GetComponent)
+			components.PUT("/:id", componentHandler.UpdateComponent)
+			components.DELETE("/:id", componentHandler.DeleteComponent)
 			// Versioning endpoints
-			charts.GET("/:id/versions", chartHandler.ListChartVersions)
-			charts.GET("/:id/versions/:version", chartHandler.GetChartVersion)
-			charts.DELETE("/:id/versions/:version", chartHandler.DeleteChartVersion)
-			charts.GET("/:id/version-info", chartHandler.GetChartVersionInfo)
-			charts.GET("/:id/draft", chartHandler.GetChartDraft)
-			charts.DELETE("/:id/draft", chartHandler.DeleteChartDraft)
+			components.GET("/:id/versions", componentHandler.ListComponentVersions)
+			components.GET("/:id/versions/:version", componentHandler.GetComponentVersion)
+			components.DELETE("/:id/versions/:version", componentHandler.DeleteComponentVersion)
+			components.GET("/:id/version-info", componentHandler.GetComponentVersionInfo)
+			components.GET("/:id/draft", componentHandler.GetComponentDraft)
+			components.DELETE("/:id/draft", componentHandler.DeleteComponentDraft)
 		}
 
-		// Control routes (controls are stored as charts with component_type="control")
+		// Control routes (controls are components with component_type="control")
 		controls := api.Group("/controls")
 		{
 			controls.POST("/:id/execute", commandHandler.ExecuteControlCommand)

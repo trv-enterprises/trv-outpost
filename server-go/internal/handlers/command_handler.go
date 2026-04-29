@@ -19,15 +19,15 @@ import (
 // CommandHandler handles command execution for bidirectional datasources and controls
 type CommandHandler struct {
 	datasourceService  *service.DatasourceService
-	chartService       *service.ChartService
+	componentService       *service.ComponentService
 	deviceTypeService  *service.DeviceTypeService
 }
 
 // NewCommandHandler creates a new command handler
-func NewCommandHandler(datasourceService *service.DatasourceService, chartService *service.ChartService, deviceTypeService *service.DeviceTypeService) *CommandHandler {
+func NewCommandHandler(datasourceService *service.DatasourceService, componentService *service.ComponentService, deviceTypeService *service.DeviceTypeService) *CommandHandler {
 	return &CommandHandler{
 		datasourceService:  datasourceService,
-		chartService:       chartService,
+		componentService:       componentService,
 		deviceTypeService:  deviceTypeService,
 	}
 }
@@ -149,7 +149,7 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 	}
 
 	// Get the control (stored as a chart with component_type="control")
-	chart, err := h.chartService.GetChart(c.Request.Context(), controlID)
+	chart, err := h.componentService.GetComponent(c.Request.Context(), controlID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "control not found"})
 		return

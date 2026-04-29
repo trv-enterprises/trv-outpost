@@ -25,6 +25,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"collation_case_insensitive_v1", migrateCollationCaseInsensitive},
 		{"namespacing_v1", migrateNamespacingV1},
 		{"strip_chart_thumbnail_v1", migrateStripChartThumbnail},
+		{"rename_charts_to_components_v1", migrateRenameChartsToComponents},
 	}
 
 	coll := db.Collection("migrations")
@@ -295,5 +296,47 @@ func migrateStripChartThumbnail(ctx context.Context, db *mongo.Database) error {
 		return fmt.Errorf("strip thumbnail: %w", err)
 	}
 	log.Printf("  charts: stripped thumbnail from %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateRenameChartsToComponents renames the legacy `charts` collection
+// to `components`. The umbrella entity that holds chart, control, and
+// display sub-types is now called Component everywhere in the codebase;
+// this migration brings the on-disk name in line.
+//
+// Idempotent: no-op when `charts` doesn't exist (fresh install) or when
+// `components` already exists (this migration already ran). When `charts`
+// exists and `components` does not, runs the admin renameCollection
+// command. Indexes do NOT carry through a rename — the per-repository
+// CreateIndexes call rebuilds them on the next startup, immediately
+// after migrations finish.
+func migrateRenameChartsToComponents(ctx context.Context, db *mongo.Database) error {
+	chartsExists, _, err := collectionState(ctx, db, "charts")
+	if err != nil {
+		return fmt.Errorf("check charts collection: %w", err)
+	}
+	if !chartsExists {
+		log.Printf("  charts: collection does not exist (fresh install), nothing to rename")
+		return nil
+	}
+
+	componentsExists, _, err := collectionState(ctx, db, "components")
+	if err != nil {
+		return fmt.Errorf("check components collection: %w", err)
+	}
+	if componentsExists {
+		log.Printf("  components: already exists, leaving charts in place — manual cleanup required")
+		return nil
+	}
+
+	dbName := db.Name()
+	renameCmd := bson.D{
+		{Key: "renameCollection", Value: dbName + ".charts"},
+		{Key: "to", Value: dbName + ".components"},
+	}
+	if err := db.Client().Database("admin").RunCommand(ctx, renameCmd).Err(); err != nil {
+		return fmt.Errorf("rename charts → components: %w", err)
+	}
+	log.Printf("  charts → components: renamed (indexes will be rebuilt by ComponentRepository.CreateIndexes)")
 	return nil
 }

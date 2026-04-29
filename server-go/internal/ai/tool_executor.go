@@ -15,17 +15,17 @@ import (
 
 // ToolExecutor handles executing AI tools and updating charts
 type ToolExecutor struct {
-	chartRepo      ChartRepository
+	componentRepo      ComponentRepository
 	datasourceRepo DatasourceRepository
 	datasourceSvc  DatasourceService
 	deviceTypeRepo DeviceTypeRepository
-	chartHub       *hub.ChartHub
+	componentHub       *hub.ComponentHub
 }
 
-// ChartRepository interface for chart operations
-type ChartRepository interface {
-	FindByIDAndVersion(ctx context.Context, id string, version int) (*models.Chart, error)
-	Update(ctx context.Context, id string, version int, chart *models.Chart) error
+// ComponentRepository interface for chart operations
+type ComponentRepository interface {
+	FindByIDAndVersion(ctx context.Context, id string, version int) (*models.Component, error)
+	Update(ctx context.Context, id string, version int, chart *models.Component) error
 }
 
 // DatasourceRepository interface for data source operations
@@ -50,21 +50,21 @@ type DatasourceService interface {
 }
 
 // NewToolExecutor creates a new tool executor
-func NewToolExecutor(chartRepo ChartRepository, dsRepo DatasourceRepository, dsSvc DatasourceService, dtRepo DeviceTypeRepository, chartHub *hub.ChartHub) *ToolExecutor {
+func NewToolExecutor(componentRepo ComponentRepository, dsRepo DatasourceRepository, dsSvc DatasourceService, dtRepo DeviceTypeRepository, componentHub *hub.ComponentHub) *ToolExecutor {
 	return &ToolExecutor{
-		chartRepo:      chartRepo,
+		componentRepo:      componentRepo,
 		datasourceRepo: dsRepo,
 		datasourceSvc:  dsSvc,
 		deviceTypeRepo: dtRepo,
-		chartHub:       chartHub,
+		componentHub:       componentHub,
 	}
 }
 
-// broadcastChartUpdate broadcasts a chart update to all subscribers via the hub
-func (e *ToolExecutor) broadcastChartUpdate(chart *models.Chart) {
-	if e.chartHub != nil && chart != nil {
-		fmt.Printf("[ToolExecutor] Broadcasting chart update for %s to ChartHub\n", chart.ID)
-		e.chartHub.BroadcastChartUpdate(chart.ID, chart)
+// broadcastComponentUpdate broadcasts a component update to all subscribers via the hub
+func (e *ToolExecutor) broadcastComponentUpdate(component *models.Component) {
+	if e.componentHub != nil && component != nil {
+		fmt.Printf("[ToolExecutor] Broadcasting component update for %s to ComponentHub\n", component.ID)
+		e.componentHub.BroadcastComponentUpdate(component.ID, component)
 	}
 }
 
@@ -149,7 +149,7 @@ func (e *ToolExecutor) executeUpdateComponentType(ctx context.Context, chartID s
 		return &ToolResult{Success: false, Error: "invalid component_type, must be: chart, control, or display"}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -167,11 +167,11 @@ func (e *ToolExecutor) executeUpdateComponentType(ctx context.Context, chartID s
 		chart.DisplayConfig = &models.DisplayConfig{}
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -196,7 +196,7 @@ func (e *ToolExecutor) executeUpdateControlConfig(ctx context.Context, chartID s
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -268,11 +268,11 @@ func (e *ToolExecutor) executeUpdateControlConfig(ctx context.Context, chartID s
 		return &ToolResult{Success: true, Message: "No changes specified"}, nil
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -292,7 +292,7 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -318,12 +318,12 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 		return &ToolResult{Success: true, Message: "No changes specified"}, nil
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -348,7 +348,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -400,7 +400,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		chart.DataMapping.GroupBy = *params.GroupBy
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		fmt.Printf("[ToolExecutor] update_data_mapping - Update failed: %v\n", err)
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
@@ -413,7 +413,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -433,7 +433,7 @@ func (e *ToolExecutor) executeUpdateQueryConfig(ctx context.Context, chartID str
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -460,12 +460,12 @@ func (e *ToolExecutor) executeUpdateQueryConfig(ctx context.Context, chartID str
 		chart.Options["refreshInterval"] = *params.RefreshInterval
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -483,7 +483,7 @@ func (e *ToolExecutor) executeUpdateFilters(ctx context.Context, chartID string,
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -498,12 +498,12 @@ func (e *ToolExecutor) executeUpdateFilters(ctx context.Context, chartID string,
 
 	chart.DataMapping.Filters = params.Filters
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -524,7 +524,7 @@ func (e *ToolExecutor) executeUpdateAggregation(ctx context.Context, chartID str
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -553,12 +553,12 @@ func (e *ToolExecutor) executeUpdateAggregation(ctx context.Context, chartID str
 		chart.DataMapping.Aggregation.Count = *params.Count
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -577,7 +577,7 @@ func (e *ToolExecutor) executeUpdateSlidingWindow(ctx context.Context, chartID s
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -600,12 +600,12 @@ func (e *ToolExecutor) executeUpdateSlidingWindow(ctx context.Context, chartID s
 		chart.DataMapping.SlidingWindow.TimestampCol = *params.TimestampCol
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -626,7 +626,7 @@ func (e *ToolExecutor) executeUpdateTimeBucket(ctx context.Context, chartID stri
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -660,12 +660,12 @@ func (e *ToolExecutor) executeUpdateTimeBucket(ctx context.Context, chartID stri
 		chart.DataMapping.TimeBucket.TimestampCol = *params.TimestampCol
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -687,7 +687,7 @@ func (e *ToolExecutor) executeSetCustomCode(ctx context.Context, chartID string,
 		return &ToolResult{Success: false, Error: "component_code is required"}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -698,12 +698,12 @@ func (e *ToolExecutor) executeSetCustomCode(ctx context.Context, chartID string,
 	chart.UseCustomCode = true
 	chart.ComponentCode = params.ComponentCode
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -728,7 +728,7 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -766,12 +766,12 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 		chart.Options["showDataLabels"] = *params.ShowDataLabels
 	}
 
-	if err := e.chartRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
+	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
 		return &ToolResult{Success: false, Error: "failed to update chart: " + err.Error()}, nil
 	}
 
 	// Broadcast chart update to all subscribers
-	e.broadcastChartUpdate(chart)
+	e.broadcastComponentUpdate(chart)
 
 	return &ToolResult{
 		Success:      true,
@@ -1044,7 +1044,7 @@ func (e *ToolExecutor) executePreviewData(ctx context.Context, chartID string, c
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}
@@ -1098,7 +1098,7 @@ func (e *ToolExecutor) executePreviewData(ctx context.Context, chartID string, c
 
 // executeGetComponentState returns the current component state
 func (e *ToolExecutor) executeGetComponentState(ctx context.Context, chartID string, chartVersion int) (*ToolResult, error) {
-	chart, err := e.chartRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	chart, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get chart: " + err.Error()}, nil
 	}

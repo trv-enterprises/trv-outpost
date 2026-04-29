@@ -55,7 +55,7 @@ func migrateNamespacingV1(ctx context.Context, db *mongo.Database) error {
 	}
 	backfillUpdate := bson.M{"$set": bson.M{"namespace": "default"}}
 
-	for _, name := range []string{"datasources", "charts", "dashboards"} {
+	for _, name := range []string{"datasources", "components", "dashboards"} {
 		res, err := db.Collection(name).UpdateMany(ctx, backfillFilter, backfillUpdate)
 		if err != nil {
 			return fmt.Errorf("backfill namespace on %s: %w", name, err)
@@ -70,8 +70,8 @@ func migrateNamespacingV1(ctx context.Context, db *mongo.Database) error {
 	if err := resolveNamespaceCollisions(ctx, db, "dashboards", false); err != nil {
 		return fmt.Errorf("resolve dashboard collisions: %w", err)
 	}
-	if err := resolveNamespaceCollisions(ctx, db, "charts", true); err != nil {
-		return fmt.Errorf("resolve chart collisions: %w", err)
+	if err := resolveNamespaceCollisions(ctx, db, "components", true); err != nil {
+		return fmt.Errorf("resolve component collisions: %w", err)
 	}
 
 	// Step 4: drop old unique name indexes. Tolerate "not found" because

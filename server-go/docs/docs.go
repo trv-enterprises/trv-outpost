@@ -243,7 +243,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     },
                     "400": {
@@ -2561,16 +2561,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts": {
+        "/components": {
             "get": {
-                "description": "Get a paginated list of charts (latest version of each) with optional filtering",
+                "description": "Get a paginated list of components (latest version of each) with optional filtering",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "List charts",
+                "summary": "List components",
                 "parameters": [
                     {
                         "type": "string",
@@ -2580,7 +2580,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Filter by chart type",
+                        "description": "Filter by chart sub-type",
                         "name": "chart_type",
                         "in": "query"
                     },
@@ -2627,7 +2627,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.ChartListResponse"
+                            "$ref": "#/definitions/models.ComponentListResponse"
                         }
                     },
                     "400": {
@@ -2647,7 +2647,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Create a new chart with data source binding and visualization config. Creates as version 1 with status \"final\".",
+                "description": "Create a new component (chart, control, or display) with optional data source binding and visualization config. Creates as version 1 with status \"final\".",
                 "consumes": [
                     "application/json"
                 ],
@@ -2655,17 +2655,17 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Create a new chart",
+                "summary": "Create a new component",
                 "parameters": [
                     {
-                        "description": "Chart data",
-                        "name": "chart",
+                        "description": "Component data",
+                        "name": "component",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.CreateChartRequest"
+                            "$ref": "#/definitions/models.CreateComponentRequest"
                         }
                     }
                 ],
@@ -2673,7 +2673,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     },
                     "400": {
@@ -2693,16 +2693,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts/summaries": {
+        "/components/summaries": {
             "get": {
-                "description": "Get lightweight chart summaries for card-based selection UI",
+                "description": "Get lightweight component summaries for card-based selection UI",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Get chart summaries",
+                "summary": "Get component summaries",
                 "parameters": [
                     {
                         "type": "integer",
@@ -2718,7 +2718,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.ChartSummary"
+                                "$ref": "#/definitions/models.ComponentSummary"
                             }
                         }
                     },
@@ -2732,20 +2732,20 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts/{id}": {
+        "/components/{id}": {
             "get": {
-                "description": "Get the latest version of a chart by ID",
+                "description": "Get the latest version of a component by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Get a chart",
+                "summary": "Get a component",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -2755,7 +2755,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     },
                     "404": {
@@ -2775,7 +2775,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update the latest version of a chart in-place (for manual edits)",
+                "description": "Update the latest version of a component in-place (for manual edits)",
                 "consumes": [
                     "application/json"
                 ],
@@ -2783,24 +2783,24 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Update a chart",
+                "summary": "Update a component",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Chart update data",
-                        "name": "chart",
+                        "description": "Component update data",
+                        "name": "component",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.UpdateChartRequest"
+                            "$ref": "#/definitions/models.UpdateComponentRequest"
                         }
                     }
                 ],
@@ -2808,7 +2808,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     },
                     "400": {
@@ -2835,15 +2835,15 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete all versions of a chart by ID",
+                "description": "Delete all versions of a component by ID",
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Delete a chart",
+                "summary": "Delete a component",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -2870,20 +2870,20 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts/{id}/draft": {
+        "/components/{id}/draft": {
             "get": {
-                "description": "Get the draft version of a chart (if exists)",
+                "description": "Get the draft version of a component (if exists)",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Get chart draft",
+                "summary": "Get component draft",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -2893,7 +2893,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     },
                     "404": {
@@ -2913,15 +2913,15 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete the draft version of a chart (if exists)",
+                "description": "Delete the draft version of a component (if exists)",
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Delete chart draft",
+                "summary": "Delete component draft",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -2948,20 +2948,20 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts/{id}/version-info": {
+        "/components/{id}/version-info": {
             "get": {
-                "description": "Get version metadata for a chart (version count, has draft, etc.)",
+                "description": "Get version metadata for a component (version count, has draft, etc.)",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Get chart version info",
+                "summary": "Get component version info",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -2971,7 +2971,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.ChartVersionInfo"
+                            "$ref": "#/definitions/models.ComponentVersionInfo"
                         }
                     },
                     "404": {
@@ -2991,20 +2991,20 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts/{id}/versions": {
+        "/components/{id}/versions": {
             "get": {
-                "description": "Get all versions of a chart by ID",
+                "description": "Get all versions of a component by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "List chart versions",
+                "summary": "List component versions",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -3035,20 +3035,20 @@ const docTemplate = `{
                 }
             }
         },
-        "/charts/{id}/versions/{version}": {
+        "/components/{id}/versions/{version}": {
             "get": {
-                "description": "Get a specific version of a chart by ID and version number",
+                "description": "Get a specific version of a component by ID and version number",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Get a specific chart version",
+                "summary": "Get a specific component version",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -3065,7 +3065,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     },
                     "404": {
@@ -3085,15 +3085,15 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete a specific version of a chart",
+                "description": "Delete a specific version of a component",
                 "tags": [
-                    "charts"
+                    "components"
                 ],
-                "summary": "Delete a chart version",
+                "summary": "Delete a component version",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Chart ID",
+                        "description": "Component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -5107,11 +5107,11 @@ const docTemplate = `{
             "description": "Response containing AI session state",
             "type": "object",
             "properties": {
-                "chart": {
-                    "description": "Current chart state (draft)",
+                "component": {
+                    "description": "Current component state (draft)",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/models.Chart"
+                            "$ref": "#/definitions/models.Component"
                         }
                     ]
                 },
@@ -5274,116 +5274,6 @@ const docTemplate = `{
                 "CapabilityManage"
             ]
         },
-        "models.Chart": {
-            "description": "Chart/Control with data source binding, query config, and visualization settings",
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "ai_session_id": {
-                    "description": "Active AI session (drafts only)",
-                    "type": "string"
-                },
-                "chart_type": {
-                    "description": "bar, line, pie, gauge, etc. (charts only)",
-                    "type": "string"
-                },
-                "component_code": {
-                    "description": "React component code",
-                    "type": "string"
-                },
-                "component_type": {
-                    "description": "\"chart\" (default) | \"control\"",
-                    "type": "string"
-                },
-                "connection_id": {
-                    "description": "Reference to connection",
-                    "type": "string"
-                },
-                "control_config": {
-                    "description": "Control configuration (controls only)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ControlConfig"
-                        }
-                    ]
-                },
-                "created": {
-                    "type": "string"
-                },
-                "data_mapping": {
-                    "description": "How to map data to chart (charts only)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ChartDataMapping"
-                        }
-                    ]
-                },
-                "description": {
-                    "type": "string"
-                },
-                "display_config": {
-                    "description": "Display configuration (displays only)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.DisplayConfig"
-                        }
-                    ]
-                },
-                "id": {
-                    "description": "UUID - same across versions",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "Unique identifier within namespace",
-                    "type": "string"
-                },
-                "namespace": {
-                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
-                    "type": "string"
-                },
-                "options": {
-                    "description": "ECharts options overrides (charts only)",
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "query_config": {
-                    "description": "How to query data (charts only)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ChartQueryConfig"
-                        }
-                    ]
-                },
-                "status": {
-                    "description": "\"draft\" | \"final\"",
-                    "type": "string"
-                },
-                "tags": {
-                    "description": "Searchable tags",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "title": {
-                    "description": "Display title (defaults to Name if empty)",
-                    "type": "string"
-                },
-                "updated": {
-                    "type": "string"
-                },
-                "use_custom_code": {
-                    "description": "Whether custom code mode is enabled",
-                    "type": "boolean"
-                },
-                "version": {
-                    "description": "Version number (1, 2, 3...)",
-                    "type": "integer"
-                }
-            }
-        },
         "models.ChartDataMapping": {
             "description": "Mapping configuration from data columns to chart axes/series",
             "type": "object",
@@ -5504,27 +5394,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ChartListResponse": {
-            "description": "Response containing a list of charts with pagination",
-            "type": "object",
-            "properties": {
-                "charts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Chart"
-                    }
-                },
-                "page": {
-                    "type": "integer"
-                },
-                "page_size": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "models.ChartQueryConfig": {
             "description": "Query configuration for fetching chart data",
             "type": "object",
@@ -5541,68 +5410,6 @@ const docTemplate = `{
                 "type": {
                     "description": "sql, csv_filter, stream_filter, api",
                     "type": "string"
-                }
-            }
-        },
-        "models.ChartSummary": {
-            "description": "Minimal chart info for selection cards and lists",
-            "type": "object",
-            "properties": {
-                "chart_type": {
-                    "type": "string"
-                },
-                "component_type": {
-                    "type": "string"
-                },
-                "connection_id": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.ChartVersionInfo": {
-            "description": "Version info for a chart",
-            "type": "object",
-            "properties": {
-                "has_draft": {
-                    "description": "Whether a draft version exists",
-                    "type": "boolean"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "integer"
-                },
-                "version_count": {
-                    "description": "Total versions for this chart id",
-                    "type": "integer"
                 }
             }
         },
@@ -5663,6 +5470,199 @@ const docTemplate = `{
                     "description": "Optional value mapping (e.g., true -\u003e \"ON\", false -\u003e \"OFF\")",
                     "type": "object",
                     "additionalProperties": true
+                }
+            }
+        },
+        "models.Component": {
+            "description": "Component (chart, control, or display) with optional data source binding, query config, and visualization settings",
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "ai_session_id": {
+                    "description": "Active AI session (drafts only)",
+                    "type": "string"
+                },
+                "chart_type": {
+                    "description": "bar, line, pie, gauge, etc. (charts only)",
+                    "type": "string"
+                },
+                "component_code": {
+                    "description": "React component code",
+                    "type": "string"
+                },
+                "component_type": {
+                    "description": "\"chart\" | \"control\" | \"display\"",
+                    "type": "string"
+                },
+                "connection_id": {
+                    "description": "Reference to connection",
+                    "type": "string"
+                },
+                "control_config": {
+                    "description": "Control configuration (controls only)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ControlConfig"
+                        }
+                    ]
+                },
+                "created": {
+                    "type": "string"
+                },
+                "data_mapping": {
+                    "description": "How to map data to chart (charts only)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ChartDataMapping"
+                        }
+                    ]
+                },
+                "description": {
+                    "type": "string"
+                },
+                "display_config": {
+                    "description": "Display configuration (displays only)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.DisplayConfig"
+                        }
+                    ]
+                },
+                "id": {
+                    "description": "UUID - same across versions",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Unique identifier within namespace",
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
+                    "type": "string"
+                },
+                "options": {
+                    "description": "ECharts options overrides (charts only)",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "query_config": {
+                    "description": "How to query data (charts only)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ChartQueryConfig"
+                        }
+                    ]
+                },
+                "status": {
+                    "description": "\"draft\" | \"final\"",
+                    "type": "string"
+                },
+                "tags": {
+                    "description": "Searchable tags",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "description": "Display title (defaults to Name if empty)",
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "string"
+                },
+                "use_custom_code": {
+                    "description": "Whether custom code mode is enabled",
+                    "type": "boolean"
+                },
+                "version": {
+                    "description": "Version number (1, 2, 3...)",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ComponentListResponse": {
+            "description": "Response containing a list of components with pagination",
+            "type": "object",
+            "properties": {
+                "components": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Component"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ComponentSummary": {
+            "description": "Minimal component info for selection cards and lists",
+            "type": "object",
+            "properties": {
+                "chart_type": {
+                    "type": "string"
+                },
+                "component_type": {
+                    "type": "string"
+                },
+                "connection_id": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ComponentVersionInfo": {
+            "description": "Version info for a component",
+            "type": "object",
+            "properties": {
+                "has_draft": {
+                    "description": "Whether a draft version exists",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                },
+                "version_count": {
+                    "description": "Total versions for this component id",
+                    "type": "integer"
                 }
             }
         },
@@ -5792,8 +5792,8 @@ const docTemplate = `{
                 }
             }
         },
-        "models.CreateChartRequest": {
-            "description": "Request body for creating a new chart or control",
+        "models.CreateComponentRequest": {
+            "description": "Request body for creating a new component",
             "type": "object",
             "required": [
                 "name"
@@ -5806,7 +5806,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "component_type": {
-                    "description": "\"chart\" (default) | \"control\"",
+                    "description": "\"chart\" (default) | \"control\" | \"display\"",
                     "type": "string"
                 },
                 "connection_id": {
@@ -6694,7 +6694,7 @@ const docTemplate = `{
             }
         },
         "models.DisplayConfig": {
-            "description": "Configuration for non-chart visual components (cameras, iframes, etc.)",
+            "description": "Configuration for non-chart visual components (cameras, weather, etc.)",
             "type": "object",
             "properties": {
                 "alert_severity": {
@@ -6793,7 +6793,7 @@ const docTemplate = `{
                 "components": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Chart"
+                        "$ref": "#/definitions/models.Component"
                     }
                 },
                 "connections": {
@@ -8025,8 +8025,8 @@ const docTemplate = `{
                 }
             }
         },
-        "models.UpdateChartRequest": {
-            "description": "Request body for updating an existing chart, control, or display",
+        "models.UpdateComponentRequest": {
+            "description": "Request body for updating an existing component",
             "type": "object",
             "properties": {
                 "chart_type": {

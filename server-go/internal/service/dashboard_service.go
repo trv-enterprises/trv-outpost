@@ -24,14 +24,14 @@ import (
 type DashboardService struct {
 	repo            *repository.DashboardRepository
 	db              *mongo.Database
-	chartRepo       *repository.ChartRepository
+	chartRepo       *repository.ComponentRepository
 	datasourceRepo  *repository.DatasourceRepository
 }
 
 // NewDashboardService creates a new dashboard service. Pass nil for
 // chartRepo/datasourceRepo if export/import isn't needed (legacy
 // callers); production main.go always passes the live repos.
-func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database, chartRepo *repository.ChartRepository, datasourceRepo *repository.DatasourceRepository) *DashboardService {
+func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database, chartRepo *repository.ComponentRepository, datasourceRepo *repository.DatasourceRepository) *DashboardService {
 	return &DashboardService{
 		repo:           repo,
 		db:             db,

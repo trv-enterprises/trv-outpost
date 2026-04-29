@@ -222,7 +222,7 @@ func (s *DashboardService) classifyConnection(ctx context.Context, inc models.Da
 	out.New = append(out.New, ref)
 }
 
-func (s *DashboardService) classifyComponent(ctx context.Context, inc models.Chart, targetNs string, out *models.ImportPreflightResponse) {
+func (s *DashboardService) classifyComponent(ctx context.Context, inc models.Component, targetNs string, out *models.ImportPreflightResponse) {
 	ref := models.ImportObjectRef{
 		Kind: models.ImportKindComponent, ID: inc.ID,
 		Name: inc.Name, Namespace: inc.Namespace,
@@ -329,7 +329,7 @@ func (s *DashboardService) applyConnection(ctx context.Context, inc models.Datas
 	return err
 }
 
-func (s *DashboardService) applyComponent(ctx context.Context, inc models.Chart, targetNs string, isUpdate bool) error {
+func (s *DashboardService) applyComponent(ctx context.Context, inc models.Component, targetNs string, isUpdate bool) error {
 	inc.Namespace = targetNs
 	now := time.Now()
 	coll := s.db.Collection("charts")
@@ -344,7 +344,7 @@ func (s *DashboardService) applyComponent(ctx context.Context, inc models.Chart,
 	}
 
 	inc.Version = 1
-	inc.Status = models.ChartStatusFinal
+	inc.Status = models.ComponentStatusFinal
 	inc.AISessionID = ""
 	if inc.Created.IsZero() {
 		inc.Created = now

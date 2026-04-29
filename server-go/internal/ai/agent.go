@@ -37,7 +37,7 @@ type Agent struct {
 // SessionService interface for session operations and SSE broadcasting
 type SessionService interface {
 	AddAssistantMessage(ctx context.Context, sessionID string, content string, toolCalls []models.ToolCall) (*models.AIMessage, error)
-	UpdateChartDraft(ctx context.Context, sessionID string, chart *models.Chart) error
+	UpdateChartDraft(ctx context.Context, sessionID string, chart *models.Component) error
 	SendThinkingEvent(sessionID string, thinking bool)
 	SendStreamingEvent(sessionID string, content string, done bool)
 	SendErrorEvent(sessionID string, err error, code string)

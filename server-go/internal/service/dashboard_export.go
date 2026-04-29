@@ -79,7 +79,7 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 	}
 
 	// Pass 2: load charts (latest final version) + collect their connection IDs.
-	components := make([]models.Chart, 0, len(chartIDsSeen))
+	components := make([]models.Component, 0, len(chartIDsSeen))
 	for cid := range chartIDsSeen {
 		ch, err := s.chartRepo.FindLatestFinal(ctx, cid)
 		if err != nil {

@@ -219,14 +219,14 @@ type DashboardSummaryListResponse struct {
 	PageSize   int                `json:"page_size"`
 }
 
-// DashboardWithCharts represents a dashboard with expanded chart data
-// @Description Dashboard with full chart objects for rendering
-type DashboardWithCharts struct {
+// DashboardWithComponents represents a dashboard with expanded component data
+// @Description Dashboard with full component objects for rendering
+type DashboardWithComponents struct {
 	ID          string                 `json:"id"`
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
 	Panels      []DashboardPanel       `json:"panels"`
-	Charts      map[string]*Chart      `json:"charts"` // panel_id -> Chart mapping (uses Chart from chart.go)
+	Components  map[string]*Component  `json:"components"` // panel_id -> Component mapping
 	Settings    DashboardSettings      `json:"settings"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }

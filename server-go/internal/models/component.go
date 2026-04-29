@@ -8,17 +8,17 @@ import (
 	"time"
 )
 
-// Chart status constants
+// Component status constants
 const (
-	ChartStatusDraft = "draft" // AI work in progress, not visible in dashboards
-	ChartStatusFinal = "final" // Saved/committed version
+	ComponentStatusDraft = "draft" // AI work in progress, not visible in dashboards
+	ComponentStatusFinal = "final" // Saved/committed version
 )
 
 // Component type constants
 const (
-	ComponentTypeChart   = "chart"   // Default - data visualization chart
+	ComponentTypeChart   = "chart"   // Data visualization chart (ECharts)
 	ComponentTypeControl = "control" // Interactive control component
-	ComponentTypeDisplay = "display" // Non-chart visual component (cameras, iframes, etc.)
+	ComponentTypeDisplay = "display" // Non-chart visual component (cameras, weather, etc.)
 )
 
 // Display type constants
@@ -70,7 +70,7 @@ type CommandConfig struct {
 }
 
 // DisplayConfig defines configuration for display components
-// @Description Configuration for non-chart visual components (cameras, iframes, etc.)
+// @Description Configuration for non-chart visual components (cameras, weather, etc.)
 type DisplayConfig struct {
 	DisplayType string `json:"display_type" bson:"display_type"` // "frigate_camera", "frigate_alerts", "weather"
 
@@ -90,14 +90,16 @@ type DisplayConfig struct {
 	WeatherLocation    string `json:"weather_location,omitempty" bson:"weather_location,omitempty"`         // Display label (e.g., "Spring, TX")
 }
 
-// Chart represents a standalone chart or control configuration
-// @Description Chart/Control with data source binding, query config, and visualization settings
-// Primary key is composite (id, version) - id stays same across versions
-type Chart struct {
+// Component represents a chart, control, or display configuration.
+// Component is the umbrella entity; ComponentType discriminates the
+// three sub-types (chart, control, display).
+// Primary key is composite (id, version) — id stays same across versions.
+// @Description Component (chart, control, or display) with optional data source binding, query config, and visualization settings
+type Component struct {
 	ID            string                 `json:"id" bson:"id"`                           // UUID - same across versions
 	Version       int                    `json:"version" bson:"version"`                 // Version number (1, 2, 3...)
 	Status        string                 `json:"status" bson:"status"`                   // "draft" | "final"
-	ComponentType string                 `json:"component_type" bson:"component_type"`   // "chart" (default) | "control"
+	ComponentType string                 `json:"component_type" bson:"component_type"`   // "chart" | "control" | "display"
 	Namespace     string                 `json:"namespace" bson:"namespace"`             // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 	Name          string                 `json:"name" bson:"name" binding:"required"`    // Unique identifier within namespace
 	Title         string                 `json:"title" bson:"title"`                     // Display title (defaults to Name if empty)
@@ -117,10 +119,10 @@ type Chart struct {
 	Updated       time.Time              `json:"updated" bson:"updated"`
 }
 
-// CreateChartRequest represents a request to create a chart or control
-// @Description Request body for creating a new chart or control
-type CreateChartRequest struct {
-	ComponentType string                 `json:"component_type"` // "chart" (default) | "control"
+// CreateComponentRequest represents a request to create a chart, control, or display
+// @Description Request body for creating a new component
+type CreateComponentRequest struct {
+	ComponentType string                 `json:"component_type"` // "chart" (default) | "control" | "display"
 	Namespace     string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
 	Name          string                 `json:"name" binding:"required"`
 	Title         string                 `json:"title"`
@@ -137,9 +139,9 @@ type CreateChartRequest struct {
 	Tags          []string               `json:"tags"`
 }
 
-// UpdateChartRequest represents a request to update a chart, control, or display
-// @Description Request body for updating an existing chart, control, or display
-type UpdateChartRequest struct {
+// UpdateComponentRequest represents a request to update a component
+// @Description Request body for updating an existing component
+type UpdateComponentRequest struct {
 	ComponentType *string                 `json:"component_type,omitempty"`
 	Namespace     *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
 	Name          *string                 `json:"name,omitempty"`
@@ -157,33 +159,33 @@ type UpdateChartRequest struct {
 	Tags          *[]string               `json:"tags,omitempty"`
 }
 
-// ChartListResponse represents a paginated list of charts
-// @Description Response containing a list of charts with pagination
-type ChartListResponse struct {
-	Charts   []Chart `json:"charts"`
-	Total    int64   `json:"total"`
-	Page     int     `json:"page"`
-	PageSize int     `json:"page_size"`
+// ComponentListResponse represents a paginated list of components
+// @Description Response containing a list of components with pagination
+type ComponentListResponse struct {
+	Components []Component `json:"components"`
+	Total      int64       `json:"total"`
+	Page       int         `json:"page"`
+	PageSize   int         `json:"page_size"`
 }
 
-// ChartQueryParams defines query parameters for listing charts
+// ComponentQueryParams defines query parameters for listing components
 // @Description Query parameters for filtering and pagination
-type ChartQueryParams struct {
+type ComponentQueryParams struct {
 	Namespace     string   `form:"namespace"`      // Empty = all namespaces; non-empty = exact match
 	Name          string   `form:"name"`
 	ChartType     string   `form:"chart_type"`
 	ComponentType string   `form:"component_type"` // "chart", "control", "display"
 	Status        string   `form:"status"`         // "draft", "final"
 	DatasourceID  string   `form:"connection_id"`  // Accept connection_id query param
-	Tags          []string `form:"tags"`           // Filter charts with any of the given tags (OR)
+	Tags          []string `form:"tags"`           // Filter components with any of the given tags (OR)
 	Tag           string   `form:"tag"`            // DEPRECATED: use tags; kept for back-compat
 	Page          int      `form:"page"`
 	PageSize      int      `form:"page_size"`
 }
 
-// ChartSummary is a lightweight chart representation for card listings
-// @Description Minimal chart info for selection cards and lists
-type ChartSummary struct {
+// ComponentSummary is a lightweight component representation for card listings
+// @Description Minimal component info for selection cards and lists
+type ComponentSummary struct {
 	ID            string   `json:"id"`
 	Version       int      `json:"version"`
 	Status        string   `json:"status"`
@@ -196,12 +198,12 @@ type ChartSummary struct {
 	Tags          []string `json:"tags,omitempty"`
 }
 
-// ChartVersionInfo provides version metadata for delete dialogs
-// @Description Version info for a chart
-type ChartVersionInfo struct {
+// ComponentVersionInfo provides version metadata for delete dialogs
+// @Description Version info for a component
+type ComponentVersionInfo struct {
 	ID           string `json:"id"`
 	Version      int    `json:"version"`
 	Status       string `json:"status"`
-	VersionCount int    `json:"version_count"` // Total versions for this chart id
+	VersionCount int    `json:"version_count"` // Total versions for this component id
 	HasDraft     bool   `json:"has_draft"`     // Whether a draft version exists
 }

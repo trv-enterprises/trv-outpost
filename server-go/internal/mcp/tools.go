@@ -27,7 +27,7 @@ type ToolRegistry struct {
 
 	connectionService *service.DatasourceService
 	dashboardService  *service.DashboardService
-	chartService      *service.ChartService
+	componentService      *service.ComponentService
 	deviceTypeService *service.DeviceTypeService
 	typeFilter        registry.TypeFilter
 }
@@ -37,7 +37,7 @@ type ToolRegistry struct {
 func NewToolRegistry(
 	connectionSvc *service.DatasourceService,
 	dashboardSvc *service.DashboardService,
-	chartSvc *service.ChartService,
+	chartSvc *service.ComponentService,
 	deviceTypeSvc *service.DeviceTypeService,
 	typeFilter registry.TypeFilter,
 ) *ToolRegistry {
@@ -46,7 +46,7 @@ func NewToolRegistry(
 		handlers:          make(map[string]ToolHandler),
 		connectionService: connectionSvc,
 		dashboardService:  dashboardSvc,
-		chartService:      chartSvc,
+		componentService:      chartSvc,
 		deviceTypeService: deviceTypeSvc,
 		typeFilter:        typeFilter,
 	}
@@ -648,18 +648,18 @@ func (r *ToolRegistry) registerComponentTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			params := models.ChartQueryParams{
+			params := models.ComponentQueryParams{
 				Page:         1,
 				PageSize:     100,
 				ChartType:    getString(args, "chart_type"),
 				DatasourceID: getString(args, "connection_id"),
 				Tag:          getString(args, "tag"),
 			}
-			result, err := r.chartService.ListCharts(context.Background(), params)
+			result, err := r.componentService.ListComponents(context.Background(), params)
 			if err != nil {
 				return nil, err
 			}
-			return map[string]interface{}{"components": result.Charts, "count": result.Total}, nil
+			return map[string]interface{}{"components": result.Components, "count": result.Total}, nil
 		},
 	)
 
@@ -676,7 +676,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			return r.chartService.GetChart(context.Background(), getString(args, "id"))
+			return r.componentService.GetComponent(context.Background(), getString(args, "id"))
 		},
 	)
 
@@ -696,7 +696,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			if l := getInt(args, "limit"); l > 0 {
 				limit = int64(l)
 			}
-			return r.chartService.GetChartSummaries(context.Background(), limit)
+			return r.componentService.GetComponentSummaries(context.Background(), limit)
 		},
 	)
 
@@ -725,7 +725,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			req := &models.CreateChartRequest{
+			req := &models.CreateComponentRequest{
 				Name:          getString(args, "name"),
 				Description:   getString(args, "description"),
 				ComponentType: getString(args, "component_type"),
@@ -752,7 +752,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
-			out, err := r.chartService.CreateChart(context.Background(), req)
+			out, err := r.componentService.CreateComponent(context.Background(), req)
 			if err != nil {
 				return nil, err
 			}
@@ -786,7 +786,7 @@ func (r *ToolRegistry) registerComponentTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			req := &models.UpdateChartRequest{}
+			req := &models.UpdateComponentRequest{}
 			if name := getString(args, "name"); name != "" {
 				req.Name = &name
 			}
@@ -825,7 +825,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				tags := parseStringArray(tagsRaw)
 				req.Tags = &tags
 			}
-			out, err := r.chartService.UpdateChart(context.Background(), id, req)
+			out, err := r.componentService.UpdateComponent(context.Background(), id, req)
 			if err != nil {
 				return nil, err
 			}
@@ -847,7 +847,7 @@ func (r *ToolRegistry) registerComponentTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if err := r.chartService.DeleteChart(context.Background(), id); err != nil {
+			if err := r.componentService.DeleteComponent(context.Background(), id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Component %s deleted", id)}, nil
@@ -1089,7 +1089,7 @@ func getBool(m map[string]interface{}, key string) bool {
 // only what a caller can't compute: id, version, status, timestamps,
 // and a code-length signal so the agent can sanity-check that its
 // component_code landed.
-func componentWriteAck(c *models.Chart) map[string]interface{} {
+func componentWriteAck(c *models.Component) map[string]interface{} {
 	if c == nil {
 		return nil
 	}

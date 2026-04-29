@@ -213,10 +213,10 @@ definitions:
   models.AISessionResponse:
     description: Response containing AI session state
     properties:
-      chart:
+      component:
         allOf:
-        - $ref: '#/definitions/models.Chart'
-        description: Current chart state (draft)
+        - $ref: '#/definitions/models.Component'
+        description: Current component state (draft)
       session:
         $ref: '#/definitions/models.AISession'
     type: object
@@ -329,80 +329,6 @@ definitions:
     - CapabilityView
     - CapabilityDesign
     - CapabilityManage
-  models.Chart:
-    description: Chart/Control with data source binding, query config, and visualization
-      settings
-    properties:
-      ai_session_id:
-        description: Active AI session (drafts only)
-        type: string
-      chart_type:
-        description: bar, line, pie, gauge, etc. (charts only)
-        type: string
-      component_code:
-        description: React component code
-        type: string
-      component_type:
-        description: '"chart" (default) | "control"'
-        type: string
-      connection_id:
-        description: Reference to connection
-        type: string
-      control_config:
-        allOf:
-        - $ref: '#/definitions/models.ControlConfig'
-        description: Control configuration (controls only)
-      created:
-        type: string
-      data_mapping:
-        allOf:
-        - $ref: '#/definitions/models.ChartDataMapping'
-        description: How to map data to chart (charts only)
-      description:
-        type: string
-      display_config:
-        allOf:
-        - $ref: '#/definitions/models.DisplayConfig'
-        description: Display configuration (displays only)
-      id:
-        description: UUID - same across versions
-        type: string
-      name:
-        description: Unique identifier within namespace
-        type: string
-      namespace:
-        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
-        type: string
-      options:
-        additionalProperties: true
-        description: ECharts options overrides (charts only)
-        type: object
-      query_config:
-        allOf:
-        - $ref: '#/definitions/models.ChartQueryConfig'
-        description: How to query data (charts only)
-      status:
-        description: '"draft" | "final"'
-        type: string
-      tags:
-        description: Searchable tags
-        items:
-          type: string
-        type: array
-      title:
-        description: Display title (defaults to Name if empty)
-        type: string
-      updated:
-        type: string
-      use_custom_code:
-        description: Whether custom code mode is enabled
-        type: boolean
-      version:
-        description: Version number (1, 2, 3...)
-        type: integer
-    required:
-    - name
-    type: object
   models.ChartDataMapping:
     description: Mapping configuration from data columns to chart axes/series
     properties:
@@ -494,20 +420,6 @@ definitions:
           type: string
         type: array
     type: object
-  models.ChartListResponse:
-    description: Response containing a list of charts with pagination
-    properties:
-      charts:
-        items:
-          $ref: '#/definitions/models.Chart'
-        type: array
-      page:
-        type: integer
-      page_size:
-        type: integer
-      total:
-        type: integer
-    type: object
   models.ChartQueryConfig:
     description: Query configuration for fetching chart data
     properties:
@@ -521,48 +433,6 @@ definitions:
       type:
         description: sql, csv_filter, stream_filter, api
         type: string
-    type: object
-  models.ChartSummary:
-    description: Minimal chart info for selection cards and lists
-    properties:
-      chart_type:
-        type: string
-      component_type:
-        type: string
-      connection_id:
-        type: string
-      description:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      namespace:
-        type: string
-      status:
-        type: string
-      tags:
-        items:
-          type: string
-        type: array
-      version:
-        type: integer
-    type: object
-  models.ChartVersionInfo:
-    description: Version info for a chart
-    properties:
-      has_draft:
-        description: Whether a draft version exists
-        type: boolean
-      id:
-        type: string
-      status:
-        type: string
-      version:
-        type: integer
-      version_count:
-        description: Total versions for this chart id
-        type: integer
     type: object
   models.ColumnInfo:
     properties:
@@ -607,6 +477,136 @@ definitions:
         additionalProperties: true
         description: Optional value mapping (e.g., true -> "ON", false -> "OFF")
         type: object
+    type: object
+  models.Component:
+    description: Component (chart, control, or display) with optional data source
+      binding, query config, and visualization settings
+    properties:
+      ai_session_id:
+        description: Active AI session (drafts only)
+        type: string
+      chart_type:
+        description: bar, line, pie, gauge, etc. (charts only)
+        type: string
+      component_code:
+        description: React component code
+        type: string
+      component_type:
+        description: '"chart" | "control" | "display"'
+        type: string
+      connection_id:
+        description: Reference to connection
+        type: string
+      control_config:
+        allOf:
+        - $ref: '#/definitions/models.ControlConfig'
+        description: Control configuration (controls only)
+      created:
+        type: string
+      data_mapping:
+        allOf:
+        - $ref: '#/definitions/models.ChartDataMapping'
+        description: How to map data to chart (charts only)
+      description:
+        type: string
+      display_config:
+        allOf:
+        - $ref: '#/definitions/models.DisplayConfig'
+        description: Display configuration (displays only)
+      id:
+        description: UUID - same across versions
+        type: string
+      name:
+        description: Unique identifier within namespace
+        type: string
+      namespace:
+        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
+        type: string
+      options:
+        additionalProperties: true
+        description: ECharts options overrides (charts only)
+        type: object
+      query_config:
+        allOf:
+        - $ref: '#/definitions/models.ChartQueryConfig'
+        description: How to query data (charts only)
+      status:
+        description: '"draft" | "final"'
+        type: string
+      tags:
+        description: Searchable tags
+        items:
+          type: string
+        type: array
+      title:
+        description: Display title (defaults to Name if empty)
+        type: string
+      updated:
+        type: string
+      use_custom_code:
+        description: Whether custom code mode is enabled
+        type: boolean
+      version:
+        description: Version number (1, 2, 3...)
+        type: integer
+    required:
+    - name
+    type: object
+  models.ComponentListResponse:
+    description: Response containing a list of components with pagination
+    properties:
+      components:
+        items:
+          $ref: '#/definitions/models.Component'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.ComponentSummary:
+    description: Minimal component info for selection cards and lists
+    properties:
+      chart_type:
+        type: string
+      component_type:
+        type: string
+      connection_id:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      namespace:
+        type: string
+      status:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      version:
+        type: integer
+    type: object
+  models.ComponentVersionInfo:
+    description: Version info for a component
+    properties:
+      has_draft:
+        description: Whether a draft version exists
+        type: boolean
+      id:
+        type: string
+      status:
+        type: string
+      version:
+        type: integer
+      version_count:
+        description: Total versions for this component id
+        type: integer
     type: object
   models.ConfigItem:
     properties:
@@ -698,15 +698,15 @@ definitions:
         description: PLAINTEXT — shown once, never persisted
         type: string
     type: object
-  models.CreateChartRequest:
-    description: Request body for creating a new chart or control
+  models.CreateComponentRequest:
+    description: Request body for creating a new component
     properties:
       chart_type:
         type: string
       component_code:
         type: string
       component_type:
-        description: '"chart" (default) | "control"'
+        description: '"chart" (default) | "control" | "display"'
         type: string
       connection_id:
         type: string
@@ -1321,7 +1321,7 @@ definitions:
         type: string
     type: object
   models.DisplayConfig:
-    description: Configuration for non-chart visual components (cameras, iframes,
+    description: Configuration for non-chart visual components (cameras, weather,
       etc.)
     properties:
       alert_severity:
@@ -1394,7 +1394,7 @@ definitions:
     properties:
       components:
         items:
-          $ref: '#/definitions/models.Chart'
+          $ref: '#/definitions/models.Component'
         type: array
       connections:
         items:
@@ -2276,8 +2276,8 @@ definitions:
         description: JSON string of tool output
         type: string
     type: object
-  models.UpdateChartRequest:
-    description: Request body for updating an existing chart, control, or display
+  models.UpdateComponentRequest:
+    description: Request body for updating an existing component
     properties:
       chart_type:
         type: string
@@ -2944,7 +2944,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Chart'
+            $ref: '#/definitions/models.Component'
         "400":
           description: Bad Request
           schema:
@@ -4500,17 +4500,17 @@ paths:
       summary: Get current user capabilities
       tags:
       - Auth
-  /charts:
+  /components:
     get:
-      description: Get a paginated list of charts (latest version of each) with optional
-        filtering
+      description: Get a paginated list of components (latest version of each) with
+        optional filtering
       parameters:
       - description: Filter by name (case-insensitive word-prefix match — `ts` matches
           `TS-Store` but not `Lights`)
         in: query
         name: name
         type: string
-      - description: Filter by chart type
+      - description: Filter by chart sub-type
         in: query
         name: chart_type
         type: string
@@ -4546,7 +4546,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.ChartListResponse'
+            $ref: '#/definitions/models.ComponentListResponse'
         "400":
           description: Bad Request
           schema:
@@ -4557,28 +4557,29 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: List charts
+      summary: List components
       tags:
-      - charts
+      - components
     post:
       consumes:
       - application/json
-      description: Create a new chart with data source binding and visualization config.
-        Creates as version 1 with status "final".
+      description: Create a new component (chart, control, or display) with optional
+        data source binding and visualization config. Creates as version 1 with status
+        "final".
       parameters:
-      - description: Chart data
+      - description: Component data
         in: body
-        name: chart
+        name: component
         required: true
         schema:
-          $ref: '#/definitions/models.CreateChartRequest'
+          $ref: '#/definitions/models.CreateComponentRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/models.Chart'
+            $ref: '#/definitions/models.Component'
         "400":
           description: Bad Request
           schema:
@@ -4589,14 +4590,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Create a new chart
+      summary: Create a new component
       tags:
-      - charts
-  /charts/{id}:
+      - components
+  /components/{id}:
     delete:
-      description: Delete all versions of a chart by ID
+      description: Delete all versions of a component by ID
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4614,13 +4615,13 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Delete a chart
+      summary: Delete a component
       tags:
-      - charts
+      - components
     get:
-      description: Get the latest version of a chart by ID
+      description: Get the latest version of a component by ID
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4631,7 +4632,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Chart'
+            $ref: '#/definitions/models.Component'
         "404":
           description: Not Found
           schema:
@@ -4642,32 +4643,32 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get a chart
+      summary: Get a component
       tags:
-      - charts
+      - components
     put:
       consumes:
       - application/json
-      description: Update the latest version of a chart in-place (for manual edits)
+      description: Update the latest version of a component in-place (for manual edits)
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
         type: string
-      - description: Chart update data
+      - description: Component update data
         in: body
-        name: chart
+        name: component
         required: true
         schema:
-          $ref: '#/definitions/models.UpdateChartRequest'
+          $ref: '#/definitions/models.UpdateComponentRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Chart'
+            $ref: '#/definitions/models.Component'
         "400":
           description: Bad Request
           schema:
@@ -4683,14 +4684,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Update a chart
+      summary: Update a component
       tags:
-      - charts
-  /charts/{id}/draft:
+      - components
+  /components/{id}/draft:
     delete:
-      description: Delete the draft version of a chart (if exists)
+      description: Delete the draft version of a component (if exists)
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4708,13 +4709,13 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Delete chart draft
+      summary: Delete component draft
       tags:
-      - charts
+      - components
     get:
-      description: Get the draft version of a chart (if exists)
+      description: Get the draft version of a component (if exists)
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4725,7 +4726,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Chart'
+            $ref: '#/definitions/models.Component'
         "404":
           description: Not Found
           schema:
@@ -4736,14 +4737,15 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get chart draft
+      summary: Get component draft
       tags:
-      - charts
-  /charts/{id}/version-info:
+      - components
+  /components/{id}/version-info:
     get:
-      description: Get version metadata for a chart (version count, has draft, etc.)
+      description: Get version metadata for a component (version count, has draft,
+        etc.)
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4754,7 +4756,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.ChartVersionInfo'
+            $ref: '#/definitions/models.ComponentVersionInfo'
         "404":
           description: Not Found
           schema:
@@ -4765,14 +4767,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get chart version info
+      summary: Get component version info
       tags:
-      - charts
-  /charts/{id}/versions:
+      - components
+  /components/{id}/versions:
     get:
-      description: Get all versions of a chart by ID
+      description: Get all versions of a component by ID
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4795,14 +4797,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: List chart versions
+      summary: List component versions
       tags:
-      - charts
-  /charts/{id}/versions/{version}:
+      - components
+  /components/{id}/versions/{version}:
     delete:
-      description: Delete a specific version of a chart
+      description: Delete a specific version of a component
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4825,13 +4827,13 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Delete a chart version
+      summary: Delete a component version
       tags:
-      - charts
+      - components
     get:
-      description: Get a specific version of a chart by ID and version number
+      description: Get a specific version of a component by ID and version number
       parameters:
-      - description: Chart ID
+      - description: Component ID
         in: path
         name: id
         required: true
@@ -4847,7 +4849,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Chart'
+            $ref: '#/definitions/models.Component'
         "404":
           description: Not Found
           schema:
@@ -4858,12 +4860,12 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get a specific chart version
+      summary: Get a specific component version
       tags:
-      - charts
-  /charts/summaries:
+      - components
+  /components/summaries:
     get:
-      description: Get lightweight chart summaries for card-based selection UI
+      description: Get lightweight component summaries for card-based selection UI
       parameters:
       - default: 50
         description: Maximum number of summaries
@@ -4877,16 +4879,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/models.ChartSummary'
+              $ref: '#/definitions/models.ComponentSummary'
             type: array
         "500":
           description: Internal Server Error
           schema:
             additionalProperties: true
             type: object
-      summary: Get chart summaries
+      summary: Get component summaries
       tags:
-      - charts
+      - components
   /config/system:
     get:
       description: Retrieves system-wide configuration including layout dimensions

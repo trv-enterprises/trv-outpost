@@ -30,7 +30,7 @@ type WSClient struct {
 // AISessionService handles AI session business logic
 type AISessionService struct {
 	sessionRepo   *repository.AISessionRepository
-	chartRepo     *repository.ChartRepository
+	chartRepo     *repository.ComponentRepository
 	dashboardRepo *repository.DashboardRepository
 
 	// WebSocket client management
@@ -39,7 +39,7 @@ type AISessionService struct {
 }
 
 // NewAISessionService creates a new AI session service
-func NewAISessionService(sessionRepo *repository.AISessionRepository, chartRepo *repository.ChartRepository, dashboardRepo *repository.DashboardRepository) *AISessionService {
+func NewAISessionService(sessionRepo *repository.AISessionRepository, chartRepo *repository.ComponentRepository, dashboardRepo *repository.DashboardRepository) *AISessionService {
 	return &AISessionService{
 		sessionRepo:   sessionRepo,
 		chartRepo:     chartRepo,
@@ -50,7 +50,7 @@ func NewAISessionService(sessionRepo *repository.AISessionRepository, chartRepo 
 
 // CreateSession creates a new AI session and chart draft
 func (s *AISessionService) CreateSession(ctx context.Context, req *models.CreateAISessionRequest) (*models.AISessionResponse, error) {
-	var chart *models.Chart
+	var chart *models.Component
 	var chartVersion int
 
 	if req.ChartID != "" {
@@ -90,10 +90,10 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 		}
 
 		chartVersion = maxVersion + 1
-		chart = &models.Chart{
+		chart = &models.Component{
 			ID:            latestFinal.ID,
 			Version:       chartVersion,
-			Status:        models.ChartStatusDraft,
+			Status:        models.ComponentStatusDraft,
 			Name:          latestFinal.Name,
 			Description:   latestFinal.Description,
 			ChartType:     latestFinal.ChartType,
@@ -109,10 +109,10 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 		// Creating new chart - create v1 draft with temporary unique name
 		// Users must rename the chart before saving (names starting with "Untitled" are rejected)
 		chartID := uuid.New().String()
-		chart = &models.Chart{
+		chart = &models.Component{
 			ID:      chartID,
 			Version: 1,
-			Status:  models.ChartStatusDraft,
+			Status:  models.ComponentStatusDraft,
 			Name:    fmt.Sprintf("Untitled Chart %s", chartID[:8]),
 		}
 		chartVersion = 1
@@ -177,7 +177,7 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 
 	return &models.AISessionResponse{
 		Session: session,
-		Chart:   chart,
+		Component: chart,
 	}, nil
 }
 
@@ -199,7 +199,7 @@ func (s *AISessionService) GetSession(ctx context.Context, id string) (*models.A
 
 	return &models.AISessionResponse{
 		Session: session,
-		Chart:   chart,
+		Component: chart,
 	}, nil
 }
 
@@ -266,7 +266,7 @@ func (s *AISessionService) AddAssistantMessage(ctx context.Context, sessionID st
 }
 
 // UpdateChartDraft updates the chart draft and broadcasts the change
-func (s *AISessionService) UpdateChartDraft(ctx context.Context, sessionID string, chart *models.Chart) error {
+func (s *AISessionService) UpdateChartDraft(ctx context.Context, sessionID string, chart *models.Component) error {
 	session, err := s.sessionRepo.FindByID(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("error retrieving session: %w", err)
@@ -282,9 +282,9 @@ func (s *AISessionService) UpdateChartDraft(ctx context.Context, sessionID strin
 
 	// Broadcast chart update event
 	s.BroadcastEvent(sessionID, &models.AIEvent{
-		Type: models.AIEventTypeChartUpdate,
-		Data: models.AIChartUpdateEvent{
-			Chart: chart,
+		Type: models.AIEventTypeComponentUpdate,
+		Data: models.AIComponentUpdateEvent{
+			Component: chart,
 		},
 		Timestamp: time.Now(),
 	})
@@ -293,7 +293,7 @@ func (s *AISessionService) UpdateChartDraft(ctx context.Context, sessionID strin
 }
 
 // SaveSession publishes the draft as a new final version
-func (s *AISessionService) SaveSession(ctx context.Context, sessionID string, chartName string) (*models.Chart, error) {
+func (s *AISessionService) SaveSession(ctx context.Context, sessionID string, chartName string) (*models.Component, error) {
 	session, err := s.sessionRepo.FindByID(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving session: %w", err)
@@ -332,7 +332,7 @@ func (s *AISessionService) SaveSession(ctx context.Context, sessionID string, ch
 	}
 
 	// Update draft to final
-	draft.Status = models.ChartStatusFinal
+	draft.Status = models.ComponentStatusFinal
 	draft.AISessionID = ""
 	if err := s.chartRepo.Update(ctx, draft.ID, draft.Version, draft); err != nil {
 		return nil, fmt.Errorf("error publishing draft: %w", err)

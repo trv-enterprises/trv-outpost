@@ -38,7 +38,7 @@ type ExportBundle struct {
 // @Description Entity arrays inside an export bundle, in dependency order
 type ExportObjects struct {
 	Connections []Datasource `json:"connections"`
-	Components  []Chart      `json:"components"`
+	Components  []Component  `json:"components"`
 	Dashboards  []Dashboard  `json:"dashboards"`
 }
 

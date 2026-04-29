@@ -34,11 +34,11 @@ var wsUpgrader = websocket.Upgrader{
 type AISessionHandler struct {
 	service  *service.AISessionService
 	agent    *ai.Agent
-	chartHub *hub.ChartHub
+	chartHub *hub.ComponentHub
 }
 
 // NewAISessionHandler creates a new AI session handler
-func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chartHub *hub.ChartHub) *AISessionHandler {
+func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chartHub *hub.ComponentHub) *AISessionHandler {
 	return &AISessionHandler{
 		service:  service,
 		agent:    agent,
@@ -231,7 +231,7 @@ func (h *AISessionHandler) HandleWebSocket(c *gin.Context) {
 	// This allows the connection to receive real-time updates when the chart is modified
 	if h.chartHub != nil && response.Session.ChartID != "" {
 		subscriberID := fmt.Sprintf("session-%s", id)
-		chartSubscriber := &hub.ChartSubscriber{
+		chartSubscriber := &hub.ComponentSubscriber{
 			ID:   subscriberID,
 			Conn: conn,
 		}
@@ -312,7 +312,7 @@ type SaveSessionRequest struct {
 // @Produce json
 // @Param id path string true "Session ID"
 // @Param request body SaveSessionRequest true "Chart name"
-// @Success 200 {object} models.Chart
+// @Success 200 {object} models.Component
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}

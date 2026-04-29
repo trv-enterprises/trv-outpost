@@ -82,19 +82,19 @@ type SendMessageRequest struct {
 // AISessionResponse represents the API response for session operations
 // @Description Response containing AI session state
 type AISessionResponse struct {
-	Session *AISession `json:"session"`
-	Chart   *Chart     `json:"chart,omitempty"` // Current chart state (draft)
+	Session   *AISession `json:"session"`
+	Component *Component `json:"component,omitempty"` // Current component state (draft)
 }
 
 // AIEventType constants for SSE events
 const (
-	AIEventTypeMessage     = "message"      // New message added
-	AIEventTypeToolCall    = "tool_call"    // Tool was called
-	AIEventTypeChartUpdate = "chart_update" // Chart was modified
-	AIEventTypeStatus      = "status"       // Session status changed
-	AIEventTypeError       = "error"        // Error occurred
-	AIEventTypeThinking    = "thinking"     // AI is processing
-	AIEventTypeStreaming   = "streaming"    // Streaming text content
+	AIEventTypeMessage         = "message"           // New message added
+	AIEventTypeToolCall        = "tool_call"         // Tool was called
+	AIEventTypeComponentUpdate = "component_update"  // Component was modified
+	AIEventTypeStatus          = "status"            // Session status changed
+	AIEventTypeError           = "error"             // Error occurred
+	AIEventTypeThinking        = "thinking"          // AI is processing
+	AIEventTypeStreaming       = "streaming"         // Streaming text content
 )
 
 // AIEvent represents an SSE event sent to the client
@@ -115,9 +115,9 @@ type AIToolCallEvent struct {
 	ToolCall ToolCall `json:"tool_call"`
 }
 
-// AIChartUpdateEvent is the data for a "chart_update" event
-type AIChartUpdateEvent struct {
-	Chart *Chart `json:"chart"`
+// AIComponentUpdateEvent is the data for a "component_update" event
+type AIComponentUpdateEvent struct {
+	Component *Component `json:"component"`
 }
 
 // AIStatusEvent is the data for a "status" event

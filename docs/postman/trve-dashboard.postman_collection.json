@@ -472,11 +472,11 @@
       ]
     },
     {
-      "name": "Charts",
-      "description": "charts endpoints (12).",
+      "name": "components",
+      "description": "components endpoints (12).",
       "item": [
         {
-          "name": "Create a new chart",
+          "name": "Create a new component",
           "request": {
             "method": "POST",
             "header": [
@@ -492,16 +492,16 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts",
+              "raw": "{{baseUrl}}/api/components",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts"
+                "components"
               ]
             },
-            "description": "Create a new chart\n\nCreate a new chart with data source binding and visualization config. Creates as version 1 with status \"final\".\n\n\nResponses: 201, 400, 500",
+            "description": "Create a new component\n\nCreate a new component (chart, control, or display) with optional data source binding and visualization config. Creates as version 1 with status \"final\".\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false\n}",
@@ -515,7 +515,7 @@
           "response": []
         },
         {
-          "name": "Delete a chart",
+          "name": "Delete a component",
           "request": {
             "method": "DELETE",
             "header": [
@@ -527,29 +527,29 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}",
+              "raw": "{{baseUrl}}/api/components/{id}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id"
               ],
               "variable": [
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "Delete a chart\n\nDelete all versions of a chart by ID\n\n\nResponses: 204, 404, 500"
+            "description": "Delete a component\n\nDelete all versions of a component by ID\n\n\nResponses: 204, 404, 500"
           },
           "response": []
         },
         {
-          "name": "Delete a chart version",
+          "name": "Delete a component version",
           "request": {
             "method": "DELETE",
             "header": [
@@ -561,13 +561,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}/versions/{version}",
+              "raw": "{{baseUrl}}/api/components/{id}/versions/{version}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id",
                 "versions",
                 ":version"
@@ -576,7 +576,7 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 },
                 {
                   "key": "version",
@@ -585,12 +585,12 @@
                 }
               ]
             },
-            "description": "Delete a chart version\n\nDelete a specific version of a chart\n\n\nResponses: 204, 404, 500"
+            "description": "Delete a component version\n\nDelete a specific version of a component\n\n\nResponses: 204, 404, 500"
           },
           "response": []
         },
         {
-          "name": "Delete chart draft",
+          "name": "Delete component draft",
           "request": {
             "method": "DELETE",
             "header": [
@@ -602,13 +602,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}/draft",
+              "raw": "{{baseUrl}}/api/components/{id}/draft",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id",
                 "draft"
               ],
@@ -616,16 +616,16 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "Delete chart draft\n\nDelete the draft version of a chart (if exists)\n\n\nResponses: 204, 404, 500"
+            "description": "Delete component draft\n\nDelete the draft version of a component (if exists)\n\n\nResponses: 204, 404, 500"
           },
           "response": []
         },
         {
-          "name": "Get a chart",
+          "name": "Get a component",
           "request": {
             "method": "GET",
             "header": [
@@ -637,29 +637,29 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}",
+              "raw": "{{baseUrl}}/api/components/{id}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id"
               ],
               "variable": [
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "Get a chart\n\nGet the latest version of a chart by ID\n\n\nResponses: 200, 404, 500"
+            "description": "Get a component\n\nGet the latest version of a component by ID\n\n\nResponses: 200, 404, 500"
           },
           "response": []
         },
         {
-          "name": "Get a specific chart version",
+          "name": "Get a specific component version",
           "request": {
             "method": "GET",
             "header": [
@@ -671,13 +671,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}/versions/{version}",
+              "raw": "{{baseUrl}}/api/components/{id}/versions/{version}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id",
                 "versions",
                 ":version"
@@ -686,7 +686,7 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 },
                 {
                   "key": "version",
@@ -695,12 +695,12 @@
                 }
               ]
             },
-            "description": "Get a specific chart version\n\nGet a specific version of a chart by ID and version number\n\n\nResponses: 200, 404, 500"
+            "description": "Get a specific component version\n\nGet a specific version of a component by ID and version number\n\n\nResponses: 200, 404, 500"
           },
           "response": []
         },
         {
-          "name": "Get chart draft",
+          "name": "Get component draft",
           "request": {
             "method": "GET",
             "header": [
@@ -712,13 +712,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}/draft",
+              "raw": "{{baseUrl}}/api/components/{id}/draft",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id",
                 "draft"
               ],
@@ -726,16 +726,16 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "Get chart draft\n\nGet the draft version of a chart (if exists)\n\n\nResponses: 200, 404, 500"
+            "description": "Get component draft\n\nGet the draft version of a component (if exists)\n\n\nResponses: 200, 404, 500"
           },
           "response": []
         },
         {
-          "name": "Get chart summaries",
+          "name": "Get component summaries",
           "request": {
             "method": "GET",
             "header": [
@@ -747,13 +747,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/summaries?limit=",
+              "raw": "{{baseUrl}}/api/components/summaries?limit=",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 "summaries"
               ],
               "query": [
@@ -765,12 +765,12 @@
                 }
               ]
             },
-            "description": "Get chart summaries\n\nGet lightweight chart summaries for card-based selection UI\n\n\nResponses: 200, 500"
+            "description": "Get component summaries\n\nGet lightweight component summaries for card-based selection UI\n\n\nResponses: 200, 500"
           },
           "response": []
         },
         {
-          "name": "Get chart version info",
+          "name": "Get component version info",
           "request": {
             "method": "GET",
             "header": [
@@ -782,13 +782,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}/version-info",
+              "raw": "{{baseUrl}}/api/components/{id}/version-info",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id",
                 "version-info"
               ],
@@ -796,16 +796,16 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "Get chart version info\n\nGet version metadata for a chart (version count, has draft, etc.)\n\n\nResponses: 200, 404, 500"
+            "description": "Get component version info\n\nGet version metadata for a component (version count, has draft, etc.)\n\n\nResponses: 200, 404, 500"
           },
           "response": []
         },
         {
-          "name": "List chart versions",
+          "name": "List component versions",
           "request": {
             "method": "GET",
             "header": [
@@ -817,13 +817,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}/versions",
+              "raw": "{{baseUrl}}/api/components/{id}/versions",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id",
                 "versions"
               ],
@@ -831,16 +831,16 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "List chart versions\n\nGet all versions of a chart by ID\n\n\nResponses: 200, 404, 500"
+            "description": "List component versions\n\nGet all versions of a component by ID\n\n\nResponses: 200, 404, 500"
           },
           "response": []
         },
         {
-          "name": "List charts",
+          "name": "List components",
           "request": {
             "method": "GET",
             "header": [
@@ -852,13 +852,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts?name=&chart_type=&component_type=&status=&datasource_id=&tag=&page=&page_size=",
+              "raw": "{{baseUrl}}/api/components?name=&chart_type=&component_type=&status=&datasource_id=&tag=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts"
+                "components"
               ],
               "query": [
                 {
@@ -870,7 +870,7 @@
                 {
                   "key": "chart_type",
                   "value": "",
-                  "description": "Filter by chart type",
+                  "description": "Filter by chart sub-type",
                   "disabled": true
                 },
                 {
@@ -911,12 +911,12 @@
                 }
               ]
             },
-            "description": "List charts\n\nGet a paginated list of charts (latest version of each) with optional filtering\n\n\nResponses: 200, 400, 500"
+            "description": "List components\n\nGet a paginated list of components (latest version of each) with optional filtering\n\n\nResponses: 200, 400, 500"
           },
           "response": []
         },
         {
-          "name": "Update a chart",
+          "name": "Update a component",
           "request": {
             "method": "PUT",
             "header": [
@@ -932,24 +932,24 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/charts/{id}",
+              "raw": "{{baseUrl}}/api/components/{id}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "charts",
+                "components",
                 ":id"
               ],
               "variable": [
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Chart ID"
+                  "description": "Component ID"
                 }
               ]
             },
-            "description": "Update a chart\n\nUpdate the latest version of a chart in-place (for manual edits)\n\n\nResponses: 200, 400, 404, 500",
+            "description": "Update a component\n\nUpdate the latest version of a component in-place (for manual edits)\n\n\nResponses: 200, 400, 404, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false\n}",

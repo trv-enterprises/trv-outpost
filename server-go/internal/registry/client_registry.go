@@ -14,9 +14,9 @@ import (
 type ConnectionType string
 
 const (
-	ConnectionTypeAISession         ConnectionType = "ai_session"
-	ConnectionTypeChartSubscription ConnectionType = "chart_subscription"
-	ConnectionTypeStream            ConnectionType = "stream"
+	ConnectionTypeAISession             ConnectionType = "ai_session"
+	ConnectionTypeComponentSubscription ConnectionType = "component_subscription"
+	ConnectionTypeStream                ConnectionType = "stream"
 	ConnectionTypeInbound           ConnectionType = "inbound"
 	ConnectionTypeStatusMonitor     ConnectionType = "status_monitor"
 	ConnectionTypeDebug             ConnectionType = "debug"

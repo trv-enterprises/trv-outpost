@@ -26,7 +26,7 @@ var CaseInsensitiveCollation = &options.Collation{
 var CollationCollections = []string{
 	"datasources",
 	"dashboards",
-	"charts",
+	"components",
 	"layouts",
 	"users",
 	"devices",
