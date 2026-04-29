@@ -1,9 +1,29 @@
 # Dashboard Server (Go) - Development Status
 
 ## Project Overview
-Go-based backend server for the TRVE Dashboards project. Replacing Node.js server with Go + MongoDB.
+Go-based backend server for the TRVE Dashboards project. Gin + MongoDB.
 
-## Current Status (2025-11-20)
+## Current state (2026-04-29)
+
+The phase-by-phase notes below are **historical** — they capture the
+original Node→Go migration in 2025 and have not been kept current.
+For up-to-date architecture, read `../docs/architecture/` and the
+parent `CLAUDE.md`. A short pointer to the post-rename state:
+
+- The umbrella entity is **Component** (`internal/models/component.go`).
+  `ComponentType` discriminates the three sub-types: `chart`,
+  `display`, `control`. The word "chart" in code/routes refers
+  strictly to the chart sub-type (ECharts visualizations).
+- The MongoDB collection is **`components`** (renamed from `charts`
+  in `migrations.go::migrateRenameChartsToComponents`).
+- HTTP routes live under `/api/components/*`; there is no
+  `/api/charts/*` alias.
+- AI tool names use `component` consistently
+  (`update_component_type`, `update_component_config`, etc.). The
+  one exception is `update_chart_options`, which configures
+  ECharts-specific options on chart sub-type components.
+
+## Historical phase log (2025)
 
 ### ✅ Phase 1: Foundation - COMPLETE
 - **Go Version**: 1.23.12 (via Homebrew)

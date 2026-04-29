@@ -182,65 +182,65 @@ class APIClient {
     return this.request('/health');
   }
 
-  // Chart endpoints
-  async getCharts(filters = {}) {
+  // Component endpoints (umbrella for chart, control, and display sub-types)
+  async getComponents(filters = {}) {
     const params = buildListParams({ page_size: 1000, ...filters });
-    return this.request(`/api/charts?${params}`);
+    return this.request(`/api/components?${params}`);
   }
 
-  async getChart(id) {
-    return this.request(`/api/charts/${id}`);
+  async getComponent(id) {
+    return this.request(`/api/components/${id}`);
   }
 
-  async getChartSummaries(limit = 50) {
-    return this.request(`/api/charts/summaries?limit=${limit}`);
+  async getComponentSummaries(limit = 50) {
+    return this.request(`/api/components/summaries?limit=${limit}`);
   }
 
-  async createChart(chart) {
-    return this.request('/api/charts', {
+  async createComponent(component) {
+    return this.request('/api/components', {
       method: 'POST',
-      body: JSON.stringify(chart),
+      body: JSON.stringify(component),
     });
   }
 
-  async updateChart(id, updates) {
-    return this.request(`/api/charts/${id}`, {
+  async updateComponent(id, updates) {
+    return this.request(`/api/components/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
     });
   }
 
-  async deleteChart(id) {
-    return this.request(`/api/charts/${id}`, {
+  async deleteComponent(id) {
+    return this.request(`/api/components/${id}`, {
       method: 'DELETE',
     });
   }
 
-  // Chart versioning endpoints
-  async getChartVersionInfo(id) {
-    return this.request(`/api/charts/${id}/version-info`);
+  // Component versioning endpoints
+  async getComponentVersionInfo(id) {
+    return this.request(`/api/components/${id}/version-info`);
   }
 
-  async getChartVersions(id) {
-    return this.request(`/api/charts/${id}/versions`);
+  async getComponentVersions(id) {
+    return this.request(`/api/components/${id}/versions`);
   }
 
-  async getChartVersion(id, version) {
-    return this.request(`/api/charts/${id}/versions/${version}`);
+  async getComponentVersion(id, version) {
+    return this.request(`/api/components/${id}/versions/${version}`);
   }
 
-  async deleteChartVersion(id, version) {
-    return this.request(`/api/charts/${id}/versions/${version}`, {
+  async deleteComponentVersion(id, version) {
+    return this.request(`/api/components/${id}/versions/${version}`, {
       method: 'DELETE',
     });
   }
 
-  async getChartDraft(id) {
-    return this.request(`/api/charts/${id}/draft`);
+  async getComponentDraft(id) {
+    return this.request(`/api/components/${id}/draft`);
   }
 
-  async deleteChartDraft(id) {
-    return this.request(`/api/charts/${id}/draft`, {
+  async deleteComponentDraft(id) {
+    return this.request(`/api/components/${id}/draft`, {
       method: 'DELETE',
     });
   }

@@ -28,7 +28,7 @@ function DesignModeNav({ location, navigate }) {
       description: 'Configure data connections'
     },
     {
-      path: '/design/charts',
+      path: '/design/components',
       icon: ChartLineSmooth,
       label: 'Components',
       description: 'Create and edit displays and controls'

@@ -106,7 +106,7 @@ function DashboardsListPage() {
       // Fetch dashboards, charts, and datasources in parallel (like DashboardTileViewPage)
       const [dashboardsRes, chartsRes, datasourcesRes] = await Promise.all([
         apiClient.getDashboards({ page: 1, page_size: 100 }),
-        apiClient.getCharts(),
+        apiClient.getComponents(),
         apiClient.getDatasources()
       ]);
 

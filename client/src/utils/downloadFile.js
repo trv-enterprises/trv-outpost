@@ -8,7 +8,7 @@
  * Take a Blob (or anything Blob-compatible) and trigger a browser-side
  * download under the given filename. Centralized so the export flow
  * doesn't duplicate the anchor-click-revoke dance that was already
- * living in ChartPanelWithActions.
+ * living in ComponentPanelWithActions.
  */
 export function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);

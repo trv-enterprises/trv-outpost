@@ -45,7 +45,7 @@ import {
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
-import ChartPanelWithActions from '../components/ChartPanelWithActions';
+import ComponentPanelWithActions from '../components/ComponentPanelWithActions';
 import { ControlRenderer } from '../components/controls';
 import FrigateCameraViewer from '../components/frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
@@ -53,7 +53,7 @@ import WeatherDisplay from '../components/weather/WeatherDisplay';
 import PanelEditMenu from '../components/PanelEditMenu';
 import PanelText from '../components/PanelText';
 import PanelTextEditor from '../components/PanelTextEditor';
-import ChartEditorModal from '../components/ChartEditorModal';
+import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient from '../api/client';
@@ -222,7 +222,7 @@ function DashboardViewerPage({ canDesign = false }) {
 
 
   // Chart editor modal state
-  const [chartEditorOpen, setChartEditorOpen] = useState(false);
+  const [componentEditorOpen, setComponentEditorOpen] = useState(false);
   const [editingPanelId, setEditingPanelId] = useState(null);
   const [editingChart, setEditingChart] = useState(null);
 
@@ -482,7 +482,7 @@ function DashboardViewerPage({ canDesign = false }) {
         const chartIds = [...new Set(data.panels.map(p => p.chart_id).filter(Boolean))];
         if (chartIds.length > 0) {
           const chartPromises = chartIds.map(chartId =>
-            apiClient.getChart(chartId).catch(() => null)
+            apiClient.getComponent(chartId).catch(() => null)
           );
           const charts = await Promise.all(chartPromises);
           const newChartsMap = {};
@@ -783,7 +783,7 @@ function DashboardViewerPage({ canDesign = false }) {
 
   const handleManualRefresh = () => {
     // Force every chart panel to re-mount and re-query. The keying
-    // pattern at <ChartPanelWithActions key={`${panel.chart_id}-${refreshKey}`}>
+    // pattern at <ComponentPanelWithActions key={`${panel.chart_id}-${refreshKey}`}>
     // tears down each useData instance and starts a fresh fetch.
     // We deliberately do NOT re-fetch the dashboard record here —
     // that would reload the panel layout and config, which is
@@ -1289,7 +1289,7 @@ function DashboardViewerPage({ canDesign = false }) {
 
   // ── Chart editor / component picker / AI preflight ───────────────
 
-  const openChartEditor = (panelId, chart = undefined) => {
+  const openComponentEditor = (panelId, chart = undefined) => {
     setEditingPanelId(panelId);
     if (chart === undefined) {
       const panel = editablePanels.find(p => p.id === panelId);
@@ -1297,12 +1297,12 @@ function DashboardViewerPage({ canDesign = false }) {
     } else {
       setEditingChart(chart);
     }
-    setChartEditorOpen(true);
+    setComponentEditorOpen(true);
 
   };
 
-  const closeChartEditor = () => {
-    setChartEditorOpen(false);
+  const closeComponentEditor = () => {
+    setComponentEditorOpen(false);
     setEditingPanelId(null);
     setEditingChart(null);
   };
@@ -1326,7 +1326,7 @@ function DashboardViewerPage({ canDesign = false }) {
     const panel = editablePanels.find(p => p.id === panelId);
     const chartId = panel?.chart_id;
     if (chartId) {
-      navigate(`/design/charts/ai/${chartId}`, {
+      navigate(`/design/components/ai/${chartId}`, {
         state: { from: `/view/dashboards/${id}`, dashboardId: id, panelId }
       });
     }
@@ -1417,7 +1417,7 @@ function DashboardViewerPage({ canDesign = false }) {
       console.error('Failed to save before AI navigation:', err);
     }
 
-    navigate('/design/charts/ai/new', {
+    navigate('/design/components/ai/new', {
       state: {
         from: `/view/dashboards/${id}`,
         dashboardId: id,
@@ -1835,11 +1835,11 @@ function DashboardViewerPage({ canDesign = false }) {
                               minimal
                               minimalIcon={hasChart ? <Edit size={14} /> : <Add size={14} />}
                               hasExisting={hasChart}
-                              onEdit={hasChart ? () => openChartEditor(panel.id) : undefined}
+                              onEdit={hasChart ? () => openComponentEditor(panel.id) : undefined}
                               onEditWithAI={hasChart ? () => openAIEditor(panel.id) : undefined}
                               onNew={() => {
                                 if (hasChart) updateEditablePanel(panel.id, { chart_id: null, text_config: null });
-                                openChartEditor(panel.id, null);
+                                openComponentEditor(panel.id, null);
                               }}
                               onNewWithAI={() => openAIPreflightModal(panel.id)}
                               onSelectExisting={() => openComponentPicker(panel.id, 'all')}
@@ -1895,7 +1895,7 @@ function DashboardViewerPage({ canDesign = false }) {
                             </div>
                           )}
                           <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''}`}>
-                            <ChartPanelWithActions
+                            <ComponentPanelWithActions
                               // Key includes chart.updated so a config-refresh poll
                               // that picks up a server-side chart edit forces this
                               // panel to remount and the DynamicComponentLoader to
@@ -1935,7 +1935,7 @@ function DashboardViewerPage({ canDesign = false }) {
                       <PanelEditMenu
                         buttonLabel="Add"
                         hasExisting={false}
-                        onNew={() => openChartEditor(panel.id, null)}
+                        onNew={() => openComponentEditor(panel.id, null)}
                         onNewWithAI={() => openAIPreflightModal(panel.id)}
                         onSelectExisting={() => openComponentPicker(panel.id, 'all')}
                         onText={() => setTextPanel(panel.id)}
@@ -1999,9 +1999,9 @@ function DashboardViewerPage({ canDesign = false }) {
       )}
 
       {/* Chart Editor Modal (edit mode) */}
-      <ChartEditorModal
-        open={chartEditorOpen}
-        onClose={closeChartEditor}
+      <ComponentEditorModal
+        open={componentEditorOpen}
+        onClose={closeComponentEditor}
         onSave={handleChartSave}
         chart={editingChart}
         panelId={editingPanelId}

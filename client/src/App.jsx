@@ -29,8 +29,8 @@ import { hydrateListPrefs } from './utils/listPrefs';
 import LoginPage from './pages/LoginPage';
 import ConnectionsPage from './pages/ConnectionsPage';
 import ConnectionDetailPage from './pages/ConnectionDetailPage';
-import ChartsListPage from './pages/ChartsListPage';
-import ChartDetailPage from './pages/ChartDetailPage';
+import ComponentsListPage from './pages/ComponentsListPage';
+import ComponentDetailPage from './pages/ComponentDetailPage';
 import AIBuilderPage from './pages/AIBuilderPage';
 import DashboardsListPage from './pages/DashboardsListPage';
 // Dashboard design/edit lives in DashboardViewerPage edit mode
@@ -531,9 +531,9 @@ function AppContent({ onDisconnect }) {
           {/* Legacy datasources routes - redirect to connections */}
           <Route path="/design/datasources" element={<Navigate to="/design/connections" replace />} />
           <Route path="/design/datasources/:id" element={<Navigate to="/design/connections" replace />} />
-          <Route path="/design/charts" element={<ChartsListPage />} />
-          <Route path="/design/charts/ai/:chartId" element={<AIBuilderPage />} />
-          <Route path="/design/charts/:id" element={<ChartDetailPage />} />
+          <Route path="/design/components" element={<ComponentsListPage />} />
+          <Route path="/design/components/ai/:chartId" element={<AIBuilderPage />} />
+          <Route path="/design/components/:id" element={<ComponentDetailPage />} />
           <Route path="/design/dashboards" element={<DashboardsListPage />} />
           <Route path="/design/dashboards/:id" element={<DashboardEditRedirect />} />
 
@@ -562,7 +562,6 @@ function AppContent({ onDisconnect }) {
           <Route path="/design/layouts/:id" element={<Navigate to="/design/dashboards" replace />} />
           <Route path="/nodes" element={<Navigate to="/design/connections" replace />} />
           <Route path="/queries" element={<Navigate to="/design/connections" replace />} />
-          <Route path="/chart-design" element={<Navigate to="/design/charts" replace />} />
         </Routes>
       </Content>
     </div>

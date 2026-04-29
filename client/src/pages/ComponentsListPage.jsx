@@ -36,17 +36,17 @@ import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
 import apiClient from '../api/client';
-import ChartDeleteDialog from '../components/ChartDeleteDialog';
+import ComponentDeleteDialog from '../components/ComponentDeleteDialog';
 import CreateMenu from '../components/CreateMenu';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
-import './ChartsListPage.scss';
+import './ComponentsListPage.scss';
 
 /**
- * ChartsListPage Component
+ * ComponentsListPage Component
  *
  * Displays list of all standalone charts with IBM Cloud-style design:
  * - Page header with title and description
@@ -54,7 +54,7 @@ import './ChartsListPage.scss';
  * - Sortable columns
  * - Click on row to edit, trash icon to delete
  */
-function ChartsListPage() {
+function ComponentsListPage() {
   const navigate = useNavigate();
 
   // Merge persisted per-user prefs (survives reload) with session filters (takes precedence)
@@ -288,7 +288,7 @@ function ChartsListPage() {
       setLoading(true);
       // Fetch charts, connections, and dashboards in parallel
       const [chartsData, connectionsData, dashboardsData] = await Promise.all([
-        apiClient.getCharts(),
+        apiClient.getComponents(),
         apiClient.getConnections(),
         apiClient.getDashboards()
       ]);
@@ -338,7 +338,7 @@ function ChartsListPage() {
 
   // Create menu handlers
   const handleCreate = () => {
-    navigate('/design/charts/new');
+    navigate('/design/components/new');
   };
 
   const handleCreateWithAI = () => {
@@ -352,22 +352,22 @@ function ChartsListPage() {
   // AI pre-flight modal handler
   const handleAIPreflightContinue = (context) => {
     setAiPreflightOpen(false);
-    navigate('/design/charts/ai/new', { state: context });
+    navigate('/design/components/ai/new', { state: context });
   };
 
   // Component picker handler
   const handlePickerSelect = (item) => {
     setPickerOpen(false);
-    navigate(`/design/charts/${item.id}`);
+    navigate(`/design/components/${item.id}`);
   };
 
   const handleRowClick = (chart) => {
-    navigate(`/design/charts/${chart.id}`);
+    navigate(`/design/components/${chart.id}`);
   };
 
   const handleAIEdit = (e, chart) => {
     e.stopPropagation();
-    navigate(`/design/charts/ai/${chart.id}`);
+    navigate(`/design/components/ai/${chart.id}`);
   };
 
   const handleDelete = (e, chart) => {
@@ -574,7 +574,7 @@ function ChartsListPage() {
 
   if (loading) {
     return (
-      <div className="charts-list-page">
+      <div className="components-list-page">
         <Loading description="Loading components..." withOverlay={false} />
       </div>
     );
@@ -582,14 +582,14 @@ function ChartsListPage() {
 
   if (error) {
     return (
-      <div className="charts-list-page">
+      <div className="components-list-page">
         <div className="error-message">Error: {error}</div>
       </div>
     );
   }
 
   return (
-    <div className="charts-list-page">
+    <div className="components-list-page">
       {/* Page Header */}
       <div className="page-header">
         <h1>Components</h1>
@@ -1005,7 +1005,7 @@ function ChartsListPage() {
       )}
 
       {/* Delete Confirmation Dialog */}
-      <ChartDeleteDialog
+      <ComponentDeleteDialog
         open={deleteDialogOpen}
         chart={chartToDelete}
         onClose={handleDeleteClose}
@@ -1031,4 +1031,4 @@ function ChartsListPage() {
   );
 }
 
-export default ChartsListPage;
+export default ComponentsListPage;

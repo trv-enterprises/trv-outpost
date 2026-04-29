@@ -22,10 +22,11 @@ See the `release-deploy` skill for the authoritative runbook (tagging, image bui
 - Use "connection" (not "data source" or "datasource") for external data connections in UI text
 - Internal code can use `datasource` for backwards compatibility with existing database records
 - API endpoints: `/api/connections` is preferred, `/api/datasources` kept as deprecated alias
-- Use "display" (not "chart") for data visualization components in UI text
-- Use "control" for interactive components (buttons, sliders, toggles)
-- Internal code uses `component_type: 'chart'` in DB for displays (backward compatibility), but UI shows "Display"
-- "Component" is the umbrella term for both displays and controls
+- **Component** is the umbrella entity. Three sub-types via `component_type`:
+  - `chart` — ECharts visualizations (bar/line/pie/scatter/gauge/number/dataview/custom). Discriminated further by `chart_type`.
+  - `display` — non-chart visual components (frigate cameras, frigate alerts, weather). Discriminated by `display_type`.
+  - `control` — interactive components (buttons, toggles, sliders, plugs, dimmers). Discriminated by `control_type`.
+- The word "chart" in UI/code refers strictly to `component_type=chart`. Don't use "chart" as a synonym for "component".
 - **Namespace** = the conflict-domain grouping on connections/components/dashboards. Uniqueness is `(namespace, name)` — two namespaces can each have an entity called `Home`. Slug-safe strings like `default`, `tviviano-homelab`. Namespaces are first-class records (name, description, color) managed at `/manage/namespaces`; active namespace is a per-user preference keyed on `active_namespace` in app_config. **Don't conflate with tags** — tags are descriptive (`environment:prod`), namespace is structural.
 
 ### 3. Full-Stack Awareness
@@ -283,7 +284,7 @@ Use the most abstract (semantic) token available. This ensures theme compatibili
 Create and configure dashboard components:
 - **Layouts** (`/design/layouts`) - Define cell-grid layouts with panels (32 × 32 px cells; cols/rows derive from canvas)
 - **Connections** (`/design/connections`) - Configure SQL, API, CSV, WebSocket connections
-- **Components** (`/design/charts`) - Build displays (charts, gauges, tables) and controls (buttons, sliders)
+- **Components** (`/design/components`) - Build charts, displays, and controls. Three sub-types: `chart` (ECharts visualizations — bar/line/pie/etc.), `display` (cameras, weather, frigate alerts), `control` (buttons, toggles, sliders).
 - **Dashboards** (`/design/dashboards`) - Combine components with layouts
 
 ### View Mode (`/view/*`)
@@ -362,18 +363,18 @@ dashboard/
 | **Controls** |||
 | POST | `/api/controls/:id/execute` | Execute control command |
 | **Components** |||
-| GET | `/api/components` | List components |
-| GET | `/api/components/systems` | Get system hierarchy |
+| GET | `/api/components` | List components (chart, display, and control sub-types) |
+| GET | `/api/components/summaries` | Lightweight summaries for selection cards |
 | POST | `/api/components` | Create component |
-| GET | `/api/components/:id` | Get component |
+| GET | `/api/components/:id` | Get component (latest version) |
 | PUT | `/api/components/:id` | Update component |
-| DELETE | `/api/components/:id` | Delete component |
-| **Charts** |||
-| GET | `/api/charts` | List charts |
-| POST | `/api/charts` | Create chart |
-| GET | `/api/charts/:id` | Get chart |
-| PUT | `/api/charts/:id` | Update chart |
-| DELETE | `/api/charts/:id` | Delete chart |
+| DELETE | `/api/components/:id` | Delete component (all versions) |
+| GET | `/api/components/:id/versions` | List component versions |
+| GET | `/api/components/:id/versions/:version` | Get a specific version |
+| DELETE | `/api/components/:id/versions/:version` | Delete a specific version |
+| GET | `/api/components/:id/version-info` | Version metadata (count, has draft) |
+| GET | `/api/components/:id/draft` | Get the draft version (if any) |
+| DELETE | `/api/components/:id/draft` | Delete the draft version |
 | **Dashboards** |||
 | GET | `/api/dashboards` | List dashboards |
 | POST | `/api/dashboards` | Create dashboard |
@@ -581,7 +582,7 @@ Controls are interactive UI elements (buttons, toggles, sliders, plugs, dimmers)
    - Add `export { default as ControlMyType } from './ControlMyType'`
    - (This triggers the self-registration — no changes to ControlRenderer needed)
 
-4. **Backend**: Add the control type constant in `server-go/internal/models/chart.go` (`ControlType*` constants)
+4. **Backend**: Add the control type constant in `server-go/internal/models/component.go` (`ControlType*` constants)
 
 5. **AI support**: Update `update_control_config` tool enum in `server-go/internal/ai/tools.go` and control types list in `server-go/internal/ai/system_prompt.go`
 
@@ -649,7 +650,7 @@ for fit-mode behavior and layout-dimension presets.
 - **Prometheus Connection**: Full Prometheus integration with schema discovery, visual PromQL builder, and AI tool support
 - **EdgeLake Connection**: Full EdgeLake integration with distributed query support, cascading schema discovery (database → table → columns), visual query builder, and AI tool support
 - **Terminology Rename**: "Data Sources" renamed to "Connections" throughout UI and API (`/api/connections`)
-- **Terminology Rename**: "Chart" renamed to "Display" in UI (DB still uses `component_type: 'chart'` for backward compatibility)
+- **Terminology Rename**: "Chart" entity renamed to "Component" (umbrella for chart/display/control sub-types). Routes, files, types, and the MongoDB collection (`charts` → `components`) all moved. The word "chart" is now reserved for `component_type=chart` (ECharts visualizations).
 - **MQTT Connection**: Full MQTT broker integration with Eclipse Paho v2, bidirectional pub/sub, visual topic selector with broker discovery, multi-topic subscription, and streaming support via SSE
 - **Type Availability Gating** (v0.6.0): Admin-managed `enabled_types` setting toggles connection / chart / control / display types and integrations per deployment. Frigate and Weather are integrations; admins can enable/disable a whole bundle from Manage → Settings → Type Availability. Filter applies to picker UIs, AI agent prompt + tool enums, and MCP catalog. Existing dashboard components keep rendering even when their type is disabled.
 - **WebSocket Bidirectional UI** (v0.6.0): Connection editor exposes a Bidirectional checkbox for WebSocket connections. When set, resolves to `stream.websocket-bidir` so the connection gains write capability for control commands.

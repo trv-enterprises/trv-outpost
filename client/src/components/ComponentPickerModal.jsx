@@ -87,7 +87,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const data = await apiClient.getCharts();
+      const data = await apiClient.getComponents();
       // Filter to final versions only
       const finals = (data.charts || []).filter(c => c.status === 'final');
       setItems(finals);

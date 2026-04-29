@@ -124,7 +124,7 @@ function ConnectionsPage() {
       // Fetch connections and charts in parallel
       const [connectionsData, chartsData] = await Promise.all([
         apiClient.getConnections(),
-        apiClient.getCharts()
+        apiClient.getComponents()
       ]);
 
       // API returns 'datasources' key for backwards compatibility

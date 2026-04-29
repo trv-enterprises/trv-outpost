@@ -7,10 +7,10 @@ import html2canvas from 'html2canvas';
 import { IconButton, OverflowMenu, OverflowMenuItem } from '@carbon/react';
 import { DataTable, Download } from '@carbon/icons-react';
 import DynamicComponentLoader, { DataContext } from './DynamicComponentLoader';
-import ChartDataGridModal from './ChartDataGridModal';
+import ComponentDataGridModal from './ComponentDataGridModal';
 
 /**
- * ChartPanelWithActions
+ * ComponentPanelWithActions
  *
  * Wraps DynamicComponentLoader with a small floating action row
  * (top-right of the panel) and the chart-data grid modal. The icon row
@@ -156,7 +156,7 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
   );
 }
 
-export default function ChartPanelWithActions({ chart, loaderProps }) {
+export default function ComponentPanelWithActions({ chart, loaderProps }) {
   const [dataModalOpen, setDataModalOpen] = useState(false);
   const captureRef = useRef(null);
   const showDataModalAction = !!chart && !SKIP_TABLE_MODAL_CHART_TYPES.has(chart.chart_type);
@@ -176,7 +176,7 @@ export default function ChartPanelWithActions({ chart, loaderProps }) {
               showDataModalAction={showDataModalAction}
             />
             {dataModalOpen && (
-              <ChartDataGridModal
+              <ComponentDataGridModal
                 open={dataModalOpen}
                 chart={chart}
                 onClose={() => setDataModalOpen(false)}

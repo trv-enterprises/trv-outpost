@@ -10,7 +10,7 @@
  *
  * Used by:
  * - AIBuilderModal (preview panel)
- * - ChartEditor (preview tab)
+ * - ComponentEditor (preview tab)
  * - DashboardViewerPage (rendering charts)
  */
 

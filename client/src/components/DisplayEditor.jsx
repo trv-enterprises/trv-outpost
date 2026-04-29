@@ -30,7 +30,7 @@ const DISPLAY_TYPES = [
 /**
  * DisplayEditor Component
  *
- * Generic display config editor shown in ChartEditor when componentType === 'display'.
+ * Generic display config editor shown in ComponentEditor when componentType === 'display'.
  * Delegates to subtype-specific fields based on display_type.
  * Currently only supports Frigate Camera — future subtypes (datatable, iframe) will be added here.
  */

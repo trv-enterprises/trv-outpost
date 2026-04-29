@@ -5,17 +5,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Modal, RadioButton, RadioButtonGroup, Loading } from '@carbon/react';
 import apiClient from '../api/client';
-import './ChartDeleteDialog.scss';
+import './ComponentDeleteDialog.scss';
 
 /**
- * ChartDeleteDialog Component
+ * ComponentDeleteDialog Component
  *
  * Version-aware delete dialog for charts with three variants:
  * 1. Draft: Simple discard confirmation
  * 2. Final with previous versions: Choice dialog (delete this version or all)
  * 3. Final single version: Simple permanent delete confirmation
  */
-function ChartDeleteDialog({ open, chart, onClose, onDelete }) {
+function ComponentDeleteDialog({ open, chart, onClose, onDelete }) {
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [versionInfo, setVersionInfo] = useState(null);
@@ -27,7 +27,7 @@ function ChartDeleteDialog({ open, chart, onClose, onDelete }) {
     setLoading(true);
     setError(null);
     try {
-      const info = await apiClient.getChartVersionInfo(chart.id);
+      const info = await apiClient.getComponentVersionInfo(chart.id);
       setVersionInfo(info);
     } catch (err) {
       setError(err.message);
@@ -57,13 +57,13 @@ function ChartDeleteDialog({ open, chart, onClose, onDelete }) {
 
       if (isDraft) {
         // Delete draft
-        await apiClient.deleteChartDraft(chart.id);
+        await apiClient.deleteComponentDraft(chart.id);
       } else if (deleteOption === 'all' || !hasMultipleVersions) {
         // Delete all versions (or the only version)
-        await apiClient.deleteChart(chart.id);
+        await apiClient.deleteComponent(chart.id);
       } else {
         // Delete specific version
-        await apiClient.deleteChartVersion(chart.id, versionInfo.version);
+        await apiClient.deleteComponentVersion(chart.id, versionInfo.version);
       }
 
       onDelete();
@@ -202,7 +202,7 @@ function ChartDeleteDialog({ open, chart, onClose, onDelete }) {
       primaryButtonDisabled={loading || deleting}
       danger={!isDraft || !hasPreviousVersion}
       size="sm"
-      className="chart-delete-dialog"
+      className="component-delete-dialog"
     >
       {getDialogContent()}
       {error && versionInfo && (
@@ -214,4 +214,4 @@ function ChartDeleteDialog({ open, chart, onClose, onDelete }) {
   );
 }
 
-export default ChartDeleteDialog;
+export default ComponentDeleteDialog;

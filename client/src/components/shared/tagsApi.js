@@ -10,7 +10,7 @@
  * Call `invalidateTagsCache()` after any create/update that may have added
  * or removed a tag so the next TagInput / TagFilter mount picks up the
  * fresh pool. This is especially important when editing inside modals:
- * ChartEditor inside ChartEditorModal uses a `key` bump to remount on
+ * ComponentEditor inside ComponentEditorModal uses a `key` bump to remount on
  * every open, so invalidating here is sufficient.
  */
 let cache = null;

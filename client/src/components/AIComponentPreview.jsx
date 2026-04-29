@@ -40,7 +40,7 @@ const FILTER_OP_LABELS = {
  * AIComponentPreview Component
  *
  * Read-only preview of a component configuration created by AI.
- * Similar layout to ChartEditor but without editing capabilities,
+ * Similar layout to ComponentEditor but without editing capabilities,
  * except for the component name which can be edited inline.
  */
 function AIComponentPreview({ component, onNameChange }) {
@@ -119,7 +119,7 @@ function AIComponentPreview({ component, onNameChange }) {
     }
     // Check for duplicate names
     try {
-      const response = await apiClient.getCharts();
+      const response = await apiClient.getComponents();
       const charts = response.charts || [];
       const duplicate = charts.find(c =>
         c.name.toLowerCase() === newName.toLowerCase() &&

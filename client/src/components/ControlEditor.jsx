@@ -65,7 +65,7 @@ export { TILE_ICONS };
  * ControlEditor Component
  *
  * Editor for configuring control components (buttons, toggles, sliders, text inputs).
- * Used within ChartEditor when component_type="control".
+ * Used within ComponentEditor when component_type="control".
  */
 
 function PayloadEditor({ payload, onChange }) {

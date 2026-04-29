@@ -6,19 +6,19 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Loading, Modal } from '@carbon/react';
 import { Save, Close, ArrowLeft } from '@carbon/icons-react';
-import ChartEditor from '../components/ChartEditor';
+import ComponentEditor from '../components/ComponentEditor';
 import apiClient from '../api/client';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
-import './ChartDetailPage.scss';
+import './ComponentDetailPage.scss';
 
 /**
- * ChartDetailPage Component
+ * ComponentDetailPage Component
  *
  * Standalone page for creating/editing charts and controls.
- * Uses shared ChartEditor component.
+ * Uses shared ComponentEditor component.
  * Pass ?type=control to create a control instead of a chart.
  */
-function ChartDetailPage() {
+function ComponentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -50,7 +50,7 @@ function ChartDetailPage() {
   const fetchChart = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.getChart(id);
+      const data = await apiClient.getComponent(id);
       setChart(data);
     } catch (err) {
       setError(err.message);
@@ -71,14 +71,14 @@ function ChartDetailPage() {
     setSaving(true);
     try {
       if (isCreateMode) {
-        await apiClient.createChart(pendingPayload);
+        await apiClient.createComponent(pendingPayload);
       } else {
-        await apiClient.updateChart(id, pendingPayload);
+        await apiClient.updateComponent(id, pendingPayload);
       }
 
       invalidateTagsCache();
       setShowSaveModal(false);
-      navigate('/design/charts');
+      navigate('/design/components');
     } catch (err) {
       alert(`Error: ${err.message}`);
     } finally {
@@ -91,12 +91,12 @@ function ChartDetailPage() {
       setShowDiscardModal(true);
       return;
     }
-    navigate('/design/charts');
+    navigate('/design/components');
   };
 
   const confirmDiscard = () => {
     setShowDiscardModal(false);
-    navigate('/design/charts');
+    navigate('/design/components');
   };
 
   const handleSaveClick = () => {
@@ -107,7 +107,7 @@ function ChartDetailPage() {
 
   if (loading) {
     return (
-      <div className="chart-detail-page">
+      <div className="component-detail-page">
         <Loading description="Loading chart..." withOverlay={false} />
       </div>
     );
@@ -115,22 +115,22 @@ function ChartDetailPage() {
 
   if (error) {
     return (
-      <div className="chart-detail-page">
+      <div className="component-detail-page">
         <div className="error-message">Error: {error}</div>
-        <Button onClick={() => navigate('/design/charts')}>Back to Charts</Button>
+        <Button onClick={() => navigate('/design/components')}>Back to Charts</Button>
       </div>
     );
   }
 
   return (
-    <div className="chart-detail-page">
+    <div className="component-detail-page">
       {/* Page header bar with title and actions */}
       <div className="page-header-bar">
         <div className="header-left">
           <Button
             kind="ghost"
             renderIcon={ArrowLeft}
-            onClick={() => navigate('/design/charts')}
+            onClick={() => navigate('/design/components')}
             size="md"
           >
             Back
@@ -158,14 +158,14 @@ function ChartDetailPage() {
         </div>
       </div>
 
-      <ChartEditor
+      <ComponentEditor
         ref={editorRef}
         chart={chart}
         onSave={handleSave}
         onCancel={handleCancel}
         saving={saving}
         showActions={false}
-        className="chart-detail-editor"
+        className="component-detail-editor"
         onValidityChange={setIsValid}
       />
 
@@ -206,4 +206,4 @@ function ChartDetailPage() {
   );
 }
 
-export default ChartDetailPage;
+export default ComponentDetailPage;

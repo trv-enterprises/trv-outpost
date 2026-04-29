@@ -4,25 +4,25 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Modal } from '@carbon/react';
-import ChartEditor from './ChartEditor';
+import ComponentEditor from './ComponentEditor';
 import apiClient from '../api/client';
 import { invalidateTagsCache } from './shared/tagsApi';
-import './ChartEditorModal.scss';
+import './ComponentEditorModal.scss';
 
 /**
- * ChartEditorModal Component
+ * ComponentEditorModal Component
  *
- * Modal wrapper for ChartEditor component.
+ * Modal wrapper for ComponentEditor component.
  * Used in dashboard editing to create/edit charts inline.
  */
-function ChartEditorModal({ open, onClose, onSave, chart, panelId }) {
+function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const editorRef = useRef(null);
 
-  // Reset state when modal opens — increment key to force ChartEditor remount
+  // Reset state when modal opens — increment key to force ComponentEditor remount
   useEffect(() => {
     if (open) {
       setSaving(false);
@@ -38,10 +38,10 @@ function ChartEditorModal({ open, onClose, onSave, chart, panelId }) {
       let savedChart;
       if (chart?.id) {
         // Update existing chart
-        savedChart = await apiClient.updateChart(chart.id, chartPayload);
+        savedChart = await apiClient.updateComponent(chart.id, chartPayload);
       } else {
         // Create new chart
-        savedChart = await apiClient.createChart(chartPayload);
+        savedChart = await apiClient.createComponent(chartPayload);
       }
 
       // Drop the shared tag cache so the next TagInput/TagFilter mount
@@ -84,12 +84,12 @@ function ChartEditorModal({ open, onClose, onSave, chart, panelId }) {
         secondaryButtonText="Cancel"
         primaryButtonDisabled={saving || !isValid}
         size="lg"
-        className="chart-editor-modal"
+        className="component-editor-modal"
         preventCloseOnClickOutside
         isFullWidth
       >
-        <div className="chart-editor-content">
-          <ChartEditor
+        <div className="component-editor-content">
+          <ComponentEditor
             key={editorKey}
             ref={editorRef}
             chart={chart}
@@ -125,4 +125,4 @@ function ChartEditorModal({ open, onClose, onSave, chart, panelId }) {
   );
 }
 
-export default ChartEditorModal;
+export default ComponentEditorModal;

@@ -4,7 +4,7 @@
 
 @use '@carbon/react/scss/spacing' as spacing;
 
-.chart-detail-page {
+.component-detail-page {
   background-color: var(--cds-background);
   height: 100%;
   display: flex;
@@ -56,16 +56,16 @@
   }
 
   // Chart editor container - full width scroll, content constrained
-  .chart-detail-editor {
+  .component-detail-editor {
     padding: spacing.$spacing-05;
     flex: 1;
     overflow: auto;
 
-    // Constrain chart-editor content sections to max-width
+    // Constrain component-editor content sections to max-width
     .chart-metadata-section,
-    .chart-editor-switcher-wrapper,
+    .component-editor-switcher-wrapper,
     .tab-content {
-      max-width: var(--chart-editor-max-width, 1200px);
+      max-width: var(--component-editor-max-width, 1200px);
     }
   }
 

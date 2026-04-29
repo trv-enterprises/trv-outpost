@@ -12,7 +12,7 @@ import './CreateMenu.scss';
  * CreateMenu Component
  *
  * Simple dropdown menu for creating components with three options:
- * - Create: Opens ChartEditor (which has ContentSwitcher for Display/Control)
+ * - Create: Opens ComponentEditor (which has ContentSwitcher for Display/Control)
  * - Create with AI: Opens AI Pre-flight modal
  * - From Existing: Opens ComponentPickerModal
  *

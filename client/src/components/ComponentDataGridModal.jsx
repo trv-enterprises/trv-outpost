@@ -10,7 +10,7 @@ import { DataContext } from './DynamicComponentLoader';
 import { formatCellValue } from '../utils/dataTransforms';
 
 /**
- * ChartDataGridModal
+ * ComponentDataGridModal
  *
  * Shows the chart's underlying data as an AG Grid table. Reads the live
  * data from DataContext provided by DynamicComponentLoader — zero
@@ -21,7 +21,7 @@ import { formatCellValue } from '../utils/dataTransforms';
  * inside the chart panel); otherwise DataContext is null and the modal
  * shows an empty-state notice.
  */
-export default function ChartDataGridModal({ open, chart, onClose }) {
+export default function ComponentDataGridModal({ open, chart, onClose }) {
   const ctx = useContext(DataContext);
   const data = ctx?.data;
   const loading = ctx?.loading;

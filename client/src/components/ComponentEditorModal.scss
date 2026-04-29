@@ -5,7 +5,7 @@
 @use '@carbon/react/scss/spacing' as spacing;
 
 // Chart editor modal styles
-.chart-editor-modal {
+.component-editor-modal {
   // Dark backdrop overlay
   &.cds--modal {
     background-color: rgba(0, 0, 0, 0.65);
@@ -98,15 +98,15 @@
 
 }
 
-.chart-editor-content {
+.component-editor-content {
   display: flex;
   flex-direction: column;
   padding: spacing.$spacing-05;
   padding-bottom: spacing.$spacing-07;
   background-color: #161616;
 
-  // ContentSwitcher wrapper for border - matches ChartEditor.scss
-  .chart-editor-switcher-wrapper {
+  // ContentSwitcher wrapper for border - matches ComponentEditor.scss
+  .component-editor-switcher-wrapper {
     margin-bottom: spacing.$spacing-05;
     display: flex;
     width: fit-content;
@@ -116,7 +116,7 @@
   }
 
   // ContentSwitcher styling - matches Carbon g100 theme
-  .chart-editor-switcher.cds--content-switcher {
+  .component-editor-switcher.cds--content-switcher {
     background-color: transparent;
     width: auto;
     flex: 0 0 auto;

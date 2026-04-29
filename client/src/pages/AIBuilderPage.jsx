@@ -40,8 +40,8 @@ import './AIBuilderPage.scss';
  * - Save/discard actions
  *
  * Routes:
- * - /design/charts/ai/new - Create new chart with AI
- * - /design/charts/ai/:chartId - Edit existing chart with AI
+ * - /design/components/ai/new - Create new chart with AI
+ * - /design/components/ai/:chartId - Edit existing chart with AI
  */
 function AIBuilderPage() {
   const { chartId } = useParams();
@@ -65,7 +65,7 @@ function AIBuilderPage() {
   } = preflightContext;
 
   // Determine return path - either from state (if coming from dashboard) or default to charts list
-  const returnPath = preflightContext.from || '/design/charts';
+  const returnPath = preflightContext.from || '/design/components';
 
   const [input, setInput] = useState('');
   const [componentName, setComponentName] = useState(preflightName || '');
@@ -202,7 +202,7 @@ function AIBuilderPage() {
     // This catches orphaned drafts from previous sessions that weren't properly cleaned up
     if (!isNewChart && chartId) {
       try {
-        await apiClient.deleteChartDraft(chartId);
+        await apiClient.deleteComponentDraft(chartId);
       } catch {
         // 404 is expected if no draft exists - ignore silently
       }
