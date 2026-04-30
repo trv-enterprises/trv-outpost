@@ -34,7 +34,7 @@ import './EdgeLakeQueryBuilder.scss';
  * - Execute query
  */
 
-function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, onExecute, initialQuery, initialDatabase }) {
+function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, onExecute, initialQuery: _initialQuery, initialDatabase }) {
   // Schema state
   const [databases, setDatabases] = useState([]);
   const [tables, setTables] = useState([]);

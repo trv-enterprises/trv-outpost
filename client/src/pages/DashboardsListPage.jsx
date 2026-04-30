@@ -34,7 +34,6 @@ import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
-import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
 import './DashboardsListPage.scss';
@@ -119,9 +118,9 @@ function DashboardsListPage() {
       }
 
       // Build chart lookup (chart_id -> chart)
-      if (chartsRes.charts) {
+      if (chartsRes.components) {
         const chartMap = {};
-        chartsRes.charts.forEach(chart => {
+        chartsRes.components.forEach(chart => {
           chartMap[chart.id] = chart;
         });
         setCharts(chartMap);

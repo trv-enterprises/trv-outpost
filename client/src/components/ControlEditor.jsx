@@ -81,7 +81,7 @@ function PayloadEditor({ payload, onChange }) {
       const parsed = JSON.parse(raw);
       setError(null);
       onChange(parsed);
-    } catch (err) {
+    } catch {
       setError('Invalid JSON');
     }
   };
@@ -335,7 +335,7 @@ function ControlEditor({
   };
 
   // Parse payload template from JSON string
-  const parsePayloadTemplate = (jsonStr) => {
+  const _parsePayloadTemplate = (jsonStr) => {
     try {
       return JSON.parse(jsonStr);
     } catch {

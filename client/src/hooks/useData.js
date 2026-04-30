@@ -420,7 +420,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
               handleConnectionError(() => {}); // Will be handled by manager's reconnect
             }
           },
-          onReconnecting: (attempts, delay) => {
+          onReconnecting: (_attempts, _delay) => {
             if (mountedRef.current) {
               setReconnecting(true);
             }

@@ -162,7 +162,7 @@ function DashboardViewerPage({ canDesign = false }) {
   // ── Edit mode state ──────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
   const [editablePanels, setEditablePanels] = useState([]);
-  const [originalPanels, setOriginalPanels] = useState([]);
+  const [, setOriginalPanels] = useState([]);
   const [editHasChanges, setEditHasChanges] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   // Mode-switch intercept when the user has dirty edits. The pendingResolve

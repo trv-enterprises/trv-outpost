@@ -117,7 +117,7 @@ function AIBuilderModal({
       const result = await saveSession(chartName.trim());
       onSave?.(result);
       onClose();
-    } catch (err) {
+    } catch {
       // Error is handled by the hook
     } finally {
       setSaving(false);

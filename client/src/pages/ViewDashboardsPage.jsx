@@ -44,7 +44,7 @@ function ViewDashboardsPage() {
       if (config.settings?.default_dashboard_id) {
         setDefaultDashboardId(config.settings.default_dashboard_id);
       }
-    } catch (err) {
+    } catch {
       // Ignore errors - user may not have config yet
       console.log('No user config found');
     }

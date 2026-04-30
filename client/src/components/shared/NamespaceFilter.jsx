@@ -32,7 +32,7 @@ export default function NamespaceFilter({
   selected = [],
   onChange,
   id = 'namespace-filter',
-  label = 'Filter by namespace',
+  label: _label = 'Filter by namespace',
 }) {
   const { namespaces } = useNamespaces();
 

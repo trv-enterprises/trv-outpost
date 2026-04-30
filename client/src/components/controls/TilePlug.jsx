@@ -59,9 +59,12 @@ function TilePlug({ control, readOnly = false, onSuccess, onError }) {
       return;
     }
     if (!tileRef.current) return;
-    // Use the tile button's rect (the inner div), not the wrapper
+    // Use the tile button's rect (the inner div), not the wrapper.
+    // Fall back to the wrapper rect if the inner button isn't there.
     const tileButton = tileRef.current.querySelector('.tile-plug');
-    const btnRect = tileButton ? tileButton.getBoundingClientRect() : rect;
+    const btnRect = tileButton
+      ? tileButton.getBoundingClientRect()
+      : tileRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const btnCenterX = btnRect.left + btnRect.width / 2;

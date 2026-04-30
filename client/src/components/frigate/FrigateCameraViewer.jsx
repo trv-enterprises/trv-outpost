@@ -97,7 +97,7 @@ function FrigateCameraViewer({ config }) {
         if (playerRef.current.source) {
           playerRef.current.source.destroy();
         }
-      } catch (e) {
+      } catch {
         // Ignore cleanup errors (WebGL context may already be lost)
       }
       playerRef.current = null;

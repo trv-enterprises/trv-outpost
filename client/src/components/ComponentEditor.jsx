@@ -36,7 +36,6 @@ import DisplayEditor from './DisplayEditor';
 import { transformData, formatCellValue } from '../utils/dataTransforms';
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
-import { invalidateTagsCache } from './shared/tagsApi';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from './shared/NamespaceSelect';
@@ -467,7 +466,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
     try {
       const result = await apiClient.getComponents();
-      const charts = result.charts || [];
+      const charts = result.components || [];
       const duplicate = charts.find(c =>
         c.name.toLowerCase() === nameToCheck.trim().toLowerCase() &&
         c.id !== chart?.id
@@ -1259,7 +1258,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     onSave(chartPayload);
   };
 
-  const handleYAxisToggle = (column) => {
+  const _handleYAxisToggle = (column) => {
     setYAxisColumns(prev => {
       if (prev.includes(column)) {
         return prev.filter(c => c !== column);
@@ -1939,7 +1938,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     <PrometheusQueryBuilder
                       datasourceId={selectedDatasourceId}
                       onQueryChange={(query) => setQueryRaw(query)}
-                      onParamsChange={(params) => {
+                      onParamsChange={(_params) => {
                         // Store params for use in query execution
                         // These will be passed via query_config.params
                       }}

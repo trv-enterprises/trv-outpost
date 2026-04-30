@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Select,
   SelectItem,
@@ -95,7 +95,7 @@ const PrometheusQueryBuilder = ({
   onQueryChange,
   onParamsChange,
   onExecute,
-  initialQuery = '',
+  initialQuery: _initialQuery = '',
   disabled = false
 }) => {
   // Schema state

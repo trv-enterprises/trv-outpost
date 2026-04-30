@@ -186,7 +186,7 @@ function applyAggregation(rows, columns, aggregation) {
     return { rows, value: null };
   }
 
-  const { type, sortBy, field, groupBy } = aggregation;
+  const { type, sortBy, field } = aggregation;
 
   // Sort if needed for first/last
   let sortedRows = rows;
@@ -211,32 +211,37 @@ function applyAggregation(rows, columns, aggregation) {
         value: fieldIndex >= 0 && sortedRows.length > 0 ? sortedRows[0][fieldIndex] : null
       };
 
-    case 'min':
+    case 'min': {
       if (fieldIndex < 0) return { rows, value: null };
       const minVal = Math.min(...rows.map(r => Number(r[fieldIndex]) || 0));
       return { rows, value: minVal };
+    }
 
-    case 'max':
+    case 'max': {
       if (fieldIndex < 0) return { rows, value: null };
       const maxVal = Math.max(...rows.map(r => Number(r[fieldIndex]) || 0));
       return { rows, value: maxVal };
+    }
 
-    case 'sum':
+    case 'sum': {
       if (fieldIndex < 0) return { rows, value: null };
       const sumVal = rows.reduce((acc, r) => acc + (Number(r[fieldIndex]) || 0), 0);
       return { rows, value: sumVal };
+    }
 
-    case 'avg':
+    case 'avg': {
       if (fieldIndex < 0 || rows.length === 0) return { rows, value: null };
       const avgVal = rows.reduce((acc, r) => acc + (Number(r[fieldIndex]) || 0), 0) / rows.length;
       return { rows, value: avgVal };
+    }
 
     case 'count':
       return { rows, value: rows.length };
 
-    case 'limit':
+    case 'limit': {
       const limit = aggregation.count || 10;
       return { rows: sortedRows.slice(0, limit), value: null };
+    }
 
     default:
       console.warn(`Unknown aggregation type "${type}"`);
@@ -393,10 +398,11 @@ export function parseTimestamp(value, type = null) {
       return new Date(Number(value));
     case 'iso':
       return new Date(value);
-    default:
+    default: {
       // Try parsing as-is
       const date = new Date(value);
       return isNaN(date.getTime()) ? null : date;
+    }
   }
 }
 
@@ -542,7 +548,7 @@ export function formatTimestamp(value, format = 'short', options = {}) {
         second: '2-digit'
       });
 
-    case 'chart_auto':
+    case 'chart_auto': {
       // Auto format based on data range - use when AI analyzes data spread
       const now = new Date();
       const diffHours = Math.abs(now.getTime() - date.getTime()) / (1000 * 60 * 60);
@@ -561,6 +567,7 @@ export function formatTimestamp(value, format = 'short', options = {}) {
           day: 'numeric'
         });
       }
+    }
 
     default:
       return date.toLocaleString(locale, formatOptions);

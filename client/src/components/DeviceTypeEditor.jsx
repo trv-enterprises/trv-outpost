@@ -36,7 +36,7 @@ function DeviceTypeEditor({ deviceType, onSave, onClose }) {
   const [capabilities, setCapabilities] = useState(deviceType?.capabilities || []);
   const [supportedTypes, setSupportedTypes] = useState(deviceType?.supported_types || []);
   const [commands, setCommands] = useState(deviceType?.commands || {});
-  const [stateQuery, setStateQuery] = useState(deviceType?.state_query || null);
+  const [stateQuery] = useState(deviceType?.state_query || null);
   const [response, setResponse] = useState(deviceType?.response || null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);

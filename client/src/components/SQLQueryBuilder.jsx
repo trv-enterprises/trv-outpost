@@ -37,7 +37,7 @@ const SQLQueryBuilder = ({
   datasourceId,
   onQueryChange,
   onExecute,
-  initialQuery = '',
+  initialQuery: _initialQuery = '',
   disabled = false
 }) => {
   // Schema state

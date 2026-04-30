@@ -24,7 +24,11 @@ export const isElectron = () => {
     return true;
   }
 
-  // Check for Node.js process in renderer (older Electron versions)
+  // Check for Node.js process in renderer (older Electron versions).
+  // `process` is a Node global; in pure-browser contexts it's undefined,
+  // which is why we typeof-check before touching it. ESLint doesn't
+  // know about that runtime guard, so silence its no-undef warning.
+  // eslint-disable-next-line no-undef
   if (typeof process !== 'undefined' && process.versions && process.versions.electron) {
     return true;
   }

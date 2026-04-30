@@ -27,7 +27,7 @@ export default function ComponentSelector({ onSelect, selectedId }) {
   const [selectedSystem, setSelectedSystem] = useState('');
   const [selectedSource, setSelectedSource] = useState('');
 
-  const { systems, loading: systemsLoading } = useSystems();
+  const { systems } = useSystems();
   const { components, loading: componentsLoading } = useComponents({
     system: selectedSystem || undefined,
     source: selectedSource || undefined,

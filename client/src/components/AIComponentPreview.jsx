@@ -49,10 +49,14 @@ function AIComponentPreview({ component, onNameChange }) {
   const [connectionType, setConnectionType] = useState('');
   const [connectionDescription, setConnectionDescription] = useState('');
 
-  // Name editing state
-  const [editingName, setEditingName] = useState(false);
+  // Name editing state — inline-rename UI scaffolding (the
+  // _start/_cancel/_confirm helpers below) is wired but no UI
+  // currently triggers it. Kept underscore-prefixed so lint
+  // doesn't flag unused while we decide whether to surface the
+  // rename affordance or drop it.
+  const [_editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
-  const [nameError, setNameError] = useState('');
+  const [_nameError, setNameError] = useState('');
 
   // Preview data
   const [previewData, setPreviewData] = useState(null);
@@ -95,19 +99,19 @@ function AIComponentPreview({ component, onNameChange }) {
   }, [component?.datasource_id, component?.query_config?.raw, componentFetchesOwnData]);
 
   // Handle name editing
-  const startEditName = () => {
+  const _startEditName = () => {
     setEditNameValue(component?.name || 'Untitled');
     setNameError('');
     setEditingName(true);
   };
 
-  const cancelEditName = () => {
+  const _cancelEditName = () => {
     setEditingName(false);
     setEditNameValue('');
     setNameError('');
   };
 
-  const confirmEditName = async () => {
+  const _confirmEditName = async () => {
     const newName = editNameValue.trim();
     if (!newName) {
       setNameError('Name is required');
@@ -120,7 +124,7 @@ function AIComponentPreview({ component, onNameChange }) {
     // Check for duplicate names
     try {
       const response = await apiClient.getComponents();
-      const charts = response.charts || [];
+      const charts = response.components || [];
       const duplicate = charts.find(c =>
         c.name.toLowerCase() === newName.toLowerCase() &&
         c.id !== component?.id

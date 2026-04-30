@@ -60,7 +60,7 @@ function AIBuilderPage() {
     connectionType,
     chartType,
     controlType,
-    dashboardId,
+    dashboardId: _dashboardId,
     panelId
   } = preflightContext;
 
@@ -185,7 +185,7 @@ function AIBuilderPage() {
       } else {
         navigate(returnPath);
       }
-    } catch (err) {
+    } catch {
       // Error is handled by the hook
     } finally {
       setSaving(false);

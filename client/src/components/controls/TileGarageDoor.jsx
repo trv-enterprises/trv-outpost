@@ -14,7 +14,7 @@ import { registerControl } from './controlRegistry';
 import GarageDoorSVG, { GARAGE_DOOR_STATES } from './GarageDoorSVG';
 import './controls.scss';
 
-function TileGarageDoor({ control, readOnly = false }) {
+function TileGarageDoor({ control, readOnly: _readOnly = false }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
   const tileRef = useRef(null);
