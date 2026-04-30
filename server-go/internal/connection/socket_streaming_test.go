@@ -18,7 +18,7 @@
 // True non-JSON binary protocols (MessagePack, protobuf) would need a
 // dedicated typed adapter rather than a generic raw-bytes mode.
 
-package datasource
+package connection
 
 import (
 	"context"

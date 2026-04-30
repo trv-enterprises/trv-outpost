@@ -32,7 +32,7 @@ type Streamer interface {
 
 // Stream represents a single streaming connection to a socket datasource
 type Stream struct {
-	datasourceID string
+	connectionID string
 	config       *models.SocketConfig
 	wsConn       *websocket.Conn
 	subscribers  map[chan models.Record]struct{}
@@ -63,14 +63,14 @@ func DefaultStreamConfig() StreamConfig {
 }
 
 // NewStream creates a new stream for a socket datasource
-func NewStream(datasourceID string, config *models.SocketConfig, streamConfig StreamConfig) *Stream {
+func NewStream(connectionID string, config *models.SocketConfig, streamConfig StreamConfig) *Stream {
 	bufferSize := streamConfig.BufferSize
 	if config.BufferSize > 0 {
 		bufferSize = config.BufferSize
 	}
 
 	return &Stream{
-		datasourceID: datasourceID,
+		connectionID: connectionID,
 		config:       config,
 		subscribers:  make(map[chan models.Record]struct{}),
 		buffer:       NewRingBuffer(bufferSize),
@@ -116,7 +116,7 @@ func (s *Stream) connect() error {
 	s.wsConn = conn
 	s.connected = true
 	s.lastError = nil
-	log.Printf("[Stream %s] Connected to %s", s.datasourceID, s.config.URL)
+	log.Printf("[Stream %s] Connected to %s", s.connectionID, s.config.URL)
 
 	return nil
 }
@@ -142,7 +142,7 @@ func (s *Stream) readLoop(ctx context.Context) {
 
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("[Stream %s] Read error: %v", s.datasourceID, err)
+				log.Printf("[Stream %s] Read error: %v", s.connectionID, err)
 
 				s.mu.Lock()
 				s.connected = false
@@ -184,7 +184,7 @@ func (s *Stream) reconnect(ctx context.Context, delay *time.Duration) {
 		s.mu.Unlock()
 	}()
 
-	log.Printf("[Stream %s] Reconnecting in %v...", s.datasourceID, *delay)
+	log.Printf("[Stream %s] Reconnecting in %v...", s.connectionID, *delay)
 
 	select {
 	case <-ctx.Done():
@@ -193,7 +193,7 @@ func (s *Stream) reconnect(ctx context.Context, delay *time.Duration) {
 	}
 
 	if err := s.connect(); err != nil {
-		log.Printf("[Stream %s] Reconnect failed: %v", s.datasourceID, err)
+		log.Printf("[Stream %s] Reconnect failed: %v", s.connectionID, err)
 		// Exponential backoff
 		*delay = *delay * 2
 		if *delay > 30*time.Second {
@@ -309,7 +309,7 @@ func (s *Stream) broadcast(records []models.Record) {
 		s.buffer.Push(record)
 
 		// Feed to bucket aggregators for this datasource
-		registry.FeedRecord(s.datasourceID, record)
+		registry.FeedRecord(s.connectionID, record)
 
 		// Send to all subscribers (non-blocking)
 		for _, ch := range subscribers {
@@ -330,7 +330,7 @@ func (s *Stream) Subscribe() chan models.Record {
 	s.subscribers[ch] = struct{}{}
 	s.mu.Unlock()
 
-	log.Printf("[Stream %s] Subscriber added (total: %d)", s.datasourceID, len(s.subscribers))
+	log.Printf("[Stream %s] Subscriber added (total: %d)", s.connectionID, len(s.subscribers))
 	return ch
 }
 
@@ -342,7 +342,7 @@ func (s *Stream) Unsubscribe(ch chan models.Record) {
 	s.mu.Unlock()
 
 	close(ch)
-	log.Printf("[Stream %s] Subscriber removed (total: %d)", s.datasourceID, count)
+	log.Printf("[Stream %s] Subscriber removed (total: %d)", s.connectionID, count)
 }
 
 // GetBuffer returns the current buffer contents
@@ -394,5 +394,5 @@ func (s *Stream) cleanup() {
 	}
 	s.connected = false
 
-	log.Printf("[Stream %s] Cleaned up", s.datasourceID)
+	log.Printf("[Stream %s] Cleaned up", s.connectionID)
 }

@@ -36,7 +36,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "github.com/trv-enterprises/trve-dashboard/docs"       // Swagger docs
-	_ "github.com/trv-enterprises/trve-dashboard/internal/datasource" // Register adapters via init()
+	_ "github.com/trv-enterprises/trve-dashboard/internal/connection" // Register adapters via init()
 )
 
 // @title TRVE Dashboards API
@@ -123,7 +123,7 @@ func main() {
 	})
 
 	// Initialize repositories
-	datasourceRepo := repository.NewDatasourceRepository(mongodb.Database)
+	connectionRepo := repository.NewConnectionRepository(mongodb.Database)
 	componentRepo := repository.NewComponentRepository(mongodb.Database)
 	dashboardRepo := repository.NewDashboardRepository(mongodb.Database)
 	aiSessionRepo := repository.NewAISessionRepository(mongodb.Database)
@@ -190,21 +190,21 @@ func main() {
 	clerkPublishable := os.Getenv("CLERK_PUBLISHABLE_KEY")
 
 	// Initialize services
-	datasourceService := service.NewDatasourceService(datasourceRepo)
+	connectionService := service.NewConnectionService(connectionRepo)
 	componentService := service.NewComponentService(componentRepo)
-	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, componentRepo, datasourceRepo)
+	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, componentRepo, connectionRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, componentRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg, clerkPublishable)
 	userService := service.NewUserService(userRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
-	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, datasourceRepo)
-	deviceDiscoveryService := service.NewDeviceDiscoveryService(datasourceRepo, deviceTypeRepo, deviceRepo)
+	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, connectionRepo)
+	deviceDiscoveryService := service.NewDeviceDiscoveryService(connectionRepo, deviceTypeRepo, deviceRepo)
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
 
 	// Namespace service with the three entity repos wired in. Each repo
 	// implements CountByNamespace + RenameNamespace so the service's
 	// delete-guard and rename-cascade paths work end-to-end.
-	namespaceService := service.NewNamespaceService(namespaceRepo, datasourceRepo, componentRepo, dashboardRepo)
+	namespaceService := service.NewNamespaceService(namespaceRepo, connectionRepo, componentRepo, dashboardRepo)
 	if err := namespaceService.SeedDefault(ctx); err != nil {
 		log.Printf("Warning: Failed to seed default namespace: %v", err)
 	} else {
@@ -270,7 +270,7 @@ func main() {
 	fmt.Println("✓ ChartHub initialized for real-time chart updates")
 
 	// Initialize StreamManager for socket datasource streaming
-	streamManager := streaming.NewManager(datasourceRepo, streaming.DefaultManagerConfig())
+	streamManager := streaming.NewManager(connectionRepo, streaming.DefaultManagerConfig())
 	fmt.Println("✓ StreamManager initialized for socket datasource streaming")
 
 	// Initialize inbound WebSocket handler for ts-store push connections
@@ -283,7 +283,7 @@ func main() {
 	fmt.Println("✓ InboundHandler initialized for ts-store push connections")
 
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
-	toolExecutor := ai.NewToolExecutor(componentRepo, datasourceRepo, datasourceService, deviceTypeRepo, chartHub)
+	toolExecutor := ai.NewToolExecutor(componentRepo, connectionRepo, connectionService, deviceTypeRepo, chartHub)
 	deviceTypeLister := &service.DeviceTypeListerAdapter{Service: deviceTypeService}
 	catalogProvider := service.NewCatalogProvider(deviceTypeLister, typeFilter)
 	var aiAgent *ai.Agent
@@ -297,7 +297,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	datasourceHandler := handlers.NewDatasourceHandler(datasourceService)
+	connectionHandler := handlers.NewConnectionHandler(connectionService)
 	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chartHub)
@@ -306,8 +306,8 @@ func main() {
 	configHandler := handlers.NewConfigHandler(configService)
 	authHandler := handlers.NewAuthHandler(userService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
-	commandHandler := handlers.NewCommandHandler(datasourceService, componentService, deviceTypeService)
-	frigateHandler := handlers.NewFrigateHandler(datasourceService)
+	commandHandler := handlers.NewCommandHandler(connectionService, componentService, deviceTypeService)
+	frigateHandler := handlers.NewFrigateHandler(connectionService)
 	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
@@ -346,7 +346,7 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(userService, apiKeyService, identityVerifier, userRepo)
 
 	// Initialize MCP
-	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, componentService, deviceTypeService, typeFilter)
+	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, typeFilter)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
 	// API routes with authentication and authorization middleware
@@ -380,54 +380,28 @@ func main() {
 		// Connection routes (new terminology - preferred)
 		connections := api.Group("/connections")
 		{
-			connections.POST("", datasourceHandler.CreateDatasource)
-			connections.GET("", datasourceHandler.ListDatasources)
+			connections.POST("", connectionHandler.CreateConnection)
+			connections.GET("", connectionHandler.ListConnections)
 			connections.GET("/streams", streamHandler.ListActiveStreams) // Before /:id to avoid conflict
-			connections.GET("/:id", datasourceHandler.GetDatasource)
-			connections.PUT("/:id", datasourceHandler.UpdateDatasource)
-			connections.DELETE("/:id", datasourceHandler.DeleteDatasource)
-			connections.POST("/test", datasourceHandler.TestDatasource)
-			connections.POST("/:id/health", datasourceHandler.CheckDatasourceHealth)
-			connections.POST("/:id/query", datasourceHandler.QueryDatasource)
-			connections.GET("/:id/schema", datasourceHandler.GetDatasourceSchema)
-			connections.GET("/:id/prometheus/labels/:label/values", datasourceHandler.GetPrometheusLabelValues) // Prometheus label values
-			connections.GET("/:id/edgelake/databases", datasourceHandler.GetEdgeLakeDatabases)                     // EdgeLake databases
-			connections.GET("/:id/edgelake/tables", datasourceHandler.GetEdgeLakeTables)                           // EdgeLake tables
-			connections.GET("/:id/edgelake/schema", datasourceHandler.GetEdgeLakeSchema)                           // EdgeLake table schema
-			connections.GET("/:id/mqtt/topics", datasourceHandler.GetMQTTTopics)                                // MQTT topic discovery
-			connections.GET("/:id/mqtt/sample", datasourceHandler.SampleMQTTTopic)                              // MQTT topic schema sample
-			connections.GET("/:id/stream", streamHandler.StreamDatasource)                                      // SSE streaming
+			connections.GET("/:id", connectionHandler.GetConnection)
+			connections.PUT("/:id", connectionHandler.UpdateConnection)
+			connections.DELETE("/:id", connectionHandler.DeleteConnection)
+			connections.POST("/test", connectionHandler.TestConnection)
+			connections.POST("/:id/health", connectionHandler.CheckConnectionHealth)
+			connections.POST("/:id/query", connectionHandler.QueryConnection)
+			connections.GET("/:id/schema", connectionHandler.GetConnectionSchema)
+			connections.GET("/:id/prometheus/labels/:label/values", connectionHandler.GetPrometheusLabelValues) // Prometheus label values
+			connections.GET("/:id/edgelake/databases", connectionHandler.GetEdgeLakeDatabases)                     // EdgeLake databases
+			connections.GET("/:id/edgelake/tables", connectionHandler.GetEdgeLakeTables)                           // EdgeLake tables
+			connections.GET("/:id/edgelake/schema", connectionHandler.GetEdgeLakeSchema)                           // EdgeLake table schema
+			connections.GET("/:id/mqtt/topics", connectionHandler.GetMQTTTopics)                                // MQTT topic discovery
+			connections.GET("/:id/mqtt/sample", connectionHandler.SampleMQTTTopic)                              // MQTT topic schema sample
+			connections.GET("/:id/stream", streamHandler.StreamConnection)                                      // SSE streaming
 			connections.GET("/:id/stream/status", streamHandler.GetStreamStatus)                 // Stream status
-			connections.POST("/:id/stream/aggregated", streamHandler.StreamAggregatedDatasource) // SSE aggregated streaming
+			connections.POST("/:id/stream/aggregated", streamHandler.StreamAggregatedConnection) // SSE aggregated streaming
 			connections.GET("/aggregators", streamHandler.GetAggregatorStats)                    // Aggregator stats
 			connections.POST("/:id/command", commandHandler.ExecuteCommand)                     // Bidirectional command execution
 			connections.POST("/:id/discover-devices", deviceHandler.DiscoverDevices)              // Device discovery
-		}
-
-		// Datasource routes (deprecated alias - kept for backwards compatibility)
-		datasources := api.Group("/datasources")
-		{
-			datasources.POST("", datasourceHandler.CreateDatasource)
-			datasources.GET("", datasourceHandler.ListDatasources)
-			datasources.GET("/streams", streamHandler.ListActiveStreams) // Before /:id to avoid conflict
-			datasources.GET("/:id", datasourceHandler.GetDatasource)
-			datasources.PUT("/:id", datasourceHandler.UpdateDatasource)
-			datasources.DELETE("/:id", datasourceHandler.DeleteDatasource)
-			datasources.POST("/test", datasourceHandler.TestDatasource)
-			datasources.POST("/:id/health", datasourceHandler.CheckDatasourceHealth)
-			datasources.POST("/:id/query", datasourceHandler.QueryDatasource)
-			datasources.GET("/:id/schema", datasourceHandler.GetDatasourceSchema)
-			datasources.GET("/:id/prometheus/labels/:label/values", datasourceHandler.GetPrometheusLabelValues) // Prometheus label values
-			datasources.GET("/:id/edgelake/databases", datasourceHandler.GetEdgeLakeDatabases)                     // EdgeLake databases
-			datasources.GET("/:id/edgelake/tables", datasourceHandler.GetEdgeLakeTables)                           // EdgeLake tables
-			datasources.GET("/:id/edgelake/schema", datasourceHandler.GetEdgeLakeSchema)                           // EdgeLake table schema
-			datasources.GET("/:id/mqtt/topics", datasourceHandler.GetMQTTTopics)                                // MQTT topic discovery
-			datasources.GET("/:id/mqtt/sample", datasourceHandler.SampleMQTTTopic)                              // MQTT topic schema sample
-			datasources.GET("/:id/stream", streamHandler.StreamDatasource)                                      // SSE streaming
-			datasources.GET("/:id/stream/status", streamHandler.GetStreamStatus)                 // Stream status
-			datasources.POST("/:id/stream/aggregated", streamHandler.StreamAggregatedDatasource) // SSE aggregated streaming
-			datasources.GET("/aggregators", streamHandler.GetAggregatorStats)                    // Aggregator stats
-			datasources.POST("/:id/command", commandHandler.ExecuteCommand)                     // Bidirectional command execution
 		}
 
 		// Registry routes - unified type catalog (connection types, component
@@ -597,7 +571,7 @@ func main() {
 
 	// Inbound WebSocket endpoint for ts-store push connections (outside /api group, no auth required)
 	// ts-store dials out to this endpoint to push data
-	router.GET("/api/streams/inbound/:datasourceId", inboundHandler.HandleInboundWebSocket)
+	router.GET("/api/streams/inbound/:connectionId", inboundHandler.HandleInboundWebSocket)
 
 	// Status monitoring WebSocket (no auth required for monitoring tools)
 	router.GET("/api/ws/status", statusHandler.HandleStatusWebSocket)
@@ -610,7 +584,7 @@ func main() {
 
 	fmt.Println("✓ MCP SSE endpoint enabled at http://localhost:3001/mcp/sse")
 	fmt.Println("✓ AI Debug WebSocket enabled at ws://localhost:3001/api/ai/debug")
-	fmt.Println("✓ TSStore inbound WebSocket at ws://localhost:3001/api/streams/inbound/:datasourceId")
+	fmt.Println("✓ TSStore inbound WebSocket at ws://localhost:3001/api/streams/inbound/:connectionId")
 	fmt.Println("✓ Status WebSocket at ws://localhost:3001/api/ws/status?interval=5s")
 
 	// Serve documentation site at /docs.

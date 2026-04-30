@@ -18,15 +18,15 @@ import (
 
 // CommandHandler handles command execution for bidirectional datasources and controls
 type CommandHandler struct {
-	datasourceService  *service.DatasourceService
+	connectionService  *service.ConnectionService
 	componentService       *service.ComponentService
 	deviceTypeService  *service.DeviceTypeService
 }
 
 // NewCommandHandler creates a new command handler
-func NewCommandHandler(datasourceService *service.DatasourceService, componentService *service.ComponentService, deviceTypeService *service.DeviceTypeService) *CommandHandler {
+func NewCommandHandler(connectionService *service.ConnectionService, componentService *service.ComponentService, deviceTypeService *service.DeviceTypeService) *CommandHandler {
 	return &CommandHandler{
-		datasourceService:  datasourceService,
+		connectionService:  connectionService,
 		componentService:       componentService,
 		deviceTypeService:  deviceTypeService,
 	}
@@ -70,14 +70,14 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 	}
 
 	// Get the datasource
-	datasource, err := h.datasourceService.GetDatasource(c.Request.Context(), id)
+	datasource, err := h.connectionService.GetConnection(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "datasource not found"})
 		return
 	}
 
 	// Create adapter from datasource
-	adapter, err := h.datasourceService.CreateAdapter(c.Request.Context(), datasource)
+	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), datasource)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -171,20 +171,20 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 	}
 
 	// Validate connection is set
-	if chart.DatasourceID == "" {
+	if chart.ConnectionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "control has no connection configured"})
 		return
 	}
 
 	// Get the connection
-	datasource, err := h.datasourceService.GetDatasource(c.Request.Context(), chart.DatasourceID)
+	datasource, err := h.connectionService.GetConnection(c.Request.Context(), chart.ConnectionID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})
 		return
 	}
 
 	// Create adapter
-	adapter, err := h.datasourceService.CreateAdapter(c.Request.Context(), datasource)
+	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), datasource)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

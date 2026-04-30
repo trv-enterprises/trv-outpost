@@ -70,15 +70,15 @@ func buildRouteRules() []RouteCapability {
 		// Design mode routes - require design capability for write operations
 		// Read operations are allowed for VIEW users so they can see dashboards
 
-		// Datasources - design required for write
-		{PathPrefix: "/api/datasources", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/datasources", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/datasources", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+		// Connections - design required for write
+		{PathPrefix: "/api/connections", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
+		{PathPrefix: "/api/connections", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
+		{PathPrefix: "/api/connections", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
 
-		// Charts - design required for write
-		{PathPrefix: "/api/charts", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/charts", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/charts", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+		// Components - design required for write
+		{PathPrefix: "/api/components", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
+		{PathPrefix: "/api/components", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
+		{PathPrefix: "/api/components", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
 
 		// Dashboards - design required for write
 		{PathPrefix: "/api/dashboards", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},

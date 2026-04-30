@@ -812,7 +812,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/components?name=&chart_type=&component_type=&status=&datasource_id=&tag=&page=&page_size=",
+              "raw": "{{baseUrl}}/api/components?name=&chart_type=&component_type=&status=&connection_id=&tag=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -846,7 +846,7 @@
                   "disabled": true
                 },
                 {
-                  "key": "datasource_id",
+                  "key": "connection_id",
                   "value": "",
                   "description": "Filter by data source ID",
                   "disabled": true
@@ -1075,6 +1075,186 @@
                 }
               }
             }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "connections",
+      "description": "connections endpoints (5).",
+      "item": [
+        {
+          "name": "Get aggregator statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/aggregators",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                "aggregators"
+              ]
+            },
+            "description": "Get aggregator statistics\n\nGet statistics about active bucket aggregators\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get stream status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/stream/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "stream",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get stream status\n\nGet status information for an active stream\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List active streams",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/streams",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                "streams"
+              ]
+            },
+            "description": "List active streams\n\nGet a list of all active streaming connections\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Stream aggregated data from a socket connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/stream/aggregated",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "stream",
+                "aggregated"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Stream aggregated data from a socket connection\n\nOpens an SSE connection to stream time-bucketed aggregated data\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"function\": \"\",\n  \"interval\": 0,\n  \"series_col\": \"\",\n  \"timestamp_col\": \"\",\n  \"value_cols\": [\n    \"\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stream data from a socket connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "stream"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Stream data from a socket connection\n\nOpens an SSE connection to stream real-time data from a socket connection\n\n\nResponses: 200, 400, 404, 500"
           },
           "response": []
         }
@@ -1517,7 +1697,7 @@
     },
     {
       "name": "Datasources (legacy alias of /connections)",
-      "description": "datasources endpoints (21).",
+      "description": "datasources endpoints (16).",
       "item": [
         {
           "name": "Check datasource health",
@@ -1758,33 +1938,6 @@
           "response": []
         },
         {
-          "name": "Get aggregator statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/aggregators",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                "aggregators"
-              ]
-            },
-            "description": "Get aggregator statistics\n\nGet statistics about active bucket aggregators\n\n\nResponses: 200"
-          },
-          "response": []
-        },
-        {
           "name": "Get database schema for a SQL datasource",
           "request": {
             "method": "GET",
@@ -1852,42 +2005,6 @@
               ]
             },
             "description": "Get databases from an EdgeLake data source\n\nRetrieve all database names from an EdgeLake node's blockchain registry\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get stream status",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/stream/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "stream",
-                "status"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get stream status\n\nGet status information for an active stream\n\n\nResponses: 200, 404"
           },
           "response": []
         },
@@ -2065,33 +2182,6 @@
           "response": []
         },
         {
-          "name": "List active streams",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/streams",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                "streams"
-              ]
-            },
-            "description": "List active streams\n\nGet a list of all active streaming connections\n\n\nResponses: 200"
-          },
-          "response": []
-        },
-        {
           "name": "List all datasources",
           "request": {
             "method": "GET",
@@ -2190,90 +2280,6 @@
               ]
             },
             "description": "Sample a single MQTT topic\n\nSubscribe to a topic and return the first message's schema (columns and sample values)\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Stream aggregated data from a socket datasource",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/stream/aggregated",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "stream",
-                "aggregated"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Stream aggregated data from a socket datasource\n\nOpens an SSE connection to stream time-bucketed aggregated data\n\n\nResponses: 200, 400, 404, 500",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"function\": \"\",\n  \"interval\": 0,\n  \"series_col\": \"\",\n  \"timestamp_col\": \"\",\n  \"value_cols\": [\n    \"\"\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Stream data from a socket datasource",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/stream",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "stream"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Stream data from a socket datasource\n\nOpens an SSE connection to stream real-time data from a socket datasource\n\n\nResponses: 200, 400, 404, 500"
           },
           "response": []
         },

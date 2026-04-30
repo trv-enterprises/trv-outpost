@@ -56,7 +56,7 @@ func (r *AggregatorRegistry) Subscribe(config BucketConfig) (chan models.Record,
 	agg.Start()
 
 	log.Printf("[AggregatorRegistry] Created new aggregator %s for datasource %s (interval: %ds, func: %s)",
-		configKey[:8], config.DatasourceID, config.Interval, config.Function)
+		configKey[:8], config.ConnectionID, config.Interval, config.Function)
 
 	ch := agg.Subscribe()
 	return ch, configKey
@@ -85,12 +85,12 @@ func (r *AggregatorRegistry) Unsubscribe(configKey string, ch chan models.Record
 
 // FeedRecord sends a record to all aggregators for a given datasource
 // This is called by the StreamHandler when new data arrives
-func (r *AggregatorRegistry) FeedRecord(datasourceID string, record models.Record) {
+func (r *AggregatorRegistry) FeedRecord(connectionID string, record models.Record) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for _, agg := range r.aggregators {
-		if agg.config.DatasourceID == datasourceID {
+		if agg.config.ConnectionID == connectionID {
 			agg.ProcessRecord(record)
 		}
 	}
@@ -111,13 +111,13 @@ func (r *AggregatorRegistry) GetAggregatorCount() int {
 }
 
 // GetAggregatorsForDatasource returns all aggregators for a given datasource
-func (r *AggregatorRegistry) GetAggregatorsForDatasource(datasourceID string) []*BucketAggregator {
+func (r *AggregatorRegistry) GetAggregatorsForDatasource(connectionID string) []*BucketAggregator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var result []*BucketAggregator
 	for _, agg := range r.aggregators {
-		if agg.config.DatasourceID == datasourceID {
+		if agg.config.ConnectionID == connectionID {
 			result = append(result, agg)
 		}
 	}
@@ -138,7 +138,7 @@ func (r *AggregatorRegistry) Stats() map[string]interface{} {
 	for key, agg := range r.aggregators {
 		aggStats = append(aggStats, map[string]interface{}{
 			"config_key":       key[:8],
-			"datasource_id":    agg.config.DatasourceID,
+			"connection_id":    agg.config.ConnectionID,
 			"interval":         agg.config.Interval,
 			"function":         agg.config.Function,
 			"value_cols":       agg.config.ValueCols,

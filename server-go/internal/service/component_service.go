@@ -63,7 +63,7 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 		Title:         title,
 		Description:   req.Description,
 		ChartType:     req.ChartType,
-		DatasourceID:  req.DatasourceID,
+		ConnectionID:  req.ConnectionID,
 		QueryConfig:   req.QueryConfig,
 		DataMapping:   req.DataMapping,
 		ControlConfig: req.ControlConfig,
@@ -248,8 +248,8 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 	if req.ChartType != nil {
 		component.ChartType = *req.ChartType
 	}
-	if req.DatasourceID != nil {
-		component.DatasourceID = *req.DatasourceID
+	if req.ConnectionID != nil {
+		component.ConnectionID = *req.ConnectionID
 	}
 	if req.QueryConfig != nil {
 		component.QueryConfig = req.QueryConfig
@@ -347,7 +347,7 @@ func (s *ComponentService) DeleteComponentDraft(ctx context.Context, id string) 
 	return nil
 }
 
-// GetComponentsByDatasource retrieves latest version of all components using a specific data source
-func (s *ComponentService) GetComponentsByDatasource(ctx context.Context, datasourceID string) ([]models.Component, error) {
-	return s.repo.FindByDatasourceID(ctx, datasourceID)
+// GetComponentsByConnection retrieves latest version of all components using a specific connection
+func (s *ComponentService) GetComponentsByConnection(ctx context.Context, connectionID string) ([]models.Component, error) {
+	return s.repo.FindByConnectionID(ctx, connectionID)
 }

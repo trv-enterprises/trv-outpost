@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-package datasource
+package connection
 
 import (
 	"context"

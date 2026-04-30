@@ -27,7 +27,7 @@ type InboundHandler struct {
 // inboundConnection represents an active inbound WebSocket connection
 type inboundConnection struct {
 	conn             *websocket.Conn
-	datasourceID     string
+	connectionID     string
 	stopChan         chan struct{}
 	clientRegistryID uint64
 }
@@ -62,26 +62,26 @@ func GetInboundHandler() *InboundHandler {
 }
 
 // HandleInboundWebSocket handles incoming WebSocket connections from ts-store
-// Route: GET /api/streams/inbound/:datasourceId
+// Route: GET /api/streams/inbound/:connectionId
 func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
-	datasourceID := c.Param("datasourceId")
-	if datasourceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasourceId is required"})
+	connectionID := c.Param("connectionId")
+	if connectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connectionId is required"})
 		return
 	}
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("[InboundHandler] Failed to upgrade connection for %s: %v", datasourceID, err)
+		log.Printf("[InboundHandler] Failed to upgrade connection for %s: %v", connectionID, err)
 		return
 	}
 
-	log.Printf("[InboundHandler] Accepted inbound connection for datasource %s from %s", datasourceID, c.Request.RemoteAddr)
+	log.Printf("[InboundHandler] Accepted inbound connection for datasource %s from %s", connectionID, c.Request.RemoteAddr)
 
 	// Register the connection
 	h.mu.Lock()
 	// Close existing connection if any
-	if existing, exists := h.connections[datasourceID]; exists {
+	if existing, exists := h.connections[connectionID]; exists {
 		close(existing.stopChan)
 		existing.conn.Close()
 	}
@@ -89,17 +89,17 @@ func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
 	// Register with client registry
 	clientRegistry := clientreg.GetClientRegistry()
 	clientRegistryID := clientRegistry.Register(clientreg.ConnectionTypeInbound, map[string]interface{}{
-		"datasource_id": datasourceID,
+		"connection_id": connectionID,
 		"remote_addr":   c.Request.RemoteAddr,
 	})
 
 	ic := &inboundConnection{
 		conn:             conn,
-		datasourceID:     datasourceID,
+		connectionID:     connectionID,
 		stopChan:         make(chan struct{}),
 		clientRegistryID: clientRegistryID,
 	}
-	h.connections[datasourceID] = ic
+	h.connections[connectionID] = ic
 	h.mu.Unlock()
 
 	// Start reading messages
@@ -110,8 +110,8 @@ func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
 func (h *InboundHandler) readLoop(ic *inboundConnection) {
 	defer func() {
 		h.mu.Lock()
-		if current, exists := h.connections[ic.datasourceID]; exists && current == ic {
-			delete(h.connections, ic.datasourceID)
+		if current, exists := h.connections[ic.connectionID]; exists && current == ic {
+			delete(h.connections, ic.connectionID)
 		}
 		h.mu.Unlock()
 
@@ -122,7 +122,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 		}
 
 		ic.conn.Close()
-		log.Printf("[InboundHandler] Connection closed for datasource %s", ic.datasourceID)
+		log.Printf("[InboundHandler] Connection closed for datasource %s", ic.connectionID)
 	}()
 
 	for {
@@ -133,7 +133,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 			_, message, err := ic.conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					log.Printf("[InboundHandler] Read error for %s: %v", ic.datasourceID, err)
+					log.Printf("[InboundHandler] Read error for %s: %v", ic.connectionID, err)
 				}
 				return
 			}
@@ -141,7 +141,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 			// Parse the ts-store message
 			var msg tsStorePushMessage
 			if err := json.Unmarshal(message, &msg); err != nil {
-				log.Printf("[InboundHandler] Failed to parse message for %s: %v", ic.datasourceID, err)
+				log.Printf("[InboundHandler] Failed to parse message for %s: %v", ic.connectionID, err)
 				continue
 			}
 
@@ -153,7 +153,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 			record := h.messageToRecord(&msg)
 
 			// Broadcast to listeners
-			h.broadcast(ic.datasourceID, record)
+			h.broadcast(ic.connectionID, record)
 		}
 	}
 }
@@ -185,9 +185,9 @@ func (h *InboundHandler) messageToRecord(msg *tsStorePushMessage) models.Record 
 }
 
 // broadcast sends a record to all listeners for a datasource
-func (h *InboundHandler) broadcast(datasourceID string, record models.Record) {
+func (h *InboundHandler) broadcast(connectionID string, record models.Record) {
 	h.mu.RLock()
-	listeners := h.listeners[datasourceID]
+	listeners := h.listeners[connectionID]
 	h.mu.RUnlock()
 
 	for _, ch := range listeners {
@@ -200,58 +200,58 @@ func (h *InboundHandler) broadcast(datasourceID string, record models.Record) {
 }
 
 // Subscribe adds a listener for a datasource and returns a channel for receiving records
-func (h *InboundHandler) Subscribe(datasourceID string) chan models.Record {
+func (h *InboundHandler) Subscribe(connectionID string) chan models.Record {
 	ch := make(chan models.Record, 100)
 
 	h.mu.Lock()
-	h.listeners[datasourceID] = append(h.listeners[datasourceID], ch)
-	count := len(h.listeners[datasourceID])
+	h.listeners[connectionID] = append(h.listeners[connectionID], ch)
+	count := len(h.listeners[connectionID])
 	h.mu.Unlock()
 
-	log.Printf("[InboundHandler] Subscriber added for %s (total: %d)", datasourceID, count)
+	log.Printf("[InboundHandler] Subscriber added for %s (total: %d)", connectionID, count)
 	return ch
 }
 
 // Unsubscribe removes a listener
-func (h *InboundHandler) Unsubscribe(datasourceID string, ch chan models.Record) {
+func (h *InboundHandler) Unsubscribe(connectionID string, ch chan models.Record) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	listeners := h.listeners[datasourceID]
+	listeners := h.listeners[connectionID]
 	for i, listener := range listeners {
 		if listener == ch {
 			// Remove from slice
-			h.listeners[datasourceID] = append(listeners[:i], listeners[i+1:]...)
+			h.listeners[connectionID] = append(listeners[:i], listeners[i+1:]...)
 			close(ch)
-			log.Printf("[InboundHandler] Subscriber removed for %s (total: %d)", datasourceID, len(h.listeners[datasourceID]))
+			log.Printf("[InboundHandler] Subscriber removed for %s (total: %d)", connectionID, len(h.listeners[connectionID]))
 			return
 		}
 	}
 }
 
 // IsConnected checks if there's an active inbound connection for a datasource
-func (h *InboundHandler) IsConnected(datasourceID string) bool {
+func (h *InboundHandler) IsConnected(connectionID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	_, exists := h.connections[datasourceID]
+	_, exists := h.connections[connectionID]
 	return exists
 }
 
 // CloseConnection closes an inbound connection
-func (h *InboundHandler) CloseConnection(datasourceID string) {
+func (h *InboundHandler) CloseConnection(connectionID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if ic, exists := h.connections[datasourceID]; exists {
+	if ic, exists := h.connections[connectionID]; exists {
 		close(ic.stopChan)
 		ic.conn.Close()
-		delete(h.connections, datasourceID)
-		log.Printf("[InboundHandler] Closed connection for %s", datasourceID)
+		delete(h.connections, connectionID)
+		log.Printf("[InboundHandler] Closed connection for %s", connectionID)
 	}
 }
 
 // GetInboundURL returns the WebSocket URL that ts-store should connect to
 // The dashboardHost is the external address of the dashboard server
-func GetInboundURL(dashboardHost string, datasourceID string) string {
-	return "ws://" + dashboardHost + "/api/streams/inbound/" + datasourceID
+func GetInboundURL(dashboardHost string, connectionID string) string {
+	return "ws://" + dashboardHost + "/api/streams/inbound/" + connectionID
 }

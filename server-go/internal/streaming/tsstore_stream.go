@@ -25,7 +25,7 @@ import (
 // 2. ts-store dials out to dashboard's inbound WebSocket endpoint
 // 3. Dashboard receives data on the inbound endpoint
 type TSStoreStream struct {
-	datasourceID string
+	connectionID string
 	config       *models.TSStoreConfig
 	subscribers  map[chan models.Record]struct{}
 	buffer       *RingBuffer
@@ -33,7 +33,7 @@ type TSStoreStream struct {
 	cancelFunc   context.CancelFunc
 	connected    bool
 	lastError    error
-	connectionID string        // ts-store push connection ID
+	pushID       string             // ts-store push connection ID (server-side identifier for the push lifecycle)
 	inboundChan  chan models.Record // channel to receive from inbound handler
 }
 
@@ -61,14 +61,14 @@ type tsStorePushConnectionResponse struct {
 }
 
 // NewTSStoreStream creates a new stream for a TSStore datasource
-func NewTSStoreStream(datasourceID string, config *models.TSStoreConfig, streamConfig StreamConfig) Streamer {
+func NewTSStoreStream(connectionID string, config *models.TSStoreConfig, streamConfig StreamConfig) Streamer {
 	bufferSize := streamConfig.BufferSize
 	if bufferSize <= 0 {
 		bufferSize = 100
 	}
 
 	return &TSStoreStream{
-		datasourceID: datasourceID,
+		connectionID: connectionID,
 		config:       config,
 		subscribers:  make(map[chan models.Record]struct{}),
 		buffer:       NewRingBuffer(bufferSize),
@@ -82,11 +82,11 @@ func (ts *TSStoreStream) Start(ctx context.Context) error {
 
 	// Subscribe to inbound handler to receive data from ts-store
 	inboundHandler := GetInboundHandler()
-	ts.inboundChan = inboundHandler.Subscribe(ts.datasourceID)
+	ts.inboundChan = inboundHandler.Subscribe(ts.connectionID)
 
 	// Create push connection with ts-store
 	if err := ts.createPushConnection(streamCtx); err != nil {
-		inboundHandler.Unsubscribe(ts.datasourceID, ts.inboundChan)
+		inboundHandler.Unsubscribe(ts.connectionID, ts.inboundChan)
 		return fmt.Errorf("failed to create push connection: %w", err)
 	}
 
@@ -117,7 +117,7 @@ func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboun
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[TSStoreStream %s] Failed to list push connections: %v", ts.datasourceID, err)
+		log.Printf("[TSStoreStream %s] Failed to list push connections: %v", ts.connectionID, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -125,7 +125,7 @@ func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboun
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[TSStoreStream %s] List push connections returned %d: %s", ts.datasourceID, resp.StatusCode, string(body))
+		log.Printf("[TSStoreStream %s] List push connections returned %d: %s", ts.connectionID, resp.StatusCode, string(body))
 		return
 	}
 
@@ -145,14 +145,14 @@ func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboun
 		if err2 := json.Unmarshal(body, &envelope); err2 == nil {
 			connections = envelope.Connections
 		} else {
-			log.Printf("[TSStoreStream %s] Failed to parse push connections list: %s", ts.datasourceID, string(body[:200]))
+			log.Printf("[TSStoreStream %s] Failed to parse push connections list: %s", ts.connectionID, string(body[:200]))
 		}
 	}
 
-	log.Printf("[TSStoreStream %s] Found %d existing push connections, looking for URL: %s", ts.datasourceID, len(connections), inboundURL)
+	log.Printf("[TSStoreStream %s] Found %d existing push connections, looking for URL: %s", ts.connectionID, len(connections), inboundURL)
 	for _, conn := range connections {
 		if conn.URL == inboundURL {
-			log.Printf("[TSStoreStream %s] Deleting stale push connection %s (URL: %s)", ts.datasourceID, conn.ID, conn.URL)
+			log.Printf("[TSStoreStream %s] Deleting stale push connection %s (URL: %s)", ts.connectionID, conn.ID, conn.URL)
 			delURL := fmt.Sprintf("%s/%s", apiURL, conn.ID)
 			delReq, err := http.NewRequestWithContext(ctx, "DELETE", delURL, nil)
 			if err != nil {
@@ -175,7 +175,7 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 	// Build the inbound URL that ts-store will connect to
 	// Use the configured dashboard host or default to localhost
 	dashboardHost := ts.getDashboardHost()
-	inboundURL := GetInboundURL(dashboardHost, ts.datasourceID)
+	inboundURL := GetInboundURL(dashboardHost, ts.connectionID)
 
 	// Clean up any stale push connections that target our inbound URL
 	// This ensures ts-store doesn't resume from a persisted cursor
@@ -209,12 +209,12 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	log.Printf("[TSStoreStream %s] Push request: %s", ts.datasourceID, string(reqBody))
+	log.Printf("[TSStoreStream %s] Push request: %s", ts.connectionID, string(reqBody))
 
 	// Build API URL
 	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.config.StoreName)
 
-	log.Printf("[TSStoreStream %s] Creating push connection to %s, inbound URL: %s", ts.datasourceID, apiURL, inboundURL)
+	log.Printf("[TSStoreStream %s] Creating push connection to %s, inbound URL: %s", ts.connectionID, apiURL, inboundURL)
 
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(reqBody))
@@ -257,19 +257,19 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 		return fmt.Errorf("ts-store error: %s", pushResp.Error)
 	}
 
-	ts.connectionID = pushResp.ID
-	log.Printf("[TSStoreStream %s] Push connection created: ID=%s, status=%s", ts.datasourceID, pushResp.ID, pushResp.Status)
+	ts.pushID = pushResp.ID
+	log.Printf("[TSStoreStream %s] Push connection created: ID=%s, status=%s", ts.connectionID, pushResp.ID, pushResp.Status)
 
 	return nil
 }
 
 // deletePushConnection removes the push connection from ts-store
 func (ts *TSStoreStream) deletePushConnection(ctx context.Context) error {
-	if ts.connectionID == "" {
+	if ts.pushID == "" {
 		return nil
 	}
 
-	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections/%s", ts.config.BaseURL(), ts.config.StoreName, ts.connectionID)
+	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections/%s", ts.config.BaseURL(), ts.config.StoreName, ts.pushID)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "DELETE", apiURL, nil)
 	if err != nil {
@@ -295,8 +295,8 @@ func (ts *TSStoreStream) deletePushConnection(ctx context.Context) error {
 		return fmt.Errorf("failed to delete push connection (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	log.Printf("[TSStoreStream %s] Push connection deleted: ID=%s", ts.datasourceID, ts.connectionID)
-	ts.connectionID = ""
+	log.Printf("[TSStoreStream %s] Push connection deleted: ID=%s", ts.connectionID, ts.pushID)
+	ts.pushID = ""
 
 	return nil
 }
@@ -379,7 +379,7 @@ func (ts *TSStoreStream) broadcast(records []models.Record) {
 		ts.buffer.Push(record)
 
 		// Feed to bucket aggregators for this datasource
-		registry.FeedRecord(ts.datasourceID, record)
+		registry.FeedRecord(ts.connectionID, record)
 
 		// Send to all subscribers (non-blocking)
 		for _, ch := range subscribers {
@@ -400,7 +400,7 @@ func (ts *TSStoreStream) Subscribe() chan models.Record {
 	ts.subscribers[ch] = struct{}{}
 	ts.mu.Unlock()
 
-	log.Printf("[TSStoreStream %s] Subscriber added (total: %d)", ts.datasourceID, len(ts.subscribers))
+	log.Printf("[TSStoreStream %s] Subscriber added (total: %d)", ts.connectionID, len(ts.subscribers))
 	return ch
 }
 
@@ -412,7 +412,7 @@ func (ts *TSStoreStream) Unsubscribe(ch chan models.Record) {
 	ts.mu.Unlock()
 
 	close(ch)
-	log.Printf("[TSStoreStream %s] Subscriber removed (total: %d)", ts.datasourceID, count)
+	log.Printf("[TSStoreStream %s] Subscriber removed (total: %d)", ts.connectionID, count)
 }
 
 // GetBuffer returns the current buffer contents
@@ -462,15 +462,15 @@ func (ts *TSStoreStream) cleanup(ctx context.Context) {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := ts.deletePushConnection(cleanupCtx); err != nil {
-		log.Printf("[TSStoreStream %s] Error deleting push connection: %v", ts.datasourceID, err)
+		log.Printf("[TSStoreStream %s] Error deleting push connection: %v", ts.connectionID, err)
 	}
 
 	// Unsubscribe from inbound handler
 	if ts.inboundChan != nil {
-		GetInboundHandler().Unsubscribe(ts.datasourceID, ts.inboundChan)
+		GetInboundHandler().Unsubscribe(ts.connectionID, ts.inboundChan)
 		ts.inboundChan = nil
 	}
 
 	ts.connected = false
-	log.Printf("[TSStoreStream %s] Cleaned up", ts.datasourceID)
+	log.Printf("[TSStoreStream %s] Cleaned up", ts.connectionID)
 }

@@ -25,7 +25,7 @@ type ToolRegistry struct {
 	tools    map[string]Tool
 	handlers map[string]ToolHandler
 
-	connectionService *service.DatasourceService
+	connectionService *service.ConnectionService
 	dashboardService  *service.DashboardService
 	componentService      *service.ComponentService
 	deviceTypeService *service.DeviceTypeService
@@ -35,7 +35,7 @@ type ToolRegistry struct {
 // NewToolRegistry wires services into a fresh tool registry and registers
 // every tool the MCP server exposes. typeFilter may be nil (no filtering).
 func NewToolRegistry(
-	connectionSvc *service.DatasourceService,
+	connectionSvc *service.ConnectionService,
 	dashboardSvc *service.DashboardService,
 	chartSvc *service.ComponentService,
 	deviceTypeSvc *service.DeviceTypeService,
@@ -262,7 +262,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			ctx := context.Background()
-			conns, total, err := r.connectionService.ListDatasources(ctx, 100, 0)
+			conns, total, err := r.connectionService.ListConnections(ctx, 100, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -290,7 +290,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 			if !ok {
 				return nil, fmt.Errorf("id must be a string")
 			}
-			return r.connectionService.GetDatasource(context.Background(), id)
+			return r.connectionService.GetConnection(context.Background(), id)
 		},
 	)
 
@@ -311,18 +311,18 @@ func (r *ToolRegistry) registerConnectionTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			req := &models.CreateDatasourceRequest{
+			req := &models.CreateConnectionRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
-				Type:        models.DatasourceType(getString(args, "type")),
+				Type:        models.ConnectionType(getString(args, "type")),
 			}
 			if cfg, ok := args["config"].(map[string]interface{}); ok {
-				req.Config = parseDatasourceConfig(req.Type, cfg)
+				req.Config = parseConnectionConfig(req.Type, cfg)
 			}
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
-			return r.connectionService.CreateDatasource(context.Background(), req)
+			return r.connectionService.CreateConnection(context.Background(), req)
 		},
 	)
 
@@ -342,11 +342,11 @@ func (r *ToolRegistry) registerConnectionTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			req := &models.UpdateDatasourceRequest{
+			req := &models.UpdateConnectionRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
 			}
-			return r.connectionService.UpdateDatasource(context.Background(), id, req)
+			return r.connectionService.UpdateConnection(context.Background(), id, req)
 		},
 	)
 
@@ -364,7 +364,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if err := r.connectionService.DeleteDatasource(context.Background(), id); err != nil {
+			if err := r.connectionService.DeleteConnection(context.Background(), id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Connection %s deleted", id)}, nil
@@ -411,7 +411,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 					Params: getMap(queryMap, "params"),
 				},
 			}
-			return r.connectionService.QueryDatasource(context.Background(), id, req)
+			return r.connectionService.QueryConnection(context.Background(), id, req)
 		},
 	)
 }
@@ -652,7 +652,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				Page:         1,
 				PageSize:     100,
 				ChartType:    getString(args, "chart_type"),
-				DatasourceID: getString(args, "connection_id"),
+				ConnectionID: getString(args, "connection_id"),
 				Tag:          getString(args, "tag"),
 			}
 			result, err := r.componentService.ListComponents(context.Background(), params)
@@ -730,7 +730,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				Description:   getString(args, "description"),
 				ComponentType: getString(args, "component_type"),
 				ChartType:     getString(args, "chart_type"),
-				DatasourceID:  getString(args, "connection_id"),
+				ConnectionID:  getString(args, "connection_id"),
 				ComponentCode: getString(args, "component_code"),
 				UseCustomCode: getBool(args, "use_custom_code"),
 			}
@@ -797,7 +797,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				req.ChartType = &ct
 			}
 			if cid := getString(args, "connection_id"); cid != "" {
-				req.DatasourceID = &cid
+				req.ConnectionID = &cid
 			}
 			if code := getString(args, "component_code"); code != "" {
 				req.ComponentCode = &code
@@ -1102,7 +1102,7 @@ func componentWriteAck(c *models.Component) map[string]interface{} {
 		"name":            c.Name,
 		"title":           c.Title,
 		"chart_type":      c.ChartType,
-		"connection_id":   c.DatasourceID,
+		"connection_id":   c.ConnectionID,
 		"use_custom_code": c.UseCustomCode,
 		"component_code_length": len(c.ComponentCode),
 		"created":         c.Created,
@@ -1117,10 +1117,10 @@ func getMap(m map[string]interface{}, key string) map[string]interface{} {
 	return nil
 }
 
-func parseDatasourceConfig(dsType models.DatasourceType, configMap map[string]interface{}) models.DatasourceConfig {
-	config := models.DatasourceConfig{}
+func parseConnectionConfig(dsType models.ConnectionType, configMap map[string]interface{}) models.ConnectionConfig {
+	config := models.ConnectionConfig{}
 	switch dsType {
-	case models.DatasourceTypeAPI:
+	case models.ConnectionTypeAPI:
 		config.API = &models.APIConfig{
 			URL:     getString(configMap, "url"),
 			Method:  getString(configMap, "method"),
@@ -1134,7 +1134,7 @@ func parseDatasourceConfig(dsType models.DatasourceType, configMap map[string]in
 				}
 			}
 		}
-	case models.DatasourceTypeSQL:
+	case models.ConnectionTypeSQL:
 		config.SQL = &models.SQLConfig{
 			Driver:   getString(configMap, "driver"),
 			Host:     getString(configMap, "host"),
@@ -1145,18 +1145,18 @@ func parseDatasourceConfig(dsType models.DatasourceType, configMap map[string]in
 			SSL:      getBool(configMap, "ssl"),
 			Options:  getString(configMap, "options"),
 		}
-	case models.DatasourceTypeCSV:
+	case models.ConnectionTypeCSV:
 		config.CSV = &models.CSVConfig{
 			Path:      getString(configMap, "path"),
 			Delimiter: getString(configMap, "delimiter"),
 			HasHeader: getBool(configMap, "has_header"),
 		}
-	case models.DatasourceTypeSocket:
+	case models.ConnectionTypeSocket:
 		config.Socket = &models.SocketConfig{
 			URL:      getString(configMap, "url"),
 			Protocol: getString(configMap, "protocol"),
 		}
-	case models.DatasourceTypeTSStore:
+	case models.ConnectionTypeTSStore:
 		config.TSStore = &models.TSStoreConfig{
 			Transport: models.TSStoreTransport(getString(configMap, "transport")),
 			Protocol:  models.TSStoreProtocol(getString(configMap, "protocol")),

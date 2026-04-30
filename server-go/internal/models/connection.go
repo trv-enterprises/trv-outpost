@@ -28,19 +28,19 @@ const (
 	QueryTypeMQTT         QueryType = "mqtt"
 )
 
-// DatasourceType represents the type of data source
-type DatasourceType string
+// ConnectionType represents the type of data source
+type ConnectionType string
 
 const (
-	DatasourceTypeSQL        DatasourceType = "sql"
-	DatasourceTypeCSV        DatasourceType = "csv"
-	DatasourceTypeSocket     DatasourceType = "socket"
-	DatasourceTypeAPI        DatasourceType = "api"
-	DatasourceTypeTSStore    DatasourceType = "tsstore"
-	DatasourceTypePrometheus DatasourceType = "prometheus"
-	DatasourceTypeEdgeLake  DatasourceType = "edgelake"
-	DatasourceTypeMQTT     DatasourceType = "mqtt"
-	DatasourceTypeFrigate  DatasourceType = "frigate"
+	ConnectionTypeSQL        ConnectionType = "sql"
+	ConnectionTypeCSV        ConnectionType = "csv"
+	ConnectionTypeSocket     ConnectionType = "socket"
+	ConnectionTypeAPI        ConnectionType = "api"
+	ConnectionTypeTSStore    ConnectionType = "tsstore"
+	ConnectionTypePrometheus ConnectionType = "prometheus"
+	ConnectionTypeEdgeLake  ConnectionType = "edgelake"
+	ConnectionTypeMQTT     ConnectionType = "mqtt"
+	ConnectionTypeFrigate  ConnectionType = "frigate"
 )
 
 // HealthStatus represents the health status of a data source
@@ -74,15 +74,15 @@ type ResultSet struct {
 	Metadata map[string]interface{}   `json:"metadata,omitempty" bson:"metadata,omitempty"` // Additional metadata
 }
 
-// DataSource is the interface that all datasource implementations must satisfy
-type DataSource interface {
+// ConnectionAdapter is the interface that all datasource implementations must satisfy
+type ConnectionAdapter interface {
 	Query(ctx context.Context, query Query) (*ResultSet, error)
 	Stream(ctx context.Context, query Query) (<-chan Record, error)
 	Close() error
 }
 
-// Datasource represents a data source configuration stored in MongoDB
-type Datasource struct {
+// Connection represents a data source configuration stored in MongoDB
+type Connection struct {
 	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Name        string             `json:"name" bson:"name" binding:"required"`
 	Description string             `json:"description" bson:"description"`
@@ -94,8 +94,8 @@ type Datasource struct {
 	TypeConfig map[string]interface{} `json:"type_config,omitempty" bson:"type_config,omitempty"`
 
 	// LEGACY: Keep for backwards compatibility during migration
-	Type   DatasourceType   `json:"type,omitempty" bson:"type,omitempty"`
-	Config DatasourceConfig `json:"config,omitempty" bson:"config,omitempty"`
+	Type   ConnectionType   `json:"type,omitempty" bson:"type,omitempty"`
+	Config ConnectionConfig `json:"config,omitempty" bson:"config,omitempty"`
 
 	Health      HealthInfo `json:"health" bson:"health"`
 	Tags        []string   `json:"tags,omitempty" bson:"tags,omitempty"`
@@ -109,26 +109,26 @@ type Datasource struct {
 }
 
 // IsRegistryBased returns true if this datasource uses the new registry-based type system
-func (d *Datasource) IsRegistryBased() bool {
+func (d *Connection) IsRegistryBased() bool {
 	return d.TypeID != ""
 }
 
 // GetEffectiveTypeID returns the registry type ID, converting from legacy Type if needed
-func (d *Datasource) GetEffectiveTypeID() string {
+func (d *Connection) GetEffectiveTypeID() string {
 	if d.TypeID != "" {
 		return d.TypeID
 	}
 
 	// Convert legacy Type to registry TypeID
 	switch d.Type {
-	case DatasourceTypeSQL:
+	case ConnectionTypeSQL:
 		if d.Config.SQL != nil {
 			return "db." + d.Config.SQL.Driver
 		}
 		return "db.postgres" // default
-	case DatasourceTypeCSV:
+	case ConnectionTypeCSV:
 		return "file.csv"
-	case DatasourceTypeSocket:
+	case ConnectionTypeSocket:
 		if d.Config.Socket != nil {
 			switch d.Config.Socket.Protocol {
 			case "websocket":
@@ -141,17 +141,17 @@ func (d *Datasource) GetEffectiveTypeID() string {
 			}
 		}
 		return "stream.websocket"
-	case DatasourceTypeAPI:
+	case ConnectionTypeAPI:
 		return "api.rest"
-	case DatasourceTypeTSStore:
+	case ConnectionTypeTSStore:
 		return "store.tsstore"
-	case DatasourceTypePrometheus:
+	case ConnectionTypePrometheus:
 		return "api.prometheus"
-	case DatasourceTypeEdgeLake:
+	case ConnectionTypeEdgeLake:
 		return "api.edgelake"
-	case DatasourceTypeMQTT:
+	case ConnectionTypeMQTT:
 		return "stream.mqtt"
-	case DatasourceTypeFrigate:
+	case ConnectionTypeFrigate:
 		return "nvr.frigate"
 	default:
 		return ""
@@ -159,7 +159,7 @@ func (d *Datasource) GetEffectiveTypeID() string {
 }
 
 // GetEffectiveConfig returns the unified config map, converting from legacy Config if needed
-func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
+func (d *Connection) GetEffectiveConfig() map[string]interface{} {
 	if d.TypeConfig != nil {
 		return d.TypeConfig
 	}
@@ -168,7 +168,7 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 	config := make(map[string]interface{})
 
 	switch d.Type {
-	case DatasourceTypeSQL:
+	case ConnectionTypeSQL:
 		if d.Config.SQL != nil {
 			config["host"] = d.Config.SQL.Host
 			config["port"] = d.Config.SQL.Port
@@ -180,7 +180,7 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 			config["timeout"] = d.Config.SQL.Timeout
 			config["options"] = d.Config.SQL.Options
 		}
-	case DatasourceTypeCSV:
+	case ConnectionTypeCSV:
 		if d.Config.CSV != nil {
 			config["path"] = d.Config.CSV.Path
 			config["delimiter"] = d.Config.CSV.Delimiter
@@ -188,7 +188,7 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 			config["columns"] = d.Config.CSV.Columns
 			config["encoding"] = d.Config.CSV.Encoding
 		}
-	case DatasourceTypeSocket:
+	case ConnectionTypeSocket:
 		if d.Config.Socket != nil {
 			config["url"] = d.Config.Socket.URL
 			config["headers"] = d.Config.Socket.Headers
@@ -202,7 +202,7 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 				config["timestamp_field"] = d.Config.Socket.Parser.TimestampField
 			}
 		}
-	case DatasourceTypeAPI:
+	case ConnectionTypeAPI:
 		if d.Config.API != nil {
 			config["url"] = d.Config.API.URL
 			config["method"] = d.Config.API.Method
@@ -218,7 +218,7 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 				config["data_path"] = d.Config.API.ResponseConfig.DataPath
 			}
 		}
-	case DatasourceTypeTSStore:
+	case ConnectionTypeTSStore:
 		if d.Config.TSStore != nil {
 			config["transport"] = string(d.Config.TSStore.Transport)
 			config["protocol"] = string(d.Config.TSStore.Protocol)
@@ -229,21 +229,21 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 			config["api_key"] = d.Config.TSStore.APIKey
 			config["timeout"] = d.Config.TSStore.Timeout
 		}
-	case DatasourceTypePrometheus:
+	case ConnectionTypePrometheus:
 		if d.Config.Prometheus != nil {
 			config["url"] = d.Config.Prometheus.URL
 			config["username"] = d.Config.Prometheus.Username
 			config["password"] = d.Config.Prometheus.Password
 			config["timeout"] = d.Config.Prometheus.Timeout
 		}
-	case DatasourceTypeEdgeLake:
+	case ConnectionTypeEdgeLake:
 		if d.Config.EdgeLake != nil {
 			config["host"] = d.Config.EdgeLake.Host
 			config["port"] = d.Config.EdgeLake.Port
 			config["timeout"] = d.Config.EdgeLake.Timeout
 			config["use_distributed_query"] = d.Config.EdgeLake.UseDistributedQuery
 		}
-	case DatasourceTypeMQTT:
+	case ConnectionTypeMQTT:
 		if d.Config.MQTT != nil {
 			config["broker_url"] = d.Config.MQTT.BrokerURL
 			config["client_id"] = d.Config.MQTT.ClientID
@@ -255,7 +255,7 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 			config["clean_start"] = d.Config.MQTT.CleanStart
 			config["buffer_size"] = d.Config.MQTT.BufferSize
 		}
-	case DatasourceTypeFrigate:
+	case ConnectionTypeFrigate:
 		if d.Config.Frigate != nil {
 			config["host"] = d.Config.Frigate.Host
 			config["port"] = d.Config.Frigate.Port
@@ -268,8 +268,8 @@ func (d *Datasource) GetEffectiveConfig() map[string]interface{} {
 	return config
 }
 
-// DatasourceConfig holds type-specific configuration
-type DatasourceConfig struct {
+// ConnectionConfig holds type-specific configuration
+type ConnectionConfig struct {
 	SQL        *SQLConfig        `json:"sql,omitempty" bson:"sql,omitempty"`
 	CSV        *CSVConfig        `json:"csv,omitempty" bson:"csv,omitempty"`
 	Socket     *SocketConfig     `json:"socket,omitempty" bson:"socket,omitempty"`
@@ -575,8 +575,8 @@ type HealthInfo struct {
 	ResponseTime int64        `json:"response_time,omitempty" bson:"response_time,omitempty"` // milliseconds
 }
 
-// CreateDatasourceRequest represents request to create a data source
-type CreateDatasourceRequest struct {
+// CreateConnectionRequest represents request to create a data source
+type CreateConnectionRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 	Namespace   string `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
@@ -586,16 +586,16 @@ type CreateDatasourceRequest struct {
 	TypeConfig map[string]interface{} `json:"type_config,omitempty"`
 
 	// LEGACY: Keep for backwards compatibility
-	Type   DatasourceType   `json:"type,omitempty"`
-	Config DatasourceConfig `json:"config,omitempty"`
+	Type   ConnectionType   `json:"type,omitempty"`
+	Config ConnectionConfig `json:"config,omitempty"`
 
 	Tags             []string `json:"tags,omitempty"`
 	MaskSecrets      *bool    `json:"mask_secrets,omitempty"` // If true, secrets are masked in API responses (default: true)
 	SupportedSchemas []string `json:"supported_schemas,omitempty"`
 }
 
-// UpdateDatasourceRequest represents request to update a data source
-type UpdateDatasourceRequest struct {
+// UpdateConnectionRequest represents request to update a data source
+type UpdateConnectionRequest struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 	Namespace   string `json:"namespace,omitempty"` // Empty = leave current namespace unchanged.
@@ -605,29 +605,29 @@ type UpdateDatasourceRequest struct {
 	TypeConfig map[string]interface{} `json:"type_config,omitempty"`
 
 	// LEGACY: Keep for backwards compatibility
-	Config DatasourceConfig `json:"config,omitempty"`
+	Config ConnectionConfig `json:"config,omitempty"`
 
 	Tags             []string `json:"tags,omitempty"`
 	MaskSecrets      *bool    `json:"mask_secrets,omitempty"` // If provided, updates secret masking setting
 	SupportedSchemas []string `json:"supported_schemas,omitempty"`
 }
 
-// TestDatasourceRequest represents request to test a data source connection
-type TestDatasourceRequest struct {
+// TestConnectionRequest represents request to test a data source connection
+type TestConnectionRequest struct {
 	// NEW: Registry-based type system (preferred)
 	TypeID     string                 `json:"type_id,omitempty"`
 	TypeConfig map[string]interface{} `json:"type_config,omitempty"`
 
 	// LEGACY: Keep for backwards compatibility
-	Type   DatasourceType   `json:"type,omitempty"`
-	Config DatasourceConfig `json:"config,omitempty"`
+	Type   ConnectionType   `json:"type,omitempty"`
+	Config ConnectionConfig `json:"config,omitempty"`
 
 	// Optional: existing connection ID to resolve masked secrets from DB
 	ID string `json:"id,omitempty"`
 }
 
-// TestDatasourceResponse represents response from testing a data source
-type TestDatasourceResponse struct {
+// TestConnectionResponse represents response from testing a data source
+type TestConnectionResponse struct {
 	Success      bool         `json:"success"`
 	Status       HealthStatus `json:"status"`
 	Message      string       `json:"message,omitempty"`
@@ -707,9 +707,9 @@ type PrometheusSchemaProvider interface {
 }
 
 // UnifiedSchemaResponse is the response format for the get_schema tool
-// It provides a consistent schema format for all datasource types
+// It provides a consistent schema format for all connection types
 type UnifiedSchemaResponse struct {
-	Datasource UnifiedSchemaSourceInfo `json:"datasource"`
+	Connection UnifiedSchemaSourceInfo `json:"connection"`
 	Schema     UnifiedSchema           `json:"schema"`
 }
 
@@ -848,7 +848,7 @@ func maskSQLOptions(opts string) string {
 // for API responses where an internal UI may need to round-trip the
 // full object (MaskSecrets=false). Use SanitizeForExport for any
 // artifact that leaves the system.
-func (d *Datasource) SanitizeForAPI() *Datasource {
+func (d *Connection) SanitizeForAPI() *Connection {
 	if !d.MaskSecrets {
 		return d
 	}
@@ -858,13 +858,13 @@ func (d *Datasource) SanitizeForAPI() *Datasource {
 // SanitizeForExport returns a copy of the datasource with sensitive
 // fields masked, regardless of the MaskSecrets flag. Exported bundles
 // are publishable artifacts and must never carry credentials.
-func (d *Datasource) SanitizeForExport() *Datasource {
+func (d *Connection) SanitizeForExport() *Connection {
 	return d.sanitize()
 }
 
 // sanitize returns a masked copy of the datasource. Every secret-bearing
 // field across every ConnectionConfig sub-struct is redacted.
-func (d *Datasource) sanitize() *Datasource {
+func (d *Connection) sanitize() *Connection {
 	sanitized := *d
 
 	if d.Config.SQL != nil {
@@ -951,7 +951,7 @@ func (d *Datasource) sanitize() *Datasource {
 
 // HasSecret checks if a field currently has a secret value set (not empty).
 // Used by frontend to show "********" vs empty field.
-func (d *Datasource) HasSecret(fieldPath string) bool {
+func (d *Connection) HasSecret(fieldPath string) bool {
 	switch fieldPath {
 	case "sql.password":
 		return d.Config.SQL != nil && d.Config.SQL.Password != ""

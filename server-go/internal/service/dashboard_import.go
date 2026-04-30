@@ -186,14 +186,14 @@ func (s *DashboardService) ApplyImport(ctx context.Context, req *models.ImportAp
 
 // ── preflight classifiers ───────────────────────────────────────────
 
-func (s *DashboardService) classifyConnection(ctx context.Context, inc models.Datasource, targetNs string, out *models.ImportPreflightResponse) {
+func (s *DashboardService) classifyConnection(ctx context.Context, inc models.Connection, targetNs string, out *models.ImportPreflightResponse) {
 	idHex := inc.ID.Hex()
 	ref := models.ImportObjectRef{
 		Kind: models.ImportKindConnection, ID: idHex,
 		Name: inc.Name, Namespace: inc.Namespace,
 	}
 
-	existing, err := s.datasourceRepo.FindByID(ctx, idHex)
+	existing, err := s.connectionRepo.FindByID(ctx, idHex)
 	if err == nil && existing != nil {
 		if equalBySanitizedJSON(&inc, existing.SanitizeForAPI(), connectionVolatileFields()) {
 			out.Identical = append(out.Identical, ref)
@@ -210,7 +210,7 @@ func (s *DashboardService) classifyConnection(ctx context.Context, inc models.Da
 	}
 
 	// ID not found → check for (target_namespace, name) collision.
-	byName, err := s.datasourceRepo.FindByName(ctx, targetNs, inc.Name)
+	byName, err := s.connectionRepo.FindByName(ctx, targetNs, inc.Name)
 	if err == nil && byName != nil {
 		out.Blocked = append(out.Blocked, models.ImportBlocked{
 			Kind: ref.Kind, IncomingID: ref.ID, IncomingName: ref.Name,
@@ -295,13 +295,13 @@ func (s *DashboardService) classifyDashboard(ctx context.Context, inc models.Das
 // or just insert fresh. Masked password placeholders are handled here:
 // on update we preserve the existing secret; on create we leave the
 // placeholder literal for the user to fix.
-func (s *DashboardService) applyConnection(ctx context.Context, inc models.Datasource, targetNs string, isUpdate bool) error {
+func (s *DashboardService) applyConnection(ctx context.Context, inc models.Connection, targetNs string, isUpdate bool) error {
 	inc.Namespace = targetNs
 	now := time.Now()
 	coll := s.db.Collection("datasources")
 
 	if isUpdate {
-		existing, err := s.datasourceRepo.FindByID(ctx, inc.ID.Hex())
+		existing, err := s.connectionRepo.FindByID(ctx, inc.ID.Hex())
 		if err != nil {
 			return err
 		}
@@ -375,10 +375,10 @@ func (s *DashboardService) applyDashboard(ctx context.Context, inc models.Dashbo
 
 // ── helpers ─────────────────────────────────────────────────────────
 
-// requireImportRepos guards methods that need chartRepo + datasourceRepo
+// requireImportRepos guards methods that need chartRepo + connectionRepo
 // wired in. Main always wires them; this is defensive for tests.
 func (s *DashboardService) requireImportRepos() error {
-	if s.chartRepo == nil || s.datasourceRepo == nil || s.db == nil {
+	if s.chartRepo == nil || s.connectionRepo == nil || s.db == nil {
 		return fmt.Errorf("import requires chart/datasource repos and a database handle — service was constructed without them")
 	}
 	return nil

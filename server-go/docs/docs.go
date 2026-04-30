@@ -2547,7 +2547,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Filter by data source ID",
-                        "name": "datasource_id",
+                        "name": "connection_id",
                         "in": "query"
                     },
                     {
@@ -3249,6 +3249,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/connections/aggregators": {
+            "get": {
+                "description": "Get statistics about active bucket aggregators",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "Get aggregator statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/connections/streams": {
+            "get": {
+                "description": "Get a list of all active streaming connections",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "List active streams",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/connections/{id}/mqtt/sample": {
             "get": {
                 "description": "Subscribe to a topic and return the first message's schema (columns and sample values)",
@@ -3332,6 +3374,154 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/connections/{id}/stream": {
+            "get": {
+                "description": "Opens an SSE connection to stream real-time data from a socket connection",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "Stream data from a socket connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/connections/{id}/stream/aggregated": {
+            "post": {
+                "description": "Opens an SSE connection to stream time-bucketed aggregated data",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "Stream aggregated data from a socket connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Aggregation configuration",
+                        "name": "config",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.StreamAggregatedRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/connections/{id}/stream/status": {
+            "get": {
+                "description": "Get status information for an active stream",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "Get stream status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/streaming.StreamStatus"
                         }
                     },
                     "404": {
@@ -3673,7 +3863,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.CreateDatasourceRequest"
+                            "$ref": "#/definitions/models.CreateConnectionRequest"
                         }
                     }
                 ],
@@ -3681,7 +3871,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Datasource"
+                            "$ref": "#/definitions/models.Connection"
                         }
                     },
                     "400": {
@@ -3693,48 +3883,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/datasources/aggregators": {
-            "get": {
-                "description": "Get statistics about active bucket aggregators",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "Get aggregator statistics",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/datasources/streams": {
-            "get": {
-                "description": "Get a list of all active streaming connections",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "List active streams",
-                "responses": {
-                    "200": {
-                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3763,7 +3911,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.TestDatasourceRequest"
+                            "$ref": "#/definitions/models.TestConnectionRequest"
                         }
                     }
                 ],
@@ -3771,7 +3919,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.TestDatasourceResponse"
+                            "$ref": "#/definitions/models.TestConnectionResponse"
                         }
                     },
                     "400": {
@@ -3807,7 +3955,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Datasource"
+                            "$ref": "#/definitions/models.Connection"
                         }
                     },
                     "400": {
@@ -3852,7 +4000,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.UpdateDatasourceRequest"
+                            "$ref": "#/definitions/models.UpdateConnectionRequest"
                         }
                     }
                 ],
@@ -3860,7 +4008,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Datasource"
+                            "$ref": "#/definitions/models.Connection"
                         }
                     },
                     "400": {
@@ -4255,154 +4403,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/datasources/{id}/stream": {
-            "get": {
-                "description": "Opens an SSE connection to stream real-time data from a socket datasource",
-                "produces": [
-                    "text/event-stream"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "Stream data from a socket datasource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Datasource ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "SSE stream",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/datasources/{id}/stream/aggregated": {
-            "post": {
-                "description": "Opens an SSE connection to stream time-bucketed aggregated data",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "text/event-stream"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "Stream aggregated data from a socket datasource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Datasource ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Aggregation configuration",
-                        "name": "config",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.StreamAggregatedRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "SSE stream",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/datasources/{id}/stream/status": {
-            "get": {
-                "description": "Get status information for an active stream",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "Get stream status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Datasource ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/streaming.StreamStatus"
                         }
                     },
                     "404": {
@@ -5606,6 +5606,129 @@ const docTemplate = `{
                 }
             }
         },
+        "models.Connection": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "config": {
+                    "$ref": "#/definitions/models.ConnectionConfig"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "health": {
+                    "$ref": "#/definitions/models.HealthInfo"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mask_secrets": {
+                    "description": "If true, secrets are masked in API responses",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
+                    "type": "string"
+                },
+                "supported_schemas": {
+                    "description": "Control schema support - which control schemas this connection supports",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "description": "LEGACY: Keep for backwards compatibility during migration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ConnectionType"
+                        }
+                    ]
+                },
+                "type_config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type_id": {
+                    "description": "NEW: Registry-based type system (preferred)\nTypeID format: \"category.name\" (e.g., \"db.postgres\", \"stream.websocket-bidir\")",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ConnectionConfig": {
+            "type": "object",
+            "properties": {
+                "api": {
+                    "$ref": "#/definitions/models.APIConfig"
+                },
+                "csv": {
+                    "$ref": "#/definitions/models.CSVConfig"
+                },
+                "edgelake": {
+                    "$ref": "#/definitions/models.EdgeLakeConfig"
+                },
+                "frigate": {
+                    "$ref": "#/definitions/models.FrigateConfig"
+                },
+                "mqtt": {
+                    "$ref": "#/definitions/models.MQTTConfig"
+                },
+                "prometheus": {
+                    "$ref": "#/definitions/models.PrometheusConfig"
+                },
+                "socket": {
+                    "$ref": "#/definitions/models.SocketConfig"
+                },
+                "sql": {
+                    "$ref": "#/definitions/models.SQLConfig"
+                },
+                "tsstore": {
+                    "$ref": "#/definitions/models.TSStoreConfig"
+                }
+            }
+        },
+        "models.ConnectionType": {
+            "type": "string",
+            "enum": [
+                "sql",
+                "csv",
+                "socket",
+                "api",
+                "tsstore",
+                "prometheus",
+                "edgelake",
+                "mqtt",
+                "frigate"
+            ],
+            "x-enum-varnames": [
+                "ConnectionTypeSQL",
+                "ConnectionTypeCSV",
+                "ConnectionTypeSocket",
+                "ConnectionTypeAPI",
+                "ConnectionTypeTSStore",
+                "ConnectionTypePrometheus",
+                "ConnectionTypeEdgeLake",
+                "ConnectionTypeMQTT",
+                "ConnectionTypeFrigate"
+            ]
+        },
         "models.ControlConfig": {
             "description": "Configuration for interactive control components (buttons, toggles, etc.)",
             "type": "object",
@@ -5762,6 +5885,59 @@ const docTemplate = `{
                 }
             }
         },
+        "models.CreateConnectionRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "config": {
+                    "$ref": "#/definitions/models.ConnectionConfig"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "mask_secrets": {
+                    "description": "If true, secrets are masked in API responses (default: true)",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Empty defaults to \"default\" in the handler.",
+                    "type": "string"
+                },
+                "supported_schemas": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "description": "LEGACY: Keep for backwards compatibility",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ConnectionType"
+                        }
+                    ]
+                },
+                "type_config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type_id": {
+                    "description": "NEW: Registry-based type system (preferred)",
+                    "type": "string"
+                }
+            }
+        },
         "models.CreateDashboardRequest": {
             "description": "Request body for creating a new dashboard",
             "type": "object",
@@ -5798,59 +5974,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "models.CreateDatasourceRequest": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "config": {
-                    "$ref": "#/definitions/models.DatasourceConfig"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "mask_secrets": {
-                    "description": "If true, secrets are masked in API responses (default: true)",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "description": "Empty defaults to \"default\" in the handler.",
-                    "type": "string"
-                },
-                "supported_schemas": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "type": {
-                    "description": "LEGACY: Keep for backwards compatibility",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.DatasourceType"
-                        }
-                    ]
-                },
-                "type_config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "type_id": {
-                    "description": "NEW: Registry-based type system (preferred)",
-                    "type": "string"
                 }
             }
         },
@@ -6136,15 +6259,15 @@ const docTemplate = `{
             "description": "Dashboard info with optional data source names for display in tiles",
             "type": "object",
             "properties": {
-                "created": {
-                    "type": "string"
-                },
-                "datasource_names": {
-                    "description": "Unique data source names used by charts",
+                "connection_names": {
+                    "description": "Unique connection names used by referenced components",
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "created": {
+                    "type": "string"
                 },
                 "description": {
                     "type": "string"
@@ -6237,129 +6360,6 @@ const docTemplate = `{
                     "description": "Value to compare against (can be array for 'in' operator)"
                 }
             }
-        },
-        "models.Datasource": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "config": {
-                    "$ref": "#/definitions/models.DatasourceConfig"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "health": {
-                    "$ref": "#/definitions/models.HealthInfo"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "mask_secrets": {
-                    "description": "If true, secrets are masked in API responses",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "description": "Conflict-domain; uniqueness is (namespace, name). See models.Namespace.",
-                    "type": "string"
-                },
-                "supported_schemas": {
-                    "description": "Control schema support - which control schemas this connection supports",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "type": {
-                    "description": "LEGACY: Keep for backwards compatibility during migration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.DatasourceType"
-                        }
-                    ]
-                },
-                "type_config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "type_id": {
-                    "description": "NEW: Registry-based type system (preferred)\nTypeID format: \"category.name\" (e.g., \"db.postgres\", \"stream.websocket-bidir\")",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.DatasourceConfig": {
-            "type": "object",
-            "properties": {
-                "api": {
-                    "$ref": "#/definitions/models.APIConfig"
-                },
-                "csv": {
-                    "$ref": "#/definitions/models.CSVConfig"
-                },
-                "edgelake": {
-                    "$ref": "#/definitions/models.EdgeLakeConfig"
-                },
-                "frigate": {
-                    "$ref": "#/definitions/models.FrigateConfig"
-                },
-                "mqtt": {
-                    "$ref": "#/definitions/models.MQTTConfig"
-                },
-                "prometheus": {
-                    "$ref": "#/definitions/models.PrometheusConfig"
-                },
-                "socket": {
-                    "$ref": "#/definitions/models.SocketConfig"
-                },
-                "sql": {
-                    "$ref": "#/definitions/models.SQLConfig"
-                },
-                "tsstore": {
-                    "$ref": "#/definitions/models.TSStoreConfig"
-                }
-            }
-        },
-        "models.DatasourceType": {
-            "type": "string",
-            "enum": [
-                "sql",
-                "csv",
-                "socket",
-                "api",
-                "tsstore",
-                "prometheus",
-                "edgelake",
-                "mqtt",
-                "frigate"
-            ],
-            "x-enum-varnames": [
-                "DatasourceTypeSQL",
-                "DatasourceTypeCSV",
-                "DatasourceTypeSocket",
-                "DatasourceTypeAPI",
-                "DatasourceTypeTSStore",
-                "DatasourceTypePrometheus",
-                "DatasourceTypeEdgeLake",
-                "DatasourceTypeMQTT",
-                "DatasourceTypeFrigate"
-            ]
         },
         "models.Device": {
             "description": "A specific device instance with connection and topic bindings",
@@ -6709,7 +6709,7 @@ const docTemplate = `{
                 "connections": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Datasource"
+                        "$ref": "#/definitions/models.Connection"
                     }
                 },
                 "dashboards": {
@@ -7843,11 +7843,11 @@ const docTemplate = `{
                 }
             }
         },
-        "models.TestDatasourceRequest": {
+        "models.TestConnectionRequest": {
             "type": "object",
             "properties": {
                 "config": {
-                    "$ref": "#/definitions/models.DatasourceConfig"
+                    "$ref": "#/definitions/models.ConnectionConfig"
                 },
                 "id": {
                     "description": "Optional: existing connection ID to resolve masked secrets from DB",
@@ -7857,7 +7857,7 @@ const docTemplate = `{
                     "description": "LEGACY: Keep for backwards compatibility",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/models.DatasourceType"
+                            "$ref": "#/definitions/models.ConnectionType"
                         }
                     ]
                 },
@@ -7871,7 +7871,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.TestDatasourceResponse": {
+        "models.TestConnectionResponse": {
             "type": "object",
             "properties": {
                 "data": {},
@@ -8003,53 +8003,14 @@ const docTemplate = `{
                 }
             }
         },
-        "models.UpdateDashboardRequest": {
-            "description": "Request body for updating an existing dashboard",
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "metadata": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "description": "Omitted = leave current namespace unchanged.",
-                    "type": "string"
-                },
-                "panels": {
-                    "description": "Panels with optional chart_id",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.DashboardPanel"
-                    }
-                },
-                "settings": {
-                    "$ref": "#/definitions/models.DashboardSettings"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "thumbnail": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.UpdateDatasourceRequest": {
+        "models.UpdateConnectionRequest": {
             "type": "object",
             "properties": {
                 "config": {
                     "description": "LEGACY: Keep for backwards compatibility",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/models.DatasourceConfig"
+                            "$ref": "#/definitions/models.ConnectionConfig"
                         }
                     ]
                 },
@@ -8085,6 +8046,45 @@ const docTemplate = `{
                 },
                 "type_id": {
                     "description": "NEW: Registry-based type system",
+                    "type": "string"
+                }
+            }
+        },
+        "models.UpdateDashboardRequest": {
+            "description": "Request body for updating an existing dashboard",
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Omitted = leave current namespace unchanged.",
+                    "type": "string"
+                },
+                "panels": {
+                    "description": "Panels with optional chart_id",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DashboardPanel"
+                    }
+                },
+                "settings": {
+                    "$ref": "#/definitions/models.DashboardSettings"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "thumbnail": {
                     "type": "string"
                 }
             }
@@ -8643,7 +8643,7 @@ const docTemplate = `{
                 "connected": {
                     "type": "boolean"
                 },
-                "datasourceID": {
+                "connectionID": {
                     "type": "string"
                 },
                 "lastError": {},

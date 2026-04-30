@@ -92,7 +92,7 @@ type mqttSubscriber struct {
 // dynamically based on what subscribers need. Only subscribes to topics at the broker
 // level when at least one subscriber wants them.
 type MQTTStream struct {
-	datasourceID string
+	connectionID string
 	config       *models.MQTTConfig
 	cm           *autopaho.ConnectionManager
 	subscribers  []*mqttSubscriber
@@ -114,14 +114,14 @@ type MQTTStream struct {
 }
 
 // NewMQTTStream creates a new MQTT stream
-func NewMQTTStream(datasourceID string, config *models.MQTTConfig, streamConfig StreamConfig) *MQTTStream {
+func NewMQTTStream(connectionID string, config *models.MQTTConfig, streamConfig StreamConfig) *MQTTStream {
 	bufferSize := streamConfig.BufferSize
 	if config.BufferSize > 0 {
 		bufferSize = config.BufferSize
 	}
 
 	return &MQTTStream{
-		datasourceID:  datasourceID,
+		connectionID:  connectionID,
 		config:        config,
 		subscribers:   make([]*mqttSubscriber, 0),
 		topicRefs:     make(map[string]int),
@@ -162,7 +162,7 @@ func (s *MQTTStream) Start(ctx context.Context) error {
 		CleanStartOnInitialConnection: s.config.CleanStart,
 		SessionExpiryInterval:         0,
 		OnConnectionUp: func(cm *autopaho.ConnectionManager, connAck *paho.Connack) {
-			log.Printf("[MQTTStream %s] Connected to broker", s.datasourceID)
+			log.Printf("[MQTTStream %s] Connected to broker", s.connectionID)
 
 			s.mu.Lock()
 			s.connected = true
@@ -179,7 +179,7 @@ func (s *MQTTStream) Start(ctx context.Context) error {
 			}
 		},
 		OnConnectError: func(err error) {
-			log.Printf("[MQTTStream %s] Connection error: %v", s.datasourceID, err)
+			log.Printf("[MQTTStream %s] Connection error: %v", s.connectionID, err)
 			s.mu.Lock()
 			s.connected = false
 			s.lastError = err
@@ -218,7 +218,7 @@ func (s *MQTTStream) Start(ctx context.Context) error {
 	s.cm = cm
 	s.mu.Unlock()
 
-	log.Printf("[MQTTStream %s] Started (broker: %s, clientID: %s)", s.datasourceID, s.config.BrokerURL, clientID)
+	log.Printf("[MQTTStream %s] Started (broker: %s, clientID: %s)", s.connectionID, s.config.BrokerURL, clientID)
 	return nil
 }
 
@@ -247,9 +247,9 @@ func (s *MQTTStream) subscribeBrokerTopics(topics []string) {
 
 	_, err := cm.Subscribe(ctx, &paho.Subscribe{Subscriptions: subs})
 	if err != nil {
-		log.Printf("[MQTTStream %s] Subscribe error for %v: %v", s.datasourceID, topics, err)
+		log.Printf("[MQTTStream %s] Subscribe error for %v: %v", s.connectionID, topics, err)
 	} else {
-		log.Printf("[MQTTStream %s] Subscribed to broker topics: %v", s.datasourceID, topics)
+		log.Printf("[MQTTStream %s] Subscribed to broker topics: %v", s.connectionID, topics)
 	}
 }
 
@@ -268,9 +268,9 @@ func (s *MQTTStream) unsubscribeBrokerTopics(topics []string) {
 
 	_, err := cm.Unsubscribe(ctx, &paho.Unsubscribe{Topics: topics})
 	if err != nil {
-		log.Printf("[MQTTStream %s] Unsubscribe error for %v: %v", s.datasourceID, topics, err)
+		log.Printf("[MQTTStream %s] Unsubscribe error for %v: %v", s.connectionID, topics, err)
 	} else {
-		log.Printf("[MQTTStream %s] Unsubscribed from broker topics: %v", s.datasourceID, topics)
+		log.Printf("[MQTTStream %s] Unsubscribed from broker topics: %v", s.connectionID, topics)
 	}
 }
 
@@ -315,7 +315,7 @@ func (s *MQTTStream) handleMessage(m *paho.Publish) {
 
 	// Feed to bucket aggregators
 	aggRegistry := GetRegistry()
-	aggRegistry.FeedRecord(s.datasourceID, record)
+	aggRegistry.FeedRecord(s.connectionID, record)
 
 	// Update the per-topic latest-state cache and route to matching
 	// subscribers under a single write-lock acquisition. Fan-out is
@@ -396,7 +396,7 @@ func (s *MQTTStream) SubscribeWithTopics(topics []string) chan models.Record {
 		select {
 		case ch <- rec:
 		default:
-			log.Printf("[MQTTStream %s] preload channel full, skipping record", s.datasourceID)
+			log.Printf("[MQTTStream %s] preload channel full, skipping record", s.connectionID)
 		}
 	}
 
@@ -405,7 +405,7 @@ func (s *MQTTStream) SubscribeWithTopics(topics []string) chan models.Record {
 		s.subscribeBrokerTopics(newTopics)
 	}
 
-	log.Printf("[MQTTStream %s] Subscriber added for topics %v (total subscribers: %d, preloaded: %d)", s.datasourceID, topics, totalSubs, len(preload))
+	log.Printf("[MQTTStream %s] Subscriber added for topics %v (total subscribers: %d, preloaded: %d)", s.connectionID, topics, totalSubs, len(preload))
 	return ch
 }
 
@@ -439,7 +439,7 @@ func (s *MQTTStream) Unsubscribe(ch chan models.Record) {
 		s.unsubscribeBrokerTopics(removedTopics)
 	}
 
-	log.Printf("[MQTTStream %s] Subscriber removed (total: %d)", s.datasourceID, totalSubs)
+	log.Printf("[MQTTStream %s] Subscriber removed (total: %d)", s.connectionID, totalSubs)
 }
 
 // GetBuffer returns the current buffer contents
@@ -519,7 +519,7 @@ func (s *MQTTStream) Stop() {
 	}
 
 	s.connected = false
-	log.Printf("[MQTTStream %s] Stopped", s.datasourceID)
+	log.Printf("[MQTTStream %s] Stopped", s.connectionID)
 }
 
 // ParseTopicFilters parses a comma-separated topic filter string into individual filters

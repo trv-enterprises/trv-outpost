@@ -604,6 +604,96 @@ definitions:
       value:
         description: The setting value
     type: object
+  models.Connection:
+    properties:
+      config:
+        $ref: '#/definitions/models.ConnectionConfig'
+      created_at:
+        type: string
+      description:
+        type: string
+      health:
+        $ref: '#/definitions/models.HealthInfo'
+      id:
+        type: string
+      mask_secrets:
+        description: If true, secrets are masked in API responses
+        type: boolean
+      name:
+        type: string
+      namespace:
+        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
+        type: string
+      supported_schemas:
+        description: Control schema support - which control schemas this connection
+          supports
+        items:
+          type: string
+        type: array
+      tags:
+        items:
+          type: string
+        type: array
+      type:
+        allOf:
+        - $ref: '#/definitions/models.ConnectionType'
+        description: 'LEGACY: Keep for backwards compatibility during migration'
+      type_config:
+        additionalProperties: true
+        type: object
+      type_id:
+        description: |-
+          NEW: Registry-based type system (preferred)
+          TypeID format: "category.name" (e.g., "db.postgres", "stream.websocket-bidir")
+        type: string
+      updated_at:
+        type: string
+    required:
+    - name
+    type: object
+  models.ConnectionConfig:
+    properties:
+      api:
+        $ref: '#/definitions/models.APIConfig'
+      csv:
+        $ref: '#/definitions/models.CSVConfig'
+      edgelake:
+        $ref: '#/definitions/models.EdgeLakeConfig'
+      frigate:
+        $ref: '#/definitions/models.FrigateConfig'
+      mqtt:
+        $ref: '#/definitions/models.MQTTConfig'
+      prometheus:
+        $ref: '#/definitions/models.PrometheusConfig'
+      socket:
+        $ref: '#/definitions/models.SocketConfig'
+      sql:
+        $ref: '#/definitions/models.SQLConfig'
+      tsstore:
+        $ref: '#/definitions/models.TSStoreConfig'
+    type: object
+  models.ConnectionType:
+    enum:
+    - sql
+    - csv
+    - socket
+    - api
+    - tsstore
+    - prometheus
+    - edgelake
+    - mqtt
+    - frigate
+    type: string
+    x-enum-varnames:
+    - ConnectionTypeSQL
+    - ConnectionTypeCSV
+    - ConnectionTypeSocket
+    - ConnectionTypeAPI
+    - ConnectionTypeTSStore
+    - ConnectionTypePrometheus
+    - ConnectionTypeEdgeLake
+    - ConnectionTypeMQTT
+    - ConnectionTypeFrigate
   models.ControlConfig:
     description: Configuration for interactive control components (buttons, toggles,
       etc.)
@@ -714,6 +804,41 @@ definitions:
     required:
     - name
     type: object
+  models.CreateConnectionRequest:
+    properties:
+      config:
+        $ref: '#/definitions/models.ConnectionConfig'
+      description:
+        type: string
+      mask_secrets:
+        description: 'If true, secrets are masked in API responses (default: true)'
+        type: boolean
+      name:
+        type: string
+      namespace:
+        description: Empty defaults to "default" in the handler.
+        type: string
+      supported_schemas:
+        items:
+          type: string
+        type: array
+      tags:
+        items:
+          type: string
+        type: array
+      type:
+        allOf:
+        - $ref: '#/definitions/models.ConnectionType'
+        description: 'LEGACY: Keep for backwards compatibility'
+      type_config:
+        additionalProperties: true
+        type: object
+      type_id:
+        description: 'NEW: Registry-based type system (preferred)'
+        type: string
+    required:
+    - name
+    type: object
   models.CreateDashboardRequest:
     description: Request body for creating a new dashboard
     properties:
@@ -738,41 +863,6 @@ definitions:
         items:
           type: string
         type: array
-    required:
-    - name
-    type: object
-  models.CreateDatasourceRequest:
-    properties:
-      config:
-        $ref: '#/definitions/models.DatasourceConfig'
-      description:
-        type: string
-      mask_secrets:
-        description: 'If true, secrets are masked in API responses (default: true)'
-        type: boolean
-      name:
-        type: string
-      namespace:
-        description: Empty defaults to "default" in the handler.
-        type: string
-      supported_schemas:
-        items:
-          type: string
-        type: array
-      tags:
-        items:
-          type: string
-        type: array
-      type:
-        allOf:
-        - $ref: '#/definitions/models.DatasourceType'
-        description: 'LEGACY: Keep for backwards compatibility'
-      type_config:
-        additionalProperties: true
-        type: object
-      type_id:
-        description: 'NEW: Registry-based type system (preferred)'
-        type: string
     required:
     - name
     type: object
@@ -969,13 +1059,13 @@ definitions:
   models.DashboardSummary:
     description: Dashboard info with optional data source names for display in tiles
     properties:
-      created:
-        type: string
-      datasource_names:
-        description: Unique data source names used by charts
+      connection_names:
+        description: Unique connection names used by referenced components
         items:
           type: string
         type: array
+      created:
+        type: string
       description:
         type: string
       id:
@@ -1041,96 +1131,6 @@ definitions:
       value:
         description: Value to compare against (can be array for 'in' operator)
     type: object
-  models.Datasource:
-    properties:
-      config:
-        $ref: '#/definitions/models.DatasourceConfig'
-      created_at:
-        type: string
-      description:
-        type: string
-      health:
-        $ref: '#/definitions/models.HealthInfo'
-      id:
-        type: string
-      mask_secrets:
-        description: If true, secrets are masked in API responses
-        type: boolean
-      name:
-        type: string
-      namespace:
-        description: Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
-        type: string
-      supported_schemas:
-        description: Control schema support - which control schemas this connection
-          supports
-        items:
-          type: string
-        type: array
-      tags:
-        items:
-          type: string
-        type: array
-      type:
-        allOf:
-        - $ref: '#/definitions/models.DatasourceType'
-        description: 'LEGACY: Keep for backwards compatibility during migration'
-      type_config:
-        additionalProperties: true
-        type: object
-      type_id:
-        description: |-
-          NEW: Registry-based type system (preferred)
-          TypeID format: "category.name" (e.g., "db.postgres", "stream.websocket-bidir")
-        type: string
-      updated_at:
-        type: string
-    required:
-    - name
-    type: object
-  models.DatasourceConfig:
-    properties:
-      api:
-        $ref: '#/definitions/models.APIConfig'
-      csv:
-        $ref: '#/definitions/models.CSVConfig'
-      edgelake:
-        $ref: '#/definitions/models.EdgeLakeConfig'
-      frigate:
-        $ref: '#/definitions/models.FrigateConfig'
-      mqtt:
-        $ref: '#/definitions/models.MQTTConfig'
-      prometheus:
-        $ref: '#/definitions/models.PrometheusConfig'
-      socket:
-        $ref: '#/definitions/models.SocketConfig'
-      sql:
-        $ref: '#/definitions/models.SQLConfig'
-      tsstore:
-        $ref: '#/definitions/models.TSStoreConfig'
-    type: object
-  models.DatasourceType:
-    enum:
-    - sql
-    - csv
-    - socket
-    - api
-    - tsstore
-    - prometheus
-    - edgelake
-    - mqtt
-    - frigate
-    type: string
-    x-enum-varnames:
-    - DatasourceTypeSQL
-    - DatasourceTypeCSV
-    - DatasourceTypeSocket
-    - DatasourceTypeAPI
-    - DatasourceTypeTSStore
-    - DatasourceTypePrometheus
-    - DatasourceTypeEdgeLake
-    - DatasourceTypeMQTT
-    - DatasourceTypeFrigate
   models.Device:
     description: A specific device instance with connection and topic bindings
     properties:
@@ -1373,7 +1373,7 @@ definitions:
         type: array
       connections:
         items:
-          $ref: '#/definitions/models.Datasource'
+          $ref: '#/definitions/models.Connection'
         type: array
       dashboards:
         items:
@@ -2187,17 +2187,17 @@ definitions:
       name:
         type: string
     type: object
-  models.TestDatasourceRequest:
+  models.TestConnectionRequest:
     properties:
       config:
-        $ref: '#/definitions/models.DatasourceConfig'
+        $ref: '#/definitions/models.ConnectionConfig'
       id:
         description: 'Optional: existing connection ID to resolve masked secrets from
           DB'
         type: string
       type:
         allOf:
-        - $ref: '#/definitions/models.DatasourceType'
+        - $ref: '#/definitions/models.ConnectionType'
         description: 'LEGACY: Keep for backwards compatibility'
       type_config:
         additionalProperties: true
@@ -2206,7 +2206,7 @@ definitions:
         description: 'NEW: Registry-based type system (preferred)'
         type: string
     type: object
-  models.TestDatasourceResponse:
+  models.TestConnectionResponse:
     properties:
       data: {}
       message:
@@ -2297,6 +2297,37 @@ definitions:
     required:
     - settings
     type: object
+  models.UpdateConnectionRequest:
+    properties:
+      config:
+        allOf:
+        - $ref: '#/definitions/models.ConnectionConfig'
+        description: 'LEGACY: Keep for backwards compatibility'
+      description:
+        type: string
+      mask_secrets:
+        description: If provided, updates secret masking setting
+        type: boolean
+      name:
+        type: string
+      namespace:
+        description: Empty = leave current namespace unchanged.
+        type: string
+      supported_schemas:
+        items:
+          type: string
+        type: array
+      tags:
+        items:
+          type: string
+        type: array
+      type_config:
+        additionalProperties: true
+        type: object
+      type_id:
+        description: 'NEW: Registry-based type system'
+        type: string
+    type: object
   models.UpdateDashboardRequest:
     description: Request body for updating an existing dashboard
     properties:
@@ -2322,37 +2353,6 @@ definitions:
           type: string
         type: array
       thumbnail:
-        type: string
-    type: object
-  models.UpdateDatasourceRequest:
-    properties:
-      config:
-        allOf:
-        - $ref: '#/definitions/models.DatasourceConfig'
-        description: 'LEGACY: Keep for backwards compatibility'
-      description:
-        type: string
-      mask_secrets:
-        description: If provided, updates secret masking setting
-        type: boolean
-      name:
-        type: string
-      namespace:
-        description: Empty = leave current namespace unchanged.
-        type: string
-      supported_schemas:
-        items:
-          type: string
-        type: array
-      tags:
-        items:
-          type: string
-        type: array
-      type_config:
-        additionalProperties: true
-        type: object
-      type_id:
-        description: 'NEW: Registry-based type system'
         type: string
     type: object
   models.UpdateDeviceRequest:
@@ -2751,7 +2751,7 @@ definitions:
         type: integer
       connected:
         type: boolean
-      datasourceID:
+      connectionID:
         type: string
       lastError: {}
       subscriberCount:
@@ -4465,7 +4465,7 @@ paths:
         type: string
       - description: Filter by data source ID
         in: query
-        name: datasource_id
+        name: connection_id
         type: string
       - description: Filter by tag
         in: query
@@ -5011,6 +5011,135 @@ paths:
       summary: Get topics from an MQTT broker
       tags:
       - datasources
+  /connections/{id}/stream:
+    get:
+      description: Opens an SSE connection to stream real-time data from a socket
+        connection
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stream data from a socket connection
+      tags:
+      - connections
+  /connections/{id}/stream/aggregated:
+    post:
+      consumes:
+      - application/json
+      description: Opens an SSE connection to stream time-bucketed aggregated data
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Aggregation configuration
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.StreamAggregatedRequest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stream aggregated data from a socket connection
+      tags:
+      - connections
+  /connections/{id}/stream/status:
+    get:
+      description: Get status information for an active stream
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/streaming.StreamStatus'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get stream status
+      tags:
+      - connections
+  /connections/aggregators:
+    get:
+      description: Get statistics about active bucket aggregators
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get aggregator statistics
+      tags:
+      - connections
+  /connections/streams:
+    get:
+      description: Get a list of all active streaming connections
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List active streams
+      tags:
+      - connections
   /dashboards:
     get:
       description: Get a paginated list of dashboards with optional filtering. Use
@@ -5234,14 +5363,14 @@ paths:
         name: datasource
         required: true
         schema:
-          $ref: '#/definitions/models.CreateDatasourceRequest'
+          $ref: '#/definitions/models.CreateConnectionRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/models.Datasource'
+            $ref: '#/definitions/models.Connection'
         "400":
           description: Bad Request
           schema:
@@ -5294,7 +5423,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Datasource'
+            $ref: '#/definitions/models.Connection'
         "400":
           description: Bad Request
           schema:
@@ -5323,14 +5452,14 @@ paths:
         name: datasource
         required: true
         schema:
-          $ref: '#/definitions/models.UpdateDatasourceRequest'
+          $ref: '#/definitions/models.UpdateConnectionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Datasource'
+            $ref: '#/definitions/models.Connection'
         "400":
           description: Bad Request
           schema:
@@ -5588,135 +5717,6 @@ paths:
       summary: Get database schema for a SQL datasource
       tags:
       - datasources
-  /datasources/{id}/stream:
-    get:
-      description: Opens an SSE connection to stream real-time data from a socket
-        datasource
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - text/event-stream
-      responses:
-        "200":
-          description: SSE stream
-          schema:
-            type: string
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Stream data from a socket datasource
-      tags:
-      - datasources
-  /datasources/{id}/stream/aggregated:
-    post:
-      consumes:
-      - application/json
-      description: Opens an SSE connection to stream time-bucketed aggregated data
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Aggregation configuration
-        in: body
-        name: config
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.StreamAggregatedRequest'
-      produces:
-      - text/event-stream
-      responses:
-        "200":
-          description: SSE stream
-          schema:
-            type: string
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Stream aggregated data from a socket datasource
-      tags:
-      - datasources
-  /datasources/{id}/stream/status:
-    get:
-      description: Get status information for an active stream
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/streaming.StreamStatus'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get stream status
-      tags:
-      - datasources
-  /datasources/aggregators:
-    get:
-      description: Get statistics about active bucket aggregators
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get aggregator statistics
-      tags:
-      - datasources
-  /datasources/streams:
-    get:
-      description: Get a list of all active streaming connections
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List active streams
-      tags:
-      - datasources
   /datasources/test:
     post:
       consumes:
@@ -5728,14 +5728,14 @@ paths:
         name: datasource
         required: true
         schema:
-          $ref: '#/definitions/models.TestDatasourceRequest'
+          $ref: '#/definitions/models.TestConnectionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.TestDatasourceResponse'
+            $ref: '#/definitions/models.TestConnectionResponse'
         "400":
           description: Bad Request
           schema:

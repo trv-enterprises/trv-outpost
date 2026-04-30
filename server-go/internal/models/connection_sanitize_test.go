@@ -12,15 +12,15 @@ import (
 // sentinel is a value we should never see in sanitized output.
 const sentinel = "SECRET-SHOULD-NEVER-APPEAR"
 
-// fullyLoadedDatasource builds a Datasource with every connection type
+// fullyLoadedConnection builds a Connection with every connection type
 // populated and every secret-bearing field set to the sentinel. The
 // tests below walk the sanitized copy and assert the sentinel is gone
 // from all of them.
-func fullyLoadedDatasource(maskSecrets bool) *Datasource {
-	return &Datasource{
+func fullyLoadedConnection(maskSecrets bool) *Connection {
+	return &Connection{
 		Name:        "test",
 		MaskSecrets: maskSecrets,
-		Config: DatasourceConfig{
+		Config: ConnectionConfig{
 			SQL: &SQLConfig{
 				Host:     "db",
 				Password: sentinel,
@@ -78,9 +78,9 @@ func fullyLoadedDatasource(maskSecrets bool) *Datasource {
 }
 
 // containsSentinel walks string fields of interest on a sanitized
-// Datasource and returns the first location where the sentinel still
+// Connection and returns the first location where the sentinel still
 // appears, or "" if it's gone.
-func containsSentinel(d *Datasource) string {
+func containsSentinel(d *Connection) string {
 	if d.Config.SQL != nil {
 		if strings.Contains(d.Config.SQL.Password, sentinel) {
 			return "SQL.Password"
@@ -157,7 +157,7 @@ func containsSentinel(d *Datasource) string {
 }
 
 func TestSanitizeForExport_RedactsEverySecretField(t *testing.T) {
-	d := fullyLoadedDatasource(true)
+	d := fullyLoadedConnection(true)
 	got := d.SanitizeForExport()
 	if leak := containsSentinel(got); leak != "" {
 		t.Fatalf("SanitizeForExport leaked secret at %s", leak)
@@ -167,7 +167,7 @@ func TestSanitizeForExport_RedactsEverySecretField(t *testing.T) {
 func TestSanitizeForExport_IgnoresMaskSecretsFlag(t *testing.T) {
 	// SanitizeForExport must redact even when MaskSecrets=false — the
 	// flag is a UI-round-trip affordance, not an export policy.
-	d := fullyLoadedDatasource(false)
+	d := fullyLoadedConnection(false)
 	got := d.SanitizeForExport()
 	if leak := containsSentinel(got); leak != "" {
 		t.Fatalf("SanitizeForExport respected MaskSecrets=false and leaked at %s", leak)
@@ -178,7 +178,7 @@ func TestSanitizeForAPI_HonorsMaskSecretsFlag(t *testing.T) {
 	// When MaskSecrets is false, SanitizeForAPI returns the original
 	// object unchanged — this is load-bearing for the edit-form
 	// round-trip.
-	d := fullyLoadedDatasource(false)
+	d := fullyLoadedConnection(false)
 	got := d.SanitizeForAPI()
 	if got.Config.SQL.Password != sentinel {
 		t.Fatalf("SanitizeForAPI redacted despite MaskSecrets=false")
@@ -186,7 +186,7 @@ func TestSanitizeForAPI_HonorsMaskSecretsFlag(t *testing.T) {
 }
 
 func TestSanitizeForExport_PreservesNonSecretHeaders(t *testing.T) {
-	d := fullyLoadedDatasource(true)
+	d := fullyLoadedConnection(true)
 	got := d.SanitizeForExport()
 	if got.Config.API.Headers["X-Custom"] != "not-a-secret" {
 		t.Fatalf("non-secret header was redacted: got %q", got.Config.API.Headers["X-Custom"])
@@ -200,7 +200,7 @@ func TestSanitizeForExport_PreservesNonSecretHeaders(t *testing.T) {
 }
 
 func TestSanitizeForExport_DoesNotMutateOriginal(t *testing.T) {
-	d := fullyLoadedDatasource(true)
+	d := fullyLoadedConnection(true)
 	_ = d.SanitizeForExport()
 	if d.Config.SQL.Password != sentinel {
 		t.Fatalf("original was mutated — SQL password is now %q", d.Config.SQL.Password)

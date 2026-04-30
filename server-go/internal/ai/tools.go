@@ -85,7 +85,7 @@ Control types and their UI config:
 			Description: anthropic.String("Configure how data maps to chart axes and series"),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"datasource_id":  map[string]interface{}{"type": "string", "description": "ID of the connection to use"},
+					"connection_id":  map[string]interface{}{"type": "string", "description": "ID of the connection to use"},
 					"x_axis":         map[string]interface{}{"type": "string", "description": "Column for X axis"},
 					"x_axis_label":   map[string]interface{}{"type": "string", "description": "Label for X axis"},
 					"x_axis_format":  map[string]interface{}{"type": "string", "description": "Format for X axis values"},
@@ -264,9 +264,9 @@ Use this BEFORE configuring data mapping to understand the data structure.`),
 			Description: anthropic.String("DEPRECATED: Use get_schema instead. Get the schema (tables and columns) for a SQL database data source."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"datasource_id": map[string]interface{}{"type": "string", "description": "ID of the SQL data source"},
+					"connection_id": map[string]interface{}{"type": "string", "description": "ID of the SQL data source"},
 				},
-				Required: []string{"datasource_id"},
+				Required: []string{"connection_id"},
 			},
 		},
 		{
@@ -274,9 +274,9 @@ Use this BEFORE configuring data mapping to understand the data structure.`),
 			Description: anthropic.String("DEPRECATED: Use get_schema instead. Get available metrics and labels from a Prometheus data source."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"datasource_id": map[string]interface{}{"type": "string", "description": "ID of the Prometheus data source"},
+					"connection_id": map[string]interface{}{"type": "string", "description": "ID of the Prometheus data source"},
 				},
-				Required: []string{"datasource_id"},
+				Required: []string{"connection_id"},
 			},
 		},
 		{
@@ -284,11 +284,11 @@ Use this BEFORE configuring data mapping to understand the data structure.`),
 			Description: anthropic.String("DEPRECATED: Use get_schema instead. Get available databases, tables, and columns from an EdgeLake data source."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"datasource_id": map[string]interface{}{"type": "string", "description": "ID of the EdgeLake data source"},
+					"connection_id": map[string]interface{}{"type": "string", "description": "ID of the EdgeLake data source"},
 					"database":      map[string]interface{}{"type": "string", "description": "Database name (optional - if omitted, returns list of databases)"},
 					"table":         map[string]interface{}{"type": "string", "description": "Table name (optional - if omitted with database, returns list of tables)"},
 				},
-				Required: []string{"datasource_id"},
+				Required: []string{"connection_id"},
 			},
 		},
 		{
@@ -362,7 +362,7 @@ const (
 	ToolQueryConnection       = "query_connection"
 	ToolListConnections       = "list_connections"
 	ToolGetSchema             = "get_schema"
-	ToolGetDatasourceSchema   = "get_datasource_schema"   // Deprecated
+	ToolGetConnectionSchema   = "get_datasource_schema"   // Deprecated
 	ToolGetPrometheusSchema   = "get_prometheus_schema"   // Deprecated
 	ToolGetEdgeLakeSchema     = "get_edgelake_schema"     // Deprecated
 	ToolListDeviceTypes       = "list_device_types"

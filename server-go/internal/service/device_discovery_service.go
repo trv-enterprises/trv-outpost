@@ -18,19 +18,19 @@ import (
 
 // DeviceDiscoveryService handles device discovery from MQTT bridges
 type DeviceDiscoveryService struct {
-	datasourceRepo *repository.DatasourceRepository
+	connectionRepo *repository.ConnectionRepository
 	deviceTypeRepo *repository.DeviceTypeRepository
 	deviceRepo     *repository.DeviceRepository
 }
 
 // NewDeviceDiscoveryService creates a new device discovery service
 func NewDeviceDiscoveryService(
-	datasourceRepo *repository.DatasourceRepository,
+	connectionRepo *repository.ConnectionRepository,
 	deviceTypeRepo *repository.DeviceTypeRepository,
 	deviceRepo *repository.DeviceRepository,
 ) *DeviceDiscoveryService {
 	return &DeviceDiscoveryService{
-		datasourceRepo: datasourceRepo,
+		connectionRepo: connectionRepo,
 		deviceTypeRepo: deviceTypeRepo,
 		deviceRepo:     deviceRepo,
 	}
@@ -39,14 +39,14 @@ func NewDeviceDiscoveryService(
 // DiscoverDevices discovers devices on an MQTT connection
 func (s *DeviceDiscoveryService) DiscoverDevices(ctx context.Context, connectionID string) (*models.DiscoverDevicesResponse, error) {
 	// Validate connection
-	ds, err := s.datasourceRepo.FindByID(ctx, connectionID)
+	ds, err := s.connectionRepo.FindByID(ctx, connectionID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
 		return nil, fmt.Errorf("connection not found")
 	}
-	if ds.Type != models.DatasourceTypeMQTT || ds.Config.MQTT == nil {
+	if ds.Type != models.ConnectionTypeMQTT || ds.Config.MQTT == nil {
 		return nil, fmt.Errorf("connection is not MQTT type")
 	}
 

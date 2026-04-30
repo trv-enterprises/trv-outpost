@@ -204,7 +204,7 @@ func (h *ComponentHandler) GetComponentDraft(c *gin.Context) {
 // @Param chart_type query string false "Filter by chart sub-type"
 // @Param component_type query string false "Filter by component type (chart, control, display)"
 // @Param status query string false "Filter by status (draft, final)"
-// @Param datasource_id query string false "Filter by data source ID"
+// @Param connection_id query string false "Filter by data source ID"
 // @Param tag query string false "Filter by tag"
 // @Param page query int false "Page number" default(1)
 // @Param page_size query int false "Page size" default(20)

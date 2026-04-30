@@ -335,7 +335,7 @@ func summarizeToolResultForHistory(toolName, output string) string {
 		ToolListConnections:     true,
 		ToolListDeviceTypes:     true,
 		ToolGetSchema:           true,
-		ToolGetDatasourceSchema: true,
+		ToolGetConnectionSchema: true,
 		ToolGetPrometheusSchema: true,
 		ToolGetEdgeLakeSchema:   true,
 		ToolQueryConnection:     true,
@@ -370,7 +370,7 @@ func summarizeToolResultForHistory(toolName, output string) string {
 		if data, ok := result.Data.([]interface{}); ok {
 			summary.Message = fmt.Sprintf("Returned %d connection(s) - use get_schema to explore", len(data))
 		}
-	case ToolGetSchema, ToolGetDatasourceSchema, ToolGetPrometheusSchema, ToolGetEdgeLakeSchema:
+	case ToolGetSchema, ToolGetConnectionSchema, ToolGetPrometheusSchema, ToolGetEdgeLakeSchema:
 		summary.Message = result.Message + " (schema already retrieved)"
 	case ToolQueryConnection, ToolPreviewData:
 		summary.Message = result.Message + " (data already retrieved)"

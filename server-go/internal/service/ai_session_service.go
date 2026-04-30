@@ -97,7 +97,7 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 			Name:          latestFinal.Name,
 			Description:   latestFinal.Description,
 			ChartType:     latestFinal.ChartType,
-			DatasourceID:  latestFinal.DatasourceID,
+			ConnectionID:  latestFinal.ConnectionID,
 			QueryConfig:   latestFinal.QueryConfig,
 			DataMapping:   latestFinal.DataMapping,
 			ComponentCode: latestFinal.ComponentCode,
@@ -125,7 +125,7 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 			chart.ChartType = req.ChartType
 		}
 		if req.ConnectionID != "" {
-			chart.DatasourceID = req.ConnectionID
+			chart.ConnectionID = req.ConnectionID
 		}
 		if req.ControlType != "" {
 			if chart.ControlConfig == nil {

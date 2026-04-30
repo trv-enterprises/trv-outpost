@@ -19,7 +19,7 @@ import (
 
 // BucketConfig defines the configuration for time-bucketed aggregation
 type BucketConfig struct {
-	DatasourceID string   // Source datasource
+	ConnectionID string   // Source datasource
 	Interval     int      // Bucket interval in seconds
 	Function     string   // Aggregation function: avg, min, max, sum, count
 	ValueCols    []string // Columns to aggregate
@@ -35,7 +35,7 @@ func (c BucketConfig) ConfigKey() string {
 	sort.Strings(cols)
 
 	// Create a deterministic string (include SeriesCol)
-	data := fmt.Sprintf("%s|%d|%s|%s|%s|%v", c.DatasourceID, c.Interval, c.Function, c.TimestampCol, c.SeriesCol, cols)
+	data := fmt.Sprintf("%s|%d|%s|%s|%s|%v", c.ConnectionID, c.Interval, c.Function, c.TimestampCol, c.SeriesCol, cols)
 
 	// Hash it for a shorter key
 	hash := sha256.Sum256([]byte(data))

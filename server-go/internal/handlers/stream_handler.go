@@ -16,7 +16,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/streaming"
 )
 
-// StreamHandler handles SSE streaming for socket datasources
+// StreamHandler handles SSE streaming for socket connections
 type StreamHandler struct {
 	manager *streaming.Manager
 }
@@ -28,52 +28,52 @@ func NewStreamHandler(manager *streaming.Manager) *StreamHandler {
 	}
 }
 
-// StreamDatasource streams data from a socket datasource via SSE
-// @Summary Stream data from a socket datasource
-// @Description Opens an SSE connection to stream real-time data from a socket datasource
-// @Tags datasources
+// StreamConnection streams data from a socket connection via SSE
+// @Summary Stream data from a socket connection
+// @Description Opens an SSE connection to stream real-time data from a socket connection
+// @Tags connections
 // @Produce text/event-stream
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {string} string "SSE stream"
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /datasources/{id}/stream [get]
-func (h *StreamHandler) StreamDatasource(c *gin.Context) {
-	datasourceID := c.Param("id")
-	if datasourceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasource ID is required"})
+// @Router /connections/{id}/stream [get]
+func (h *StreamHandler) StreamConnection(c *gin.Context) {
+	connectionID := c.Param("id")
+	if connectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection ID is required"})
 		return
 	}
 
-	// Check if this is a streaming datasource (socket or tsstore)
-	isStreaming, err := h.manager.IsStreamingDatasource(c.Request.Context(), datasourceID)
+	// Check if this is a streaming connection (socket or tsstore)
+	isStreaming, err := h.manager.IsStreamingConnection(c.Request.Context(), connectionID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	if !isStreaming {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasource does not support streaming (must be socket or tsstore type)"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection does not support streaming (must be socket or tsstore type)"})
 		return
 	}
 
-	// Parse optional topic filters for MQTT datasources
+	// Parse optional topic filters for MQTT connections
 	// Accepts comma-separated MQTT topic patterns (e.g., "sensors/temp/#,home/+/status")
 	topicFilters := streaming.ParseTopicFilters(c.Query("topics"))
 	if len(topicFilters) > 0 {
-		log.Printf("[StreamHandler] Topic filters for datasource %s: %v", datasourceID, topicFilters)
+		log.Printf("[StreamHandler] Topic filters for connection %s: %v", connectionID, topicFilters)
 	}
 
 	// Subscribe to the stream — for MQTT, this subscribes only to the requested topics
 	// at the broker level and routes only matching records to this channel
 	var recordCh chan models.Record
 	if len(topicFilters) > 0 {
-		recordCh = h.manager.SubscribeWithTopics(c.Request.Context(), datasourceID, topicFilters)
+		recordCh = h.manager.SubscribeWithTopics(c.Request.Context(), connectionID, topicFilters)
 	} else {
-		recordCh = h.manager.SubscribeAndGetChannel(c.Request.Context(), datasourceID)
+		recordCh = h.manager.SubscribeAndGetChannel(c.Request.Context(), connectionID)
 	}
 	if recordCh == nil {
-		log.Printf("[StreamHandler] Subscribe error for %s", datasourceID)
+		log.Printf("[StreamHandler] Subscribe error for %s", connectionID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to subscribe to stream"})
 		return
 	}
@@ -93,7 +93,7 @@ func (h *StreamHandler) StreamDatasource(c *gin.Context) {
 		_ = rc.SetWriteDeadline(time.Time{})
 	}
 
-	log.Printf("[StreamHandler] SSE connection opened for datasource %s", datasourceID)
+	log.Printf("[StreamHandler] SSE connection opened for connection %s", connectionID)
 
 	// Flush a connected event immediately so the browser's EventSource
 	// fires `onopen` right away. Without this, `onopen` doesn't fire
@@ -104,7 +104,7 @@ func (h *StreamHandler) StreamDatasource(c *gin.Context) {
 	c.Writer.Flush()
 
 	// Send buffered records first (initial state) — already topic-filtered for MQTT
-	bufferedRecords := h.manager.GetBufferFiltered(datasourceID, topicFilters)
+	bufferedRecords := h.manager.GetBufferFiltered(connectionID, topicFilters)
 	if len(bufferedRecords) > 0 {
 		for _, record := range bufferedRecords {
 			data, err := json.Marshal(record)
@@ -126,13 +126,13 @@ func (h *StreamHandler) StreamDatasource(c *gin.Context) {
 	for {
 		select {
 		case <-clientGone:
-			log.Printf("[StreamHandler] Client disconnected from datasource %s", datasourceID)
-			h.manager.Unsubscribe(datasourceID, recordCh)
+			log.Printf("[StreamHandler] Client disconnected from connection %s", connectionID)
+			h.manager.Unsubscribe(connectionID, recordCh)
 			return
 
 		case record, ok := <-recordCh:
 			if !ok {
-				log.Printf("[StreamHandler] Stream channel closed for datasource %s", datasourceID)
+				log.Printf("[StreamHandler] Stream channel closed for connection %s", connectionID)
 				return
 			}
 
@@ -155,27 +155,27 @@ func (h *StreamHandler) StreamDatasource(c *gin.Context) {
 // GetStreamStatus returns status information for a stream
 // @Summary Get stream status
 // @Description Get status information for an active stream
-// @Tags datasources
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {object} streaming.StreamStatus
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/stream/status [get]
+// @Router /connections/{id}/stream/status [get]
 func (h *StreamHandler) GetStreamStatus(c *gin.Context) {
-	datasourceID := c.Param("id")
-	if datasourceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasource ID is required"})
+	connectionID := c.Param("id")
+	if connectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection ID is required"})
 		return
 	}
 
-	status := h.manager.GetStreamStatus(datasourceID)
+	status := h.manager.GetStreamStatus(connectionID)
 	if status == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream not found"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"datasource_id":    status.DatasourceID,
+		"connection_id":    status.ConnectionID,
 		"connected":        status.Connected,
 		"subscriber_count": status.SubscriberCount,
 		"buffer_count":     status.BufferCount,
@@ -186,10 +186,10 @@ func (h *StreamHandler) GetStreamStatus(c *gin.Context) {
 // ListActiveStreams returns a list of all active streams
 // @Summary List active streams
 // @Description Get a list of all active streaming connections
-// @Tags datasources
+// @Tags connections
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /datasources/streams [get]
+// @Router /connections/streams [get]
 func (h *StreamHandler) ListActiveStreams(c *gin.Context) {
 	streamIDs := h.manager.ListStreams()
 
@@ -198,7 +198,7 @@ func (h *StreamHandler) ListActiveStreams(c *gin.Context) {
 		status := h.manager.GetStreamStatus(id)
 		if status != nil {
 			streams = append(streams, gin.H{
-				"datasource_id":    status.DatasourceID,
+				"connection_id":    status.ConnectionID,
 				"connected":        status.Connected,
 				"subscriber_count": status.SubscriberCount,
 				"buffer_count":     status.BufferCount,
@@ -221,23 +221,23 @@ type StreamAggregatedRequest struct {
 	SeriesCol    string   `json:"series_col"`                       // Column to partition by (e.g., "location") - optional
 }
 
-// StreamAggregatedDatasource streams time-bucketed aggregated data via SSE
-// @Summary Stream aggregated data from a socket datasource
+// StreamAggregatedConnection streams time-bucketed aggregated data via SSE
+// @Summary Stream aggregated data from a socket connection
 // @Description Opens an SSE connection to stream time-bucketed aggregated data
-// @Tags datasources
+// @Tags connections
 // @Accept json
 // @Produce text/event-stream
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param config body StreamAggregatedRequest true "Aggregation configuration"
 // @Success 200 {string} string "SSE stream"
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /datasources/{id}/stream/aggregated [post]
-func (h *StreamHandler) StreamAggregatedDatasource(c *gin.Context) {
-	datasourceID := c.Param("id")
-	if datasourceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasource ID is required"})
+// @Router /connections/{id}/stream/aggregated [post]
+func (h *StreamHandler) StreamAggregatedConnection(c *gin.Context) {
+	connectionID := c.Param("id")
+	if connectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection ID is required"})
 		return
 	}
 
@@ -255,29 +255,29 @@ func (h *StreamHandler) StreamAggregatedDatasource(c *gin.Context) {
 		return
 	}
 
-	// Check if this is a streaming datasource (socket or tsstore)
-	isStreaming, err := h.manager.IsStreamingDatasource(c.Request.Context(), datasourceID)
+	// Check if this is a streaming connection (socket or tsstore)
+	isStreaming, err := h.manager.IsStreamingConnection(c.Request.Context(), connectionID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	if !isStreaming {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasource does not support streaming (must be socket or tsstore type)"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection does not support streaming (must be socket or tsstore type)"})
 		return
 	}
 
 	// Ensure the raw stream is active (subscribes to start it if needed)
-	rawCh := h.manager.SubscribeAndGetChannel(c.Request.Context(), datasourceID)
+	rawCh := h.manager.SubscribeAndGetChannel(c.Request.Context(), connectionID)
 	if rawCh == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start stream"})
 		return
 	}
 	// We don't need the raw channel, just need the stream active
-	h.manager.Unsubscribe(datasourceID, rawCh)
+	h.manager.Unsubscribe(connectionID, rawCh)
 
 	// Create bucket config
 	bucketConfig := streaming.BucketConfig{
-		DatasourceID: datasourceID,
+		ConnectionID: connectionID,
 		Interval:     req.Interval,
 		Function:     req.Function,
 		ValueCols:    req.ValueCols,
@@ -289,7 +289,7 @@ func (h *StreamHandler) StreamAggregatedDatasource(c *gin.Context) {
 	registry := streaming.GetRegistry()
 	aggCh, configKey := registry.Subscribe(bucketConfig)
 
-	log.Printf("[StreamHandler] SSE aggregated connection opened for datasource %s (config: %s)", datasourceID, configKey[:8])
+	log.Printf("[StreamHandler] SSE aggregated connection opened for connection %s (config: %s)", connectionID, configKey[:8])
 
 	// Set SSE headers
 	c.Header("Content-Type", "text/event-stream")
@@ -298,14 +298,14 @@ func (h *StreamHandler) StreamAggregatedDatasource(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	// Disable the global WriteTimeout for SSE — see comment in the
-	// non-aggregated StreamDatasource handler above for details.
+	// non-aggregated StreamConnection handler above for details.
 	if rc := http.NewResponseController(c.Writer); rc != nil {
 		_ = rc.SetWriteDeadline(time.Time{})
 	}
 
 	// Send initial config acknowledgment
 	configData, _ := json.Marshal(gin.H{
-		"datasource_id": datasourceID,
+		"connection_id": connectionID,
 		"config_key":    configKey[:8],
 		"interval":      req.Interval,
 		"function":      req.Function,
@@ -354,10 +354,10 @@ func (h *StreamHandler) StreamAggregatedDatasource(c *gin.Context) {
 // GetAggregatorStats returns statistics about active aggregators
 // @Summary Get aggregator statistics
 // @Description Get statistics about active bucket aggregators
-// @Tags datasources
+// @Tags connections
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /datasources/aggregators [get]
+// @Router /connections/aggregators [get]
 func (h *StreamHandler) GetAggregatorStats(c *gin.Context) {
 	registry := streaming.GetRegistry()
 	stats := registry.Stats()

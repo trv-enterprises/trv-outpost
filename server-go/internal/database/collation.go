@@ -24,7 +24,7 @@ var CaseInsensitiveCollation = &options.Collation{
 // ai_sessions, control_schemas, migrations) are intentionally excluded because
 // their keys are programmatic identifiers where case-sensitivity is correct.
 var CollationCollections = []string{
-	"datasources",
+	"connections",
 	"dashboards",
 	"components",
 	"layouts",

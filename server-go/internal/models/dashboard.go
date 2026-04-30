@@ -110,7 +110,7 @@ type EmbeddedChart struct {
 	ID            string                 `json:"id" bson:"id"`
 	Name          string                 `json:"name" bson:"name"`
 	ChartType     string                 `json:"chart_type" bson:"chart_type"`           // bar, line, pie, etc.
-	DatasourceID  string                 `json:"connection_id" bson:"datasource_id"`     // Reference to connection (was datasource_id)
+	ConnectionID  string                 `json:"connection_id" bson:"connection_id"`     // Reference to connection (was connection_id)
 	QueryConfig   *ChartQueryConfig      `json:"query_config" bson:"query_config"`       // How to query data
 	DataMapping   *ChartDataMapping      `json:"data_mapping" bson:"data_mapping"`       // How to map data to chart
 	ComponentCode string                 `json:"component_code" bson:"component_code"`   // Custom React component code
@@ -189,7 +189,7 @@ type DashboardQueryParams struct {
 	IsPublic           *bool    `form:"is_public"`
 	ChartID            string   `form:"chart_id"`            // Filter dashboards using a specific chart
 	Tags               []string `form:"tags"`                // Filter dashboards with any of the given tags (OR)
-	IncludeDatasources bool     `form:"include_datasources"` // Include data source names from charts
+	IncludeConnections bool     `form:"include_connections"` // Include connection names from referenced components
 	Page               int      `form:"page"`
 	PageSize           int      `form:"page_size"`
 }
@@ -205,7 +205,7 @@ type DashboardSummary struct {
 	Settings        DashboardSettings `json:"settings"`
 	Tags            []string          `json:"tags,omitempty"`
 	PanelCount      int               `json:"panel_count"`
-	DatasourceNames []string          `json:"datasource_names,omitempty"` // Unique data source names used by charts
+	ConnectionNames []string          `json:"connection_names,omitempty"` // Unique connection names used by referenced components
 	Created         time.Time         `json:"created"`
 	Updated         time.Time         `json:"updated"`
 }

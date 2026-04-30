@@ -75,7 +75,7 @@ func (m *MongoDB) Collection(name string) *mongo.Collection {
 // Collections returns collection helpers
 func (m *MongoDB) Collections() Collections {
 	return Collections{
-		Datasources:  m.Collection("datasources"),
+		Connections:  m.Collection("connections"),
 		Dashboards:   m.Collection("dashboards"),
 		ChatSessions: m.Collection("chat_sessions"),
 		AISessions:   m.Collection("ai_sessions"),
@@ -84,7 +84,7 @@ func (m *MongoDB) Collections() Collections {
 
 // Collections holds references to all collections
 type Collections struct {
-	Datasources  *mongo.Collection
+	Connections  *mongo.Collection
 	Dashboards   *mongo.Collection
 	ChatSessions *mongo.Collection
 	AISessions   *mongo.Collection
@@ -94,9 +94,9 @@ type Collections struct {
 func (m *MongoDB) CreateIndexes(ctx context.Context) error {
 	collections := m.Collections()
 
-	// Datasources indexes
-	if err := createIndexes(ctx, collections.Datasources, datasourceIndexes()); err != nil {
-		return fmt.Errorf("datasources indexes: %w", err)
+	// Connections indexes
+	if err := createIndexes(ctx, collections.Connections, connectionIndexes()); err != nil {
+		return fmt.Errorf("connections indexes: %w", err)
 	}
 
 	// Dashboards indexes
@@ -132,7 +132,7 @@ func createIndexes(ctx context.Context, collection *mongo.Collection, models []m
 // `bson.D` is used instead of map[string]interface{} to guarantee field
 // ordering for compound indexes.
 
-func datasourceIndexes() []mongo.IndexModel {
+func connectionIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
 		// Uniqueness is scoped to (namespace, name) — two namespaces can
 		// each have a connection called "Home". The old name-only unique

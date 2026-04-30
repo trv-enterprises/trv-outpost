@@ -19,7 +19,7 @@ import (
 type Manager struct {
 	streams      map[string]Streamer
 	mu           sync.RWMutex
-	repo         *repository.DatasourceRepository
+	repo         *repository.ConnectionRepository
 	config       ManagerConfig
 	ctx          context.Context
 	cancelFunc   context.CancelFunc
@@ -42,7 +42,7 @@ func DefaultManagerConfig() ManagerConfig {
 }
 
 // NewManager creates a new stream manager
-func NewManager(repo *repository.DatasourceRepository, config ManagerConfig) *Manager {
+func NewManager(repo *repository.ConnectionRepository, config ManagerConfig) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m := &Manager{
@@ -62,14 +62,14 @@ func NewManager(repo *repository.DatasourceRepository, config ManagerConfig) *Ma
 // SubscribeWithTopics creates or gets a stream for the datasource and subscribes with specific topic filters.
 // For MQTT streams, this subscribes only to the requested topics at the broker level.
 // For non-MQTT streams, topics are ignored and it behaves like SubscribeAndGetChannel.
-func (m *Manager) SubscribeWithTopics(ctx context.Context, datasourceID string, topics []string) chan models.Record {
+func (m *Manager) SubscribeWithTopics(ctx context.Context, connectionID string, topics []string) chan models.Record {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Check if stream already exists
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	if !exists {
-		stream = m.createStream(ctx, datasourceID)
+		stream = m.createStream(ctx, connectionID)
 		if stream == nil {
 			return nil
 		}
@@ -85,9 +85,9 @@ func (m *Manager) SubscribeWithTopics(ctx context.Context, datasourceID string, 
 
 // GetBufferFiltered returns buffered records filtered by topic patterns (for MQTT streams).
 // For non-MQTT streams, returns the full buffer.
-func (m *Manager) GetBufferFiltered(datasourceID string, topics []string) []models.Record {
+func (m *Manager) GetBufferFiltered(connectionID string, topics []string) []models.Record {
 	m.mu.RLock()
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -103,14 +103,14 @@ func (m *Manager) GetBufferFiltered(datasourceID string, topics []string) []mode
 
 // createStream creates and starts a new stream for the given datasource.
 // Must be called with m.mu held. Returns nil on failure.
-func (m *Manager) createStream(ctx context.Context, datasourceID string) Streamer {
-	ds, err := m.repo.FindByID(ctx, datasourceID)
+func (m *Manager) createStream(ctx context.Context, connectionID string) Streamer {
+	ds, err := m.repo.FindByID(ctx, connectionID)
 	if err != nil {
 		log.Printf("[StreamManager] Failed to get datasource: %v", err)
 		return nil
 	}
 	if ds == nil {
-		log.Printf("[StreamManager] Datasource not found: %s", datasourceID)
+		log.Printf("[StreamManager] Datasource not found: %s", connectionID)
 		return nil
 	}
 
@@ -120,29 +120,29 @@ func (m *Manager) createStream(ctx context.Context, datasourceID string) Streame
 
 	var stream Streamer
 	switch ds.Type {
-	case models.DatasourceTypeSocket:
+	case models.ConnectionTypeSocket:
 		if ds.Config.Socket == nil {
-			log.Printf("[StreamManager] Datasource %s has no socket configuration", datasourceID)
+			log.Printf("[StreamManager] Datasource %s has no socket configuration", connectionID)
 			return nil
 		}
-		stream = NewStream(datasourceID, ds.Config.Socket, streamConfig)
+		stream = NewStream(connectionID, ds.Config.Socket, streamConfig)
 
-	case models.DatasourceTypeTSStore:
+	case models.ConnectionTypeTSStore:
 		if ds.Config.TSStore == nil {
-			log.Printf("[StreamManager] Datasource %s has no TSStore configuration", datasourceID)
+			log.Printf("[StreamManager] Datasource %s has no TSStore configuration", connectionID)
 			return nil
 		}
-		stream = NewTSStoreStream(datasourceID, ds.Config.TSStore, streamConfig)
+		stream = NewTSStoreStream(connectionID, ds.Config.TSStore, streamConfig)
 
-	case models.DatasourceTypeMQTT:
+	case models.ConnectionTypeMQTT:
 		if ds.Config.MQTT == nil {
-			log.Printf("[StreamManager] Datasource %s has no MQTT configuration", datasourceID)
+			log.Printf("[StreamManager] Datasource %s has no MQTT configuration", connectionID)
 			return nil
 		}
-		stream = NewMQTTStream(datasourceID, ds.Config.MQTT, streamConfig)
+		stream = NewMQTTStream(connectionID, ds.Config.MQTT, streamConfig)
 
 	default:
-		log.Printf("[StreamManager] Datasource %s is not a streaming type (got: %s)", datasourceID, ds.Type)
+		log.Printf("[StreamManager] Datasource %s is not a streaming type (got: %s)", connectionID, ds.Type)
 		return nil
 	}
 
@@ -151,20 +151,20 @@ func (m *Manager) createStream(ctx context.Context, datasourceID string) Streame
 		return nil
 	}
 
-	m.streams[datasourceID] = stream
-	log.Printf("[StreamManager] Created stream for datasource %s (type: %s)", datasourceID, ds.Type)
+	m.streams[connectionID] = stream
+	log.Printf("[StreamManager] Created stream for datasource %s (type: %s)", connectionID, ds.Type)
 	return stream
 }
 
 // SubscribeAndGetChannel creates or gets a stream for the datasource and returns a bidirectional channel
 // This is useful when the caller needs to pass the channel to Unsubscribe later
-func (m *Manager) SubscribeAndGetChannel(ctx context.Context, datasourceID string) chan models.Record {
+func (m *Manager) SubscribeAndGetChannel(ctx context.Context, connectionID string) chan models.Record {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	if !exists {
-		stream = m.createStream(ctx, datasourceID)
+		stream = m.createStream(ctx, connectionID)
 		if stream == nil {
 			return nil
 		}
@@ -174,15 +174,15 @@ func (m *Manager) SubscribeAndGetChannel(ctx context.Context, datasourceID strin
 }
 
 // Subscribe creates or gets a stream for the datasource and returns a subscriber channel
-func (m *Manager) Subscribe(ctx context.Context, datasourceID string) (<-chan models.Record, error) {
+func (m *Manager) Subscribe(ctx context.Context, connectionID string) (<-chan models.Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	if !exists {
-		stream = m.createStream(ctx, datasourceID)
+		stream = m.createStream(ctx, connectionID)
 		if stream == nil {
-			return nil, fmt.Errorf("failed to create stream for datasource %s", datasourceID)
+			return nil, fmt.Errorf("failed to create stream for datasource %s", connectionID)
 		}
 	}
 
@@ -191,9 +191,9 @@ func (m *Manager) Subscribe(ctx context.Context, datasourceID string) (<-chan mo
 
 // Unsubscribe removes a subscriber from a stream
 // Note: The caller must pass a bidirectional channel that was returned by Subscribe()
-func (m *Manager) Unsubscribe(datasourceID string, ch chan models.Record) {
+func (m *Manager) Unsubscribe(connectionID string, ch chan models.Record) {
 	m.mu.RLock()
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -204,9 +204,9 @@ func (m *Manager) Unsubscribe(datasourceID string, ch chan models.Record) {
 }
 
 // GetBuffer returns the buffered records for a datasource
-func (m *Manager) GetBuffer(datasourceID string) []models.Record {
+func (m *Manager) GetBuffer(connectionID string) []models.Record {
 	m.mu.RLock()
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -217,9 +217,9 @@ func (m *Manager) GetBuffer(datasourceID string) []models.Record {
 }
 
 // GetStreamStatus returns status information for a stream
-func (m *Manager) GetStreamStatus(datasourceID string) *StreamStatus {
+func (m *Manager) GetStreamStatus(connectionID string) *StreamStatus {
 	m.mu.RLock()
-	stream, exists := m.streams[datasourceID]
+	stream, exists := m.streams[connectionID]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -227,7 +227,7 @@ func (m *Manager) GetStreamStatus(datasourceID string) *StreamStatus {
 	}
 
 	return &StreamStatus{
-		DatasourceID:    datasourceID,
+		ConnectionID:    connectionID,
 		Connected:       stream.IsConnected(),
 		SubscriberCount: stream.SubscriberCount(),
 		BufferCount:     stream.BufferCount(),
@@ -237,7 +237,7 @@ func (m *Manager) GetStreamStatus(datasourceID string) *StreamStatus {
 
 // StreamStatus contains status information for a stream
 type StreamStatus struct {
-	DatasourceID    string
+	ConnectionID    string
 	Connected       bool
 	SubscriberCount int
 	BufferCount     int
@@ -315,10 +315,10 @@ func (m *Manager) Stop() {
 	log.Println("[StreamManager] Stopped")
 }
 
-// IsStreamingDatasource checks if a datasource supports streaming
+// IsStreamingConnection checks if a datasource supports streaming
 // Socket and MQTT are always streaming; TSStore only when transport is "streaming"
-func (m *Manager) IsStreamingDatasource(ctx context.Context, datasourceID string) (bool, error) {
-	ds, err := m.repo.FindByID(ctx, datasourceID)
+func (m *Manager) IsStreamingConnection(ctx context.Context, connectionID string) (bool, error) {
+	ds, err := m.repo.FindByID(ctx, connectionID)
 	if err != nil {
 		return false, err
 	}
@@ -326,9 +326,9 @@ func (m *Manager) IsStreamingDatasource(ctx context.Context, datasourceID string
 		return false, fmt.Errorf("datasource not found")
 	}
 	switch ds.Type {
-	case models.DatasourceTypeSocket, models.DatasourceTypeMQTT:
+	case models.ConnectionTypeSocket, models.ConnectionTypeMQTT:
 		return true, nil
-	case models.DatasourceTypeTSStore:
+	case models.ConnectionTypeTSStore:
 		return ds.Config.TSStore != nil && ds.Config.TSStore.IsStreaming(), nil
 	default:
 		return false, nil

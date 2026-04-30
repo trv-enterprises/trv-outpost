@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -26,6 +27,9 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"namespacing_v1", migrateNamespacingV1},
 		{"strip_chart_thumbnail_v1", migrateStripChartThumbnail},
 		{"rename_charts_to_components_v1", migrateRenameChartsToComponents},
+		{"rename_datasources_to_connections_v1", migrateRenameDatasourcesToConnections},
+		{"rename_datasource_id_field_v1", migrateRenameDatasourceIDField},
+		{"rename_datasourceId_in_component_code_v1", migrateRenameDatasourceIdInComponentCode},
 	}
 
 	coll := db.Collection("migrations")
@@ -338,5 +342,134 @@ func migrateRenameChartsToComponents(ctx context.Context, db *mongo.Database) er
 		return fmt.Errorf("rename charts → components: %w", err)
 	}
 	log.Printf("  charts → components: renamed (indexes will be rebuilt by ComponentRepository.CreateIndexes)")
+	return nil
+}
+
+// migrateRenameDatasourcesToConnections renames the legacy `datasources`
+// collection to `connections`. The wire format and UI both call these
+// "Connections" — this brings the on-disk name in line and removes the
+// last surface using the older "datasource" nomenclature.
+//
+// Idempotent: no-op when `datasources` doesn't exist (fresh install)
+// or when `connections` already exists (already ran). When the source
+// exists and the target does not, runs the admin renameCollection
+// command. Indexes are recreated by the per-repository CreateIndexes
+// call on the next startup, after migrations finish.
+func migrateRenameDatasourcesToConnections(ctx context.Context, db *mongo.Database) error {
+	srcExists, _, err := collectionState(ctx, db, "datasources")
+	if err != nil {
+		return fmt.Errorf("check datasources collection: %w", err)
+	}
+	if !srcExists {
+		log.Printf("  datasources: collection does not exist (fresh install), nothing to rename")
+		return nil
+	}
+
+	dstExists, _, err := collectionState(ctx, db, "connections")
+	if err != nil {
+		return fmt.Errorf("check connections collection: %w", err)
+	}
+	if dstExists {
+		log.Printf("  connections: already exists, leaving datasources in place — manual cleanup required")
+		return nil
+	}
+
+	dbName := db.Name()
+	renameCmd := bson.D{
+		{Key: "renameCollection", Value: dbName + ".datasources"},
+		{Key: "to", Value: dbName + ".connections"},
+	}
+	if err := db.Client().Database("admin").RunCommand(ctx, renameCmd).Err(); err != nil {
+		return fmt.Errorf("rename datasources → connections: %w", err)
+	}
+	log.Printf("  datasources → connections: renamed (indexes will be rebuilt by ConnectionRepository.CreateIndexes)")
+	return nil
+}
+
+// migrateRenameDatasourceIDField copies `datasource_id` to `connection_id`
+// on every document that has it, then unsets the old field. Atomic per
+// document via a server-side aggregation pipeline. Idempotent — if a doc
+// has only `connection_id` already (already ran, or fresh write), the
+// $exists guard skips it.
+//
+// Today this only matters for the `components` collection. Pre-flight
+// audit (2026-04-30) showed: components=97, dashboards=0 nested+top.
+// We sweep dashboards too, defensively, so future panel-config changes
+// that re-introduce datasource_id won't quietly leak through.
+func migrateRenameDatasourceIDField(ctx context.Context, db *mongo.Database) error {
+	collections := []string{"components", "dashboards"}
+	totalModified := int64(0)
+	for _, name := range collections {
+		coll := db.Collection(name)
+		// Aggregation pipeline: $set the new field from the old, then
+		// $unset the old. The pipeline form of UpdateMany guarantees
+		// both happen atomically per document.
+		res, err := coll.UpdateMany(
+			ctx,
+			bson.M{"datasource_id": bson.M{"$exists": true}},
+			mongo.Pipeline{
+				bson.D{{Key: "$set", Value: bson.M{"connection_id": "$datasource_id"}}},
+				bson.D{{Key: "$unset", Value: "datasource_id"}},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("rename datasource_id on %s: %w", name, err)
+		}
+		log.Printf("  %s: renamed datasource_id → connection_id on %d documents", name, res.ModifiedCount)
+		totalModified += res.ModifiedCount
+	}
+	log.Printf("  total datasource_id → connection_id rewrites: %d", totalModified)
+	return nil
+}
+
+// migrateRenameDatasourceIdInComponentCode rewrites the legacy
+// `datasourceId:` token inside stored component_code strings to
+// `connectionId:`. The chart code we ship is generated and lives in
+// MongoDB as plain text, evaluated at runtime by the dynamic loader.
+// When useData was renamed (datasourceId → connectionId in the prop
+// shape), every previously-saved component still passed the old key
+// and the hook silently no-op'd — components stuck on "Loading."
+//
+// Scope: only the standalone `datasourceId:` form inside object
+// literals — the pattern emitted by chartCodeGenerator. We don't
+// touch other occurrences (variable names, comments) because those
+// are internal to the chart code's own logic and may legitimately
+// keep the old name. The string the runtime hook reads is the only
+// thing that has to change.
+//
+// Idempotent: if a doc already has only `connectionId:`, the
+// substring match no-ops. Safe to re-run.
+func migrateRenameDatasourceIdInComponentCode(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("components")
+	cursor, err := coll.Find(ctx, bson.M{"component_code": bson.M{"$regex": "datasourceId:"}})
+	if err != nil {
+		return fmt.Errorf("find components with datasourceId in code: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	updated := 0
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID            interface{} `bson:"_id"`
+			ComponentCode string      `bson:"component_code"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			return fmt.Errorf("decode component: %w", err)
+		}
+		newCode := strings.ReplaceAll(doc.ComponentCode, "datasourceId:", "connectionId:")
+		if newCode == doc.ComponentCode {
+			continue
+		}
+		_, err := coll.UpdateByID(ctx, doc.ID, bson.M{"$set": bson.M{"component_code": newCode}})
+		if err != nil {
+			return fmt.Errorf("update component %v: %w", doc.ID, err)
+		}
+		updated++
+	}
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("cursor: %w", err)
+	}
+
+	log.Printf("  components: rewrote datasourceId: → connectionId: in %d component_code blobs", updated)
 	return nil
 }

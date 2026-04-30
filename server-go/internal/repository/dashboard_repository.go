@@ -293,9 +293,9 @@ func (r *DashboardRepository) FindByChartID(ctx context.Context, chartID string)
 	return dashboards, nil
 }
 
-// ListWithDatasources retrieves dashboard summaries with data source names using aggregation
+// ListWithConnections retrieves dashboard summaries with data source names using aggregation
 // This performs a multi-collection join: dashboards -> charts -> datasources
-func (r *DashboardRepository) ListWithDatasources(ctx context.Context, params models.DashboardQueryParams, db *mongo.Database) ([]models.DashboardSummary, int64, error) {
+func (r *DashboardRepository) ListWithConnections(ctx context.Context, params models.DashboardQueryParams, db *mongo.Database) ([]models.DashboardSummary, int64, error) {
 	// Build filter
 	filter := bson.M{}
 	if params.Namespace != "" {
@@ -376,17 +376,17 @@ func (r *DashboardRepository) ListWithDatasources(ctx context.Context, params mo
 					}},
 				}}},
 				bson.D{{Key: "$project", Value: bson.D{
-					{Key: "datasource_id", Value: 1},
+					{Key: "connection_id", Value: 1},
 				}}},
 			}},
 			{Key: "as", Value: "matched_charts"},
 		}}},
-		// Extract unique datasource_ids from matched charts
+		// Extract unique connection_ids from matched charts
 		{{Key: "$addFields", Value: bson.D{
-			{Key: "datasource_ids", Value: bson.D{
+			{Key: "connection_ids", Value: bson.D{
 				{Key: "$setUnion", Value: bson.A{
 					bson.D{{Key: "$filter", Value: bson.D{
-						{Key: "input", Value: "$matched_charts.datasource_id"},
+						{Key: "input", Value: "$matched_charts.connection_id"},
 						{Key: "as", Value: "dsid"},
 						{Key: "cond", Value: bson.D{
 							{Key: "$and", Value: bson.A{
@@ -402,7 +402,7 @@ func (r *DashboardRepository) ListWithDatasources(ctx context.Context, params mo
 		{{Key: "$addFields", Value: bson.D{
 			{Key: "datasource_object_ids", Value: bson.D{
 				{Key: "$map", Value: bson.D{
-					{Key: "input", Value: "$datasource_ids"},
+					{Key: "input", Value: "$connection_ids"},
 					{Key: "as", Value: "dsid"},
 					{Key: "in", Value: bson.D{
 						{Key: "$toObjectId", Value: "$$dsid"},
@@ -435,7 +435,7 @@ func (r *DashboardRepository) ListWithDatasources(ctx context.Context, params mo
 			{Key: "settings", Value: 1},
 			{Key: "tags", Value: 1},
 			{Key: "panel_count", Value: bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels", bson.A{}}}}}}},
-			{Key: "datasource_names", Value: "$matched_datasources.name"},
+			{Key: "connection_names", Value: "$matched_datasources.name"},
 			{Key: "created", Value: 1},
 			{Key: "updated", Value: 1},
 		}}},

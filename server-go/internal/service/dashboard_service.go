@@ -25,18 +25,18 @@ type DashboardService struct {
 	repo            *repository.DashboardRepository
 	db              *mongo.Database
 	chartRepo       *repository.ComponentRepository
-	datasourceRepo  *repository.DatasourceRepository
+	connectionRepo  *repository.ConnectionRepository
 }
 
 // NewDashboardService creates a new dashboard service. Pass nil for
-// chartRepo/datasourceRepo if export/import isn't needed (legacy
+// chartRepo/connectionRepo if export/import isn't needed (legacy
 // callers); production main.go always passes the live repos.
-func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database, chartRepo *repository.ComponentRepository, datasourceRepo *repository.DatasourceRepository) *DashboardService {
+func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database, chartRepo *repository.ComponentRepository, connectionRepo *repository.ConnectionRepository) *DashboardService {
 	return &DashboardService{
 		repo:           repo,
 		db:             db,
 		chartRepo:      chartRepo,
-		datasourceRepo: datasourceRepo,
+		connectionRepo: connectionRepo,
 	}
 }
 
@@ -114,7 +114,7 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
 	}
-	summaries, total, err := s.repo.ListWithDatasources(ctx, params, s.db)
+	summaries, total, err := s.repo.ListWithConnections(ctx, params, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list dashboards with datasources: %w", err)
 	}

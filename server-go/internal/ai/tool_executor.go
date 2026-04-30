@@ -16,8 +16,8 @@ import (
 // ToolExecutor handles executing AI tools and updating charts
 type ToolExecutor struct {
 	componentRepo      ComponentRepository
-	datasourceRepo DatasourceRepository
-	datasourceSvc  DatasourceService
+	connectionRepo ConnectionRepoIface
+	connectionSvc  ConnectionServiceIface
 	deviceTypeRepo DeviceTypeRepository
 	componentHub       *hub.ComponentHub
 }
@@ -28,10 +28,10 @@ type ComponentRepository interface {
 	Update(ctx context.Context, id string, version int, chart *models.Component) error
 }
 
-// DatasourceRepository interface for data source operations
-type DatasourceRepository interface {
-	FindAll(ctx context.Context, limit, offset int64) ([]*models.Datasource, error)
-	FindByID(ctx context.Context, id string) (*models.Datasource, error)
+// ConnectionRepoIface interface for data source operations
+type ConnectionRepoIface interface {
+	FindAll(ctx context.Context, limit, offset int64) ([]*models.Connection, error)
+	FindByID(ctx context.Context, id string) (*models.Connection, error)
 }
 
 // DeviceTypeRepository interface for device type operations
@@ -39,22 +39,22 @@ type DeviceTypeRepository interface {
 	List(ctx context.Context, params *models.DeviceTypeQueryParams) ([]models.DeviceType, int64, error)
 }
 
-// DatasourceService interface for data source queries
-type DatasourceService interface {
-	QueryDatasource(ctx context.Context, id string, req *models.QueryRequest) (*models.QueryResponse, error)
+// ConnectionServiceIface interface for data source queries
+type ConnectionServiceIface interface {
+	QueryConnection(ctx context.Context, id string, req *models.QueryRequest) (*models.QueryResponse, error)
 	GetSchema(ctx context.Context, id string) (*models.SchemaResponse, error)
-	GetDatasource(ctx context.Context, id string) (*models.Datasource, error)
+	GetConnection(ctx context.Context, id string) (*models.Connection, error)
 	GetEdgeLakeDatabases(ctx context.Context, id string) ([]string, error)
 	GetEdgeLakeTables(ctx context.Context, id string, database string) ([]string, error)
 	GetEdgeLakeSchema(ctx context.Context, id string, database, table string) ([]models.EdgeLakeColumnInfo, error)
 }
 
 // NewToolExecutor creates a new tool executor
-func NewToolExecutor(componentRepo ComponentRepository, dsRepo DatasourceRepository, dsSvc DatasourceService, dtRepo DeviceTypeRepository, componentHub *hub.ComponentHub) *ToolExecutor {
+func NewToolExecutor(componentRepo ComponentRepository, connRepo ConnectionRepoIface, connSvc ConnectionServiceIface, dtRepo DeviceTypeRepository, componentHub *hub.ComponentHub) *ToolExecutor {
 	return &ToolExecutor{
 		componentRepo:      componentRepo,
-		datasourceRepo: dsRepo,
-		datasourceSvc:  dsSvc,
+		connectionRepo: connRepo,
+		connectionSvc:  connSvc,
 		deviceTypeRepo: dtRepo,
 		componentHub:       componentHub,
 	}
@@ -111,8 +111,8 @@ func (e *ToolExecutor) ExecuteTool(ctx context.Context, chartID string, chartVer
 		return e.executeListConnections(ctx)
 	case ToolGetSchema:
 		return e.executeGetSchema(ctx, input)
-	case ToolGetDatasourceSchema:
-		return e.executeGetDatasourceSchema(ctx, input)
+	case ToolGetConnectionSchema:
+		return e.executeGetConnectionSchema(ctx, input)
 	case ToolGetPrometheusSchema:
 		return e.executeGetPrometheusSchema(ctx, input)
 	case ToolGetEdgeLakeSchema:
@@ -226,7 +226,7 @@ func (e *ToolExecutor) executeUpdateControlConfig(ctx context.Context, chartID s
 	}
 
 	if params.ConnectionID != nil {
-		chart.DatasourceID = *params.ConnectionID
+		chart.ConnectionID = *params.ConnectionID
 		updates = append(updates, "connection_id")
 	}
 
@@ -335,7 +335,7 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 // executeUpdateDataMapping updates data mapping configuration
 func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID string, chartVersion int, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		DatasourceID *string   `json:"datasource_id,omitempty"`
+		ConnectionID *string   `json:"connection_id,omitempty"`
 		XAxis        *string   `json:"x_axis,omitempty"`
 		XAxisLabel   *string   `json:"x_axis_label,omitempty"`
 		XAxisFormat  *string   `json:"x_axis_format,omitempty"`
@@ -356,8 +356,8 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
 
-	if params.DatasourceID != nil {
-		chart.DatasourceID = *params.DatasourceID
+	if params.ConnectionID != nil {
+		chart.ConnectionID = *params.ConnectionID
 	}
 
 	// Initialize DataMapping if nil
@@ -406,7 +406,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 
 	fmt.Printf("[ToolExecutor] update_data_mapping - Chart updated successfully\n")
-	fmt.Printf("[ToolExecutor] update_data_mapping - DatasourceID: %s\n", chart.DatasourceID)
+	fmt.Printf("[ToolExecutor] update_data_mapping - ConnectionID: %s\n", chart.ConnectionID)
 	if chart.DataMapping != nil {
 		fmt.Printf("[ToolExecutor] update_data_mapping - XAxis: %s, YAxis: %v\n",
 			chart.DataMapping.XAxis, chart.DataMapping.YAxis)
@@ -783,7 +783,7 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 // executeQueryConnection executes a query against a connection
 func (e *ToolExecutor) executeQueryConnection(ctx context.Context, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		DatasourceID string  `json:"connection_id"`
+		ConnectionID string  `json:"connection_id"`
 		Query        *string `json:"query,omitempty"`
 		Limit        *int    `json:"limit,omitempty"`
 	}
@@ -791,8 +791,8 @@ func (e *ToolExecutor) executeQueryConnection(ctx context.Context, input json.Ra
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	if params.DatasourceID == "" {
-		return &ToolResult{Success: false, Error: "datasource_id is required"}, nil
+	if params.ConnectionID == "" {
+		return &ToolResult{Success: false, Error: "connection_id is required"}, nil
 	}
 
 	// Set default limit
@@ -815,7 +815,7 @@ func (e *ToolExecutor) executeQueryConnection(ctx context.Context, input json.Ra
 		},
 	}
 
-	response, err := e.datasourceSvc.QueryDatasource(ctx, params.DatasourceID, req)
+	response, err := e.connectionSvc.QueryConnection(ctx, params.ConnectionID, req)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "query failed: " + err.Error()}, nil
 	}
@@ -833,7 +833,7 @@ func (e *ToolExecutor) executeQueryConnection(ctx context.Context, input json.Ra
 
 // executeListConnections lists all available connections
 func (e *ToolExecutor) executeListConnections(ctx context.Context) (*ToolResult, error) {
-	datasources, err := e.datasourceRepo.FindAll(ctx, 100, 0) // limit 100, offset 0
+	datasources, err := e.connectionRepo.FindAll(ctx, 100, 0) // limit 100, offset 0
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to list connections: " + err.Error()}, nil
 	}
@@ -899,20 +899,20 @@ func (e *ToolExecutor) executeListDeviceTypes(ctx context.Context) (*ToolResult,
 	}, nil
 }
 
-// executeGetDatasourceSchema gets the schema (tables and columns) for a SQL data source
-func (e *ToolExecutor) executeGetDatasourceSchema(ctx context.Context, input json.RawMessage) (*ToolResult, error) {
+// executeGetConnectionSchema gets the schema (tables and columns) for a SQL data source
+func (e *ToolExecutor) executeGetConnectionSchema(ctx context.Context, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		DatasourceID string `json:"datasource_id"`
+		ConnectionID string `json:"connection_id"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	if params.DatasourceID == "" {
-		return &ToolResult{Success: false, Error: "datasource_id is required"}, nil
+	if params.ConnectionID == "" {
+		return &ToolResult{Success: false, Error: "connection_id is required"}, nil
 	}
 
-	response, err := e.datasourceSvc.GetSchema(ctx, params.DatasourceID)
+	response, err := e.connectionSvc.GetSchema(ctx, params.ConnectionID)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "schema discovery failed: " + err.Error()}, nil
 	}
@@ -933,7 +933,7 @@ func (e *ToolExecutor) executeGetDatasourceSchema(ctx context.Context, input jso
 // executeGetEdgeLakeSchema gets databases, tables, and columns from an EdgeLake data source
 func (e *ToolExecutor) executeGetEdgeLakeSchema(ctx context.Context, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		DatasourceID string `json:"datasource_id"`
+		ConnectionID string `json:"connection_id"`
 		Database     string `json:"database,omitempty"`
 		Table        string `json:"table,omitempty"`
 	}
@@ -941,12 +941,12 @@ func (e *ToolExecutor) executeGetEdgeLakeSchema(ctx context.Context, input json.
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	if params.DatasourceID == "" {
-		return &ToolResult{Success: false, Error: "datasource_id is required"}, nil
+	if params.ConnectionID == "" {
+		return &ToolResult{Success: false, Error: "connection_id is required"}, nil
 	}
 
 	// Verify this is an EdgeLake data source
-	ds, err := e.datasourceSvc.GetDatasource(ctx, params.DatasourceID)
+	ds, err := e.connectionSvc.GetConnection(ctx, params.ConnectionID)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get data source: " + err.Error()}, nil
 	}
@@ -956,7 +956,7 @@ func (e *ToolExecutor) executeGetEdgeLakeSchema(ctx context.Context, input json.
 
 	// If no database specified, return list of databases
 	if params.Database == "" {
-		databases, err := e.datasourceSvc.GetEdgeLakeDatabases(ctx, params.DatasourceID)
+		databases, err := e.connectionSvc.GetEdgeLakeDatabases(ctx, params.ConnectionID)
 		if err != nil {
 			return &ToolResult{Success: false, Error: "failed to get databases: " + err.Error()}, nil
 		}
@@ -969,7 +969,7 @@ func (e *ToolExecutor) executeGetEdgeLakeSchema(ctx context.Context, input json.
 
 	// If database specified but no table, return list of tables
 	if params.Table == "" {
-		tables, err := e.datasourceSvc.GetEdgeLakeTables(ctx, params.DatasourceID, params.Database)
+		tables, err := e.connectionSvc.GetEdgeLakeTables(ctx, params.ConnectionID, params.Database)
 		if err != nil {
 			return &ToolResult{Success: false, Error: "failed to get tables: " + err.Error()}, nil
 		}
@@ -981,7 +981,7 @@ func (e *ToolExecutor) executeGetEdgeLakeSchema(ctx context.Context, input json.
 	}
 
 	// Database and table specified, return column schema
-	columns, err := e.datasourceSvc.GetEdgeLakeSchema(ctx, params.DatasourceID, params.Database, params.Table)
+	columns, err := e.connectionSvc.GetEdgeLakeSchema(ctx, params.ConnectionID, params.Database, params.Table)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get table schema: " + err.Error()}, nil
 	}
@@ -1000,17 +1000,17 @@ func (e *ToolExecutor) executeGetEdgeLakeSchema(ctx context.Context, input json.
 // executeGetPrometheusSchema gets the schema (metrics and labels) for a Prometheus data source
 func (e *ToolExecutor) executeGetPrometheusSchema(ctx context.Context, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		DatasourceID string `json:"datasource_id"`
+		ConnectionID string `json:"connection_id"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	if params.DatasourceID == "" {
-		return &ToolResult{Success: false, Error: "datasource_id is required"}, nil
+	if params.ConnectionID == "" {
+		return &ToolResult{Success: false, Error: "connection_id is required"}, nil
 	}
 
-	response, err := e.datasourceSvc.GetSchema(ctx, params.DatasourceID)
+	response, err := e.connectionSvc.GetSchema(ctx, params.ConnectionID)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "Prometheus schema discovery failed: " + err.Error()}, nil
 	}
@@ -1052,7 +1052,7 @@ func (e *ToolExecutor) executePreviewData(ctx context.Context, chartID string, c
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
 
-	if chart.DatasourceID == "" {
+	if chart.ConnectionID == "" {
 		return &ToolResult{Success: false, Error: "chart has no data source configured"}, nil
 	}
 
@@ -1075,7 +1075,7 @@ func (e *ToolExecutor) executePreviewData(ctx context.Context, chartID string, c
 		},
 	}
 
-	response, err := e.datasourceSvc.QueryDatasource(ctx, chart.DatasourceID, req)
+	response, err := e.connectionSvc.QueryConnection(ctx, chart.ConnectionID, req)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "query failed: " + err.Error()}, nil
 	}
@@ -1135,7 +1135,7 @@ func (e *ToolExecutor) executeSuggestMissing(input json.RawMessage) (*ToolResult
 // executeGetSchema returns unified schema information for any datasource type
 func (e *ToolExecutor) executeGetSchema(ctx context.Context, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		DatasourceID string `json:"connection_id"`
+		ConnectionID string `json:"connection_id"`
 		Database     string `json:"database,omitempty"`
 		Table        string `json:"table,omitempty"`
 	}
@@ -1143,17 +1143,17 @@ func (e *ToolExecutor) executeGetSchema(ctx context.Context, input json.RawMessa
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
-	if params.DatasourceID == "" {
-		return &ToolResult{Success: false, Error: "datasource_id is required"}, nil
+	if params.ConnectionID == "" {
+		return &ToolResult{Success: false, Error: "connection_id is required"}, nil
 	}
 
 	// Get the datasource
-	ds, err := e.datasourceRepo.FindByID(ctx, params.DatasourceID)
+	ds, err := e.connectionRepo.FindByID(ctx, params.ConnectionID)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "failed to get data source: " + err.Error()}, nil
 	}
 	if ds == nil {
-		return &ToolResult{Success: false, Error: "data source not found: " + params.DatasourceID}, nil
+		return &ToolResult{Success: false, Error: "data source not found: " + params.ConnectionID}, nil
 	}
 
 	sourceInfo := models.UnifiedSchemaSourceInfo{
@@ -1165,14 +1165,14 @@ func (e *ToolExecutor) executeGetSchema(ctx context.Context, input json.RawMessa
 	var schema models.UnifiedSchema
 
 	switch ds.Type {
-	case models.DatasourceTypeSQL:
-		schema, err = e.getSQLUnifiedSchema(ctx, params.DatasourceID, params.Table)
-	case models.DatasourceTypePrometheus:
-		schema, err = e.getPrometheusUnifiedSchema(ctx, params.DatasourceID)
-	case models.DatasourceTypeEdgeLake:
-		schema, err = e.getEdgeLakeUnifiedSchema(ctx, params.DatasourceID, params.Database, params.Table)
-	case models.DatasourceTypeAPI, models.DatasourceTypeCSV, models.DatasourceTypeSocket, models.DatasourceTypeTSStore:
-		schema, err = e.inferSchemaFromData(ctx, params.DatasourceID)
+	case models.ConnectionTypeSQL:
+		schema, err = e.getSQLUnifiedSchema(ctx, params.ConnectionID, params.Table)
+	case models.ConnectionTypePrometheus:
+		schema, err = e.getPrometheusUnifiedSchema(ctx, params.ConnectionID)
+	case models.ConnectionTypeEdgeLake:
+		schema, err = e.getEdgeLakeUnifiedSchema(ctx, params.ConnectionID, params.Database, params.Table)
+	case models.ConnectionTypeAPI, models.ConnectionTypeCSV, models.ConnectionTypeSocket, models.ConnectionTypeTSStore:
+		schema, err = e.inferSchemaFromData(ctx, params.ConnectionID)
 	default:
 		return &ToolResult{Success: false, Error: fmt.Sprintf("unsupported datasource type: %s", ds.Type)}, nil
 	}
@@ -1182,7 +1182,7 @@ func (e *ToolExecutor) executeGetSchema(ctx context.Context, input json.RawMessa
 	}
 
 	response := models.UnifiedSchemaResponse{
-		Datasource: sourceInfo,
+		Connection: sourceInfo,
 		Schema:     schema,
 	}
 
@@ -1206,8 +1206,8 @@ func (e *ToolExecutor) executeGetSchema(ctx context.Context, input json.RawMessa
 }
 
 // getSQLUnifiedSchema gets schema from SQL datasource in unified format
-func (e *ToolExecutor) getSQLUnifiedSchema(ctx context.Context, datasourceID, tableName string) (models.UnifiedSchema, error) {
-	response, err := e.datasourceSvc.GetSchema(ctx, datasourceID)
+func (e *ToolExecutor) getSQLUnifiedSchema(ctx context.Context, connectionID, tableName string) (models.UnifiedSchema, error) {
+	response, err := e.connectionSvc.GetSchema(ctx, connectionID)
 	if err != nil {
 		return models.UnifiedSchema{}, err
 	}
@@ -1244,8 +1244,8 @@ func (e *ToolExecutor) getSQLUnifiedSchema(ctx context.Context, datasourceID, ta
 }
 
 // getPrometheusUnifiedSchema gets schema from Prometheus datasource in unified format
-func (e *ToolExecutor) getPrometheusUnifiedSchema(ctx context.Context, datasourceID string) (models.UnifiedSchema, error) {
-	response, err := e.datasourceSvc.GetSchema(ctx, datasourceID)
+func (e *ToolExecutor) getPrometheusUnifiedSchema(ctx context.Context, connectionID string) (models.UnifiedSchema, error) {
+	response, err := e.connectionSvc.GetSchema(ctx, connectionID)
 	if err != nil {
 		return models.UnifiedSchema{}, err
 	}
@@ -1265,12 +1265,12 @@ func (e *ToolExecutor) getPrometheusUnifiedSchema(ctx context.Context, datasourc
 }
 
 // getEdgeLakeUnifiedSchema gets schema from EdgeLake datasource in unified format
-func (e *ToolExecutor) getEdgeLakeUnifiedSchema(ctx context.Context, datasourceID, database, table string) (models.UnifiedSchema, error) {
+func (e *ToolExecutor) getEdgeLakeUnifiedSchema(ctx context.Context, connectionID, database, table string) (models.UnifiedSchema, error) {
 	schema := models.UnifiedSchema{}
 
 	// If no database specified, return list of databases
 	if database == "" {
-		databases, err := e.datasourceSvc.GetEdgeLakeDatabases(ctx, datasourceID)
+		databases, err := e.connectionSvc.GetEdgeLakeDatabases(ctx, connectionID)
 		if err != nil {
 			return schema, err
 		}
@@ -1285,7 +1285,7 @@ func (e *ToolExecutor) getEdgeLakeUnifiedSchema(ctx context.Context, datasourceI
 
 	// If database but no table, return list of tables
 	if table == "" {
-		tables, err := e.datasourceSvc.GetEdgeLakeTables(ctx, datasourceID, database)
+		tables, err := e.connectionSvc.GetEdgeLakeTables(ctx, connectionID, database)
 		if err != nil {
 			return schema, err
 		}
@@ -1297,7 +1297,7 @@ func (e *ToolExecutor) getEdgeLakeUnifiedSchema(ctx context.Context, datasourceI
 	}
 
 	// Database and table specified, return columns
-	columns, err := e.datasourceSvc.GetEdgeLakeSchema(ctx, datasourceID, database, table)
+	columns, err := e.connectionSvc.GetEdgeLakeSchema(ctx, connectionID, database, table)
 	if err != nil {
 		return schema, err
 	}
@@ -1318,7 +1318,7 @@ func (e *ToolExecutor) getEdgeLakeUnifiedSchema(ctx context.Context, datasourceI
 }
 
 // inferSchemaFromData infers schema by querying sample data
-func (e *ToolExecutor) inferSchemaFromData(ctx context.Context, datasourceID string) (models.UnifiedSchema, error) {
+func (e *ToolExecutor) inferSchemaFromData(ctx context.Context, connectionID string) (models.UnifiedSchema, error) {
 	// Query sample data (limit to 100 rows for inference)
 	req := &models.QueryRequest{
 		Query: models.Query{
@@ -1329,7 +1329,7 @@ func (e *ToolExecutor) inferSchemaFromData(ctx context.Context, datasourceID str
 		},
 	}
 
-	response, err := e.datasourceSvc.QueryDatasource(ctx, datasourceID, req)
+	response, err := e.connectionSvc.QueryConnection(ctx, connectionID, req)
 	if err != nil {
 		return models.UnifiedSchema{}, fmt.Errorf("failed to query sample data: %w", err)
 	}

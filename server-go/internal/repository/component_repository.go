@@ -57,7 +57,7 @@ func (r *ComponentRepository) CreateIndexes(ctx context.Context) error {
 			Keys: bson.D{{Key: "chart_type", Value: 1}},
 		},
 		{
-			Keys: bson.D{{Key: "datasource_id", Value: 1}},
+			Keys: bson.D{{Key: "connection_id", Value: 1}},
 		},
 		{
 			Keys: bson.D{{Key: "tags", Value: 1}},
@@ -87,7 +87,7 @@ func (r *ComponentRepository) CreateIndexes(ctx context.Context) error {
 		// Covers "components using connection X" queries with recency sort.
 		{
 			Keys: bson.D{
-				{Key: "datasource_id", Value: 1},
+				{Key: "connection_id", Value: 1},
 				{Key: "updated", Value: -1},
 			},
 		},
@@ -257,8 +257,8 @@ func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.C
 	if params.ChartType != "" {
 		matchFilter["chart_type"] = params.ChartType
 	}
-	if params.DatasourceID != "" {
-		matchFilter["datasource_id"] = params.DatasourceID
+	if params.ConnectionID != "" {
+		matchFilter["connection_id"] = params.ConnectionID
 	}
 	// Tags filter (OR semantics). The service layer backfills params.Tags
 	// from the deprecated single-value params.Tag for back-compat.
@@ -378,7 +378,7 @@ func (r *ComponentRepository) FindSummaries(ctx context.Context, limit int64) ([
 			"name":          1,
 			"description":   1,
 			"chart_type":    1,
-			"datasource_id": 1,
+			"connection_id": 1,
 			"tags":          1,
 		}}},
 	}
@@ -403,7 +403,7 @@ func (r *ComponentRepository) FindSummaries(ctx context.Context, limit int64) ([
 			Name:         getString(doc, "name"),
 			Description:  getString(doc, "description"),
 			ChartType:    getString(doc, "chart_type"),
-			DatasourceID: getString(doc, "datasource_id"),
+			ConnectionID: getString(doc, "connection_id"),
 		}
 
 		if tags, ok := doc["tags"].(bson.A); ok {
@@ -550,10 +550,10 @@ func (r *ComponentRepository) CountUnique(ctx context.Context) (int64, error) {
 	return 0, nil
 }
 
-// FindByDatasourceID retrieves the latest version of all components using a specific data source
-func (r *ComponentRepository) FindByDatasourceID(ctx context.Context, datasourceID string) ([]models.Component, error) {
+// FindByConnectionID retrieves the latest version of all components using a specific data source
+func (r *ComponentRepository) FindByConnectionID(ctx context.Context, connectionID string) ([]models.Component, error) {
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"datasource_id": datasourceID}}},
+		{{Key: "$match", Value: bson.M{"connection_id": connectionID}}},
 		{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
 		{{Key: "$group", Value: bson.M{
 			"_id": "$id",

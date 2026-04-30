@@ -76,7 +76,7 @@ type StreamSummary struct {
 
 // StreamInfo represents a single stream's status
 type StreamInfo struct {
-	DatasourceID    string `json:"datasource_id"`
+	ConnectionID    string `json:"connection_id"`
 	Connected       bool   `json:"connected"`
 	SubscriberCount int    `json:"subscriber_count"`
 	BufferCount     int    `json:"buffer_count"`
@@ -259,7 +259,7 @@ func (h *StatusHandler) buildStreamSummary() StreamSummary {
 		status := h.streamManager.GetStreamStatus(id)
 		if status != nil {
 			streams = append(streams, StreamInfo{
-				DatasourceID:    status.DatasourceID,
+				ConnectionID:    status.ConnectionID,
 				Connected:       status.Connected,
 				SubscriberCount: status.SubscriberCount,
 				BufferCount:     status.BufferCount,

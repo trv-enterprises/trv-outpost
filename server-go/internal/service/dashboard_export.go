@@ -48,7 +48,7 @@ func (s *DashboardService) PreviewExport(ctx context.Context, dashboardIDs []str
 // exportedBy is opaque — the handler typically passes the requester's
 // user GUID so the bundle metadata records who built it.
 func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, dashboardIDs []string) (*models.ExportBundle, error) {
-	if s.chartRepo == nil || s.datasourceRepo == nil {
+	if s.chartRepo == nil || s.connectionRepo == nil {
 		return nil, fmt.Errorf("export requires chart and datasource repositories — service was constructed without them")
 	}
 	if len(dashboardIDs) == 0 {
@@ -93,8 +93,8 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 			continue
 		}
 		components = append(components, *ch)
-		if ch.DatasourceID != "" {
-			dsIDsSeen[ch.DatasourceID] = struct{}{}
+		if ch.ConnectionID != "" {
+			dsIDsSeen[ch.ConnectionID] = struct{}{}
 		}
 		// Display components can also reference connections directly via
 		// DisplayConfig — pull those into the dependency graph too so a
@@ -110,9 +110,9 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 	}
 
 	// Pass 3: load connections, sanitized for export (secrets masked).
-	connections := make([]models.Datasource, 0, len(dsIDsSeen))
+	connections := make([]models.Connection, 0, len(dsIDsSeen))
 	for did := range dsIDsSeen {
-		ds, err := s.datasourceRepo.FindByID(ctx, did)
+		ds, err := s.connectionRepo.FindByID(ctx, did)
 		if err != nil {
 			return nil, fmt.Errorf("loading connection %s: %w", did, err)
 		}

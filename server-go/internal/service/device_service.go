@@ -17,19 +17,19 @@ import (
 type DeviceService struct {
 	repo           *repository.DeviceRepository
 	deviceTypeRepo *repository.DeviceTypeRepository
-	datasourceRepo *repository.DatasourceRepository
+	connectionRepo *repository.ConnectionRepository
 }
 
 // NewDeviceService creates a new device service
 func NewDeviceService(
 	repo *repository.DeviceRepository,
 	deviceTypeRepo *repository.DeviceTypeRepository,
-	datasourceRepo *repository.DatasourceRepository,
+	connectionRepo *repository.ConnectionRepository,
 ) *DeviceService {
 	return &DeviceService{
 		repo:           repo,
 		deviceTypeRepo: deviceTypeRepo,
-		datasourceRepo: datasourceRepo,
+		connectionRepo: connectionRepo,
 	}
 }
 
@@ -45,7 +45,7 @@ func (s *DeviceService) CreateDevice(ctx context.Context, req *models.CreateDevi
 	}
 
 	// Validate connection exists
-	ds, err := s.datasourceRepo.FindByID(ctx, req.ConnectionID)
+	ds, err := s.connectionRepo.FindByID(ctx, req.ConnectionID)
 	if err != nil {
 		return nil, fmt.Errorf("error validating connection: %w", err)
 	}
@@ -126,7 +126,7 @@ func (s *DeviceService) UpdateDevice(ctx context.Context, id string, req *models
 
 	// Validate connection if being changed
 	if req.ConnectionID != nil {
-		ds, err := s.datasourceRepo.FindByID(ctx, *req.ConnectionID)
+		ds, err := s.connectionRepo.FindByID(ctx, *req.ConnectionID)
 		if err != nil {
 			return nil, fmt.Errorf("error validating connection: %w", err)
 		}
@@ -194,7 +194,7 @@ func (s *DeviceService) ListDevices(ctx context.Context, params *models.DeviceQu
 // ImportDevices bulk-creates devices from a discovery import
 func (s *DeviceService) ImportDevices(ctx context.Context, req *models.ImportDevicesRequest) ([]models.Device, error) {
 	// Validate connection exists
-	ds, err := s.datasourceRepo.FindByID(ctx, req.ConnectionID)
+	ds, err := s.connectionRepo.FindByID(ctx, req.ConnectionID)
 	if err != nil {
 		return nil, fmt.Errorf("error validating connection: %w", err)
 	}

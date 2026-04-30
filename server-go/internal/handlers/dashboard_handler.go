@@ -105,7 +105,7 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 	}
 
 	// If include_datasources is true, use the aggregation method
-	if params.IncludeDatasources {
+	if params.IncludeConnections {
 		response, err := h.service.ListDashboardsWithDatasources(c.Request.Context(), params)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

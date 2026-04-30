@@ -23,14 +23,14 @@ import (
 // Requests are routed through the Go backend so the browser doesn't need
 // direct access to the Frigate host (CORS, network segmentation).
 type FrigateHandler struct {
-	datasourceService *service.DatasourceService
+	connectionService *service.ConnectionService
 	httpClient        *http.Client
 }
 
 // NewFrigateHandler creates a new FrigateHandler
-func NewFrigateHandler(datasourceService *service.DatasourceService) *FrigateHandler {
+func NewFrigateHandler(connectionService *service.ConnectionService) *FrigateHandler {
 	return &FrigateHandler{
-		datasourceService: datasourceService,
+		connectionService: connectionService,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -44,7 +44,7 @@ func (h *FrigateHandler) getFrigateBaseURL(c *gin.Context) (string, error) {
 		return "", fmt.Errorf("connection_id is required")
 	}
 
-	ds, err := h.datasourceService.GetDatasource(c.Request.Context(), connectionID)
+	ds, err := h.connectionService.GetConnection(c.Request.Context(), connectionID)
 	if err != nil {
 		return "", fmt.Errorf("connection not found: %w", err)
 	}
@@ -75,7 +75,7 @@ func (h *FrigateHandler) getFrigateGo2RTCURL(c *gin.Context) (string, error) {
 		return "", fmt.Errorf("connection_id is required")
 	}
 
-	ds, err := h.datasourceService.GetDatasource(c.Request.Context(), connectionID)
+	ds, err := h.connectionService.GetConnection(c.Request.Context(), connectionID)
 	if err != nil {
 		return "", fmt.Errorf("connection not found: %w", err)
 	}
@@ -499,7 +499,7 @@ func (h *FrigateHandler) ProxyLiveStream(c *gin.Context) {
 	}
 
 	// Look up the Frigate connection to get the JSMPEG WebSocket URL
-	ds, err := h.datasourceService.GetDatasource(c.Request.Context(), connectionID)
+	ds, err := h.connectionService.GetConnection(c.Request.Context(), connectionID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("connection not found: %v", err)})
 		return

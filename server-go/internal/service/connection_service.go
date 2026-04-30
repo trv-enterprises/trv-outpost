@@ -15,28 +15,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trv-enterprises/trve-dashboard/internal/datasource"
+	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
 
-// DatasourceService handles datasource business logic
-type DatasourceService struct {
-	repo *repository.DatasourceRepository
+// ConnectionService handles connection business logic
+type ConnectionService struct {
+	repo *repository.ConnectionRepository
 }
 
-// NewDatasourceService creates a new datasource service
-func NewDatasourceService(repo *repository.DatasourceRepository) *DatasourceService {
-	return &DatasourceService{
+// NewConnectionService creates a new connection service
+func NewConnectionService(repo *repository.ConnectionRepository) *ConnectionService {
+	return &ConnectionService{
 		repo: repo,
 	}
 }
 
-// CreateDatasource creates a new datasource with validation. Namespace
+// CreateConnection creates a new connection with validation. Namespace
 // defaults to "default" if the caller doesn't provide one — clients
 // should normally pass the user's active namespace from the header.
-func (s *DatasourceService) CreateDatasource(ctx context.Context, req *models.CreateDatasourceRequest) (*models.Datasource, error) {
+func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.CreateConnectionRequest) (*models.Connection, error) {
 	namespace := req.Namespace
 	if namespace == "" {
 		namespace = models.DefaultNamespace
@@ -49,7 +49,7 @@ func (s *DatasourceService) CreateDatasource(ctx context.Context, req *models.Cr
 		return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("datasource with name '%s' already exists in namespace '%s'", req.Name, namespace)
+		return nil, fmt.Errorf("connection with name '%s' already exists in namespace '%s'", req.Name, namespace)
 	}
 
 	// Validate config based on type
@@ -63,7 +63,7 @@ func (s *DatasourceService) CreateDatasource(ctx context.Context, req *models.Cr
 		maskSecrets = *req.MaskSecrets
 	}
 
-	datasource := &models.Datasource{
+	connection := &models.Connection{
 		Namespace:   namespace,
 		Name:        req.Name,
 		Description: req.Description,
@@ -76,27 +76,27 @@ func (s *DatasourceService) CreateDatasource(ctx context.Context, req *models.Cr
 		},
 	}
 
-	if err := s.repo.Create(ctx, datasource); err != nil {
-		return nil, fmt.Errorf("error creating datasource: %w", err)
+	if err := s.repo.Create(ctx, connection); err != nil {
+		return nil, fmt.Errorf("error creating connection: %w", err)
 	}
 
-	return datasource, nil
+	return connection, nil
 }
 
-// GetDatasource retrieves a datasource by ID
-func (s *DatasourceService) GetDatasource(ctx context.Context, id string) (*models.Datasource, error) {
-	datasource, err := s.repo.FindByID(ctx, id)
+// GetConnection retrieves a connection by ID
+func (s *ConnectionService) GetConnection(ctx context.Context, id string) (*models.Connection, error) {
+	connection, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
-	if datasource == nil {
-		return nil, fmt.Errorf("datasource not found")
+	if connection == nil {
+		return nil, fmt.Errorf("connection not found")
 	}
-	return datasource, nil
+	return connection, nil
 }
 
-// ListDatasources retrieves all datasources with pagination
-func (s *DatasourceService) ListDatasources(ctx context.Context, limit, offset int64) ([]*models.Datasource, int64, error) {
+// ListConnections retrieves all connections with pagination
+func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -104,21 +104,21 @@ func (s *DatasourceService) ListDatasources(ctx context.Context, limit, offset i
 		offset = 0
 	}
 
-	datasources, err := s.repo.FindAll(ctx, limit, offset)
+	connections, err := s.repo.FindAll(ctx, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("error listing datasources: %w", err)
+		return nil, 0, fmt.Errorf("error listing connections: %w", err)
 	}
 
 	total, err := s.repo.Count(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("error counting datasources: %w", err)
+		return nil, 0, fmt.Errorf("error counting connections: %w", err)
 	}
 
-	return datasources, total, nil
+	return connections, total, nil
 }
 
-// ListDatasourcesByType retrieves datasources by type with pagination
-func (s *DatasourceService) ListDatasourcesByType(ctx context.Context, dsType models.DatasourceType, limit, offset int64) ([]*models.Datasource, int64, error) {
+// ListConnectionsByType retrieves connections by type with pagination
+func (s *ConnectionService) ListConnectionsByType(ctx context.Context, dsType models.ConnectionType, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -126,23 +126,23 @@ func (s *DatasourceService) ListDatasourcesByType(ctx context.Context, dsType mo
 		offset = 0
 	}
 
-	datasources, err := s.repo.FindByType(ctx, dsType, limit, offset)
+	connections, err := s.repo.FindByType(ctx, dsType, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("error listing datasources by type: %w", err)
+		return nil, 0, fmt.Errorf("error listing connections by type: %w", err)
 	}
 
 	total, err := s.repo.CountByType(ctx, dsType)
 	if err != nil {
-		return nil, 0, fmt.Errorf("error counting datasources by type: %w", err)
+		return nil, 0, fmt.Errorf("error counting connections by type: %w", err)
 	}
 
-	return datasources, total, nil
+	return connections, total, nil
 }
 
-// ListDatasourcesFiltered retrieves datasources with optional namespace,
+// ListConnectionsFiltered retrieves connections with optional namespace,
 // type, and tag filters. Empty namespace = all namespaces (cross-namespace
 // toggle). Tags are OR-matched; normalized before the query.
-func (s *DatasourceService) ListDatasourcesFiltered(ctx context.Context, namespace, typeFilter string, tags []string, limit, offset int64) ([]*models.Datasource, int64, error) {
+func (s *ConnectionService) ListConnectionsFiltered(ctx context.Context, namespace, typeFilter string, tags []string, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -156,75 +156,75 @@ func (s *DatasourceService) ListDatasourcesFiltered(ctx context.Context, namespa
 	return s.repo.List(ctx, namespace, typeFilter, tags, limit, offset)
 }
 
-// UpdateDatasource updates an existing datasource
-func (s *DatasourceService) UpdateDatasource(ctx context.Context, id string, req *models.UpdateDatasourceRequest) (*models.Datasource, error) {
-	// Get existing datasource
-	datasource, err := s.repo.FindByID(ctx, id)
+// UpdateConnection updates an existing connection
+func (s *ConnectionService) UpdateConnection(ctx context.Context, id string, req *models.UpdateConnectionRequest) (*models.Connection, error) {
+	// Get existing connection
+	connection, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
-	if datasource == nil {
-		return nil, fmt.Errorf("datasource not found")
+	if connection == nil {
+		return nil, fmt.Errorf("connection not found")
 	}
 
 	// Resolve the post-update namespace + name. Both can change in the
 	// same request; uniqueness is checked against the new (namespace, name)
 	// pair, not the old one.
-	newNamespace := datasource.Namespace
+	newNamespace := connection.Namespace
 	if req.Namespace != "" {
 		newNamespace = req.Namespace
 	}
-	newName := datasource.Name
+	newName := connection.Name
 	if req.Name != "" {
 		newName = req.Name
 	}
-	if newNamespace != datasource.Namespace || newName != datasource.Name {
+	if newNamespace != connection.Namespace || newName != connection.Name {
 		existing, err := s.repo.FindByName(ctx, newNamespace, newName)
 		if err != nil {
 			return nil, fmt.Errorf("error checking name uniqueness: %w", err)
 		}
-		if existing != nil && existing.ID != datasource.ID {
-			return nil, fmt.Errorf("datasource with name '%s' already exists in namespace '%s'", newName, newNamespace)
+		if existing != nil && existing.ID != connection.ID {
+			return nil, fmt.Errorf("connection with name '%s' already exists in namespace '%s'", newName, newNamespace)
 		}
-		datasource.Namespace = newNamespace
-		datasource.Name = newName
+		connection.Namespace = newNamespace
+		connection.Name = newName
 	}
 
 	if req.Description != "" {
-		datasource.Description = req.Description
+		connection.Description = req.Description
 	}
 
 	// MaskSecrets cannot be changed after creation (security constraint)
 	// If provided and different from current value, reject the update
-	if req.MaskSecrets != nil && *req.MaskSecrets != datasource.MaskSecrets {
-		return nil, fmt.Errorf("mask_secrets cannot be changed after datasource creation")
+	if req.MaskSecrets != nil && *req.MaskSecrets != connection.MaskSecrets {
+		return nil, fmt.Errorf("mask_secrets cannot be changed after connection creation")
 	}
 
 	// Update config if provided and validate
 	if req.Config.API != nil || req.Config.Socket != nil || req.Config.CSV != nil || req.Config.SQL != nil || req.Config.TSStore != nil || req.Config.EdgeLake != nil {
 		// Preserve existing secrets if masked value is sent
-		preserveSecrets(&req.Config, &datasource.Config)
+		preserveSecrets(&req.Config, &connection.Config)
 
-		if err := s.validateConfig(datasource.Type, req.Config); err != nil {
+		if err := s.validateConfig(connection.Type, req.Config); err != nil {
 			return nil, fmt.Errorf("invalid configuration: %w", err)
 		}
-		datasource.Config = req.Config
+		connection.Config = req.Config
 	}
 
 	if req.Tags != nil {
-		datasource.Tags = models.NormalizeTags(req.Tags)
+		connection.Tags = models.NormalizeTags(req.Tags)
 	}
 
-	if err := s.repo.Update(ctx, id, datasource); err != nil {
-		return nil, fmt.Errorf("error updating datasource: %w", err)
+	if err := s.repo.Update(ctx, id, connection); err != nil {
+		return nil, fmt.Errorf("error updating connection: %w", err)
 	}
 
-	return datasource, nil
+	return connection, nil
 }
 
 // preserveSecrets copies secret values from existing config if the new config contains the masked value.
 // This allows the frontend to send "********" for unchanged secrets without losing the actual value.
-func preserveSecrets(newConfig, existingConfig *models.DatasourceConfig) {
+func preserveSecrets(newConfig, existingConfig *models.ConnectionConfig) {
 	// Preserve SQL secrets
 	if newConfig.SQL != nil && existingConfig.SQL != nil {
 		if newConfig.SQL.Password == models.SecretMaskedValue {
@@ -287,7 +287,7 @@ func preserveSecrets(newConfig, existingConfig *models.DatasourceConfig) {
 // resolveMaskedSecrets looks up an existing connection by ID and replaces any
 // masked secret values ("********") in the test request with the real values from DB.
 // This allows testing with current form values without exposing secrets to the frontend.
-func (s *DatasourceService) resolveMaskedSecrets(ctx context.Context, req *models.TestDatasourceRequest) {
+func (s *ConnectionService) resolveMaskedSecrets(ctx context.Context, req *models.TestConnectionRequest) {
 	existing, err := s.repo.FindByID(ctx, req.ID)
 	if err != nil || existing == nil {
 		return
@@ -295,33 +295,33 @@ func (s *DatasourceService) resolveMaskedSecrets(ctx context.Context, req *model
 	preserveSecrets(&req.Config, &existing.Config)
 }
 
-// DeleteDatasource deletes a datasource by ID
-func (s *DatasourceService) DeleteDatasource(ctx context.Context, id string) error {
-	// Check if datasource exists
-	datasource, err := s.repo.FindByID(ctx, id)
+// DeleteConnection deletes a connection by ID
+func (s *ConnectionService) DeleteConnection(ctx context.Context, id string) error {
+	// Check if connection exists
+	connection, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("error retrieving datasource: %w", err)
+		return fmt.Errorf("error retrieving connection: %w", err)
 	}
-	if datasource == nil {
-		return fmt.Errorf("datasource not found")
+	if connection == nil {
+		return fmt.Errorf("connection not found")
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("error deleting datasource: %w", err)
+		return fmt.Errorf("error deleting connection: %w", err)
 	}
 
 	return nil
 }
 
-// TestDatasource tests a datasource connection without saving
-func (s *DatasourceService) TestDatasource(ctx context.Context, req *models.TestDatasourceRequest) (*models.TestDatasourceResponse, error) {
+// TestConnection tests a connection connection without saving
+func (s *ConnectionService) TestConnection(ctx context.Context, req *models.TestConnectionRequest) (*models.TestConnectionResponse, error) {
 	// If an existing connection ID is provided, resolve any masked secrets from DB
 	if req.ID != "" {
 		s.resolveMaskedSecrets(ctx, req)
 	}
 
 	if err := s.validateConfig(req.Type, req.Config); err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Invalid configuration: %v", err),
@@ -329,36 +329,36 @@ func (s *DatasourceService) TestDatasource(ctx context.Context, req *models.Test
 	}
 
 	startTime := time.Now()
-	var response *models.TestDatasourceResponse
+	var response *models.TestConnectionResponse
 
 	switch req.Type {
-	case models.DatasourceTypeSQL:
+	case models.ConnectionTypeSQL:
 		response = s.testSQLConnection(req.Config.SQL)
-	case models.DatasourceTypeAPI:
+	case models.ConnectionTypeAPI:
 		response = s.testAPIConnection(ctx, req.Config.API)
-	case models.DatasourceTypeCSV:
+	case models.ConnectionTypeCSV:
 		response = s.testFileConnection(req.Config.CSV)
-	case models.DatasourceTypeSocket:
-		response = &models.TestDatasourceResponse{
+	case models.ConnectionTypeSocket:
+		response = &models.TestConnectionResponse{
 			Success: true,
 			Status:  models.HealthStatusHealthy,
 			Message: "WebSocket validation successful (connection test requires runtime connection)",
 		}
-	case models.DatasourceTypeTSStore:
+	case models.ConnectionTypeTSStore:
 		response = s.testTSStoreConnection(ctx, req.Config.TSStore)
-	case models.DatasourceTypePrometheus:
+	case models.ConnectionTypePrometheus:
 		response = s.testPrometheusConnection(ctx, req.Config.Prometheus)
-	case models.DatasourceTypeEdgeLake:
+	case models.ConnectionTypeEdgeLake:
 		response = s.testEdgeLakeConnection(ctx, req.Config.EdgeLake)
-	case models.DatasourceTypeMQTT:
+	case models.ConnectionTypeMQTT:
 		response = s.testMQTTConnection(ctx, req.Config.MQTT)
-	case models.DatasourceTypeFrigate:
+	case models.ConnectionTypeFrigate:
 		response = s.testFrigateConnection(ctx, req.Config.Frigate)
 	default:
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
-			Message: fmt.Sprintf("Unsupported datasource type: %s", req.Type),
+			Message: fmt.Sprintf("Unsupported connection type: %s", req.Type),
 		}, nil
 	}
 
@@ -366,14 +366,14 @@ func (s *DatasourceService) TestDatasource(ctx context.Context, req *models.Test
 	return response, nil
 }
 
-// CheckHealth checks the health of a datasource and updates its status
-func (s *DatasourceService) CheckHealth(ctx context.Context, id string) (*models.HealthInfo, error) {
-	datasource, err := s.repo.FindByID(ctx, id)
+// CheckHealth checks the health of a connection and updates its status
+func (s *ConnectionService) CheckHealth(ctx context.Context, id string) (*models.HealthInfo, error) {
+	connection, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
-	if datasource == nil {
-		return nil, fmt.Errorf("datasource not found")
+	if connection == nil {
+		return nil, fmt.Errorf("connection not found")
 	}
 
 	startTime := time.Now()
@@ -381,31 +381,31 @@ func (s *DatasourceService) CheckHealth(ctx context.Context, id string) (*models
 		LastCheck: time.Now(),
 	}
 
-	var testResponse *models.TestDatasourceResponse
+	var testResponse *models.TestConnectionResponse
 
-	switch datasource.Type {
-	case models.DatasourceTypeSQL:
-		testResponse = s.testSQLConnection(datasource.Config.SQL)
-	case models.DatasourceTypeAPI:
-		testResponse = s.testAPIConnection(ctx, datasource.Config.API)
-	case models.DatasourceTypeCSV:
-		testResponse = s.testFileConnection(datasource.Config.CSV)
-	case models.DatasourceTypeSocket:
-		testResponse = &models.TestDatasourceResponse{
+	switch connection.Type {
+	case models.ConnectionTypeSQL:
+		testResponse = s.testSQLConnection(connection.Config.SQL)
+	case models.ConnectionTypeAPI:
+		testResponse = s.testAPIConnection(ctx, connection.Config.API)
+	case models.ConnectionTypeCSV:
+		testResponse = s.testFileConnection(connection.Config.CSV)
+	case models.ConnectionTypeSocket:
+		testResponse = &models.TestConnectionResponse{
 			Success: true,
 			Status:  models.HealthStatusHealthy,
 			Message: "WebSocket configuration valid",
 		}
-	case models.DatasourceTypeTSStore:
-		testResponse = s.testTSStoreConnection(ctx, datasource.Config.TSStore)
-	case models.DatasourceTypePrometheus:
-		testResponse = s.testPrometheusConnection(ctx, datasource.Config.Prometheus)
-	case models.DatasourceTypeEdgeLake:
-		testResponse = s.testEdgeLakeConnection(ctx, datasource.Config.EdgeLake)
-	case models.DatasourceTypeMQTT:
-		testResponse = s.testMQTTConnection(ctx, datasource.Config.MQTT)
-	case models.DatasourceTypeFrigate:
-		testResponse = s.testFrigateConnection(ctx, datasource.Config.Frigate)
+	case models.ConnectionTypeTSStore:
+		testResponse = s.testTSStoreConnection(ctx, connection.Config.TSStore)
+	case models.ConnectionTypePrometheus:
+		testResponse = s.testPrometheusConnection(ctx, connection.Config.Prometheus)
+	case models.ConnectionTypeEdgeLake:
+		testResponse = s.testEdgeLakeConnection(ctx, connection.Config.EdgeLake)
+	case models.ConnectionTypeMQTT:
+		testResponse = s.testMQTTConnection(ctx, connection.Config.MQTT)
+	case models.ConnectionTypeFrigate:
+		testResponse = s.testFrigateConnection(ctx, connection.Config.Frigate)
 	}
 
 	health.Status = testResponse.Status
@@ -426,70 +426,70 @@ func (s *DatasourceService) CheckHealth(ctx context.Context, id string) (*models
 	return &health, nil
 }
 
-// validateConfig validates datasource configuration based on type
-func (s *DatasourceService) validateConfig(dsType models.DatasourceType, config models.DatasourceConfig) error {
+// validateConfig validates connection configuration based on type
+func (s *ConnectionService) validateConfig(dsType models.ConnectionType, config models.ConnectionConfig) error {
 	switch dsType {
-	case models.DatasourceTypeAPI:
+	case models.ConnectionTypeAPI:
 		if config.API == nil {
-			return fmt.Errorf("API configuration is required for API datasource")
+			return fmt.Errorf("API configuration is required for API connection")
 		}
 		return s.validateAPIConfig(config.API)
 
-	case models.DatasourceTypeSQL:
+	case models.ConnectionTypeSQL:
 		if config.SQL == nil {
-			return fmt.Errorf("SQL configuration is required for SQL datasource")
+			return fmt.Errorf("SQL configuration is required for SQL connection")
 		}
 		return s.validateSQLConfig(config.SQL)
 
-	case models.DatasourceTypeSocket:
+	case models.ConnectionTypeSocket:
 		if config.Socket == nil {
-			return fmt.Errorf("Socket configuration is required for Socket datasource")
+			return fmt.Errorf("Socket configuration is required for Socket connection")
 		}
 		return s.validateSocketConfig(config.Socket)
 
-	case models.DatasourceTypeCSV:
+	case models.ConnectionTypeCSV:
 		if config.CSV == nil {
-			return fmt.Errorf("CSV configuration is required for CSV datasource")
+			return fmt.Errorf("CSV configuration is required for CSV connection")
 		}
 		return s.validateCSVConfig(config.CSV)
 
-	case models.DatasourceTypeTSStore:
+	case models.ConnectionTypeTSStore:
 		if config.TSStore == nil {
-			return fmt.Errorf("TSStore configuration is required for TSStore datasource")
+			return fmt.Errorf("TSStore configuration is required for TSStore connection")
 		}
 		return s.validateTSStoreConfig(config.TSStore)
 
-	case models.DatasourceTypePrometheus:
+	case models.ConnectionTypePrometheus:
 		if config.Prometheus == nil {
-			return fmt.Errorf("Prometheus configuration is required for Prometheus datasource")
+			return fmt.Errorf("Prometheus configuration is required for Prometheus connection")
 		}
 		return s.validatePrometheusConfig(config.Prometheus)
 
-	case models.DatasourceTypeEdgeLake:
+	case models.ConnectionTypeEdgeLake:
 		if config.EdgeLake == nil {
-			return fmt.Errorf("EdgeLake configuration is required for EdgeLake datasource")
+			return fmt.Errorf("EdgeLake configuration is required for EdgeLake connection")
 		}
 		return s.validateEdgeLakeConfig(config.EdgeLake)
 
-	case models.DatasourceTypeMQTT:
+	case models.ConnectionTypeMQTT:
 		if config.MQTT == nil {
-			return fmt.Errorf("MQTT configuration is required for MQTT datasource")
+			return fmt.Errorf("MQTT configuration is required for MQTT connection")
 		}
 		return s.validateMQTTConfig(config.MQTT)
 
-	case models.DatasourceTypeFrigate:
+	case models.ConnectionTypeFrigate:
 		if config.Frigate == nil {
-			return fmt.Errorf("Frigate configuration is required for Frigate datasource")
+			return fmt.Errorf("Frigate configuration is required for Frigate connection")
 		}
 		return s.validateFrigateConfig(config.Frigate)
 
 	default:
-		return fmt.Errorf("unsupported datasource type: %s", dsType)
+		return fmt.Errorf("unsupported connection type: %s", dsType)
 	}
 }
 
 // validateAPIConfig validates API configuration
-func (s *DatasourceService) validateAPIConfig(config *models.APIConfig) error {
+func (s *ConnectionService) validateAPIConfig(config *models.APIConfig) error {
 	if config.URL == "" {
 		return fmt.Errorf("URL is required")
 	}
@@ -519,7 +519,7 @@ func (s *DatasourceService) validateAPIConfig(config *models.APIConfig) error {
 }
 
 // validateSQLConfig validates SQL configuration
-func (s *DatasourceService) validateSQLConfig(config *models.SQLConfig) error {
+func (s *ConnectionService) validateSQLConfig(config *models.SQLConfig) error {
 	if config.Driver == "" {
 		return fmt.Errorf("database driver is required")
 	}
@@ -557,7 +557,7 @@ func (s *DatasourceService) validateSQLConfig(config *models.SQLConfig) error {
 }
 
 // validateSocketConfig validates Socket configuration
-func (s *DatasourceService) validateSocketConfig(config *models.SocketConfig) error {
+func (s *ConnectionService) validateSocketConfig(config *models.SocketConfig) error {
 	if config.URL == "" {
 		return fmt.Errorf("URL is required")
 	}
@@ -578,7 +578,7 @@ func (s *DatasourceService) validateSocketConfig(config *models.SocketConfig) er
 }
 
 // validateCSVConfig validates CSV file configuration
-func (s *DatasourceService) validateCSVConfig(config *models.CSVConfig) error {
+func (s *ConnectionService) validateCSVConfig(config *models.CSVConfig) error {
 	if config.Path == "" {
 		return fmt.Errorf("file path is required")
 	}
@@ -587,7 +587,7 @@ func (s *DatasourceService) validateCSVConfig(config *models.CSVConfig) error {
 }
 
 // validateTSStoreConfig validates TSStore configuration
-func (s *DatasourceService) validateTSStoreConfig(config *models.TSStoreConfig) error {
+func (s *ConnectionService) validateTSStoreConfig(config *models.TSStoreConfig) error {
 	if config.Host == "" {
 		return fmt.Errorf("host is required")
 	}
@@ -602,7 +602,7 @@ func (s *DatasourceService) validateTSStoreConfig(config *models.TSStoreConfig) 
 }
 
 // validatePrometheusConfig validates Prometheus configuration
-func (s *DatasourceService) validatePrometheusConfig(config *models.PrometheusConfig) error {
+func (s *ConnectionService) validatePrometheusConfig(config *models.PrometheusConfig) error {
 	if config.URL == "" {
 		return fmt.Errorf("Prometheus URL is required")
 	}
@@ -610,7 +610,7 @@ func (s *DatasourceService) validatePrometheusConfig(config *models.PrometheusCo
 }
 
 // validateEdgeLakeConfig validates EdgeLake configuration
-func (s *DatasourceService) validateEdgeLakeConfig(config *models.EdgeLakeConfig) error {
+func (s *ConnectionService) validateEdgeLakeConfig(config *models.EdgeLakeConfig) error {
 	if config.Host == "" {
 		return fmt.Errorf("host is required")
 	}
@@ -621,7 +621,7 @@ func (s *DatasourceService) validateEdgeLakeConfig(config *models.EdgeLakeConfig
 }
 
 // testAPIConnection tests an API connection
-func (s *DatasourceService) testAPIConnection(ctx context.Context, config *models.APIConfig) *models.TestDatasourceResponse {
+func (s *ConnectionService) testAPIConnection(ctx context.Context, config *models.APIConfig) *models.TestConnectionResponse {
 	timeout := 30 * time.Second
 	if config.Timeout > 0 {
 		timeout = time.Duration(config.Timeout) * time.Second
@@ -638,7 +638,7 @@ func (s *DatasourceService) testAPIConnection(ctx context.Context, config *model
 
 	req, err := http.NewRequestWithContext(ctx, method, config.URL, nil)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Error creating request: %v", err),
@@ -680,7 +680,7 @@ func (s *DatasourceService) testAPIConnection(ctx context.Context, config *model
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
@@ -689,22 +689,22 @@ func (s *DatasourceService) testAPIConnection(ctx context.Context, config *model
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: true,
 			Status:  models.HealthStatusHealthy,
 			Message: fmt.Sprintf("Connection successful (HTTP %d)", resp.StatusCode),
 		}
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: false,
 		Status:  models.HealthStatusDegraded,
 		Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
 	}
 }
 
-// testFileConnection tests a CSV file datasource
-func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models.TestDatasourceResponse {
+// testFileConnection tests a CSV file connection
+func (s *ConnectionService) testFileConnection(config *models.CSVConfig) *models.TestConnectionResponse {
 	// Handle HTTP/HTTPS URLs
 	if strings.HasPrefix(config.Path, "http://") || strings.HasPrefix(config.Path, "https://") {
 		return s.testCSVURLConnection(config)
@@ -714,13 +714,13 @@ func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models
 	info, err := os.Stat(config.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &models.TestDatasourceResponse{
+			return &models.TestConnectionResponse{
 				Success: false,
 				Status:  models.HealthStatusUnhealthy,
 				Message: "File does not exist",
 			}
 		}
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Error accessing file: %v", err),
@@ -728,7 +728,7 @@ func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models
 	}
 
 	if info.IsDir() {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: "Path is a directory, not a file",
@@ -737,7 +737,7 @@ func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models
 
 	ext := strings.TrimPrefix(filepath.Ext(config.Path), ".")
 	if ext != "csv" {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusDegraded,
 			Message: fmt.Sprintf("File extension .%s is not a CSV file", ext),
@@ -746,7 +746,7 @@ func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models
 
 	file, err := os.Open(config.Path)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Cannot open file: %v", err),
@@ -757,14 +757,14 @@ func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models
 	buffer := make([]byte, 1024)
 	_, err = file.Read(buffer)
 	if err != nil && err != io.EOF {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Cannot read file: %v", err),
 		}
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("File accessible (size: %d bytes)", info.Size()),
@@ -772,11 +772,11 @@ func (s *DatasourceService) testFileConnection(config *models.CSVConfig) *models
 }
 
 // testCSVURLConnection tests a CSV file served over HTTP/HTTPS
-func (s *DatasourceService) testCSVURLConnection(config *models.CSVConfig) *models.TestDatasourceResponse {
+func (s *ConnectionService) testCSVURLConnection(config *models.CSVConfig) *models.TestConnectionResponse {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(config.Path)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Failed to fetch CSV from URL: %v", err),
@@ -785,7 +785,7 @@ func (s *DatasourceService) testCSVURLConnection(config *models.CSVConfig) *mode
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
@@ -796,7 +796,7 @@ func (s *DatasourceService) testCSVURLConnection(config *models.CSVConfig) *mode
 	buffer := make([]byte, 1024)
 	n, err := resp.Body.Read(buffer)
 	if err != nil && err != io.EOF {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Cannot read response body: %v", err),
@@ -810,7 +810,7 @@ func (s *DatasourceService) testCSVURLConnection(config *models.CSVConfig) *mode
 		size = fmt.Sprintf("%d+ bytes", n)
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("URL accessible (size: %s)", size),
@@ -818,11 +818,11 @@ func (s *DatasourceService) testCSVURLConnection(config *models.CSVConfig) *mode
 }
 
 // testSQLConnection tests a SQL database connection
-func (s *DatasourceService) testSQLConnection(config *models.SQLConfig) *models.TestDatasourceResponse {
-	// Use the datasource package to create and test the connection
-	sqlDS, err := datasource.NewSQLDataSource(config)
+func (s *ConnectionService) testSQLConnection(config *models.SQLConfig) *models.TestConnectionResponse {
+	// Use the connection package to create and test the connection
+	sqlDS, err := connection.NewSQLDataSource(config)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
@@ -831,7 +831,7 @@ func (s *DatasourceService) testSQLConnection(config *models.SQLConfig) *models.
 	defer sqlDS.Close()
 
 	// Connection successful, now fetch schema
-	response := &models.TestDatasourceResponse{
+	response := &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("Connection successful (driver: %s)", config.Driver),
@@ -848,27 +848,27 @@ func (s *DatasourceService) testSQLConnection(config *models.SQLConfig) *models.
 }
 
 // testTSStoreConnection tests a TSStore connection
-func (s *DatasourceService) testTSStoreConnection(ctx context.Context, config *models.TSStoreConfig) *models.TestDatasourceResponse {
-	tsDS, err := datasource.NewTSStoreDataSource(config)
+func (s *ConnectionService) testTSStoreConnection(ctx context.Context, config *models.TSStoreConfig) *models.TestConnectionResponse {
+	tsDS, err := connection.NewTSStoreDataSource(config)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
-			Message: fmt.Sprintf("Failed to create TSStore datasource: %v", err),
+			Message: fmt.Sprintf("Failed to create TSStore connection: %v", err),
 		}
 	}
 	defer tsDS.Close()
 
 	// Test the connection
 	if err := tsDS.TestConnection(ctx); err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
 		}
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("Connection successful (store: %s)", config.StoreName),
@@ -876,27 +876,27 @@ func (s *DatasourceService) testTSStoreConnection(ctx context.Context, config *m
 }
 
 // testPrometheusConnection tests a Prometheus connection
-func (s *DatasourceService) testPrometheusConnection(ctx context.Context, config *models.PrometheusConfig) *models.TestDatasourceResponse {
-	promDS, err := datasource.NewPrometheusDataSource(config)
+func (s *ConnectionService) testPrometheusConnection(ctx context.Context, config *models.PrometheusConfig) *models.TestConnectionResponse {
+	promDS, err := connection.NewPrometheusDataSource(config)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
-			Message: fmt.Sprintf("Failed to create Prometheus datasource: %v", err),
+			Message: fmt.Sprintf("Failed to create Prometheus connection: %v", err),
 		}
 	}
 	defer promDS.Close()
 
 	// Test the connection
 	if err := promDS.TestConnection(ctx); err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
 		}
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("Connection successful (%s)", config.URL),
@@ -904,27 +904,27 @@ func (s *DatasourceService) testPrometheusConnection(ctx context.Context, config
 }
 
 // testEdgeLakeConnection tests an EdgeLake connection
-func (s *DatasourceService) testEdgeLakeConnection(ctx context.Context, config *models.EdgeLakeConfig) *models.TestDatasourceResponse {
-	elDS, err := datasource.NewEdgeLakeDataSource(config)
+func (s *ConnectionService) testEdgeLakeConnection(ctx context.Context, config *models.EdgeLakeConfig) *models.TestConnectionResponse {
+	elDS, err := connection.NewEdgeLakeDataSource(config)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
-			Message: fmt.Sprintf("Failed to create EdgeLake datasource: %v", err),
+			Message: fmt.Sprintf("Failed to create EdgeLake connection: %v", err),
 		}
 	}
 	defer elDS.Close()
 
 	// Test the connection
 	if err := elDS.TestConnection(ctx); err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
 		}
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("Connection successful (%s:%d)", config.Host, config.Port),
@@ -932,7 +932,7 @@ func (s *DatasourceService) testEdgeLakeConnection(ctx context.Context, config *
 }
 
 // validateMQTTConfig validates MQTT configuration
-func (s *DatasourceService) validateMQTTConfig(config *models.MQTTConfig) error {
+func (s *ConnectionService) validateMQTTConfig(config *models.MQTTConfig) error {
 	if config.BrokerURL == "" {
 		return fmt.Errorf("broker URL is required")
 	}
@@ -943,9 +943,9 @@ func (s *DatasourceService) validateMQTTConfig(config *models.MQTTConfig) error 
 }
 
 // testMQTTConnection tests an MQTT broker connection
-func (s *DatasourceService) testMQTTConnection(ctx context.Context, config *models.MQTTConfig) *models.TestDatasourceResponse {
+func (s *ConnectionService) testMQTTConnection(ctx context.Context, config *models.MQTTConfig) *models.TestConnectionResponse {
 	if config == nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: "MQTT configuration is required",
@@ -964,7 +964,7 @@ func (s *DatasourceService) testMQTTConnection(ctx context.Context, config *mode
 		"clean_start": config.CleanStart,
 	})
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Failed to create adapter: %v", err),
@@ -972,14 +972,14 @@ func (s *DatasourceService) testMQTTConnection(ctx context.Context, config *mode
 	}
 
 	if err := adapter.TestConnection(ctx); err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
 		}
 	}
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("Connected to MQTT broker at %s", config.BrokerURL),
@@ -987,7 +987,7 @@ func (s *DatasourceService) testMQTTConnection(ctx context.Context, config *mode
 }
 
 // validateFrigateConfig validates Frigate NVR configuration
-func (s *DatasourceService) validateFrigateConfig(config *models.FrigateConfig) error {
+func (s *ConnectionService) validateFrigateConfig(config *models.FrigateConfig) error {
 	if config.Host == "" {
 		return fmt.Errorf("host is required")
 	}
@@ -1001,9 +1001,9 @@ func (s *DatasourceService) validateFrigateConfig(config *models.FrigateConfig) 
 }
 
 // testFrigateConnection tests a Frigate NVR connection by hitting /api/version
-func (s *DatasourceService) testFrigateConnection(ctx context.Context, config *models.FrigateConfig) *models.TestDatasourceResponse {
+func (s *ConnectionService) testFrigateConnection(ctx context.Context, config *models.FrigateConfig) *models.TestConnectionResponse {
 	if config == nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: "Frigate configuration is required",
@@ -1015,7 +1015,7 @@ func (s *DatasourceService) testFrigateConnection(ctx context.Context, config *m
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Failed to create request: %v", err),
@@ -1028,7 +1028,7 @@ func (s *DatasourceService) testFrigateConnection(ctx context.Context, config *m
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Failed to connect to Frigate at %s: %v", config.BaseURL(), err),
@@ -1037,7 +1037,7 @@ func (s *DatasourceService) testFrigateConnection(ctx context.Context, config *m
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &models.TestDatasourceResponse{
+		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Frigate returned status %d", resp.StatusCode),
@@ -1047,31 +1047,31 @@ func (s *DatasourceService) testFrigateConnection(ctx context.Context, config *m
 	body, _ := io.ReadAll(resp.Body)
 	version := strings.TrimSpace(string(body))
 
-	return &models.TestDatasourceResponse{
+	return &models.TestConnectionResponse{
 		Success: true,
 		Status:  models.HealthStatusHealthy,
 		Message: fmt.Sprintf("Connected to Frigate %s at %s", version, config.BaseURL()),
 	}
 }
 
-// QueryDatasource executes a query against a datasource
-func (s *DatasourceService) QueryDatasource(ctx context.Context, id string, req *models.QueryRequest) (*models.QueryResponse, error) {
-	// Get datasource configuration
+// QueryConnection executes a query against a connection
+func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req *models.QueryRequest) (*models.QueryResponse, error) {
+	// Get connection configuration
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
 
-	// Create datasource adapter
-	factory := datasource.NewDataSourceFactory()
+	// Create connection adapter
+	factory := connection.NewConnectionFactory()
 	dataSource, err := factory.CreateFromConfig(ds)
 	if err != nil {
 		return &models.QueryResponse{
 			Success: false,
-			Error:   fmt.Sprintf("Failed to create datasource: %v", err),
+			Error:   fmt.Sprintf("Failed to create connection: %v", err),
 		}, nil
 	}
 	defer dataSource.Close()
@@ -1096,48 +1096,48 @@ func (s *DatasourceService) QueryDatasource(ctx context.Context, id string, req 
 	}, nil
 }
 
-// GetSchema retrieves schema information for a datasource that supports it
-// Only SQL datasources implement SchemaProvider; others return an error
-func (s *DatasourceService) GetSchema(ctx context.Context, id string) (*models.SchemaResponse, error) {
-	// Get datasource configuration
+// GetSchema retrieves schema information for a connection that supports it
+// Only SQL connections implement SchemaProvider; others return an error
+func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.SchemaResponse, error) {
+	// Get connection configuration
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
 
 	// Handle Prometheus schema separately
-	if ds.Type == models.DatasourceTypePrometheus {
+	if ds.Type == models.ConnectionTypePrometheus {
 		return s.getPrometheusSchema(ctx, ds)
 	}
 
-	// Only SQL datasources support schema discovery
-	if ds.Type != models.DatasourceTypeSQL {
+	// Only SQL connections support schema discovery
+	if ds.Type != models.ConnectionTypeSQL {
 		return &models.SchemaResponse{
 			Success: false,
-			Error:   fmt.Sprintf("Schema discovery not supported for datasource type: %s", ds.Type),
+			Error:   fmt.Sprintf("Schema discovery not supported for connection type: %s", ds.Type),
 		}, nil
 	}
 
-	// Create datasource adapter
-	factory := datasource.NewDataSourceFactory()
+	// Create connection adapter
+	factory := connection.NewConnectionFactory()
 	dataSource, err := factory.CreateFromConfig(ds)
 	if err != nil {
 		return &models.SchemaResponse{
 			Success: false,
-			Error:   fmt.Sprintf("Failed to create datasource: %v", err),
+			Error:   fmt.Sprintf("Failed to create connection: %v", err),
 		}, nil
 	}
 	defer dataSource.Close()
 
-	// Check if datasource implements SchemaProvider
+	// Check if connection implements SchemaProvider
 	schemaProvider, ok := dataSource.(models.SchemaProvider)
 	if !ok {
 		return &models.SchemaResponse{
 			Success: false,
-			Error:   "Datasource does not support schema discovery",
+			Error:   "Connection does not support schema discovery",
 		}, nil
 	}
 
@@ -1161,16 +1161,16 @@ func (s *DatasourceService) GetSchema(ctx context.Context, id string) (*models.S
 	}, nil
 }
 
-// getPrometheusSchema retrieves schema information from a Prometheus datasource
-func (s *DatasourceService) getPrometheusSchema(ctx context.Context, ds *models.Datasource) (*models.SchemaResponse, error) {
+// getPrometheusSchema retrieves schema information from a Prometheus connection
+func (s *ConnectionService) getPrometheusSchema(ctx context.Context, ds *models.Connection) (*models.SchemaResponse, error) {
 	startTime := time.Now()
 
-	// Create Prometheus datasource
-	promDS, err := datasource.NewPrometheusDataSource(ds.Config.Prometheus)
+	// Create Prometheus connection
+	promDS, err := connection.NewPrometheusDataSource(ds.Config.Prometheus)
 	if err != nil {
 		return &models.SchemaResponse{
 			Success: false,
-			Error:   fmt.Sprintf("Failed to create Prometheus datasource: %v", err),
+			Error:   fmt.Sprintf("Failed to create Prometheus connection: %v", err),
 		}, nil
 	}
 	defer promDS.Close()
@@ -1213,26 +1213,26 @@ func (s *DatasourceService) getPrometheusSchema(ctx context.Context, ds *models.
 	}, nil
 }
 
-// GetPrometheusLabelValues retrieves all values for a specific label from a Prometheus datasource
-func (s *DatasourceService) GetPrometheusLabelValues(ctx context.Context, id string, labelName string) ([]string, error) {
-	// Get datasource configuration
+// GetPrometheusLabelValues retrieves all values for a specific label from a Prometheus connection
+func (s *ConnectionService) GetPrometheusLabelValues(ctx context.Context, id string, labelName string) ([]string, error) {
+	// Get connection configuration
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
 
-	// Only Prometheus datasources support this
-	if ds.Type != models.DatasourceTypePrometheus {
-		return nil, fmt.Errorf("label values are only available for Prometheus datasources")
+	// Only Prometheus connections support this
+	if ds.Type != models.ConnectionTypePrometheus {
+		return nil, fmt.Errorf("label values are only available for Prometheus connections")
 	}
 
-	// Create Prometheus datasource
-	promDS, err := datasource.NewPrometheusDataSource(ds.Config.Prometheus)
+	// Create Prometheus connection
+	promDS, err := connection.NewPrometheusDataSource(ds.Config.Prometheus)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Prometheus datasource: %w", err)
+		return nil, fmt.Errorf("failed to create Prometheus connection: %w", err)
 	}
 	defer promDS.Close()
 
@@ -1246,22 +1246,22 @@ func (s *DatasourceService) GetPrometheusLabelValues(ctx context.Context, id str
 }
 
 // GetEdgeLakeDatabases retrieves all databases from an EdgeLake data source
-func (s *DatasourceService) GetEdgeLakeDatabases(ctx context.Context, id string) ([]string, error) {
+func (s *ConnectionService) GetEdgeLakeDatabases(ctx context.Context, id string) ([]string, error) {
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
 
-	if ds.Type != models.DatasourceTypeEdgeLake {
-		return nil, fmt.Errorf("database listing is only available for EdgeLake datasources")
+	if ds.Type != models.ConnectionTypeEdgeLake {
+		return nil, fmt.Errorf("database listing is only available for EdgeLake connections")
 	}
 
-	elDS, err := datasource.NewEdgeLakeDataSource(ds.Config.EdgeLake)
+	elDS, err := connection.NewEdgeLakeDataSource(ds.Config.EdgeLake)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create EdgeLake datasource: %w", err)
+		return nil, fmt.Errorf("failed to create EdgeLake connection: %w", err)
 	}
 	defer elDS.Close()
 
@@ -1274,22 +1274,22 @@ func (s *DatasourceService) GetEdgeLakeDatabases(ctx context.Context, id string)
 }
 
 // GetEdgeLakeTables retrieves tables for a specific database from an EdgeLake data source
-func (s *DatasourceService) GetEdgeLakeTables(ctx context.Context, id string, database string) ([]string, error) {
+func (s *ConnectionService) GetEdgeLakeTables(ctx context.Context, id string, database string) ([]string, error) {
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
 
-	if ds.Type != models.DatasourceTypeEdgeLake {
-		return nil, fmt.Errorf("table listing is only available for EdgeLake datasources")
+	if ds.Type != models.ConnectionTypeEdgeLake {
+		return nil, fmt.Errorf("table listing is only available for EdgeLake connections")
 	}
 
-	elDS, err := datasource.NewEdgeLakeDataSource(ds.Config.EdgeLake)
+	elDS, err := connection.NewEdgeLakeDataSource(ds.Config.EdgeLake)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create EdgeLake datasource: %w", err)
+		return nil, fmt.Errorf("failed to create EdgeLake connection: %w", err)
 	}
 	defer elDS.Close()
 
@@ -1302,22 +1302,22 @@ func (s *DatasourceService) GetEdgeLakeTables(ctx context.Context, id string, da
 }
 
 // GetEdgeLakeSchema retrieves the column schema for a table from an EdgeLake data source
-func (s *DatasourceService) GetEdgeLakeSchema(ctx context.Context, id string, database, table string) ([]models.EdgeLakeColumnInfo, error) {
+func (s *ConnectionService) GetEdgeLakeSchema(ctx context.Context, id string, database, table string) ([]models.EdgeLakeColumnInfo, error) {
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving datasource: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
 
-	if ds.Type != models.DatasourceTypeEdgeLake {
-		return nil, fmt.Errorf("schema discovery is only available for EdgeLake datasources")
+	if ds.Type != models.ConnectionTypeEdgeLake {
+		return nil, fmt.Errorf("schema discovery is only available for EdgeLake connections")
 	}
 
-	elDS, err := datasource.NewEdgeLakeDataSource(ds.Config.EdgeLake)
+	elDS, err := connection.NewEdgeLakeDataSource(ds.Config.EdgeLake)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create EdgeLake datasource: %w", err)
+		return nil, fmt.Errorf("failed to create EdgeLake connection: %w", err)
 	}
 	defer elDS.Close()
 
@@ -1330,16 +1330,16 @@ func (s *DatasourceService) GetEdgeLakeSchema(ctx context.Context, id string, da
 }
 
 // GetMQTTTopics discovers available topics from an MQTT broker by subscribing briefly
-func (s *DatasourceService) GetMQTTTopics(ctx context.Context, id string) ([]string, error) {
+func (s *ConnectionService) GetMQTTTopics(ctx context.Context, id string) ([]string, error) {
 	ds, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
-	if ds.Type != models.DatasourceTypeMQTT || ds.Config.MQTT == nil {
-		return nil, fmt.Errorf("datasource is not an MQTT connection")
+	if ds.Type != models.ConnectionTypeMQTT || ds.Config.MQTT == nil {
+		return nil, fmt.Errorf("connection is not an MQTT connection")
 	}
 
 	// Create adapter and use Stream to collect topics
@@ -1390,16 +1390,16 @@ done:
 // SampleMQTTTopic subscribes to a single MQTT topic and returns the schema (columns)
 // plus one sample row, with a short timeout. Used by the chart editor to discover
 // the message schema for a topic before configuring data mapping.
-func (s *DatasourceService) SampleMQTTTopic(ctx context.Context, datasourceID string, topic string) (map[string]interface{}, error) {
-	ds, err := s.repo.FindByID(ctx, datasourceID)
+func (s *ConnectionService) SampleMQTTTopic(ctx context.Context, connectionID string, topic string) (map[string]interface{}, error) {
+	ds, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find datasource: %w", err)
+		return nil, fmt.Errorf("failed to find connection: %w", err)
 	}
 	if ds == nil {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, fmt.Errorf("connection not found")
 	}
-	if ds.Type != models.DatasourceTypeMQTT || ds.Config.MQTT == nil {
-		return nil, fmt.Errorf("datasource is not an MQTT connection")
+	if ds.Type != models.ConnectionTypeMQTT || ds.Config.MQTT == nil {
+		return nil, fmt.Errorf("connection is not an MQTT connection")
 	}
 
 	adapter, err := registry.CreateAdapter("stream.mqtt", ds.GetEffectiveConfig())
@@ -1456,7 +1456,7 @@ func (s *DatasourceService) SampleMQTTTopic(ctx context.Context, datasourceID st
 
 // CreateAdapter creates a registry.Adapter for the given data source
 // This is used by the command handler for bidirectional communication
-func (s *DatasourceService) CreateAdapter(ctx context.Context, ds *models.Datasource) (registry.Adapter, error) {
-	factory := datasource.NewDataSourceFactory()
+func (s *ConnectionService) CreateAdapter(ctx context.Context, ds *models.Connection) (registry.Adapter, error) {
+	factory := connection.NewConnectionFactory()
 	return factory.CreateAdapterFromConfig(ds)
 }
