@@ -17,7 +17,7 @@ MQTT broker     ─▶  MQTTStream                   ──▶  StreamConnection
                       │                                 │
                       ▼                                 ▼
                     StreamManager                     Subscriber callbacks
-                      │  (per-datasource streams)      (Weather, Frigate alerts,
+                      │  (per-connection streams)      (Weather, Frigate alerts,
                       │  (reference-counted subs)       controls, charts)
                       ▼
                     stream_handler.go
@@ -49,7 +49,7 @@ Long-idle streams get torn down by a background sweep.
 
 ## MQTT stream
 
-`internal/streaming/mqtt_stream.go` is the per-datasource MQTT
+`internal/streaming/mqtt_stream.go` is the per-connection MQTT
 client. It uses `github.com/eclipse/paho.golang/autopaho` to
 maintain the TCP connection to the broker, survive network
 interruptions, and handle reconnect logic.
@@ -155,7 +155,7 @@ need initial data get a bounded time-range pull when they connect.
 `internal/handlers/stream_handler.go` is the HTTP endpoint clients
 connect to. `GET /api/connections/:id/stream?topics=foo,bar`:
 
-1. Validate the datasource ID and confirm the type supports
+1. Validate the connection ID and confirm the type supports
    streaming.
 2. Parse the `topics` query parameter into a topic-filter slice.
 3. Call `manager.SubscribeWithTopics(...)` to get a channel.

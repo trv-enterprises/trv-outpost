@@ -19,9 +19,7 @@ See the `release-deploy` skill for the authoritative runbook (tagging, image bui
 - Format: `{ "buildNumber": N }` where N is an integer
 
 ### 2. Terminology
-- Use "connection" (not "data source" or "datasource") for external data connections in UI text
-- Internal code can use `datasource` for backwards compatibility with existing database records
-- API endpoints: `/api/connections` is preferred, `/api/datasources` kept as deprecated alias
+- Use "connection" (not "data source" or "datasource") for external data connections in UI text and code. The `datasource` nomenclature has been fully retired — collection is `connections`, BSON field is `connection_id`, Go types are `Connection` / `ConnectionRepository` / `ConnectionService` / `ConnectionAdapter` (the runtime interface), API route is `/api/connections`. The legacy `datasource_id` field name and `/api/datasources` alias were removed in v0.11.x.
 - **Component** is the umbrella entity. Three sub-types via `component_type`:
   - `chart` — ECharts visualizations (bar/line/pie/scatter/gauge/number/dataview/custom). Discriminated further by `chart_type`.
   - `display` — non-chart visual components (frigate cameras, frigate alerts, weather). Discriminated by `display_type`.
@@ -123,7 +121,7 @@ src/
 │   ├── useData.js          # Generic data fetching hook
 │   ├── useDashboard.js     # Dashboard-specific hook
 │   ├── useCharts.js        # Charts-specific hook
-│   └── useDatasources.js   # Data sources-specific hook
+│   └── useConnections.js   # Connections-specific hook
 ├── context/
 │   ├── ModeContext.jsx     # App mode (Design/View/Manage)
 │   └── ThemeContext.jsx    # Theme preferences (future)
@@ -325,7 +323,7 @@ dashboard/
 │   ├── internal/
 │   │   ├── ai/               # AI agent, tools, system prompt
 │   │   ├── database/         # MongoDB connection
-│   │   ├── datasource/       # SQL, API, CSV, Socket adapters
+│   │   ├── connection/       # SQL, API, CSV, Socket adapters (runtime adapter implementations)
 │   │   ├── handlers/         # HTTP handlers
 │   │   ├── mcp/              # MCP SSE endpoint
 │   │   ├── models/           # Data models
@@ -667,7 +665,7 @@ for fit-mode behavior and layout-dimension presets.
 - **Fix AI Chart Builder 429 Rate Limit Error**: Hitting Anthropic's 30k input tokens/minute limit after just a few messages. Options: implement retry-with-backoff on 429 errors, trim conversation history to last N messages, or summarize older context to reduce token usage.
 - **Tabbed Panel Layout**: Allow panels to contain multiple charts with tabs to switch between
 - **Connection Testing in Editor**: Add connection test capability to connection editor UI (backend API already exists at `/api/connections/test`)
-- **Fix `include_connections` Aggregation**: The `ListWithDatasources` MongoDB aggregation in `dashboard_repository.go` has a bug where `panel_count` returns 0. Currently worked around by fetching dashboards, charts, and connections separately client-side. Fix the aggregation to reduce API calls as dashboard count grows.
+- **Fix `include_connections` Aggregation**: The `ListWithConnections` MongoDB aggregation in `dashboard_repository.go` has a bug where `panel_count` returns 0. Currently worked around by fetching dashboards, components, and connections separately client-side. Fix the aggregation to reduce API calls as dashboard count grows.
 - User authentication
 - ModeContext for shared state (replace localStorage-based mode switching)
 - ErrorBoundary component for crash recovery

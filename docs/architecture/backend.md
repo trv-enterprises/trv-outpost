@@ -29,10 +29,10 @@ binary also serves the MCP endpoint at `/mcp/sse` — see
                     │               │                    │
                     │               │                    │
     ┌───────────────▼──┐   ┌────────▼─────────┐   ┌──────▼──────┐
-    │ Repositories     │   │ Datasource       │   │ Streaming   │
+    │ Repositories     │   │ Connection       │   │ Streaming   │
     │ repository/*     │   │ adapters         │   │ engine      │
-    │ - MongoDB CRUD   │   │ datasource/*     │   │ streaming/* │
-    │ - index creation │   │ - per-type shims │   │ - per-ds    │
+    │ - MongoDB CRUD   │   │ connection/*     │   │ streaming/* │
+    │ - index creation │   │ - per-type shims │   │ - per-conn  │
     │                  │   │ - Query/Stream/  │   │   stream    │
     │                  │   │   Write          │   │ - SSE fan   │
     └──────────┬───────┘   └──────────┬───────┘   └──────┬──────┘
@@ -58,12 +58,12 @@ the collection handle, the index set, and the aggregation pipelines
 for any non-trivial queries. Repositories don't know about HTTP or
 services.
 
-**Datasource adapters** implement the `Streamer` / `Queryable` /
+**Connection adapters** implement the `Streamer` / `Queryable` /
 `Writable` interfaces for each external source type. They don't know
 about MongoDB or HTTP — they're pure adapters over external wire
 protocols. See [connections.md](connections.md).
 
-**Streaming engine** owns long-lived per-datasource streams and fans
+**Streaming engine** owns long-lived per-connection streams and fans
 messages out to SSE subscribers. See [streaming.md](streaming.md).
 
 This separation is strict enough that the repository tests can run
@@ -101,7 +101,7 @@ server-go/
     │   ├── mongodb.go        Client setup, shared index helpers
     │   ├── migrations.go     Startup migration framework
     │   └── collation.go      Case-insensitive collation constants
-    ├── datasource/           Per-type adapters (SQL, REST, CSV, MQTT,
+    ├── connection/           Per-type adapters (SQL, REST, CSV, MQTT,
     │                         Prometheus, EdgeLake, TSStore, Frigate,
     │                         WebSocket, TCP)
     ├── handlers/             HTTP + SSE + WebSocket handlers
@@ -141,7 +141,7 @@ created after migrations complete. See [database.md](database.md).
 
 ## Services in brief
 
-- **DatasourceService** — create, update, delete, list, test, health
+- **ConnectionService** — create, update, delete, list, test, health
   check. Normalizes tags on write, masks/unmasks secrets on the
   test path.
 - **ComponentService** — create, update, delete, list. Manages the
@@ -151,8 +151,8 @@ created after migrations complete. See [database.md](database.md).
   the DB uniqueness can't be applied (multiple versions share a
   name).
 - **DashboardService** — create, update, delete, list with filters.
-  Also offers `ListWithDatasources` which joins dashboards ➝ their
-  panels ➝ referenced components ➝ referenced datasources in a single
+  Also offers `ListWithConnections` which joins dashboards ➝ their
+  panels ➝ referenced components ➝ referenced connections in a single
   aggregation for the list-page sidebar.
 - **UserService** — CRUD, auth lookup by GUID, pseudo-user seeding.
 - **ConfigService** — system + per-user runtime config.

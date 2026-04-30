@@ -121,7 +121,7 @@ sub-type (ECharts visualizations).
   "description": "Last hour, binned per minute",
   "chart_type": "line",
   "tags": ["temperature", "sensors"],
-  "datasource_id": "a1e4...7b",
+  "connection_id": "a1e4...7b",
   "query_config": {
     "raw": "since:1h",
     "type": "stream_filter",
@@ -166,7 +166,7 @@ Each component type uses different sub-documents:
   topic prefix, alerts severity, etc.).
 
 See [frontend.md](frontend.md) for how each type is rendered and
-[connections.md](connections.md) for how `datasource_id` is resolved.
+[connections.md](connections.md) for how `connection_id` is resolved.
 
 ### Versioning
 
@@ -207,7 +207,7 @@ builder flow**, not by every save:
 ## Datasource (connection)
 
 A datasource is an external data or device endpoint. Connection is
-the user-facing name; `datasource` is the internal name and the
+the user-facing name; `connection` is the internal name and the
 MongoDB collection name.
 
 ```json

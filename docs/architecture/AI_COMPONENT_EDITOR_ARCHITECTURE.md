@@ -404,7 +404,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `update_chart_config` | Set chart type and description | `chart_type`, `description` |
-| `update_data_mapping` | Configure axes and data source | `datasource_id`, `x_axis`, `y_axis`, `group_by` |
+| `update_data_mapping` | Configure axes and data source | `connection_id`, `x_axis`, `y_axis`, `group_by` |
 | `update_query_config` | Set query and refresh interval | `query`, `query_type`, `refresh_interval` |
 | `update_filters` | Add data filters | `filters[]` |
 | `update_aggregation` | Configure aggregation | `type`, `field`, `sort_by` |

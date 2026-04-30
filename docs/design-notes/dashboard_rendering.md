@@ -191,7 +191,7 @@ The viewer renders charts using `DynamicComponentLoader`:
               code={chart.component_code}
               props={{}}
               dataMapping={chart.data_mapping}
-              datasourceId={chart.datasource_id}
+              datasourceId={chart.connection_id}
             />
           </div>
         </>
@@ -320,7 +320,7 @@ In the detail/editor page, preview mode renders charts similarly:
               code={chart.component_code}
               props={{}}
               dataMapping={chart.data_mapping}
-              datasourceId={chart.datasource_id}
+              datasourceId={chart.connection_id}
             />
           </div>
         ) : isDesignMode ? (

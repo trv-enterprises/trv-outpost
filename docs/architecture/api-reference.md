@@ -2,7 +2,7 @@
 
 All API routes live under `/api/*` on the Go backend (port 3001 by
 default). All routes except `/health`, `/api/ws/status`, and
-`/api/streams/inbound/:datasourceId` require authentication.
+`/api/streams/inbound/:connectionId` require authentication.
 
 For request/response payloads, see the Swagger UI at
 `http://<host>:3001/swagger/index.html`. This page is the
@@ -42,10 +42,6 @@ failed Bearer returns 401 immediately rather than falling through.
 | GET    | `/api/auth/me`     | Get the currently authenticated user. Non-browser clients use this to validate an API key after `setApiKey()`. |
 
 ## Connections
-
-"Connection" is the user-facing term; `/api/datasources` is a
-deprecated alias kept for backwards compatibility. Both route groups
-are served by the same handler.
 
 | Method     | Endpoint                                    | Description                               |
 | ---------- | ------------------------------------------- | ----------------------------------------- |

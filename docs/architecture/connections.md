@@ -2,9 +2,9 @@
 
 "Connection" is the user-facing name for an external data or device
 endpoint the dashboard talks to. Internally the code calls them
-`datasources` and the MongoDB collection is named `datasources` for
+`connections` and the MongoDB collection is named `connections` for
 backwards compatibility. The UI and `/api/connections` endpoints are
-the canonical names going forward; `/api/datasources` is kept as a
+the canonical names going forward; `/api/connections` is kept as a
 deprecated alias.
 
 Every connection has:
@@ -23,7 +23,7 @@ Every connection has:
 
 ## Adapter registry
 
-Adapters live under `internal/datasource/` and are registered at
+Adapters live under `internal/connection/` and are registered at
 init time with `internal/registry/`. Each adapter supplies:
 
 - A **type ID** like `"db.postgres"`, `"stream.mqtt"`, `"store.tsstore"`

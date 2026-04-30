@@ -8,7 +8,7 @@ sessions, layouts, and runtime configuration.
 
 | Collection       | Contents                                                |
 | ---------------- | ------------------------------------------------------- |
-| `datasources`    | Connection definitions (SQL, API, MQTT, Frigate, etc.)  |
+| `connections`    | Connection definitions (SQL, API, MQTT, Frigate, etc.)  |
 | `dashboards`     | Dashboards with their panel layout and settings         |
 | `charts`         | Components — charts, controls, displays (with versions) |
 | `layouts`        | Named layout presets that dashboards can reference      |
@@ -22,7 +22,7 @@ sessions, layouts, and runtime configuration.
 | `migrations`     | One-row-per-migration marker collection                 |
 
 "Connection" is the user-facing term for what the code calls a
-`datasource` (the collection name, model type, and repository all use
+`connection` (the collection name, model type, and repository all use
 the internal term for backwards compatibility with existing records).
 
 ## Case-insensitive collation
@@ -30,7 +30,7 @@ the internal term for backwards compatibility with existing records).
 Every collection where a user-facing name is stored uses MongoDB's
 case-insensitive collation (`locale=en, strength=2`). Applied to:
 
-- `datasources`, `dashboards`, `charts`, `layouts`, `users`, `devices`,
+- `connections`, `dashboards`, `charts`, `layouts`, `users`, `devices`,
   `device_types`
 
 With this collation, equality queries and unique-index constraints
@@ -75,13 +75,13 @@ The namespacing migration (`namespacing_v1`) introduces the
 namespace dimension to existing data:
 
 1. Upserts the `default` namespace row in the `namespaces` collection.
-2. UpdateMany on `datasources`, `charts`, `dashboards` to set
+2. UpdateMany on `connections`, `charts`, `dashboards` to set
    `namespace: "default"` where the field is missing or empty.
 3. Resolves `(namespace=default, name)` collisions by auto-renaming
    the younger duplicates (`name-2`, `name-3`, …). Charts handle
    versioning by grouping per logical id first; every version row of
    a renamed chart picks up the same new name.
-4. Drops the legacy `name_1` unique indexes on `datasources` and
+4. Drops the legacy `name_1` unique indexes on `connections` and
    `dashboards`. The next `CreateIndexes` call replaces them with
    compound `(namespace, name)` unique indexes (see mongodb.go).
 

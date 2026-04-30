@@ -98,7 +98,7 @@ For non-MQTT streams, these fall back to `Subscribe()` and `GetBuffer()`.
 
 **Stream lifecycle**: The manager runs a cleanup goroutine that checks every 30s for streams with 0 subscribers. After a 60s grace period, idle streams are stopped and removed.
 
-**Stream creation** (`createStream`): Looks up the datasource config from MongoDB, creates the appropriate `Streamer` implementation based on type (`socket`, `mqtt`, `tsstore`), calls `Start()`, and stores it.
+**Stream creation** (`createStream`): Looks up the connection config from MongoDB, creates the appropriate `Streamer` implementation based on type (`socket`, `mqtt`, `tsstore`), calls `Start()`, and stores it.
 
 ### 3. StreamHandler (SSE Endpoint)
 

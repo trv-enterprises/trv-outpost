@@ -321,15 +321,15 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] X-User-ID header sets user context
 
 ### 8.3 Datasource Endpoints
-- [ ] `POST /api/datasources` creates datasource
-- [ ] `GET /api/datasources` lists with pagination
-- [ ] `GET /api/datasources/:id` returns datasource
-- [ ] `PUT /api/datasources/:id` updates datasource
-- [ ] `DELETE /api/datasources/:id` deletes datasource
-- [ ] `POST /api/datasources/test` tests connection
-- [ ] `POST /api/datasources/:id/health` checks health
-- [ ] `POST /api/datasources/:id/query` executes query
-- [ ] `GET /api/datasources/:id/schema` returns schema
+- [ ] `POST /api/connections` creates datasource
+- [ ] `GET /api/connections` lists with pagination
+- [ ] `GET /api/connections/:id` returns datasource
+- [ ] `PUT /api/connections/:id` updates datasource
+- [ ] `DELETE /api/connections/:id` deletes datasource
+- [ ] `POST /api/connections/test` tests connection
+- [ ] `POST /api/connections/:id/health` checks health
+- [ ] `POST /api/connections/:id/query` executes query
+- [ ] `GET /api/connections/:id/schema` returns schema
 
 ### 8.4 Component Endpoints
 - [ ] `POST /api/components` creates component
