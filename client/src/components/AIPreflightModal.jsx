@@ -83,8 +83,8 @@ function AIPreflightModal({ open, onClose, onContinue }) {
       // For controls, we need writable connections; for displays, any connection works
       // Fetch all connections and let user pick
       const data = await apiClient.getConnections();
-      if (data.datasources) {
-        setConnections(data.datasources);
+      if (data.connections) {
+        setConnections(data.connections);
       }
     } catch (err) {
       console.error('Failed to fetch connections:', err);

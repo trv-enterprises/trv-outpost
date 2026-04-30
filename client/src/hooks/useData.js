@@ -10,7 +10,7 @@
  *
  * Usage:
  * const { data, loading, error, refetch } = useData({
- *   datasourceId: 'uuid',
+ *   connectionId: 'uuid',
  *   query: {
  *     raw: '/readings',
  *     type: 'api',
@@ -94,7 +94,7 @@ function applyParser(record, parser) {
   return result;
 }
 
-export function useData({ datasourceId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null, parser = null }) {
+export function useData({ connectionId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null, parser = null }) {
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +128,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
 
   // Fetch datasource type on mount
   useEffect(() => {
-    if (!datasourceId) {
+    if (!connectionId) {
       setTypeLoading(false);
       return;
     }
@@ -137,7 +137,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
 
     const fetchType = async () => {
       try {
-        const ds = await apiClient.getDatasource(datasourceId);
+        const ds = await apiClient.getConnection(connectionId);
         if (!cancelled && mountedRef.current) {
           setDatasourceType(ds.type);
           // Extract transport for tsstore (determines REST vs streaming)
@@ -161,7 +161,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
     return () => {
       cancelled = true;
     };
-  }, [datasourceId]);
+  }, [connectionId]);
 
   // Streaming datasource types use SSE instead of polling
   // TSStore only streams when transport is explicitly set to "streaming"
@@ -280,7 +280,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
 
   // Connect to SSE stream for socket datasources (raw or aggregated)
   useEffect(() => {
-    if (typeLoading || !isStreamingType || !datasourceId) {
+    if (typeLoading || !isStreamingType || !connectionId) {
       return;
     }
 
@@ -293,7 +293,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
 
       // Use fetch with streaming for POST endpoint
       abortController = new AbortController();
-      const url = `${API_BASE}/api/connections/${datasourceId}/stream/aggregated`;
+      const url = `${API_BASE}/api/connections/${connectionId}/stream/aggregated`;
 
       try {
         // Build headers including user auth
@@ -388,7 +388,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       // Skip buffer replay when backfill is configured — the REST backfill query is
       // the authoritative source for historical data within the sliding window.
       if (!backfill) {
-        const bufferedRecords = manager.getBuffer(datasourceId, topicFilter);
+        const bufferedRecords = manager.getBuffer(connectionId, topicFilter);
         if (bufferedRecords.length > 0) {
           bufferedRecords.forEach(record => {
             if (mountedRef.current) {
@@ -400,7 +400,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
 
       // Subscribe to the shared connection (with optional topic filter for MQTT)
       unsubscribeFromManager = manager.subscribe(
-        datasourceId,
+        connectionId,
         (record) => {
           if (mountedRef.current) {
             processStreamRecord(record);
@@ -429,7 +429,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       );
 
       // Check if already connected
-      const status = manager.getStatus(datasourceId, topicFilter);
+      const status = manager.getStatus(connectionId, topicFilter);
       if (status.connected) {
         handleConnectionSuccess();
         setSource('stream');
@@ -442,7 +442,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       if (backfill && mountedRef.current && !backfillDoneRef.current) {
         backfillDoneRef.current = true;
         try {
-          const result = await queryData(datasourceId, backfill, false);
+          const result = await queryData(connectionId, backfill, false);
           if (mountedRef.current && result.data?.columns && result.data?.rows) {
             // Convert columnar result to record objects for processStreamRecord
             const { columns, rows } = result.data;
@@ -492,7 +492,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
         eventSourceRef.current = null;
       }
     };
-  }, [datasourceId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, backfillKey, handleConnectionError, handleConnectionSuccess]);
+  }, [connectionId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, backfillKey, handleConnectionError, handleConnectionSuccess]);
 
   // === POLLING LOGIC (for non-socket datasources) ===
   // isInitialFetch tracks whether this is the first load (shows loading state)
@@ -500,8 +500,8 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
   const isInitialFetchRef = useRef(true);
 
   const fetchData = useCallback(async (forceShowLoading = false) => {
-    if (!datasourceId || !query) {
-      setError(new Error('datasourceId and query are required'));
+    if (!connectionId || !query) {
+      setError(new Error('connectionId and query are required'));
       setLoading(false);
       return;
     }
@@ -521,7 +521,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       }
       setError(null);
 
-      const result = await queryData(datasourceId, query, useCache);
+      const result = await queryData(connectionId, query, useCache);
 
       if (mountedRef.current) {
         setData(result.data);
@@ -537,16 +537,16 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
     } finally {
       fetchingRef.current = false;
     }
-  }, [datasourceId, queryKey, useCache]);
+  }, [connectionId, queryKey, useCache]);
 
   // Reset initial fetch flag when datasource or query changes
   useEffect(() => {
     isInitialFetchRef.current = true;
-  }, [datasourceId, queryKey]);
+  }, [connectionId, queryKey]);
 
   // Initial fetch for non-socket datasources
   useEffect(() => {
-    if (typeLoading || isStreamingType || !datasourceId) {
+    if (typeLoading || isStreamingType || !connectionId) {
       return;
     }
 
@@ -556,7 +556,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
     return () => {
       mountedRef.current = false;
     };
-  }, [datasourceId, queryKey, datasourceType, datasourceTransport, typeLoading, fetchData]);
+  }, [connectionId, queryKey, datasourceType, datasourceTransport, typeLoading, fetchData]);
 
   // Auto-refresh interval for non-socket datasources, gated on
   // document visibility. When the browser tab is hidden (user
@@ -633,7 +633,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
       }
       setError(null);
 
-      const result = await queryData(datasourceId, query, false);
+      const result = await queryData(connectionId, query, false);
 
       if (mountedRef.current) {
         setData(result.data);
@@ -648,7 +648,7 @@ export function useData({ datasourceId, query, refreshInterval = null, useCache 
     } finally {
       fetchingRef.current = false;
     }
-  }, [datasourceId, queryKey, datasourceType]);
+  }, [connectionId, queryKey, datasourceType]);
 
   // Clear buffer function (for streaming)
   const clearBuffer = useCallback(() => {

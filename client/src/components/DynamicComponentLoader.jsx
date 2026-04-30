@@ -95,18 +95,18 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, dataMapping = null, datasourceId = null, queryConfig = null, dataRefreshInterval = null, children = null }) {
+export default function DynamicComponentLoader({ code, props = {}, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
   // Get datasource ID from prop or dataMapping
-  const effectiveDatasourceId = datasourceId || dataMapping?.datasource_id;
+  const effectiveDatasourceId = connectionId || dataMapping?.connection_id;
 
   // Build transforms from dataMapping (memoized)
   const transforms = useMemo(() => buildTransformsFromMapping(dataMapping), [dataMapping]);
 
   // Determine if we need to fetch data ourselves
-  // Fetch data when: datasourceId is available AND no data prop was provided
+  // Fetch data when: connectionId is available AND no data prop was provided
   const shouldFetchData = effectiveDatasourceId && !props.data;
 
   // Use data hook when we need to fetch (always called but disabled when not needed)
@@ -130,7 +130,7 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
     reconnecting,
     disconnectedSince
   } = useDataOriginal({
-    datasourceId: shouldFetchData ? effectiveDatasourceId : null,
+    connectionId: shouldFetchData ? effectiveDatasourceId : null,
     query: queryConfig || dataMapping?.query_config || { raw: '', type: 'sql' },
     refreshInterval: dataRefreshInterval,
     useCache: true,

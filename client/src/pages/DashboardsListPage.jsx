@@ -55,7 +55,7 @@ function DashboardsListPage() {
 
   const [dashboards, setDashboards] = useState([]);
   const [charts, setCharts] = useState({});
-  const [datasources, setDatasources] = useState({});
+  const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
@@ -94,7 +94,7 @@ function DashboardsListPage() {
     });
   }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter]);
 
-  // Fetch dashboards, charts, and datasources from API
+  // Fetch dashboards, charts, and connections from API
   useEffect(() => {
     fetchData();
   }, []);
@@ -102,11 +102,11 @@ function DashboardsListPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch dashboards, charts, and datasources in parallel (like DashboardTileViewPage)
-      const [dashboardsRes, chartsRes, datasourcesRes] = await Promise.all([
+      // Fetch dashboards, charts, and connections in parallel (like DashboardTileViewPage)
+      const [dashboardsRes, chartsRes, connectionsRes] = await Promise.all([
         apiClient.getDashboards({ page: 1, page_size: 100 }),
         apiClient.getComponents(),
-        apiClient.getDatasources()
+        apiClient.getConnections()
       ]);
 
       if (dashboardsRes.dashboards) {
@@ -126,13 +126,13 @@ function DashboardsListPage() {
         setCharts(chartMap);
       }
 
-      // Build datasource lookup (datasource_id -> name)
-      if (datasourcesRes.datasources) {
+      // Build connection lookup (connection_id -> name)
+      if (connectionsRes.connections) {
         const dsMap = {};
-        datasourcesRes.datasources.forEach(ds => {
+        connectionsRes.connections.forEach(ds => {
           dsMap[ds.id] = ds.name;
         });
-        setDatasources(dsMap);
+        setConnections(dsMap);
       }
     } catch (err) {
       setError(err.message);
@@ -194,16 +194,16 @@ function DashboardsListPage() {
     }
   };
 
-  // Helper to get datasource names for search filtering (returns string for matching)
-  const getDatasourceNamesForSearch = (dashboard) => {
+  // Helper to get connection names for search filtering (returns string for matching)
+  const getConnectionNamesForSearch = (dashboard) => {
     if (!dashboard.panels || dashboard.panels.length === 0) return '';
 
     const dsNames = new Set();
     dashboard.panels.forEach(panel => {
       if (panel.chart_id) {
         const chart = charts[panel.chart_id];
-        if (chart?.datasource_id && datasources[chart.datasource_id]) {
-          dsNames.add(datasources[chart.datasource_id]);
+        if (chart?.connection_id && connections[chart.connection_id]) {
+          dsNames.add(connections[chart.connection_id]);
         }
       }
     });
@@ -231,7 +231,7 @@ function DashboardsListPage() {
       });
     }
 
-    // Filter by search term (matches name, description, or datasource names)
+    // Filter by search term (matches name, description, or connection names)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(dashboard => {
@@ -239,8 +239,8 @@ function DashboardsListPage() {
         if (dashboard.name?.toLowerCase().includes(term)) return true;
         if (dashboard.description?.toLowerCase().includes(term)) return true;
 
-        // Check datasource names (computed from charts)
-        const dsNames = getDatasourceNamesForSearch(dashboard);
+        // Check connection names (computed from charts)
+        const dsNames = getConnectionNamesForSearch(dashboard);
         if (dsNames.toLowerCase().includes(term)) return true;
 
         return false;
@@ -271,29 +271,29 @@ function DashboardsListPage() {
     });
 
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, charts, datasources, tagFilter, namespaceFilter]);
+  }, [dashboards, searchTerm, sortKey, sortDirection, charts, connections, tagFilter, namespaceFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'panels', header: 'Panels', isSortable: true },
-    { key: 'datasources', header: 'Data Sources', isSortable: false },
+    { key: 'connections', header: 'Data Sources', isSortable: false },
     { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
 
   // Get unique data source names for a dashboard (computed client-side)
-  const getDatasourceNames = (dashboard) => {
+  const getConnectionNames = (dashboard) => {
     if (!dashboard.panels || dashboard.panels.length === 0) return '-';
 
     const dsNames = new Set();
     dashboard.panels.forEach(panel => {
       if (panel.chart_id) {
         const chart = charts[panel.chart_id];
-        if (chart?.datasource_id && datasources[chart.datasource_id]) {
-          dsNames.add(datasources[chart.datasource_id]);
+        if (chart?.connection_id && connections[chart.connection_id]) {
+          dsNames.add(connections[chart.connection_id]);
         }
       }
     });
@@ -309,7 +309,7 @@ function DashboardsListPage() {
     namespace: dashboard.namespace || 'default',
     description: dashboard.description || '',
     panels: getPanelCount(dashboard),
-    datasources: getDatasourceNames(dashboard),
+    connections: getConnectionNames(dashboard),
     tags: dashboard.tags || [],
     updated: formatDate(dashboard.updated)
   }));
@@ -526,10 +526,10 @@ function DashboardsListPage() {
                       ))}
                     </div>
 
-                    {getDatasourceNames(dashboard) !== '-' && (
-                      <div className="tile-datasource">
+                    {getConnectionNames(dashboard) !== '-' && (
+                      <div className="tile-connection">
                         <DataBase size={14} />
-                        <span>{getDatasourceNames(dashboard)}</span>
+                        <span>{getConnectionNames(dashboard)}</span>
                       </div>
                     )}
 

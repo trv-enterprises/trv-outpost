@@ -128,8 +128,8 @@ function ConnectionsPage() {
       ]);
 
       // API returns 'datasources' key for backwards compatibility
-      if (connectionsData.datasources || connectionsData.connections) {
-        setConnections(connectionsData.datasources || connectionsData.connections);
+      if (connectionsData.connections || connectionsData.connections) {
+        setConnections(connectionsData.connections || connectionsData.connections);
       } else if (connectionsData.error) {
         setError(connectionsData.error);
       } else {
@@ -141,7 +141,7 @@ function ConnectionsPage() {
         const counts = {};
         chartsData.components.forEach(chart => {
           // API now returns connection_id instead of datasource_id
-          const connId = chart.connection_id || chart.datasource_id;
+          const connId = chart.connection_id || chart.connection_id;
           if (connId) {
             counts[connId] = (counts[connId] || 0) + 1;
           }

@@ -302,9 +302,9 @@ function ComponentsListPage() {
       }
 
       // Create a lookup map for connections
-      if (connectionsData.datasources) {
+      if (connectionsData.connections) {
         const connMap = {};
-        connectionsData.datasources.forEach(conn => {
+        connectionsData.connections.forEach(conn => {
           connMap[conn.id] = conn.name;
         });
         setConnections(connMap);
@@ -495,7 +495,7 @@ function ComponentsListPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(chart => {
-        const connName = connections[chart.connection_id || chart.datasource_id] || '';
+        const connName = connections[chart.connection_id || chart.connection_id] || '';
         return chart.name?.toLowerCase().includes(term) ||
           chart.description?.toLowerCase().includes(term) ||
           chart.chart_type?.toLowerCase().includes(term) ||
@@ -563,7 +563,7 @@ function ComponentsListPage() {
     namespace: chart.namespace || 'default',
     component_type: chart.component_type || 'chart',
     chart_type: chart.chart_type || chart.control_config?.control_type || chart.display_config?.display_type || '',
-    connection: connections[chart.connection_id || chart.datasource_id] || 'None',
+    connection: connections[chart.connection_id || chart.connection_id] || 'None',
     dashboards: dashboardCounts[chart.id] || 0,
     status: chart.status || 'draft',
     description: chart.description || '',
@@ -796,10 +796,10 @@ function ComponentsListPage() {
                         {chart.description && (
                           <span className="tile-description">{chart.description}</span>
                         )}
-                        {connections[chart.connection_id || chart.datasource_id] && (
+                        {connections[chart.connection_id || chart.connection_id] && (
                           <span className="tile-connection">
                             <DataBase size={14} />
-                            {connections[chart.connection_id || chart.datasource_id]}
+                            {connections[chart.connection_id || chart.connection_id]}
                           </span>
                         )}
                         {dashboardCounts[chart.id] > 0 && (

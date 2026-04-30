@@ -152,7 +152,7 @@ function ControlEditor({
         const response = typeInfo?.canWrite
           ? await apiClient.getWritableConnections()
           : await apiClient.getConnections();
-        const connList = response.connections || response.datasources || [];
+        const connList = response.connections || response.connections || [];
         const filtered = typeInfo?.canWrite
           ? connList
           : connList.filter(c => c.capabilities?.can_read || c.capabilities?.can_stream);

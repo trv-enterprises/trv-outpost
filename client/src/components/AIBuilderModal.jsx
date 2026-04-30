@@ -89,7 +89,7 @@ function AIBuilderModal({
   const previewCode = useMemo(() => {
     const code = generateChartCode(chart);
     // Debug: log chart state and generated code
-    console.log('[AIBuilder] Chart state:', chart?.id, 'type:', chart?.chart_type, 'datasource:', chart?.datasource_id);
+    console.log('[AIBuilder] Chart state:', chart?.id, 'type:', chart?.chart_type, 'datasource:', chart?.connection_id);
     console.log('[AIBuilder] Data mapping:', chart?.data_mapping);
     console.log('[AIBuilder] Generated code:', code ? code.substring(0, 200) + '...' : 'null');
     return code;
@@ -327,10 +327,10 @@ function AIBuilderModal({
                   <Tag type="blue" size="sm">{chart.chart_type.toUpperCase()}</Tag>
                 </div>
               )}
-              {chart.datasource_id && (
+              {chart.connection_id && (
                 <div className="info-row">
                   <span className="label">Data Source:</span>
-                  <span className="value">{chart.datasource_id}</span>
+                  <span className="value">{chart.connection_id}</span>
                 </div>
               )}
             </div>

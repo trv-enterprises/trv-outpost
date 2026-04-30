@@ -19,7 +19,7 @@
  *
  * @param {Object} chart - Chart configuration object
  * @param {string} chart.chart_type - Chart type (bar, line, pie, custom, etc.)
- * @param {string} chart.datasource_id - Data source ID for data fetching
+ * @param {string} chart.connection_id - Data source ID for data fetching
  * @param {Object} chart.query_config - Query configuration {raw, type, params}
  * @param {Object} chart.data_mapping - Data mapping {x_axis, y_axis, filters, etc.}
  * @param {Object} chart.options - ECharts options (can be ANY valid ECharts config)
@@ -42,7 +42,7 @@ export function generateChartCode(chart) {
 
   // PRIORITY: If there's data mapping with a datasource, generate data-driven code
   // This takes precedence over raw options since AI typically sets both
-  if (chart.datasource_id && chart.data_mapping) {
+  if (chart.connection_id && chart.data_mapping) {
     return generateDataDrivenCode(chart);
   }
 
@@ -64,7 +64,7 @@ export function generateChartCode(chart) {
  * This supports ANY ECharts configuration the AI creates
  */
 function generateFromOptions(chart) {
-  const { options, datasource_id, query_config, data_mapping } = chart;
+  const { options, connection_id: datasource_id, query_config, data_mapping } = chart;
 
   // If no datasource, render static options
   if (!datasource_id) {
@@ -84,7 +84,7 @@ function generateFromOptions(chart) {
 
   return `const Component = () => {
   const { data, loading, error } = useData({
-    datasourceId: '${datasource_id}',
+    connectionId: '${datasource_id}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -134,7 +134,7 @@ function generateFromOptions(chart) {
  * Generate data-driven chart code from data mapping
  */
 function generateDataDrivenCode(chart) {
-  const { chart_type, datasource_id, query_config, data_mapping } = chart;
+  const { chart_type, connection_id: datasource_id, query_config, data_mapping } = chart;
   const queryRaw = query_config?.raw || '';
   const queryType = query_config?.type || 'sql';
   const queryParams = query_config?.params || {};
@@ -248,7 +248,7 @@ function generateDataDrivenCode(chart) {
 
   return `const Component = () => {
   const { data, loading, error } = useData({
-    datasourceId: '${datasource_id}',
+    connectionId: '${datasource_id}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -445,11 +445,11 @@ function generateStaticCode(chartType) {
 }
 
 // Helper functions for specific chart types
-function generatePieCode(datasourceId, queryRaw, queryType, xAxis, yAxis, transforms, xAxisFormat, queryParams = {}) {
+function generatePieCode(connectionId, queryRaw, queryType, xAxis, yAxis, transforms, xAxisFormat, queryParams = {}) {
   const hasTransforms = !!transforms;
   return `const Component = () => {
   const { data, loading, error } = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -488,7 +488,7 @@ function generatePieCode(datasourceId, queryRaw, queryType, xAxis, yAxis, transf
 };`;
 }
 
-function generateGaugeCode(datasourceId, queryRaw, queryType, yAxis, transforms, chartOptions = {}, queryParams = {}) {
+function generateGaugeCode(connectionId, queryRaw, queryType, yAxis, transforms, chartOptions = {}, queryParams = {}) {
   const hasTransforms = !!transforms;
 
   // Extract gauge options with defaults
@@ -523,7 +523,7 @@ function generateGaugeCode(datasourceId, queryRaw, queryType, yAxis, transforms,
   }, []);
 
   const { data, loading, error } = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -587,11 +587,11 @@ function generateGaugeCode(datasourceId, queryRaw, queryType, yAxis, transforms,
 };`;
 }
 
-function generateScatterCode(datasourceId, queryRaw, queryType, xAxis, yAxis, transforms, xAxisLabel, yAxisLabel, queryParams = {}) {
+function generateScatterCode(connectionId, queryRaw, queryType, xAxis, yAxis, transforms, xAxisLabel, yAxisLabel, queryParams = {}) {
   const hasTransforms = !!transforms;
   return `const Component = () => {
   const { data, loading, error } = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -624,7 +624,7 @@ function generateScatterCode(datasourceId, queryRaw, queryType, xAxis, yAxis, tr
 };`;
 }
 
-function generateDataViewCode(datasourceId, queryRaw, queryType, dataMapping, transforms, queryParams = {}) {
+function generateDataViewCode(connectionId, queryRaw, queryType, dataMapping, transforms, queryParams = {}) {
   const hasTransforms = !!transforms;
   const visibleColumns = dataMapping?.visible_columns || [];
   const hasVisibleColumns = visibleColumns.length > 0;
@@ -632,7 +632,7 @@ function generateDataViewCode(datasourceId, queryRaw, queryType, dataMapping, tr
   return `const Component = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const { data, loading, error } = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',

@@ -68,7 +68,7 @@ function ViewDashboardsPage() {
   const fetchDashboards = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/api/dashboards?page=1&page_size=100&include_datasources=true`);
+      const response = await fetch(`${API_BASE}/api/dashboards?page=1&page_size=100&include_connections=true`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -94,7 +94,7 @@ function ViewDashboardsPage() {
   };
 
   const getDatasourceNames = (dashboard) => {
-    return dashboard.datasource_names || [];
+    return dashboard.connection_names || [];
   };
 
   const filteredDashboards = dashboards.filter(dashboard => {

@@ -40,7 +40,7 @@ function DashboardTileViewPage() {
   const navigate = useNavigate();
   const [dashboards, setDashboards] = useState([]);
   const [charts, setCharts] = useState({});
-  const [datasources, setDatasources] = useState({});
+  const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,11 +131,11 @@ function DashboardTileViewPage() {
 
   const fetchData = async () => {
     try {
-      // Fetch dashboards, charts, and datasources in parallel
-      const [dashboardsRes, chartsRes, datasourcesRes] = await Promise.all([
+      // Fetch dashboards, charts, and connections in parallel
+      const [dashboardsRes, chartsRes, connectionsRes] = await Promise.all([
         apiClient.getDashboards({ page: 1, page_size: 100 }),
         apiClient.getComponents(),
-        apiClient.getDatasources()
+        apiClient.getConnections()
       ]);
 
       if (dashboardsRes.dashboards) {
@@ -151,13 +151,13 @@ function DashboardTileViewPage() {
         setCharts(chartMap);
       }
 
-      // Build datasource lookup (datasource_id -> name)
-      if (datasourcesRes.datasources) {
+      // Build connection lookup (connection_id -> name)
+      if (connectionsRes.connections) {
         const dsMap = {};
-        datasourcesRes.datasources.forEach(ds => {
+        connectionsRes.connections.forEach(ds => {
           dsMap[ds.id] = ds.name;
         });
-        setDatasources(dsMap);
+        setConnections(dsMap);
       }
     } catch (err) {
       setError(err.message);
@@ -167,15 +167,15 @@ function DashboardTileViewPage() {
   };
 
   // Get unique data source names for a dashboard
-  const getDatasourceNames = (dashboard) => {
+  const getConnectionNames = (dashboard) => {
     if (!dashboard.panels || dashboard.panels.length === 0) return [];
 
     const dsNames = new Set();
     dashboard.panels.forEach(panel => {
       if (panel.chart_id) {
         const chart = charts[panel.chart_id];
-        if (chart?.datasource_id && datasources[chart.datasource_id]) {
-          dsNames.add(datasources[chart.datasource_id]);
+        if (chart?.connection_id && connections[chart.connection_id]) {
+          dsNames.add(connections[chart.connection_id]);
         }
       }
     });
@@ -419,7 +419,7 @@ function DashboardTileViewPage() {
                         {dashboard.panels.length} panel{dashboard.panels.length !== 1 ? 's' : ''}
                       </Tag>
                     )}
-                    {getDatasourceNames(dashboard).map(dsName => (
+                    {getConnectionNames(dashboard).map(dsName => (
                       <Tag key={dsName} type="blue" size="sm">
                         <DataBase size={12} />
                         {dsName}

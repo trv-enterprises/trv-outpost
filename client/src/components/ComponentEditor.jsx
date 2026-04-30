@@ -246,8 +246,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [displayConfig, setDisplayConfig] = useState(null);
 
   // Data source configuration
-  const [datasources, setDatasources] = useState([]);
-  const [selectedDatasourceId, setSelectedDatasourceId] = useState('');
+  const [connections, setConnections] = useState([]);
+  const [selectedConnectionId, setSelectedConnectionId] = useState('');
   const [selectedDatasource, setSelectedDatasource] = useState(null);
 
   // Query configuration
@@ -523,7 +523,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       }
       setControlConfig(loadedControlConfig);
       setDisplayConfig(chart.display_config || null);
-      setSelectedDatasourceId(chart.connection_id || chart.datasource_id || '');
+      setSelectedConnectionId(chart.connection_id || chart.connection_id || '');
       setQueryRaw(chart.query_config?.raw || '');
       setQueryType(chart.query_config?.type || 'sql');
       setXAxisColumn(chart.data_mapping?.x_axis || '');
@@ -611,7 +611,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         const savedTopic = chart.query_config?.raw || '';
         setMqttSelectedTopic(savedTopic);
         // Discover topics from broker
-        const dsId = chart.connection_id || chart.datasource_id || '';
+        const dsId = chart.connection_id || chart.connection_id || '';
         if (dsId) {
           setMqttTopicsLoading(true);
           apiClient.getMQTTTopics(dsId).then(result => {
@@ -650,7 +650,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         description: chart.description || '',
         tags: chart.tags || [],
         chartType: chart.chart_type || 'bar',
-        datasourceId: chart.datasource_id || '',
+        connectionId: chart.connection_id || '',
         queryRaw: chart.query_config?.raw || '',
         xAxisColumn: chart.data_mapping?.x_axis || '',
         yAxisColumns: chart.data_mapping?.y_axis || [],
@@ -665,7 +665,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         description: '',
         tags: [],
         chartType: 'bar',
-        datasourceId: '',
+        connectionId: '',
         queryRaw: '',
         xAxisColumn: '',
         yAxisColumns: [],
@@ -684,7 +684,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       description,
       tags,
       chartType,
-      datasourceId: selectedDatasourceId,
+      connectionId: selectedConnectionId,
       queryRaw,
       xAxisColumn,
       yAxisColumns,
@@ -692,7 +692,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       showCustomCode
     });
     setHasChanges(currentState !== initialState);
-  }, [name, description, tags, chartType, selectedDatasourceId, queryRaw, xAxisColumn, yAxisColumns, filters, showCustomCode, initialState]);
+  }, [name, description, tags, chartType, selectedConnectionId, queryRaw, xAxisColumn, yAxisColumns, filters, showCustomCode, initialState]);
 
   // Show warning modal when user changes config-affecting fields on a chart with custom code.
   // Fires once per chart load. Config changes don't render unless user switches to generated code.
@@ -703,7 +703,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Only trigger for config-shape changes (not name/description/tags which don't affect rendering)
     customCodeWarningShownRef.current = true;
     setCustomCodeWarningOpen(true);
-  }, [hasChanges, showCustomCode, chartType, selectedDatasourceId, queryRaw, xAxisColumn, yAxisColumns, filters]);
+  }, [hasChanges, showCustomCode, chartType, selectedConnectionId, queryRaw, xAxisColumn, yAxisColumns, filters]);
 
   // Notify parent of validity changes
   useEffect(() => {
@@ -714,13 +714,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Update selectedDatasource when ID changes
   useEffect(() => {
-    if (selectedDatasourceId && datasources.length > 0) {
-      const ds = datasources.find(d => d.id === selectedDatasourceId);
+    if (selectedConnectionId && connections.length > 0) {
+      const ds = connections.find(d => d.id === selectedConnectionId);
       setSelectedDatasource(ds || null);
     } else {
       setSelectedDatasource(null);
     }
-  }, [selectedDatasourceId, datasources]);
+  }, [selectedConnectionId, connections]);
 
   // Derived datasource type flags (used in multiple places)
   const isTSStore = selectedDatasource?.type === 'tsstore';
@@ -730,10 +730,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const isAPI = selectedDatasource?.type === 'api';
 
   const handleDatasourceChange = (newDatasourceId) => {
-    setSelectedDatasourceId(newDatasourceId);
+    setSelectedConnectionId(newDatasourceId);
 
-    if (newDatasourceId && datasources.length > 0) {
-      const ds = datasources.find(d => d.id === newDatasourceId);
+    if (newDatasourceId && connections.length > 0) {
+      const ds = connections.find(d => d.id === newDatasourceId);
       if (ds) {
         switch (ds.type) {
           case 'sql':
@@ -809,7 +809,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
     setMqttSampling(true);
     try {
-      const result = await apiClient.sampleMQTTTopic(selectedDatasourceId, topic);
+      const result = await apiClient.sampleMQTTTopic(selectedConnectionId, topic);
       if (result.columns && result.columns.length > 0) {
         setAvailableColumns(result.columns);
 
@@ -849,7 +849,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setDescription('');
     setNamespace(activeNamespace || 'default');
     setChartType('bar');
-    setSelectedDatasourceId('');
+    setSelectedConnectionId('');
     setSelectedDatasource(null);
     setQueryRaw('');
     setQueryType('sql');
@@ -889,8 +889,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     try {
       const response = await fetch(`${API_BASE}/api/connections?page=1&page_size=100`);
       const data = await response.json();
-      if (data.datasources || data.connections) {
-        setDatasources(data.datasources || data.connections);
+      if (data.connections || data.connections) {
+        setConnections(data.connections || data.connections);
       }
     } catch (err) {
       console.error('Failed to fetch connections:', err);
@@ -898,7 +898,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   };
 
   const fetchPreviewData = async () => {
-    if (!selectedDatasourceId) {
+    if (!selectedConnectionId) {
       setPreviewError('Please select a connection');
       return;
     }
@@ -924,7 +924,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // NOTE: This block is outside try/catch/finally so setPreviewLoading stays true until finishCapture.
     if (isMQTT) {
         const topicParam = queryRaw ? `&topics=${encodeURIComponent(queryRaw)}` : '';
-        const sseUrl = `${API_BASE}/api/connections/${selectedDatasourceId}/stream?user_id=${apiClient.getCurrentUserGuid() || ''}${topicParam}`;
+        const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?user_id=${apiClient.getCurrentUserGuid() || ''}${topicParam}`;
         const es = new EventSource(sseUrl);
         mqttCaptureRef.current = es;
         const rawRecords = [];
@@ -1036,7 +1036,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryParams = { database: edgelakeDatabase };
       }
 
-      const response = await fetch(`${API_BASE}/api/connections/${selectedDatasourceId}/query`, {
+      const response = await fetch(`${API_BASE}/api/connections/${selectedConnectionId}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1079,7 +1079,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       return componentCode;
     }
 
-    if (!selectedDatasourceId) {
+    if (!selectedConnectionId) {
       return getStaticChartCode(chartType);
     }
 
@@ -1126,8 +1126,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedDatasourceId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '');
-  }, [chartType, selectedDatasourceId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '');
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1189,8 +1189,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       chart_type: componentType === 'chart' ? chartType : '',
       control_config: componentType === 'control' ? controlConfig : null,
       display_config: componentType === 'display' ? displayConfig : null,
-      connection_id: componentType === 'control' ? (controlConfig?.connection_id || '') : (selectedDatasourceId || ''),
-      query_config: selectedDatasourceId ? {
+      connection_id: componentType === 'control' ? (controlConfig?.connection_id || '') : (selectedConnectionId || ''),
+      query_config: selectedConnectionId ? {
         raw: selectedDatasource?.type === 'tsstore'
           ? (tsstoreQueryType === 'since' ? `since:${tsstoreSinceDuration}` : tsstoreQueryType)
           : queryRaw,
@@ -1201,7 +1201,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             ? { database: edgelakeDatabase }
             : {}
       } : null,
-      data_mapping: selectedDatasourceId ? {
+      data_mapping: selectedConnectionId ? {
         x_axis: xAxisColumn,
         x_axis_label: xAxisLabel || '',
         x_axis_format: xAxisFormat || 'chart',
@@ -1507,7 +1507,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       {componentType === 'control' && (
         <ControlEditor
           controlConfig={controlConfig}
-          connectionId={controlConfig?.connection_id || selectedDatasourceId || ''}
+          connectionId={controlConfig?.connection_id || selectedConnectionId || ''}
           displayTitle={title}
           onControlConfigChange={(newConfig) => setControlConfig(newConfig)}
           onConnectionIdChange={(connId) => setControlConfig(prev => ({ ...prev, connection_id: connId }))}
@@ -1546,11 +1546,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 <Select
                   id="datasource-select"
                   labelText="Connection"
-                  value={selectedDatasourceId}
+                  value={selectedConnectionId}
                   onChange={(e) => handleDatasourceChange(e.target.value)}
                 >
                   <SelectItem value="" text="Select a connection..." />
-                  {datasources.map(ds => (
+                  {connections.map(ds => (
                     <SelectItem
                       key={ds.id}
                       value={ds.id}
@@ -1712,7 +1712,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             label="Refresh topics"
                             onClick={() => {
                               setMqttTopicsLoading(true);
-                              apiClient.getMQTTTopics(selectedDatasourceId).then(result => {
+                              apiClient.getMQTTTopics(selectedConnectionId).then(result => {
                                 setMqttTopics(result.topics || []);
                               }).catch(err => console.error('Failed to discover MQTT topics:', err))
                                 .finally(() => setMqttTopicsLoading(false));
@@ -1919,7 +1919,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   ) : selectedDatasource.type === 'sql' && queryMode === 'visual' ? (
                     <SQLQueryBuilder
-                      datasourceId={selectedDatasourceId}
+                      connectionId={selectedConnectionId}
                       onQueryChange={(query) => setQueryRaw(query)}
                       onExecute={(response) => {
                         if (response.success && response.result_set) {
@@ -1936,7 +1936,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     />
                   ) : selectedDatasource.type === 'prometheus' && queryMode === 'visual' ? (
                     <PrometheusQueryBuilder
-                      datasourceId={selectedDatasourceId}
+                      connectionId={selectedConnectionId}
                       onQueryChange={(query) => setQueryRaw(query)}
                       onParamsChange={(_params) => {
                         // Store params for use in query execution
@@ -2002,7 +2002,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   ) : selectedDatasource.type === 'edgelake' && queryMode === 'visual' ? (
                     <EdgeLakeQueryBuilder
-                      datasourceId={selectedDatasourceId}
+                      connectionId={selectedConnectionId}
                       onQueryChange={(query) => setQueryRaw(query)}
                       onDatabaseChange={(db) => setEdgelakeDatabase(db)}
                       onExecute={(response) => {
@@ -3322,7 +3322,7 @@ function getStaticChartCode(chartType) {
     custom: `const Component = () => {
   // Custom chart component
   // Use useData hook for data fetching:
-  // const { data, loading, error } = useData({ datasourceId: 'your-id', query: {...} });
+  // const { data, loading, error } = useData({ connectionId: 'your-id', query: {...} });
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -3335,7 +3335,7 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '') {
+function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '') {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 
@@ -3478,7 +3478,7 @@ function getDataDrivenChartCode(chartType, datasourceId, queryRaw, queryType, xA
   if (chartType === 'pie') {
     return `const Component = () => {
   const ${useDataFields} = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -3531,7 +3531,7 @@ ${xAxisFormatCode}
     const dataSrc = hasTransforms ? 'transformed' : 'data';
     return `const Component = () => {
   const ${useDataFields} = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -3721,7 +3721,7 @@ ${xAxisFormatCode}
 
     return `const Component = () => {
   const ${useDataFields} = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -3801,7 +3801,7 @@ ${transformsConfig}
   }, []);
 
   const ${useDataFields} = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',
@@ -3904,7 +3904,7 @@ ${transformsConfig}
 
   return `const Component = () => {
   const ${useDataFields} = useData({
-    datasourceId: '${datasourceId}',
+    connectionId: '${connectionId}',
     query: {
       raw: \`${queryRaw.replace(/`/g, '\\`')}\`,
       type: '${queryType}',

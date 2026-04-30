@@ -57,8 +57,8 @@ export const MODES = {
 // Design mode sections
 export const DESIGN_SECTIONS = {
   LAYOUTS: 'layouts',
-  DATASOURCES: 'datasources',
-  CHARTS: 'charts',
+  CONNECTIONS: 'connections',
+  COMPONENTS: 'components',
   DASHBOARDS: 'dashboards',
 };
 

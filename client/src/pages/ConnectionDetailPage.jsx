@@ -168,7 +168,7 @@ function ConnectionDetailPage() {
     }
     try {
       const response = await apiClient.getConnections();
-      const connections = response.datasources || response.connections || [];
+      const connections = response.connections || response.connections || [];
       const duplicate = connections.find(conn =>
         conn.name.toLowerCase() === nameToCheck.trim().toLowerCase() &&
         conn.id !== id

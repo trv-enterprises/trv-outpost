@@ -62,7 +62,7 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
     const fetchConnections = async () => {
       try {
         const data = await apiClient.getConnections();
-        setConnections(data.datasources || []);
+        setConnections(data.connections || []);
       } catch (err) {
         console.error('Failed to load connections:', err);
       }

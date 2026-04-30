@@ -1906,7 +1906,7 @@ function DashboardViewerPage({ canDesign = false }) {
                                 code: chart.component_code,
                                 props: {},
                                 dataMapping: chart.data_mapping,
-                                datasourceId: chart.connection_id,
+                                connectionId: chart.connection_id,
                                 queryConfig: chart.query_config,
                                 dataRefreshInterval: !isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                               }}

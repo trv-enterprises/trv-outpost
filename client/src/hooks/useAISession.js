@@ -45,13 +45,14 @@ export function useAISession(chartId = null, preflightContext = {}) {
 
     try {
       const response = await apiClient.createAISession(chartId, preflightContext);
-      // API returns {session: {...}, chart: {...}}
+      // API returns {session: {...}, component: {...}}
+      // (renamed from `chart` in the v0.11.0 Component umbrella rename)
       setSession(response.session);
       sessionIdRef.current = response.session.id;
 
       // Set initial component state if provided
-      if (response.chart) {
-        setComponent(response.chart);
+      if (response.component) {
+        setComponent(response.component);
       }
 
       // Set initial messages if any
@@ -185,11 +186,11 @@ export function useAISession(chartId = null, preflightContext = {}) {
         setThinking(false);
         break;
 
-      case 'chart_update':
+      case 'component_update':
         // Component was modified by AI
-        console.log('[WS] Component update received:', eventData.chart?.id, 'type:', eventData.chart?.chart_type);
-        if (eventData.chart) {
-          setComponent(eventData.chart);
+        console.log('[WS] Component update received:', eventData.component?.id, 'type:', eventData.component?.chart_type);
+        if (eventData.component) {
+          setComponent(eventData.component);
         }
         break;
 

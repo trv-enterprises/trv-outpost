@@ -25,7 +25,7 @@ function ViewModeNav({ location, navigate }) {
 
   const fetchDashboards = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/dashboards?page=1&page_size=100&include_datasources=true`);
+      const response = await fetch(`${API_BASE}/api/dashboards?page=1&page_size=100&include_connections=true`);
       if (response.ok) {
         const data = await response.json();
         if (data.dashboards) {

@@ -63,18 +63,24 @@ function AIComponentPreview({ component, onNameChange }) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
 
+  // The wire format calls this `connection_id`; some callers pass it
+  // through with the legacy `datasource_id` BSON name. Accept either
+  // so the AI Builder preview works regardless of which side is
+  // responsible for normalizing.
+  const connectionId = component?.connection_id || component?.connection_id;
+
   // Fetch connection info when component changes
   useEffect(() => {
     const fetchConnectionInfo = async () => {
-      if (component?.datasource_id) {
+      if (connectionId) {
         try {
-          const datasource = await apiClient.getDatasource(component.datasource_id);
-          setConnectionName(datasource.name || component.datasource_id);
-          setConnectionType(datasource.type || '');
-          setConnectionDescription(datasource.description || '');
+          const connection = await apiClient.getConnection(connectionId);
+          setConnectionName(connection.name || connectionId);
+          setConnectionType(connection.type || '');
+          setConnectionDescription(connection.description || '');
         } catch (err) {
-          console.error('Failed to fetch datasource:', err);
-          setConnectionName(component.datasource_id);
+          console.error('Failed to fetch connection:', err);
+          setConnectionName(connectionId);
         }
       } else {
         setConnectionName('');
@@ -83,7 +89,7 @@ function AIComponentPreview({ component, onNameChange }) {
       }
     };
     fetchConnectionInfo();
-  }, [component?.datasource_id]);
+  }, [connectionId]);
 
   // Check if component fetches its own data (has useData embedded)
   // If so, we don't need to fetch data ourselves - the component will do it
@@ -92,11 +98,11 @@ function AIComponentPreview({ component, onNameChange }) {
   // Auto-run query when datasource or query config changes
   // Only fetch if the component expects data as a prop (doesn't have useData embedded)
   useEffect(() => {
-    if (component?.datasource_id && !componentFetchesOwnData) {
+    if (connectionId && !componentFetchesOwnData) {
       console.log('[AIComponentPreview] Auto-running query - component expects data as prop');
       runQuery();
     }
-  }, [component?.datasource_id, component?.query_config?.raw, componentFetchesOwnData]);
+  }, [connectionId, component?.query_config?.raw, componentFetchesOwnData]);
 
   // Handle name editing
   const _startEditName = () => {
@@ -146,7 +152,7 @@ function AIComponentPreview({ component, onNameChange }) {
 
   // Run query for preview
   const runQuery = async () => {
-    if (!component?.datasource_id) return;
+    if (!connectionId) return;
 
     setPreviewLoading(true);
     setPreviewError(null);
@@ -155,7 +161,7 @@ function AIComponentPreview({ component, onNameChange }) {
       const queryRaw = component?.query_config?.raw || '';
       const queryType = component?.query_config?.type || 'sql';
 
-      const response = await apiClient.queryDatasource(component.datasource_id, {
+      const response = await apiClient.queryConnection(connectionId, {
         query: {
           raw: queryRaw,
           type: queryType,

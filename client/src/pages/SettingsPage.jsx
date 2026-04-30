@@ -107,7 +107,7 @@ function SettingsPage() {
       case 'dashboard_command_connection':
         // Fetch MQTT connections for the dropdown
         apiClient.getConnections().then(data => {
-          const conns = (data.datasources || data.connections || []).filter(c => c.type === 'mqtt');
+          const conns = (data.connections || data.connections || []).filter(c => c.type === 'mqtt');
           setMqttConnections(conns);
         }).catch(() => {});
         setDashboardCommandModalOpen(true);

@@ -10,7 +10,7 @@
  * multiple charts with different filter configurations.
  *
  * Usage:
- * const { data } = useData({ datasourceId, query });
+ * const { data } = useData({ connectionId, query });
  * const filtered = transformData(data, {
  *   filters: [{ field: 'sensor_id', op: 'eq', value: 'sensor-001' }],
  *   aggregation: { type: 'last', sortBy: 'timestamp' }

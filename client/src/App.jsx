@@ -572,9 +572,6 @@ function AppContent({ onDisconnect }) {
           {/* Design Mode Routes */}
           <Route path="/design/connections" element={<ConnectionsPage />} />
           <Route path="/design/connections/:id" element={<ConnectionDetailPage />} />
-          {/* Legacy datasources routes - redirect to connections */}
-          <Route path="/design/datasources" element={<Navigate to="/design/connections" replace />} />
-          <Route path="/design/datasources/:id" element={<Navigate to="/design/connections" replace />} />
           <Route path="/design/components" element={<ComponentsListPage />} />
           <Route path="/design/components/ai/:chartId" element={<AIBuilderPage />} />
           <Route path="/design/components/:id" element={<ComponentDetailPage />} />

@@ -16,7 +16,7 @@ import {
 } from '@carbon/react';
 import { Application, DataBase, Time } from '@carbon/icons-react';
 import { useComponents } from '../hooks/useComponents';
-import { useSystems } from '../hooks/useDataSources';
+import { useSystems } from '../hooks/useConnections';
 import './ComponentSelector.scss';
 
 /**

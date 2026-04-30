@@ -561,7 +561,7 @@ class APIClient {
   async getWritableConnections() {
     const response = await this.getConnections();
     return {
-      connections: (response.datasources || response.connections || []).filter(c => c.capabilities?.can_write)
+      connections: (response.connections || response.connections || []).filter(c => c.capabilities?.can_write)
     };
   }
 
@@ -747,43 +747,6 @@ class APIClient {
 
   async getFrigateInfo(connectionId) {
     return this.request(`/api/frigate/${connectionId}/info`);
-  }
-
-  // Deprecated aliases - keep for backwards compatibility
-  async getDatasources(filters = {}) {
-    return this.getConnections(filters);
-  }
-
-  async getDatasource(id) {
-    return this.getConnection(id);
-  }
-
-  async queryDatasource(id, query) {
-    return this.queryConnection(id, query);
-  }
-
-  async getDatasourceSchema(id) {
-    return this.getConnectionSchema(id);
-  }
-
-  async createDatasource(datasource) {
-    return this.createConnection(datasource);
-  }
-
-  async updateDatasource(id, updates) {
-    return this.updateConnection(id, updates);
-  }
-
-  async deleteDatasource(id) {
-    return this.deleteConnection(id);
-  }
-
-  async testDatasource(type, config) {
-    return this.testConnection(type, config);
-  }
-
-  async checkDatasourceHealth(id) {
-    return this.checkConnectionHealth(id);
   }
 
   // AI Session endpoints
