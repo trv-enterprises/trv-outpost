@@ -47,12 +47,16 @@ function LoginPage({ onLoginSuccess }) {
     }
   };
 
-  // Validate key format (should be a UUID-like string)
+  // Validate API key format. Real keys are `trve_<base32>`; tolerate
+  // anything that starts with the prefix and has a reasonable length.
   const validateKey = (key) => {
     if (!key) {
-      return 'Key is required';
+      return 'API key is required';
     }
-    if (key.length < 10) {
+    if (!key.startsWith('trve_')) {
+      return 'Key must start with "trve_"';
+    }
+    if (key.length < 20) {
       return 'Key is too short';
     }
     return '';
@@ -91,8 +95,19 @@ function LoginPage({ onLoginSuccess }) {
       // Set the server URL in the API client
       apiClient.setServerUrl(serverUrl);
 
-      // Attempt to login with the key
-      const response = await apiClient.login(userKey);
+      // Stamp the API key so subsequent requests carry
+      // Authorization: Bearer trve_…, then validate by calling
+      // /api/auth/me. If the key is bad, getCurrentUser throws 401.
+      apiClient.setApiKey(userKey);
+      let response;
+      try {
+        response = await apiClient.getCurrentUser();
+      } catch (validateErr) {
+        // Roll back the stored key on a failed validate so the next
+        // attempt starts clean.
+        apiClient.clearApiKey();
+        throw validateErr;
+      }
 
       // Save credentials for future sessions
       await saveCredentials(serverUrl, userKey, response.name);
@@ -109,10 +124,10 @@ function LoginPage({ onLoginSuccess }) {
       console.error('Login failed:', err);
 
       // Determine error type
-      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('Server unreachable') || err.message.includes('Request timed out')) {
         setError('Cannot connect to server. Check the URL and ensure the server is running.');
-      } else if (err.message.includes('Invalid key') || err.message.includes('401')) {
-        setError('Invalid key. Please check your key and try again.');
+      } else if (err.message.includes('Invalid API key') || err.message.includes('Invalid key') || err.message.includes('401')) {
+        setError('Invalid API key. Please check the key and try again.');
       } else if (err.message.includes('inactive')) {
         setError('Your account is inactive. Contact an administrator.');
       } else {
@@ -138,7 +153,7 @@ function LoginPage({ onLoginSuccess }) {
             <h1>Connect to Dashboard</h1>
             <p className="login-subtitle">
               {isElectron()
-                ? 'Enter your server URL and key to connect'
+                ? 'Enter your server URL and API key to connect'
                 : 'Enter server credentials to connect'}
             </p>
           </div>
@@ -170,8 +185,8 @@ function LoginPage({ onLoginSuccess }) {
 
             <TextInput
               id="user-key"
-              labelText="Your Key"
-              placeholder="Enter your key"
+              labelText="API Key"
+              placeholder="trve_…"
               value={userKey}
               onChange={handleKeyChange}
               onKeyDown={handleKeyDown}
@@ -180,7 +195,7 @@ function LoginPage({ onLoginSuccess }) {
               disabled={loading}
               autoComplete="off"
               type="password"
-              helperText="Your key was provided by an administrator"
+              helperText="Generate an API key from Manage → API Keys in the dashboard"
             />
 
             <Button
@@ -203,7 +218,8 @@ function LoginPage({ onLoginSuccess }) {
 
           <div className="login-footer">
             <p>
-              Need a key? Contact your system administrator.
+              Need an API key? Open the dashboard in a browser, sign
+              in, and visit <strong>Manage → API Keys → New</strong>.
             </p>
           </div>
         </Tile>

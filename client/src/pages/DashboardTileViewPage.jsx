@@ -143,9 +143,9 @@ function DashboardTileViewPage() {
       }
 
       // Build chart lookup (chart_id -> chart)
-      if (chartsRes.charts) {
+      if (chartsRes.components) {
         const chartMap = {};
-        chartsRes.charts.forEach(chart => {
+        chartsRes.components.forEach(chart => {
           chartMap[chart.id] = chart;
         });
         setCharts(chartMap);

@@ -39,9 +39,10 @@ The collection mirrors the server's auth precedence as of v0.9.0:
    path. Don't enable both at once; the server prefers Bearer when
    present.
 
-Endpoints that don't require auth (e.g. `/api/auth/login`) still send
-the Bearer header — the server ignores it for unauthenticated routes,
-so this is harmless.
+Unauthenticated endpoints (`/health`, `/api/ws/status`,
+`/api/streams/inbound/:datasourceId`) still receive the Bearer
+header — the server ignores it for those routes, so this is
+harmless.
 
 ## Regenerating
 

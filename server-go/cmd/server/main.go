@@ -349,14 +349,11 @@ func main() {
 	mcpRegistry := mcp.NewToolRegistry(datasourceService, dashboardService, componentService, deviceTypeService, typeFilter)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
-	// Public API routes (no authentication required)
-	publicAPI := router.Group("/api")
-	{
-		// Login endpoint - validates key and returns user info
-		publicAPI.POST("/auth/login", authHandler.Login)
-	}
-
 	// API routes with authentication and authorization middleware
+	// (Note: there is no public /api/auth/login endpoint anymore;
+	// non-browser clients authenticate via API keys —
+	// `Authorization: Bearer trve_…` — and validate by calling
+	// /api/auth/me which is mounted on the authenticated group below.)
 	api := router.Group("/api")
 	api.Use(authMiddleware.Authenticate()) // Authenticate all API requests
 	api.Use(authMiddleware.Authorize())    // Check route permissions

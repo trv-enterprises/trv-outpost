@@ -400,7 +400,7 @@
     },
     {
       "name": "Auth",
-      "description": "auth endpoints (2).",
+      "description": "auth endpoints (1).",
       "item": [
         {
           "name": "Get current user capabilities",
@@ -426,46 +426,6 @@
               ]
             },
             "description": "Get current user capabilities\n\nReturns the authenticated user's ID, name, and capabilities\n\n\nResponses: 200, 401"
-          },
-          "response": []
-        },
-        {
-          "name": "Login with key",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "login"
-              ]
-            },
-            "description": "Login with key\n\nValidates a user key (GUID) and returns user info if valid\n\n\nResponses: 200, 400, 401",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
           },
           "response": []
         }

@@ -1,21 +1,45 @@
 # API reference
 
 All API routes live under `/api/*` on the Go backend (port 3001 by
-default). All routes except `/api/auth/login`, `/health`,
-`/api/ws/status`, and `/api/streams/inbound/:datasourceId` require
-authentication via the `X-User-ID` header.
+default). All routes except `/health`, `/api/ws/status`, and
+`/api/streams/inbound/:datasourceId` require authentication.
 
 For request/response payloads, see the Swagger UI at
 `http://<host>:3001/swagger/index.html`. This page is the
 endpoint directory — what exists, what it does, where it lives in
 the code.
 
+## Authentication channels
+
+The auth middleware accepts credentials from these channels, in
+precedence order:
+
+1. **`Authorization: Bearer <token>`** — dispatched by token shape:
+   - `trve_<base32>` → API key (validated against the api_keys
+     collection). Used by Electron, kiosk, dashboard-agent, and
+     mcp-proxy.
+   - anything else → JWT, validated against the configured identity
+     provider (Clerk today). Used by browser users when Clerk is
+     enabled.
+2. **`?token=<token>`** — query-param fallback for EventSource
+   (which can't set custom headers). Same shape-based dispatch as
+   the Bearer header. The dashboard's React app uses this for its
+   streaming subscriptions.
+3. **`X-User-ID: <guid>`** — legacy identity assertion. Trust model:
+   anyone who knows a GUID becomes that user. Kept for browser dev
+   mode (`npm run dev` user dropdown) and back-compat with older
+   non-Clerk deployments. Move production deployments off it.
+4. **`?user_id=<guid>`** — same trust as #3, query-param form for
+   EventSource on legacy deployments.
+
+When more than one credential is present, earlier channels win. A
+failed Bearer returns 401 immediately rather than falling through.
+
 ## Auth
 
-| Method | Endpoint           | Description                        |
-| ------ | ------------------ | ---------------------------------- |
-| POST   | `/api/auth/login`  | Login — returns user profile       |
-| GET    | `/api/auth/me`     | Get the currently authenticated user |
+| Method | Endpoint           | Description                                 |
+| ------ | ------------------ | ------------------------------------------- |
+| GET    | `/api/auth/me`     | Get the currently authenticated user. Non-browser clients use this to validate an API key after `setApiKey()`. |
 
 ## Connections
 

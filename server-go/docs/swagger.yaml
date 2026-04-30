@@ -77,31 +77,6 @@ definitions:
           $ref: '#/definitions/registry.IntegrationInfo'
         type: array
     type: object
-  handlers.LoginRequest:
-    properties:
-      key:
-        description: User GUID/key
-        type: string
-    required:
-    - key
-    type: object
-  handlers.LoginResponse:
-    properties:
-      can_design:
-        type: boolean
-      can_manage:
-        type: boolean
-      capabilities:
-        items:
-          type: string
-        type: array
-      email:
-        type: string
-      guid:
-        type: string
-      name:
-        type: string
-    type: object
   handlers.SaveSessionRequest:
     properties:
       name:
@@ -4447,40 +4422,6 @@ paths:
       summary: Subscribe to server status via WebSocket
       tags:
       - system
-  /auth/login:
-    post:
-      consumes:
-      - application/json
-      description: Validates a user key (GUID) and returns user info if valid
-      parameters:
-      - description: Login request with key
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.LoginRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.LoginResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Login with key
-      tags:
-      - Auth
   /auth/me:
     get:
       description: Returns the authenticated user's ID, name, and capabilities

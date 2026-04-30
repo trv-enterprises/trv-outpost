@@ -89,7 +89,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
     try {
       const data = await apiClient.getComponents();
       // Filter to final versions only
-      const finals = (data.charts || []).filter(c => c.status === 'final');
+      const finals = (data.components || []).filter(c => c.status === 'final');
       setItems(finals);
     } catch (err) {
       console.error('Failed to fetch components:', err);

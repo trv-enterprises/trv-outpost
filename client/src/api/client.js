@@ -82,9 +82,21 @@ class APIClient {
     // and it returns a non-empty string, every outbound request
     // attaches `Authorization: Bearer <jwt>`. When it returns null
     // (Clerk session signed out) or throws, we fall through to the
-    // legacy X-User-ID path. Unset entirely on Clerk-disabled
-    // deployments — no async overhead in that case.
+    // API-key / X-User-ID legacy paths. Unset entirely on
+    // Clerk-disabled deployments — no async overhead in that case.
     this.tokenProvider = null;
+    // API key (`trve_…`) for non-browser clients (Electron, kiosk,
+    // dashboard-agent, mcp-proxy). Persisted to localStorage so it
+    // survives page reload. The auth header path prefers Clerk JWT
+    // when one is available, then this API key, then the legacy
+    // X-User-ID header.
+    this.apiKey = null;
+    try {
+      this.apiKey = localStorage.getItem('apiKey') || null;
+    } catch {
+      // localStorage may be inaccessible in some embed contexts;
+      // request() falls through to other auth channels.
+    }
     // Notification surface plumbed in by NotificationProvider on
     // mount. When unset, connection-failure detection is silent.
     // Two callbacks: pushToast(transient corner toast) and
@@ -106,6 +118,24 @@ class APIClient {
   // switch, tests).
   setTokenProvider(provider) {
     this.tokenProvider = typeof provider === 'function' ? provider : null;
+  }
+
+  // setApiKey stamps a `trve_…` API key onto the apiClient and
+  // persists it. Every subsequent request attaches it as
+  // Authorization: Bearer trve_… (unless a Clerk JWT is also
+  // available, in which case Clerk wins). Pass null/empty to clear.
+  setApiKey(key) {
+    if (typeof key === 'string' && key.startsWith('trve_')) {
+      this.apiKey = key;
+      try { localStorage.setItem('apiKey', key); } catch { /* ignore */ }
+    } else {
+      this.apiKey = null;
+      try { localStorage.removeItem('apiKey'); } catch { /* ignore */ }
+    }
+  }
+
+  clearApiKey() {
+    this.setApiKey(null);
   }
 
   // setNotificationHandlers wires in the toast + bell push points.
@@ -187,14 +217,13 @@ class APIClient {
       ...options.headers,
     };
 
-    // Prefer Clerk JWT when a session token is available; the server
-    // dispatches Bearer tokens by shape (`trve_…` is an API key,
-    // anything else is a Clerk JWT) and resolves the user from the
-    // verified `sub` claim. Falls through silently to X-User-ID when
-    // no provider is configured, the provider returns null (signed
-    // out), or the token call errors. Token-fetch errors are
-    // non-fatal here — the legacy path is still authenticated for
-    // dev / non-Clerk deployments.
+    // Auth header precedence:
+    //   1. Clerk JWT (when tokenProvider is wired AND it returns one)
+    //   2. API key (`trve_…`) — Electron, kiosk, dashboard-agent, etc.
+    //   3. X-User-ID legacy header — browser dev mode + back-compat
+    // The server dispatches Bearer tokens by shape, so a JWT and an
+    // API key share the same Authorization header but never collide.
+    // X-User-ID is only attached when no Bearer was set.
     let bearerSet = false;
     if (this.tokenProvider) {
       try {
@@ -205,9 +234,14 @@ class APIClient {
         }
       } catch (err) {
         // Don't block the request on a token-fetch hiccup; let the
-        // legacy header path try. Server will 401 if neither works.
-        console.warn('apiClient: tokenProvider error, falling back to X-User-ID', err);
+        // API-key / X-User-ID paths try. Server will 401 if neither
+        // works.
+        console.warn('apiClient: tokenProvider error, falling back', err);
       }
+    }
+    if (!bearerSet && this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+      bearerSet = true;
     }
 
     // Add user authentication header if we have a current user.
@@ -863,20 +897,13 @@ class APIClient {
   }
 
   // User/Auth endpoints
+  //
+  // For client validation, call setApiKey(key) followed by
+  // getCurrentUser() — the API key is sent as Authorization: Bearer
+  // trve_…, /api/auth/me returns the resolved user, and a 401 means
+  // the key is invalid. The legacy /api/auth/login endpoint was
+  // removed in v0.11.1.
 
-  // Login with a key (GUID) - validates key and returns user info
-  // This endpoint does not require authentication
-  async login(key) {
-    const response = await this.request('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ key }),
-    });
-    // On successful login, store the key
-    if (response.guid) {
-      this.setCurrentUser(response.guid);
-    }
-    return response;
-  }
 
   async getUsers() {
     return this.request('/api/users');

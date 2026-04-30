@@ -293,8 +293,8 @@ function ComponentsListPage() {
         apiClient.getDashboards()
       ]);
 
-      if (chartsData.charts) {
-        setCharts(chartsData.charts);
+      if (chartsData.components) {
+        setCharts(chartsData.components);
       } else if (chartsData.error) {
         setError(chartsData.error);
       } else {

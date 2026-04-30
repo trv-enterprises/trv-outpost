@@ -39,10 +39,15 @@ When the client is running under `npm run dev` (Vite dev server), the legacy use
 When using the desktop application:
 
 1. Enter the server URL (e.g., `http://localhost:3001`)
-2. Enter your API key
+2. Enter your API key (a `trve_…` token generated from
+   **Manage → API Keys** in the browser dashboard, signed in as
+   the user the desktop app should authenticate as)
 3. Click **Connect**
 
-Credentials are stored securely and restored on next launch.
+Credentials are stored encrypted via the operating system keychain
+(macOS Keychain, Windows DPAPI, libsecret on Linux) and restored on
+next launch. To revoke a desktop client's access, delete its API
+key from **Manage → API Keys**.
 
 ## User Capabilities
 

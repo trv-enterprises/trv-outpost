@@ -137,9 +137,9 @@ function ConnectionsPage() {
       }
 
       // Build chart count map by connection_id
-      if (chartsData.charts) {
+      if (chartsData.components) {
         const counts = {};
-        chartsData.charts.forEach(chart => {
+        chartsData.components.forEach(chart => {
           // API now returns connection_id instead of datasource_id
           const connId = chart.connection_id || chart.datasource_id;
           if (connId) {

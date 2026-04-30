@@ -118,10 +118,11 @@ func buildRouteRules() []RouteCapability {
 //     a) `trve_…` → API key (validated by APIKeyService).
 //     b) anything else → Clerk JWT (validated by IdentityVerifier
 //        when configured; otherwise rejected as 401).
-//  2. `?token=<jwt>` query param — fallback for EventSource, which
-//     can't set custom headers. Treated as a Clerk JWT only; API
-//     keys never travel via query string. Bypassed when the request
-//     also has an Authorization header (header wins).
+//  2. `?token=<token>` query param — fallback for EventSource, which
+//     can't set custom headers. Same shape-based dispatch as the
+//     Bearer header: `trve_…` → API key, anything else → JWT.
+//     Bypassed when the request also has an Authorization header
+//     (header wins).
 //  3. `X-User-ID` header — legacy identity assertion. Still useful
 //     for migration and dev (`npm run dev` user switcher). Trust
 //     model: anyone who knows a GUID becomes that user. Use a real
@@ -144,9 +145,11 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// 2. ?token=<jwt> — Clerk JWT in query param for SSE
-		if m.identityVerifier != nil {
-			if qToken := strings.TrimSpace(c.Query("token")); qToken != "" && !looksLikeAPIKey(qToken) {
+		// 2. ?token=<token> — query-param fallback for EventSource.
+		// Accept both API keys and (when configured) JWTs; dispatch
+		// by token shape inside authenticateBearer.
+		if qToken := strings.TrimSpace(c.Query("token")); qToken != "" {
+			if looksLikeAPIKey(qToken) || m.identityVerifier != nil {
 				m.authenticateBearer(c, qToken)
 				return
 			}

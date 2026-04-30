@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Header,
@@ -120,14 +120,32 @@ function AppContent({ onDisconnect }) {
   useEffect(() => {
     const bootstrap = async () => {
       try {
+        // Tier 0: ?key=trve_… in the URL — kiosk pattern, also
+        // anyone hand-crafting an API-key-authenticated link.
+        // Stamp the key onto apiClient so every subsequent call
+        // sends Authorization: Bearer trve_…, then strip it from
+        // the URL bar. The remainder of the bootstrap proceeds
+        // normally; getCurrentUser() will resolve the user from
+        // the API key's owner instead of the legacy GUID path.
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromKey = urlParams.get('key');
+        if (fromKey && fromKey.startsWith('trve_')) {
+          apiClient.setApiKey(fromKey);
+          urlParams.delete('key');
+          const cleanQuery = urlParams.toString();
+          const cleanUrl = window.location.pathname +
+            (cleanQuery ? '?' + cleanQuery : '') +
+            window.location.hash;
+          window.history.replaceState(null, '', cleanUrl);
+        }
+
         const response = await apiClient.getUsers().catch(() => ({ users: [] }));
         const list = response?.users || [];
         setUsers(list);
 
-        // Tier 1: URL param. Strip from address bar after capture so
-        // a refresh doesn't perpetually re-apply (and so it doesn't
-        // sit in the user's history bar).
-        const urlParams = new URLSearchParams(window.location.search);
+        // Tier 1: ?user_id=<guid> URL param. Strip from address bar
+        // after capture so a refresh doesn't perpetually re-apply
+        // (and so it doesn't sit in the user's history bar).
         const fromUrl = urlParams.get('user_id');
         if (fromUrl) {
           urlParams.delete('user_id');
@@ -137,6 +155,32 @@ function AppContent({ onDisconnect }) {
             window.location.hash;
           window.history.replaceState(null, '', cleanUrl);
           apiClient.setCurrentUser(fromUrl);
+        }
+
+        // If a Tier 0 API key was set above, /api/auth/me identifies
+        // the user (the apikey'd request resolves them server-side).
+        // This wins ahead of the localStorage / admin-default
+        // tiers — the URL key was an explicit authentication signal.
+        if (apiClient.apiKey) {
+          try {
+            const me = await apiClient.getCurrentUser();
+            // /api/auth/me returns { user_id (mongo _id), name,
+            // capabilities, can_design, can_manage }. Look the user
+            // up in the users list (when accessible) to get the GUID,
+            // otherwise synthesize a minimal user record.
+            const owner = list.find((u) => u.id === me.user_id) || {
+              id: me.user_id,
+              guid: me.user_id, // best-effort placeholder; UI uses name primarily
+              name: me.name,
+              capabilities: me.capabilities,
+            };
+            setCurrentUser(owner);
+            setIdentityResolved(true);
+            return;
+          } catch (e) {
+            console.warn('Bootstrap: API key did not resolve a user', e);
+            // Fall through to legacy tiers.
+          }
         }
 
         // Tier 2: whatever is now in localStorage (just-set above
@@ -572,7 +616,6 @@ function AppContent({ onDisconnect }) {
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [connectedUser, setConnectedUser] = useState(null);
   const electronMode = isElectron();
 
   // Check for stored credentials on startup (Electron mode only)
@@ -585,20 +628,22 @@ function App() {
         return;
       }
 
-      // Electron mode - check for stored credentials
+      // Electron mode - check for stored credentials. The "key"
+      // here is a `trve_…` API key (not a user GUID). Stamp it
+      // onto apiClient and validate via /api/auth/me. On failure,
+      // clear local state so the user lands back on LoginPage.
       try {
         const creds = await getCredentials();
         if (creds && creds.serverUrl && creds.key) {
-          // Try to validate the stored credentials
           apiClient.setServerUrl(creds.serverUrl);
+          apiClient.setApiKey(creds.key);
           try {
-            const user = await apiClient.login(creds.key);
-            setConnectedUser(user);
+            await apiClient.getCurrentUser();
             setIsAuthenticated(true);
           } catch (err) {
             console.error('Stored credentials invalid:', err);
-            // Clear invalid credentials
             await clearCredentials();
+            apiClient.clearApiKey();
             apiClient.clearCredentials();
           }
         }
@@ -612,16 +657,15 @@ function App() {
   }, [electronMode]);
 
   // Handle successful login from LoginPage
-  const handleLoginSuccess = (loginData) => {
-    setConnectedUser(loginData.user);
+  const handleLoginSuccess = () => {
     setIsAuthenticated(true);
   };
 
   // Handle disconnect (Electron mode)
   const handleDisconnect = async () => {
     await clearCredentials();
+    apiClient.clearApiKey();
     apiClient.clearCredentials();
-    setConnectedUser(null);
     setIsAuthenticated(false);
   };
 
