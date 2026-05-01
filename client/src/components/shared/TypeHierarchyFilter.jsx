@@ -74,14 +74,15 @@ function allSubtypeKeys(hierarchy) {
  * TypeHierarchyFilter
  *
  * Popover-style hierarchical type filter. Drives selection via `selectedTypes`
- * (Set of "parent:subtype" keys, or null for "all"). Initial collapsed state
- * defaults to display + control collapsed since charts is the most-used group.
+ * (Set of "parent:subtype" keys, or null for "all"). All groups start collapsed
+ * — the chart group has so many subtypes that an expanded chart group pushes
+ * display/control off-screen and forces users to scroll just to deselect.
  */
 export default function TypeHierarchyFilter({
   selectedTypes,
   onChange,
   hierarchy = COMPONENT_TYPE_HIERARCHY,
-  defaultCollapsed = ['display', 'control'],
+  defaultCollapsed = ['chart', 'display', 'control'],
   width = 240,
   label = 'Filter by Type'
 }) {

@@ -34,6 +34,8 @@ import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
+import ResetFiltersButton from '../components/shared/ResetFiltersButton';
+import SortMenu from '../components/shared/SortMenu';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
 import './DashboardsListPage.scss';
@@ -351,6 +353,7 @@ function DashboardsListPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search"
             persistent
+            value={searchTerm}
           />
           <NamespaceFilter
             id="namespace-filter-dashboards"
@@ -362,6 +365,30 @@ function DashboardsListPage() {
             selected={tagFilter}
             onChange={setTagFilter}
           />
+          <ResetFiltersButton
+            active={
+              !!searchTerm ||
+              namespaceFilter.length > 0 ||
+              tagFilter.length > 0
+            }
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setTagFilter([]);
+            }}
+          />
+          {viewMode === 'tile' && (
+            <SortMenu
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
+              options={[
+                { key: 'name', label: 'Name', defaultDir: 'asc' },
+                { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
+                { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+              ]}
+            />
+          )}
           <ContentSwitcher
             onChange={(e) => setViewMode(e.name)}
             selectedIndex={viewMode === 'list' ? 0 : 1}

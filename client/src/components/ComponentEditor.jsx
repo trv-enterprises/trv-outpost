@@ -17,6 +17,7 @@ import {
   Switch,
   Tag,
   InlineNotification,
+  NotificationActionButton,
   Button,
   NumberInput,
   IconButton,
@@ -224,7 +225,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   saving = false,
   showActions = true,
   className = '',
-  onValidityChange
+  onValidityChange,
+  onDirtyChange
 }, ref) {
   // Basic info
   const [name, setName] = useState('');
@@ -368,8 +370,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Code editor
   const [componentCode, setComponentCode] = useState('');
   const [showCustomCode, setShowCustomCode] = useState(false);
-  const [customCodeWarningOpen, setCustomCodeWarningOpen] = useState(false);
-  const customCodeWarningShownRef = useRef(false); // Show warning only once per chart load
 
   // Chart-specific options (gauge thresholds, pie radius, etc.)
   const [chartOptions, setChartOptions] = useState({
@@ -635,9 +635,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         }
       }
       setComponentCode(chart.component_code || '');
-      setShowCustomCode(chart.use_custom_code ?? (chart.chart_type === 'custom'));
-      // Reset warning ref when loading a new chart so the warning fires on next config change
-      customCodeWarningShownRef.current = false;
+      const usingCustomCode = chart.use_custom_code ?? (chart.chart_type === 'custom');
+      setShowCustomCode(usingCustomCode);
+      // Land on the Code tab for custom-code charts — that's the only meaningful
+      // editing surface in this mode. With the data-mapping form hidden, the Code
+      // tab is index 1 (Preview, Code) instead of 2.
+      if (usingCustomCode) {
+        setActiveTab(1);
+      }
       // Initialize chart options from saved data
       if (chart.options) {
         setChartOptions(prev => ({
@@ -645,6 +650,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           ...chart.options
         }));
       }
+      // Snapshot mirrors the post-load values for every field in the diff —
+      // including the legacy y_axis_label → y_axis_labels seeding and the
+      // default aggregation shape — so the form doesn't read as dirty on entry.
+      const loadedYAxisLabels = (() => {
+        const arr = chart.data_mapping?.y_axis_labels;
+        if (Array.isArray(arr) && arr.length > 0) return arr;
+        if (chart.data_mapping?.y_axis_label) return [chart.data_mapping.y_axis_label];
+        return [];
+      })();
       setInitialState(JSON.stringify({
         name: chart.name || '',
         description: chart.description || '',
@@ -653,12 +667,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         connectionId: chart.connection_id || '',
         queryRaw: chart.query_config?.raw || '',
         xAxisColumn: chart.data_mapping?.x_axis || '',
+        xAxisLabel: chart.data_mapping?.x_axis_label || '',
+        xAxisFormat: chart.data_mapping?.x_axis_format || 'chart',
         yAxisColumns: chart.data_mapping?.y_axis || [],
+        yAxisLabel: chart.data_mapping?.y_axis_label || '',
+        yAxisLabels: loadedYAxisLabels,
         filters: chart.data_mapping?.filters || [],
-        showCustomCode: chart.chart_type === 'custom' || !!chart.component_code
+        aggregation: chart.data_mapping?.aggregation || { type: '', sortBy: '', field: '', count: 10 },
+        sortBy: chart.data_mapping?.sort_by || '',
+        sortOrder: chart.data_mapping?.sort_order || 'desc',
+        limitRows: chart.data_mapping?.limit || 0,
+        seriesColumn: chart.data_mapping?.series || '',
+        groupByColumn: chart.data_mapping?.group_by || '',
+        showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code)
       }));
     } else {
-      // New chart - reset to defaults
+      // New chart - reset to defaults; snapshot mirrors them.
       resetForm();
       setInitialState(JSON.stringify({
         name: '',
@@ -668,8 +692,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         connectionId: '',
         queryRaw: '',
         xAxisColumn: '',
+        xAxisLabel: '',
+        xAxisFormat: 'chart',
         yAxisColumns: [],
+        yAxisLabel: '',
+        yAxisLabels: [],
         filters: [],
+        aggregation: { type: '', sortBy: '', field: '', count: 10 },
+        sortBy: '',
+        sortOrder: 'desc',
+        limitRows: 0,
+        seriesColumn: '',
+        groupByColumn: '',
         showCustomCode: false
       }));
     }
@@ -687,23 +721,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       connectionId: selectedConnectionId,
       queryRaw,
       xAxisColumn,
+      xAxisLabel,
+      xAxisFormat,
       yAxisColumns,
+      yAxisLabel,
+      yAxisLabels,
       filters,
+      aggregation,
+      sortBy,
+      sortOrder,
+      limitRows,
+      seriesColumn,
+      groupByColumn,
       showCustomCode
     });
-    setHasChanges(currentState !== initialState);
-  }, [name, description, tags, chartType, selectedConnectionId, queryRaw, xAxisColumn, yAxisColumns, filters, showCustomCode, initialState]);
-
-  // Show warning modal when user changes config-affecting fields on a chart with custom code.
-  // Fires once per chart load. Config changes don't render unless user switches to generated code.
-  useEffect(() => {
-    if (!showCustomCode) return; // No custom code, no warning needed
-    if (customCodeWarningShownRef.current) return; // Already shown for this load
-    if (!hasChanges) return; // No changes yet
-    // Only trigger for config-shape changes (not name/description/tags which don't affect rendering)
-    customCodeWarningShownRef.current = true;
-    setCustomCodeWarningOpen(true);
-  }, [hasChanges, showCustomCode, chartType, selectedConnectionId, queryRaw, xAxisColumn, yAxisColumns, filters]);
+    const dirty = currentState !== initialState;
+    setHasChanges(dirty);
+    if (onDirtyChange) onDirtyChange(dirty);
+  }, [name, description, tags, chartType, selectedConnectionId, queryRaw, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, seriesColumn, groupByColumn, showCustomCode, initialState, onDirtyChange]);
 
   // Notify parent of validity changes
   useEffect(() => {
@@ -889,8 +924,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     try {
       const response = await fetch(`${API_BASE}/api/connections?page=1&page_size=100`);
       const data = await response.json();
-      if (data.connections || data.connections) {
-        setConnections(data.connections || data.connections);
+      if (data.connections) {
+        setConnections(data.connections);
       }
     } catch (err) {
       console.error('Failed to fetch connections:', err);
@@ -1294,15 +1329,26 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   return (
     <div className={`component-editor ${className}`}>
-      {/* Custom code warning */}
+      {/* Custom code mode banner — replaces the data-mapping form with the code editor.
+          Action button gives the user a one-click escape back to generated mode. */}
       {showCustomCode && componentType === 'chart' && (
         <InlineNotification
           kind="warning"
           title="Custom Code Mode"
-          subtitle="Data mapping changes won't update the code automatically. Edit the code directly or disable custom code to regenerate."
+          subtitle="Data mapping is bypassed — the chart renders the code below verbatim. Switch to generated code to edit the mapping form again."
           lowContrast
           hideCloseButton
           className="custom-code-warning"
+          actions={
+            <NotificationActionButton
+              onClick={() => {
+                setShowCustomCode(false);
+                setActiveTab(0);
+              }}
+            >
+              Switch to Generated Code
+            </NotificationActionButton>
+          }
         />
       )}
 
@@ -1333,12 +1379,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             // because the next render's componentType will match.
             setTimeout(() => setComponentType(effectiveType), 0);
           }
+          // Custom-code charts must stay on the chart subtype — switching to
+          // display/control would orphan the user's code, since those subtypes
+          // ignore component_code entirely. The non-chart switches render
+          // disabled so the user can see the alternatives exist but can't
+          // navigate into them without first switching back to generated code.
+          const lockedToChart = showCustomCode && componentType === 'chart';
           return (
             <ContentSwitcher
               selectedIndex={Math.max(0, selectedIndex)}
               onChange={({ index }) => {
                 const newType = tabs[index]?.name;
                 if (!newType) return;
+                if (lockedToChart && newType !== 'chart') return;
                 setComponentType(newType);
                 if (newType === 'control' && !controlConfig) {
                   const firstEnabled = enabledControlTypes?.find((t) => !t.hidden)?.subtype || 'button';
@@ -1355,7 +1408,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               }}
               className="component-type-switcher"
             >
-              {tabs.map((t) => <Switch key={t.name} name={t.name} text={t.text} />)}
+              {tabs.map((t) => (
+                <Switch
+                  key={t.name}
+                  name={t.name}
+                  text={t.text}
+                  disabled={lockedToChart && t.name !== 'chart'}
+                />
+              ))}
             </ContentSwitcher>
           );
         })()}
@@ -1413,8 +1473,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         </div>
       </div>
 
-      {/* Chart Type card — shown when componentType is 'chart' */}
-      {componentType === 'chart' && (() => {
+      {/* Chart Type card — shown when componentType is 'chart'.
+          Hidden in custom-code mode since the chart type drives the generated
+          code, which is bypassed when the user supplies their own. */}
+      {componentType === 'chart' && !showCustomCode && (() => {
         const currentChartType = CHART_TYPES.find(t => t.id === chartType) || CHART_TYPES[0];
         const TypeIcon = currentChartType.icon;
         return (
@@ -1433,36 +1495,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           </div>
         );
       })()}
-
-      {/* Custom Code Warning Modal — fires when user changes config on a chart with custom code */}
-      {customCodeWarningOpen && createPortal(
-        <Modal
-          open
-          onRequestClose={() => setCustomCodeWarningOpen(false)}
-          onRequestSubmit={() => {
-            // Switch to generated code — config changes will take effect, custom code will be overwritten on save
-            setShowCustomCode(false);
-            setCustomCodeWarningOpen(false);
-          }}
-          modalHeading="Custom Code Will Be Overwritten"
-          primaryButtonText="Switch to Generated Code"
-          secondaryButtonText="Keep Custom Code"
-          danger
-          size="sm"
-        >
-          <p style={{ marginBottom: '1rem' }}>
-            This chart has custom code (likely written by the AI agent). Your configuration changes
-            will not be reflected in the rendered chart unless you switch to generated code.
-          </p>
-          <p>
-            <strong>Switch to Generated Code:</strong> Apply your config changes — the custom code will be regenerated on save (custom code lost).
-          </p>
-          <p style={{ marginTop: '0.5rem' }}>
-            <strong>Keep Custom Code:</strong> Custom code stays — your config changes save to the record but won't render until you switch.
-          </p>
-        </Modal>,
-        document.body
-      )}
 
       {/* Chart Type Selection Modal — portaled to body to escape parent modal */}
       {chartTypeModalOpen && createPortal(
@@ -1522,24 +1554,32 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         />
       )}
 
-      {/* Chart Configuration - shown when componentType is 'chart' */}
-      {componentType === 'chart' && (
+      {/* Chart Configuration - shown when componentType is 'chart'.
+          Custom-code mode hides the Connection tab — the data-mapping form
+          doesn't drive the rendered chart, so showing it would be misleading. */}
+      {componentType === 'chart' && (() => {
+        const tabs = showCustomCode
+          ? [{ key: 'preview', label: 'Preview' }, { key: 'code', label: 'Code' }]
+          : [{ key: 'datasource', label: 'Connection' }, { key: 'preview', label: 'Preview' }, { key: 'code', label: 'Code' }];
+        const activeKey = tabs[Math.min(activeTab, tabs.length - 1)]?.key || tabs[0].key;
+        const isOnTab = (key) => activeKey === key;
+        return (
         <>
           <div className="component-editor-switcher-wrapper">
             <ContentSwitcher
-              selectedIndex={activeTab}
+              selectedIndex={Math.min(activeTab, tabs.length - 1)}
               onChange={({ index }) => setActiveTab(index)}
               className="component-editor-switcher"
             >
-              <Switch name="datasource" text="Connection" />
-              <Switch name="preview" text="Preview" />
-              <Switch name="code" text="Code" />
+              {tabs.map((t) => (
+                <Switch key={t.key} name={t.key} text={t.label} />
+              ))}
             </ContentSwitcher>
           </div>
 
           <div className="tab-panels">
         {/* Connection Tab */}
-        {activeTab === 0 && (
+        {isOnTab('datasource') && (
           <div className="tab-content">
             <Grid narrow>
               <Column lg={6} md={4} sm={4}>
@@ -3086,7 +3126,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         )}
 
         {/* Preview Tab */}
-        {activeTab === 1 && (
+        {isOnTab('preview') && (
           <div className="tab-content preview-tab">
             <div className="chart-preview-container">
               {generatedCode ? (
@@ -3095,9 +3135,49 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     <span className="preview-chart-name">{name || 'Untitled Chart'}</span>
                   </div>
                   <div className="preview-chart-body">
+                    {/* Pass connectionId + queryConfig + dataMapping so the loader
+                        fetches and transforms data the same way a live dashboard
+                        panel does. Custom code that calls `useData(...)` itself
+                        still works because the loader only injects `data` when
+                        the component doesn't already provide it. */}
                     <DynamicComponentLoader
                       code={generatedCode}
-                      props={showCustomCode && filteredPreviewData ? { data: filteredPreviewData } : {}}
+                      connectionId={selectedConnectionId || null}
+                      queryConfig={selectedConnectionId ? {
+                        raw: selectedDatasource?.type === 'tsstore'
+                          ? (tsstoreQueryType === 'since' ? `since:${tsstoreSinceDuration}` : tsstoreQueryType)
+                          : queryRaw,
+                        type: queryType,
+                        params: selectedDatasource?.type === 'tsstore'
+                          ? (tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit })
+                          : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
+                            ? { database: edgelakeDatabase }
+                            : {}
+                      } : null}
+                      dataMapping={selectedConnectionId ? {
+                        connection_id: selectedConnectionId,
+                        x_axis: xAxisColumn,
+                        x_axis_label: xAxisLabel || '',
+                        x_axis_format: xAxisFormat || 'chart',
+                        y_axis: yAxisColumns,
+                        y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
+                        y_axis_labels: yAxisLabels && yAxisLabels.length > 0 ? yAxisLabels : undefined,
+                        group_by: groupByColumn || '',
+                        series: seriesColumn || '',
+                        filters: filters.length > 0 ? filters : [],
+                        aggregation: aggregation.type ? aggregation : null,
+                        sort_by: sortBy || '',
+                        sort_order: sortOrder || 'desc',
+                        limit: limitRows || 0,
+                        column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
+                        visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
+                        parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
+                          data_path: parserDataPath || undefined,
+                          timestamp_field: parserTimestampField || undefined,
+                          timestamp_scale: parserTimestampScale || undefined
+                        } : null
+                      } : null}
+                      props={{}}
                     />
                   </div>
                 </>
@@ -3112,7 +3192,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         )}
 
         {/* Code Tab */}
-        {activeTab === 2 && (
+        {isOnTab('code') && (
           <div className="tab-content code-tab">
             <div className="code-header">
               <div className="code-switcher">
@@ -3147,7 +3227,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         )}
       </div>
         </>
-      )}
+        );
+      })()}
 
       {/* Action buttons (optional, for standalone page use) */}
       {showActions && (
@@ -3162,7 +3243,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           <Button
             kind="primary"
             onClick={handleSave}
-            disabled={saving || !name.trim()}
+            disabled={saving || !name.trim() || !hasChanges}
           >
             {saving ? 'Saving...' : (chart?.id ? 'Save Changes' : 'Create Chart')}
           </Button>

@@ -39,8 +39,8 @@ func (h *TagHandler) ListTags(c *gin.Context) {
 	ctx := c.Request.Context()
 	merged := make(map[string]*models.TagUsage)
 
-	// Connections (datasources): simple $unwind + $group.
-	if err := h.aggregateTags(ctx, "datasources", nil, merged, func(t *models.TagUsage, n int) {
+	// Connections: simple $unwind + $group.
+	if err := h.aggregateTags(ctx, "connections", nil, merged, func(t *models.TagUsage, n int) {
 		t.Connections += n
 		t.Count += n
 	}); err != nil {
@@ -57,17 +57,17 @@ func (h *TagHandler) ListTags(c *gin.Context) {
 		return
 	}
 
-	// Charts: mirror the FindAllLatest pattern so each logical chart is
-	// counted once, not once per version. Group by `id`, take first tags
+	// Components: mirror the FindAllLatest pattern so each logical component
+	// is counted once, not once per version. Group by `id`, take first tags
 	// (any version has the same id's current tags for the latest version).
-	chartsPre := bson.A{
+	componentsPre := bson.A{
 		bson.D{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$id"},
 			{Key: "tags", Value: bson.D{{Key: "$first", Value: "$tags"}}},
 		}}},
 	}
-	if err := h.aggregateTags(ctx, "charts", chartsPre, merged, func(t *models.TagUsage, n int) {
+	if err := h.aggregateTags(ctx, "components", componentsPre, merged, func(t *models.TagUsage, n int) {
 		t.Components += n
 		t.Count += n
 	}); err != nil {

@@ -298,7 +298,7 @@ func (s *DashboardService) classifyDashboard(ctx context.Context, inc models.Das
 func (s *DashboardService) applyConnection(ctx context.Context, inc models.Connection, targetNs string, isUpdate bool) error {
 	inc.Namespace = targetNs
 	now := time.Now()
-	coll := s.db.Collection("datasources")
+	coll := s.db.Collection("connections")
 
 	if isUpdate {
 		existing, err := s.connectionRepo.FindByID(ctx, inc.ID.Hex())
@@ -332,7 +332,7 @@ func (s *DashboardService) applyConnection(ctx context.Context, inc models.Conne
 func (s *DashboardService) applyComponent(ctx context.Context, inc models.Component, targetNs string, isUpdate bool) error {
 	inc.Namespace = targetNs
 	now := time.Now()
-	coll := s.db.Collection("charts")
+	coll := s.db.Collection("components")
 
 	if isUpdate {
 		// Drop every version of this id; insert the incoming as v1 final.

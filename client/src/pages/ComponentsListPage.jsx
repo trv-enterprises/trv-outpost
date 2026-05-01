@@ -43,6 +43,8 @@ import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
+import ResetFiltersButton from '../components/shared/ResetFiltersButton';
+import SortMenu from '../components/shared/SortMenu';
 import './ComponentsListPage.scss';
 
 /**
@@ -78,7 +80,7 @@ function ComponentsListPage() {
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
-  const [collapsedTypes, setCollapsedTypes] = useState(new Set(['display', 'control'])); // Display and Control start collapsed
+  const [collapsedTypes, setCollapsedTypes] = useState(new Set(['chart', 'display', 'control'])); // All groups start collapsed — chart's subtype list is long enough that expanding it forces scroll to reach Display/Control
   const typeFilterRef = useRef(null); // Ref for click-outside detection
 
   // Hierarchical type filter - tracks selected types
@@ -708,6 +710,34 @@ function ComponentsListPage() {
             }}
             size="md"
           />
+          <ResetFiltersButton
+            active={
+              !!searchTerm ||
+              namespaceFilter.length > 0 ||
+              selectedTypes !== null ||
+              tagFilter.length > 0 ||
+              connectionFilter !== 'all'
+            }
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setSelectedTypes(null);
+              setTagFilter([]);
+              setConnectionFilter('all');
+            }}
+          />
+          {viewMode === 'tile' && (
+            <SortMenu
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
+              options={[
+                { key: 'name', label: 'Name', defaultDir: 'asc' },
+                { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
+                { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+              ]}
+            />
+          )}
           <ContentSwitcher
             onChange={(e) => setViewMode(e.name)}
             selectedIndex={viewMode === 'list' ? 0 : 1}

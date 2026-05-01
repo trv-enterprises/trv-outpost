@@ -15,6 +15,9 @@ import { CONTROL_TYPE_INFO } from './controls/controlTypes';
 import apiClient from '../api/client';
 import TagFilter from './shared/TagFilter';
 import TypeHierarchyFilter, { matchesTypeSelection } from './shared/TypeHierarchyFilter';
+import ResetFiltersButton from './shared/ResetFiltersButton';
+import NamespaceFilter from './shared/NamespaceFilter';
+import SortMenu from './shared/SortMenu';
 import './ComponentPickerModal.scss';
 
 // Chart type icon mapping
@@ -41,6 +44,18 @@ const CHART_TYPE_COLORS = {
   dataview: 'warm-gray',
   custom: 'gray'
 };
+
+// Compare two TypeHierarchyFilter values (Set | null). Used by the reset
+// button to decide whether the type filter is at its open-state default.
+function sameTypeSet(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (a.size !== b.size) return false;
+  for (const v of a) {
+    if (!b.has(v)) return false;
+  }
+  return true;
+}
 
 // Map a legacy `category` prop ('chart' | 'control' | 'display' | 'all') to
 // a Set of typed keys so the hierarchy filter starts pre-scoped to the parent.
@@ -73,6 +88,9 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   // null = all selected; Set of "parent:subtype" keys otherwise.
   const [selectedTypes, setSelectedTypes] = useState(() => categoryToTypeSet(initialCategory));
   const [tagFilter, setTagFilter] = useState([]);
+  const [namespaceFilter, setNamespaceFilter] = useState([]);
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     if (open) {
@@ -81,6 +99,9 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       setSearchTerm('');
       setSelectedTypes(categoryToTypeSet(initialCategory));
       setTagFilter([]);
+      setNamespaceFilter([]);
+      setSortKey('name');
+      setSortDirection('asc');
     }
   }, [open, initialCategory]);
 
@@ -99,9 +120,16 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
     }
   };
 
-  // Filter and search
+  // Filter, search, and sort
   const filtered = useMemo(() => {
     let result = items;
+
+    // Namespace filter (OR within selection; missing namespace stays visible
+    // — same defensive behaviour as the list pages).
+    if (namespaceFilter.length > 0) {
+      const wanted = new Set(namespaceFilter);
+      result = result.filter(item => !item.namespace || wanted.has(item.namespace));
+    }
 
     // Hierarchical type filter
     result = result.filter(item => matchesTypeSelection(item, selectedTypes));
@@ -125,8 +153,23 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       );
     }
 
-    return result;
-  }, [items, selectedTypes, tagFilter, searchTerm]);
+    // Sort — by name / last modified / namespace
+    const sorted = [...result].sort((a, b) => {
+      let aVal = a[sortKey];
+      let bVal = b[sortKey];
+      if (sortKey === 'updated') {
+        aVal = new Date(aVal).getTime() || 0;
+        bVal = new Date(bVal).getTime() || 0;
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [items, namespaceFilter, selectedTypes, tagFilter, searchTerm, sortKey, sortDirection]);
 
   const handleSelect = () => {
     if (selected) onSelect(selected);
@@ -189,6 +232,20 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
     >
       <div className="picker-content">
         <div className="picker-toolbar">
+          <div className="picker-search">
+            <Search
+              labelText="Search"
+              placeholder="Search components..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              size="md"
+            />
+          </div>
+          <NamespaceFilter
+            id="namespace-filter-component-picker"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
+          />
           <TypeHierarchyFilter
             selectedTypes={selectedTypes}
             onChange={setSelectedTypes}
@@ -198,12 +255,29 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
             selected={tagFilter}
             onChange={setTagFilter}
           />
-          <Search
-            labelText="Search"
-            placeholder="Search components..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            size="md"
+          <ResetFiltersButton
+            active={
+              !!searchTerm ||
+              namespaceFilter.length > 0 ||
+              tagFilter.length > 0 ||
+              !sameTypeSet(selectedTypes, categoryToTypeSet(initialCategory))
+            }
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setTagFilter([]);
+              setSelectedTypes(categoryToTypeSet(initialCategory));
+            }}
+          />
+          <SortMenu
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
+            options={[
+              { key: 'name', label: 'Name', defaultDir: 'asc' },
+              { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
+              { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+            ]}
           />
         </div>
 

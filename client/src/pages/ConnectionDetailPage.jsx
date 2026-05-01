@@ -168,7 +168,7 @@ function ConnectionDetailPage() {
     }
     try {
       const response = await apiClient.getConnections();
-      const connections = response.connections || response.connections || [];
+      const connections = response.connections || [];
       const duplicate = connections.find(conn =>
         conn.name.toLowerCase() === nameToCheck.trim().toLowerCase() &&
         conn.id !== id
@@ -1598,7 +1598,7 @@ function ConnectionDetailPage() {
             kind="primary"
             renderIcon={Save}
             onClick={() => setShowSaveModal(true)}
-            disabled={!name || !type}
+            disabled={!name || !type || !hasChanges}
             size="md"
           >
             Save Connection

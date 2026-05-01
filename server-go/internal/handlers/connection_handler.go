@@ -102,7 +102,7 @@ func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"datasources": enrichedConnections,
+		"connections": enrichedConnections,
 		"total":       total,
 		"limit":       limit,
 		"offset":      offset,

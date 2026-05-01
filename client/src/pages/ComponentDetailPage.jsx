@@ -38,6 +38,7 @@ function ComponentDetailPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
   const [isValid, setIsValid] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const editorRef = useRef(null);
 
@@ -150,7 +151,7 @@ function ComponentDetailPage() {
             kind="primary"
             renderIcon={Save}
             onClick={handleSaveClick}
-            disabled={saving || !isValid}
+            disabled={saving || !isValid || !isDirty}
             size="md"
           >
             Save
@@ -167,6 +168,7 @@ function ComponentDetailPage() {
         showActions={false}
         className="component-detail-editor"
         onValidityChange={setIsValid}
+        onDirtyChange={setIsDirty}
       />
 
       {/* Discard changes confirmation */}

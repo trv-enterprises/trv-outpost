@@ -410,9 +410,9 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 				}},
 			}},
 		}}},
-		// Lookup datasources to get their names
+		// Lookup connections to get their names
 		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: "datasources"},
+			{Key: "from", Value: "connections"},
 			{Key: "let", Value: bson.D{{Key: "dsIds", Value: "$datasource_object_ids"}}},
 			{Key: "pipeline", Value: bson.A{
 				bson.D{{Key: "$match", Value: bson.D{

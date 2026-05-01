@@ -34,6 +34,8 @@ import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
+import ResetFiltersButton from '../components/shared/ResetFiltersButton';
+import SortMenu from '../components/shared/SortMenu';
 import './ConnectionsPage.scss';
 
 /**
@@ -127,9 +129,8 @@ function ConnectionsPage() {
         apiClient.getComponents()
       ]);
 
-      // API returns 'datasources' key for backwards compatibility
-      if (connectionsData.connections || connectionsData.connections) {
-        setConnections(connectionsData.connections || connectionsData.connections);
+      if (connectionsData.connections) {
+        setConnections(connectionsData.connections);
       } else if (connectionsData.error) {
         setError(connectionsData.error);
       } else {
@@ -328,6 +329,7 @@ function ConnectionsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search"
             persistent
+            value={searchTerm}
           />
           <NamespaceFilter
             id="namespace-filter-connections"
@@ -349,6 +351,32 @@ function ConnectionsPage() {
             selected={tagFilter}
             onChange={setTagFilter}
           />
+          <ResetFiltersButton
+            active={
+              !!searchTerm ||
+              namespaceFilter.length > 0 ||
+              typeFilter !== 'all' ||
+              tagFilter.length > 0
+            }
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setTypeFilter('all');
+              setTagFilter([]);
+            }}
+          />
+          {viewMode === 'tile' && (
+            <SortMenu
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
+              options={[
+                { key: 'name', label: 'Name', defaultDir: 'asc' },
+                { key: 'updated_at', label: 'Last modified', defaultDir: 'desc' },
+                { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+              ]}
+            />
+          )}
           <ContentSwitcher
             onChange={(e) => setViewMode(e.name)}
             selectedIndex={viewMode === 'list' ? 0 : 1}

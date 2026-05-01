@@ -21,15 +21,24 @@
 .picker-toolbar {
   display: flex;
   gap: spacing.$spacing-04;
-  align-items: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
 
   .cds--dropdown {
     min-width: 200px;
   }
 
-  .cds--search {
-    flex: 1;
-    background-color: var(--cds-field-01);
+  // Search sits on the left at a fixed width — wide enough to be useful
+  // but no longer eating all the slack the way `flex: 1` did. The other
+  // filter controls take their natural widths; the row wraps when the
+  // viewport is narrow.
+  .picker-search {
+    width: 220px;
+    flex-shrink: 0;
+
+    .cds--search {
+      background-color: var(--cds-field-01);
+    }
   }
 }
 

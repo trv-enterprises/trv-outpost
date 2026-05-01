@@ -19,6 +19,7 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isValid, setIsValid] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const editorRef = useRef(null);
 
@@ -28,6 +29,7 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
       setSaving(false);
       setShowCancelConfirm(false);
       setIsValid(!!chart?.name);
+      setIsDirty(false);
       setEditorKey(k => k + 1);
     }
   }, [open, chart]);
@@ -82,7 +84,7 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
         modalLabel="Chart Editor"
         primaryButtonText={saving ? 'Saving...' : 'Save'}
         secondaryButtonText="Cancel"
-        primaryButtonDisabled={saving || !isValid}
+        primaryButtonDisabled={saving || !isValid || !isDirty}
         size="lg"
         className="component-editor-modal"
         preventCloseOnClickOutside
@@ -98,6 +100,7 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
             saving={saving}
             showActions={false}
             onValidityChange={setIsValid}
+            onDirtyChange={setIsDirty}
           />
         </div>
       </Modal>

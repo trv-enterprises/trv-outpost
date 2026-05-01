@@ -22,6 +22,8 @@ import {
 import apiClient from '../api/client';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import TagFilter from '../components/shared/TagFilter';
+import ResetFiltersButton from '../components/shared/ResetFiltersButton';
+import SortMenu from '../components/shared/SortMenu';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import './DashboardTileViewPage.scss';
 
@@ -50,6 +52,12 @@ function DashboardTileViewPage() {
   // component state only — no session/user-config persistence yet.
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [tagFilter, setTagFilter] = useState([]);
+  // Sort mode for the tile grid. 'manual' means honour the user's
+  // drag-reorder; any other value disables drag and applies a key+dir
+  // sort. Defaults to 'manual' for backwards-compat (existing users with
+  // a stored tile order keep seeing their layout).
+  const [sortKey, setSortKey] = useState('manual');
+  const [sortDirection, setSortDirection] = useState('asc');
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
   // User-authored tile order: array of dashboard IDs the user has
   // explicitly placed via drag-and-drop. Partial coverage is fine —
@@ -95,11 +103,28 @@ function DashboardTileViewPage() {
       }
       const stored = settings.dashboard_tile_order;
       setTileOrder(Array.isArray(stored) ? stored : []);
+      const storedSort = settings.dashboard_tile_sort;
+      if (storedSort && typeof storedSort.key === 'string') {
+        setSortKey(storedSort.key);
+        setSortDirection(storedSort.direction === 'desc' ? 'desc' : 'asc');
+      }
     } catch {
       // User may not have config yet — treat as empty manual order.
       setTileOrder([]);
     }
   };
+
+  // Persist the sort preference. Caller passes the new key + direction;
+  // we save and update local state. Mirrors persistTileOrder's pattern.
+  const persistSort = useCallback((nextKey, nextDirection) => {
+    setSortKey(nextKey);
+    setSortDirection(nextDirection);
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) return;
+    apiClient.updateUserConfig(userGuid, {
+      dashboard_tile_sort: { key: nextKey, direction: nextDirection },
+    }).catch(() => {});
+  }, []);
 
   // Persist the user's tile order. Caller passes the new order array;
   // we save and update local state. GC: drop entries pointing at
@@ -301,9 +326,27 @@ function DashboardTileViewPage() {
 
     // Order resolution lives in utils/dashboardOrder so the View
     // Mode tile page and the dashboard viewer's prev/next arrows
-    // walk dashboards in the same sequence.
-    return orderDashboardsForViewer(result, tileOrder);
-  }, [dashboards, namespaceFilter, tagFilter, searchTerm, tileOrder]);
+    // walk dashboards in the same sequence — but only in manual mode.
+    // For key-based sort, honour the user's choice instead.
+    if (sortKey === 'manual') {
+      return orderDashboardsForViewer(result, tileOrder);
+    }
+    const sorted = [...result].sort((a, b) => {
+      let aVal = a[sortKey];
+      let bVal = b[sortKey];
+      if (sortKey === 'updated') {
+        aVal = new Date(aVal).getTime() || 0;
+        bVal = new Date(bVal).getTime() || 0;
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [dashboards, namespaceFilter, tagFilter, searchTerm, tileOrder, sortKey, sortDirection]);
 
   if (loading) {
     return (
@@ -328,7 +371,7 @@ function DashboardTileViewPage() {
           <Dashboard size={24} />
           <h1>Dashboards</h1>
         </div>
-        {tileOrder && tileOrder.length > 0 && (
+        {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
           <Button
             kind="ghost"
             size="sm"
@@ -361,6 +404,29 @@ function DashboardTileViewPage() {
           selected={tagFilter}
           onChange={setTagFilter}
         />
+        <ResetFiltersButton
+          active={
+            !!searchTerm ||
+            namespaceFilter.length > 0 ||
+            tagFilter.length > 0
+          }
+          onReset={() => {
+            setSearchTerm('');
+            setNamespaceFilter([]);
+            setTagFilter([]);
+          }}
+        />
+        <SortMenu
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          onChange={(k, d) => persistSort(k, d)}
+          options={[
+            { key: 'manual', label: 'Manual (drag to reorder)' },
+            { key: 'name', label: 'Name', defaultDir: 'asc' },
+            { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
+            { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+          ]}
+        />
       </div>
 
       {filteredDashboards.length === 0 ? (
@@ -384,12 +450,12 @@ function DashboardTileViewPage() {
                 dropSide === 'left' ? 'dashboard-tile--drop-before' : '',
                 dropSide === 'right' ? 'dashboard-tile--drop-after' : '',
               ].filter(Boolean).join(' ')}
-              draggable
-              onDragStart={(e) => handleDragStart(e, dashboard.id)}
-              onDragOver={(e) => handleDragOver(e, dashboard.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, dashboard.id)}
-              onDragEnd={handleDragEnd}
+              draggable={sortKey === 'manual'}
+              onDragStart={sortKey === 'manual' ? (e) => handleDragStart(e, dashboard.id) : undefined}
+              onDragOver={sortKey === 'manual' ? (e) => handleDragOver(e, dashboard.id) : undefined}
+              onDragLeave={sortKey === 'manual' ? handleDragLeave : undefined}
+              onDrop={sortKey === 'manual' ? (e) => handleDrop(e, dashboard.id) : undefined}
+              onDragEnd={sortKey === 'manual' ? handleDragEnd : undefined}
               onClick={() => handleTileClick(dashboard.id)}
             >
               <div className="tile-thumbnail">

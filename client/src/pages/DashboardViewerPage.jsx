@@ -1311,15 +1311,28 @@ function DashboardViewerPage({ canDesign = false }) {
     const { panel_id, ...chartInfo } = chartData;
     setChartsMap(prev => ({ ...prev, [chartInfo.id]: chartInfo }));
 
+    // Detect whether the panel itself actually needs to change. Editing a
+    // component's name/code/config shouldn't dirty the dashboard — the
+    // component lives in its own collection and was already persisted by
+    // the component editor. Only swapping the panel's chart_id (e.g.
+    // converting a placeholder to a saved component) or growing the panel
+    // to satisfy a new min-size is a genuine dashboard mutation.
     const subtype = chartInfo.control_config?.control_type || chartInfo.display_config?.display_type || chartInfo.chart_type;
     const minSize = getComponentMinSize(subtype);
+    let panelChanged = false;
     setEditablePanels(prev => prev.map(p => {
       if (p.id !== panel_id) return p;
       const newW = Math.max(p.w, Math.min(minSize.w, maxGridCol - p.x));
       const newH = Math.max(p.h, minSize.h);
+      const idChanged = p.chart_id !== chartInfo.id;
+      const sizeChanged = newW !== p.w || newH !== p.h;
+      if (!idChanged && !sizeChanged) return p;
+      panelChanged = true;
       return { ...p, chart_id: chartInfo.id, w: newW, h: newH };
     }));
-    setEditHasChanges(true);
+    if (panelChanged) {
+      setEditHasChanges(true);
+    }
   };
 
   const openAIEditor = (panelId) => {

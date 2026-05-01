@@ -1,0 +1,68 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing' as spacing;
+
+.sort-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sort-menu-popover {
+  position: absolute;
+  top: calc(100% + #{spacing.$spacing-02});
+  right: 0;
+  min-width: 220px;
+  background-color: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: spacing.$spacing-02 0;
+}
+
+.sort-menu-item {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-03;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+  background: none;
+  border: none;
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+
+  &:hover {
+    background-color: var(--cds-layer-hover-02);
+  }
+
+  &--active {
+    color: var(--cds-text-primary);
+    font-weight: 500;
+  }
+}
+
+.sort-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--cds-icon-primary);
+}
+
+.sort-menu-label {
+  flex: 1;
+}
+
+.sort-menu-direction {
+  display: inline-flex;
+  align-items: center;
+  color: var(--cds-icon-secondary);
+  margin-left: spacing.$spacing-02;
+}

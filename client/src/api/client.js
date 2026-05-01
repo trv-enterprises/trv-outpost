@@ -471,7 +471,7 @@ class APIClient {
     // Opportunistically warm the name cache so failure toasts can
     // render real names instead of UUIDs. Shape: { connections: [...] }
     // for the paged response, plain array for some legacy callers.
-    const list = Array.isArray(result) ? result : result?.connections || result?.datasources || [];
+    const list = Array.isArray(result) ? result : result?.connections || [];
     list.forEach((c) => this._cacheConnectionName(c));
     return result;
   }
@@ -561,7 +561,7 @@ class APIClient {
   async getWritableConnections() {
     const response = await this.getConnections();
     return {
-      connections: (response.connections || response.connections || []).filter(c => c.capabilities?.can_write)
+      connections: (response.connections || []).filter(c => c.capabilities?.can_write)
     };
   }
 
