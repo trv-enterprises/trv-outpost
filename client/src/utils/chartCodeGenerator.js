@@ -270,6 +270,7 @@ function generateDataDrivenCode(chart) {
   const option = {
     tooltip: {
       trigger: 'axis',
+      appendToBody: true,
       formatter: function(params) {
         if (!params || !params.length) return '';
         // Header: format the axis value (timestamp in milliseconds)
@@ -314,7 +315,7 @@ function generateStaticCode(chartType) {
   const templates = {
     bar: `const Component = () => {
   const option = {
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', appendToBody: true },
     xAxis: { type: 'category', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May'] },
     yAxis: { type: 'value' },
     series: [{ data: [400, 300, 500, 280, 590], type: 'bar', itemStyle: { color: '#0f62fe' } }]
@@ -324,7 +325,7 @@ function generateStaticCode(chartType) {
 };`,
     line: `const Component = () => {
   const option = {
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', appendToBody: true },
     xAxis: { type: 'category', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May'] },
     yAxis: { type: 'value' },
     series: [{ data: [400, 300, 500, 280, 590], type: 'line', smooth: true, itemStyle: { color: '#0f62fe' } }]
@@ -334,7 +335,7 @@ function generateStaticCode(chartType) {
 };`,
     area: `const Component = () => {
   const option = {
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', appendToBody: true },
     xAxis: { type: 'category', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May'], boundaryGap: false },
     yAxis: { type: 'value' },
     series: [{ data: [400, 300, 500, 280, 590], type: 'line', areaStyle: {}, smooth: true, itemStyle: { color: '#0f62fe' } }]
@@ -344,7 +345,7 @@ function generateStaticCode(chartType) {
 };`,
     pie: `const Component = () => {
   const option = {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    tooltip: { trigger: 'item', appendToBody: true, formatter: '{b}: {c} ({d}%)' },
     series: [{
       type: 'pie',
       radius: '70%',
@@ -362,7 +363,7 @@ function generateStaticCode(chartType) {
 };`,
     scatter: `const Component = () => {
   const option = {
-    tooltip: { trigger: 'item' },
+    tooltip: { trigger: 'item', appendToBody: true },
     xAxis: { type: 'value' },
     yAxis: { type: 'value' },
     series: [{ data: [[10, 20], [20, 30], [30, 25], [40, 45], [50, 35]], type: 'scatter', symbolSize: 15, itemStyle: { color: '#0f62fe' } }]
@@ -475,7 +476,7 @@ function generatePieCode(connectionId, queryRaw, queryType, xAxis, yAxis, transf
   }));
 
   const option = {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    tooltip: { trigger: 'item', appendToBody: true, formatter: '{b}: {c} ({d}%)' },
     series: [{
       type: 'pie',
       radius: '70%',
@@ -614,7 +615,7 @@ function generateScatterCode(connectionId, queryRaw, queryType, xAxis, yAxis, tr
   const scatterData = rows.map(r => [Number(r[xIdx]), Number(r[yIdx])]);
 
   const option = {
-    tooltip: { trigger: 'item' },
+    tooltip: { trigger: 'item', appendToBody: true },
     xAxis: { type: 'value'${xAxisLabel ? `, name: '${xAxisLabel}'` : ''} },
     yAxis: { type: 'value'${yAxisLabel ? `, name: '${yAxisLabel}'` : ''} },
     series: [{ data: scatterData, type: 'scatter', symbolSize: 15, itemStyle: { color: '#0f62fe' } }]

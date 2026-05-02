@@ -7,6 +7,15 @@ import * as React from 'react';
 import * as echarts from 'echarts';
 import 'echarts-gl'; // Required for 3D charts (scatter3D, bar3D, surface, etc.)
 import ReactECharts from 'echarts-for-react';
+
+// NOTE: We previously wrapped ReactECharts to inject tooltip.appendToBody so
+// tooltips overflow the panel's overflow:hidden. Removed because the wrapper
+// rebuilt `option` on every render, which combined with React Strict Mode's
+// double-invoke triggered a teardown bug in echarts-for-react
+// (sensor.disconnect on undefined). The theme-level appendToBody in
+// carbonEchartsTheme.js still applies to charts using theme="carbon-dark";
+// AI-generated charts that skip the theme prop need to set appendToBody
+// in their option block directly (system prompt instructs this).
 import { carbonLightTheme, carbonDarkTheme } from '../theme/carbonEchartsTheme';
 import { useData as useDataOriginal } from '../hooks/useData';
 import { transformData, toObjects, getValue, formatTimestamp, formatCellValue, buildTransformsFromMapping } from '../utils/dataTransforms';
@@ -37,6 +46,13 @@ import { useDataviewLayout } from '../hooks/useDataviewLayout';
 // Context to provide transforms to child components
 const TransformsContext = createContext(null);
 
+// Context that exposes the saved component's config ({title, name, description})
+// to anything inside the dynamically-eval'd component. AI-generated code often
+// destructures `config` from useData()'s return rather than from props — so
+// we mirror it onto the useData return value as a convenience to avoid
+// chart-by-chart fixes.
+const ComponentConfigContext = createContext(null);
+
 // Context that exposes the live data (columns + rows) and stream state
 // for the chart in this subtree. Populated by DynamicComponentLoader so
 // any child UI — notably the "show me the underlying data" modal — can
@@ -52,6 +68,7 @@ export const DataContext = createContext(null);
  */
 function useDataWithTransforms(params) {
   const transforms = useContext(TransformsContext);
+  const componentConfig = useContext(ComponentConfigContext);
   // Pass through all params including timeBucket for aggregated streaming
   const result = useDataOriginal(params);
 
@@ -67,7 +84,12 @@ function useDataWithTransforms(params) {
     ...result,
     data: transformedData,
     // Keep original data available if needed
-    rawData: result.data
+    rawData: result.data,
+    // Mirror the component's config onto the useData return so AI-generated
+    // code that destructures `config` from useData() keeps working. Reading
+    // from the prop (`const Component = ({ config }) => ...`) is still the
+    // canonical pattern; this is just a fallback for existing charts.
+    config: componentConfig,
   };
 }
 
@@ -95,7 +117,7 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, children = null }) {
+export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
@@ -246,6 +268,17 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
     }
   }, [code]);
 
+  // Build the `config` prop the component receives. Must be declared before
+  // any conditional early-return so hook order stays stable across renders.
+  // componentMeta is optional — undefined when the loader is invoked outside
+  // a saved-component context (AI preview, ad-hoc usage); fields fall back
+  // to empty strings so the component can `config?.title || 'fallback'`.
+  const config = useMemo(() => ({
+    title: componentMeta?.title || '',
+    name: componentMeta?.name || '',
+    description: componentMeta?.description || '',
+  }), [componentMeta?.title, componentMeta?.name, componentMeta?.description]);
+
   if (error) {
     return (
       <div style={{
@@ -310,16 +343,21 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
     );
   }
 
-  // Determine final props - if we fetched data, add it; otherwise use provided props
-  const finalProps = shouldFetchData
+  // Determine final props. Inject `config` AFTER caller props so we always
+  // win — AI-generated component code reads `config.title` without optional
+  // chaining, so config must always be a real object even if the caller
+  // accidentally passed `props={ config: undefined }` or left it off.
+  const baseProps = shouldFetchData
     ? { ...props, data: transformedFetchedData }
     : props;
+  const finalProps = { ...baseProps, config };
 
   // Show overlay error when reconnecting but we have existing data
   const showReconnectOverlay = shouldFetchData && dataError && transformedFetchedData && reconnecting;
 
   return (
     <TransformsContext.Provider value={transforms}>
+      <ComponentConfigContext.Provider value={config}>
       <DataContext.Provider value={{
         data: transformedFetchedData,
         loading: dataLoading,
@@ -375,6 +413,7 @@ export default function DynamicComponentLoader({ code, props = {}, dataMapping =
         )}
       </div>
       </DataContext.Provider>
+      </ComponentConfigContext.Provider>
     </TransformsContext.Provider>
   );
 }

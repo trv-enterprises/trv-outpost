@@ -377,6 +377,10 @@ export const carbonLightTheme = {
   },
 
   tooltip: {
+    // Render the tooltip in document.body so it isn't clipped by the
+    // panel's overflow:hidden. Without this, hovering near a panel edge
+    // hides the tooltip behind neighbouring panels.
+    appendToBody: true,
     backgroundColor: 'rgba(22, 22, 22, 0.9)',
     borderColor: carbonColors.gray70,
     borderWidth: 1,
@@ -770,6 +774,10 @@ export const carbonDarkTheme = {
   },
 
   tooltip: {
+    // Render the tooltip in document.body so it isn't clipped by the
+    // panel's overflow:hidden. Without this, hovering near a panel edge
+    // hides the tooltip behind neighbouring panels.
+    appendToBody: true,
     backgroundColor: 'rgba(244, 244, 244, 0.95)',
     borderColor: carbonColors.gray30,
     borderWidth: 1,

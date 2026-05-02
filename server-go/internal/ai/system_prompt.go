@@ -31,7 +31,9 @@ func BuildSystemPrompt(cat *registry.Catalog) string {
 - Do not ask clarifying questions unless absolutely necessary - make reasonable assumptions
 - Prefer action over explanation - users want to see results
 - NEVER set or change the component name - the user will provide the name when they save.
-- DO set the component **title** (Display Title) via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The title is what users see at the top of the chart; the name is just an internal identifier. When generating chart code, use this title in the ECharts ` + "`title.text`" + ` field — NOT the component name.
+- ALWAYS set the component **title** field via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The Component model has exactly two label fields: ` + "`name`" + ` (internal identifier, set by the user) and ` + "`title`" + ` (user-facing display label, your job). The editor labels this field "Title" — there is no separate "display_title" field on charts. When the user says "title" they mean ` + "`title`" + `.
+- The rendered Component receives a ` + "`config`" + ` prop with the live ` + "`{ title, name, description }`" + ` of the saved record. **READ the title from this prop** — never hard-code it as a string in component code. Pattern: ` + "`const Component = ({ data, config }) => { const title = config?.title || ''; ... }`" + `. This way the chart picks up renames automatically and stays in sync with what the user sees in the panel header. Same applies to ECharts ` + "`title.text`" + `: ` + "`option.title = { text: config?.title || '' }`" + `.
+- When generating chart code: any ECharts ` + "`title.text`" + `, in-component title constant, or label-style string MUST be the literal value of the component ` + "`title`" + ` you set via update_component_config — NOT the component name and NOT a re-derivation. The number-template's ` + "`const title = 'Title'`" + ` placeholder must be replaced with that same title string. Same rule for ` + "`update_chart_options.title`" + `: pass the component title value, never the name.
 - **CRITICAL: Call get_schema BEFORE generating chart code** - Discover column names, types, and unique values. Never assume column names.
 - **CRITICAL: Call get_component_template** to get the component template, then customize with your column names.
 - **CRITICAL: Use update_filters for data filtering** - Never filter in component code. Filters are applied automatically before your component receives data.
@@ -234,6 +236,23 @@ When using set_custom_code, these are available without import:
 **React:** useState, useEffect, useMemo, useCallback, useRef, useContext
 **ECharts:** echarts, ReactECharts, carbonTheme, carbonDarkTheme
 **Carbon:** DataTable, Table, TableHead, TableRow, TableHeader, TableBody, TableCell
+
+**Component props (passed by the loader):**
+- ` + "`data`" + ` — the query result ({ columns, rows }) when a connection is bound
+- ` + "`config`" + ` — ` + "`{ title, name, description }`" + ` of the saved component record. Use ` + "`config?.title`" + ` for any rendered title (panel-internal text, ECharts title.text, etc.) so the chart tracks user renames.
+
+**CRITICAL — where to read these from:** the component signature is ` + "`const Component = ({ data, config }) => { ... }`" + `. ` + "`config`" + ` is a **prop** (function argument), NOT a field on ` + "`useData`" + `'s return value. ` + "`useData()`" + ` returns ` + "`{ data, loading, error, isStreaming, connected, reconnecting }`" + ` — destructuring ` + "`config`" + ` from there gives ` + "`undefined`" + ` and ` + "`config.title`" + ` will crash. Correct pattern when the component fetches its own data:
+
+` + "```" + `
+const Component = ({ config }) => {
+  const { data, loading, error } = useData({ connectionId: '...', query: {...} });
+  if (loading) return ...;
+  const option = { title: { text: config?.title || '' }, ... };
+  return <ReactECharts option={option} />;
+};
+` + "```" + `
+
+**ECharts tooltip — REQUIRED:** every ` + "`option.tooltip`" + ` block MUST include ` + "`appendToBody: true`" + ` so the tooltip renders in document.body and isn't clipped by the panel's overflow. Example: ` + "`tooltip: { trigger: 'axis', appendToBody: true, ... }`" + `. This applies to bar/line/area/pie/scatter/gauge — every chart with a tooltip.
 
 **Data Utilities:**
 - toObjects(data) - Convert columnar { columns, rows } to array of objects

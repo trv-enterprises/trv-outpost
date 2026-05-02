@@ -1,3 +1,18 @@
 .tag-filter {
   min-width: 12rem;
+
+  // Trigger stays its set width so toolbar layout is predictable, but
+  // let the open menu and its items expand to fit long tag names. Mirrors
+  // the connection-filter rule in App.scss.
+  .cds--list-box__menu {
+    inline-size: max-content;
+    min-inline-size: 100%;
+    max-inline-size: 480px;
+  }
+
+  .cds--list-box__menu-item__option {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }

@@ -1918,6 +1918,7 @@ function DashboardViewerPage({ canDesign = false }) {
                               loaderProps={{
                                 code: chart.component_code,
                                 props: {},
+                                componentMeta: chart,
                                 dataMapping: chart.data_mapping,
                                 connectionId: chart.connection_id,
                                 queryConfig: chart.query_config,

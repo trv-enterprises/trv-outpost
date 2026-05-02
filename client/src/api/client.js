@@ -175,9 +175,13 @@ class APIClient {
       subtitle = 'The dashboard server is not responding. Check that it is running.';
     }
 
+    // Background failure detection — bell-only. Connection/server reachability
+    // checks fire from polling and stream loops with no user action behind them,
+    // so a corner toast is too loud (and stacks per-connection on busy
+    // dashboards). The bell badge is the right surface; users open it when
+    // they care.
     const payload = { kind: 'error', title, subtitle };
     try {
-      this.notificationHandlers.pushToast(payload);
       this.notificationHandlers.addNotification(payload);
     } catch (err) {
       console.warn('apiClient: notification handler error', err);

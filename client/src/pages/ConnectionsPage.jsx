@@ -137,15 +137,22 @@ function ConnectionsPage() {
         setConnections([]);
       }
 
-      // Build chart count map by connection_id
+      // Build component count map by connection_id. A single component can
+      // reference a connection through multiple fields (top-level connection_id
+      // for charts/controls, display_config.frigate_connection_id and
+      // display_config.mqtt_connection_id for Frigate/weather displays). De-dupe
+      // per component so referencing the same connection twice still counts once.
       if (chartsData.components) {
         const counts = {};
-        chartsData.components.forEach(chart => {
-          // API now returns connection_id instead of datasource_id
-          const connId = chart.connection_id || chart.connection_id;
-          if (connId) {
+        chartsData.components.forEach(component => {
+          const refs = new Set();
+          if (component.connection_id) refs.add(component.connection_id);
+          const dc = component.display_config;
+          if (dc?.frigate_connection_id) refs.add(dc.frigate_connection_id);
+          if (dc?.mqtt_connection_id) refs.add(dc.mqtt_connection_id);
+          refs.forEach(connId => {
             counts[connId] = (counts[connId] || 0) + 1;
-          }
+          });
         });
         setChartCounts(counts);
       }

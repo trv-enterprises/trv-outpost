@@ -70,7 +70,7 @@ Control types and their UI config:
 			Description: anthropic.String("Update basic component configuration like title, description and chart type. Note: Component name is set by the user when saving, do NOT try to set the name."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"title":       map[string]interface{}{"type": "string", "description": "Display title shown at the top of the chart on dashboards. Use a concise human-readable title (e.g., 'CPU Utilization') — this is what users see, NOT the internal name."},
+					"title":       map[string]interface{}{"type": "string", "description": "Component title — the user-facing display label, labeled 'Title' in the editor. Concise human-readable string like 'CPU Utilization' or 'Flow Rate by Location'. The same string MUST then be used verbatim for any ECharts title.text, in-code title constant, or update_chart_options.title — never the component name."},
 					"description": map[string]interface{}{"type": "string", "description": "Component description"},
 					"chart_type": map[string]interface{}{
 						"type":        "string",
@@ -196,7 +196,7 @@ Control types and their UI config:
 			Description: anthropic.String("Update ECharts-specific options for the chart"),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"title":            map[string]interface{}{"type": "string", "description": "Chart title displayed on the chart"},
+					"title":            map[string]interface{}{"type": "string", "description": "Chart title rendered inside the ECharts canvas. MUST equal the component title set via update_component_config — never the component name."},
 					"show_legend":      map[string]interface{}{"type": "boolean", "description": "Whether to show the legend"},
 					"legend_position":  map[string]interface{}{"type": "string", "description": "Legend position", "enum": []string{"top", "bottom", "left", "right"}},
 					"show_tooltip":     map[string]interface{}{"type": "boolean", "description": "Whether to show tooltips on hover"},

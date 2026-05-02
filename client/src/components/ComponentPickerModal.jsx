@@ -298,6 +298,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                   key={item.id}
                   className={`picker-tile ${selected?.id === item.id ? 'selected' : ''}`}
                   onClick={() => setSelected(item)}
+                  onDoubleClick={() => onSelect(item)}
                 >
                   <div className="picker-tile-header">
                     <div className={`picker-tile-icon picker-tile-icon--${getCategoryTagColor(item)}`}>

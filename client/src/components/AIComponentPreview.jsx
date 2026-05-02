@@ -475,6 +475,7 @@ function AIComponentPreview({ component, onNameChange }) {
               <div className="chart-preview-container">
                 <DynamicComponentLoader
                   code={component.component_code}
+                  componentMeta={component}
                   props={componentFetchesOwnData ? {} : { data: transformedData }}
                 />
               </div>

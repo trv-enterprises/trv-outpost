@@ -480,9 +480,19 @@ function ComponentsListPage() {
       });
     }
 
-    // Filter by connection
+    // Filter by connection. Components reference connections through one of
+    // three fields: top-level connection_id (charts/controls), or
+    // display_config.frigate_connection_id / mqtt_connection_id for
+    // Frigate/weather displays. Include all of them so a Frigate display's
+    // API and MQTT connections both filter correctly.
     if (connectionFilter !== 'all') {
-      result = result.filter(item => (item.connection_id || item.datasource_id) === connectionFilter);
+      result = result.filter(item => {
+        if (item.connection_id === connectionFilter) return true;
+        const dc = item.display_config;
+        if (dc?.frigate_connection_id === connectionFilter) return true;
+        if (dc?.mqtt_connection_id === connectionFilter) return true;
+        return false;
+      });
     }
 
     // Filter by tags (OR semantics)
@@ -697,6 +707,7 @@ function ComponentsListPage() {
           />
           <Dropdown
             id="connection-filter"
+            className="connection-filter-dropdown"
             label="Filter by connection"
             titleText=""
             items={[

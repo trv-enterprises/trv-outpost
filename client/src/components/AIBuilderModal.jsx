@@ -304,6 +304,7 @@ function AIBuilderModal({
             {previewCode ? (
               <DynamicComponentLoader
                 code={previewCode}
+                componentMeta={chart}
                 props={{}}
               />
             ) : (

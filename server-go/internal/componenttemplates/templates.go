@@ -45,6 +45,7 @@ var templates = map[string]string{
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
+      appendToBody: true,
       backgroundColor: '#262626',
       borderColor: '#393939',
       textStyle: { color: '#f4f4f4' },
@@ -92,7 +93,7 @@ var templates = map[string]string{
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    tooltip: { trigger: 'axis', appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
     grid: { left: 55, right: '2%', bottom: '1.5%', top: 40, containLabel: true },
     xAxis: {
       type: 'category',
@@ -122,6 +123,7 @@ var templates = map[string]string{
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
+      appendToBody: true,
       backgroundColor: '#262626',
       borderColor: '#393939',
       textStyle: { color: '#f4f4f4' }
@@ -164,7 +166,7 @@ var templates = map[string]string{
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    tooltip: { trigger: 'item', appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
     legend: { top: '5%', left: 'center', textStyle: { color: '#c6c6c6' } },
     series: [{
       type: 'pie',
@@ -185,7 +187,7 @@ var templates = map[string]string{
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    tooltip: { trigger: 'item', appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
     grid: { left: 55, right: '2%', bottom: '1.5%', top: 40, containLabel: true },
     xAxis: {
       type: 'value',
@@ -207,9 +209,11 @@ var templates = map[string]string{
   return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />;
 };`,
 
-	"number": `const Component = ({ data }) => {
+	"number": `const Component = ({ data, config }) => {
+  // Title comes from the saved component record (config.title) so renames
+  // in the editor flow through automatically. Don't hard-code it here.
+  const title = config?.title || '';
   // Configuration - customize these values
-  const title = 'Title';           // Replace with your metric title
   const units = 'units';           // Replace with your units (e.g., 'ms', '°F', 'req/s')
   const valueColumn = null;        // Set to column name, or null to auto-detect first numeric column
 
@@ -366,7 +370,7 @@ var templates = map[string]string{
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    tooltip: { appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
     grid: { left: 80, right: 80, bottom: 40, top: 40 },
     xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' } },
     yAxis: { type: 'category', data: yLabels, axisLabel: { color: '#c6c6c6' } },
@@ -400,7 +404,7 @@ var templates = map[string]string{
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    tooltip: { appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
     radar: {
       indicator: indicators,
       axisName: { color: '#c6c6c6' },
@@ -424,7 +428,7 @@ var templates = map[string]string{
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    tooltip: { trigger: 'item', appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
     legend: { top: '5%', left: 'center', textStyle: { color: '#c6c6c6' } },
     series: [{
       type: 'funnel',
@@ -498,9 +502,12 @@ const Component = ({ data }) => {
   const option = {
     backgroundColor: 'transparent',
 
-    // Tooltip with dark theme
+    // Tooltip with dark theme. appendToBody:true is REQUIRED so the
+    // tooltip overflows the panel's overflow:hidden — without it,
+    // tooltips near panel edges get clipped behind neighbouring panels.
     tooltip: {
       trigger: 'axis', // or 'item' for pie/scatter
+      appendToBody: true,
       backgroundColor: '#262626',
       borderColor: '#393939',
       textStyle: { color: '#f4f4f4' }

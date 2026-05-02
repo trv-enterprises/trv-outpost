@@ -547,3 +547,22 @@ button.cds--overflow-menu {
     color: var(--cds-text-secondary, #c6c6c6) !important;
   }
 }
+
+// Connection-filter dropdowns: keep the trigger at its set width so the
+// toolbar layout stays predictable, but let the open menu and its items
+// expand to fit long connection names. Connection names are often quite
+// long (e.g. "TRV-SRV-001 TS-STORE WS STATS") and the default Carbon
+// dropdown truncates with ellipsis at the trigger's width.
+.connection-filter-dropdown {
+  .cds--list-box__menu {
+    inline-size: max-content;
+    min-inline-size: 100%;
+    max-inline-size: 480px;
+  }
+
+  .cds--list-box__menu-item__option {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}

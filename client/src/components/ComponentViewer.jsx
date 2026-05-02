@@ -132,6 +132,7 @@ export default function ComponentViewer({ componentId, onEdit, onDelete }) {
         <div className="preview-content">
           <DynamicComponentLoader
             code={component.component_code}
+            componentMeta={component}
             props={component.metadata?.props || {}}
           />
         </div>

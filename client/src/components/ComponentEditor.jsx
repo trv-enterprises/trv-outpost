@@ -652,93 +652,209 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       }
       // Snapshot mirrors the post-load values for every field in the diff —
       // including the legacy y_axis_label → y_axis_labels seeding and the
-      // default aggregation shape — so the form doesn't read as dirty on entry.
+      // default aggregation shape — so the form doesn't read as dirty on
+      // entry. Must list every field handleSave reads into the payload;
+      // anything missing here silently won't trip the Save button.
       const loadedYAxisLabels = (() => {
         const arr = chart.data_mapping?.y_axis_labels;
         if (Array.isArray(arr) && arr.length > 0) return arr;
         if (chart.data_mapping?.y_axis_label) return [chart.data_mapping.y_axis_label];
         return [];
       })();
+      const loadedVisibleSnap = chart.data_mapping?.visible_columns;
+      const loadedTb = chart.data_mapping?.time_bucket;
+      const loadedTbValid = loadedTb?.interval > 0 && !!loadedTb?.timestamp_col && (loadedTb?.value_cols?.length || 0) > 0;
+      const loadedSw = chart.data_mapping?.sliding_window;
+      const loadedParser = chart.data_mapping?.parser;
+      const loadedParserPreset = (() => {
+        if (!loadedParser?.data_path && !loadedParser?.timestamp_field) return 'none';
+        if (loadedParser.data_path === 'data' && loadedParser.timestamp_field === 'timestamp' && loadedParser.timestamp_scale === 'ns') return 'tsstore';
+        return 'custom';
+      })();
+      const loadedQueryType = chart.query_config?.type || 'sql';
+      const loadedTsRaw = loadedQueryType === 'tsstore' ? (chart.query_config?.raw || 'newest') : '';
+      const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:') ? 'since' : (loadedTsRaw || 'since');
+      const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
+      const loadedTsstoreLimit = chart.query_config?.params?.limit || 100;
+      const loadedEdgelakeDatabase = loadedQueryType === 'edgelake' ? (chart.query_config?.params?.database || '') : '';
+      const loadedControlConfigSnap = chart.control_config || null;
+      if (loadedControlConfigSnap && chart.connection_id && !loadedControlConfigSnap.connection_id) {
+        loadedControlConfigSnap.connection_id = chart.connection_id;
+      }
       setInitialState(JSON.stringify({
         name: chart.name || '',
+        title: chart.title || '',
         description: chart.description || '',
+        namespace: chart.namespace || 'default',
         tags: chart.tags || [],
+        componentType: chart.component_type || 'chart',
         chartType: chart.chart_type || 'bar',
+        controlConfig: loadedControlConfigSnap,
+        displayConfig: chart.display_config || null,
         connectionId: chart.connection_id || '',
         queryRaw: chart.query_config?.raw || '',
+        queryType: loadedQueryType,
+        tsstoreQueryType: loadedTsstoreQueryType,
+        tsstoreSinceDuration: loadedTsstoreSinceDuration,
+        tsstoreLimit: loadedTsstoreLimit,
+        edgelakeDatabase: loadedEdgelakeDatabase,
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
         xAxisFormat: chart.data_mapping?.x_axis_format || 'chart',
         yAxisColumns: chart.data_mapping?.y_axis || [],
         yAxisLabel: chart.data_mapping?.y_axis_label || '',
         yAxisLabels: loadedYAxisLabels,
+        groupByColumn: chart.data_mapping?.group_by || '',
+        seriesColumn: chart.data_mapping?.series || '',
         filters: chart.data_mapping?.filters || [],
         aggregation: chart.data_mapping?.aggregation || { type: '', sortBy: '', field: '', count: 10 },
+        slidingWindowEnabled: loadedSw?.duration > 0 && !!loadedSw?.timestamp_col,
+        slidingWindowDuration: loadedSw?.duration || 300,
+        slidingWindowTimestampCol: loadedSw?.timestamp_col || '',
+        timeBucketEnabled: loadedTbValid,
+        timeBucketInterval: loadedTb?.interval || 60,
+        timeBucketFunction: loadedTb?.function || 'avg',
+        timeBucketValueCols: loadedTb?.value_cols || [],
+        timeBucketTimestampCol: loadedTb?.timestamp_col || '',
         sortBy: chart.data_mapping?.sort_by || '',
         sortOrder: chart.data_mapping?.sort_order || 'desc',
         limitRows: chart.data_mapping?.limit || 0,
-        seriesColumn: chart.data_mapping?.series || '',
-        groupByColumn: chart.data_mapping?.group_by || '',
-        showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code)
+        columnAliases: chart.data_mapping?.column_aliases || {},
+        visibleColumns: Array.isArray(loadedVisibleSnap) && loadedVisibleSnap.length > 0 ? loadedVisibleSnap : null,
+        parserPreset: loadedParserPreset,
+        parserDataPath: loadedParser?.data_path || '',
+        parserTimestampField: loadedParser?.timestamp_field || '',
+        parserTimestampScale: loadedParser?.timestamp_scale || '',
+        componentCode: chart.component_code || '',
+        showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code),
       }));
     } else {
-      // New chart - reset to defaults; snapshot mirrors them.
+      // New chart - reset to defaults; snapshot mirrors them. chartOptions
+      // is intentionally NOT in the snapshot: numberSize lazy-loads from an
+      // admin setting after mount, which would otherwise dirty the form on
+      // its own. Edits to chart options that come from user interaction
+      // travel via setState calls that pair with another tracked field
+      // changing (chartType selection, etc.), so this is safe in practice.
       resetForm();
       setInitialState(JSON.stringify({
         name: '',
+        title: '',
         description: '',
+        namespace: activeNamespace || 'default',
         tags: [],
+        componentType: 'chart',
         chartType: 'bar',
+        controlConfig: null,
+        displayConfig: null,
         connectionId: '',
         queryRaw: '',
+        queryType: 'sql',
+        tsstoreQueryType: 'newest',
+        tsstoreSinceDuration: '1h',
+        tsstoreLimit: 100,
+        edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
         xAxisFormat: 'chart',
         yAxisColumns: [],
         yAxisLabel: '',
         yAxisLabels: [],
+        groupByColumn: '',
+        seriesColumn: '',
         filters: [],
         aggregation: { type: '', sortBy: '', field: '', count: 10 },
+        slidingWindowEnabled: false,
+        slidingWindowDuration: 300,
+        slidingWindowTimestampCol: '',
+        timeBucketEnabled: false,
+        timeBucketInterval: 60,
+        timeBucketFunction: 'avg',
+        timeBucketValueCols: [],
+        timeBucketTimestampCol: '',
         sortBy: '',
         sortOrder: 'desc',
         limitRows: 0,
-        seriesColumn: '',
-        groupByColumn: '',
-        showCustomCode: false
+        columnAliases: {},
+        visibleColumns: null,
+        parserPreset: 'none',
+        parserDataPath: '',
+        parserTimestampField: '',
+        parserTimestampScale: '',
+        componentCode: '',
+        showCustomCode: false,
       }));
     }
     setHasChanges(false);
   }, [chart]);
 
-  // Track changes
+  // Track changes. Every field handleSave reads into the payload must
+  // appear in BOTH the snapshot above and this diff, otherwise edits to
+  // it silently won't dirty the form. chartOptions is excluded — see the
+  // note in the new-chart branch.
   useEffect(() => {
     if (!initialState) return;
     const currentState = JSON.stringify({
       name,
+      title,
       description,
+      namespace,
       tags,
+      componentType,
       chartType,
+      controlConfig,
+      displayConfig,
       connectionId: selectedConnectionId,
       queryRaw,
+      queryType,
+      tsstoreQueryType,
+      tsstoreSinceDuration,
+      tsstoreLimit,
+      edgelakeDatabase,
       xAxisColumn,
       xAxisLabel,
       xAxisFormat,
       yAxisColumns,
       yAxisLabel,
       yAxisLabels,
+      groupByColumn,
+      seriesColumn,
       filters,
       aggregation,
+      slidingWindowEnabled,
+      slidingWindowDuration,
+      slidingWindowTimestampCol,
+      timeBucketEnabled,
+      timeBucketInterval,
+      timeBucketFunction,
+      timeBucketValueCols,
+      timeBucketTimestampCol,
       sortBy,
       sortOrder,
       limitRows,
-      seriesColumn,
-      groupByColumn,
-      showCustomCode
+      columnAliases,
+      visibleColumns,
+      parserPreset,
+      parserDataPath,
+      parserTimestampField,
+      parserTimestampScale,
+      componentCode,
+      showCustomCode,
     });
     const dirty = currentState !== initialState;
     setHasChanges(dirty);
     if (onDirtyChange) onDirtyChange(dirty);
-  }, [name, description, tags, chartType, selectedConnectionId, queryRaw, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, seriesColumn, groupByColumn, showCustomCode, initialState, onDirtyChange]);
+  }, [
+    name, title, description, namespace, tags, componentType, chartType,
+    controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, edgelakeDatabase,
+    xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels,
+    groupByColumn, seriesColumn, filters, aggregation,
+    slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
+    timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
+    sortBy, sortOrder, limitRows, columnAliases, visibleColumns,
+    parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
+    componentCode, showCustomCode, initialState, onDirtyChange,
+  ]);
 
   // Notify parent of validity changes
   useEffect(() => {
@@ -1319,13 +1435,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setAggregation(prev => ({ ...prev, [field]: value }));
   };
 
-  // Expose methods via ref for modal usage
+  // Expose methods via ref for modal usage. Route every call through a
+  // latest-value ref so the imperative methods always read the freshest
+  // closure — without this, useImperativeHandle's deps array would freeze
+  // handleSave at whatever state existed last time `name` or `hasChanges`
+  // changed, dropping connection_id / data_mapping edits made afterward.
+  const latestRef = useRef({ handleSave, name, hasChanges });
+  latestRef.current = { handleSave, name, hasChanges };
   useImperativeHandle(ref, () => ({
-    save: handleSave,
-    getName: () => name,
-    isValid: () => !!name.trim(),
-    hasUnsavedChanges: () => hasChanges,
-  }), [name, hasChanges]);
+    save: () => latestRef.current.handleSave(),
+    getName: () => latestRef.current.name,
+    isValid: () => !!latestRef.current.name.trim(),
+    hasUnsavedChanges: () => latestRef.current.hasChanges,
+  }), []);
 
   return (
     <div className={`component-editor ${className}`}>
@@ -1442,7 +1564,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         <div className="metadata-row">
           <TextInput
             id="chart-title"
-            labelText="Display Title"
+            labelText="Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
@@ -3142,6 +3264,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         the component doesn't already provide it. */}
                     <DynamicComponentLoader
                       code={generatedCode}
+                      componentMeta={{ title, name, description }}
                       connectionId={selectedConnectionId || null}
                       queryConfig={selectedConnectionId ? {
                         raw: selectedDatasource?.type === 'tsstore'

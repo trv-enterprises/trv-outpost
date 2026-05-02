@@ -10,7 +10,8 @@ import {
   Search,
   OverflowMenu,
   OverflowMenuItem,
-  Button
+  Button,
+  Dropdown
 } from '@carbon/react';
 import {
   Dashboard,
@@ -52,6 +53,8 @@ function DashboardTileViewPage() {
   // component state only — no session/user-config persistence yet.
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [tagFilter, setTagFilter] = useState([]);
+  // Single-select connection filter. 'all' = no filter.
+  const [connectionFilter, setConnectionFilter] = useState('all');
   // Sort mode for the tile grid. 'manual' means honour the user's
   // drag-reorder; any other value disables drag and applies a key+dir
   // sort. Defaults to 'manual' for backwards-compat (existing users with
@@ -316,6 +319,26 @@ function DashboardTileViewPage() {
       });
     }
 
+    // Connection filter: dashboard matches when any of its panels'
+    // components reference the selected connection — through top-level
+    // connection_id (charts/controls) OR display_config.frigate_connection_id
+    // / mqtt_connection_id (Frigate/weather displays).
+    if (connectionFilter !== 'all') {
+      result = result.filter(d => {
+        if (!d.panels || d.panels.length === 0) return false;
+        return d.panels.some(panel => {
+          if (!panel.chart_id) return false;
+          const c = charts[panel.chart_id];
+          if (!c) return false;
+          if (c.connection_id === connectionFilter) return true;
+          const dc = c.display_config;
+          if (dc?.frigate_connection_id === connectionFilter) return true;
+          if (dc?.mqtt_connection_id === connectionFilter) return true;
+          return false;
+        });
+      });
+    }
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(d =>
@@ -346,7 +369,7 @@ function DashboardTileViewPage() {
       return 0;
     });
     return sorted;
-  }, [dashboards, namespaceFilter, tagFilter, searchTerm, tileOrder, sortKey, sortDirection]);
+  }, [dashboards, namespaceFilter, tagFilter, connectionFilter, charts, searchTerm, tileOrder, sortKey, sortDirection]);
 
   if (loading) {
     return (
@@ -371,17 +394,6 @@ function DashboardTileViewPage() {
           <Dashboard size={24} />
           <h1>Dashboards</h1>
         </div>
-        {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
-          <Button
-            kind="ghost"
-            size="sm"
-            renderIcon={Reset}
-            onClick={handleResetOrder}
-            title="Discard your manual tile order and revert to most-recently-updated first"
-          >
-            Reset order
-          </Button>
-        )}
       </div>
       <div className="header-toolbar">
         <div className="header-search">
@@ -404,16 +416,34 @@ function DashboardTileViewPage() {
           selected={tagFilter}
           onChange={setTagFilter}
         />
+        <Dropdown
+          id="connection-filter-view-dashboards"
+          className="connection-filter-dropdown"
+          label="Filter by connection"
+          titleText=""
+          items={[
+            { id: 'all', text: 'All Connections' },
+            ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
+          ]}
+          itemToString={(item) => item?.text || ''}
+          selectedItem={{ id: connectionFilter, text: connectionFilter === 'all' ? 'All Connections' : (connections[connectionFilter] || 'Unknown') }}
+          onChange={({ selectedItem }) => {
+            setConnectionFilter(selectedItem?.id || 'all');
+          }}
+          size="md"
+        />
         <ResetFiltersButton
           active={
             !!searchTerm ||
             namespaceFilter.length > 0 ||
-            tagFilter.length > 0
+            tagFilter.length > 0 ||
+            connectionFilter !== 'all'
           }
           onReset={() => {
             setSearchTerm('');
             setNamespaceFilter([]);
             setTagFilter([]);
+            setConnectionFilter('all');
           }}
         />
         <SortMenu
@@ -427,6 +457,17 @@ function DashboardTileViewPage() {
             { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
           ]}
         />
+        {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
+          <Button
+            kind="ghost"
+            size="sm"
+            renderIcon={Reset}
+            onClick={handleResetOrder}
+            title="Discard your manual tile order and revert to most-recently-updated first"
+          >
+            Reset order
+          </Button>
+        )}
       </div>
 
       {filteredDashboards.length === 0 ? (

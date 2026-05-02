@@ -27,7 +27,8 @@ import {
   Switch,
   Tag,
   Tooltip,
-  Checkbox
+  Checkbox,
+  Dropdown
 } from '@carbon/react';
 import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype, Download, Close, View } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -70,6 +71,9 @@ function DashboardsListPage() {
   // so users can peek at other namespaces without changing where new
   // records land.
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
+  // Single-select connection filter. 'all' = no filter; otherwise the
+  // connection id we're matching against any panel's component refs.
+  const [connectionFilter, setConnectionFilter] = useState(savedFilters.connection || 'all');
   // Export mode layers a selection UI on top of the table. When on:
   // the Create button hides, rows show a checkbox, and a batch-action
   // bar at the top of the list shows selection count + Export button.
@@ -87,6 +91,7 @@ function DashboardsListPage() {
       view: viewMode,
       tags: tagFilter,
       namespaces: namespaceFilter,
+      connection: connectionFilter,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('dashboards', {
@@ -94,7 +99,7 @@ function DashboardsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, connectionFilter]);
 
   // Fetch dashboards, charts, and connections from API
   useEffect(() => {
@@ -233,6 +238,27 @@ function DashboardsListPage() {
       });
     }
 
+    // Filter by connection. A dashboard matches when any of its panels'
+    // components reference the selected connection — through the top-level
+    // connection_id (charts/controls) OR display_config.frigate_connection_id
+    // / mqtt_connection_id (Frigate/weather displays). Mirrors the union we
+    // do for the connection-usage count on the connections list page.
+    if (connectionFilter !== 'all') {
+      result = result.filter(dashboard => {
+        if (!dashboard.panels || dashboard.panels.length === 0) return false;
+        return dashboard.panels.some(panel => {
+          if (!panel.chart_id) return false;
+          const c = charts[panel.chart_id];
+          if (!c) return false;
+          if (c.connection_id === connectionFilter) return true;
+          const dc = c.display_config;
+          if (dc?.frigate_connection_id === connectionFilter) return true;
+          if (dc?.mqtt_connection_id === connectionFilter) return true;
+          return false;
+        });
+      });
+    }
+
     // Filter by search term (matches name, description, or connection names)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -273,14 +299,14 @@ function DashboardsListPage() {
     });
 
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, charts, connections, tagFilter, namespaceFilter]);
+  }, [dashboards, searchTerm, sortKey, sortDirection, charts, connections, tagFilter, namespaceFilter, connectionFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'panels', header: 'Panels', isSortable: true },
-    { key: 'connections', header: 'Data Sources', isSortable: false },
+    { key: 'connections', header: 'Connections', isSortable: false },
     { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
@@ -365,16 +391,34 @@ function DashboardsListPage() {
             selected={tagFilter}
             onChange={setTagFilter}
           />
+          <Dropdown
+            id="connection-filter-dashboards"
+            className="connection-filter-dropdown"
+            label="Filter by connection"
+            titleText=""
+            items={[
+              { id: 'all', text: 'All Connections' },
+              ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
+            ]}
+            itemToString={(item) => item?.text || ''}
+            selectedItem={{ id: connectionFilter, text: connectionFilter === 'all' ? 'All Connections' : (connections[connectionFilter] || 'Unknown') }}
+            onChange={({ selectedItem }) => {
+              setConnectionFilter(selectedItem?.id || 'all');
+            }}
+            size="md"
+          />
           <ResetFiltersButton
             active={
               !!searchTerm ||
               namespaceFilter.length > 0 ||
-              tagFilter.length > 0
+              tagFilter.length > 0 ||
+              connectionFilter !== 'all'
             }
             onReset={() => {
               setSearchTerm('');
               setNamespaceFilter([]);
               setTagFilter([]);
+              setConnectionFilter('all');
             }}
           />
           {viewMode === 'tile' && (
