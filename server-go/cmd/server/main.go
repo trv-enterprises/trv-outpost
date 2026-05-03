@@ -190,8 +190,8 @@ func main() {
 	clerkPublishable := os.Getenv("CLERK_PUBLISHABLE_KEY")
 
 	// Initialize services
-	connectionService := service.NewConnectionService(connectionRepo)
-	componentService := service.NewComponentService(componentRepo)
+	connectionService := service.NewConnectionService(connectionRepo, componentRepo, deviceRepo)
+	componentService := service.NewComponentService(componentRepo, dashboardRepo)
 	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, componentRepo, connectionRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, componentRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg, clerkPublishable)

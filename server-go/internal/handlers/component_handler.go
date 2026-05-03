@@ -5,6 +5,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -291,20 +292,29 @@ func (h *ComponentHandler) UpdateComponent(c *gin.Context) {
 	c.JSON(http.StatusOK, component)
 }
 
-// DeleteComponent deletes all versions of a component
+// DeleteComponent deletes all versions of a component. Returns 409
+// with a usage payload when dashboards still reference the component.
 // @Summary Delete a component
 // @Description Delete all versions of a component by ID
 // @Tags components
 // @Param id path string true "Component ID"
 // @Success 204
 // @Failure 404 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /components/{id} [delete]
 func (h *ComponentHandler) DeleteComponent(c *gin.Context) {
 	id := c.Param("id")
 
-	err := h.service.DeleteComponent(c.Request.Context(), id)
+	usage, err := h.service.DeleteComponent(c.Request.Context(), id)
 	if err != nil {
+		if errors.Is(err, service.ErrComponentInUse) {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": err.Error(),
+				"usage": usage,
+			})
+			return
+		}
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
 			return

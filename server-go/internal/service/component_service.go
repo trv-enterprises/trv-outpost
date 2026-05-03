@@ -6,21 +6,44 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
 
-// ComponentService handles component business logic
-type ComponentService struct {
-	repo *repository.ComponentRepository
+// ErrComponentInUse is returned by DeleteComponent when one or more
+// dashboards still have a panel pointing at the component. The handler
+// maps this to HTTP 409 Conflict and returns the offender list in the
+// response body so the frontend can render a clear "cannot delete —
+// referenced by ..." dialog.
+var ErrComponentInUse = errors.New("component is in use")
+
+// ComponentUsage describes the entities referencing a component. Empty
+// slice means no dashboards reference it. The handler serializes this
+// struct under "usage" in the 409 response.
+type ComponentUsage struct {
+	Dashboards []EntityRef `json:"dashboards"`
 }
 
-// NewComponentService creates a new component service
-func NewComponentService(repo *repository.ComponentRepository) *ComponentService {
+// ComponentService handles component business logic
+type ComponentService struct {
+	repo          *repository.ComponentRepository
+	dashboardRepo *repository.DashboardRepository
+}
+
+// NewComponentService creates a new component service. The dashboard
+// repo is used only for the delete-guard cross-collection lookup; it
+// may be nil during early bootstrap (delete will then proceed without
+// checking references). Production main.go always passes a live repo.
+func NewComponentService(
+	repo *repository.ComponentRepository,
+	dashboardRepo *repository.DashboardRepository,
+) *ComponentService {
 	return &ComponentService{
-		repo: repo,
+		repo:          repo,
+		dashboardRepo: dashboardRepo,
 	}
 }
 
@@ -293,22 +316,52 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 	return component, nil
 }
 
-// DeleteComponent deletes all versions of a component by ID
-func (s *ComponentService) DeleteComponent(ctx context.Context, id string) error {
+// DeleteComponent deletes all versions of a component by ID, blocking
+// the delete if any dashboard panels still reference it. Callers should
+// detect ErrComponentInUse via errors.Is and use the returned
+// ComponentUsage to render a useful error message.
+func (s *ComponentService) DeleteComponent(ctx context.Context, id string) (*ComponentUsage, error) {
 	// Check if component exists
 	component, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("error retrieving component: %w", err)
+		return nil, fmt.Errorf("error retrieving component: %w", err)
 	}
 	if component == nil {
-		return fmt.Errorf("component not found")
+		return nil, fmt.Errorf("component not found")
+	}
+
+	usage, err := s.componentUsage(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error checking component usage: %w", err)
+	}
+	if usage != nil && len(usage.Dashboards) > 0 {
+		return usage, ErrComponentInUse
 	}
 
 	if err := s.repo.DeleteAllVersions(ctx, id); err != nil {
-		return fmt.Errorf("error deleting component: %w", err)
+		return nil, fmt.Errorf("error deleting component: %w", err)
 	}
 
-	return nil
+	return nil, nil
+}
+
+// componentUsage returns a non-nil *ComponentUsage describing every
+// dashboard whose panels reference the given component. If the
+// dashboard repo is unavailable (nil), reports an empty list rather
+// than failing.
+func (s *ComponentService) componentUsage(ctx context.Context, id string) (*ComponentUsage, error) {
+	usage := &ComponentUsage{}
+	if s.dashboardRepo == nil {
+		return usage, nil
+	}
+	dashes, err := s.dashboardRepo.FindByComponentID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("listing dashboards: %w", err)
+	}
+	for _, d := range dashes {
+		usage.Dashboards = append(usage.Dashboards, EntityRef{ID: d.ID, Name: d.Name})
+	}
+	return usage, nil
 }
 
 // DeleteComponentVersion deletes a specific version of a component

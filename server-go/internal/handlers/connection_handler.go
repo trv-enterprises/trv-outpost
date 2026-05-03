@@ -5,6 +5,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -172,7 +173,10 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, enrichWithCapabilities(datasource.SanitizeForAPI()))
 }
 
-// DeleteConnection handles datasource deletion
+// DeleteConnection handles datasource deletion. Returns 409 with a
+// usage payload when components or devices still reference the
+// connection — the frontend renders that into a clear "cannot delete"
+// dialog with the offender list.
 // @Summary Delete a datasource
 // @Description Delete a datasource by ID
 // @Tags datasources
@@ -180,14 +184,22 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 // @Success 204
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
 // @Router /datasources/{id} [delete]
 func (h *ConnectionHandler) DeleteConnection(c *gin.Context) {
 	id := c.Param("id")
 
-	err := h.service.DeleteConnection(c.Request.Context(), id)
+	usage, err := h.service.DeleteConnection(c.Request.Context(), id)
 	if err != nil {
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if errors.Is(err, service.ErrConnectionInUse) {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": err.Error(),
+				"usage": usage,
+			})
+			return
+		}
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

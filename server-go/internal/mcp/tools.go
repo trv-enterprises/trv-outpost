@@ -364,7 +364,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if err := r.connectionService.DeleteConnection(context.Background(), id); err != nil {
+			if _, err := r.connectionService.DeleteConnection(context.Background(), id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Connection %s deleted", id)}, nil
@@ -847,7 +847,7 @@ func (r *ToolRegistry) registerComponentTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if err := r.componentService.DeleteComponent(context.Background(), id); err != nil {
+			if _, err := r.componentService.DeleteComponent(context.Background(), id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Component %s deleted", id)}, nil

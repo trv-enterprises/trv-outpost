@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,15 +22,48 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
 
-// ConnectionService handles connection business logic
-type ConnectionService struct {
-	repo *repository.ConnectionRepository
+// ErrConnectionInUse is returned by DeleteConnection when components or
+// devices still reference the connection. The handler maps this to HTTP
+// 409 Conflict and returns the offender list in the response body so the
+// frontend can render a clear "cannot delete — referenced by ..." dialog.
+var ErrConnectionInUse = errors.New("connection is in use")
+
+// ConnectionUsage describes the entities referencing a connection. Empty
+// slices mean nothing of that kind references it. The handler serializes
+// this struct under "usage" in the 409 response.
+type ConnectionUsage struct {
+	Components []EntityRef `json:"components"`
+	Devices    []EntityRef `json:"devices"`
 }
 
-// NewConnectionService creates a new connection service
-func NewConnectionService(repo *repository.ConnectionRepository) *ConnectionService {
+// EntityRef is a minimal {id, name} pair so the frontend can show
+// human-readable references without a second API round-trip.
+type EntityRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ConnectionService handles connection business logic
+type ConnectionService struct {
+	repo          *repository.ConnectionRepository
+	componentRepo *repository.ComponentRepository
+	deviceRepo    *repository.DeviceRepository
+}
+
+// NewConnectionService creates a new connection service. The component
+// and device repos are used only for the delete-guard cross-collection
+// lookup; they may be nil during early bootstrap, in which case the
+// guard is permissive (delete proceeds without checking references).
+// Production main.go always passes live repos.
+func NewConnectionService(
+	repo *repository.ConnectionRepository,
+	componentRepo *repository.ComponentRepository,
+	deviceRepo *repository.DeviceRepository,
+) *ConnectionService {
 	return &ConnectionService{
-		repo: repo,
+		repo:          repo,
+		componentRepo: componentRepo,
+		deviceRepo:    deviceRepo,
 	}
 }
 
@@ -295,22 +329,68 @@ func (s *ConnectionService) resolveMaskedSecrets(ctx context.Context, req *model
 	preserveSecrets(&req.Config, &existing.Config)
 }
 
-// DeleteConnection deletes a connection by ID
-func (s *ConnectionService) DeleteConnection(ctx context.Context, id string) error {
+// DeleteConnection deletes a connection by ID, blocking the delete if
+// any components or devices still reference it. Callers should detect
+// ErrConnectionInUse via errors.Is and call ConnectionUsage to retrieve
+// the offender list (also returned alongside the error).
+func (s *ConnectionService) DeleteConnection(ctx context.Context, id string) (*ConnectionUsage, error) {
 	// Check if connection exists
-	connection, err := s.repo.FindByID(ctx, id)
+	conn, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("error retrieving connection: %w", err)
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
-	if connection == nil {
-		return fmt.Errorf("connection not found")
+	if conn == nil {
+		return nil, fmt.Errorf("connection not found")
+	}
+
+	usage, err := s.connectionUsage(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error checking connection usage: %w", err)
+	}
+	if usage != nil && (len(usage.Components) > 0 || len(usage.Devices) > 0) {
+		return usage, ErrConnectionInUse
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("error deleting connection: %w", err)
+		return nil, fmt.Errorf("error deleting connection: %w", err)
 	}
 
-	return nil
+	return nil, nil
+}
+
+// connectionUsage returns a non-nil *ConnectionUsage describing every
+// component and device that references the given connection. If the
+// component or device repos are unavailable (nil), that part of the
+// usage is reported as empty rather than failing — see the constructor
+// note about bootstrap-time permissiveness.
+func (s *ConnectionService) connectionUsage(ctx context.Context, id string) (*ConnectionUsage, error) {
+	usage := &ConnectionUsage{}
+
+	if s.componentRepo != nil {
+		comps, err := s.componentRepo.FindByConnectionID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("listing components: %w", err)
+		}
+		for _, c := range comps {
+			name := c.Title
+			if name == "" {
+				name = c.Name
+			}
+			usage.Components = append(usage.Components, EntityRef{ID: c.ID, Name: name})
+		}
+	}
+
+	if s.deviceRepo != nil {
+		devs, err := s.deviceRepo.FindByConnectionID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("listing devices: %w", err)
+		}
+		for _, d := range devs {
+			usage.Devices = append(usage.Devices, EntityRef{ID: d.ID.Hex(), Name: d.Name})
+		}
+	}
+
+	return usage, nil
 }
 
 // TestConnection tests a connection connection without saving

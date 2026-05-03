@@ -33,6 +33,7 @@ import { TrashCan, DataBase, List, Grid, Edit, Information, Sql, Api, Document, 
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
+import { useNotifications } from '../context/NotificationContext';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
@@ -49,6 +50,7 @@ import './ConnectionsPage.scss';
  */
 function ConnectionsPage() {
   const navigate = useNavigate();
+  const { pushToast } = useNotifications();
 
   // Get saved filters from session store
   const savedFilters = { ...getListPrefs('connections'), ...getFilters('connections') };
@@ -173,13 +175,29 @@ function ConnectionsPage() {
 
   const handleDelete = async (e, connection) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${connection.name}"?`)) {
-      try {
-        await apiClient.deleteConnection(connection.id);
-        fetchConnections();
-      } catch (err) {
-        alert(`Error: ${err.message}`);
+    if (!window.confirm(`Are you sure you want to delete "${connection.name}"?`)) return;
+    try {
+      await apiClient.deleteConnection(connection.id);
+      fetchConnections();
+    } catch (err) {
+      // Server returns HTTP 409 + { usage: { components, devices } } when
+      // the connection still has references. Render a clear toast that
+      // names the blocking entities so the user knows what to clean up.
+      if (err.status === 409 && err.body?.usage) {
+        const u = err.body.usage;
+        const parts = [];
+        const comps = (u.components || []).map(c => c.name).filter(Boolean);
+        const devs = (u.devices || []).map(d => d.name).filter(Boolean);
+        if (comps.length) parts.push(`${comps.length} component${comps.length === 1 ? '' : 's'}: ${comps.slice(0, 5).join(', ')}${comps.length > 5 ? `, +${comps.length - 5} more` : ''}`);
+        if (devs.length) parts.push(`${devs.length} device${devs.length === 1 ? '' : 's'}: ${devs.slice(0, 5).join(', ')}${devs.length > 5 ? `, +${devs.length - 5} more` : ''}`);
+        pushToast({
+          kind: 'error',
+          title: `Cannot delete "${connection.name}"`,
+          subtitle: `Still referenced by ${parts.join('; ')}. Remove those references first.`,
+        });
+        return;
       }
+      pushToast({ kind: 'error', title: 'Delete failed', subtitle: err.message });
     }
   };
 

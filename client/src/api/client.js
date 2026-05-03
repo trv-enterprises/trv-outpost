@@ -322,7 +322,14 @@ class APIClient {
         if (isConnectionFailure) {
           this._reportConnectionFailure(connectionId);
         }
-        throw new Error(data.error || `HTTP ${response.status}`);
+        // Attach the HTTP status and the parsed body to the thrown
+        // Error so callers can branch on 409 (in-use guard) and read
+        // the usage payload without re-fetching. Existing callers that
+        // only inspect err.message keep working.
+        const apiErr = new Error(data.error || `HTTP ${response.status}`);
+        apiErr.status = status;
+        apiErr.body = data;
+        throw apiErr;
       }
 
       return data;

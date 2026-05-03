@@ -69,7 +69,16 @@ function ComponentDeleteDialog({ open, chart, onClose, onDelete }) {
       onDelete();
       onClose();
     } catch (err) {
-      setError(err.message);
+      // 409 means dashboards still reference this component. Build a
+      // useful message naming the dashboards so the user knows where
+      // to remove the component before retrying.
+      if (err.status === 409 && err.body?.usage?.dashboards?.length) {
+        const dashes = err.body.usage.dashboards.map(d => d.name).filter(Boolean);
+        const list = dashes.slice(0, 5).join(', ') + (dashes.length > 5 ? `, +${dashes.length - 5} more` : '');
+        setError(`Cannot delete: still used by ${dashes.length} dashboard${dashes.length === 1 ? '' : 's'} (${list}). Remove the panel reference${dashes.length === 1 ? '' : 's'} first.`);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setDeleting(false);
     }

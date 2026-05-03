@@ -504,7 +504,7 @@
                 }
               ]
             },
-            "description": "Delete a component\n\nDelete all versions of a component by ID\n\n\nResponses: 204, 404, 500"
+            "description": "Delete a component\n\nDelete all versions of a component by ID\n\n\nResponses: 204, 404, 409, 500"
           },
           "response": []
         },
@@ -1803,7 +1803,7 @@
                 }
               ]
             },
-            "description": "Delete a datasource\n\nDelete a datasource by ID\n\n\nResponses: 204, 400, 404"
+            "description": "Delete a datasource\n\nDelete a datasource by ID\n\n\nResponses: 204, 400, 404, 409"
           },
           "response": []
         },

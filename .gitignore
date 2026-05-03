@@ -55,3 +55,4 @@ server-go/dashboard-agent
 
 # Mongo backups (mongodump output) — keep out of git
 backups/
+.claude/scheduled_tasks.lock
