@@ -130,13 +130,12 @@ function DashboardViewerPage({ canDesign = false }) {
   const [dashboardCommand, setDashboardCommand] = useState(null); // Latest command: { target, action, ... }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  // refreshKey: full panel remount (used when chart definition changes
-  // server-side and we need to re-eval component_code, etc.).
   // refreshTick: refetch-without-remount signal (used when only the
   // *data* should refresh — manual Refresh button, dashboard navigation).
-  // The tick preserves streaming buffers and dynamic-component state,
-  // which the remount path destroys.
-  const [refreshKey, setRefreshKey] = useState(0);
+  // Preserves streaming buffers and dynamic-component state. Server-side
+  // chart-definition edits trigger a real remount via the chart.updated
+  // segment of each panel's key, so no separate "force remount" counter
+  // is needed.
   const [refreshTick, setRefreshTick] = useState(0);
   // Dashboard fit mode: "actual" | "window" | "width" | "stretch".
   // Storage is strictly per-user-per-dashboard; the load effect below
@@ -1963,7 +1962,7 @@ function DashboardViewerPage({ canDesign = false }) {
                               // is intentionally NOT in the key — it triggers an
                               // out-of-band refetch via useData without remounting
                               // (preserves streaming buffers + dynamic state).
-                              key={`${panel.chart_id}-${chart.updated || ''}-${refreshKey}`}
+                              key={`${panel.chart_id}-${chart.updated || ''}`}
                               chart={chart}
                               loaderProps={{
                                 code: chart.component_code,
