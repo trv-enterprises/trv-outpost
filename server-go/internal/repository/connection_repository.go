@@ -6,12 +6,11 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -28,9 +27,13 @@ func NewConnectionRepository(db *mongo.Database) *ConnectionRepository {
 	}
 }
 
-// Create creates a new connection
+// Create creates a new connection. The ID is a UUID; if the caller
+// has already set one (e.g., during a bundle import where the ID needs
+// to round-trip), it is preserved.
 func (r *ConnectionRepository) Create(ctx context.Context, connection *models.Connection) error {
-	connection.ID = primitive.NewObjectID()
+	if connection.ID == "" {
+		connection.ID = uuid.NewString()
+	}
 	connection.CreatedAt = time.Now()
 	connection.UpdatedAt = time.Now()
 
@@ -45,13 +48,8 @@ func (r *ConnectionRepository) Create(ctx context.Context, connection *models.Co
 
 // FindByID retrieves a connection by ID
 func (r *ConnectionRepository) FindByID(ctx context.Context, id string) (*models.Connection, error) {
-	objectID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return nil, fmt.Errorf("invalid id format: %w", err)
-	}
-
 	var connection models.Connection
-	err = r.collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&connection)
+	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&connection)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -173,14 +171,9 @@ func (r *ConnectionRepository) FindByTags(ctx context.Context, tags []string, li
 
 // Update updates an existing connection
 func (r *ConnectionRepository) Update(ctx context.Context, id string, connection *models.Connection) error {
-	objectID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return fmt.Errorf("invalid id format: %w", err)
-	}
-
 	connection.UpdatedAt = time.Now()
 
-	filter := bson.M{"_id": objectID}
+	filter := bson.M{"_id": id}
 	update := bson.M{"$set": connection}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)
@@ -197,12 +190,7 @@ func (r *ConnectionRepository) Update(ctx context.Context, id string, connection
 
 // UpdateHealth updates only the health information of a connection
 func (r *ConnectionRepository) UpdateHealth(ctx context.Context, id string, health models.HealthInfo) error {
-	objectID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return fmt.Errorf("invalid id format: %w", err)
-	}
-
-	filter := bson.M{"_id": objectID}
+	filter := bson.M{"_id": id}
 	update := bson.M{
 		"$set": bson.M{
 			"health":     health,
@@ -224,12 +212,7 @@ func (r *ConnectionRepository) UpdateHealth(ctx context.Context, id string, heal
 
 // Delete deletes a connection by ID
 func (r *ConnectionRepository) Delete(ctx context.Context, id string) error {
-	objectID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return fmt.Errorf("invalid id format: %w", err)
-	}
-
-	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": objectID})
+	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}

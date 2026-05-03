@@ -248,8 +248,10 @@ MongoDB collection name.
   values back to the stored real values via `preserveSecrets`.
 - `health` is maintained by a background sweep; the list-page status
   indicator reads from it.
-- `_id` is a MongoDB `ObjectId` here (not a UUID) — datasources
-  predate the convention.
+- `_id` is a UUID string, matching every other top-level entity.
+  Pre-v0.14 deployments stored `_id` as an auto-generated `ObjectId`
+  here — the migration in `server-go/cmd/migrate-uuid-ids` rewrites
+  legacy data to UUIDs and updates component → connection references.
 - **Name**: case-insensitive unique within a namespace
   (compound `(namespace, name)` index). The same connection name
   can exist in multiple namespaces.

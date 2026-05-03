@@ -354,7 +354,7 @@ POST /api/datasources/696028e7d7cb5c13dc5dad95/query
 
 **3. Backend Fetches from TSStore**
 ```
-GET http://100.74.102.38:8080/api/stores/sensor-readings/json/newest?since=1h&limit=100
+GET http://tsstore.example/api/stores/sensor-readings/json/newest?since=1h&limit=100
 Headers: X-API-Key: tsstore_ab672865-...
 ```
 
@@ -419,12 +419,12 @@ const option = {
 
 ```javascript
 {
-    "_id": ObjectId("696028e7d7cb5c13dc5dad95"),
+    "_id": "0045f5fc-ee99-4152-927e-c328cc3284e0",   // UUID
     "name": "TS-STORE SENSOR-READINGS",
     "type": "tsstore",
     "config": {
         "tsstore": {
-            "url": "http://100.74.102.38:8080",      // TSStore server URL
+            "url": "http://tsstore.example/",        // TSStore server URL
             "store_name": "sensor-readings",          // Store name
             "api_key": "tsstore_ab672865-...",       // Authentication
             "timeout": 30                             // Request timeout (seconds)
@@ -437,10 +437,11 @@ const option = {
 
 ```javascript
 {
-    "_id": ObjectId("..."),
+    "id": "26d3ae8b-be32-4cc7-bdee-d7aba66fa51d",    // UUID — entity id (same across versions)
+    "version": 1,
     "name": "Temperature Over Time",
     "chart_type": "line",
-    "datasource_id": "696028e7d7cb5c13dc5dad95",
+    "connection_id": "0045f5fc-ee99-4152-927e-c328cc3284e0",
     "query_config": {
         "raw": "since:1h",
         "type": "tsstore",

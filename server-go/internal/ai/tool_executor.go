@@ -850,7 +850,7 @@ func (e *ToolExecutor) executeListConnections(ctx context.Context) (*ToolResult,
 	summaries := make([]connSummary, len(datasources))
 	for i, ds := range datasources {
 		summaries[i] = connSummary{
-			ID:          ds.ID.Hex(),
+			ID:          ds.ID,
 			Name:        ds.Name,
 			Type:        string(ds.Type),
 			Description: ds.Description,
@@ -1157,7 +1157,7 @@ func (e *ToolExecutor) executeGetSchema(ctx context.Context, input json.RawMessa
 	}
 
 	sourceInfo := models.UnifiedSchemaSourceInfo{
-		ID:   ds.ID.Hex(),
+		ID:   ds.ID,
 		Name: ds.Name,
 		Type: string(ds.Type),
 	}

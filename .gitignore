@@ -52,3 +52,6 @@ server-go/docs/agent-runs/
 
 # Stray dashboard-agent binary built without -o bin/...
 server-go/dashboard-agent
+
+# Mongo backups (mongodump output) — keep out of git
+backups/

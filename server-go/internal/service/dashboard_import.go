@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // PreflightImport classifies every object in the incoming bundle into
@@ -100,8 +100,7 @@ func (s *DashboardService) ApplyImport(ctx context.Context, req *models.ImportAp
 
 	// Process connections first.
 	for _, inc := range req.Bundle.Objects.Connections {
-		idHex := inc.ID.Hex()
-		key := models.ImportKindConnection + ":" + idHex
+		key := models.ImportKindConnection + ":" + inc.ID
 		if _, ok := identicalKeys[key]; ok {
 			resp.Skipped++
 			continue
@@ -112,7 +111,7 @@ func (s *DashboardService) ApplyImport(ctx context.Context, req *models.ImportAp
 				continue
 			}
 			if err := s.applyConnection(ctx, inc, targetNs, true); err != nil {
-				resp.Errors = append(resp.Errors, fmt.Sprintf("update connection %s (%s): %v", inc.Name, idHex, err))
+				resp.Errors = append(resp.Errors, fmt.Sprintf("update connection %s (%s): %v", inc.Name, inc.ID, err))
 				continue
 			}
 			resp.Updated++
@@ -120,7 +119,7 @@ func (s *DashboardService) ApplyImport(ctx context.Context, req *models.ImportAp
 		}
 		// new
 		if err := s.applyConnection(ctx, inc, targetNs, false); err != nil {
-			resp.Errors = append(resp.Errors, fmt.Sprintf("create connection %s (%s): %v", inc.Name, idHex, err))
+			resp.Errors = append(resp.Errors, fmt.Sprintf("create connection %s (%s): %v", inc.Name, inc.ID, err))
 			continue
 		}
 		resp.Created++
@@ -187,13 +186,12 @@ func (s *DashboardService) ApplyImport(ctx context.Context, req *models.ImportAp
 // ── preflight classifiers ───────────────────────────────────────────
 
 func (s *DashboardService) classifyConnection(ctx context.Context, inc models.Connection, targetNs string, out *models.ImportPreflightResponse) {
-	idHex := inc.ID.Hex()
 	ref := models.ImportObjectRef{
-		Kind: models.ImportKindConnection, ID: idHex,
+		Kind: models.ImportKindConnection, ID: inc.ID,
 		Name: inc.Name, Namespace: inc.Namespace,
 	}
 
-	existing, err := s.connectionRepo.FindByID(ctx, idHex)
+	existing, err := s.connectionRepo.FindByID(ctx, inc.ID)
 	if err == nil && existing != nil {
 		if equalBySanitizedJSON(&inc, existing.SanitizeForAPI(), connectionVolatileFields()) {
 			out.Identical = append(out.Identical, ref)
@@ -214,7 +212,7 @@ func (s *DashboardService) classifyConnection(ctx context.Context, inc models.Co
 	if err == nil && byName != nil {
 		out.Blocked = append(out.Blocked, models.ImportBlocked{
 			Kind: ref.Kind, IncomingID: ref.ID, IncomingName: ref.Name,
-			ExistingID: byName.ID.Hex(), TargetNamespace: targetNs,
+			ExistingID: byName.ID, TargetNamespace: targetNs,
 			Reason: "a different connection with this name already exists in the target namespace",
 		})
 		return
@@ -301,7 +299,7 @@ func (s *DashboardService) applyConnection(ctx context.Context, inc models.Conne
 	coll := s.db.Collection("connections")
 
 	if isUpdate {
-		existing, err := s.connectionRepo.FindByID(ctx, inc.ID.Hex())
+		existing, err := s.connectionRepo.FindByID(ctx, inc.ID)
 		if err != nil {
 			return err
 		}
@@ -322,8 +320,8 @@ func (s *DashboardService) applyConnection(ctx context.Context, inc models.Conne
 		inc.UpdatedAt = now
 	}
 
-	if inc.ID.IsZero() {
-		inc.ID = primitive.NewObjectID()
+	if inc.ID == "" {
+		inc.ID = uuid.NewString()
 	}
 	_, err := coll.InsertOne(ctx, inc)
 	return err

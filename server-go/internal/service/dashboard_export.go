@@ -126,7 +126,7 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 
 	// Stable ordering inside each array so the bundle is deterministic
 	// (helps with diffs and re-import idempotency tests).
-	sort.SliceStable(connections, func(i, j int) bool { return connections[i].ID.Hex() < connections[j].ID.Hex() })
+	sort.SliceStable(connections, func(i, j int) bool { return connections[i].ID < connections[j].ID })
 	sort.SliceStable(components, func(i, j int) bool { return components[i].ID < components[j].ID })
 	sort.SliceStable(dashboards, func(i, j int) bool { return dashboards[i].ID < dashboards[j].ID })
 

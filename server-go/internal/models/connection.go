@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // QueryType represents the type of query
@@ -81,12 +79,17 @@ type ConnectionAdapter interface {
 	Close() error
 }
 
-// Connection represents a data source configuration stored in MongoDB
+// Connection represents a data source configuration stored in MongoDB.
+// ID is a UUID string stored in `_id` (matches the convention used by
+// dashboards, namespaces, users, etc.). Pre-v0.14 deployments used
+// auto-generated ObjectID `_id` here; the migration in
+// `cmd/migrate-uuid-ids` rewrites old data to UUIDs and updates
+// component → connection references accordingly.
 type Connection struct {
-	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Name        string             `json:"name" bson:"name" binding:"required"`
-	Description string             `json:"description" bson:"description"`
-	Namespace   string             `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
+	ID          string `json:"id" bson:"_id,omitempty"`
+	Name        string `json:"name" bson:"name" binding:"required"`
+	Description string `json:"description" bson:"description"`
+	Namespace   string `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 
 	// NEW: Registry-based type system (preferred)
 	// TypeID format: "category.name" (e.g., "db.postgres", "stream.websocket-bidir")
