@@ -18,15 +18,15 @@ type PanelTextConfig struct {
 }
 
 // DashboardPanel represents a panel position in the dashboard grid
-// @Description Panel position and size in the grid with optional chart reference or text config
+// @Description Panel position and size in the grid with optional component reference or text config
 type DashboardPanel struct {
-	ID         string           `json:"id" bson:"id"`
-	X          int              `json:"x" bson:"x"`
-	Y          int              `json:"y" bson:"y"`
-	W          int              `json:"w" bson:"w"`
-	H          int              `json:"h" bson:"h"`
-	ChartID    string           `json:"chart_id,omitempty" bson:"chart_id,omitempty"`       // Reference to chart component
-	TextConfig *PanelTextConfig `json:"text_config,omitempty" bson:"text_config,omitempty"` // Native text panel config
+	ID          string           `json:"id" bson:"id"`
+	X           int              `json:"x" bson:"x"`
+	Y           int              `json:"y" bson:"y"`
+	W           int              `json:"w" bson:"w"`
+	H           int              `json:"h" bson:"h"`
+	ComponentID string           `json:"component_id,omitempty" bson:"component_id,omitempty"` // Reference to a component (chart, control, or display)
+	TextConfig  *PanelTextConfig `json:"text_config,omitempty" bson:"text_config,omitempty"`   // Native text panel config
 }
 
 // ChartQueryConfig defines how to query data for a chart
@@ -125,7 +125,7 @@ type Dashboard struct {
 	Namespace   string                 `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 	Name        string                 `json:"name" bson:"name" binding:"required"`
 	Description string                 `json:"description" bson:"description"`
-	Panels      []DashboardPanel       `json:"panels" bson:"panels"`           // Panels with chart_id references
+	Panels      []DashboardPanel       `json:"panels" bson:"panels"`           // Panels with component_id references
 	Thumbnail   string                 `json:"thumbnail" bson:"thumbnail"`     // Base64 encoded thumbnail image
 	Settings    DashboardSettings      `json:"settings" bson:"settings"`
 	Tags        []string               `json:"tags,omitempty" bson:"tags,omitempty"` // User-defined tags for filtering/grouping
@@ -153,7 +153,7 @@ type CreateDashboardRequest struct {
 	Namespace   string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
 	Name        string                 `json:"name" binding:"required"`
 	Description string                 `json:"description"`
-	Panels      []DashboardPanel       `json:"panels"` // Panels with optional chart_id
+	Panels      []DashboardPanel       `json:"panels"` // Panels with optional component_id
 	Settings    DashboardSettings      `json:"settings"`
 	Tags        []string               `json:"tags,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
@@ -165,7 +165,7 @@ type UpdateDashboardRequest struct {
 	Namespace   *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
 	Name        *string                 `json:"name,omitempty"`
 	Description *string                 `json:"description,omitempty"`
-	Panels      *[]DashboardPanel       `json:"panels,omitempty"` // Panels with optional chart_id
+	Panels      *[]DashboardPanel       `json:"panels,omitempty"` // Panels with optional component_id
 	Thumbnail   *string                 `json:"thumbnail,omitempty"`
 	Settings    *DashboardSettings      `json:"settings,omitempty"`
 	Tags        *[]string               `json:"tags,omitempty"`
@@ -187,7 +187,7 @@ type DashboardQueryParams struct {
 	Namespace          string   `form:"namespace"`           // Empty = all namespaces; non-empty = exact match
 	Name               string   `form:"name"`
 	IsPublic           *bool    `form:"is_public"`
-	ChartID            string   `form:"chart_id"`            // Filter dashboards using a specific chart
+	ComponentID        string   `form:"component_id"`        // Filter dashboards using a specific component
 	Tags               []string `form:"tags"`                // Filter dashboards with any of the given tags (OR)
 	IncludeConnections bool     `form:"include_connections"` // Include connection names from referenced components
 	Page               int      `form:"page"`

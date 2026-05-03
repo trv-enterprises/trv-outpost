@@ -122,7 +122,7 @@ function DashboardViewerPage({ canDesign = false }) {
   const isNewDashboard = id === 'new';
 
   const [dashboard, setDashboard] = useState(null);
-  const [chartsMap, setChartsMap] = useState({}); // Chart data keyed by chart_id
+  const [chartsMap, setChartsMap] = useState({}); // Chart data keyed by component_id
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -487,7 +487,7 @@ function DashboardViewerPage({ canDesign = false }) {
       setDashboard(data);
 
       if (data.panels && data.panels.length > 0) {
-        const chartIds = [...new Set(data.panels.map(p => p.chart_id).filter(Boolean))];
+        const chartIds = [...new Set(data.panels.map(p => p.component_id).filter(Boolean))];
         if (chartIds.length > 0) {
           const chartPromises = chartIds.map(chartId =>
             apiClient.getComponent(chartId).catch(() => null)
@@ -1149,7 +1149,7 @@ function DashboardViewerPage({ canDesign = false }) {
   const addPanel = (panelData) => {
     const newPanel = {
       id: `panel-${Date.now()}`,
-      chart_id: null,
+      component_id: null,
       ...panelData
     };
     setEditablePanels(prev => [...prev, newPanel]);
@@ -1167,8 +1167,8 @@ function DashboardViewerPage({ canDesign = false }) {
     const panel = editablePanels.find(p => p.id === panelId);
     if (!panel) return getComponentMinSize('default');
     if (panel.text_config) return { w: 2, h: 1 };
-    if (!panel.chart_id) return getComponentMinSize('default');
-    const chart = chartsMap[panel.chart_id];
+    if (!panel.component_id) return getComponentMinSize('default');
+    const chart = chartsMap[panel.component_id];
     if (!chart) return getComponentMinSize('default');
     const subtype = chart.control_config?.control_type || chart.display_config?.display_type || chart.chart_type;
     return getComponentMinSize(subtype);
@@ -1323,7 +1323,7 @@ function DashboardViewerPage({ canDesign = false }) {
     setEditingPanelId(panelId);
     if (chart === undefined) {
       const panel = editablePanels.find(p => p.id === panelId);
-      setEditingChart(panel?.chart_id ? chartsMap[panel.chart_id] : null);
+      setEditingChart(panel?.component_id ? chartsMap[panel.component_id] : null);
     } else {
       setEditingChart(chart);
     }
@@ -1344,7 +1344,7 @@ function DashboardViewerPage({ canDesign = false }) {
     // Detect whether the panel itself actually needs to change. Editing a
     // component's name/code/config shouldn't dirty the dashboard — the
     // component lives in its own collection and was already persisted by
-    // the component editor. Only swapping the panel's chart_id (e.g.
+    // the component editor. Only swapping the panel's component_id (e.g.
     // converting a placeholder to a saved component) or growing the panel
     // to satisfy a new min-size is a genuine dashboard mutation.
     const subtype = chartInfo.control_config?.control_type || chartInfo.display_config?.display_type || chartInfo.chart_type;
@@ -1354,11 +1354,11 @@ function DashboardViewerPage({ canDesign = false }) {
       if (p.id !== panel_id) return p;
       const newW = Math.max(p.w, Math.min(minSize.w, maxGridCol - p.x));
       const newH = Math.max(p.h, minSize.h);
-      const idChanged = p.chart_id !== chartInfo.id;
+      const idChanged = p.component_id !== chartInfo.id;
       const sizeChanged = newW !== p.w || newH !== p.h;
       if (!idChanged && !sizeChanged) return p;
       panelChanged = true;
-      return { ...p, chart_id: chartInfo.id, w: newW, h: newH };
+      return { ...p, component_id: chartInfo.id, w: newW, h: newH };
     }));
     if (panelChanged) {
       setEditHasChanges(true);
@@ -1367,7 +1367,7 @@ function DashboardViewerPage({ canDesign = false }) {
 
   const openAIEditor = (panelId) => {
     const panel = editablePanels.find(p => p.id === panelId);
-    const chartId = panel?.chart_id;
+    const chartId = panel?.component_id;
     if (chartId) {
       navigate(`/design/components/ai/${chartId}`, {
         state: { from: `/view/dashboards/${id}`, dashboardId: id, panelId }
@@ -1384,9 +1384,9 @@ function DashboardViewerPage({ canDesign = false }) {
   };
 
   const setTextPanel = (panelId) => {
-    // Set default text config and clear chart_id
+    // Set default text config and clear component_id
     updateEditablePanel(panelId, {
-      chart_id: null,
+      component_id: null,
       text_config: { content: '', display_content: 'title', size: 20, align: 'center' }
     });
     // Open the text editor anchored to the panel
@@ -1435,14 +1435,14 @@ function DashboardViewerPage({ canDesign = false }) {
       if (p.id !== componentPickerPanelId) return p;
       const newW = Math.max(p.w, Math.min(minSize.w, maxGridCol - p.x));
       const newH = Math.max(p.h, minSize.h);
-      return { ...p, chart_id: component.id, w: newW, h: newH };
+      return { ...p, component_id: component.id, w: newW, h: newH };
     }));
     setEditHasChanges(true);
     closeComponentPicker();
   };
 
   const openAIPreflightModal = (panelId) => {
-    updateEditablePanel(panelId, { chart_id: null });
+    updateEditablePanel(panelId, { component_id: null });
     setAiPreflightPanelId(panelId);
     setAiPreflightOpen(true);
 
@@ -1828,7 +1828,7 @@ function DashboardViewerPage({ canDesign = false }) {
             }}
           >
             {panels.map((panel) => {
-              const chart = panel.chart_id ? chartsMap[panel.chart_id] : null;
+              const chart = panel.component_id ? chartsMap[panel.component_id] : null;
               const hasText = !!panel.text_config;
               const hasChart = !hasText && (!!chart?.component_code || chart?.component_type === 'control' || chart?.component_type === 'display');
               const hasContent = hasText || hasChart;
@@ -1897,7 +1897,7 @@ function DashboardViewerPage({ canDesign = false }) {
                               onEdit={hasChart ? () => openComponentEditor(panel.id) : undefined}
                               onEditWithAI={hasChart ? () => openAIEditor(panel.id) : undefined}
                               onNew={() => {
-                                if (hasChart) updateEditablePanel(panel.id, { chart_id: null, text_config: null });
+                                if (hasChart) updateEditablePanel(panel.id, { component_id: null, text_config: null });
                                 openComponentEditor(panel.id, null);
                               }}
                               onNewWithAI={() => openAIPreflightModal(panel.id)}
@@ -1962,7 +1962,7 @@ function DashboardViewerPage({ canDesign = false }) {
                               // is intentionally NOT in the key — it triggers an
                               // out-of-band refetch via useData without remounting
                               // (preserves streaming buffers + dynamic state).
-                              key={`${panel.chart_id}-${chart.updated || ''}`}
+                              key={`${panel.component_id}-${chart.updated || ''}`}
                               chart={chart}
                               loaderProps={{
                                 code: chart.component_code,
@@ -2108,7 +2108,7 @@ function DashboardViewerPage({ canDesign = false }) {
       />
       {expandedPanelId && (() => {
         const expandedPanel = panels.find(p => p.id === expandedPanelId);
-        const expandedChart = expandedPanel?.chart_id ? chartsMap[expandedPanel.chart_id] : null;
+        const expandedChart = expandedPanel?.component_id ? chartsMap[expandedPanel.component_id] : null;
         if (!expandedChart) return null;
         return (
           <ComponentExpandModal

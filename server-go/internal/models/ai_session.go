@@ -22,11 +22,11 @@ const (
 	AIMessageRoleSystem    = "system"
 )
 
-// AISession represents an active AI chart editing session
-// @Description AI session for chart creation/editing
+// AISession represents an active AI component editing session
+// @Description AI session for component creation/editing
 type AISession struct {
 	ID           string      `json:"id" bson:"_id"`                            // UUID
-	ChartID      string      `json:"chart_id" bson:"chart_id"`                 // Chart UUID being edited
+	ComponentID  string      `json:"component_id" bson:"component_id"`         // Component UUID being edited
 	ChartVersion int         `json:"chart_version" bson:"chart_version"`       // Version being edited (always a draft)
 	Messages     []AIMessage `json:"messages" bson:"messages"`                 // Conversation history
 	Status       string      `json:"status" bson:"status"`                     // "active" | "completed" | "cancelled"
@@ -59,7 +59,7 @@ type ToolCall struct {
 // CreateAISessionRequest represents a request to create a new AI session
 // @Description Request body for creating a new AI session
 type CreateAISessionRequest struct {
-	ChartID        string `json:"chart_id"`        // Existing chart ID to edit (optional, omit for new chart)
+	ComponentID    string `json:"component_id"`    // Existing component ID to edit (optional, omit for new component)
 	InitialMessage string `json:"initial_message"` // First user message (optional)
 
 	// Pre-flight context (optional) - sets fields on the draft directly

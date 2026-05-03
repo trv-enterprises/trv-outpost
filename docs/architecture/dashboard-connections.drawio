@@ -1,99 +1,138 @@
-<mxfile host="Electron" modified="2026-05-02T00:00:00.000Z" agent="claude-code" etag="auto-update" version="21.3.7" type="device">
+<mxfile host="Electron" modified="2026-05-03T22:15:38.340Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.3.7 Chrome/112.0.5615.204 Electron/24.5.0 Safari/537.36" etag="LXEMrYlgkCgn3me6ygOC" version="21.3.7" type="device">
   <diagram id="dashboard-connections" name="Dashboard Connections">
     <mxGraphModel dx="1570" dy="1033" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" background="#FFFFFF" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="My Dashboard Test Environment" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=27;" parent="1" vertex="1">
-          <mxGeometry x="300" y="30" width="820" height="40" as="geometry" />
+        <mxCell id="6wXPxYFN3ZWVJanfPNlm-6" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#36393d;verticalAlign=top;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="60" y="40" width="242" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="6wXPxYFN3ZWVJanfPNlm-5" value="Kube for testing Prometheus" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="541" y="84" width="320" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="6wXPxYFN3ZWVJanfPNlm-4" value="Testing Edge Computing&amp;nbsp;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=bottom;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="540" y="830" width="320" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="6wXPxYFN3ZWVJanfPNlm-3" value="Testing PI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=bottom;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="967" y="830" width="283" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="6wXPxYFN3ZWVJanfPNlm-2" value="Simulator LXC for testing" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="144" width="280" height="602" as="geometry" />
+        </mxCell>
+        <mxCell id="6wXPxYFN3ZWVJanfPNlm-1" value="Monitored Lab Devices" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="20" y="250" width="330" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="title" value="My Dashboard Connections for Testing" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=27;" parent="1" vertex="1">
+          <mxGeometry x="302" y="20" width="820" height="40" as="geometry" />
         </mxCell>
         <mxCell id="dashboard" value="Dashboard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F2937;strokeColor=#111827;fontColor=#FFFFFF;fontSize=16;fontStyle=1;shadow=1;" parent="1" vertex="1">
           <mxGeometry x="600" y="460" width="200" height="120" as="geometry" />
         </mxCell>
-
         <mxCell id="legend" value="Connection Types" style="text;html=1;fontSize=14;fontStyle=1;align=center;" parent="1" vertex="1">
-          <mxGeometry x="60" y="70" width="200" height="24" as="geometry" />
+          <mxGeometry x="85" y="40" width="200" height="24" as="geometry" />
         </mxCell>
         <mxCell id="legend-mqtt" value="mqtt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#10B981;strokeColor=#047857;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="60" y="102" width="90" height="28" as="geometry" />
+          <mxGeometry x="85" y="72" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-frigate" value="frigate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#B45309;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="160" y="102" width="90" height="28" as="geometry" />
+          <mxGeometry x="185" y="72" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-sql" value="sql" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3B82F6;strokeColor=#1E40AF;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="60" y="138" width="90" height="28" as="geometry" />
+          <mxGeometry x="85" y="108" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-socket" value="socket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8B5CF6;strokeColor=#5B21B6;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="160" y="138" width="90" height="28" as="geometry" />
+          <mxGeometry x="185" y="108" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-api" value="api" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EC4899;strokeColor=#9D174D;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="60" y="174" width="90" height="28" as="geometry" />
+          <mxGeometry x="85" y="144" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-tsstore" value="tsstore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="160" y="174" width="90" height="28" as="geometry" />
+          <mxGeometry x="185" y="144" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-prom" value="prometheus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EF4444;strokeColor=#991B1B;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="60" y="210" width="90" height="28" as="geometry" />
+          <mxGeometry x="85" y="180" width="90" height="28" as="geometry" />
         </mxCell>
         <mxCell id="legend-edge" value="edgelake" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6B7280;strokeColor=#374151;fontColor=#FFFFFF;fontSize=12;" parent="1" vertex="1">
-          <mxGeometry x="160" y="210" width="90" height="28" as="geometry" />
+          <mxGeometry x="185" y="180" width="90" height="28" as="geometry" />
         </mxCell>
-
         <mxCell id="c-mqtt-mosquitto" value="services-mosquito-broker&#xa;[mqtt]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#10B981;strokeColor=#047857;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="80" y="320" width="220" height="60" as="geometry" />
+          <mxGeometry x="40" y="299" width="290" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-frigate" value="Frigate&#xa;[frigate]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#B45309;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="80" y="420" width="220" height="60" as="geometry" />
+          <mxGeometry x="40" y="394" width="290" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-sql" value="SQL - Machine Room Data&#xa;[sql]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3B82F6;strokeColor=#1E40AF;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="80" y="520" width="220" height="60" as="geometry" />
+          <mxGeometry x="1080" y="190" width="237" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-socket" value="Sensors WebSocket&#xa;[socket]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8B5CF6;strokeColor=#5B21B6;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="80" y="620" width="220" height="60" as="geometry" />
+          <mxGeometry x="1080" y="415" width="237" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-api" value="Sensors API&#xa;[api]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EC4899;strokeColor=#9D174D;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="80" y="720" width="220" height="60" as="geometry" />
+          <mxGeometry x="1080" y="303" width="237" height="60" as="geometry" />
         </mxCell>
-
         <mxCell id="c-tsstore-ws-journal" value="TS-STORE WS - TRV-SRV-001 - journal&#xa;[tsstore]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="120" width="280" height="60" as="geometry" />
+          <mxGeometry x="40" y="489" width="290" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-tsstore-ws-sysstats" value="TS-STORE WS - TRV-SRV-001 system-stats&#xa;[tsstore]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="220" width="280" height="60" as="geometry" />
+          <mxGeometry x="40" y="584" width="290" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-tsstore-ws-warehouse" value="TS-STORE WS - warehouse&#xa;[tsstore]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="320" width="280" height="60" as="geometry" />
+          <mxGeometry x="1080" y="528" width="237" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-tsstore-api-sysstats" value="TS-STORE API - TRV-SRV-001 system-stats&#xa;[tsstore]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="420" width="280" height="60" as="geometry" />
+          <mxGeometry x="40" y="679" width="290" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-tsstore-api-senshat" value="TS-STORE API - PI senshat&#xa;[tsstore]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="520" width="280" height="60" as="geometry" />
+          <mxGeometry x="990" y="850" width="237" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-tsstore-api-sensorreadings" value="TS-STORE API - sensor-readings&#xa;[tsstore]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#06B6D4;strokeColor=#0E7490;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="620" width="280" height="60" as="geometry" />
+          <mxGeometry x="1080" y="640" width="237" height="60" as="geometry" />
         </mxCell>
-
         <mxCell id="c-prom" value="TRV-SRV-001 K3S Prometheus&#xa;[prometheus]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EF4444;strokeColor=#991B1B;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="720" width="280" height="60" as="geometry" />
+          <mxGeometry x="560" y="124" width="280" height="60" as="geometry" />
         </mxCell>
         <mxCell id="c-edgelake" value="Homelab EL&#xa;[edgelake]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6B7280;strokeColor=#374151;fontColor=#FFFFFF;fontSize=14;" parent="1" vertex="1">
-          <mxGeometry x="1080" y="820" width="280" height="60" as="geometry" />
+          <mxGeometry x="560" y="850" width="280" height="60" as="geometry" />
         </mxCell>
-
-        <mxCell id="e-mqtt" style="endArrow=none;html=1;strokeColor=#047857;strokeWidth=2;" parent="1" source="c-mqtt-mosquitto" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-frigate" style="endArrow=none;html=1;strokeColor=#B45309;strokeWidth=2;" parent="1" source="c-frigate" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-sql" style="endArrow=none;html=1;strokeColor=#1E40AF;strokeWidth=2;" parent="1" source="c-sql" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-socket" style="endArrow=none;html=1;strokeColor=#5B21B6;strokeWidth=2;" parent="1" source="c-socket" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-api" style="endArrow=none;html=1;strokeColor=#9D174D;strokeWidth=2;" parent="1" source="c-api" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-tsstore-ws-journal" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-ws-journal" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-tsstore-ws-sysstats" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-ws-sysstats" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-tsstore-ws-warehouse" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-ws-warehouse" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-tsstore-api-sysstats" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-api-sysstats" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-tsstore-api-senshat" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-api-senshat" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-tsstore-api-sensorreadings" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-api-sensorreadings" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-prom" style="endArrow=none;html=1;strokeColor=#991B1B;strokeWidth=2;" parent="1" source="c-prom" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e-edgelake" style="endArrow=none;html=1;strokeColor=#374151;strokeWidth=2;" parent="1" source="c-edgelake" target="dashboard" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-mqtt" style="endArrow=none;html=1;strokeColor=#047857;strokeWidth=2;" parent="1" source="c-mqtt-mosquitto" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-frigate" style="endArrow=none;html=1;strokeColor=#B45309;strokeWidth=2;" parent="1" source="c-frigate" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sql" style="endArrow=none;html=1;strokeColor=#1E40AF;strokeWidth=2;" parent="1" source="c-sql" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-socket" style="endArrow=none;html=1;strokeColor=#5B21B6;strokeWidth=2;" parent="1" source="c-socket" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api" style="endArrow=none;html=1;strokeColor=#9D174D;strokeWidth=2;" parent="1" source="c-api" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-tsstore-ws-journal" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-ws-journal" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-tsstore-ws-sysstats" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-ws-sysstats" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-tsstore-ws-warehouse" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-ws-warehouse" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-tsstore-api-sysstats" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-api-sysstats" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-tsstore-api-senshat" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-api-senshat" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-tsstore-api-sensorreadings" style="endArrow=none;html=1;strokeColor=#0E7490;strokeWidth=2;" parent="1" source="c-tsstore-api-sensorreadings" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-prom" style="endArrow=none;html=1;strokeColor=#991B1B;strokeWidth=2;" parent="1" source="c-prom" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-edgelake" style="endArrow=none;html=1;strokeColor=#374151;strokeWidth=2;" parent="1" source="c-edgelake" target="dashboard" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>

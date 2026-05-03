@@ -44,16 +44,16 @@ func (r *AISessionRepository) CreateIndexes(ctx context.Context) error {
 			Options: options.Index().SetExpireAfterSeconds(0),
 		},
 		{
-			// Lookup sessions by chart_id
-			Keys: bson.D{{Key: "chart_id", Value: 1}},
+			// Lookup sessions by component_id
+			Keys: bson.D{{Key: "component_id", Value: 1}},
 		},
 		{
 			// Filter by status
 			Keys: bson.D{{Key: "status", Value: 1}},
 		},
 		{
-			// Compound: FindByChartID filters on (chart_id + status) together.
-			Keys: bson.D{{Key: "chart_id", Value: 1}, {Key: "status", Value: 1}},
+			// Compound: FindByComponentID filters on (component_id + status) together.
+			Keys: bson.D{{Key: "component_id", Value: 1}, {Key: "status", Value: 1}},
 		},
 	}
 
@@ -102,12 +102,12 @@ func (r *AISessionRepository) FindByID(ctx context.Context, id string) (*models.
 	return &session, nil
 }
 
-// FindByChartID retrieves the active session for a chart
-func (r *AISessionRepository) FindByChartID(ctx context.Context, chartID string) (*models.AISession, error) {
+// FindByComponentID retrieves the active session for a component
+func (r *AISessionRepository) FindByComponentID(ctx context.Context, componentID string) (*models.AISession, error) {
 	var session models.AISession
 	err := r.collection.FindOne(ctx, bson.M{
-		"chart_id": chartID,
-		"status":   models.AISessionStatusActive,
+		"component_id": componentID,
+		"status":       models.AISessionStatusActive,
 	}).Decode(&session)
 	if err == mongo.ErrNoDocuments {
 		return nil, nil

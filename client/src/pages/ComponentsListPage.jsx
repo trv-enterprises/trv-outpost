@@ -65,7 +65,7 @@ function ComponentsListPage() {
   // Initialize state from saved filters (persist across navigation within session)
   const [charts, setCharts] = useState([]);
   const [connections, setConnections] = useState({});
-  const [dashboardCounts, setDashboardCounts] = useState({}); // Map of chart_id -> dashboard count
+  const [dashboardCounts, setDashboardCounts] = useState({}); // Map of component_id -> dashboard count
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
@@ -312,15 +312,15 @@ function ComponentsListPage() {
         setConnections(connMap);
       }
 
-      // Build dashboard count map by chart_id
+      // Build dashboard count map by component_id
       if (dashboardsData.dashboards) {
         const counts = {};
         dashboardsData.dashboards.forEach(dashboard => {
-          // Each dashboard has panels, each panel can have a chart_id
+          // Each dashboard has panels, each panel can have a component_id
           if (dashboard.panels) {
             dashboard.panels.forEach(panel => {
-              if (panel.chart_id) {
-                counts[panel.chart_id] = (counts[panel.chart_id] || 0) + 1;
+              if (panel.component_id) {
+                counts[panel.component_id] = (counts[panel.component_id] || 0) + 1;
               }
             });
           }

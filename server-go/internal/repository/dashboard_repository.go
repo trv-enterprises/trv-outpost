@@ -36,7 +36,7 @@ func (r *DashboardRepository) CreateIndexes(ctx context.Context) error {
 			Options: options.Index().SetUnique(true),
 		},
 		{
-			Keys: bson.D{{Key: "panels.chart_id", Value: 1}}, // For finding dashboards by chart
+			Keys: bson.D{{Key: "panels.component_id", Value: 1}}, // For finding dashboards by component
 		},
 		{
 			Keys: bson.D{{Key: "updated", Value: -1}},
@@ -137,8 +137,8 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 	if params.IsPublic != nil {
 		filter["settings.is_public"] = *params.IsPublic
 	}
-	if params.ChartID != "" {
-		filter["panels.chart_id"] = params.ChartID
+	if params.ComponentID != "" {
+		filter["panels.component_id"] = params.ComponentID
 	}
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
@@ -274,14 +274,14 @@ func (r *DashboardRepository) AttachChartToPanel(ctx context.Context, dashboardI
 	return nil
 }
 
-// FindByChartID retrieves all dashboards using a specific chart
-// Used for notifying dashboards when a chart is updated
-func (r *DashboardRepository) FindByChartID(ctx context.Context, chartID string) ([]models.Dashboard, error) {
-	filter := bson.M{"panels.chart_id": chartID}
+// FindByComponentID retrieves all dashboards using a specific component
+// Used for notifying dashboards when a component is updated
+func (r *DashboardRepository) FindByComponentID(ctx context.Context, componentID string) ([]models.Dashboard, error) {
+	filter := bson.M{"panels.component_id": componentID}
 
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find dashboards by chart: %w", err)
+		return nil, fmt.Errorf("failed to find dashboards by component: %w", err)
 	}
 	defer cursor.Close(ctx)
 
@@ -309,8 +309,8 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 	if params.IsPublic != nil {
 		filter["settings.is_public"] = *params.IsPublic
 	}
-	if params.ChartID != "" {
-		filter["panels.chart_id"] = params.ChartID
+	if params.ComponentID != "" {
+		filter["panels.component_id"] = params.ComponentID
 	}
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
@@ -347,11 +347,11 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 		// Pagination
 		{{Key: "$skip", Value: skip}},
 		{{Key: "$limit", Value: limit}},
-		// Extract chart_ids from panels
+		// Extract component_ids from panels
 		{{Key: "$addFields", Value: bson.D{
-			{Key: "chart_ids", Value: bson.D{
+			{Key: "component_ids", Value: bson.D{
 				{Key: "$filter", Value: bson.D{
-					{Key: "input", Value: "$panels.chart_id"},
+					{Key: "input", Value: "$panels.component_id"},
 					{Key: "as", Value: "cid"},
 					{Key: "cond", Value: bson.D{
 						{Key: "$and", Value: bson.A{
@@ -362,16 +362,22 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 				}},
 			}},
 		}}},
-		// Lookup charts by ID (charts use "id" field, not "_id")
+		// Lookup components by ID (components use "id" field, not "_id").
+		// Note: the `from: "charts"` collection name here is pre-existing
+		// drift — the underlying Mongo collection is `components`. This
+		// aggregation has been broken since v0.11.x (panel_count returns 0)
+		// and is worked around client-side; the proper fix is tracked
+		// separately. Don't conflate it with the v0.14.1 panel.chart_id
+		// rename: this code is renamed for consistency, not correctness.
 		{{Key: "$lookup", Value: bson.D{
 			{Key: "from", Value: "charts"},
-			{Key: "let", Value: bson.D{{Key: "chartIds", Value: "$chart_ids"}}},
+			{Key: "let", Value: bson.D{{Key: "componentIds", Value: "$component_ids"}}},
 			{Key: "pipeline", Value: bson.A{
 				bson.D{{Key: "$match", Value: bson.D{
 					{Key: "$expr", Value: bson.D{
 						{Key: "$and", Value: bson.A{
-							bson.D{{Key: "$in", Value: bson.A{"$id", "$$chartIds"}}},
-							bson.D{{Key: "$eq", Value: bson.A{"$status", "final"}}}, // Only final charts
+							bson.D{{Key: "$in", Value: bson.A{"$id", "$$componentIds"}}},
+							bson.D{{Key: "$eq", Value: bson.A{"$status", "final"}}}, // Only final components
 						}},
 					}},
 				}}},
@@ -379,14 +385,14 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 					{Key: "connection_id", Value: 1},
 				}}},
 			}},
-			{Key: "as", Value: "matched_charts"},
+			{Key: "as", Value: "matched_components"},
 		}}},
-		// Extract unique connection_ids from matched charts
+		// Extract unique connection_ids from matched components
 		{{Key: "$addFields", Value: bson.D{
 			{Key: "connection_ids", Value: bson.D{
 				{Key: "$setUnion", Value: bson.A{
 					bson.D{{Key: "$filter", Value: bson.D{
-						{Key: "input", Value: "$matched_charts.connection_id"},
+						{Key: "input", Value: "$matched_components.connection_id"},
 						{Key: "as", Value: "dsid"},
 						{Key: "cond", Value: bson.D{
 							{Key: "$and", Value: bson.A{

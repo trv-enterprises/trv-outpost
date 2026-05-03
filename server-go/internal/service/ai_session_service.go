@@ -53,15 +53,15 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 	var chart *models.Component
 	var chartVersion int
 
-	if req.ChartID != "" {
+	if req.ComponentID != "" {
 		// Editing existing chart - check for existing draft
-		existingDraft, err := s.chartRepo.FindDraft(ctx, req.ChartID)
+		existingDraft, err := s.chartRepo.FindDraft(ctx, req.ComponentID)
 		if err != nil {
 			return nil, fmt.Errorf("error checking for existing draft: %w", err)
 		}
 		if existingDraft != nil {
 			// Check if there's already an active session for this chart
-			existingSession, err := s.sessionRepo.FindByChartID(ctx, req.ChartID)
+			existingSession, err := s.sessionRepo.FindByComponentID(ctx, req.ComponentID)
 			if err != nil {
 				return nil, fmt.Errorf("error checking for existing session: %w", err)
 			}
@@ -69,13 +69,13 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 				return nil, fmt.Errorf("chart already has an active AI session - delete the draft first")
 			}
 			// Draft exists but no active session - delete the orphaned draft
-			if err := s.chartRepo.DeleteVersion(ctx, req.ChartID, existingDraft.Version); err != nil {
+			if err := s.chartRepo.DeleteVersion(ctx, req.ComponentID, existingDraft.Version); err != nil {
 				return nil, fmt.Errorf("error deleting orphaned draft: %w", err)
 			}
 		}
 
 		// Get the latest final version
-		latestFinal, err := s.chartRepo.FindLatestFinal(ctx, req.ChartID)
+		latestFinal, err := s.chartRepo.FindLatestFinal(ctx, req.ComponentID)
 		if err != nil {
 			return nil, fmt.Errorf("error finding latest final version: %w", err)
 		}
@@ -84,7 +84,7 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 		}
 
 		// Create new draft version based on latest final
-		maxVersion, err := s.chartRepo.GetMaxVersion(ctx, req.ChartID)
+		maxVersion, err := s.chartRepo.GetMaxVersion(ctx, req.ComponentID)
 		if err != nil {
 			return nil, fmt.Errorf("error getting max version: %w", err)
 		}
@@ -138,7 +138,7 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 	// Create the session
 	session := &models.AISession{
 		ID:           uuid.New().String(),
-		ChartID:      chart.ID,
+		ComponentID:  chart.ID,
 		ChartVersion: chartVersion,
 		Messages:     []models.AIMessage{},
 		Status:       models.AISessionStatusActive,
@@ -192,7 +192,7 @@ func (s *AISessionService) GetSession(ctx context.Context, id string) (*models.A
 	}
 
 	// Get the associated chart draft
-	chart, err := s.chartRepo.FindByIDAndVersion(ctx, session.ChartID, session.ChartVersion)
+	chart, err := s.chartRepo.FindByIDAndVersion(ctx, session.ComponentID, session.ChartVersion)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving chart draft: %w", err)
 	}
@@ -303,7 +303,7 @@ func (s *AISessionService) SaveSession(ctx context.Context, sessionID string, ch
 	}
 
 	// Get the draft
-	draft, err := s.chartRepo.FindByIDAndVersion(ctx, session.ChartID, session.ChartVersion)
+	draft, err := s.chartRepo.FindByIDAndVersion(ctx, session.ComponentID, session.ChartVersion)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving draft: %w", err)
 	}
@@ -370,7 +370,7 @@ func (s *AISessionService) CancelSession(ctx context.Context, sessionID string) 
 
 	// Delete the draft - ignore errors if draft was already deleted
 	// This can happen if the frontend deleted it first via /api/charts/:id/draft
-	_ = s.chartRepo.DeleteVersion(ctx, session.ChartID, session.ChartVersion)
+	_ = s.chartRepo.DeleteVersion(ctx, session.ComponentID, session.ChartVersion)
 
 	// Mark session as cancelled
 	if err := s.sessionRepo.UpdateStatus(ctx, sessionID, models.AISessionStatusCancelled); err != nil {

@@ -170,7 +170,7 @@ function DashboardTileViewPage() {
         setDashboards(dashboardsRes.dashboards);
       }
 
-      // Build chart lookup (chart_id -> chart)
+      // Build component lookup (component_id -> chart)
       if (chartsRes.components) {
         const chartMap = {};
         chartsRes.components.forEach(chart => {
@@ -200,8 +200,8 @@ function DashboardTileViewPage() {
 
     const dsNames = new Set();
     dashboard.panels.forEach(panel => {
-      if (panel.chart_id) {
-        const chart = charts[panel.chart_id];
+      if (panel.component_id) {
+        const chart = charts[panel.component_id];
         if (chart?.connection_id && connections[chart.connection_id]) {
           dsNames.add(connections[chart.connection_id]);
         }
@@ -327,8 +327,8 @@ function DashboardTileViewPage() {
       result = result.filter(d => {
         if (!d.panels || d.panels.length === 0) return false;
         return d.panels.some(panel => {
-          if (!panel.chart_id) return false;
-          const c = charts[panel.chart_id];
+          if (!panel.component_id) return false;
+          const c = charts[panel.component_id];
           if (!c) return false;
           if (c.connection_id === connectionFilter) return true;
           const dc = c.display_config;

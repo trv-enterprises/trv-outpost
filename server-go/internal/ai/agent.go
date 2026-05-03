@@ -125,7 +125,7 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		Type:      DebugEventSessionStart,
 		SessionID: session.ID,
 		Data: map[string]interface{}{
-			"chart_id":      session.ChartID,
+			"component_id":  session.ComponentID,
 			"chart_version": session.ChartVersion,
 			"user_message":  userContent,
 			"model":         a.modelName,
@@ -212,7 +212,7 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			// Execute the tool
 			result, err := a.toolExecutor.ExecuteTool(
 				ctx,
-				session.ChartID,
+				session.ComponentID,
 				session.ChartVersion,
 				tc.Name,
 				inputJSON,

@@ -167,8 +167,8 @@ func dashboardIndexes() []mongo.IndexModel {
 		},
 		// Namespace filter + recency — the default dashboards list query.
 		{Keys: bson.D{{Key: "namespace", Value: 1}, {Key: "updated", Value: -1}}},
-		// "Dashboards using chart X" lookups + newest-first sort.
-		{Keys: bson.D{{Key: "panels.chart_id", Value: 1}, {Key: "updated", Value: -1}}},
+		// "Dashboards using component X" lookups + newest-first sort.
+		{Keys: bson.D{{Key: "panels.component_id", Value: 1}, {Key: "updated", Value: -1}}},
 		// Public-dashboard listing with newest-first sort.
 		{Keys: bson.D{{Key: "settings.is_public", Value: 1}, {Key: "updated", Value: -1}}},
 		// Tag filtering (Part 3) with newest-first sort.

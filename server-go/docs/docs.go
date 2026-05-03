@@ -4968,16 +4968,16 @@ const docTemplate = `{
             }
         },
         "models.AISession": {
-            "description": "AI session for chart creation/editing",
+            "description": "AI session for component creation/editing",
             "type": "object",
             "properties": {
-                "chart_id": {
-                    "description": "Chart UUID being edited",
-                    "type": "string"
-                },
                 "chart_version": {
                     "description": "Version being edited (always a draft)",
                     "type": "integer"
+                },
+                "component_id": {
+                    "description": "Component UUID being edited",
+                    "type": "string"
                 },
                 "created": {
                     "type": "string"
@@ -5764,12 +5764,12 @@ const docTemplate = `{
             "description": "Request body for creating a new AI session",
             "type": "object",
             "properties": {
-                "chart_id": {
-                    "description": "Existing chart ID to edit (optional, omit for new chart)",
-                    "type": "string"
-                },
                 "chart_type": {
                     "description": "For charts: bar, line, pie, etc.",
+                    "type": "string"
+                },
+                "component_id": {
+                    "description": "Existing component ID to edit (optional, omit for new component)",
                     "type": "string"
                 },
                 "component_type": {
@@ -5960,7 +5960,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "panels": {
-                    "description": "Panels with optional chart_id",
+                    "description": "Panels with optional component_id",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.DashboardPanel"
@@ -6145,7 +6145,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "panels": {
-                    "description": "Panels with chart_id references",
+                    "description": "Panels with component_id references",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.DashboardPanel"
@@ -6192,11 +6192,11 @@ const docTemplate = `{
             }
         },
         "models.DashboardPanel": {
-            "description": "Panel position and size in the grid with optional chart reference or text config",
+            "description": "Panel position and size in the grid with optional component reference or text config",
             "type": "object",
             "properties": {
-                "chart_id": {
-                    "description": "Reference to chart component",
+                "component_id": {
+                    "description": "Reference to a component (chart, control, or display)",
                     "type": "string"
                 },
                 "h": {
@@ -8069,7 +8069,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "panels": {
-                    "description": "Panels with optional chart_id",
+                    "description": "Panels with optional component_id",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.DashboardPanel"

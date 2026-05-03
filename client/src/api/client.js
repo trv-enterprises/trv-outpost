@@ -754,8 +754,8 @@ class APIClient {
   }
 
   // AI Session endpoints
-  async createAISession(chartId = null, context = {}) {
-    const payload = chartId ? { chart_id: chartId } : {};
+  async createAISession(componentId = null, context = {}) {
+    const payload = componentId ? { component_id: componentId } : {};
     // Apply pre-flight context to session creation
     if (context.componentType) payload.component_type = context.componentType;
     if (context.chartType) payload.chart_type = context.chartType;

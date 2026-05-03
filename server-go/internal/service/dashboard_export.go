@@ -72,8 +72,8 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 		dashboards = append(dashboards, *dash)
 		namespaceCounts[dash.Namespace]++
 		for _, panel := range dash.Panels {
-			if panel.ChartID != "" {
-				chartIDsSeen[panel.ChartID] = struct{}{}
+			if panel.ComponentID != "" {
+				chartIDsSeen[panel.ComponentID] = struct{}{}
 			}
 		}
 	}
@@ -169,12 +169,12 @@ func bundleWarnings(b *models.ExportBundle) []string {
 	var warnings []string
 	for _, d := range b.Objects.Dashboards {
 		for _, p := range d.Panels {
-			if p.ChartID == "" {
+			if p.ComponentID == "" {
 				continue
 			}
-			if _, ok := have[p.ChartID]; !ok {
+			if _, ok := have[p.ComponentID]; !ok {
 				warnings = append(warnings, fmt.Sprintf(
-					"dashboard %q (%s) references missing chart %s", d.Name, d.ID, p.ChartID,
+					"dashboard %q (%s) references missing component %s", d.Name, d.ID, p.ComponentID,
 				))
 			}
 		}

@@ -868,9 +868,9 @@ func (r *ToolRegistry) registerComponentTools() {
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			params := models.DashboardQueryParams{
-				ChartID:  getString(args, "component_id"),
-				Page:     1,
-				PageSize: 100,
+				ComponentID: getString(args, "component_id"),
+				Page:        1,
+				PageSize:    100,
 			}
 			result, err := r.dashboardService.ListDashboards(context.Background(), params)
 			if err != nil {
@@ -914,7 +914,7 @@ func (r *ToolRegistry) registerComponentTools() {
 
 // ============================================================================
 // Dashboard tools. Dashboards are a name + grid panels. Each panel either
-// references a component (chart_id) or carries inline text (text_config).
+// references a component (component_id) or carries inline text (text_config).
 // ============================================================================
 
 func (r *ToolRegistry) registerDashboardTools() {
@@ -956,13 +956,13 @@ func (r *ToolRegistry) registerDashboardTools() {
 	r.registerTool(
 		Tool{
 			Name:        "create_dashboard",
-			Description: "Create a new dashboard. Panels live directly on the dashboard (there is no separate Layout entity). Each panel is `{id, x, y, w, h, chart_id?, text_config?}` in 32x32 px cell units — see the session-init \"Grid contract\" section for how cols/rows derive from canvas size. Use chart_id to reference an existing component, or text_config for native inline text. Empty panels (no chart_id and no text_config) are valid placeholders.",
+			Description: "Create a new dashboard. Panels live directly on the dashboard (there is no separate Layout entity). Each panel is `{id, x, y, w, h, component_id?, text_config?}` in 32x32 px cell units — see the session-init \"Grid contract\" section for how cols/rows derive from canvas size. Use component_id to reference an existing component, or text_config for native inline text. Empty panels (no component_id and no text_config) are valid placeholders.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"name":        {Type: "string", Description: "Unique dashboard name"},
 					"description": {Type: "string", Description: "Description"},
-					"panels":      {Type: "array", Description: "Array of panel objects {id, x, y, w, h, chart_id?, text_config?}"},
+					"panels":      {Type: "array", Description: "Array of panel objects {id, x, y, w, h, component_id?, text_config?}"},
 					"settings":    {Type: "object", Description: "Dashboard settings (theme, refresh_interval, layout_dimension, etc)"},
 					"tags":        {Type: "array", Description: "Tags"},
 				},
@@ -1176,12 +1176,12 @@ func parsePanels(panelsRaw []interface{}) []models.DashboardPanel {
 	for _, p := range panelsRaw {
 		if pm, ok := p.(map[string]interface{}); ok {
 			panel := models.DashboardPanel{
-				ID:      getString(pm, "id"),
-				X:       getInt(pm, "x"),
-				Y:       getInt(pm, "y"),
-				W:       getInt(pm, "w"),
-				H:       getInt(pm, "h"),
-				ChartID: getString(pm, "chart_id"),
+				ID:          getString(pm, "id"),
+				X:           getInt(pm, "x"),
+				Y:           getInt(pm, "y"),
+				W:           getInt(pm, "w"),
+				H:           getInt(pm, "h"),
+				ComponentID: getString(pm, "component_id"),
 			}
 			if tc, ok := pm["text_config"].(map[string]interface{}); ok {
 				panel.TextConfig = &models.PanelTextConfig{

@@ -216,8 +216,8 @@ func (h *AISessionHandler) HandleWebSocket(c *gin.Context) {
 	// Register with client registry for status monitoring
 	clientRegistry := registry.GetClientRegistry()
 	clientID := clientRegistry.Register(registry.ConnectionTypeAISession, map[string]interface{}{
-		"session_id": id,
-		"chart_id":   response.Session.ChartID,
+		"session_id":   id,
+		"component_id": response.Session.ComponentID,
 	})
 	defer clientRegistry.Unregister(clientID)
 
@@ -229,15 +229,15 @@ func (h *AISessionHandler) HandleWebSocket(c *gin.Context) {
 
 	// Subscribe this connection to chart updates via the ChartHub
 	// This allows the connection to receive real-time updates when the chart is modified
-	if h.chartHub != nil && response.Session.ChartID != "" {
+	if h.chartHub != nil && response.Session.ComponentID != "" {
 		subscriberID := fmt.Sprintf("session-%s", id)
 		chartSubscriber := &hub.ComponentSubscriber{
 			ID:   subscriberID,
 			Conn: conn,
 		}
-		h.chartHub.Subscribe(chartSubscriber, response.Session.ChartID)
+		h.chartHub.Subscribe(chartSubscriber, response.Session.ComponentID)
 		defer h.chartHub.UnsubscribeAll(subscriberID)
-		fmt.Printf("[WS] Subscribed session %s to chart %s updates\n", id, response.Session.ChartID)
+		fmt.Printf("[WS] Subscribed session %s to chart %s updates\n", id, response.Session.ComponentID)
 	}
 
 	// Send initial connection event
