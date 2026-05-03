@@ -1,0 +1,75 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+.component-expand-modal {
+  .cds--modal-container {
+    // Track the viewport at all sizes so the modal grows on larger displays.
+    // The px caps only engage on truly huge screens (5K+); below that, the
+    // viewport percentages drive sizing, with breathable margins on every
+    // edge.
+    width: min(92vw, 1800px);
+    max-width: 92vw;
+    height: min(88vh, 1200px);
+    max-height: 88vh;
+  }
+
+  .cds--modal-content {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 1rem;
+  }
+
+  // Lift the chart action row (download menu + view-as-table) out of the
+  // panel body and pin it to the modal header, immediately to the left of
+  // Carbon's close button. Carbon's .cds--modal-container is already
+  // position:relative, so an absolutely-positioned descendant anchors to
+  // it — but we have to neutralize position on the intermediate panel
+  // wrappers (`.chart-panel-with-actions` is inline-styled relative) so
+  // the action row's offsetParent climbs all the way up to the container.
+  // We only need this *inside* the modal, so the dashboard panel keeps
+  // its hover-only top-right action row unchanged.
+  .cds--modal-content,
+  .component-expand-body,
+  .component-expand-body .chart-panel-with-actions {
+    position: static !important;
+  }
+  .component-expand-body .chart-panel-actions {
+    position: absolute;
+    top: 0.75rem;
+    right: 3.25rem; // close button is ~3rem wide; leave a small gap
+    z-index: 10;
+    display: flex;
+    gap: 4px;
+    opacity: 1; // always visible inside the modal — no hover-to-reveal
+  }
+
+  .component-expand-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 0 0.75rem 0;
+
+    .last-refresh {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+    }
+  }
+
+  .component-expand-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle-01);
+    overflow: hidden;
+
+    // ComponentPanelWithActions / displays expect a sized container.
+    > .chart-panel-with-actions,
+    > .weather-display,
+    > .frigate-camera-viewer {
+      width: 100%;
+      height: 100%;
+    }
+  }
+}

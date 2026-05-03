@@ -46,6 +46,7 @@ import {
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
 import ComponentPanelWithActions from '../components/ComponentPanelWithActions';
+import ComponentExpandModal from '../components/ComponentExpandModal';
 import { ControlRenderer } from '../components/controls';
 import FrigateCameraViewer from '../components/frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
@@ -202,6 +203,7 @@ function DashboardViewerPage({ canDesign = false }) {
   const [editableRefreshInterval, setEditableRefreshInterval] = useState(30);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [expandedPanelId, setExpandedPanelId] = useState(null);
 
   // Zoom state (edit mode only)
   const [zoom, setZoom] = useState(100);
@@ -1029,7 +1031,14 @@ function DashboardViewerPage({ canDesign = false }) {
   // their default dashboard. Dirty state → pop a Save / Discard /
   // Stay prompt and wait for the user to pick.
   useEffect(() => {
-    if (!isEditMode) {
+    // Register a guard whenever the dashboard is being treated as part of
+    // the design workflow — either an active edit session (isEditMode) or
+    // a design-origin preview (fromDesign). In both cases the App pins
+    // the header pill on DESIGN, and a VIEW press needs an explicit clear
+    // of the design-preview flag so the URL→mode sync doesn't snap the
+    // pill back. Without a guard at all (the previous behavior for
+    // fromDesign && !isEditMode), the pill flickers and stays on DESIGN.
+    if (!isEditMode && !fromDesign) {
       clearModeGuard();
       return undefined;
     }
@@ -1037,19 +1046,15 @@ function DashboardViewerPage({ canDesign = false }) {
       // For new dashboards we don't have a saved id to hand back —
       // App.jsx will fall back to the default dashboard.
       const currentId = isNewDashboard ? null : id;
-      if (!editHasChanges) {
-        // Clean: drop out of edit mode so the destination page doesn't
-        // render with stale isEditMode styling, then proceed.
-        setIsEditMode(false);
+      // Clean (no edit, or edit with no changes): proceed immediately.
+      if (!isEditMode || !editHasChanges) {
+        if (isEditMode) setIsEditMode(false);
         // Switching INTO view mode is the user explicitly leaving
         // the design workflow. Clear the design-origin preview flag
         // so isEditingDashboard goes false and the header pill
         // settles on VIEW immediately, instead of the App's
         // /view/* → DESIGN exception (set when fromDesign is true)
-        // snapping the pill back. Without this clear, a same-URL
-        // VIEW press while in clean preview leaves the pill on
-        // DESIGN until a *different* URL renavigation forces a
-        // page remount.
+        // snapping the pill back.
         if (newMode === MODES.VIEW) {
           setFromDesign(false);
         }
@@ -1064,7 +1069,7 @@ function DashboardViewerPage({ canDesign = false }) {
     return () => {
       clearModeGuard();
     };
-  }, [isEditMode, editHasChanges, isNewDashboard, id, setModeGuard, clearModeGuard]);
+  }, [isEditMode, fromDesign, editHasChanges, isNewDashboard, id, setModeGuard, clearModeGuard]);
 
   // Mode-switch prompt actions. Each resolves the pending guard
   // promise with { proceed, dashboardId? }. The dashboardId tells the
@@ -1640,6 +1645,15 @@ function DashboardViewerPage({ canDesign = false }) {
               <span className="last-refresh">
                 Last refresh: {formatTime(lastRefresh)}
               </span>
+              <IconButton
+                kind="ghost"
+                label="Refresh"
+                align="bottom"
+                onClick={handleManualRefresh}
+                disabled={loading}
+              >
+                <Renew size={20} className={loading ? 'spinning' : ''} />
+              </IconButton>
               {canDesign && dashboard?.id && !isNewDashboard && (
                 <IconButton
                   kind="ghost"
@@ -1650,15 +1664,6 @@ function DashboardViewerPage({ canDesign = false }) {
                   <Download size={20} />
                 </IconButton>
               )}
-              <IconButton
-                kind="ghost"
-                label="Refresh"
-                align="bottom"
-                onClick={handleManualRefresh}
-                disabled={loading}
-              >
-                <Renew size={20} className={loading ? 'spinning' : ''} />
-              </IconButton>
               <IconButton
                 kind="ghost"
                 label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
@@ -1802,6 +1807,21 @@ function DashboardViewerPage({ canDesign = false }) {
               const hasText = !!panel.text_config;
               const hasChart = !hasText && (!!chart?.component_code || chart?.component_type === 'control' || chart?.component_type === 'display');
               const hasContent = hasText || hasChart;
+              // Double-click expand: charts and "live view" displays only.
+              // Controls, frigate_alerts, text, and empty panels are excluded.
+              // Some legacy components were saved with `component_type=""`
+              // before the type was made required; treat any non-control,
+              // non-display component with custom code as a chart so they
+              // get the expand affordance too.
+              const expandableDisplayTypes = new Set(['weather', 'frigate_camera']);
+              const isLegacyChart = !!chart?.component_code
+                && chart?.component_type !== 'control'
+                && chart?.component_type !== 'display';
+              const canExpand = !isEditMode && hasChart && (
+                chart?.component_type === 'chart' ||
+                isLegacyChart ||
+                (chart?.component_type === 'display' && expandableDisplayTypes.has(chart?.display_config?.display_type))
+              );
 
               return (
                 <div
@@ -1813,6 +1833,7 @@ function DashboardViewerPage({ canDesign = false }) {
                     gridRow: `${panel.y + 1} / span ${panel.h}`,
                     cursor: isEditMode ? 'default' : (hasChart ? 'pointer' : 'default')
                   }}
+                  onDoubleClick={canExpand ? () => setExpandedPanelId(panel.id) : undefined}
                 >
                   {/* Edit mode: hover header overlay with title, actions, and delete */}
                   {isEditMode && (
@@ -2056,6 +2077,22 @@ function DashboardViewerPage({ canDesign = false }) {
         dashboardIds={dashboard?.id ? [dashboard.id] : []}
         dashboards={dashboard ? [dashboard] : []}
       />
+      {expandedPanelId && (() => {
+        const expandedPanel = panels.find(p => p.id === expandedPanelId);
+        const expandedChart = expandedPanel?.chart_id ? chartsMap[expandedPanel.chart_id] : null;
+        if (!expandedChart) return null;
+        return (
+          <ComponentExpandModal
+            open={!!expandedPanelId}
+            onClose={() => setExpandedPanelId(null)}
+            chart={expandedChart}
+            dashboardSettings={dashboard?.settings}
+            lastRefresh={lastRefresh}
+            formatTime={formatTime}
+            dashboardCommand={dashboardCommand}
+          />
+        );
+      })()}
       <Modal
         open={settingsModalOpen}
         onRequestClose={() => setSettingsModalOpen(false)}
