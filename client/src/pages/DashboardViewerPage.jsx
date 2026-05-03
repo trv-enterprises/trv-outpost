@@ -130,7 +130,14 @@ function DashboardViewerPage({ canDesign = false }) {
   const [dashboardCommand, setDashboardCommand] = useState(null); // Latest command: { target, action, ... }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  // refreshKey: full panel remount (used when chart definition changes
+  // server-side and we need to re-eval component_code, etc.).
+  // refreshTick: refetch-without-remount signal (used when only the
+  // *data* should refresh — manual Refresh button, dashboard navigation).
+  // The tick preserves streaming buffers and dynamic-component state,
+  // which the remount path destroys.
   const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
   // Dashboard fit mode: "actual" | "window" | "width" | "stretch".
   // Storage is strictly per-user-per-dashboard; the load effect below
   // resolves: user's dashboard_fit_modes[id] → admin setting
@@ -645,6 +652,24 @@ function DashboardViewerPage({ canDesign = false }) {
     }
   }, [fetchDashboard, isNewDashboard]);
 
+  // When the user navigates between dashboards, bump the refresh-tick so
+  // POLLING charts re-issue their queries (they don't carry rolling
+  // buffers, so a refetch is harmless). Streaming charts ignore the tick
+  // and keep their warm grace-period subscription + buffered series, so
+  // the user comes back to a chart that's already drawing instead of a
+  // blank one. The tick is forwarded to ComponentPanelWithActions
+  // → DynamicComponentLoader → useData, which calls refetch() in
+  // response without remounting.
+  const firstIdRef = useRef(true);
+  useEffect(() => {
+    if (firstIdRef.current) {
+      firstIdRef.current = false;
+      return;
+    }
+    setRefreshTick(t => t + 1);
+    setLastRefresh(new Date());
+  }, [id]);
+
   // Auto-enter edit mode when navigated from design mode (or new dashboard)
   const autoEditTriggered = useRef(false);
   useEffect(() => {
@@ -784,15 +809,16 @@ function DashboardViewerPage({ canDesign = false }) {
   }, []);
 
   const handleManualRefresh = () => {
-    // Force every chart panel to re-mount and re-query. The keying
-    // pattern at <ComponentPanelWithActions key={`${panel.chart_id}-${refreshKey}`}>
-    // tears down each useData instance and starts a fresh fetch.
-    // We deliberately do NOT re-fetch the dashboard record here —
-    // that would reload the panel layout and config, which is
-    // unrelated to the user's intent (they want fresh data, not a
-    // fresh layout). If the dashboard record itself changed, the
-    // user should reload the page.
-    setRefreshKey(k => k + 1);
+    // Trigger an out-of-band refetch on every polling chart by bumping
+    // the refresh-tick. Polling charts watch the tick and call
+    // useData's refetch() in response — no remount, no buffer loss.
+    // Streaming charts ignore the tick (their data is already live and
+    // a refetch would only blip the chart). We deliberately do NOT
+    // re-fetch the dashboard record here — that would reload the panel
+    // layout and config, which is unrelated to the user's intent (they
+    // want fresh data, not a fresh layout). If the dashboard record
+    // itself changed, the user should reload the page.
+    setRefreshTick(t => t + 1);
     setLastRefresh(new Date());
   };
 
@@ -1933,7 +1959,10 @@ function DashboardViewerPage({ canDesign = false }) {
                               // Key includes chart.updated so a config-refresh poll
                               // that picks up a server-side chart edit forces this
                               // panel to remount and the DynamicComponentLoader to
-                              // re-eval the new component_code.
+                              // re-eval the new component_code. Note: refreshTick
+                              // is intentionally NOT in the key — it triggers an
+                              // out-of-band refetch via useData without remounting
+                              // (preserves streaming buffers + dynamic state).
                               key={`${panel.chart_id}-${chart.updated || ''}-${refreshKey}`}
                               chart={chart}
                               loaderProps={{
@@ -1944,6 +1973,7 @@ function DashboardViewerPage({ canDesign = false }) {
                                 connectionId: chart.connection_id,
                                 queryConfig: chart.query_config,
                                 dataRefreshInterval: !isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
+                                refreshTick,
                               }}
                             />
                           </div>

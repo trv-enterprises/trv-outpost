@@ -94,7 +94,7 @@ function applyParser(record, parser) {
   return result;
 }
 
-export function useData({ connectionId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null, parser = null }) {
+export function useData({ connectionId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -557,6 +557,23 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
       mountedRef.current = false;
     };
   }, [connectionId, queryKey, datasourceType, datasourceTransport, typeLoading, fetchData]);
+
+  // Out-of-band refetch on `refreshTick` bump (polling charts only).
+  // The dashboard viewer increments refreshTick when the user presses
+  // the toolbar Refresh button or navigates between dashboards. Since
+  // streaming charts already have live data and a rolling buffer, we
+  // skip them — a forced refetch would only blip the chart and serve
+  // no purpose. The first-render guard prevents this from double-
+  // triggering the initial fetch above.
+  const firstTickRef = useRef(true);
+  useEffect(() => {
+    if (firstTickRef.current) {
+      firstTickRef.current = false;
+      return;
+    }
+    if (typeLoading || isStreamingType || !connectionId) return;
+    fetchData();
+  }, [refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh interval for non-socket datasources, gated on
   // document visibility. When the browser tab is hidden (user

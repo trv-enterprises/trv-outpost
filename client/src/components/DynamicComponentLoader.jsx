@@ -117,7 +117,7 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, children = null }) {
+export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
@@ -157,7 +157,8 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     refreshInterval: dataRefreshInterval,
     useCache: true,
     timeBucket: timeBucketConfig,
-    parser: dataMapping?.parser || null
+    parser: dataMapping?.parser || null,
+    refreshTick,
   });
 
   // Apply transforms to fetched data

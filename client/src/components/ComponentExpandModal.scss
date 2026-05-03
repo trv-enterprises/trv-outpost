@@ -62,7 +62,11 @@
     min-height: 0;
     background: var(--cds-layer-01);
     border: 1px solid var(--cds-border-subtle-01);
-    overflow: hidden;
+    // `overflow: visible` is required so the OverflowMenu's popup (rendered
+    // in-DOM, not portaled) isn't clipped by this container. The inner
+    // wrappers below clip their own content so an oversized chart canvas
+    // still doesn't blow out the modal.
+    overflow: visible;
 
     // ComponentPanelWithActions / displays expect a sized container.
     > .chart-panel-with-actions,
@@ -70,6 +74,7 @@
     > .frigate-camera-viewer {
       width: 100%;
       height: 100%;
+      overflow: hidden;
     }
   }
 }
