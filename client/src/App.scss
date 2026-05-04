@@ -458,6 +458,16 @@ button.cds--overflow-menu {
   z-index: 9100 !important;
 }
 
+// Tooltip content with embedded \n line breaks — preserves whitespace
+// so a multiline label renders one item per line. Apply via
+// `<Tooltip className="tooltip-multiline" ...>`; Carbon lands the class
+// on the tooltip container, which scopes this rule to its .cds--tooltip-content
+// descendant.
+.tooltip-multiline .cds--tooltip-content {
+  white-space: pre-line;
+  text-align: left;
+}
+
 // ContentSwitcher dark theme styling - use blue for selected state
 .cds--content-switcher {
   .cds--content-switcher-btn {

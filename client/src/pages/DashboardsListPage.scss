@@ -425,6 +425,12 @@
     }
   }
 
+  // Panels column: count is hoverable to reveal a tooltip listing
+  // the components referenced by the dashboard's panels.
+  .panels-cell .panels-count {
+    cursor: help;
+  }
+
   // Export-mode bulk action bar — sits between the toolbar and the
   // table so the selected count stays visible while scrolling.
   .export-mode-bar {

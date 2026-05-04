@@ -66,6 +66,7 @@ function ComponentsListPage() {
   const [charts, setCharts] = useState([]);
   const [connections, setConnections] = useState({});
   const [dashboardCounts, setDashboardCounts] = useState({}); // Map of component_id -> dashboard count
+  const [dashboardNames, setDashboardNames] = useState({}); // Map of component_id -> array of dashboard display names
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
@@ -312,20 +313,28 @@ function ComponentsListPage() {
         setConnections(connMap);
       }
 
-      // Build dashboard count map by component_id
+      // Build dashboard count + name-list maps by component_id. The
+      // count tracks how many panels reference the component (a single
+      // dashboard can use the same component in multiple panels — those
+      // bump the count but the dashboard name only appears once in the
+      // tooltip list).
       if (dashboardsData.dashboards) {
         const counts = {};
+        const names = {};
         dashboardsData.dashboards.forEach(dashboard => {
-          // Each dashboard has panels, each panel can have a component_id
-          if (dashboard.panels) {
-            dashboard.panels.forEach(panel => {
-              if (panel.component_id) {
-                counts[panel.component_id] = (counts[panel.component_id] || 0) + 1;
-              }
-            });
-          }
+          if (!dashboard.panels) return;
+          const dashboardLabel = dashboard.name || '(unnamed)';
+          const seenInThisDashboard = new Set();
+          dashboard.panels.forEach(panel => {
+            if (!panel.component_id) return;
+            counts[panel.component_id] = (counts[panel.component_id] || 0) + 1;
+            if (seenInThisDashboard.has(panel.component_id)) return;
+            seenInThisDashboard.add(panel.component_id);
+            (names[panel.component_id] = names[panel.component_id] || []).push(dashboardLabel);
+          });
         });
         setDashboardCounts(counts);
+        setDashboardNames(names);
       }
     } catch (err) {
       setError(err.message);
@@ -561,10 +570,10 @@ function ComponentsListPage() {
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'component_type', header: 'Component', isSortable: true },
     { key: 'chart_type', header: 'Type', isSortable: true },
-    { key: 'connection', header: 'Connection', isSortable: true },
-    { key: 'dashboards', header: 'Dashboards', isSortable: true },
-    { key: 'status', header: 'Status', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
+    { key: 'dashboards', header: 'Dashboards', isSortable: true },
+    { key: 'connection', header: 'Connection', isSortable: true },
+    { key: 'status', header: 'Status', isSortable: true },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
@@ -989,6 +998,24 @@ function ComponentsListPage() {
                                   <Tag type={getChartTypeColor(cell.value)} size="md">
                                     {cell.value?.toUpperCase() || 'N/A'}
                                   </Tag>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'dashboards') {
+                              const names = dashboardNames[chart.id] || [];
+                              const label = names.length === 0
+                                ? 'Not used by any dashboard'
+                                : names.join('\n');
+                              return (
+                                <TableCell key={cell.id} className="dashboards-cell">
+                                  <Tooltip
+                                    label={label}
+                                    align="bottom"
+                                    enterDelayMs={150}
+                                    className="tooltip-multiline"
+                                  >
+                                    <span tabIndex={0} className="dashboards-count">{cell.value}</span>
+                                  </Tooltip>
                                 </TableCell>
                               );
                             }

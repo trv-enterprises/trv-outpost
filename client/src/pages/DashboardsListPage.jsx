@@ -186,9 +186,24 @@ function DashboardsListPage() {
   };
 
   const getPanelCount = (dashboard) => {
-    // Use panels array length directly (full dashboard object)
-    const count = dashboard.panels?.length || 0;
-    return `${count} panel${count === 1 ? '' : 's'}`;
+    // Column header already says "Panels" — return the bare count.
+    return dashboard.panels?.length || 0;
+  };
+
+  // Build a multi-line label of the named components referenced by a
+  // dashboard's panels, for the panel-count tooltip on the list view.
+  // Empty panels (no component_id) and panels referencing deleted
+  // components are surfaced explicitly so the count stays honest.
+  const getComponentNamesLabel = (dashboard) => {
+    const panels = dashboard.panels || [];
+    if (panels.length === 0) return 'No panels';
+    const lines = panels.map((panel) => {
+      if (!panel.component_id) return '(empty panel)';
+      const c = charts[panel.component_id];
+      if (!c) return '(missing component)';
+      return c.title || c.name || '(unnamed)';
+    });
+    return lines.join('\n');
   };
 
   // Handle column sorting
@@ -304,10 +319,10 @@ function DashboardsListPage() {
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'namespace', header: 'Namespace', isSortable: true },
+    { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'panels', header: 'Panels', isSortable: true },
     { key: 'connections', header: 'Connections', isSortable: false },
-    { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
@@ -577,9 +592,19 @@ function DashboardsListPage() {
                     </div>
 
                     <div className="tile-meta">
-                      <Tag type="blue" size="sm">
-                        {getPanelCount(dashboard)}
-                      </Tag>
+                      <Tooltip
+                        label={getComponentNamesLabel(dashboard)}
+                        align="bottom"
+                        enterDelayMs={150}
+                        className="tooltip-multiline"
+                      >
+                        <Tag type="blue" size="sm">
+                          {(() => {
+                            const n = getPanelCount(dashboard);
+                            return `${n} panel${n === 1 ? '' : 's'}`;
+                          })()}
+                        </Tag>
+                      </Tooltip>
                       {(dashboard.tags || []).map((t) => (
                         <Tag
                           key={`dt-${t}`}
@@ -752,6 +777,20 @@ function DashboardsListPage() {
                                       {t}
                                     </Tag>
                                   ))}
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'panels') {
+                              return (
+                                <TableCell key={cell.id} className="panels-cell">
+                                  <Tooltip
+                                    label={getComponentNamesLabel(dashboard)}
+                                    align="bottom"
+                                    enterDelayMs={150}
+                                    className="tooltip-multiline"
+                                  >
+                                    <span tabIndex={0} className="panels-count">{cell.value}</span>
+                                  </Tooltip>
                                 </TableCell>
                               );
                             }

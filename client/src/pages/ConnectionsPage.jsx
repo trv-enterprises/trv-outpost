@@ -57,6 +57,7 @@ function ConnectionsPage() {
 
   const [connections, setConnections] = useState([]);
   const [chartCounts, setChartCounts] = useState({}); // Map of connection_id -> chart count
+  const [chartNames, setChartNames] = useState({}); // Map of connection_id -> array of component display names
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
@@ -139,24 +140,30 @@ function ConnectionsPage() {
         setConnections([]);
       }
 
-      // Build component count map by connection_id. A single component can
-      // reference a connection through multiple fields (top-level connection_id
-      // for charts/controls, display_config.frigate_connection_id and
-      // display_config.mqtt_connection_id for Frigate/weather displays). De-dupe
-      // per component so referencing the same connection twice still counts once.
+      // Build component count + name-list maps by connection_id. A single
+      // component can reference a connection through multiple fields
+      // (top-level connection_id for charts/controls,
+      // display_config.frigate_connection_id and
+      // display_config.mqtt_connection_id for Frigate/weather displays).
+      // De-dupe per component so referencing the same connection twice
+      // still counts once.
       if (chartsData.components) {
         const counts = {};
+        const names = {};
         chartsData.components.forEach(component => {
           const refs = new Set();
           if (component.connection_id) refs.add(component.connection_id);
           const dc = component.display_config;
           if (dc?.frigate_connection_id) refs.add(dc.frigate_connection_id);
           if (dc?.mqtt_connection_id) refs.add(dc.mqtt_connection_id);
+          const componentLabel = component.title || component.name || '(unnamed)';
           refs.forEach(connId => {
             counts[connId] = (counts[connId] || 0) + 1;
+            (names[connId] = names[connId] || []).push(componentLabel);
           });
         });
         setChartCounts(counts);
+        setChartNames(names);
       }
     } catch (err) {
       setError(err.message);
@@ -299,9 +306,9 @@ function ConnectionsPage() {
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'type', header: 'Type', isSortable: true },
-    { key: 'charts', header: 'Charts', isSortable: true },
     { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
+    { key: 'charts', header: 'Charts', isSortable: true },
     { key: 'updated_at', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
@@ -610,6 +617,24 @@ function ConnectionsPage() {
                                       {t}
                                     </Tag>
                                   ))}
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'charts') {
+                              const names = chartNames[connection.id] || [];
+                              const label = names.length === 0
+                                ? 'No components reference this connection'
+                                : names.join('\n');
+                              return (
+                                <TableCell key={cell.id} className="charts-cell">
+                                  <Tooltip
+                                    label={label}
+                                    align="bottom"
+                                    enterDelayMs={150}
+                                    className="tooltip-multiline"
+                                  >
+                                    <span tabIndex={0} className="charts-count">{cell.value}</span>
+                                  </Tooltip>
                                 </TableCell>
                               );
                             }
