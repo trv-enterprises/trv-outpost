@@ -30,6 +30,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"rename_datasources_to_connections_v1", migrateRenameDatasourcesToConnections},
 		{"rename_datasource_id_field_v1", migrateRenameDatasourceIDField},
 		{"rename_datasourceId_in_component_code_v1", migrateRenameDatasourceIdInComponentCode},
+		{"drop_mask_secrets_v1", migrateDropMaskSecrets},
 	}
 
 	coll := db.Collection("migrations")
@@ -471,5 +472,25 @@ func migrateRenameDatasourceIdInComponentCode(ctx context.Context, db *mongo.Dat
 	}
 
 	log.Printf("  components: rewrote datasourceId: → connectionId: in %d component_code blobs", updated)
+	return nil
+}
+
+// migrateDropMaskSecrets removes the legacy `mask_secrets` field from
+// every connection document. The per-connection opt-out flag was
+// removed in v0.14.3; the API now always masks secrets in GET
+// responses. This migration cleans the field out of stored documents
+// so the DB matches the new model. Idempotent: only updates documents
+// that still carry the field, and the registry framework guards
+// against re-running.
+func migrateDropMaskSecrets(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("connections").UpdateMany(
+		ctx,
+		bson.M{"mask_secrets": bson.M{"$exists": true}},
+		bson.M{"$unset": bson.M{"mask_secrets": ""}},
+	)
+	if err != nil {
+		return fmt.Errorf("drop mask_secrets: %w", err)
+	}
+	log.Printf("  connections: dropped mask_secrets from %d documents", res.ModifiedCount)
 	return nil
 }

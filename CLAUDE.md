@@ -10,6 +10,17 @@ See the `release-deploy` skill for the authoritative runbook (tagging, image bui
 
 **API docs regeneration is part of release.** `make release` calls `make api-docs-check`, which regenerates `server-go/docs/swagger.{json,yaml,go}` (via `swag init`) and `docs/postman/trve-dashboard.postman_collection.json` (via `docs/postman/build-collection.js`), then fails if any of those files diff. If you've added or changed an API handler since the last release, run `make api-docs` and commit the result before tagging — otherwise the release target stops you with a one-line `git add … && git commit` recipe.
 
+## Database Migrations
+
+**Default: add to the in-process migration framework**, not as a standalone `cmd/migrate-*` binary. The framework lives in `server-go/internal/database/migrations.go` — append a `{name, fn}` entry to the `migrations` slice and write a function with the same shape as `migrateStripChartThumbnail` or `migrateDropMaskSecrets`. The framework is idempotent (tracks completed migrations in the `migrations` collection) and runs at server startup, **before** index creation. This means every prod deploy of a new server image automatically applies pending migrations — no separate scp / docker exec / ad-hoc step. See `docs/architecture/database.md` for the full lifecycle.
+
+**Standalone `cmd/migrate-*` binaries are the exception, not the rule.** Reserve them for cases that genuinely don't fit on-boot:
+- Structural rewrites that touch many collections at once and benefit from a separate audit run (e.g. `migrate-uuid-ids`, which rewrote `_id` types and re-pointed every component reference).
+- Migrations that need to run *before* a code-incompatible server boot (the new server can't start cleanly until the data is converted).
+- One-shots that are too expensive or risky to gate every server start on (multi-hour sweeps, network-bound rewrites).
+
+For everything else — `$set`, `$unset`, `$rename`, simple aggregation rewrites — write it in `migrations.go`. It ships in the image, runs automatically on the next deploy, and never needs a manual step.
+
 ## Development Rules
 
 ### 1. Build Number Increment
