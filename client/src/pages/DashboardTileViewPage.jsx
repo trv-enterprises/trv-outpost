@@ -349,26 +349,8 @@ function DashboardTileViewPage() {
 
     // Order resolution lives in utils/dashboardOrder so the View
     // Mode tile page and the dashboard viewer's prev/next arrows
-    // walk dashboards in the same sequence — but only in manual mode.
-    // For key-based sort, honour the user's choice instead.
-    if (sortKey === 'manual') {
-      return orderDashboardsForViewer(result, tileOrder);
-    }
-    const sorted = [...result].sort((a, b) => {
-      let aVal = a[sortKey];
-      let bVal = b[sortKey];
-      if (sortKey === 'updated') {
-        aVal = new Date(aVal).getTime() || 0;
-        bVal = new Date(bVal).getTime() || 0;
-      } else {
-        aVal = String(aVal || '').toLowerCase();
-        bVal = String(bVal || '').toLowerCase();
-      }
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
+    // walk dashboards in the same sequence.
+    return orderDashboardsForViewer(result, tileOrder, { key: sortKey, direction: sortDirection });
   }, [dashboards, namespaceFilter, tagFilter, connectionFilter, charts, searchTerm, tileOrder, sortKey, sortDirection]);
 
   if (loading) {

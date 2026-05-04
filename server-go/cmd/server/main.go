@@ -652,7 +652,7 @@ func main() {
 		fmt.Printf("\n🚀 Dashboard Server starting on http://%s:%d\n", cfg.Server.Host, cfg.Server.Port)
 		fmt.Printf("📡 Mode: %s\n", cfg.Server.Mode)
 		fmt.Printf("📊 MongoDB: %s\n", cfg.MongoDB.Database)
-		fmt.Println("\nPress Ctrl+C to stop\n")
+		fmt.Print("\nPress Ctrl+C to stop\n\n")
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)

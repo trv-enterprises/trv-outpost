@@ -482,7 +482,7 @@ For instant render, cache in `localStorage` and sync from server on mount (see `
 ## Development Setup
 
 ### Prerequisites
-- Go 1.25+ (via Homebrew on macOS)
+- Go 1.26+ (via Homebrew on macOS)
 - Node.js 18+
 - Docker & Docker Compose
 - MongoDB 7.x
@@ -495,7 +495,7 @@ docker compose up -d mongodb
 
 # Start Go backend (Terminal 1)
 cd server-go
-# Go 1.25 is now the default, no PATH override needed
+# Go 1.26 is now the default, no PATH override needed
 go build -o bin/server cmd/server/main.go && ./bin/server
 
 # Start React frontend (Terminal 2)

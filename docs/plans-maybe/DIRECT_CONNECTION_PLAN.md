@@ -1,5 +1,13 @@
 # Direct Connection Mode - Implementation Plan
 
+> **Status (2026-05-03): SUPERSEDED.** This plan was the original
+> motivation for the `mask_secrets` flag on connections. The feature
+> was never built, so the flag was removed and the API now always
+> masks secrets in GET responses. If we revisit direct-mode
+> connections, we'd need a different mechanism for delivering
+> credentials to the browser — likely a separate short-lived
+> token-issue endpoint, not a per-connection always-on opt-out.
+
 ## Overview
 
 Add a per-datasource toggle that determines whether the frontend communicates directly with the data source or proxies through the dashboard server.

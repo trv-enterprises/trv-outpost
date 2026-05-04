@@ -342,7 +342,6 @@ function UserDetailPage() {
                 labelText="User GUID (read-only)"
                 value={user.guid || ''}
                 readOnly
-                helperText="This GUID is used for authentication via the X-User-ID header"
               />
             </div>
           </div>

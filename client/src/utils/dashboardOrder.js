@@ -11,27 +11,52 @@
  * matches the visible tile order on the listing page.
  *
  * Resolution:
- *   1. Default — most-recently-updated first.
- *   2. If tileOrder is supplied (array of dashboard IDs the user has
- *      pinned via drag-and-drop), pinned dashboards keep the user's
- *      chosen sequence. Unpinned (new-to-the-user) dashboards come
- *      FIRST so a freshly-created one is the first thing they
- *      notice.
+ *   - If `sort.key` is a column key ('name' | 'updated' | 'namespace'),
+ *     sort by that key + direction. Manual `tileOrder` is ignored.
+ *   - Otherwise (`sort.key === 'manual'` or omitted):
+ *       1. Default — most-recently-updated first.
+ *       2. If tileOrder is supplied (array of dashboard IDs the user
+ *          has pinned via drag-and-drop), pinned dashboards keep the
+ *          user's chosen sequence. Unpinned (new-to-the-user)
+ *          dashboards come FIRST so a freshly-created one is the
+ *          first thing they notice.
  *
- * Mirrors the inline algorithm in DashboardTileViewPage's
- * filteredDashboards memo. Keep in sync if you change one.
+ * Single source of truth for both DashboardTileViewPage's
+ * filteredDashboards memo and DashboardViewerPage's prev/next list.
  *
- * @param {Array<{id: string, updated?: string, created?: string}>} dashboards
+ * @param {Array<{id: string, name?: string, namespace?: string, updated?: string, created?: string}>} dashboards
  *   Full dashboard list from `/api/dashboards`.
  * @param {Array<string> | null | undefined} tileOrder
  *   Stored at `app_config.user.<guid>.settings.dashboard_tile_order`.
  *   Null/undefined/empty → no manual ordering, use the default sort.
+ * @param {{key?: string, direction?: 'asc'|'desc'} | null | undefined} sort
+ *   Stored at `app_config.user.<guid>.settings.dashboard_tile_sort`.
+ *   Defaults to `{ key: 'manual' }`.
  * @returns {Array} New array — the input is not mutated.
  */
-export function orderDashboardsForViewer(dashboards, tileOrder) {
+export function orderDashboardsForViewer(dashboards, tileOrder, sort) {
   const result = [...(dashboards || [])];
+  const sortKey = sort?.key || 'manual';
+  const sortDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
 
-  // Default: newest-updated first.
+  if (sortKey !== 'manual') {
+    return result.sort((a, b) => {
+      let aVal = a[sortKey];
+      let bVal = b[sortKey];
+      if (sortKey === 'updated') {
+        aVal = new Date(aVal).getTime() || 0;
+        bVal = new Date(bVal).getTime() || 0;
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // Manual mode: most-recently-updated first, with user-pinned ids appended.
   result.sort((a, b) => {
     const aT = new Date(a.updated || a.created || 0).getTime();
     const bT = new Date(b.updated || b.created || 0).getTime();

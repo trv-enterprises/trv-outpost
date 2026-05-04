@@ -1,6 +1,8 @@
 module github.com/trv-enterprises/trve-dashboard
 
-go 1.24.0
+go 1.26.0
+
+toolchain go1.26.2
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.19.0

@@ -12,7 +12,7 @@ COPY udoc/ ./
 RUN npm run build
 
 # --- Go build stage ---------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH

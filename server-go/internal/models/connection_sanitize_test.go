@@ -16,10 +16,9 @@ const sentinel = "SECRET-SHOULD-NEVER-APPEAR"
 // populated and every secret-bearing field set to the sentinel. The
 // tests below walk the sanitized copy and assert the sentinel is gone
 // from all of them.
-func fullyLoadedConnection(maskSecrets bool) *Connection {
+func fullyLoadedConnection() *Connection {
 	return &Connection{
-		Name:        "test",
-		MaskSecrets: maskSecrets,
+		Name: "test",
 		Config: ConnectionConfig{
 			SQL: &SQLConfig{
 				Host:     "db",
@@ -157,36 +156,26 @@ func containsSentinel(d *Connection) string {
 }
 
 func TestSanitizeForExport_RedactsEverySecretField(t *testing.T) {
-	d := fullyLoadedConnection(true)
+	d := fullyLoadedConnection()
 	got := d.SanitizeForExport()
 	if leak := containsSentinel(got); leak != "" {
 		t.Fatalf("SanitizeForExport leaked secret at %s", leak)
 	}
 }
 
-func TestSanitizeForExport_IgnoresMaskSecretsFlag(t *testing.T) {
-	// SanitizeForExport must redact even when MaskSecrets=false — the
-	// flag is a UI-round-trip affordance, not an export policy.
-	d := fullyLoadedConnection(false)
-	got := d.SanitizeForExport()
-	if leak := containsSentinel(got); leak != "" {
-		t.Fatalf("SanitizeForExport respected MaskSecrets=false and leaked at %s", leak)
-	}
-}
-
-func TestSanitizeForAPI_HonorsMaskSecretsFlag(t *testing.T) {
-	// When MaskSecrets is false, SanitizeForAPI returns the original
-	// object unchanged — this is load-bearing for the edit-form
-	// round-trip.
-	d := fullyLoadedConnection(false)
+func TestSanitizeForAPI_AlwaysMasks(t *testing.T) {
+	// SanitizeForAPI has no opt-out: every API response must redact
+	// every secret-bearing field. Callers updating a connection re-POST
+	// the new secret value to overwrite.
+	d := fullyLoadedConnection()
 	got := d.SanitizeForAPI()
-	if got.Config.SQL.Password != sentinel {
-		t.Fatalf("SanitizeForAPI redacted despite MaskSecrets=false")
+	if leak := containsSentinel(got); leak != "" {
+		t.Fatalf("SanitizeForAPI leaked secret at %s", leak)
 	}
 }
 
 func TestSanitizeForExport_PreservesNonSecretHeaders(t *testing.T) {
-	d := fullyLoadedConnection(true)
+	d := fullyLoadedConnection()
 	got := d.SanitizeForExport()
 	if got.Config.API.Headers["X-Custom"] != "not-a-secret" {
 		t.Fatalf("non-secret header was redacted: got %q", got.Config.API.Headers["X-Custom"])
@@ -200,7 +189,7 @@ func TestSanitizeForExport_PreservesNonSecretHeaders(t *testing.T) {
 }
 
 func TestSanitizeForExport_DoesNotMutateOriginal(t *testing.T) {
-	d := fullyLoadedConnection(true)
+	d := fullyLoadedConnection()
 	_ = d.SanitizeForExport()
 	if d.Config.SQL.Password != sentinel {
 		t.Fatalf("original was mutated — SQL password is now %q", d.Config.SQL.Password)

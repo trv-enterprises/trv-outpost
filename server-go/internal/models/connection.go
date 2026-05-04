@@ -100,9 +100,8 @@ type Connection struct {
 	Type   ConnectionType   `json:"type,omitempty" bson:"type,omitempty"`
 	Config ConnectionConfig `json:"config,omitempty" bson:"config,omitempty"`
 
-	Health      HealthInfo `json:"health" bson:"health"`
-	Tags        []string   `json:"tags,omitempty" bson:"tags,omitempty"`
-	MaskSecrets bool       `json:"mask_secrets" bson:"mask_secrets"` // If true, secrets are masked in API responses
+	Health HealthInfo `json:"health" bson:"health"`
+	Tags   []string   `json:"tags,omitempty" bson:"tags,omitempty"`
 
 	// Control schema support - which control schemas this connection supports
 	SupportedSchemas []string `json:"supported_schemas,omitempty" bson:"supported_schemas,omitempty"`
@@ -593,7 +592,6 @@ type CreateConnectionRequest struct {
 	Config ConnectionConfig `json:"config,omitempty"`
 
 	Tags             []string `json:"tags,omitempty"`
-	MaskSecrets      *bool    `json:"mask_secrets,omitempty"` // If true, secrets are masked in API responses (default: true)
 	SupportedSchemas []string `json:"supported_schemas,omitempty"`
 }
 
@@ -611,7 +609,6 @@ type UpdateConnectionRequest struct {
 	Config ConnectionConfig `json:"config,omitempty"`
 
 	Tags             []string `json:"tags,omitempty"`
-	MaskSecrets      *bool    `json:"mask_secrets,omitempty"` // If provided, updates secret masking setting
 	SupportedSchemas []string `json:"supported_schemas,omitempty"`
 }
 
@@ -846,21 +843,15 @@ func maskSQLOptions(opts string) string {
 	return strings.Join(parts, sep)
 }
 
-// SanitizeForAPI returns a copy of the datasource with sensitive fields
-// masked, but honors the MaskSecrets flag on the record. This is used
-// for API responses where an internal UI may need to round-trip the
-// full object (MaskSecrets=false). Use SanitizeForExport for any
-// artifact that leaves the system.
+// SanitizeForAPI returns a copy of the connection with every secret
+// field masked. The API never returns unmasked credentials; callers
+// updating a connection must POST/PUT new values to overwrite.
 func (d *Connection) SanitizeForAPI() *Connection {
-	if !d.MaskSecrets {
-		return d
-	}
 	return d.sanitize()
 }
 
-// SanitizeForExport returns a copy of the datasource with sensitive
-// fields masked, regardless of the MaskSecrets flag. Exported bundles
-// are publishable artifacts and must never carry credentials.
+// SanitizeForExport is an alias for SanitizeForAPI retained for clarity
+// at call sites that build publishable bundles.
 func (d *Connection) SanitizeForExport() *Connection {
 	return d.sanitize()
 }

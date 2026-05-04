@@ -186,6 +186,12 @@ source, backup + restore).
 - Historical plans and archived implementation notes live under
   [`docs/plans-archive/`](docs/plans-archive/)
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting,
+the scanning tools used (`npm audit`, `govulncheck`, `gitleaks`),
+and the project's known security posture.
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).

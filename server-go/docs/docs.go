@@ -5641,10 +5641,6 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "mask_secrets": {
-                    "description": "If true, secrets are masked in API responses",
-                    "type": "boolean"
-                },
                 "name": {
                     "type": "string"
                 },
@@ -5910,10 +5906,6 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
-                },
-                "mask_secrets": {
-                    "description": "If true, secrets are masked in API responses (default: true)",
-                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -8030,10 +8022,6 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
-                },
-                "mask_secrets": {
-                    "description": "If provided, updates secret masking setting",
-                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"

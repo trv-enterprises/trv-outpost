@@ -91,12 +91,6 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.Cr
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Default MaskSecrets to true if not specified
-	maskSecrets := true
-	if req.MaskSecrets != nil {
-		maskSecrets = *req.MaskSecrets
-	}
-
 	connection := &models.Connection{
 		Namespace:   namespace,
 		Name:        req.Name,
@@ -104,7 +98,6 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.Cr
 		Type:        req.Type,
 		Config:      req.Config,
 		Tags:        models.NormalizeTags(req.Tags),
-		MaskSecrets: maskSecrets,
 		Health: models.HealthInfo{
 			Status: models.HealthStatusUnknown,
 		},
@@ -226,12 +219,6 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, id string, req
 
 	if req.Description != "" {
 		connection.Description = req.Description
-	}
-
-	// MaskSecrets cannot be changed after creation (security constraint)
-	// If provided and different from current value, reject the update
-	if req.MaskSecrets != nil && *req.MaskSecrets != connection.MaskSecrets {
-		return nil, fmt.Errorf("mask_secrets cannot be changed after connection creation")
 	}
 
 	// Update config if provided and validate

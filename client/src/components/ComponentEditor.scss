@@ -1043,10 +1043,36 @@
     margin-top: spacing.$spacing-04;
   }
 
-  // Custom code warning at top
+  // Custom code warning at top.
+  // Carbon's InlineNotification clamps to a single-row min height, which
+  // truncates the wrapped subtitle and hides the action button behind the
+  // type-tabs row below. Force the layout to grow with its content.
   .custom-code-warning {
     margin-bottom: spacing.$spacing-05;
     margin-top: 0;
+    max-width: none;
+    min-block-size: 0;
+
+    .cds--inline-notification__details {
+      align-items: flex-start;
+      flex: 1 1 auto;
+      min-block-size: 0;
+    }
+
+    .cds--inline-notification__text-wrapper {
+      flex: 1 1 auto;
+      padding-block: spacing.$spacing-03;
+    }
+
+    .cds--inline-notification__subtitle {
+      display: block;
+      white-space: normal;
+    }
+
+    .cds--inline-notification__action-button {
+      margin-block: spacing.$spacing-03;
+      flex-shrink: 0;
+    }
   }
 
   // Saved values display (shown when columns not loaded)

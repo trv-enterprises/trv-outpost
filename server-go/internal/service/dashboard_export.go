@@ -40,10 +40,9 @@ func (s *DashboardService) PreviewExport(ctx context.Context, dashboardIDs []str
 // importer can apply them in array order without sorting.
 //
 // Connections come back via SanitizeForExport() so secrets ride out as
-// "********" placeholders regardless of the per-connection MaskSecrets
-// flag. The importer handles those specially: on update it preserves
-// the existing stored value, on create it leaves the literal
-// placeholder for the user to fix.
+// "********" placeholders. The importer handles those specially: on
+// update it preserves the existing stored value, on create it leaves
+// the literal placeholder for the user to fix.
 //
 // exportedBy is opaque — the handler typically passes the requester's
 // user GUID so the bundle metadata records who built it.

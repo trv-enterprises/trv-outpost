@@ -229,7 +229,6 @@ MongoDB collection name.
       "keepalive": 60
     }
   },
-  "mask_secrets": true,
   "health": {
     "status": "healthy",
     "last_check": "2026-04-11T09:15:23Z",
@@ -243,9 +242,11 @@ MongoDB collection name.
 
 - `type` selects the config sub-document (`config.mqtt`, `config.sql`,
   `config.frigate`, ...)
-- `mask_secrets: true` means secret fields are replaced with
-  `"********"` on API responses. The update path resolves masked
-  values back to the stored real values via `preserveSecrets`.
+- Secret fields are always replaced with `"********"` on API
+  responses — there is no opt-out. The update path resolves masked
+  values back to the stored real values via `preserveSecrets`, so a
+  client that reads-then-writes without modifying a secret keeps
+  the stored value intact; sending a non-masked value overwrites it.
 - `health` is maintained by a background sweep; the list-page status
   indicator reads from it.
 - `_id` is a UUID string, matching every other top-level entity.

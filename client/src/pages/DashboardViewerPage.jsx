@@ -513,32 +513,54 @@ function DashboardViewerPage({ canDesign = false }) {
   // Fetch dashboard list for keyboard switching + prev/next arrow
   // navigation. Orders the list to match the View Mode tile page so
   // the arrow buttons walk dashboards in the same sequence the user
-  // arranged via drag-and-drop on the listing page (stored under
-  // app_config.user.<guid>.settings.dashboard_tile_order). Falls
-  // back to most-recently-updated first when the user hasn't
-  // arranged anything yet — same default the tile page uses.
+  // sees there — both the saved sort preference
+  // (app_config.user.<guid>.settings.dashboard_tile_sort) and the
+  // manual drag-and-drop order
+  // (app_config.user.<guid>.settings.dashboard_tile_order).
+  //
+  // Reruns on tab focus / visibility-change so sort or manual-order
+  // changes the user makes on the tile page take effect the next
+  // time they return to the viewer (no cross-component event needed).
   useEffect(() => {
+    let cancelled = false;
     const fetchDashboardList = async () => {
       try {
         const data = await apiClient.getDashboards();
         const dashboards = data.dashboards || [];
         let tileOrder = null;
+        let tileSort = null;
         const userGuid = apiClient.getCurrentUserGuid();
         if (userGuid) {
           try {
             const config = await apiClient.getUserConfig(userGuid);
-            const stored = config?.settings?.dashboard_tile_order;
-            tileOrder = Array.isArray(stored) ? stored : null;
+            const storedOrder = config?.settings?.dashboard_tile_order;
+            tileOrder = Array.isArray(storedOrder) ? storedOrder : null;
+            const storedSort = config?.settings?.dashboard_tile_sort;
+            if (storedSort && typeof storedSort.key === 'string') {
+              tileSort = storedSort;
+            }
           } catch {
             // No user config yet — use the default sort.
           }
         }
-        setDashboardList(orderDashboardsForViewer(dashboards, tileOrder));
+        if (cancelled) return;
+        setDashboardList(orderDashboardsForViewer(dashboards, tileOrder, tileSort));
       } catch (err) {
         console.warn('Failed to fetch dashboard list:', err);
       }
     };
     fetchDashboardList();
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchDashboardList();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', fetchDashboardList);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', fetchDashboardList);
+    };
   }, []);
 
   // Load the deployment-wide dashboard config-refresh cadence on mount.

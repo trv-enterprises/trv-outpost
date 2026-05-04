@@ -18,8 +18,9 @@ Every connection has:
 - Capability metadata (`canRead`, `canWrite`, `canStream`) contributed
   by the adapter
 - A `health` sub-document maintained by a background check sweep
-- `mask_secrets` (default true) controlling whether sensitive fields
-  are scrubbed on API responses
+
+Sensitive fields are always scrubbed on API responses; clients
+update them by POST/PUT with new values.
 
 ## Adapter registry
 
