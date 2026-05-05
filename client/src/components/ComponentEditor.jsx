@@ -1277,7 +1277,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '');
+    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming);
   }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
 
   const filteredPreviewData = useMemo(() => {
@@ -3539,7 +3539,7 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '') {
+function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '', isTSStoreStreaming = false) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 
@@ -3570,12 +3570,25 @@ function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xA
   // let the loader-level value take effect.
   const extraOptions = [];
   if (isStreaming && slidingWindow?.duration > 0) {
-    // Convert seconds to ts-store since format (e.g., 300 -> "5m", 3600 -> "1h", 30 -> "30s")
+    // Sliding-window backfill: pull every record from the last N
+    // seconds so the chart isn't blank while waiting for the next
+    // streaming push. ts-store accepts "since:30m"/"5m"/"45s"-style
+    // shorthand on its REST query path.
     const dur = slidingWindow.duration;
     const sinceStr = dur >= 3600 && dur % 3600 === 0 ? `${dur / 3600}h`
       : dur >= 60 && dur % 60 === 0 ? `${dur / 60}m`
       : `${dur}s`;
     extraOptions.push(`backfill: { raw: 'since:${sinceStr}', type: '${queryType}', params: {} }`);
+  } else if (isTSStoreStreaming) {
+    // No sliding window set, but ts-store can still serve a quick
+    // "latest N" backfill so the chart paints immediately instead of
+    // sitting empty until the next push arrives. Single-value charts
+    // (gauge, number) only need the latest record; everything else
+    // gets 100 for context. The hook (useData) supplies a 100-record
+    // default if no backfill is emitted at all, so this generator path
+    // is mostly about the gauge/number override.
+    const limit = (chartType === 'gauge' || chartType === 'number') ? 1 : 100;
+    extraOptions.push(`backfill: { raw: 'newest', type: '${queryType}', params: { limit: ${limit} } }`);
   }
   if (parserConfig && (parserConfig.dataPath || parserConfig.timestampField)) {
     const parts = [];

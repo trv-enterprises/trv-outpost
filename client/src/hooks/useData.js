@@ -118,9 +118,8 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
   const disconnectedSinceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
 
-  // Serialize query and backfill for stable dependency comparison
+  // Serialize query for stable dependency comparison
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
-  const backfillKey = useMemo(() => JSON.stringify(backfill), [backfill]);
   // Serialize parser for stable dependency — parser is an object that may be recreated each render
   const parserKey = useMemo(() => JSON.stringify(parser), [parser]);
   // Stable parser reference — only changes when content changes
@@ -278,6 +277,25 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
     reconnectAttemptsRef.current = 0;
   }, []);
 
+  // Resolve effective backfill. Caller semantics:
+  //   - undefined / null → use the type-default (only ts-store streaming
+  //     gets one today; everything else stays empty).
+  //   - false → explicit opt-out.
+  //   - object → use as-is.
+  // Default: pull the latest 100 records so the chart paints immediately
+  // instead of sitting blank waiting for the next stream push. Charts
+  // that only need a single value (gauge, number) should pass an explicit
+  // backfill with `params: { limit: 1 }` to avoid the wasted fetch.
+  const effectiveBackfill = useMemo(() => {
+    if (backfill === false) return null;
+    if (backfill) return backfill;
+    if (datasourceType === 'tsstore' && datasourceTransport === 'streaming') {
+      return { raw: 'newest', type: 'tsstore', params: { limit: 100 } };
+    }
+    return null;
+  }, [backfill, datasourceType, datasourceTransport]);
+  const effectiveBackfillKey = useMemo(() => JSON.stringify(effectiveBackfill), [effectiveBackfill]);
+
   // Connect to SSE stream for socket datasources (raw or aggregated)
   useEffect(() => {
     if (typeLoading || !isStreamingType || !connectionId) {
@@ -387,7 +405,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
       // First, load any buffered data from the manager.
       // Skip buffer replay when backfill is configured — the REST backfill query is
       // the authoritative source for historical data within the sliding window.
-      if (!backfill) {
+      if (!effectiveBackfill) {
         const bufferedRecords = manager.getBuffer(connectionId, topicFilter);
         if (bufferedRecords.length > 0) {
           bufferedRecords.forEach(record => {
@@ -408,7 +426,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
         },
         {
           topics: topicFilter,
-          skipBufferReplay: !!backfill,
+          skipBufferReplay: !!effectiveBackfill,
           onConnect: () => {
             if (mountedRef.current) {
               handleConnectionSuccess();
@@ -439,10 +457,10 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
     // Backfill: fire a one-shot REST query to pre-populate the buffer before streaming.
     // Only on first mount, NOT on every effect re-run/reconnect (would duplicate data).
     const runBackfillThenConnect = async () => {
-      if (backfill && mountedRef.current && !backfillDoneRef.current) {
+      if (effectiveBackfill && mountedRef.current && !backfillDoneRef.current) {
         backfillDoneRef.current = true;
         try {
-          const result = await queryData(connectionId, backfill, false);
+          const result = await queryData(connectionId, effectiveBackfill, false);
           if (mountedRef.current && result.data?.columns && result.data?.rows) {
             // Convert columnar result to record objects for processStreamRecord
             const { columns, rows } = result.data;
@@ -492,7 +510,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
         eventSourceRef.current = null;
       }
     };
-  }, [connectionId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, backfillKey, handleConnectionError, handleConnectionSuccess]);
+  }, [connectionId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, effectiveBackfillKey, handleConnectionError, handleConnectionSuccess]);
 
   // === POLLING LOGIC (for non-socket datasources) ===
   // isInitialFetch tracks whether this is the first load (shows loading state)

@@ -88,7 +88,7 @@ Control types and their UI config:
 					"connection_id":  map[string]interface{}{"type": "string", "description": "ID of the connection to use"},
 					"x_axis":         map[string]interface{}{"type": "string", "description": "Column for X axis"},
 					"x_axis_label":   map[string]interface{}{"type": "string", "description": "Label for X axis"},
-					"x_axis_format":  map[string]interface{}{"type": "string", "description": "Format for X axis values"},
+					"x_axis_format":  map[string]interface{}{"type": "string", "description": "Format preset for X axis timestamp values. Pick from the listed enum — invented names like 'time_12_seconds' silently fall through to a date+time render.", "enum": []string{"chart", "chart_time", "chart_time_seconds", "chart_date", "chart_datetime", "chart_datetime_seconds"}},
 					"y_axis":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Columns for Y axis"},
 					"y_axis_label":   map[string]interface{}{"type": "string", "description": "Legacy single Y-axis label. Prefer y_axis_labels (plural, one per y column). For two y-columns they split left/right; for 3+ y-columns omit y_axis_labels entirely — the legend carries series identity."},
 					"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels; [0] goes on the left axis, [1] on the right axis for dual-axis charts. Omit for 3+ y columns."},

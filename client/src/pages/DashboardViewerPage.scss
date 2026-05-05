@@ -12,42 +12,6 @@
   flex-direction: column;
   overflow: hidden !important; // Only grid container should scroll
 
-  // Dashboard switch indicator overlay
-  .dashboard-switch-indicator {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 10000;
-    background: rgba(0, 0, 0, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    padding: spacing.$spacing-05 spacing.$spacing-07;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: spacing.$spacing-02;
-    pointer-events: none;
-    animation: switch-fade 2s ease-out forwards;
-
-    .switch-name {
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: #f4f4f4;
-    }
-
-    .switch-position {
-      font-size: 0.875rem;
-      color: #a8a8a8;
-    }
-  }
-
-  @keyframes switch-fade {
-    0% { opacity: 1; }
-    70% { opacity: 1; }
-    100% { opacity: 0; }
-  }
-
   &.fullscreen {
     position: fixed;
     top: 0;

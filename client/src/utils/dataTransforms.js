@@ -570,7 +570,30 @@ export function formatTimestamp(value, format = 'short', options = {}) {
     }
 
     default:
-      return date.toLocaleString(locale, formatOptions);
+      // Unknown format string. The most common cause is AI-generated
+      // chart code inventing a preset name like 'time_12_seconds' or
+      // 'HH:MM:SS'. The legacy fallback was toLocaleString which
+      // silently renders date + time — the opposite of what most
+      // chart-axis callers wanted, and impossible to debug from the
+      // rendered chart. Emit a one-time console warning naming the
+      // bad preset so it's visible in dev, then fall back to
+      // chart_time (time only) which is the safer default for a
+      // charting context.
+      if (typeof window !== 'undefined') {
+        const seen = (window.__formatTimestampUnknownPresets ||= new Set());
+        if (!seen.has(format)) {
+          seen.add(format);
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[formatTimestamp] Unknown format preset ${JSON.stringify(format)} — falling back to 'chart_time' (time only). Valid presets: chart, chart_time, chart_time_seconds, chart_date, chart_datetime, chart_datetime_seconds, iso.`
+          );
+        }
+      }
+      return date.toLocaleTimeString(locale, {
+        ...formatOptions,
+        hour: 'numeric',
+        minute: '2-digit',
+      });
   }
 }
 

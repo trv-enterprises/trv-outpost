@@ -49,7 +49,36 @@ The user's message may include pre-selected context (connection ID, connection n
 
 Only call list_connections when no connection was pre-selected and you need to discover available connections.
 
+## Refining vs. converting existing components
+
+**` + "`update_component_type`" + ` is destructive and one-way.** It is for setting the category on a fresh, empty component — never for changing the category of an existing one. The server enforces this: a populated component (one that has a chart_type, connection, code, or any of its config blocks) will reject a component_type change with HTTP-style error.
+
+When a user asks to "fix", "improve", "format", "tweak", or otherwise *refine* an existing component, **stay in the existing component_type** and use the appropriate refinement tools:
+
+| What the user is asking                                 | The right tool — NOT update_component_type                                 |
+|---------------------------------------------------------|----------------------------------------------------------------------------|
+| Change time/date axis format on a chart                 | ` + "`update_data_mapping`" + ` with ` + "`x_axis_format`" + `, OR ` + "`update_chart_options`" + ` setting ` + "`xAxis.axisLabel.formatter`" + ` |
+| Format the value column / y-axis tick labels            | ` + "`update_chart_options`" + ` setting ` + "`yAxis.axisLabel.formatter`" + ` |
+| Change the displayed title                              | ` + "`update_component_config`" + ` with ` + "`title`" + `                                |
+| Change which columns drive the chart                    | ` + "`update_data_mapping`" + ` with new ` + "`x_axis`" + ` / ` + "`y_axis`" + `                       |
+| Add a sliding window / time bucket                      | ` + "`update_sliding_window`" + ` / ` + "`update_time_bucket`" + `                          |
+| Refine the rendered code (colors, layout, custom logic) | ` + "`set_custom_code`" + ` (still on the same component_type)                  |
+| Adjust a control's behavior                             | ` + "`update_control_config`" + `                                                  |
+| Adjust a display's settings                             | ` + "`update_display_config`" + `                                                  |
+
+Even when a request *sounds* like a different category — "show time in HH:MM:SS AM format" on a chart is an axis-formatter change, not a request for a clock widget — assume the user means their existing component. If you genuinely can't tell, ASK before calling ` + "`update_component_type`" + `.
+
 ## Component Types
+
+**Three independent subtype namespaces — do not mix them.** Each ` + "`component_type`" + ` has its own subtype field and the values do NOT cross over:
+
+| component_type | subtype field   | example values                          |
+|----------------|-----------------|-----------------------------------------|
+| chart          | ` + "`chart_type`" + `    | bar, line, area, pie, scatter, gauge, number, dataview, custom |
+| display        | ` + "`display_type`" + `  | frigate_camera, frigate_alerts, weather |
+| control        | ` + "`control_type`" + `  | toggle, button, slider, plug, dimmer    |
+
+**` + "`update_component_config`" + `'s ` + "`chart_type`" + ` parameter only accepts the chart-namespace values above.** Passing a display_type like ` + "`\"frigate\"`" + ` or a control_type like ` + "`\"toggle\"`" + ` is rejected — those go on display / control components via different tools (see Display / Control workflows below).
 
 ### Charts (component_type: "chart")
 Data-driven ECharts visualizations. This is the default component type.
@@ -254,10 +283,27 @@ const Component = ({ config }) => {
 
 **ECharts tooltip — REQUIRED:** every ` + "`option.tooltip`" + ` block MUST include ` + "`appendToBody: true`" + ` so the tooltip renders in document.body and isn't clipped by the panel's overflow. Example: ` + "`tooltip: { trigger: 'axis', appendToBody: true, ... }`" + `. This applies to bar/line/area/pie/scatter/gauge — every chart with a tooltip.
 
+**Backfill on ts-store streaming connections:** ` + "`useData`" + ` automatically fetches the latest 100 records before subscribing to the WebSocket push, so the chart paints immediately instead of sitting blank waiting for the next message. You don't have to do anything for the default case. Two times to override:
+
+- **Single-value charts (gauge, number)** — only need the latest reading. Pass ` + "`backfill: { raw: 'newest', type: 'tsstore', params: { limit: 1 } }`" + ` to avoid pulling 100 unused rows.
+- **Sliding-window charts** — pass ` + "`backfill: { raw: 'since:5m', type: 'tsstore', params: {} }`" + ` (or whatever duration matches the window). This gives the chart its full historical context up front instead of leaving gaps until enough new pushes arrive.
+
+To opt out entirely (rare — usually you want the default): pass ` + "`backfill: false`" + `.
+
 **Data Utilities:**
 - toObjects(data) - Convert columnar { columns, rows } to array of objects
 - getValue(data, 'column') - Get single value from first row
-- formatTimestamp(ts, 'chart_time') - Format timestamps
+- formatTimestamp(ts, format) - Format a unix-seconds timestamp. **Valid format strings — do NOT invent new ones; only these values render correctly:**
+  - ` + "`'chart'`" + ` — date + time, e.g. "1/15 10:30"
+  - ` + "`'chart_time'`" + ` — time only, e.g. "10:30 AM"
+  - ` + "`'chart_time_seconds'`" + ` — time with seconds, e.g. "10:30:05 AM"
+  - ` + "`'chart_date'`" + ` — date only, e.g. "Jan 15"
+  - ` + "`'chart_datetime'`" + ` — full date + time, e.g. "Jan 15, 10:30 AM"
+  - ` + "`'chart_datetime_seconds'`" + ` — full date + time with seconds
+  - ` + "`'iso'`" + ` — ISO 8601 string
+  - Anything else (e.g. ` + "`'time_12_seconds'`" + `, ` + "`'HH:MM:SS'`" + `) silently falls through to ` + "`Date.toLocaleString()`" + ` which renders **date AND time** — exactly what the user usually didn't ask for. If none of the presets fit, build the format inline with ` + "`new Date(ts * 1000).toLocaleTimeString(...)`" + `.
+
+  ` + "`update_data_mapping`" + `'s ` + "`x_axis_format`" + ` accepts the same enum (` + "`chart`" + `, ` + "`chart_time`" + `, ` + "`chart_time_seconds`" + `, ` + "`chart_date`" + `, ` + "`chart_datetime`" + `, ` + "`chart_datetime_seconds`" + `).
 - formatCellValue(value, columnName) - Auto-format cell values
 - transformData(data, { filters, aggregation, sortBy, limit }) - Transform data
 

@@ -157,8 +157,6 @@ function DashboardViewerPage({ canDesign = false }) {
 
   // Dashboard switching state
   const [dashboardList, setDashboardList] = useState([]);
-  const [switchIndicator, setSwitchIndicator] = useState(null);
-  const switchTimerRef = useRef(null);
 
   // "Preview from design" mode: user just saved/opened this dashboard from the
   // designer. Hide multi-dashboard navigation (prev/next/home, Alt+arrow) and
@@ -582,13 +580,6 @@ function DashboardViewerPage({ canDesign = false }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Show switch indicator briefly
-  const showSwitchIndicator = useCallback((name, index, total) => {
-    setSwitchIndicator({ name, index, total });
-    if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
-    switchTimerRef.current = setTimeout(() => setSwitchIndicator(null), 2000);
-  }, []);
-
   // Dashboard navigation helpers
   const currentDashboardIndex = useMemo(() => {
     return dashboardList.findIndex(d => d.id === id);
@@ -600,26 +591,19 @@ function DashboardViewerPage({ canDesign = false }) {
   const goToPrevDashboard = useCallback(() => {
     if (!canGoPrev) return;
     const prev = dashboardList[currentDashboardIndex - 1];
-    showSwitchIndicator(prev.name, currentDashboardIndex, dashboardList.length);
     navigate(`/view/dashboards/${prev.id}`);
-  }, [canGoPrev, dashboardList, currentDashboardIndex, showSwitchIndicator, navigate]);
+  }, [canGoPrev, dashboardList, currentDashboardIndex, navigate]);
 
   const goToNextDashboard = useCallback(() => {
     if (!canGoNext) return;
     const next = dashboardList[currentDashboardIndex + 1];
-    showSwitchIndicator(next.name, currentDashboardIndex + 2, dashboardList.length);
     navigate(`/view/dashboards/${next.id}`);
-  }, [canGoNext, dashboardList, currentDashboardIndex, showSwitchIndicator, navigate]);
+  }, [canGoNext, dashboardList, currentDashboardIndex, navigate]);
 
   const goToDefaultDashboard = useCallback(() => {
     if (!defaultDashboardId || defaultDashboardId === id) return;
-    const def = dashboardList.find(d => d.id === defaultDashboardId);
-    if (def) {
-      const defIndex = dashboardList.indexOf(def);
-      showSwitchIndicator(def.name, defIndex + 1, dashboardList.length);
-    }
     navigate(`/view/dashboards/${defaultDashboardId}`);
-  }, [defaultDashboardId, id, dashboardList, showSwitchIndicator, navigate]);
+  }, [defaultDashboardId, id, navigate]);
 
   // Keyboard navigation: Alt+Left/Right to switch dashboards (disabled in edit mode
   // and in "from design" preview mode, where we want a single-dashboard view)
@@ -642,16 +626,12 @@ function DashboardViewerPage({ canDesign = false }) {
       }
 
       const next = dashboardList[nextIndex];
-      showSwitchIndicator(next.name, nextIndex + 1, dashboardList.length);
       navigate(`/view/dashboards/${next.id}`);
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
-    };
-  }, [dashboardList, id, navigate, showSwitchIndicator, isEditMode, fromDesign]);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dashboardList, id, navigate, isEditMode, fromDesign]);
 
   // Initial load
   useEffect(() => {
@@ -1515,14 +1495,6 @@ function DashboardViewerPage({ canDesign = false }) {
 
   return (
     <div className={`dashboard-viewer-page ${isFullscreen ? 'fullscreen' : ''} ${isEditMode ? 'edit-mode-active' : ''}`}>
-      {/* Dashboard switch indicator */}
-      {switchIndicator && (
-        <div className="dashboard-switch-indicator">
-          <span className="switch-name">{switchIndicator.name}</span>
-          <span className="switch-position">{switchIndicator.index} of {switchIndicator.total}</span>
-        </div>
-      )}
-
       {/* Header toolbar */}
       <div className="viewer-toolbar">
         <div className="toolbar-left">

@@ -157,6 +157,27 @@ func (e *ToolExecutor) executeUpdateComponentType(ctx context.Context, chartID s
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
 
+	// Guard: changing component_type on an already-populated component is
+	// almost always a mistake. The most common failure mode is the AI
+	// reading an ambiguous prompt ("show time in HH:MM:SS format" on a
+	// line chart) as a request for a brand-new component category and
+	// silently converting the user's chart into a control or display.
+	// Refuse the change when the existing type is non-empty, different
+	// from the requested type, AND the component carries substantive
+	// content. The user can still pivot intentionally by deleting the
+	// component and starting fresh, or by clearing it first.
+	if chart.ComponentType != "" && chart.ComponentType != params.ComponentType {
+		hasContent := chart.ChartType != "" ||
+			chart.ConnectionID != "" ||
+			chart.ComponentCode != "" ||
+			chart.DataMapping != nil ||
+			chart.ControlConfig != nil ||
+			chart.DisplayConfig != nil
+		if hasContent {
+			return &ToolResult{Success: false, Error: fmt.Sprintf("refusing to change component_type from %q to %q on a populated component — that would discard the existing %s configuration. If the user wants a different category they should create a new component. If they want to refine the existing %s, use the appropriate %s tools (update_chart_options / update_data_mapping for charts, update_control_config for controls, update_display_config for displays).", chart.ComponentType, params.ComponentType, chart.ComponentType, chart.ComponentType, chart.ComponentType)}, nil
+		}
+	}
+
 	chart.ComponentType = params.ComponentType
 
 	// Initialize type-specific configs
@@ -310,6 +331,24 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 		updates = append(updates, "description")
 	}
 	if params.ChartType != nil {
+		// Guard against namespace conflation. chart_type is the chart-
+		// subtype field on chart components — bar/line/etc. The AI has
+		// historically tried to write display_type values (e.g. "frigate",
+		// "weather") here, which silently corrupts the record. Reject:
+		//   - any chart_type write to a non-chart component
+		//   - any chart_type value that isn't a known chart subtype
+		if chart.ComponentType != "" && chart.ComponentType != "chart" {
+			return &ToolResult{Success: false, Error: fmt.Sprintf("chart_type can only be set on chart components; this component is %q. Use update_component_config to set a chart-subtype value, or pick a different tool for %s components.", chart.ComponentType, chart.ComponentType)}, nil
+		}
+		validChartTypes := map[string]bool{
+			"bar": true, "line": true, "area": true, "pie": true,
+			"scatter": true, "gauge": true, "number": true,
+			"heatmap": true, "radar": true, "funnel": true,
+			"dataview": true, "custom": true,
+		}
+		if !validChartTypes[*params.ChartType] {
+			return &ToolResult{Success: false, Error: fmt.Sprintf("invalid chart_type %q. Valid chart subtypes: bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, custom. Display types like 'frigate' / 'weather' are NOT chart_types — they go on a display component.", *params.ChartType)}, nil
+		}
 		chart.ChartType = *params.ChartType
 		updates = append(updates, "chart_type")
 	}
