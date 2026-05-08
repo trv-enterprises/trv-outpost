@@ -52,6 +52,7 @@ const CHART_TYPES = [
   { id: 'gauge', label: 'Gauge', description: 'Display a single value on a dial', icon: Meter },
   { id: 'number', label: 'Number', description: 'Display a single value as a large number with optional unit', icon: StringInteger },
   { id: 'dataview', label: 'Data Table', description: 'Tabular view of raw data', icon: TableSplit },
+  { id: 'banded_bar', label: 'Banded Bar Chart', description: 'Levey-Jennings / control-chart style — time-series with horizontal reference bands', icon: ChartBar },
   { id: 'custom', label: 'Custom Component', description: 'Write custom React/ECharts code', icon: Code }
 ];
 
@@ -188,6 +189,24 @@ const CHART_TYPE_CONFIG = {
     xAxisLabel: '',
     yAxisLabel: '',
   },
+  // banded_bar (Levey-Jennings) is per-row only — every row carries its
+  // own mean + ±1/±2 SD columns. The dedicated "Band Columns" section
+  // handles all of the per-row mapping; the generic Y-axis picker, axis
+  // labels, series column, aggregation, and sort/limit don't apply.
+  // Time bucket is also off — the data is already aggregated per row.
+  banded_bar: {
+    hasXAxis: true,
+    hasYAxis: false,
+    multipleYAxis: false,
+    hasSeriesColumn: false,
+    hasAxisLabels: false,
+    hasXAxisFormat: true,
+    hasTimeBucket: false,
+    hasSortLimit: false,
+    hasAggregation: false,
+    xAxisLabel: 'Timestamp Column',
+    yAxisLabel: '',
+  },
   custom: {
     hasXAxis: true,
     hasYAxis: true,
@@ -282,6 +301,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(false);
   const [slidingWindowDuration, setSlidingWindowDuration] = useState(300); // Default 5 minutes
   const [slidingWindowTimestampCol, setSlidingWindowTimestampCol] = useState('');
+
+  // Banded-bar column mapping — only used when chart_type === 'banded_bar'.
+  // The chart is per-row only: each row carries its own mean + SD columns
+  // and the renderer draws a per-row envelope. This object maps each
+  // band role to a row-column name.
+  const [bandColumns, setBandColumns] = useState({ mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' });
+  const [bandedBarStyle, setBandedBarStyle] = useState('time_series');
 
   // Time bucket aggregation for streaming data (socket datasources only)
   const [timeBucketEnabled, setTimeBucketEnabled] = useState(false);
@@ -558,6 +584,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
       setSlidingWindowDuration(sw?.duration || 300);
       setSlidingWindowTimestampCol(sw?.timestamp_col || '');
+      // Banded-bar column mapping. Empty defaults — the user picks
+      // columns from the schema dropdown. Migrating an old chart that
+      // still has reference_levels: keep it loaded so the chart keeps
+      // rendering; the new editor section just shows empty pickers,
+      // which is a clean prompt to re-pick.
+      const savedBandCols = chart.data_mapping?.band_columns;
+      if (savedBandCols && typeof savedBandCols === 'object') {
+        setBandColumns({
+          mean: savedBandCols.mean || '',
+          plus_1sd: savedBandCols.plus_1sd || '',
+          minus_1sd: savedBandCols.minus_1sd || '',
+          plus_2sd: savedBandCols.plus_2sd || '',
+          minus_2sd: savedBandCols.minus_2sd || '',
+        });
+      } else {
+        setBandColumns({ mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' });
+      }
+      setBandedBarStyle(chart.options?.bandedBarStyle || 'time_series');
       // Time bucket initialization (for socket datasources)
       // Load condition must match save condition: all three fields required
       const tb = chart.data_mapping?.time_bucket;
@@ -725,6 +769,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         parserDataPath: loadedParser?.data_path || '',
         parserTimestampField: loadedParser?.timestamp_field || '',
         parserTimestampScale: loadedParser?.timestamp_scale || '',
+        bandColumns: chart.data_mapping?.band_columns || { mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' },
+        bandedBarStyle: chart.options?.bandedBarStyle || 'time_series',
         componentCode: chart.component_code || '',
         showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code),
       }));
@@ -780,6 +826,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         parserDataPath: '',
         parserTimestampField: '',
         parserTimestampScale: '',
+        bandColumns: { mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' },
+        bandedBarStyle: 'time_series',
         componentCode: '',
         showCustomCode: false,
       }));
@@ -837,6 +885,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       parserDataPath,
       parserTimestampField,
       parserTimestampScale,
+      bandColumns,
+      bandedBarStyle,
       componentCode,
       showCustomCode,
     });
@@ -853,6 +903,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
     sortBy, sortOrder, limitRows, columnAliases, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
+    bandColumns, bandedBarStyle,
     componentCode, showCustomCode, initialState, onDirtyChange,
   ]);
 
@@ -1020,6 +1071,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
     setSlidingWindowTimestampCol('');
+    setBandColumns({ mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' });
+    setBandedBarStyle('time_series');
     setTimeBucketEnabled(false);
     setTimeBucketInterval(60);
     setTimeBucketFunction('avg');
@@ -1266,7 +1319,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       yAxisLabel: yAxisLabel || '',
       yAxisLabels: yAxisLabels || [],
       visibleColumns: Array.isArray(visibleColumns) ? visibleColumns : null,
-      chartName: title || name || '' // Display Title takes precedence, falls back to Chart Name
+      chartName: title || name || '', // Display Title takes precedence, falls back to Chart Name
+      bandColumns: chartType === 'banded_bar' ? bandColumns : null,
+      bandedBarStyle,
     };
 
     const slidingWindow = slidingWindowEnabled && slidingWindowTimestampCol
@@ -1278,7 +1333,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1399,11 +1454,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           data_path: parserDataPath || undefined,
           timestamp_field: parserTimestampField || undefined,
           timestamp_scale: parserTimestampScale || undefined
-        } : null
+        } : null,
+        // Banded-bar column mapping — only persisted for chart_type 'banded_bar'.
+        // Each row in the data must carry the named columns; the renderer
+        // reads each row's own values to draw a per-row envelope.
+        band_columns: chartType === 'banded_bar' && bandColumns?.mean ? bandColumns : undefined
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
-      options: chartOptions,
+      options: chartType === 'banded_bar'
+        ? { ...chartOptions, bandedBarStyle }
+        : chartOptions,
     };
 
     onSave(chartPayload);
@@ -2810,7 +2871,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   )}
                 </div>
 
-                {/* Aggregation & Sorting Section */}
+                {/* Aggregation & Sorting Section — chart-type-gated.
+                    Banded-bar (and any future per-row-aggregated type) opts
+                    out via hasAggregation:false in CHART_TYPE_CONFIG. */}
+                {chartTypeConfig.hasAggregation !== false && (
                 <div className="aggregation-section">
                   <h4>Aggregation & Sorting</h4>
                   {availableColumns.length > 0 ? (
@@ -2984,6 +3048,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Sliding Window Section - for time-series data */}
                 <div className="sliding-window-section">
@@ -3056,6 +3121,57 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </p>
                   )}
                 </div>
+
+                {/* Band Columns - banded_bar (Levey-Jennings) only */}
+                {chartType === 'banded_bar' && (
+                  <div className="reference-levels-section">
+                    <div className="section-header">
+                      <h4>Band Columns</h4>
+                    </div>
+                    <Grid narrow style={{ marginBottom: '1rem' }}>
+                      <Column lg={16} md={8} sm={4}>
+                        <Select
+                          id="banded-bar-style"
+                          labelText="Visual Style"
+                          value={bandedBarStyle}
+                          onChange={(e) => setBandedBarStyle(e.target.value)}
+                        >
+                          <SelectItem value="time_series" text="Time Series — line + dots, full-width bands (default)" />
+                          <SelectItem value="column_filled" text="Column (filled) — vertical column per timestamp, no borders" />
+                          <SelectItem value="column_outlined" text="Column (outlined) — vertical column with band borders" />
+                          <SelectItem value="column_box" text="Column (box) — inner band only, line with tick at value" />
+                        </Select>
+                      </Column>
+                    </Grid>
+                    <p className="no-filters-message" style={{ marginBottom: '0.75rem' }}>
+                      Each row in the data must carry these columns. The renderer reads each row's own values to draw a per-row envelope — bands move with the data.
+                    </p>
+                    {[
+                      { key: 'mean', label: 'Mean column', help: 'Primary value (required).' },
+                      { key: 'plus_1sd', label: '+1 SD column', help: '' },
+                      { key: 'minus_1sd', label: '-1 SD column', help: '' },
+                      { key: 'plus_2sd', label: '+2 SD column', help: '' },
+                      { key: 'minus_2sd', label: '-2 SD column', help: '' },
+                    ].map(({ key, label, help }) => (
+                      <Grid narrow key={key} style={{ marginBottom: '0.5rem' }}>
+                        <Column lg={16} md={8} sm={4}>
+                          <Select
+                            id={`band-col-${key}`}
+                            labelText={label}
+                            helperText={help}
+                            value={bandColumns[key] || ''}
+                            onChange={(e) => setBandColumns({ ...bandColumns, [key]: e.target.value })}
+                          >
+                            <SelectItem value="" text={availableColumns.length > 0 ? 'Select a column…' : 'Run the query to discover columns'} />
+                            {availableColumns.map((col) => (
+                              <SelectItem key={col} value={col} text={col} />
+                            ))}
+                          </Select>
+                        </Column>
+                      </Grid>
+                    ))}
+                  </div>
+                )}
 
                 {/* Time Bucket Section - for socket streaming datasources only */}
                 {selectedDatasource?.type === 'socket' && (
@@ -3221,7 +3337,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           {filteredPreviewData.rows?.slice(0, 10).map((row, i) => (
                             <tr key={i}>
                               {row.map((cell, j) => (
-                                <td key={j}>{formatCellValue(cell, filteredPreviewData.columns?.[j])}</td>
+                                <td key={j}>{formatCellValue(cell, filteredPreviewData.columns?.[j], { timestampFormat: xAxisFormat || 'short' })}</td>
                               ))}
                             </tr>
                           ))}
@@ -3840,9 +3956,17 @@ ${xAxisFormatCode}
       // Without a user override, the grid's autoSizeStrategy sizes
       // the column to its content on mount.
       const userWidth = userLayout?.widths?.[col];
+      // AG Grid's field prop treats dots as nested-path navigation
+      // (data['cpu']['pct']), which silently empties columns whose
+      // names literally contain dots (e.g. ts-store flat keys like
+      // 'cpu.pct'). Use a closure-captured valueGetter keyed on the
+      // literal name + an explicit colId so reorder / resize state
+      // still persists by column name.
+      const colKey = col;
       const def = {
-        field: col,
+        colId: colKey,
         headerName: columnAliases[col] || col,
+        valueGetter: (params) => params.data?.[colKey],
         sortable: true,
         resizable: true,
         filter: isNumCol ? 'agNumberColumnFilter' : (isTimeCol ? 'agDateColumnFilter' : 'agTextColumnFilter'),
@@ -3850,7 +3974,7 @@ ${xAxisFormatCode}
         valueFormatter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col);
+          const f = formatCellValue(v, col, { timestampFormat: '${transforms.xAxisFormat || 'short'}' });
           return f == null ? '' : String(f);
         },
         minWidth: isNumCol ? 100 : (isTimeCol ? 170 : 120),
@@ -3887,7 +4011,9 @@ ${xAxisFormatCode}
     if (!chartId) return;
     const api = gridRef.current?.api;
     if (!api) return;
-    const ids = api.getColumnDefs().map((c) => c.field);
+    // colId is the canonical column identifier (we now set it explicitly
+    // because field is used as a path lookup, not a literal name).
+    const ids = api.getColumnDefs().map((c) => c.colId || c.field);
     saveLayout((prev) => ({ ...prev, order: ids }));
   };
 
@@ -3899,7 +4025,7 @@ ${xAxisFormatCode}
 
   return (
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'transparent', overflow: 'hidden' }}>
-      ${transforms.chartName ? `<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center' }}>
+      ${transforms.chartName ? `<div style={{ display: 'block', height: '2.5rem', lineHeight: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         ${transforms.chartName.replace(/'/g, "\\'")}
       </div>` : ''}
       <div className="ag-theme-quartz-dark" style={{ flex: 1, minHeight: 0 }}>
@@ -4091,6 +4217,205 @@ ${transformsConfig}
 };`;
   }
 
+  if (chartType === 'banded_bar') {
+    // Banded bar (Levey-Jennings / control chart) — per-row only.
+    // Each row carries its own mean + ±1 SD + ±2 SD columns; the
+    // renderer reads each row's own values to draw a per-row envelope.
+    // The user picks which row column maps to each band role via
+    // bandColumns; xAxisCol is the timestamp.
+    const bc = transforms.bandColumns || {};
+    const style = transforms.bandedBarStyle || 'time_series';
+
+    // Refuse to emit a working chart shell when required columns aren't
+    // chosen yet — better to render a clear placeholder than a blank
+    // canvas with no error visible to the user.
+    if (!xAxisCol || !bc.mean) {
+      const missing = [];
+      if (!xAxisCol) missing.push('x-axis (time) column');
+      if (!bc.mean) missing.push('Mean column in Band Columns');
+      return `const Component = () => (
+  <div style={{ color: '#c6c6c6', padding: 16 }}>
+    Banded Bar Chart needs ${missing.join(' and ')} configured. Run the query, then pick the column(s) in the data-mapping section above.
+  </div>
+);`;
+    }
+
+    // JSON-encode column names so the generated code reads them as strings.
+    const xColJSON   = JSON.stringify(xAxisCol);
+    const meanJSON   = JSON.stringify(bc.mean);
+    const m1JSON     = JSON.stringify(bc.minus_1sd || '');
+    const p1JSON     = JSON.stringify(bc.plus_1sd || '');
+    const m2JSON     = JSON.stringify(bc.minus_2sd || '');
+    const p2JSON     = JSON.stringify(bc.plus_2sd || '');
+    const xFmtJSON   = JSON.stringify(transforms.xAxisFormat || 'chart');
+
+    if (style === 'time_series') {
+      // Stacked-band areaStyle envelope behind the mean line.
+      return `const Component = ({ data, config }) => {
+  if (!data?.rows?.length) return <div style={{ color: '#c6c6c6', padding: 16 }}>Waiting for data…</div>;
+
+  const xCol = ${xColJSON};
+  const meanCol = ${meanJSON};
+  const m2Col = ${m2JSON}, m1Col = ${m1JSON}, p1Col = ${p1JSON}, p2Col = ${p2JSON};
+
+  const rows = toObjects(data);
+  const xLabels  = rows.map(r => formatTimestamp(r[xCol], ${xFmtJSON}));
+  const meanVals = rows.map(r => +parseFloat(r[meanCol]));
+  const m1sd = m1Col ? rows.map(r => +parseFloat(r[m1Col])) : null;
+  const p1sd = p1Col ? rows.map(r => +parseFloat(r[p1Col])) : null;
+  const m2sd = m2Col ? rows.map(r => +parseFloat(r[m2Col])) : null;
+  const p2sd = p2Col ? rows.map(r => +parseFloat(r[p2Col])) : null;
+
+  const has1SD = m1sd && p1sd;
+  const has2SD = m2sd && p2sd;
+  const baseLow = has2SD ? m2sd : (has1SD ? m1sd : null);
+  const wOuterLo = (has2SD && has1SD) ? rows.map((_, i) => +(m1sd[i] - m2sd[i]).toFixed(4)) : null;
+  const wInner   = has1SD ? rows.map((_, i) => +(p1sd[i] - m1sd[i]).toFixed(4)) : null;
+
+  // Y-axis bounds. Auto-scale puts the floor at 0 because the bar-width
+  // helper series carry small delta values, which makes the bands look
+  // tiny against an empty panel. Compute explicit bounds: the wider of
+  // ±3 SD (extrapolated from the available SD columns) or 10% of the
+  // mean. Falls back to data extent + 10% when no SD info is present.
+  const yLowData  = has2SD ? Math.min(...m2sd) : has1SD ? Math.min(...m1sd) : Math.min(...meanVals);
+  const yHighData = has2SD ? Math.max(...p2sd) : has1SD ? Math.max(...p1sd) : Math.max(...meanVals);
+  const meanAvg = meanVals.reduce((a, b) => a + b, 0) / meanVals.length;
+  // SD estimate: prefer the ±2 SD half-width / 2, fall back to ±1 SD half-width.
+  const sdEstimate = has2SD ? (p2sd[0] - m2sd[0]) / 4
+                  : has1SD ? (p1sd[0] - m1sd[0]) / 2
+                  : 0;
+  const padSD  = sdEstimate > 0 ? sdEstimate * 3 : 0;
+  const padPct = Math.abs(meanAvg) * 0.10;
+  const pad    = Math.max(padSD, padPct);
+  const yMin = yLowData  - pad;
+  const yMax = yHighData + pad;
+  const wOuterHi = (has2SD && has1SD) ? rows.map((_, i) => +(p2sd[i] - p1sd[i]).toFixed(4)) : null;
+
+  const series = [];
+  if (baseLow) {
+    series.push({ name: '_base', type: 'line', stack: 'band', data: baseLow, symbol: 'none',
+      lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, tooltip: { show: false }, showInLegend: false });
+  }
+  if (wOuterLo) series.push({ name: '±2 SD', type: 'line', stack: 'band', data: wOuterLo, symbol: 'none',
+    lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(190, 149, 255, 0.18)' } });
+  if (wInner) series.push({ name: '±1 SD', type: 'line', stack: 'band', data: wInner, symbol: 'none',
+    lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(8, 189, 186, 0.22)' } });
+  if (wOuterHi) series.push({ name: '±2 SD', type: 'line', stack: 'band', data: wOuterHi, symbol: 'none',
+    lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(190, 149, 255, 0.18)' }, showInLegend: false });
+  series.push({ name: 'Mean', type: 'line', data: meanVals, symbol: 'circle', symbolSize: 6,
+    lineStyle: { color: '#0f62fe', width: 2 }, itemStyle: { color: '#0f62fe' } });
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: { text: config?.title || '', left: 'center', top: 5, textStyle: { color: '#f4f4f4' } },
+    tooltip: { trigger: 'axis', appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' } },
+    legend: { bottom: 6, textStyle: { color: '#c6c6c6' } },
+    grid: { left: 50, right: 20, top: 50, bottom: 40, containLabel: true },
+    xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } } },
+    yAxis: { type: 'value', min: yMin, max: yMax, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } }, splitLine: { lineStyle: { color: '#262626' } } },
+    series,
+  };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />;
+};`;
+    }
+
+    // column_filled / column_outlined / column_box — per-row vertical
+    // column glyphs. Each column draws that row's bands as stacked
+    // bars sized to that row's own SD columns. The bar series is
+    // category-axis-aware so width / category-gap behave naturally.
+    const showBorders = style === 'column_outlined';
+    const onlyInnerBand = style === 'column_box';
+    return `const Component = ({ data, config }) => {
+  if (!data?.rows?.length) return <div style={{ color: '#c6c6c6', padding: 16 }}>Waiting for data…</div>;
+
+  const xCol = ${xColJSON};
+  const meanCol = ${meanJSON};
+  const m2Col = ${m2JSON}, m1Col = ${m1JSON}, p1Col = ${p1JSON}, p2Col = ${p2JSON};
+
+  const rows = toObjects(data);
+  const xLabels  = rows.map(r => formatTimestamp(r[xCol], ${xFmtJSON}));
+  const meanVals = rows.map(r => +parseFloat(r[meanCol]));
+  const m1sd = m1Col ? rows.map(r => +parseFloat(r[m1Col])) : null;
+  const p1sd = p1Col ? rows.map(r => +parseFloat(r[p1Col])) : null;
+  const m2sd = m2Col ? rows.map(r => +parseFloat(r[m2Col])) : null;
+  const p2sd = p2Col ? rows.map(r => +parseFloat(r[p2Col])) : null;
+  const has1SD = m1sd && p1sd;
+  const has2SD = m2sd && p2sd;
+
+  // Y-axis bounds — see time_series template comment for rationale.
+  const yLowData  = has2SD ? Math.min(...m2sd) : has1SD ? Math.min(...m1sd) : Math.min(...meanVals);
+  const yHighData = has2SD ? Math.max(...p2sd) : has1SD ? Math.max(...p1sd) : Math.max(...meanVals);
+  const meanAvg = meanVals.reduce((a, b) => a + b, 0) / meanVals.length;
+  const sdEstimate = has2SD ? (p2sd[0] - m2sd[0]) / 4
+                  : has1SD ? (p1sd[0] - m1sd[0]) / 2
+                  : 0;
+  const padSD  = sdEstimate > 0 ? sdEstimate * 3 : 0;
+  const padPct = Math.abs(meanAvg) * 0.10;
+  const pad    = Math.max(padSD, padPct);
+  const yMin = yLowData  - pad;
+  const yMax = yHighData + pad;
+
+  const series = [];
+
+  ${onlyInnerBand
+    ? `// column_box: only the inner ±1 SD band as a stacked bar with stroke,
+  // plus a thin vertical reference line spanning each column's height
+  // and a tick mark at the mean. The vertical line uses the column gap
+  // rather than the panel height.
+  if (has1SD) {
+    // Transparent base at -1 SD
+    series.push({ name: '_base', type: 'bar', stack: 'box', data: m1sd, itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false } });
+    // ±1 SD band rectangle
+    series.push({ name: '±1 SD', type: 'bar', stack: 'box', data: rows.map((_, i) => +(p1sd[i] - m1sd[i]).toFixed(4)),
+      itemStyle: { color: 'rgba(8, 189, 186, 0.22)', borderColor: '#08bdba', borderWidth: 1 } });
+  }
+  // Mean tick — short horizontal scatter dash on top
+  series.push({ name: 'Mean', type: 'scatter', data: meanVals, symbolSize: 14,
+    symbol: 'rect', itemStyle: { color: '#f4f4f4' } });`
+    : `// column_filled / column_outlined: stacked-bar rectangles per row.
+  // Transparent base lifts the stack to the lower bound; widths fill
+  // the band regions on top.
+  if (has2SD) {
+    series.push({ name: '_base', type: 'bar', stack: 'col', data: m2sd, itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false } });
+  } else if (has1SD) {
+    series.push({ name: '_base', type: 'bar', stack: 'col', data: m1sd, itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false } });
+  }
+  if (has2SD && has1SD) {
+    series.push({ name: '±2 SD lo', type: 'bar', stack: 'col', data: rows.map((_, i) => +(m1sd[i] - m2sd[i]).toFixed(4)),
+      itemStyle: { color: 'rgba(190, 149, 255, 0.18)'${showBorders ? `, borderColor: '#be95ff', borderWidth: 1` : ''} } });
+  }
+  if (has1SD) {
+    series.push({ name: '±1 SD', type: 'bar', stack: 'col', data: rows.map((_, i) => +(p1sd[i] - m1sd[i]).toFixed(4)),
+      itemStyle: { color: 'rgba(8, 189, 186, 0.30)'${showBorders ? `, borderColor: '#08bdba', borderWidth: 1` : ''} } });
+  }
+  if (has2SD && has1SD) {
+    series.push({ name: '±2 SD hi', type: 'bar', stack: 'col', data: rows.map((_, i) => +(p2sd[i] - p1sd[i]).toFixed(4)),
+      itemStyle: { color: 'rgba(190, 149, 255, 0.18)'${showBorders ? `, borderColor: '#be95ff', borderWidth: 1` : ''} } });
+  }
+  // Mean dot per row
+  series.push({ name: 'Mean', type: 'scatter', data: meanVals, symbolSize: 6, itemStyle: { color: '#0f62fe' } });`}
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: { text: config?.title || '', left: 'center', top: 5, textStyle: { color: '#f4f4f4' } },
+    tooltip: { trigger: 'axis', appendToBody: true, backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' },
+      formatter: params => {
+        const i = params[0]?.dataIndex;
+        if (i == null) return '';
+        const lines = ['<b>' + xLabels[i] + '</b>', 'Mean: ' + meanVals[i].toFixed(3)];
+        if (has1SD) lines.push('±1 SD: ' + m1sd[i].toFixed(3) + ' / ' + p1sd[i].toFixed(3));
+        if (has2SD) lines.push('±2 SD: ' + m2sd[i].toFixed(3) + ' / ' + p2sd[i].toFixed(3));
+        return lines.join('<br/>');
+      } },
+    grid: { left: 50, right: 20, top: 50, bottom: 30, containLabel: true },
+    xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } } },
+    yAxis: { type: 'value', min: yMin, max: yMax, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } }, splitLine: { lineStyle: { color: '#262626' } } },
+    series,
+  };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />;
+};`;
+  }
+
   // When using seriesCol, categories are generated inside seriesCode; otherwise generate them here
   const categoriesCode = seriesCol ? '' : `
   const xAxisCol = '${xAxisCol}';
@@ -4116,7 +4441,7 @@ ${transformsConfig}
         : `legend: { data: typeof seriesNames !== 'undefined' ? seriesNames : yColumns, top: ${legendTop} },`)
     : '';
   const titleHeader = chartName
-    ? `<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center' }}>${chartName.replace(/'/g, "\\'")}</div>`
+    ? `<div style={{ display: 'block', height: '2.5rem', lineHeight: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>${chartName.replace(/'/g, "\\'")}</div>`
     : '';
 
   return `const Component = () => {

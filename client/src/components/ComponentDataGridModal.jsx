@@ -29,11 +29,42 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
 
   const columnAliases = chart?.data_mapping?.column_aliases || {};
   const visibleColumnsConfig = chart?.data_mapping?.visible_columns || null;
+  // Honor the chart's x-axis time format for any timestamp column in
+  // the table — without this, formatCellValue defaults to 'short'
+  // (no seconds), which mismatches charts saved with chart_time_seconds
+  // / chart_datetime_seconds. The data table should display time the
+  // same way the chart does.
+  const timestampFormat = chart?.data_mapping?.x_axis_format || 'short';
 
   const allColumns = data?.columns || [];
+  // When the chart hasn't explicitly chosen a column order via
+  // visible_columns, hoist the time + numeric-value columns to the
+  // front — most data tables here are time-series, and the reader
+  // wants `timestamp | value | …everything else…`. Especially matters
+  // for Prometheus, where the adapter emits timestamp + value first
+  // but then a long tail of label columns (instance, pod, namespace,
+  // …) that the user may want to keep around for filters / series
+  // grouping but shouldn't push the actual numeric value off-screen.
+  // Other column order preserved after the two pinned columns.
   const orderedColumns = visibleColumnsConfig
     ? visibleColumnsConfig.filter((c) => allColumns.includes(c))
-    : allColumns;
+    : (() => {
+        if (allColumns.length === 0) return allColumns;
+        const tsExact = allColumns.indexOf('timestamp');
+        const tsIdx = tsExact >= 0
+          ? tsExact
+          : allColumns.findIndex((c) => /^(time|ts)$|^time(stamp)?_?/i.test(c));
+        const valExact = allColumns.indexOf('value');
+        const valIdx = valExact >= 0
+          ? valExact
+          : allColumns.findIndex((c) => /^(value|val|y|metric_value|measurement)$/i.test(c));
+        const pinned = [];
+        if (tsIdx >= 0) pinned.push(allColumns[tsIdx]);
+        if (valIdx >= 0 && valIdx !== tsIdx) pinned.push(allColumns[valIdx]);
+        if (pinned.length === 0) return allColumns;
+        const rest = allColumns.filter((c) => !pinned.includes(c));
+        return [...pinned, ...rest];
+      })();
   const columnsKey = orderedColumns.join('|');
 
   const latestRowObjs = useMemo(() => {
@@ -86,9 +117,17 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
+      // AG Grid's `field` prop treats dots as nested-path navigation
+      // (data['cpu']['pct']), which silently empties columns whose
+      // names literally contain dots (e.g. ts-store flat keys like
+      // 'cpu.pct'). Use a closure-captured valueGetter keyed on the
+      // literal name + an explicit colId so reorder / resize state
+      // still persists by column name.
+      const colKey = col;
       return {
-        field: col,
+        colId: colKey,
         headerName: columnAliases[col] || col,
+        valueGetter: (params) => params.data?.[colKey],
         sortable: true,
         resizable: true,
         filter: isNumCol
@@ -100,7 +139,7 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
         valueFormatter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col);
+          const f = formatCellValue(v, col, { timestampFormat });
           return f == null ? '' : String(f);
         },
         minWidth: isNumCol ? 100 : isTimeCol ? 170 : 120,
@@ -109,7 +148,7 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
     // columnAliases intentionally excluded — it doesn't change during a
     // modal session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey]);
+  }, [columnsKey, timestampFormat]);
 
   const defaultColDef = useMemo(() => ({
     sortable: true,

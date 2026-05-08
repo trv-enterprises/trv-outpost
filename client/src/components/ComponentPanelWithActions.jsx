@@ -19,10 +19,12 @@ import ComponentDataGridModal from './ComponentDataGridModal';
  * live data instead of opening a second stream.
  */
 // Chart types where "view underlying data as a table" doesn't make sense.
-// Gauges/numbers show a single aggregated value; a table of one cell is silly.
-// Dataview is already a table — no reason to open a modal of the same thing.
+// Number tiles show a single aggregated value, dataview is already a
+// table — no reason to open a modal of the same thing. Gauges DO benefit
+// (gauge value comes from a row, but the underlying stream is a series
+// the user often wants to inspect).
 // Doesn't affect the download menu — PNG/CSV/JSON stay available for these.
-const SKIP_TABLE_MODAL_CHART_TYPES = new Set(['gauge', 'dataview', 'number']);
+const SKIP_TABLE_MODAL_CHART_TYPES = new Set(['dataview', 'number']);
 
 // Slugify chart name/title for filenames: "M-WS-Temp Over Time" → "m_ws_temp_over_time"
 function filenameSlug(name) {
@@ -56,27 +58,122 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
   const data = ctx?.data;
   const baseName = chart?.title || chart?.name || 'chart';
 
-  // PNG of the live chart. Resolves ECharts canvas natively when present
-  // (higher fidelity + respects devicePixelRatio), and falls back to
-  // html2canvas for DOM-rendered charts (number, dataview, gauge-via-ECharts
-  // takes the native path automatically).
+  // PNG of the live chart. Three cases, in order:
+  //   1. No ECharts canvas in panel → html2canvas the DOM (e.g. dataview).
+  //   2. ECharts canvas covers the whole panel → read its pixels directly.
+  //   3. ECharts canvas + a sibling title strip → composite: draw the
+  //      title onto a Canvas 2D with native fillText (NOT html2canvas —
+  //      its text shaper stretches single-line titles to fill the
+  //      container width), then stack the chart canvas underneath.
   const exportPNG = useCallback(async () => {
     const root = captureRef?.current;
     if (!root) return;
 
-    // ECharts renders to an inner <canvas>; when it exists and covers the
-    // panel, reading its pixels directly beats rasterizing the DOM.
     const echartsCanvas = root.querySelector('.echarts-for-react canvas');
+
+    // Find the title element rendered above the ECharts canvas. The
+    // generator emits something like:
+    //   <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    //     <div style={{ ...title... }}>{name}</div>
+    //     <div style={{ flex: 1 }}><ReactECharts /></div>
+    //   </div>
+    // Live DOM nesting is unpredictable (DynamicComponentLoader, error
+    // boundaries, etc.), so don't rely on root.children[0]. Instead,
+    // walk the canvas's ancestors and find the previous sibling with
+    // text content at any level. That sibling IS the title bar.
+    const findTitleEl = () => {
+      if (!echartsCanvas) return null;
+      let node = echartsCanvas.closest('.echarts-for-react') || echartsCanvas;
+      while (node && node !== root) {
+        let sib = node.previousElementSibling;
+        while (sib) {
+          if (sib instanceof HTMLElement && !sib.classList.contains('chart-panel-actions')) {
+            const txt = (sib.textContent || '').trim();
+            if (txt && !sib.querySelector('canvas')) return sib;
+          }
+          sib = sib.previousElementSibling;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    };
+
     if (echartsCanvas) {
-      echartsCanvas.toBlob((blob) => {
+      const rootRect = root.getBoundingClientRect();
+      const canvasContainer = echartsCanvas.closest('.echarts-for-react') || echartsCanvas.parentElement;
+      const containerRect = canvasContainer?.getBoundingClientRect();
+      const canvasCoversRoot = containerRect &&
+        Math.abs(rootRect.height - containerRect.height) < 6 &&
+        Math.abs(rootRect.width  - containerRect.width)  < 6;
+
+      if (canvasCoversRoot) {
+        // ECharts is the entire panel — read its pixels directly.
+        echartsCanvas.toBlob((blob) => {
+          if (blob) triggerDownload(blob, `${filenameSlug(baseName)}.png`);
+        }, 'image/png');
+        return;
+      }
+
+      // Composite path. Read the title text + style off the live DOM,
+      // draw it ourselves with Canvas 2D, then stack the chart canvas.
+      const titleEl = findTitleEl();
+      const titleText = (titleEl?.textContent || chart?.title || chart?.name || '').trim();
+
+      let titleHeight = 0;
+      let fontPx = 16;
+      let fontWeight = '600';
+      let fontFamily = 'sans-serif';
+      let titleColor = '#f4f4f4';
+      if (titleEl && titleText) {
+        const cs = getComputedStyle(titleEl);
+        titleHeight = Math.round(titleEl.getBoundingClientRect().height) || 40;
+        const parsedPx = parseFloat(cs.fontSize);
+        if (parsedPx) fontPx = parsedPx;
+        fontWeight = cs.fontWeight || '600';
+        fontFamily = cs.fontFamily || 'sans-serif';
+        titleColor = cs.color || titleColor;
+      }
+
+      const dpr = window.devicePixelRatio || 1;
+      const scale = Math.max(2, dpr); // retina output
+      const canvasCssWidth = Math.round(containerRect?.width || rootRect.width);
+      const canvasCssHeight = Math.round(containerRect?.height || (rootRect.height - titleHeight));
+
+      const outW = Math.round(canvasCssWidth * scale);
+      const outH = Math.round((titleHeight + canvasCssHeight) * scale);
+
+      const out = document.createElement('canvas');
+      out.width = outW;
+      out.height = outH;
+      const ctx2d = out.getContext('2d');
+      // Background — match panel background.
+      ctx2d.fillStyle = '#161616';
+      ctx2d.fillRect(0, 0, outW, outH);
+
+      if (titleText && titleHeight > 0) {
+        // Native fillText — single text run, no shaper layout pass.
+        ctx2d.fillStyle = titleColor;
+        ctx2d.font = `${fontWeight} ${fontPx * scale}px ${fontFamily}`;
+        ctx2d.textBaseline = 'middle';
+        ctx2d.textAlign = 'center';
+        ctx2d.fillText(titleText, outW / 2, (titleHeight * scale) / 2);
+      }
+
+      // Stack the ECharts canvas under the title. drawImage scales from
+      // the source canvas's actual pixel dimensions to our retina output.
+      ctx2d.drawImage(
+        echartsCanvas,
+        0, titleHeight * scale,
+        canvasCssWidth * scale, canvasCssHeight * scale,
+      );
+
+      out.toBlob((blob) => {
         if (blob) triggerDownload(blob, `${filenameSlug(baseName)}.png`);
       }, 'image/png');
       return;
     }
 
-    // DOM path: html2canvas. scale=2 for retina-quality output. The onclone
-    // hook hides the hover action row (so the PNG doesn't include the
-    // download icon itself) and strips CSS gradients that crash the library.
+    // No canvas at all — html2canvas the DOM (dataview, etc.).
     try {
       const canvas = await html2canvas(root, {
         backgroundColor: '#161616',
@@ -97,7 +194,7 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
     } catch (err) {
       console.error('PNG export failed:', err);
     }
-  }, [captureRef, baseName]);
+  }, [captureRef, baseName, chart]);
 
   const exportCSV = useCallback((e) => {
     e.stopPropagation();

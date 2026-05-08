@@ -174,6 +174,32 @@ func init() {
 	})
 
 	RegisterComponentType(ComponentTypeInfo{
+		TypeID:      "chart.banded_bar",
+		Category:    CategoryChart,
+		Subtype:     "banded_bar",
+		DisplayName: "Banded Bar Chart",
+		Description: "Time-series with horizontal reference bands at fixed Y values — Levey-Jennings / control-chart style. Each band is defined by a name + value + kind (line, dashed tick, or paired box edges that form a shaded band). Four visual styles: time_series (default — line + dots over a horizontal time axis with full-width reference bands), column_filled / column_outlined / column_box (single vertical column per timestamp).",
+		Capabilities: ComponentCapabilities{
+			CanRead:            true,
+			SupportsStreaming:  true,
+			RequiresConnection: true,
+		},
+		DataRequirements: &DataRequirements{
+			RequiresXAxis:      true,
+			RequiresYAxis:      true,
+			MultipleYAxis:      false,
+			HasSeriesColumn:    true,
+			HasAxisLabels:      true,
+			HasXAxisFormat:     true,
+			HasTimeBucket:      true,
+			HasSortLimit:       true,
+			HasReferenceLevels: true,
+			XAxisLabel:         "X-Axis (Time)",
+			YAxisLabel:         "Y-Axis (Value)",
+		},
+	})
+
+	RegisterComponentType(ComponentTypeInfo{
 		TypeID:      "chart.custom",
 		Category:    CategoryChart,
 		Subtype:     "custom",

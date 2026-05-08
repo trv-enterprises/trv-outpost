@@ -447,7 +447,7 @@ function DashboardTileViewPage() {
             onClick={handleResetOrder}
             title="Discard your manual tile order and revert to most-recently-updated first"
           >
-            Reset order
+            Reset manual order
           </Button>
         )}
       </div>

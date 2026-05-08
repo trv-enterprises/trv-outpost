@@ -91,7 +91,7 @@ const LABEL_OPERATORS = [
 ];
 
 const PrometheusQueryBuilder = ({
-  datasourceId,
+  connectionId,
   onQueryChange,
   onParamsChange,
   onExecute,
@@ -127,10 +127,10 @@ const PrometheusQueryBuilder = ({
 
   // Fetch schema when datasource changes
   useEffect(() => {
-    if (datasourceId) {
+    if (connectionId) {
       fetchSchema();
     }
-  }, [datasourceId]);
+  }, [connectionId]);
 
   // Build query whenever options change
   useEffect(() => {
@@ -154,7 +154,7 @@ const PrometheusQueryBuilder = ({
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getDatasourceSchema(datasourceId);
+      const response = await api.getConnectionSchema(connectionId);
       if (response.success && response.prometheus_schema) {
         setSchema(response.prometheus_schema);
       } else {
@@ -172,7 +172,7 @@ const PrometheusQueryBuilder = ({
     if (labelValues[labelName]) return; // Already cached
 
     try {
-      const response = await api.getPrometheusLabelValues(datasourceId, labelName);
+      const response = await api.getPrometheusLabelValues(connectionId, labelName);
       if (response && response.values && Array.isArray(response.values)) {
         setLabelValues(prev => ({ ...prev, [labelName]: response.values }));
       }
@@ -255,11 +255,11 @@ const PrometheusQueryBuilder = ({
 
   // Execute query
   const handleExecute = async () => {
-    if (!generatedQuery || !datasourceId) return;
+    if (!generatedQuery || !connectionId) return;
 
     setExecuting(true);
     try {
-      const response = await api.queryDatasource(datasourceId, {
+      const response = await api.queryConnection(connectionId, {
         query: {
           raw: generatedQuery,
           type: 'prometheus',

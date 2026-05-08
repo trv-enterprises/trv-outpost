@@ -25,6 +25,21 @@ func Get(chartType string) (string, bool) {
 	return t, ok
 }
 
+// GetStyled returns the template for a chart type + style variant. Today
+// only banded_bar has style variants — the four ECharts visual treatments
+// of a Levey-Jennings reference-band chart (time_series default,
+// column_filled, column_outlined, column_box). The style key is looked up
+// as "<chartType>:<style>"; if missing or empty the base chartType key
+// applies. Returns ok=false when neither key resolves.
+func GetStyled(chartType, style string) (string, bool) {
+	if style != "" {
+		if t, ok := templates[chartType+":"+style]; ok {
+			return t, true
+		}
+	}
+	return Get(chartType)
+}
+
 // List returns the chart types that have templates, in no guaranteed
 // order. Useful for agent prompts listing the available skeletons.
 func List() []string {
@@ -34,6 +49,305 @@ func List() []string {
 	}
 	return out
 }
+
+// Banded-bar templates broken out as package-level vars so the
+// templates map can reference them without violating the "map literals
+// can't call functions" Go rule. All four share the per-row data
+// contract documented at the bandedBarTimeSeriesTpl declaration.
+
+var bandedBarTimeSeriesTpl = `// Banded Bar Chart — time_series style (per-row envelope)
+// Horizontal time x-axis with line + dots; the reference bands move
+// with the data — each row carries its own mean + ±1 SD + ±2 SD
+// columns, and the bands are rendered as a shaded envelope behind
+// the line via ECharts' stacked areaStyle technique.
+//
+// DATA CONTRACT (every row must carry these columns):
+//   day / timestamp — the x-axis value (rename via xCol below)
+//   mean            — the primary value (rename via meanCol below)
+//   minus_2sd, minus_1sd, plus_1sd, plus_2sd — that row's bounds
+// Substitute the actual column names from get_schema before saving.
+
+const Component = ({ data, config }) => {
+  if (!data?.rows?.length) return <div style={{color: '#c6c6c6', padding: 16}}>Waiting for data…</div>;
+
+  // Substitute these with the columns from your schema.
+  const xCol     = 'day';
+  const meanCol  = 'mean';
+  const m2Col    = 'minus_2sd';
+  const m1Col    = 'minus_1sd';
+  const p1Col    = 'plus_1sd';
+  const p2Col    = 'plus_2sd';
+
+  const rows     = toObjects(data);
+  const xLabels  = rows.map(r => formatTimestamp(r[xCol], 'chart_time'));
+  const meanVals = rows.map(r => +parseFloat(r[meanCol]));
+  const m2sd     = rows.map(r => +parseFloat(r[m2Col]));
+  const m1sd     = rows.map(r => +parseFloat(r[m1Col]));
+  const p1sd     = rows.map(r => +parseFloat(r[p1Col]));
+  const p2sd     = rows.map(r => +parseFloat(r[p2Col]));
+
+  // Stacked-band trick: a transparent base series at m2sd plus three
+  // width-of-band stacks. Each stack is m1-m2 / p1-m1 / p2-p1 wide,
+  // colored to fill the gap between the bounds. ECharts paints them
+  // bottom-up so the fills shade the right region.
+  const wOuterLo = rows.map((_, i) => +(m1sd[i] - m2sd[i]).toFixed(4));
+  const wInner   = rows.map((_, i) => +(p1sd[i] - m1sd[i]).toFixed(4));
+  const wOuterHi = rows.map((_, i) => +(p2sd[i] - p1sd[i]).toFixed(4));
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: { text: config?.title || '', left: 'center', top: 5, textStyle: { color: '#f4f4f4' } },
+    tooltip: {
+      trigger: 'axis', appendToBody: true,
+      backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' },
+      formatter: params => {
+        const i = params[0]?.dataIndex;
+        if (i == null) return '';
+        return [
+          '<b>' + xLabels[i] + '</b>',
+          'Mean: ' + meanVals[i].toFixed(3),
+          '±1 SD: ' + m1sd[i].toFixed(3) + ' / ' + p1sd[i].toFixed(3),
+          '±2 SD: ' + m2sd[i].toFixed(3) + ' / ' + p2sd[i].toFixed(3),
+        ].join('<br/>');
+      },
+    },
+    legend: { bottom: 6, textStyle: { color: '#c6c6c6' }, data: ['Mean', '±1 SD', '±2 SD'] },
+    grid: { left: 50, right: 20, top: 50, bottom: 40, containLabel: true },
+    xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } } },
+    yAxis: { type: 'value', axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } }, splitLine: { lineStyle: { color: '#262626' } } },
+    series: [
+      // Transparent base — starts the stack at m2sd
+      { name: '_base', type: 'line', stack: 'band', data: m2sd, symbol: 'none',
+        lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, tooltip: { show: false }, showInLegend: false },
+      // Outer-low band: m2 → m1
+      { name: '±2 SD', type: 'line', stack: 'band', data: wOuterLo, symbol: 'none',
+        lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(190, 149, 255, 0.18)' } },
+      // Inner band: m1 → p1
+      { name: '±1 SD', type: 'line', stack: 'band', data: wInner, symbol: 'none',
+        lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(8, 189, 186, 0.22)' } },
+      // Outer-high band: p1 → p2 (re-uses the ±2 SD legend entry)
+      { name: '±2 SD', type: 'line', stack: 'band', data: wOuterHi, symbol: 'none',
+        lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(190, 149, 255, 0.18)' }, showInLegend: false },
+      // Mean line + dots — rendered on top, NOT stacked
+      { name: 'Mean', type: 'line', data: meanVals, symbol: 'circle', symbolSize: 6,
+        lineStyle: { color: '#0f62fe', width: 2 }, itemStyle: { color: '#0f62fe' } },
+    ],
+  };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />;
+};`
+
+var bandedBarColumnFilledTpl = `// Banded Bar Chart — column_filled style (per-row)
+// One vertical column per row. Each column shows that row's bands
+// as filled rectangles (no borders): outer ±2 SD shaded, inner
+// ±1 SD shaded a different tone, dot at the row's mean.
+//
+// Snapshot-style display where each timestamp reads independently —
+// the columns are visually separate, not connected by a trend line.
+// For multi-day trend rendering use time_series instead.
+//
+// Same per-row data contract as the time_series template — every
+// row needs mean + minus_2sd + minus_1sd + plus_1sd + plus_2sd.
+
+const Component = ({ data, config }) => {
+  if (!data?.rows?.length) return <div style={{color: '#c6c6c6', padding: 16}}>Waiting for data…</div>;
+
+  const xCol = 'day', meanCol = 'mean';
+  const m2Col = 'minus_2sd', m1Col = 'minus_1sd', p1Col = 'plus_1sd', p2Col = 'plus_2sd';
+
+  const rows     = toObjects(data);
+  const xLabels  = rows.map(r => formatTimestamp(r[xCol], 'chart_time'));
+  const meanVals = rows.map(r => +parseFloat(r[meanCol]));
+  const m2sd     = rows.map(r => +parseFloat(r[m2Col]));
+  const m1sd     = rows.map(r => +parseFloat(r[m1Col]));
+  const p1sd     = rows.map(r => +parseFloat(r[p1Col]));
+  const p2sd     = rows.map(r => +parseFloat(r[p2Col]));
+
+  // Per-row rectangles drawn via a custom series. Each rectangle is
+  // half a category wide centered on the timestamp's index.
+  const COL_HALF = 0.35;
+
+  const drawRect = (api, i, lo, hi, fill, stroke, strokeW) => {
+    const xLeft  = api.coord([i - COL_HALF, lo])[0];
+    const xRight = api.coord([i + COL_HALF, lo])[0];
+    const yLo    = api.coord([i, lo])[1];
+    const yHi    = api.coord([i, hi])[1];
+    return { type: 'rect',
+      shape: { x: xLeft, y: yHi, width: xRight - xLeft, height: yLo - yHi },
+      style: { fill, stroke, lineWidth: strokeW || 0 } };
+  };
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: { text: config?.title || '', left: 'center', top: 5, textStyle: { color: '#f4f4f4' } },
+    tooltip: {
+      trigger: 'axis', appendToBody: true,
+      backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' },
+      formatter: params => {
+        const i = params[0]?.dataIndex;
+        if (i == null) return '';
+        return [
+          '<b>' + xLabels[i] + '</b>',
+          'Mean: ' + meanVals[i].toFixed(3),
+          '±1 SD: ' + m1sd[i].toFixed(3) + ' / ' + p1sd[i].toFixed(3),
+          '±2 SD: ' + m2sd[i].toFixed(3) + ' / ' + p2sd[i].toFixed(3),
+        ].join('<br/>');
+      },
+    },
+    grid: { left: 50, right: 20, top: 50, bottom: 30, containLabel: true },
+    xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } } },
+    yAxis: { type: 'value', axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } }, splitLine: { lineStyle: { color: '#262626' } } },
+    series: [
+      // Outer ±2 SD rectangles
+      { type: 'custom', renderItem: (params, api) => {
+        const i = api.value(0);
+        return drawRect(api, i, m2sd[i], p2sd[i], 'rgba(190, 149, 255, 0.18)', null, 0);
+      }, encode: { x: 0, y: [1, 2] }, data: rows.map((_, i) => [i, m2sd[i], p2sd[i]]) },
+      // Inner ±1 SD rectangles (drawn over the outer)
+      { type: 'custom', renderItem: (params, api) => {
+        const i = api.value(0);
+        return drawRect(api, i, m1sd[i], p1sd[i], 'rgba(8, 189, 186, 0.30)', null, 0);
+      }, encode: { x: 0, y: [1, 2] }, data: rows.map((_, i) => [i, m1sd[i], p1sd[i]]) },
+      // Mean dot per row (used by axis tooltip)
+      { type: 'scatter', data: meanVals, symbolSize: 12, itemStyle: { color: '#0f62fe' } },
+    ],
+  };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />;
+};`
+
+var bandedBarColumnOutlinedTpl = `// Banded Bar Chart — column_outlined style (per-row)
+// Same as column_filled but each per-row rectangle has a visible
+// stroke. Reads as discrete band regions rather than smooth fills.
+// Same per-row data contract.
+
+const Component = ({ data, config }) => {
+  if (!data?.rows?.length) return <div style={{color: '#c6c6c6', padding: 16}}>Waiting for data…</div>;
+
+  const xCol = 'day', meanCol = 'mean';
+  const m2Col = 'minus_2sd', m1Col = 'minus_1sd', p1Col = 'plus_1sd', p2Col = 'plus_2sd';
+
+  const rows     = toObjects(data);
+  const xLabels  = rows.map(r => formatTimestamp(r[xCol], 'chart_time'));
+  const meanVals = rows.map(r => +parseFloat(r[meanCol]));
+  const m2sd     = rows.map(r => +parseFloat(r[m2Col]));
+  const m1sd     = rows.map(r => +parseFloat(r[m1Col]));
+  const p1sd     = rows.map(r => +parseFloat(r[p1Col]));
+  const p2sd     = rows.map(r => +parseFloat(r[p2Col]));
+
+  const COL_HALF = 0.35;
+  const drawRect = (api, i, lo, hi, fill, stroke, strokeW) => {
+    const xLeft  = api.coord([i - COL_HALF, lo])[0];
+    const xRight = api.coord([i + COL_HALF, lo])[0];
+    const yLo    = api.coord([i, lo])[1];
+    const yHi    = api.coord([i, hi])[1];
+    return { type: 'rect',
+      shape: { x: xLeft, y: yHi, width: xRight - xLeft, height: yLo - yHi },
+      style: { fill, stroke, lineWidth: strokeW || 0 } };
+  };
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: { text: config?.title || '', left: 'center', top: 5, textStyle: { color: '#f4f4f4' } },
+    tooltip: {
+      trigger: 'axis', appendToBody: true,
+      backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' },
+      formatter: params => {
+        const i = params[0]?.dataIndex;
+        if (i == null) return '';
+        return [
+          '<b>' + xLabels[i] + '</b>',
+          'Mean: ' + meanVals[i].toFixed(3),
+          '±1 SD: ' + m1sd[i].toFixed(3) + ' / ' + p1sd[i].toFixed(3),
+          '±2 SD: ' + m2sd[i].toFixed(3) + ' / ' + p2sd[i].toFixed(3),
+        ].join('<br/>');
+      },
+    },
+    grid: { left: 50, right: 20, top: 50, bottom: 30, containLabel: true },
+    xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } } },
+    yAxis: { type: 'value', axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } }, splitLine: { lineStyle: { color: '#262626' } } },
+    series: [
+      { type: 'custom', renderItem: (params, api) => {
+        const i = api.value(0);
+        return drawRect(api, i, m2sd[i], p2sd[i], 'rgba(190, 149, 255, 0.12)', '#be95ff', 1);
+      }, encode: { x: 0, y: [1, 2] }, data: rows.map((_, i) => [i, m2sd[i], p2sd[i]]) },
+      { type: 'custom', renderItem: (params, api) => {
+        const i = api.value(0);
+        return drawRect(api, i, m1sd[i], p1sd[i], 'rgba(8, 189, 186, 0.20)', '#08bdba', 1);
+      }, encode: { x: 0, y: [1, 2] }, data: rows.map((_, i) => [i, m1sd[i], p1sd[i]]) },
+      { type: 'scatter', data: meanVals, symbolSize: 12, itemStyle: { color: '#0f62fe' } },
+    ],
+  };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />;
+};`
+
+var bandedBarColumnBoxTpl = `// Banded Bar Chart — column_box style (per-row)
+// Only the inner ±1 SD band drawn (with border); the ±2 SD band is
+// suppressed. Each row's data point shows as a vertical line spanning
+// the chart height with a horizontal tick mark at the mean — a
+// box-plot-ish glyph that reads "is this reading inside the inner
+// control band?"
+// Same per-row data contract.
+
+const Component = ({ data, config }) => {
+  if (!data?.rows?.length) return <div style={{color: '#c6c6c6', padding: 16}}>Waiting for data…</div>;
+
+  const xCol = 'day', meanCol = 'mean';
+  const m1Col = 'minus_1sd', p1Col = 'plus_1sd';
+
+  const rows     = toObjects(data);
+  const xLabels  = rows.map(r => formatTimestamp(r[xCol], 'chart_time'));
+  const meanVals = rows.map(r => +parseFloat(r[meanCol]));
+  const m1sd     = rows.map(r => +parseFloat(r[m1Col]));
+  const p1sd     = rows.map(r => +parseFloat(r[p1Col]));
+
+  const COL_HALF = 0.35;
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: { text: config?.title || '', left: 'center', top: 5, textStyle: { color: '#f4f4f4' } },
+    tooltip: {
+      trigger: 'axis', appendToBody: true,
+      backgroundColor: '#262626', borderColor: '#393939', textStyle: { color: '#f4f4f4' },
+      formatter: params => {
+        const i = params[0]?.dataIndex;
+        if (i == null) return '';
+        return [
+          '<b>' + xLabels[i] + '</b>',
+          'Mean: ' + meanVals[i].toFixed(3),
+          '±1 SD: ' + m1sd[i].toFixed(3) + ' / ' + p1sd[i].toFixed(3),
+        ].join('<br/>');
+      },
+    },
+    grid: { left: 50, right: 20, top: 50, bottom: 30, containLabel: true },
+    xAxis: { type: 'category', data: xLabels, axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } } },
+    yAxis: { type: 'value', axisLabel: { color: '#c6c6c6' }, axisLine: { lineStyle: { color: '#525252' } }, splitLine: { lineStyle: { color: '#262626' } } },
+    series: [
+      // Inner ±1 SD rectangle, with border
+      { type: 'custom', renderItem: (params, api) => {
+        const i = api.value(0);
+        const xLeft  = api.coord([i - COL_HALF, m1sd[i]])[0];
+        const xRight = api.coord([i + COL_HALF, m1sd[i]])[0];
+        const yLo    = api.coord([i, m1sd[i]])[1];
+        const yHi    = api.coord([i, p1sd[i]])[1];
+        return { type: 'rect',
+          shape: { x: xLeft, y: yHi, width: xRight - xLeft, height: yLo - yHi },
+          style: { fill: 'rgba(8, 189, 186, 0.18)', stroke: '#08bdba', lineWidth: 1 } };
+      }, encode: { x: 0, y: [1, 2] }, data: rows.map((_, i) => [i, m1sd[i], p1sd[i]]) },
+      // Vertical line spanning the column + tick at mean
+      { type: 'custom', renderItem: (params, api) => {
+        const i = api.value(0);
+        const x = api.coord([i, 0])[0];
+        const yMean = api.coord([i, meanVals[i]])[1];
+        const yTop = params.coordSys.y;
+        const yBot = params.coordSys.y + params.coordSys.height;
+        return { type: 'group', children: [
+          { type: 'line', shape: { x1: x, y1: yTop, x2: x, y2: yBot }, style: { stroke: '#f4f4f4', lineWidth: 1 } },
+          { type: 'line', shape: { x1: x - 8, y1: yMean, x2: x + 8, y2: yMean }, style: { stroke: '#f4f4f4', lineWidth: 2 } },
+        ] };
+      }, encode: { x: 0, y: 1 }, data: rows.map((_, i) => [i, meanVals[i]]) },
+    ],
+  };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />;
+};`
 
 // templates is the registry of React component skeletons, keyed by chart_type.
 var templates = map[string]string{
@@ -488,6 +802,37 @@ var templates = map[string]string{
     </div>
   );
 };`,
+
+	// Banded-bar templates — Levey-Jennings / control chart variants.
+	//
+	// **Universal data assumption (per-row).** Every row in the data
+	// stream carries all the columns needed to draw that row's bands:
+	//   - mean   — the primary value (often the daily mean)
+	//   - minus_2sd, minus_1sd, plus_1sd, plus_2sd — that row's bounds
+	// The bands move with the data: each row's bounds rise/fall with
+	// its own mean and widen/narrow with its own SD. Fixed-scalar
+	// reference levels are NOT supported by these templates — drop
+	// them from the source query if you have them.
+	//
+	// Four visual styles share the same per-row contract:
+	//   - time_series  — line + dots over a horizontal time x-axis,
+	//                    bands rendered as a shaded envelope behind
+	//                    the line via stacked areaStyle
+	//   - column_filled — single vertical column per timestamp,
+	//                     filled bands (no borders), dot at value
+	//   - column_outlined — same but with band borders
+	//   - column_box   — only the ±1 SD band drawn (with border),
+	//                    vertical line + tick at value (boxplot-ish)
+	//
+	// Each style key returns a working component scoped to that
+	// variant — fetch via get_component_template({chart_type:
+	// "banded_bar", style:"<one of above>"}).
+
+	"banded_bar":                bandedBarTimeSeriesTpl,
+	"banded_bar:time_series":    bandedBarTimeSeriesTpl,
+	"banded_bar:column_filled":  bandedBarColumnFilledTpl,
+	"banded_bar:column_outlined": bandedBarColumnOutlinedTpl,
+	"banded_bar:column_box":     bandedBarColumnBoxTpl,
 
 	"custom": `// Custom Chart Template
 // Use this as a starting point for any ECharts visualization

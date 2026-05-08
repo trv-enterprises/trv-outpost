@@ -22,7 +22,7 @@ import './MQTTTopicSelector.scss';
  * select one or more topics. Selected topics are joined with commas
  * and passed to onQueryChange as the query raw string.
  */
-function MQTTTopicSelector({ datasourceId, onQueryChange, initialQuery = '#', singleSelect = false }) {
+function MQTTTopicSelector({ connectionId, onQueryChange, initialQuery = '#', singleSelect = false }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -33,18 +33,18 @@ function MQTTTopicSelector({ datasourceId, onQueryChange, initialQuery = '#', si
   const [customTopic, setCustomTopic] = useState('');
 
   const fetchTopics = useCallback(async () => {
-    if (!datasourceId) return;
+    if (!connectionId) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getMQTTTopics(datasourceId);
+      const result = await api.getMQTTTopics(connectionId);
       setTopics(result.topics || []);
     } catch (err) {
       setError(err.message || 'Failed to discover topics');
     } finally {
       setLoading(false);
     }
-  }, [datasourceId]);
+  }, [connectionId]);
 
   useEffect(() => {
     fetchTopics();

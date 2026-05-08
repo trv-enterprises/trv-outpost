@@ -34,7 +34,7 @@ import './SQLQueryBuilder.scss';
  * - Execute query
  */
 const SQLQueryBuilder = ({
-  datasourceId,
+  connectionId,
   onQueryChange,
   onExecute,
   initialQuery: _initialQuery = '',
@@ -61,10 +61,10 @@ const SQLQueryBuilder = ({
 
   // Fetch schema when datasource changes
   useEffect(() => {
-    if (datasourceId) {
+    if (connectionId) {
       fetchSchema();
     }
-  }, [datasourceId]);
+  }, [connectionId]);
 
   // Build query whenever options change
   useEffect(() => {
@@ -79,7 +79,7 @@ const SQLQueryBuilder = ({
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getDatasourceSchema(datasourceId);
+      const response = await api.getConnectionSchema(connectionId);
       if (response.success) {
         setSchema(response.schema);
       } else {
@@ -221,12 +221,12 @@ const SQLQueryBuilder = ({
   };
 
   const handleExecute = async () => {
-    if (!generatedQuery || !datasourceId) return;
+    if (!generatedQuery || !connectionId) return;
 
     setExecuting(true);
     setQueryResults(null);
     try {
-      const response = await api.queryDatasource(datasourceId, {
+      const response = await api.queryConnection(connectionId, {
         query: { raw: generatedQuery, type: 'sql' }
       });
       setQueryResults(response);
@@ -613,7 +613,7 @@ const SQLQueryBuilder = ({
                 size="sm"
                 renderIcon={Play}
                 onClick={handleExecute}
-                disabled={executing || !datasourceId}
+                disabled={executing || !connectionId}
               >
                 {executing ? 'Executing...' : 'Execute'}
               </Button>

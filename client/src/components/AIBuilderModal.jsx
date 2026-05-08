@@ -215,6 +215,8 @@ function AIBuilderModal({
                         <li>"Create a bar chart showing sales by region"</li>
                         <li>"Make a line chart for temperature over time"</li>
                         <li>"Show a pie chart of market share"</li>
+                        <li>"Add a zoom slider below the chart"</li>
+                        <li>"Format the x-axis as time only"</li>
                       </ul>
                     </div>
                   </div>

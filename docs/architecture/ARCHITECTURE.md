@@ -87,6 +87,7 @@ Topic-focused sub-docs. Start wherever matches your question.
 | [Frontend architecture](frontend.md)                | Vite app, DynamicComponentLoader, StreamConnectionManager, control renderer   |
 | [Streaming](streaming.md)                           | SSE, MQTT stream, retained-state cache, ring buffer, aggregators             |
 | [Connections](connections.md)                       | Connection registry and per-type adapters                                    |
+| [Aggregation & filtering](aggregation-and-filtering.md) | Where aggregation/filtering happens (source / server / chart) and how to choose |
 | [Database](database.md)                             | Collations, migrations, indexing strategy, secret masking                    |
 | [API reference](api-reference.md)                   | Full endpoint tables by domain                                               |
 | [Grid system](grid-system.md)                       | 32×32 px cells, canvas-derived cols/rows, fit modes, layout-dimension presets |

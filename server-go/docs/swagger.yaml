@@ -271,6 +271,24 @@ definitions:
           If empty, assumes response is already an array or will be parsed as key-value pairs
         type: string
     type: object
+  models.BandColumns:
+    properties:
+      mean:
+        description: Primary value column (e.g. "mean")
+        type: string
+      minus_1sd:
+        description: Column carrying that row's -1 SD bound
+        type: string
+      minus_2sd:
+        description: Column carrying that row's -2 SD bound
+        type: string
+      plus_1sd:
+        description: Column carrying that row's +1 SD bound
+        type: string
+      plus_2sd:
+        description: Column carrying that row's +2 SD bound
+        type: string
+    type: object
   models.CSVConfig:
     properties:
       columns:
@@ -311,6 +329,13 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.DataAggregation'
         description: Aggregation to apply (first, last, avg, etc.)
+      band_columns:
+        allOf:
+        - $ref: '#/definitions/models.BandColumns'
+        description: Banded-bar column mapping. Each row in the data is expected to
+          carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads
+          each row's own values to draw a per-row envelope. The chart is per-row only
+          — there is no scalar/fixed-band convention.
       column_aliases:
         additionalProperties:
           type: string
@@ -341,6 +366,16 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.StreamParserConfig'
         description: Per-component data extraction for streaming (MQTT, ts-store MQTT)
+      reference_levels:
+        description: |-
+          ReferenceLevels was the original scalar (Westgard) reference-marker
+          list. Banded-bar moved to a per-row-only convention (BandColumns
+          above) so this field is read-only/legacy: existing components keep
+          it for backward compat reads but the editor + AI tools no longer
+          write it. Safe to remove once all stored components migrate.
+        items:
+          $ref: '#/definitions/models.ReferenceLevel'
+        type: array
       series:
         description: Column that identifies each series (e.g., "location") - used
           for time bucket partitioning
@@ -1781,6 +1816,15 @@ definitions:
     - QueryTypePrometheus
     - QueryTypeEdgeLake
     - QueryTypeMQTT
+  models.ReferenceLevel:
+    properties:
+      kind:
+        type: string
+      label:
+        type: string
+      value:
+        type: number
+    type: object
   models.ResponseDef:
     description: Configuration for parsing connection responses
     properties:
@@ -2644,6 +2688,10 @@ definitions:
     properties:
       has_axis_labels:
         type: boolean
+      has_reference_levels:
+        description: 'Banded-bar style: show the reference-levels editor (value +
+          label + kind rows)'
+        type: boolean
       has_series_column:
         type: boolean
       has_sort_limit:
@@ -3083,6 +3131,49 @@ paths:
       summary: List every API key in the deployment (admin)
       tags:
       - api-keys
+  /api/connections/{id}/command:
+    post:
+      consumes:
+      - application/json
+      description: Send a command to a datasource that supports write operations (e.g.,
+        stream.websocket-bidir)
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Command to execute
+        in: body
+        name: command
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ExecuteCommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ExecuteCommandResponse'
+        "400":
+          description: Bad request - connection does not support write
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Connection not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Execute a command on a bidirectional datasource
+      tags:
+      - datasources
   /api/connections/{id}/discover-devices:
     post:
       description: Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)
@@ -3274,49 +3365,6 @@ paths:
       summary: Preflight an import bundle
       tags:
       - dashboards
-  /api/datasources/{id}/command:
-    post:
-      consumes:
-      - application/json
-      description: Send a command to a datasource that supports write operations (e.g.,
-        stream.websocket-bidir)
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Command to execute
-        in: body
-        name: command
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.ExecuteCommandRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ExecuteCommandResponse'
-        "400":
-          description: Bad request - connection does not support write
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Datasource not found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Execute a command on a bidirectional datasource
-      tags:
-      - datasources
   /api/device-types:
     get:
       description: List device types with optional filtering and pagination

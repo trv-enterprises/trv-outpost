@@ -355,6 +355,18 @@ function AIBuilderPage() {
                         >
                           Dimmer slider control
                         </button>
+                        <button
+                          className="suggestion-btn"
+                          onClick={() => setInput('Add a zoom slider below the chart')}
+                        >
+                          Add a zoom slider
+                        </button>
+                        <button
+                          className="suggestion-btn"
+                          onClick={() => setInput('Format the x-axis to show time only (HH:MM AM/PM)')}
+                        >
+                          Format x-axis as time
+                        </button>
                       </div>
                     </div>
                   </div>

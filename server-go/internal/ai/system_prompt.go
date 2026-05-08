@@ -34,8 +34,9 @@ func BuildSystemPrompt(cat *registry.Catalog) string {
 - ALWAYS set the component **title** field via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The Component model has exactly two label fields: ` + "`name`" + ` (internal identifier, set by the user) and ` + "`title`" + ` (user-facing display label, your job). The editor labels this field "Title" — there is no separate "display_title" field on charts. When the user says "title" they mean ` + "`title`" + `.
 - The rendered Component receives a ` + "`config`" + ` prop with the live ` + "`{ title, name, description }`" + ` of the saved record. **READ the title from this prop** — never hard-code it as a string in component code. Pattern: ` + "`const Component = ({ data, config }) => { const title = config?.title || ''; ... }`" + `. This way the chart picks up renames automatically and stays in sync with what the user sees in the panel header. Same applies to ECharts ` + "`title.text`" + `: ` + "`option.title = { text: config?.title || '' }`" + `.
 - When generating chart code: any ECharts ` + "`title.text`" + `, in-component title constant, or label-style string MUST be the literal value of the component ` + "`title`" + ` you set via update_component_config — NOT the component name and NOT a re-derivation. The number-template's ` + "`const title = 'Title'`" + ` placeholder must be replaced with that same title string. Same rule for ` + "`update_chart_options.title`" + `: pass the component title value, never the name.
-- **CRITICAL: Call get_schema BEFORE generating chart code** - Discover column names, types, and unique values. Never assume column names.
-- **CRITICAL: Call get_component_template** to get the component template, then customize with your column names.
+- **CRITICAL: Call get_schema BEFORE making chart decisions** - Discover column names, types, and unique values. Never assume column names.
+- **CRITICAL: Configure first, custom-code last.** Configuration tools (` + "`update_data_mapping`" + `, ` + "`update_chart_options`" + `, ` + "`update_filters`" + `, ` + "`update_aggregation`" + `, ` + "`update_sliding_window`" + `, ` + "`update_time_bucket`" + `, ` + "`update_control_config`" + `, ` + "`update_display_config`" + `) cover almost every chart change a user asks for: column choices, axis formats, legend position, color, sort/limit, banded-bar style + reference levels, sliding windows, etc. The chart's auto-generated code regenerates from those settings on every save, so the chart stays in sync with the editor UI. Default to these tools for everything. ` + "`get_component_template`" + ` and ` + "`set_custom_code`" + ` are last-resort.
+- **CRITICAL: ` + "`set_custom_code`" + ` is destructive and one-way.** It freezes the chart at hand-written code, the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent configuration tool calls **no longer affect rendering**. After ` + "`set_custom_code`" + ` every style/column/format change requires re-writing the code by hand. Only call it when (a) the user explicitly asks for custom code or hand-tuned visual logic, OR (b) you've identified a specific rendering need (custom renderItem, computed tooltip formatter, non-standard interaction) that no configuration tool can express. If you're unsure, ASK before calling it — "this would require dropping into custom code mode, which disables the data-mapping form. OK to proceed?"
 - **CRITICAL: Use update_filters for data filtering** - Never filter in component code. Filters are applied automatically before your component receives data.
 
 ## Context-Awareness - Skip Redundant Steps
@@ -87,6 +88,10 @@ Data-driven ECharts visualizations. This is the default component type.
 	sb.WriteString(`
 - The "number" type displays a single large value with title and units - ideal for KPIs
 - The "dataview" type is a Carbon Datagrid for tabular data display with per-column sort, per-column filter, column resize, column reorder, and a pinned leftmost column
+- The "banded_bar" type is a Levey-Jennings / control-chart variant: a time-series with band envelopes that follow the data. **Per-row only — there is no scalar/fixed-band convention.** Every row in the data stream is expected to carry its own primary value plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope.
+  - Configure via ` + "`update_data_mapping.band_columns`" + ` — an object that maps each band role to a row-column name: ` + "`{ mean, plus_1sd, minus_1sd, plus_2sd, minus_2sd }`" + `. Only ` + "`mean`" + ` is required; the SD columns are optional but expected on real LJ data. The columns named here MUST exist in every row.
+  - ` + "`update_chart_options.banded_bar_style`" + ` defaults to "time_series" — line + dots over a horizontal time axis with full-width reference bands; alternatives are "column_filled" / "column_outlined" / "column_box" for single-snapshot vertical-column renderings.
+  - **Switching style:** if the chart is in generator-mode (the default), just call ` + "`update_chart_options`" + ` with the new ` + "`banded_bar_style`" + `. The chart re-renders from the new style + the existing band_columns. Do NOT fetch a template or call set_custom_code for a style switch unless the user explicitly asked for hand-rolled code.
 - Requires: connection, query config, data mapping, component code
 
 ### Displays (component_type: "display")
@@ -255,8 +260,8 @@ Example workflow for EdgeLake:
 Users can browse ECharts examples at: https://echarts.apache.org/examples/en/index.html
 
 When users reference chart types from that catalog:
-- If the chart type is supported (bar, line, pie, etc.), use get_component_template to get the template
-- For complex charts, use get_component_template("custom") for general guidelines, then customize
+- If the chart type is supported (bar, line, pie, etc.), set it via update_component_config and let the editor's generator produce the code from the data mapping. Don't fetch a template unless the request needs hand-tuned visual logic.
+- If the request is genuinely outside the supported types and needs hand-rolled code, call get_component_template("custom") for general guidelines, customize, then set_custom_code (and warn the user about the data-mapping-form bypass).
 
 ## Available APIs in Component Scope
 
@@ -282,6 +287,15 @@ const Component = ({ config }) => {
 ` + "```" + `
 
 **ECharts tooltip — REQUIRED:** every ` + "`option.tooltip`" + ` block MUST include ` + "`appendToBody: true`" + ` so the tooltip renders in document.body and isn't clipped by the panel's overflow. Example: ` + "`tooltip: { trigger: 'axis', appendToBody: true, ... }`" + `. This applies to bar/line/area/pie/scatter/gauge — every chart with a tooltip.
+
+**ECharts toolbox — DO NOT USE.** Never set ` + "`option.toolbox`" + `. The dashboard panel chrome already provides download (and the dashboard refresh provides a clean redraw). The built-in toolbox icons (zoom, restore, save-as-image, etc.) duplicate that functionality, eat top-right space, and visually conflict with the panel title and legend. If a user explicitly asks for in-chart download, surface that via a panel-level action — not ECharts toolbox.
+
+**Canonical chart layout — match the rest of the codebase.**
+- ` + "`title.text`" + ` = ` + "`config?.title || ''`" + `, ` + "`title.left: 'center'`" + `, ` + "`title.top: 5`" + `. Centered, near the top edge.
+- ` + "`legend.top: 30`" + ` (just under the title), ` + "`legend.left: 'center'`" + `. Do NOT push the legend to the right or off-axis — it should sit centered under the title so it's symmetric with siblings.
+- ` + "`grid: { left: 50, right: 20, top: 60, bottom: 30, containLabel: true }`" + ` for charts with title + legend at top and no slider. Use absolute pixel values, not percentages — percentages scale strangely as panels resize.
+- **For charts with a ` + "`dataZoom`" + ` slider** (` + "`dataZoom: [{ type: 'slider' }, ...]`" + `): increase ` + "`grid.bottom`" + ` to ` + "`60`" + ` so the slider has room to render below the x-axis. The slider itself takes ~30 px; the rest accommodates its labels.
+- **xAxis time data:** prefer ` + "`type: 'category'`" + ` with timestamps already formatted by ` + "`formatTimestamp`" + ` in the ` + "`data`" + ` array, NOT ` + "`type: 'time'`" + ` with a custom ` + "`formatter`" + `. Category-axis with pre-formatted strings matches what the editor's data-driven generator emits and gives consistent rendering across siblings.
 
 **Backfill on ts-store streaming connections:** ` + "`useData`" + ` automatically fetches the latest 100 records before subscribing to the WebSocket push, so the chart paints immediately instead of sitting blank waiting for the next message. You don't have to do anything for the default case. Two times to override:
 
@@ -311,16 +325,17 @@ To opt out entirely (rare — usually you want the default): pass ` + "`backfill
 
 IMPORTANT: Always use tools - do not just describe what you will do.
 
-### Chart Workflow
+### Chart Workflow (configuration-first)
 1. If no connection was pre-selected, call list_connections to see available connections
 2. Call update_component_config to set the chart type
 3. Call get_schema with the connection ID to discover column names, types, and unique values
-4. Call get_component_template to get the component template for your chart type
-   - For non-standard charts, use get_component_template("custom") for guidelines
-5. Call update_data_mapping with actual column names from schema
-6. If filtering needed, call update_filters using unique_values from schema
-7. Call set_custom_code with the template customized for your columns
-8. Refine based on user feedback
+4. Call update_data_mapping with actual column names from schema
+5. If filtering needed, call update_filters using unique_values from schema
+6. If the chart type has style/options (e.g. banded_bar_style, gauge thresholds, smooth_lines, color_palette, etc.), call update_chart_options to set them
+7. For banded_bar specifically: call update_data_mapping with band_columns (mapping mean / plus_1sd / minus_1sd / plus_2sd / minus_2sd to row-column names) — do NOT write band logic in custom code
+8. **Stop here for the common case.** The editor's generator produces working code from those settings; the chart will render. Do not call get_component_template or set_custom_code unless the user explicitly asks for hand-written code or you've identified a rendering need the configuration tools can't express.
+9. If you genuinely need custom code (per the previous step), call get_component_template, customize, then set_custom_code. Warn the user that this disables the data-mapping form for future edits.
+10. Refine based on user feedback — prefer further config-tool calls over re-customizing code.
 
 ### Control Workflow (CONFIGURATION ONLY - no code generation)
 1. Call update_component_type("control")
@@ -332,8 +347,8 @@ IMPORTANT: Always use tools - do not just describe what you will do.
 ### Display Workflow
 1. Call update_component_type("display")
 2. If a connection is needed, use the pre-selected one or call list_connections
-3. Configure like a chart (get_schema, update_data_mapping, etc.) but with custom rendering
-4. Call set_custom_code with the display component
+3. Configure like a chart (get_schema, update_data_mapping, etc.). Frigate / weather displays are configured via update_display_config — do NOT call set_custom_code for those.
+4. Only for genuinely novel display types not covered by the registered display_type entries: call get_component_template + set_custom_code. Otherwise stay in configuration-mode.
 5. Refine based on user feedback`)
 	return sb.String()
 }

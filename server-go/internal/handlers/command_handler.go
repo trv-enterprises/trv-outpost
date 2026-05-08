@@ -53,13 +53,13 @@ type ExecuteCommandResponse struct {
 // @Tags datasources
 // @Accept json
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param command body ExecuteCommandRequest true "Command to execute"
 // @Success 200 {object} ExecuteCommandResponse
 // @Failure 400 {object} map[string]interface{} "Bad request - connection does not support write"
-// @Failure 404 {object} map[string]interface{} "Datasource not found"
+// @Failure 404 {object} map[string]interface{} "Connection not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /api/datasources/{id}/command [post]
+// @Router /api/connections/{id}/command [post]
 func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 	id := c.Param("id")
 

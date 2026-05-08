@@ -143,6 +143,22 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     };
   }, [dataMapping?.time_bucket, dataMapping?.series]);
 
+  // Parser config on data_mapping uses snake_case (data_path,
+  // timestamp_field, timestamp_scale) because that's the wire format
+  // from MongoDB. useData expects camelCase. Translate once here so
+  // every data-context consumer (including the data-grid modal) gets
+  // parser-flattened records — matches what chart component_code
+  // sees when it calls useData itself.
+  const parserConfig = useMemo(() => {
+    const p = dataMapping?.parser;
+    if (!p) return null;
+    return {
+      dataPath: p.data_path || p.dataPath || '',
+      timestampField: p.timestamp_field || p.timestampField || '',
+      timestampScale: p.timestamp_scale || p.timestampScale || '',
+    };
+  }, [dataMapping?.parser]);
+
   const {
     data: fetchedData,
     loading: dataLoading,
@@ -157,7 +173,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     refreshInterval: dataRefreshInterval,
     useCache: true,
     timeBucket: timeBucketConfig,
-    parser: dataMapping?.parser || null,
+    parser: parserConfig,
     refreshTick,
   });
 

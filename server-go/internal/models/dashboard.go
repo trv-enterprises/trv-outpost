@@ -93,6 +93,35 @@ type ChartDataMapping struct {
 	VisibleColumns []string         `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
 	ColumnWidths  map[string]int    `json:"column_widths,omitempty" bson:"column_widths,omitempty"` // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
 	Parser        *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"` // Per-component data extraction for streaming (MQTT, ts-store MQTT)
+	BandColumns   *BandColumns        `json:"band_columns,omitempty" bson:"band_columns,omitempty"` // Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.
+
+	// ReferenceLevels was the original scalar (Westgard) reference-marker
+	// list. Banded-bar moved to a per-row-only convention (BandColumns
+	// above) so this field is read-only/legacy: existing components keep
+	// it for backward compat reads but the editor + AI tools no longer
+	// write it. Safe to remove once all stored components migrate.
+	ReferenceLevels []ReferenceLevel `json:"reference_levels,omitempty" bson:"reference_levels,omitempty"`
+}
+
+// BandColumns maps each conceptual band role to a row-column name. The
+// data adapter pulls each row's own value from the named column at
+// render time; this is the per-row Levey-Jennings envelope contract.
+// Columns referenced here must exist in every row of the data stream.
+type BandColumns struct {
+	Mean    string `json:"mean,omitempty" bson:"mean,omitempty"`         // Primary value column (e.g. "mean")
+	Plus1SD string `json:"plus_1sd,omitempty" bson:"plus_1sd,omitempty"` // Column carrying that row's +1 SD bound
+	Minus1SD string `json:"minus_1sd,omitempty" bson:"minus_1sd,omitempty"` // Column carrying that row's -1 SD bound
+	Plus2SD string `json:"plus_2sd,omitempty" bson:"plus_2sd,omitempty"` // Column carrying that row's +2 SD bound
+	Minus2SD string `json:"minus_2sd,omitempty" bson:"minus_2sd,omitempty"` // Column carrying that row's -2 SD bound
+}
+
+// ReferenceLevel is the legacy scalar marker type. Retained only so the
+// ReferenceLevels field on ChartDataMapping deserializes cleanly for
+// pre-existing components. New banded-bar charts use BandColumns.
+type ReferenceLevel struct {
+	Value float64 `json:"value" bson:"value"`
+	Label string  `json:"label" bson:"label"`
+	Kind  string  `json:"kind,omitempty" bson:"kind,omitempty"`
 }
 
 // StreamParserConfig configures how to extract data from streaming messages.

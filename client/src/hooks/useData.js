@@ -184,16 +184,44 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
     setData((prev) => {
       const prevData = prev || { columns: [], rows: [] };
 
-      let columns = prevData.columns;
-      if (columns.length === 0 && batch.length > 0) {
-        columns = Object.keys(batch[0]);
-        columnsRef.current = columns;
+      // Union the column set across all records seen so far. New keys
+      // appearing in this batch (e.g., after a parser config change, or
+      // because a late-arriving topic has additional fields) get
+      // appended; existing rows that didn't have those keys get `null`
+      // appended in the rebuild below. This replaces the old
+      // "lock-columns-on-first-record" behavior, which silently dropped
+      // any field that wasn't in the very first record received.
+      const colSet = new Set(prevData.columns);
+      let columnsChanged = false;
+      for (const rec of batch) {
+        for (const key of Object.keys(rec)) {
+          if (!colSet.has(key)) {
+            colSet.add(key);
+            columnsChanged = true;
+          }
+        }
       }
+      const columns = columnsChanged ? Array.from(colSet) : prevData.columns;
+      columnsRef.current = columns;
 
-      // Convert all batched records to rows
-      const newRows = batch.map(record => columns.map(col => record[col]));
+      // Existing rows need null-padding if the column set grew. Cheap
+      // when columns didn't change (most of the time): reuse prev rows
+      // as-is. When columns did grow, append nulls per existing row to
+      // keep length == columns.length.
+      const padCount = columns.length - prevData.columns.length;
+      const paddedPrevRows = padCount > 0 && prevData.rows.length > 0
+        ? prevData.rows.map(r => {
+            if (r.length >= columns.length) return r;
+            const out = r.slice();
+            while (out.length < columns.length) out.push(null);
+            return out;
+          })
+        : prevData.rows;
 
-      let allRows = [...prevData.rows, ...newRows];
+      // Convert this batch to rows using the unioned column order.
+      const newRows = batch.map(record => columns.map(col => record[col] ?? null));
+
+      let allRows = [...paddedPrevRows, ...newRows];
       if (allRows.length > maxBuffer) {
         allRows = allRows.slice(allRows.length - maxBuffer);
       }

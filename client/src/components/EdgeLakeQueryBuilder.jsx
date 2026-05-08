@@ -34,7 +34,7 @@ import './EdgeLakeQueryBuilder.scss';
  * - Execute query
  */
 
-function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, onExecute, initialQuery: _initialQuery, initialDatabase }) {
+function EdgeLakeQueryBuilder({ connectionId, onQueryChange, onDatabaseChange, onExecute, initialQuery: _initialQuery, initialDatabase }) {
   // Schema state
   const [databases, setDatabases] = useState([]);
   const [tables, setTables] = useState([]);
@@ -60,10 +60,10 @@ function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, o
 
   // Fetch databases on mount
   useEffect(() => {
-    if (datasourceId) {
+    if (connectionId) {
       fetchDatabases();
     }
-  }, [datasourceId]);
+  }, [connectionId]);
 
   // Fetch tables when database changes
   useEffect(() => {
@@ -99,7 +99,7 @@ function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, o
     setLoadingDatabases(true);
     setError(null);
     try {
-      const response = await api.getEdgeLakeDatabases(datasourceId);
+      const response = await api.getEdgeLakeDatabases(connectionId);
       setDatabases(response.databases || []);
     } catch (err) {
       setError(`Failed to fetch databases: ${err.message}`);
@@ -113,7 +113,7 @@ function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, o
     setLoadingTables(true);
     setError(null);
     try {
-      const response = await api.getEdgeLakeTables(datasourceId, database);
+      const response = await api.getEdgeLakeTables(connectionId, database);
       setTables(response.tables || []);
     } catch (err) {
       setError(`Failed to fetch tables: ${err.message}`);
@@ -127,7 +127,7 @@ function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, o
     setLoadingColumns(true);
     setError(null);
     try {
-      const response = await api.getEdgeLakeSchema(datasourceId, database, table);
+      const response = await api.getEdgeLakeSchema(connectionId, database, table);
       setColumns(response.columns || []);
     } catch (err) {
       setError(`Failed to fetch columns: ${err.message}`);
@@ -196,7 +196,7 @@ function EdgeLakeQueryBuilder({ datasourceId, onQueryChange, onDatabaseChange, o
 
     try {
       const query = buildQuery();
-      const response = await api.queryDatasource(datasourceId, {
+      const response = await api.queryConnection(connectionId, {
         query: {
           raw: query,
           type: 'edgelake',

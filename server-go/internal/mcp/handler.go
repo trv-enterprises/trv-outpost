@@ -84,7 +84,7 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 				"version": "1.0.0",
 				"capabilities": map[string]interface{}{
 					"tools":       true,
-					"datasources": true,
+					"connections": true,
 					"dashboards":  true,
 				},
 			},

@@ -49,6 +49,12 @@ server-go/dist/
 # working directory determines which path actually gets written).
 docs/agent-runs/
 server-go/docs/agent-runs/
+client/docs/agent-runs/
+
+# Simulator binaries built in-place by `go build` without -o
+simulators/data-writer/data-writer
+simulators/db-seed/db-seed
+simulators/rest-api/rest-api
 
 # Stray dashboard-agent binary built without -o bin/...
 server-go/dashboard-agent

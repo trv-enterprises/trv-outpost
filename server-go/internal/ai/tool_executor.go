@@ -344,10 +344,10 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 			"bar": true, "line": true, "area": true, "pie": true,
 			"scatter": true, "gauge": true, "number": true,
 			"heatmap": true, "radar": true, "funnel": true,
-			"dataview": true, "custom": true,
+			"dataview": true, "banded_bar": true, "custom": true,
 		}
 		if !validChartTypes[*params.ChartType] {
-			return &ToolResult{Success: false, Error: fmt.Sprintf("invalid chart_type %q. Valid chart subtypes: bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, custom. Display types like 'frigate' / 'weather' are NOT chart_types — they go on a display component.", *params.ChartType)}, nil
+			return &ToolResult{Success: false, Error: fmt.Sprintf("invalid chart_type %q. Valid chart subtypes: bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, banded_bar, custom. Display types like 'frigate' / 'weather' are NOT chart_types — they go on a display component.", *params.ChartType)}, nil
 		}
 		chart.ChartType = *params.ChartType
 		updates = append(updates, "chart_type")
@@ -374,14 +374,15 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 // executeUpdateDataMapping updates data mapping configuration
 func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID string, chartVersion int, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		ConnectionID *string   `json:"connection_id,omitempty"`
-		XAxis        *string   `json:"x_axis,omitempty"`
-		XAxisLabel   *string   `json:"x_axis_label,omitempty"`
-		XAxisFormat  *string   `json:"x_axis_format,omitempty"`
-		YAxis        *[]string `json:"y_axis,omitempty"`
-		YAxisLabel   *string   `json:"y_axis_label,omitempty"`   // legacy single label
-		YAxisLabels  *[]string `json:"y_axis_labels,omitempty"`  // per-column labels (preferred)
-		GroupBy      *string   `json:"group_by,omitempty"`
+		ConnectionID *string             `json:"connection_id,omitempty"`
+		XAxis        *string             `json:"x_axis,omitempty"`
+		XAxisLabel   *string             `json:"x_axis_label,omitempty"`
+		XAxisFormat  *string             `json:"x_axis_format,omitempty"`
+		YAxis        *[]string           `json:"y_axis,omitempty"`
+		YAxisLabel   *string             `json:"y_axis_label,omitempty"`   // legacy single label
+		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"`  // per-column labels (preferred)
+		GroupBy      *string             `json:"group_by,omitempty"`
+		BandColumns  *models.BandColumns `json:"band_columns,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -415,12 +416,17 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 	if params.YAxis != nil {
 		// Cap y_axis at 2 columns for chart types that render with axes.
-		// Beyond 2 there's no good rendering — no place for axis names, tick
-		// values overlap, and color coding breaks down. Two separate charts
-		// beat one cluttered one. Dataview (tabular) is the exception; any
-		// column count is fine there.
+		// Beyond 2 there's no good rendering on bar/line/area — no place for
+		// axis names, tick values overlap, and color coding breaks down. Two
+		// separate charts beat one cluttered one. Exceptions:
+		//   - dataview (tabular) — any column count is fine
+		//   - banded_bar (Levey-Jennings envelope) — the SD columns are
+		//     additional series on the same value scale as the primary mean,
+		//     not independent y axes. Need 5 (mean + ±1 SD + ±2 SD) to draw a
+		//     per-row envelope.
 		ys := *params.YAxis
-		if chart.ChartType != "dataview" && len(ys) > 2 {
+		uncapped := chart.ChartType == "dataview" || chart.ChartType == "banded_bar"
+		if !uncapped && len(ys) > 2 {
 			ys = ys[:2]
 		}
 		chart.DataMapping.YAxis = ys
@@ -437,6 +443,9 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 	if params.GroupBy != nil {
 		chart.DataMapping.GroupBy = *params.GroupBy
+	}
+	if params.BandColumns != nil {
+		chart.DataMapping.BandColumns = params.BandColumns
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
@@ -762,6 +771,7 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 		StackSeries    *bool     `json:"stack_series,omitempty"`
 		SmoothLines    *bool     `json:"smooth_lines,omitempty"`
 		ShowDataLabels *bool     `json:"show_data_labels,omitempty"`
+		BandedBarStyle *string   `json:"banded_bar_style,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -803,6 +813,9 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 	}
 	if params.ShowDataLabels != nil {
 		chart.Options["showDataLabels"] = *params.ShowDataLabels
+	}
+	if params.BandedBarStyle != nil {
+		chart.Options["bandedBarStyle"] = *params.BandedBarStyle
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {

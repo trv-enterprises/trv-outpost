@@ -45,6 +45,7 @@ type DataRequirements struct {
 	HasTimeBucket     bool   `json:"has_time_bucket"`
 	HasSortLimit      bool   `json:"has_sort_limit"`
 	HasVisibleColumns bool   `json:"has_visible_columns"`
+	HasReferenceLevels bool  `json:"has_reference_levels,omitempty"` // Banded-bar style: show the reference-levels editor (value + label + kind rows)
 	XAxisLabel        string `json:"x_axis_label,omitempty"` // UI label hint: "X-Axis (Categories)", "Category Column", etc.
 	YAxisLabel        string `json:"y_axis_label,omitempty"`
 }

@@ -762,8 +762,12 @@ func (r *ToolRegistry) registerComponentTools() {
 
 	r.registerTool(
 		Tool{
-			Name:        "update_component",
-			Description: "Update an existing component. Only provided fields are changed.",
+			Name: "update_component",
+			Description: `Update an existing component. Only provided fields are changed.
+
+**Prefer changing fields like data_mapping / options / chart_type / connection_id over component_code + use_custom_code=true.** The chart's auto-generated code regenerates from those settings whenever any of them change, so the chart stays in sync with the editor's UI form. Setting use_custom_code=true is destructive: the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent data_mapping / options edits no longer affect rendering — every later change requires re-writing the code by hand.
+
+Only set use_custom_code=true when (a) the user explicitly asks for custom code or hand-tuned visual logic, or (b) you've identified a specific rendering need (custom renderItem, computed tooltip formatter, non-standard interaction) that no configuration field can express.`,
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
@@ -776,8 +780,8 @@ func (r *ToolRegistry) registerComponentTools() {
 					"data_mapping":    {Type: "object", Description: "New data mapping"},
 					"control_config":  {Type: "object", Description: "New control config"},
 					"display_config":  {Type: "object", Description: "New display config"},
-					"component_code":  {Type: "string", Description: "New component code"},
-					"use_custom_code": {Type: "boolean", Description: "New custom-code flag"},
+					"component_code":  {Type: "string", Description: "New component code. Last-resort field — prefer changing data_mapping / options / chart_type instead. Setting this with use_custom_code=true freezes the chart at this code; subsequent config tool calls won't update the rendering."},
+					"use_custom_code": {Type: "boolean", Description: "New custom-code flag. Setting true is destructive and one-way (per the description above). Only enable when configuration fields can't express the request."},
 					"options":         {Type: "object", Description: "New options"},
 					"tags":            {Type: "array", Description: "New tags"},
 				},
@@ -883,13 +887,17 @@ func (r *ToolRegistry) registerComponentTools() {
 	r.registerTool(
 		Tool{
 			Name: "get_component_template",
-			Description: "Return the raw React component-code template (skeleton) for a chart type. After creating a chart component and learning the data schema, fetch the template, substitute real column names into it (e.g. replace `d.value` / `d.timestamp` with your actual fields), and then call update_component with the filled-in code in the `component_code` field. Templates use a small set of runtime helpers the viewer injects: toObjects(data), getValue(data, col), formatTimestamp(ts, format), formatCellValue(value, column) — do not import them. Use chart_type='custom' for a freeform ECharts skeleton when no specific template fits.",
+			Description: "Return the raw React component-code template (skeleton) for a chart type. After creating a chart component and learning the data schema, fetch the template, substitute real column names into it (e.g. replace `d.value` / `d.timestamp` with your actual fields), and then call update_component with the filled-in code in the `component_code` field. Templates use a small set of runtime helpers the viewer injects: toObjects(data), getValue(data, col), formatTimestamp(ts, format), formatCellValue(value, column) — do not import them. Use chart_type='custom' for a freeform ECharts skeleton when no specific template fits. For chart_type='banded_bar' pass an optional `style` arg (time_series default, column_filled, column_outlined, column_box) to fetch the template for a specific visual variant — each style returns a working ECharts skeleton scoped to that variant. To switch a custom-coded banded_bar between styles, fetch the new style's template here and re-implement.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"chart_type": {
 						Type:        "string",
-						Description: "Chart type whose template to return (line, bar, area, pie, scatter, number, gauge, heatmap, radar, funnel, dataview, custom).",
+						Description: "Chart type whose template to return (line, bar, area, pie, scatter, number, gauge, heatmap, radar, funnel, dataview, banded_bar, custom).",
+					},
+					"style": {
+						Type:        "string",
+						Description: "Banded-bar visual style. Only meaningful when chart_type='banded_bar'; ignored otherwise. One of time_series, column_filled, column_outlined, column_box.",
 					},
 				},
 				Required: []string{"chart_type"},
@@ -900,12 +908,14 @@ func (r *ToolRegistry) registerComponentTools() {
 			if ct == "" {
 				return nil, fmt.Errorf("chart_type is required")
 			}
-			tmpl, ok := componenttemplates.Get(ct)
+			style := getString(args, "style")
+			tmpl, ok := componenttemplates.GetStyled(ct, style)
 			if !ok {
 				return nil, fmt.Errorf("no template for chart type %q — try one of: %v", ct, componenttemplates.List())
 			}
 			return map[string]interface{}{
 				"chart_type": ct,
+				"style":      style,
 				"template":   tmpl,
 			}, nil
 		},

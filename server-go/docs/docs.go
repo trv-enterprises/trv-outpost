@@ -504,6 +504,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/connections/{id}/command": {
+            "post": {
+                "description": "Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Execute a command on a bidirectional datasource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command to execute",
+                        "name": "command",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ExecuteCommandRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ExecuteCommandResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - connection does not support write",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Connection not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/connections/{id}/discover-devices": {
             "post": {
                 "description": "Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)",
@@ -780,68 +842,6 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/datasources/{id}/command": {
-            "post": {
-                "description": "Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "Execute a command on a bidirectional datasource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Datasource ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Command to execute",
-                        "name": "command",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ExecuteCommandRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ExecuteCommandResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request - connection does not support write",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Datasource not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     }
                 }
@@ -5152,6 +5152,31 @@ const docTemplate = `{
                 }
             }
         },
+        "models.BandColumns": {
+            "type": "object",
+            "properties": {
+                "mean": {
+                    "description": "Primary value column (e.g. \"mean\")",
+                    "type": "string"
+                },
+                "minus_1sd": {
+                    "description": "Column carrying that row's -1 SD bound",
+                    "type": "string"
+                },
+                "minus_2sd": {
+                    "description": "Column carrying that row's -2 SD bound",
+                    "type": "string"
+                },
+                "plus_1sd": {
+                    "description": "Column carrying that row's +1 SD bound",
+                    "type": "string"
+                },
+                "plus_2sd": {
+                    "description": "Column carrying that row's +2 SD bound",
+                    "type": "string"
+                }
+            }
+        },
         "models.CSVConfig": {
             "type": "object",
             "required": [
@@ -5210,6 +5235,14 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "band_columns": {
+                    "description": "Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.BandColumns"
+                        }
+                    ]
+                },
                 "column_aliases": {
                     "description": "Display names for columns (column name -\u003e display name), primarily for dataview",
                     "type": "object",
@@ -5250,6 +5283,13 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.StreamParserConfig"
                         }
                     ]
+                },
+                "reference_levels": {
+                    "description": "ReferenceLevels was the original scalar (Westgard) reference-marker\nlist. Banded-bar moved to a per-row-only convention (BandColumns\nabove) so this field is read-only/legacy: existing components keep\nit for backward compat reads but the editor + AI tools no longer\nwrite it. Safe to remove once all stored components migrate.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ReferenceLevel"
+                    }
                 },
                 "series": {
                     "description": "Column that identifies each series (e.g., \"location\") - used for time bucket partitioning",
@@ -7306,6 +7346,20 @@ const docTemplate = `{
                 "QueryTypeMQTT"
             ]
         },
+        "models.ReferenceLevel": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "number"
+                }
+            }
+        },
         "models.ResponseDef": {
             "description": "Configuration for parsing connection responses",
             "type": "object",
@@ -8502,6 +8556,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "has_axis_labels": {
+                    "type": "boolean"
+                },
+                "has_reference_levels": {
+                    "description": "Banded-bar style: show the reference-levels editor (value + label + kind rows)",
                     "type": "boolean"
                 },
                 "has_series_column": {

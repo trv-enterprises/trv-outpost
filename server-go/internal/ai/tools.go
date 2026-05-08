@@ -93,6 +93,18 @@ Control types and their UI config:
 					"y_axis_label":   map[string]interface{}{"type": "string", "description": "Legacy single Y-axis label. Prefer y_axis_labels (plural, one per y column). For two y-columns they split left/right; for 3+ y-columns omit y_axis_labels entirely — the legend carries series identity."},
 					"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels; [0] goes on the left axis, [1] on the right axis for dual-axis charts. Omit for 3+ y columns."},
 					"group_by":       map[string]interface{}{"type": "string", "description": "Column to group data by"},
+					"band_columns": map[string]interface{}{
+						"type":        "object",
+						"description": "Banded-bar (Levey-Jennings) per-row column mapping. Each row in the data stream must carry all five columns; the renderer reads each row's own values to draw a per-row envelope (the band moves with the data). Only used by chart_type 'banded_bar'; ignored elsewhere. There is no scalar/fixed-band convention — every band value is per-row.",
+						"properties": map[string]interface{}{
+							"mean":      map[string]interface{}{"type": "string", "description": "Column carrying the row's primary value (e.g. 'mean')"},
+							"plus_1sd":  map[string]interface{}{"type": "string", "description": "Column carrying the row's +1 SD bound"},
+							"minus_1sd": map[string]interface{}{"type": "string", "description": "Column carrying the row's -1 SD bound"},
+							"plus_2sd":  map[string]interface{}{"type": "string", "description": "Column carrying the row's +2 SD bound"},
+							"minus_2sd": map[string]interface{}{"type": "string", "description": "Column carrying the row's -2 SD bound"},
+						},
+						"required": []string{"mean"},
+					},
 				},
 			},
 		},
@@ -182,8 +194,18 @@ Control types and their UI config:
 			},
 		},
 		{
-			Name:        "set_custom_code",
-			Description: anthropic.String("Enable custom code mode and set React component code. Use this for complex components not supported by standard config."),
+			Name: "set_custom_code",
+			Description: anthropic.String(`Enable custom-code mode and replace the chart's React component with hand-written code. **Last-resort tool — prefer the configuration tools.**
+
+Configuration tools (update_data_mapping, update_chart_options, update_filters, update_aggregation, update_sliding_window, update_time_bucket) cover almost every chart change a user asks for: column choices, axis formats, legend placement, color, sorting, banded-bar styles, sliding windows, banded-bar band columns, etc. The chart's auto-generated code regenerates from those settings whenever any of them change, so the chart stays in sync with the editor's UI form.
+
+Calling set_custom_code is **destructive and one-way**: it freezes the chart at the current generated code (or whatever you write here), the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent configuration tool calls no longer affect rendering. Switching styles, columns, or axis formats afterward requires re-writing the code by hand each time.
+
+Only call this when:
+- the user explicitly asks for custom code, hand-tuned ECharts options, or behavior they describe as not configurable, OR
+- you've identified a specific rendering need (a custom renderItem, a computed tooltip formatter, a non-standard interaction) that no configuration tool can express.
+
+Otherwise: configure via the structured tools and let the editor's generator produce the code.`),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"component_code": map[string]interface{}{"type": "string", "description": "Full React component code"},
@@ -204,6 +226,11 @@ Control types and their UI config:
 					"stack_series":     map[string]interface{}{"type": "boolean", "description": "Whether to stack series (bar/area charts)"},
 					"smooth_lines":     map[string]interface{}{"type": "boolean", "description": "Whether to smooth line charts"},
 					"show_data_labels": map[string]interface{}{"type": "boolean", "description": "Whether to show data labels on chart"},
+					"banded_bar_style": map[string]interface{}{
+						"type":        "string",
+						"description": "Visual style for chart_type='banded_bar'. Ignored for other types. 'time_series' = horizontal time x-axis, line + dots, full-width horizontal reference bands (default — best for multi-reading trends). 'column_filled' = single vertical column per timestamp, filled bands no borders, dot at value. 'column_outlined' = same but with band borders. 'column_box' = only inner band drawn, vertical line with tick at value (box-plot style).",
+						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
+					},
 				},
 			},
 		},
@@ -312,13 +339,24 @@ Use this BEFORE configuring data mapping to understand the data structure.`),
 			Description: anthropic.String(`Get a React component template for a chart type.
 Call AFTER setting chart_type with update_component_config.
 Returns Carbon g100 dark theme styled code to customize with your column names.
-For non-standard charts, use "custom" to get general formatting guidelines and color tokens.`),
+For non-standard charts, use "custom" to get general formatting guidelines and color tokens.
+
+For chart_type "banded_bar" pass an optional "style" arg to fetch the
+template for a specific visual variant — time_series (default), column_filled,
+column_outlined, or column_box. Without "style" the time_series template is
+returned. To switch an existing banded_bar from one style to another in custom
+code, fetch the target style's template here and re-implement from it.`),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"chart_type": map[string]interface{}{
 						"type":        "string",
 						"description": "Chart type to get template for",
 						"enum":        templateEnum,
+					},
+					"style": map[string]interface{}{
+						"type":        "string",
+						"description": "Banded-bar visual style. Only meaningful when chart_type is 'banded_bar'; ignored otherwise. Defaults to 'time_series'.",
+						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
 					},
 				},
 				Required: []string{"chart_type"},

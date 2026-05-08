@@ -357,25 +357,6 @@ class APIClient {
     }
   }
 
-  // Data source endpoints
-  async getSystems() {
-    return this.request('/api/datasources');
-  }
-
-  async getSources(system) {
-    return this.request(`/api/datasources/${system}`);
-  }
-
-  async getSourceMetadata(system, source) {
-    return this.request(`/api/datasources/${system}/${source}/metadata`);
-  }
-
-  async updateSourceMetadata(system, source, metadata) {
-    return this.request(`/api/datasources/${system}/${source}/metadata`, {
-      method: 'PUT',
-      body: JSON.stringify(metadata),
-    });
-  }
 
   // Health check
   async health() {
