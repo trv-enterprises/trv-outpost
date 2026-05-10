@@ -10,7 +10,7 @@ sessions, layouts, and runtime configuration.
 | ---------------- | ------------------------------------------------------- |
 | `connections`    | Connection definitions (SQL, API, MQTT, Frigate, etc.)  |
 | `dashboards`     | Dashboards with their panel layout and settings         |
-| `charts`         | Components — charts, controls, displays (with versions) |
+| `components`     | Components — charts, controls, displays (with versions) |
 | `layouts`        | Named layout presets that dashboards can reference      |
 | `users`          | User records with GUID + active flag                    |
 | `devices`        | Device instances (Zigbee, Caséta, etc.)                 |
@@ -23,15 +23,22 @@ sessions, layouts, and runtime configuration.
 
 "Connection" is the user-facing term for what the code calls a
 `connection` (the collection name, model type, and repository all use
-the internal term for backwards compatibility with existing records).
+the same term).
+
+The `components` collection holds all three sub-types
+(`component_type` ∈ `chart` / `control` / `display`) with version
+history; the word "chart" elsewhere in this doc refers strictly to
+the chart sub-type, not the umbrella entity. The collection was
+renamed from `charts` to `components` in
+`migrations.go::migrateRenameChartsToComponents`.
 
 ## Case-insensitive collation
 
 Every collection where a user-facing name is stored uses MongoDB's
 case-insensitive collation (`locale=en, strength=2`). Applied to:
 
-- `connections`, `dashboards`, `charts`, `layouts`, `users`, `devices`,
-  `device_types`
+- `connections`, `dashboards`, `components`, `layouts`, `users`,
+  `devices`, `device_types`
 
 With this collation, equality queries and unique-index constraints
 ignore case — `HVAC` and `hvac` cannot both exist as connection
@@ -60,8 +67,8 @@ startup order is:
 1. Connect to MongoDB
 2. Instantiate repositories
 3. `database.RunMigrations(ctx, db)`
-4. `mongodb.CreateIndexes(ctx)` (datasources + dashboards)
-5. Per-repository `CreateIndexes` calls (charts, users, devices,
+4. `mongodb.CreateIndexes(ctx)` (connections + dashboards)
+5. Per-repository `CreateIndexes` calls (components, users, devices,
    device_types, ai_sessions, config, settings)
 
 The collation migration (`collation_case_insensitive_v1`) checks each
@@ -75,12 +82,12 @@ The namespacing migration (`namespacing_v1`) introduces the
 namespace dimension to existing data:
 
 1. Upserts the `default` namespace row in the `namespaces` collection.
-2. UpdateMany on `connections`, `charts`, `dashboards` to set
+2. UpdateMany on `connections`, `components`, `dashboards` to set
    `namespace: "default"` where the field is missing or empty.
 3. Resolves `(namespace=default, name)` collisions by auto-renaming
-   the younger duplicates (`name-2`, `name-3`, …). Charts handle
+   the younger duplicates (`name-2`, `name-3`, …). Components handle
    versioning by grouping per logical id first; every version row of
-   a renamed chart picks up the same new name.
+   a renamed component picks up the same new name.
 4. Drops the legacy `name_1` unique indexes on `connections` and
    `dashboards`. The next `CreateIndexes` call replaces them with
    compound `(namespace, name)` unique indexes (see mongodb.go).
@@ -88,25 +95,25 @@ namespace dimension to existing data:
 ## Indexing strategy
 
 Indexes are created per collection from functions in either
-`internal/database/mongodb.go` (datasources, dashboards) or each
+`internal/database/mongodb.go` (connections, dashboards) or each
 repository file's `CreateIndexes` method. The general patterns:
 
 - **Unique indexes on name** where case-insensitive uniqueness is
   wanted (layouts, users, devices, device_types). These inherit the
-  collection's collation. For namespaced entities (datasources,
-  charts, dashboards), the unique index is compound on
+  collection's collation. For namespaced entities (connections,
+  components, dashboards), the unique index is compound on
   `(namespace, name)` so the same name can exist in different
   namespaces — see [data-model.md#namespace](data-model.md#namespace).
 - **Compound filter + sort indexes** for common list queries — the
   leading fields cover the filter, the trailing field covers the
-  sort. Example: `{type: 1, created_at: -1}` on datasources supports
+  sort. Example: `{type: 1, created_at: -1}` on connections supports
   "list all SQL connections, newest first" as a single index scan.
 - **Tags arrays** indexed with a leading `tags` field so `$in`
   queries against tag filters hit an index directly. Tags are
   normalized (lowercase, kebab) before storage, and the cross-entity
   `/api/tags` endpoint uses `$unwind` + `$group` aggregations to
   build per-entity usage counts.
-- **Health monitoring fields** on datasources (`health.status`,
+- **Health monitoring fields** on connections (`health.status`,
   `health.last_check`) indexed for the background health-check
   sweep.
 - **TTL index** on `ai_sessions.expires_at` so the collection

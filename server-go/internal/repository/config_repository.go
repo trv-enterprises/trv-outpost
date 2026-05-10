@@ -200,6 +200,17 @@ func (r *ConfigRepository) UpdateUserConfigKey(ctx context.Context, userID strin
 	return err
 }
 
+// DeleteUserConfig removes the per-user config row, if any. Idempotent —
+// returns nil when no row exists. Used by user-delete cascade.
+func (r *ConfigRepository) DeleteUserConfig(ctx context.Context, userID string) error {
+	filter := bson.M{
+		"scope":   models.ConfigScopeUser,
+		"user_id": userID,
+	}
+	_, err := r.collection.DeleteOne(ctx, filter)
+	return err
+}
+
 // CreateIndexes creates necessary indexes for the config collection
 func (r *ConfigRepository) CreateIndexes(ctx context.Context) error {
 	indexes := []mongo.IndexModel{

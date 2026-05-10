@@ -14,9 +14,10 @@ import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from './controls/controlTypes';
 import apiClient from '../api/client';
 import TagFilter from './shared/TagFilter';
-import TypeHierarchyFilter, { matchesTypeSelection } from './shared/TypeHierarchyFilter';
+import TypeHierarchyFilter, { matchesTypeSelection, COMPONENT_TYPE_HIERARCHY } from './shared/TypeHierarchyFilter';
 import ResetFiltersButton from './shared/ResetFiltersButton';
 import NamespaceFilter from './shared/NamespaceFilter';
+import NamespaceChip from './shared/NamespaceChip';
 import SortMenu from './shared/SortMenu';
 import './ComponentPickerModal.scss';
 
@@ -61,17 +62,13 @@ function sameTypeSet(a, b) {
 // a Set of typed keys so the hierarchy filter starts pre-scoped to the parent.
 function categoryToTypeSet(category) {
   if (!category || category === 'all') return null;
-  // Build set of all subtype keys for this parent
-  const keys = [];
-  if (category === 'chart') {
-    ['bar', 'line', 'area', 'pie', 'scatter', 'gauge', 'dataview', 'number', 'custom']
-      .forEach(s => keys.push(`chart:${s}`));
-  } else if (category === 'display') {
-    ['frigate_camera', 'weather'].forEach(s => keys.push(`display:${s}`));
-  } else if (category === 'control') {
-    Object.keys(CONTROL_TYPE_INFO).forEach(s => keys.push(`control:${s}`));
-  }
-  return new Set(keys);
+  // Source the subtype list from the shared hierarchy so adding a new
+  // subtype in one place (TypeHierarchyFilter.jsx) automatically flows
+  // through to picker pre-scoping, instead of needing matched edits in
+  // multiple files.
+  const parent = COMPONENT_TYPE_HIERARCHY[category];
+  if (!parent) return null;
+  return new Set(parent.subtypes.map((s) => `${category}:${s.id}`));
 }
 
 /**
@@ -307,6 +304,9 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                     <Tag size="sm" type={getTypeTagColor(item)}>
                       {getTypeLabel(item)}
                     </Tag>
+                    {item.namespace && (
+                      <NamespaceChip name={item.namespace} />
+                    )}
                   </div>
                   <div className="picker-tile-content">
                     <h4>{item.title || item.name}</h4>

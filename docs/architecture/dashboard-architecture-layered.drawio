@@ -1,9 +1,12 @@
-<mxfile host="Electron" modified="2026-04-21T19:30:37.440Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.3.7 Chrome/112.0.5615.204 Electron/24.5.0 Safari/537.36" etag="GH41WJEHoUWHHo5Voo9h" version="21.3.7" type="device">
-  <diagram id="dashboard-layered" name="Dashboard Architecture">
-    <mxGraphModel dx="1847" dy="1215" grid="1" gridSize="1" guides="0" tooltips="1" connect="0" arrows="0" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" background="#FFFFFF" math="0" shadow="0">
+<mxfile host="Electron" modified="2026-05-08T18:46:25.288Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.3.7 Chrome/112.0.5615.204 Electron/24.5.0 Safari/537.36" etag="c-OU6BJpSLScynaXLjHv" version="21.3.7" type="device" pages="2">
+  <diagram id="dashboard-v0-10-0" name="V0.10.0">
+    <mxGraphModel dx="1570" dy="1033" grid="1" gridSize="1" guides="0" tooltips="1" connect="0" arrows="0" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" background="#FFFFFF" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
+        <mxCell id="871is8OSvID6znVha7FZ-1" value="DASHBOARD CORE DEPLOYMENT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#393939;strokeColor=#4C3A72;fontSize=12;fontStyle=1;fontColor=#ffffff;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="534" y="1220" width="719" height="80" as="geometry" />
+        </mxCell>
         <mxCell id="persona-designer" value="Designers" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#4A90E2;strokeColor=#2E5C8A;" parent="1" vertex="1">
           <mxGeometry x="224" y="133" width="30" height="60" as="geometry" />
         </mxCell>
@@ -166,7 +169,7 @@
         <mxCell id="hand-col" value="Handlers" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
           <mxGeometry x="240" y="740" width="260" height="180" as="geometry" />
         </mxCell>
-        <mxCell id="hand-1" value="REST CRUD&#xa;(dashboards, charts, connections, namespaces, users, settings)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1" vertex="1">
+        <mxCell id="hand-1" value="REST CRUD&#xa;(dashboards, components, connections, namespaces, users, settings)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1" vertex="1">
           <mxGeometry x="250" y="765" width="240" height="50" as="geometry" />
         </mxCell>
         <mxCell id="hand-2" value="SSE stream handler&#xa;(/api/stream/...)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1" vertex="1">
@@ -289,7 +292,7 @@
         <mxCell id="data-row" value="Persistence" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B6C3E1;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
           <mxGeometry x="220" y="1055" width="1420" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="data-mongo" value="MongoDB 7&#xa;(dashboards, charts, connections, namespaces,&#xa;users, devices, settings, app_config, ai_sessions)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+        <mxCell id="data-mongo" value="MongoDB 7&#xa;(dashboards, components, connections, namespaces,&#xa;users, devices, settings, app_config, ai_sessions)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
           <mxGeometry x="240" y="1062" width="320" height="68" as="geometry" />
         </mxCell>
         <mxCell id="data-fs" value="Filesystem&#xa;(bundled client assets,&#xa;Docusaurus /docs, weather icons)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
@@ -311,13 +314,13 @@
           <mxGeometry x="300" y="1230" width="220" height="46" as="geometry" />
         </mxCell>
         <mxCell id="dep-3" value="dashboard-server&#xa;(Go binary, :3001)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1" vertex="1">
-          <mxGeometry x="540" y="1230" width="220" height="46" as="geometry" />
+          <mxGeometry x="541" y="1245" width="220" height="46" as="geometry" />
         </mxCell>
         <mxCell id="dep-4" value="dashboard-client&#xa;(Caddy + static SPA)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1" vertex="1">
-          <mxGeometry x="780" y="1230" width="220" height="46" as="geometry" />
+          <mxGeometry x="781" y="1245" width="220" height="46" as="geometry" />
         </mxCell>
         <mxCell id="dep-5" value="mongodb:7&#xa;(named volume)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1" vertex="1">
-          <mxGeometry x="1020" y="1230" width="220" height="46" as="geometry" />
+          <mxGeometry x="1021" y="1245" width="220" height="46" as="geometry" />
         </mxCell>
         <mxCell id="dep-6" value="Kiosk display host&#xa;(Raspberry Pi)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1" vertex="1">
           <mxGeometry x="1260" y="1230" width="220" height="46" as="geometry" />
@@ -326,6 +329,344 @@
           <mxGeometry x="1500" y="1230" width="160" height="46" as="geometry" />
         </mxCell>
         <mxCell id="title-label" value="TRVE Dashboards — Architecture" style="text;html=1;align=center;verticalAlign=middle;fontSize=27;fontStyle=1;fontColor=#2E3B5C;" parent="1" vertex="1">
+          <mxGeometry x="578" y="67" width="526" height="51" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="dashboard-v0-11-0" name="V0.11.0+ (Clerk)">
+    <mxGraphModel dx="1570" dy="1033" grid="1" gridSize="1" guides="0" tooltips="1" connect="0" arrows="0" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0-v11" />
+        <mxCell id="1-v11" parent="0-v11" />
+        <mxCell id="871is8OSvID6znVha7FZ-1" value="DASHBOARD CORE DEPLOYMENT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#393939;strokeColor=#4C3A72;fontSize=12;fontStyle=1;fontColor=#ffffff;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="534" y="1220" width="719" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="persona-designer-v11" value="Designers" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#4A90E2;strokeColor=#2E5C8A;" parent="1-v11" vertex="1">
+          <mxGeometry x="224" y="133" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="persona-viewers-v11" value="Viewers" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#4A90E2;strokeColor=#2E5C8A;" parent="1-v11" vertex="1">
+          <mxGeometry x="474" y="133" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="persona-admins-v11" value="Admins" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#4A90E2;strokeColor=#2E5C8A;" parent="1-v11" vertex="1">
+          <mxGeometry x="724" y="133" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="persona-ai-v11" value="External AI Clients&#xa;(Claude Desktop, MCP)" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#9B59B6;strokeColor=#6B3F86;" parent="1-v11" vertex="1">
+          <mxGeometry x="1113" y="133" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="persona-smart-v11" value="Smart Devices&#xa;(home automation)" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#E67E22;strokeColor=#A65C18;" parent="1-v11" vertex="1">
+          <mxGeometry x="1348" y="133" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="channel-authoring-v11" value="Authoring / Management (LAN + Tailscale)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#A9C4E0;strokeColor=#4A7AAB;fontSize=12;fontStyle=1;" parent="1-v11" vertex="1">
+          <mxGeometry x="120" y="230" width="800" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="channel-viewing-v11" value="Viewing / Kiosk / External AI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#BCA6D4;strokeColor=#6B3F86;fontSize=12;fontStyle=1;" parent="1-v11" vertex="1">
+          <mxGeometry x="940" y="230" width="540" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-strip-v11" value="Client devices" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C7D89B;strokeColor=#6E7F44;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="40" y="280" width="1620" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-desktop-v11" value="Desktop / Laptop&#xa;(Chrome, Firefox, Safari)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6E7F44;fontSize=11;" parent="1-v11" vertex="1">
+          <mxGeometry x="80" y="305" width="240" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-tablet-v11" value="Tablet&#xa;(wall-mounted kiosk)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6E7F44;fontSize=11;" parent="1-v11" vertex="1">
+          <mxGeometry x="360" y="305" width="240" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-mobile-v11" value="Phone (FUTURE) / small screen" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6E7F44;fontSize=11;" parent="1-v11" vertex="1">
+          <mxGeometry x="640" y="305" width="240" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-fullscreen-v11" value="Fullscreen dashboard display&#xa;(TV / monitor / Pi)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6E7F44;fontSize=11;" parent="1-v11" vertex="1">
+          <mxGeometry x="920" y="305" width="280" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-mcp-v11" value="MCP stdio / SSE client&#xa;(mcp-proxy, Claude Desktop)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6E7F44;fontSize=11;" parent="1-v11" vertex="1">
+          <mxGeometry x="1240" y="305" width="380" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-header-v11" value="External services" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8FA968;strokeColor=#4E5E30;fontSize=11;fontStyle=1;rotation=-90;" parent="1-v11" vertex="1">
+          <mxGeometry x="-364.75" y="751.25" width="770" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-anthropic-v11" value="Anthropic API&#xa;(Claude, AI Builder)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="380" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-clerk-v11" value="Clerk&#xa;(SSO + JWT issuer)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="479" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-ghcr-v11" value="GitHub Container&#xa;Registry (ghcr.io)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="578" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-homelab-v11" value="Homelab deploy&#xa;target (trv-srv-*)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="677" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-tailscale-v11" value="Tailscale&#xa;(private network)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="777" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-weather-v11" value="Weather APIs&#xa;(Meteocons, providers)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="876" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-frigate-v11" value="Frigate NVR&#xa;(camera events)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="975" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-tsstore-v11" value="ts-store&#xa;(time-series sink)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
+          <mxGeometry x="42" y="1074" width="140" height="77" as="geometry" />
+        </mxCell>
+        <mxCell id="main-container-v11" value="TRVE Dashboards — homelab deployment (Docker Compose, Caddy reverse proxy)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6DDEC;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="200" y="380" width="1460" height="770" as="geometry" />
+        </mxCell>
+        <mxCell id="security-row-v11" value="Security &amp; access" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B6C3E1;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="220" y="415" width="1420" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="sec-caddy-v11" value="Reverse proxy&#xa;(Caddy, TLS)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="240" y="445" width="180" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sec-spa-v11" value="SPA fallback&#xa;(React Router)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="440" y="445" width="180" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sec-auth-v11" value="User auth&#xa;(Clerk SSO + JWT,&#xa;trve_ API keys)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="640" y="445" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sec-rbac-v11" value="RBAC roles&#xa;(Admin / Designer / Support)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="860" y="445" width="220" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sec-secrets-v11" value="Secret masking&#xa;(env-sourced creds)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1100" y="445" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sec-cors-v11" value="CORS + Clerk middleware" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1320" y="445" width="300" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="pres-row-v11" value="Presentation layer — React 19 + Vite 7 + Carbon Design System (g100) + ECharts 6" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C9D2E9;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="220" y="510" width="1420" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-design-v11" value="Design mode (/design/*)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="240" y="540" width="340" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-design-1-v11" value="Connections" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="250" y="565" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-design-2-v11" value="Components&#xa;(charts, controls, displays)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="410" y="565" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-design-3-v11" value="Dashboards + layouts" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="250" y="603" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-design-4-v11" value="AI Builder (chat + SSE)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="410" y="603" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-design-5-v11" value="Import / Export bundles" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="250" y="641" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-view-v11" value="View mode (/view/*)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="600" y="540" width="340" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-view-1-v11" value="Dashboard viewer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="610" y="565" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-view-2-v11" value="Real-time streaming&#xa;(SSE, ring buffer)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="770" y="565" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-view-3-v11" value="Fit modes (4)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="610" y="603" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-view-4-v11" value="Kiosk / fullscreen" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="770" y="603" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-view-5-v11" value="ControlRenderer (issue commands)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="610" y="641" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-manage-v11" value="Manage mode (/manage/*)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="960" y="540" width="340" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-manage-1-v11" value="Users + roles" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="970" y="565" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-manage-2-v11" value="Settings (admin)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1130" y="565" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-manage-3-v11" value="Devices + device types" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="970" y="603" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-manage-4-v11" value="Namespaces" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1130" y="603" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-manage-5-v11" value="Type-availability gating" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="970" y="641" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-shared-v11" value="Shared client infra" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="1320" y="540" width="300" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-shared-1-v11" value="apiClient singleton&#xa;(src/api/client.js)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1330" y="565" width="280" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-shared-2-v11" value="DynamicComponentLoader&#xa;(runtime JSX eval)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1330" y="603" width="280" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-shared-3-v11" value="StreamConnectionManager (SSE)&#xa;Context (Mode, Namespace, Theme)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1330" y="641" width="280" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="api-row-v11" value="Go backend (port 3001) — Gin router · REST · SSE · WebSocket · MCP SSE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C9D2E9;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="220" y="710" width="1420" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="hand-col-v11" value="Handlers" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="240" y="740" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="hand-1-v11" value="REST CRUD&#xa;(dashboards, components, connections, namespaces, users, settings)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="250" y="765" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="hand-2-v11" value="SSE stream handler&#xa;(/api/stream/...)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="250" y="823" width="240" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="hand-3-v11" value="AI session (SSE + WS)&#xa;MCP SSE (/mcp/*)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="250" y="867" width="240" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-col-v11" value="Services" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="510" y="740" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-1-v11" value="DashboardService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="520" y="765" width="115" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-2-v11" value="ChartService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="640" y="765" width="120" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-3-v11" value="DatasourceService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="520" y="795" width="115" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-4-v11" value="DeviceService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="640" y="795" width="120" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-5-v11" value="UserService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="520" y="825" width="115" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-6-v11" value="NamespaceService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="640" y="825" width="120" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-7-v11" value="SettingsService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="520" y="855" width="115" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-8-v11" value="ConfigService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="640" y="855" width="120" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-9-v11" value="AISessionService + Agent + Tool registry" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="520" y="885" width="240" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="stream-col-v11" value="Streaming engine" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="780" y="740" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="stream-1-v11" value="Stream manager&#xa;(per-connection, long-lived)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="790" y="765" width="240" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="stream-2-v11" value="Ring buffer + retained-state cache" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="790" y="809" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="stream-3-v11" value="Aggregators (window, merge)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="790" y="847" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="stream-4-v11" value="SSE fan-out to subscribers&#xa;ChartHub" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="790" y="885" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="repo-col-v11" value="Repositories + support" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="1050" y="740" width="270" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="repo-1-v11" value="Repositories&#xa;(one per collection, MongoDB CRUD + aggregations)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1060" y="765" width="250" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="repo-2-v11" value="Migrations + index helpers" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1060" y="821" width="250" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="repo-3-v11" value="Connection type registry&#xa;(TypeID system)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1060" y="857" width="250" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="repo-4-v11" value="Export / Import bundles" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1060" y="893" width="250" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ops-col-v11" value="Operations" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3E8F4;strokeColor=#4A5E8A;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="1330" y="740" width="290" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="ops-1-v11" value="Config (Viper + YAML + env)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1340" y="765" width="270" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="ops-2-v11" value="/version endpoint + build metadata" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1340" y="799" width="270" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="ops-3-v11" value="Docusaurus /docs (bundled)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1340" y="833" width="270" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="ops-4-v11" value="Swagger UI (/swagger/*)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1340" y="867" width="270" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="adapter-row-v11" value="Datasource adapters (registry-driven: Query / Stream / Write interfaces)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#BCA6D4;strokeColor=#6B3F86;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="220" y="950" width="1420" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-sql-v11" value="SQL&#xa;(Postgres, MySQL, SQLite)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="235" y="980" width="135" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-rest-v11" value="REST / API" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="378" y="980" width="90" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-csv-v11" value="CSV" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="476" y="980" width="70" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-mqtt-v11" value="MQTT&#xa;(Eclipse Paho v2)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="554" y="980" width="120" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-ws-v11" value="WebSocket&#xa;(read + bidir)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="682" y="980" width="115" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-tcp-v11" value="TCP&#xa;(raw sockets)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="805" y="980" width="100" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-prom-v11" value="Prometheus&#xa;(PromQL)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="913" y="980" width="115" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-edge-v11" value="EdgeLake&#xa;(distributed query)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1036" y="980" width="130" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-tsstore-v11" value="ts-store&#xa;(WS push + pull)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1174" y="980" width="120" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-frigate-v11" value="Frigate NVR" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1302" y="980" width="110" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-weather-v11" value="Weather integration" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6B3F86;fontSize=9;" parent="1-v11" vertex="1">
+          <mxGeometry x="1420" y="980" width="210" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="data-row-v11" value="Persistence" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B6C3E1;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+          <mxGeometry x="220" y="1055" width="1420" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="data-mongo-v11" value="MongoDB 7&#xa;(dashboards, components, connections, namespaces,&#xa;users, devices, settings, app_config, ai_sessions)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="240" y="1062" width="320" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="data-fs-v11" value="Filesystem&#xa;(bundled client assets,&#xa;Docusaurus /docs, weather icons)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="600" y="1080" width="260" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="data-secret-v11" value="Environment&#xa;(DASHBOARD_* env vars,&#xa;Anthropic key, connection creds)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="900" y="1080" width="260" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="data-config-v11" value="Config&#xa;(server-go/config/config.yaml + env overrides)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1200" y="1080" width="420" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="deploy-bar-v11" value="Deployment footer — Docker Compose · CI on GitHub Actions · images @ ghcr.io · homelab deploy script · Tailscale management plane" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#9F8EC1;strokeColor=#4C3A72;fontSize=12;fontStyle=1;fontColor=#ffffff;" parent="1-v11" vertex="1">
+          <mxGeometry x="40" y="1180" width="1620" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-1-v11" value="Simulators host&#xa;(simulators :21xxx)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="60" y="1230" width="220" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-2-v11" value="MQTT broker host&#xa;(Mosquitto)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="300" y="1230" width="220" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-3-v11" value="dashboard-server&#xa;(Go binary, :3001)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="541" y="1245" width="220" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-4-v11" value="dashboard-client&#xa;(Caddy + static SPA)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="781" y="1245" width="220" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-5-v11" value="mongodb:7&#xa;(named volume)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1021" y="1245" width="220" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-6-v11" value="Kiosk display host&#xa;(Raspberry Pi)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1260" y="1230" width="220" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-7-v11" value="release-deploy&#xa;skill / runbook" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
+          <mxGeometry x="1500" y="1230" width="160" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="title-label-v11" value="TRVE Dashboards — Architecture (V0.11.0+, Clerk SSO)" style="text;html=1;align=center;verticalAlign=middle;fontSize=27;fontStyle=1;fontColor=#2E3B5C;" parent="1-v11" vertex="1">
           <mxGeometry x="578" y="67" width="526" height="51" as="geometry" />
         </mxCell>
       </root>

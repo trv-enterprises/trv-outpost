@@ -966,13 +966,13 @@ func (r *ToolRegistry) registerDashboardTools() {
 	r.registerTool(
 		Tool{
 			Name:        "create_dashboard",
-			Description: "Create a new dashboard. Panels live directly on the dashboard (there is no separate Layout entity). Each panel is `{id, x, y, w, h, component_id?, text_config?}` in 32x32 px cell units — see the session-init \"Grid contract\" section for how cols/rows derive from canvas size. Use component_id to reference an existing component, or text_config for native inline text. Empty panels (no component_id and no text_config) are valid placeholders.",
+			Description: "Create a new dashboard. Panels live directly on the dashboard (there is no separate Layout entity). Each panel is `{id, x, y, w, h, component_id?, text_config?}` in 32x32 px cell units — see the session-init \"Grid contract\" section for how cols/rows derive from canvas size.\n\nA panel can be one of three things:\n  1. **Component panel** — set `component_id` to an existing component UUID (chart / control / display).\n  2. **Native text panel** — set `text_config` (NOT component_id). This renders text directly on the panel without creating a component record. Use it for section headers, dashboard titles, dates/clocks, or any standalone label that doesn't need to be reused or referenced from another dashboard.\n  3. **Empty placeholder** — neither component_id nor text_config. Renders an empty cell.\n\nPrefer a native text panel over creating a `text_label` control component when the text is one-off and dashboard-specific. Components are reusable; text_config is inline.\n\n`text_config` schema:\n  - `content` (string) — literal text. Used when `display_content` is `\"title\"` (or omitted).\n  - `display_content` (string) — what to render. One of: `\"title\"` (use `content`), `\"date_short\"`, `\"date_medium\"`, `\"date_long\"`, `\"time_12\"`, `\"time_24\"`, `\"datetime_short\"`, `\"datetime_long\"`. The date/time variants render the live date or time and tick every second.\n  - `size` (int OR string) — font size in pixels (e.g. 24), or a legacy preset name (`\"sm\"`, `\"md\"`, `\"lg\"`, `\"xl\"`).\n  - `align` (string) — `\"left\"`, `\"center\"`, or `\"right\"`. Defaults to center when omitted.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"name":        {Type: "string", Description: "Unique dashboard name"},
 					"description": {Type: "string", Description: "Description"},
-					"panels":      {Type: "array", Description: "Array of panel objects {id, x, y, w, h, component_id?, text_config?}"},
+					"panels":      {Type: "array", Description: "Array of panel objects. Each panel is {id, x, y, w, h, and exactly one of: component_id (reference an existing component), text_config (inline text — see tool description for schema), or neither (empty placeholder)}."},
 					"settings":    {Type: "object", Description: "Dashboard settings (theme, refresh_interval, layout_dimension, etc)"},
 					"tags":        {Type: "array", Description: "Tags"},
 				},
@@ -1000,14 +1000,14 @@ func (r *ToolRegistry) registerDashboardTools() {
 	r.registerTool(
 		Tool{
 			Name:        "update_dashboard",
-			Description: "Update an existing dashboard. Only provided fields are changed.",
+			Description: "Update an existing dashboard. Only provided fields are changed. When `panels` is provided, it REPLACES the entire panel array — fetch the current dashboard first if you only want to add or modify a subset.\n\nPanel shapes are the same as `create_dashboard`: each panel either references a component via `component_id`, carries inline text via `text_config`, or is an empty placeholder. See `create_dashboard` for the full `text_config` schema (content / display_content / size / align). Native text panels are the right tool for dashboard headers, titles, date/clock displays, and other one-off text — use them instead of creating a `text_label` control unless the text needs to be reusable across dashboards.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"id":          {Type: "string", Description: "Dashboard ID"},
 					"name":        {Type: "string", Description: "New name"},
 					"description": {Type: "string", Description: "New description"},
-					"panels":      {Type: "array", Description: "New panel array"},
+					"panels":      {Type: "array", Description: "New panel array (replaces existing). Each panel is {id, x, y, w, h, and exactly one of: component_id, text_config, or neither}. See create_dashboard for text_config schema."},
 					"settings":    {Type: "object", Description: "New settings"},
 					"tags":        {Type: "array", Description: "New tags"},
 				},

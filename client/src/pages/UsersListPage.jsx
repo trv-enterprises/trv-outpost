@@ -100,7 +100,13 @@ function UsersListPage() {
 
   const handleDelete = async (e, user) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete user "${user.name}"?`)) {
+    const msg =
+      `Delete user "${user.name}"?\n\n` +
+      `This will also delete:\n` +
+      `  • all of this user's API keys (any active tokens stop working immediately)\n` +
+      `  • this user's saved preferences (active namespace, dashboard view settings, etc.)\n\n` +
+      `Components, dashboards, and connections this user created stay in place.`;
+    if (window.confirm(msg)) {
       try {
         await apiClient.deleteUser(user.id);
         fetchUsers();

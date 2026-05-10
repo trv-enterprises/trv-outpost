@@ -40,7 +40,7 @@ name)`, not just `name`.
   namespace filter on list pages — users can peek at other
   namespaces without changing where new records land.
 - **Rename** is a single PUT that cascades the new slug into every
-  referring record (datasources, charts, dashboards) in the same
+  referring record (connections, components, dashboards) in the same
   request.
 - **Delete** is guarded — returns 409 with per-type usage counts
   when any records still reference the namespace. The user must

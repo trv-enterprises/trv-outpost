@@ -1,6 +1,10 @@
-# AI Chart Editor Architecture
+# AI Component Editor Architecture
 
-This document describes the interfaces between the AI Chart Editor, the LLM (Claude), and the Dashboard services.
+This document describes the interfaces between the AI Component
+Editor, the LLM (Claude), and the Dashboard services. The umbrella
+entity is **component** (chart / control / display sub-types). The
+word "chart" below refers strictly to the chart sub-type or to
+ECharts-specific tools like `update_chart_options`.
 
 ## System Overview
 
@@ -38,7 +42,7 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
 │                                                                                     │
 │  service/ai_session_service.go                                                      │
 │       │  - Session lifecycle management                                             │
-│       │  - Chart draft creation/management                                          │
+│       │  - Component draft creation/management                                      │
 │       │  - WebSocket client registry                                                │
 │       │  - Event broadcasting                                                       │
 │       │                                                                             │
@@ -53,12 +57,12 @@ This document describes the interfaces between the AI Chart Editor, the LLM (Cla
 │              │                                                                      │
 │              ├── ai/tool_executor.go (Tool Implementation)                          │
 │              │      - ExecuteTool() dispatches to handlers                          │
-│              │      - Updates charts in MongoDB                                     │
+│              │      - Updates components in MongoDB                                 │
 │              │      - Broadcasts updates via ComponentHub                               │
 │              │                                                                      │
 │              └── ai/system_prompt.go                                                │
 │                     - ~500 lines of instructions                                    │
-│                     - Chart templates (line, bar, gauge, pie)                       │
+│                     - Chart sub-type templates (line, bar, gauge, pie)              │
 │                     - Data source workflow guidance                                 │
 │                     - Carbon Design System colors                                   │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -104,7 +108,7 @@ Turn 3: system_prompt + tools + history(turn1-2) + tool_results + user_msg
 ### Key Token Consumers
 
 1. **System Prompt (4,000-5,000 tokens)** - Largest fixed cost
-   - Chart templates with full React code examples
+   - Chart sub-type templates with full React code examples
    - Prometheus/EdgeLake workflow documentation
    - Carbon Design System color tokens
    - Best practices and critical rules
@@ -120,7 +124,7 @@ Turn 3: system_prompt + tools + history(turn1-2) + tool_results + user_msg
 
 4. **Tool Results** - Can be large
    - `query_datasource` returns row data
-   - `get_chart_state` returns full chart object
+   - `get_component_state` returns full chart object
    - Schema discovery returns table/column info
 
 ---
@@ -250,7 +254,7 @@ var DiscoveryTools = []string{
     "get_prometheus_schema",
     "get_edgelake_schema",
     "query_datasource",
-    "update_chart_config",
+    "update_component_config",
 }
 
 // Phase 2 tools: after data source set
@@ -316,7 +320,7 @@ Create a new AI session.
 **Request:**
 ```json
 {
-  "chart_id": "optional-existing-chart-uuid",
+  "component_id": "optional-existing-component-uuid",
   "initial_message": "optional first message"
 }
 ```
@@ -326,15 +330,15 @@ Create a new AI session.
 {
   "session": {
     "id": "session-uuid",
-    "chart_id": "chart-uuid",
-    "chart_version": 1,
+    "component_id": "component-uuid",
+    "component_version": 1,
     "messages": [],
     "status": "active",
     "created": "2026-01-15T10:30:00Z",
     "updated": "2026-01-15T10:30:00Z"
   },
-  "chart": {
-    "id": "chart-uuid",
+  "component": {
+    "id": "component-uuid",
     "name": "",
     "version": 1,
     "status": "draft",
@@ -371,7 +375,7 @@ WebSocket connection for real-time updates.
 {"type": "connected", "data": {"session_id": "..."}, "timestamp": "..."}
 {"type": "thinking", "data": {"thinking": true}, "timestamp": "..."}
 {"type": "message", "data": {"message": {...}}, "timestamp": "..."}
-{"type": "component_update", "data": {"chart": {...}}, "timestamp": "..."}
+{"type": "component_update", "data": {"component": {...}}, "timestamp": "..."}
 {"type": "error", "data": {"error": "...", "code": "..."}, "timestamp": "..."}
 {"type": "ping", "data": {"timestamp": "..."}, "timestamp": "..."}
 ```
@@ -386,7 +390,7 @@ Save the session (publish draft as final).
 }
 ```
 
-**Response:** `200 OK` - Returns the saved Chart object.
+**Response:** `200 OK` - Returns the saved Component object.
 
 #### DELETE /api/ai/sessions/:id
 Cancel session and discard draft.
@@ -397,13 +401,14 @@ Cancel session and discard draft.
 
 ## Tool Definitions
 
-The AI has access to 17 tools for chart manipulation and data discovery:
+The AI has access to 17 tools for component manipulation and data discovery:
 
-### Chart Configuration Tools
+### Component Configuration Tools
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `update_chart_config` | Set chart type and description | `chart_type`, `description` |
+| `update_component_type` | Set component type (chart / control / display) | `component_type` |
+| `update_component_config` | Set chart type and description | `chart_type`, `description` |
 | `update_data_mapping` | Configure axes and data source | `connection_id`, `x_axis`, `y_axis`, `group_by` |
 | `update_query_config` | Set query and refresh interval | `query`, `query_type`, `refresh_interval` |
 | `update_filters` | Add data filters | `filters[]` |
@@ -423,7 +428,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
 | `get_edgelake_schema` | EdgeLake schema (cascading) | Databases → Tables → Columns |
 | `query_datasource` | Execute test query | `{columns: [], rows: []}` |
 | `preview_data` | Sample data for current config | `{columns: [], rows: []}` |
-| `get_chart_state` | Current chart object | Full Chart model |
+| `get_component_state` | Current component object | Full Component model |
 
 ### Utility Tools
 
@@ -433,7 +438,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
 
 ---
 
-## Data Flow: User Message → Chart Update
+## Data Flow: User Message → Component Update
 
 ```
 1. User types message in AIBuilderPage
@@ -464,7 +469,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
            │
      4c. If tool calls:
          - Execute each tool via ToolExecutor
-         - Update chart in MongoDB
+         - Update component in MongoDB
          - Broadcast component_update via ComponentHub
          - Add tool results to conversation
          - Continue loop
@@ -479,7 +484,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
    - "component_update" → update preview
    - "message" → add to chat history
            │
-6. User sees updated chart preview and AI response
+6. User sees updated component preview and AI response
 ```
 
 ---
@@ -494,7 +499,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
                             ▼
                  ┌─────────────────────┐
                  │   Active Session    │◄──────────────┐
-                 │   - Draft chart     │               │
+                 │   - Draft component │               │
                  │   - WebSocket conn  │               │ sendMessage()
                  └──────────┬──────────┘───────────────┘
                             │
@@ -505,7 +510,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
               ▼                           ▼
    ┌─────────────────────┐     ┌─────────────────────┐
    │   Completed         │     │   Cancelled         │
-   │   - Chart published │     │   - Draft deleted   │
+   │   - Component pub'd │     │   - Draft deleted   │
    │   - Session archived│     │   - Session deleted │
    └─────────────────────┘     └─────────────────────┘
 ```
@@ -526,7 +531,7 @@ The AI has access to 17 tools for chart manipulation and data discovery:
 | `server-go/internal/ai/tool_executor.go` | Tool implementations |
 | `server-go/internal/ai/system_prompt.go` | LLM instructions |
 | `server-go/internal/models/ai_session.go` | Data models |
-| `server-go/internal/hub/component_hub.go` | Real-time chart updates |
+| `server-go/internal/hub/component_hub.go` | Real-time component updates |
 
 ---
 

@@ -12,9 +12,16 @@
     display: flex;
     align-items: center;
     gap: spacing.$spacing-03;
+    // Match the Carbon MultiSelect/Dropdown trigger used by the
+    // namespace + tag filters that sit beside this one. Carbon paints
+    // `cds--list-box__field` with `--cds-field` (NOT `--cds-field-01`),
+    // and gives it a full surround box (1px border on all sides, plus
+    // a thicker bottom border that animates on focus). Without those,
+    // our trigger looked like a transparent rectangle against the dark
+    // modal toolbar while neighbors had a defined box.
+    background-color: var(--cds-field);
     padding: spacing.$spacing-03 spacing.$spacing-04;
-    background-color: var(--cds-layer-01);
-    border: none;
+    border: 1px solid var(--cds-border-subtle-01);
     border-bottom: 1px solid var(--cds-border-strong-01);
     color: var(--cds-text-primary);
     font-size: 0.875rem;

@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -28,10 +28,9 @@ import {
   Switch,
   Tooltip,
   InlineNotification,
-  Dropdown,
-  Checkbox
+  Dropdown
 } from '@carbon/react';
-import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Information, Dashboard, Keyboard, TouchInteraction, Filter, ChevronDown, ChevronRight } from '@carbon/icons-react';
+import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Information, Dashboard, Keyboard, TouchInteraction, Filter } from '@carbon/icons-react';
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
@@ -41,6 +40,7 @@ import CreateMenu from '../components/CreateMenu';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
+import TypeHierarchyFilter from '../components/shared/TypeHierarchyFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
@@ -80,169 +80,19 @@ function ComponentsListPage() {
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.ds || 'all'); // 'all' or connection id
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
-  const [typeFilterOpen, setTypeFilterOpen] = useState(false);
-  const [collapsedTypes, setCollapsedTypes] = useState(new Set(['chart', 'display', 'control'])); // All groups start collapsed — chart's subtype list is long enough that expanding it forces scroll to reach Display/Control
-  const typeFilterRef = useRef(null); // Ref for click-outside detection
-
-  // Hierarchical type filter - tracks selected types
-  // null = all selected (no filter), Set = specific selection (empty Set = nothing selected)
-  // Chart subtypes: bar, line, area, pie, scatter, gauge, dataview, number, custom
-  // Control subtypes: derived from CONTROL_TYPE_INFO
+  // Hierarchical type filter — selection state only. The widget itself
+  // (popover, parent/subtype checkboxes, partial-state logic, label
+  // formatting, click-outside) is provided by the shared
+  // TypeHierarchyFilter component. Subtype catalog lives in
+  // shared/TypeHierarchyFilter.jsx so it stays in sync with the picker
+  // modal.
+  // null = all selected (no filter), Set of "parent:subtype" keys = specific selection.
   const [selectedTypes, setSelectedTypes] = useState(() => {
     if (savedFilters.types) {
-      return new Set(savedFilters.types.split(',').filter(t => t)); // Filter out empty strings
+      return new Set(savedFilters.types.split(',').filter(t => t));
     }
-    return null; // null = all selected
+    return null;
   });
-
-  // Type hierarchy definition
-  // Three component types: chart (data viz), display (non-chart visuals), control (interactive)
-  const TYPE_HIERARCHY = {
-    chart: {
-      label: 'Charts',
-      dbValue: 'chart', // What's stored in DB (component_type)
-      subtypes: [
-        { id: 'bar', label: 'Bar Chart' },
-        { id: 'line', label: 'Line Chart' },
-        { id: 'area', label: 'Area Chart' },
-        { id: 'pie', label: 'Pie Chart' },
-        { id: 'scatter', label: 'Scatter Plot' },
-        { id: 'gauge', label: 'Gauge' },
-        { id: 'dataview', label: 'Data Table' },
-        { id: 'number', label: 'Number' },
-        { id: 'custom', label: 'Custom' }
-      ]
-    },
-    display: {
-      label: 'Displays',
-      dbValue: 'display',
-      subtypes: [
-        { id: 'frigate_camera', label: 'Frigate Camera' },
-        { id: 'weather', label: 'Weather' }
-      ]
-    },
-    control: {
-      label: 'Controls',
-      subtypes: Object.entries(CONTROL_TYPE_INFO).map(([id, info]) => ({
-        id,
-        label: info.label
-      }))
-    }
-  };
-
-  // Get all subtypes for a parent type
-  const getSubtypes = (parentType) => {
-    return TYPE_HIERARCHY[parentType]?.subtypes.map(s => `${parentType}:${s.id}`) || [];
-  };
-
-  // Check if a parent type is fully selected (all subtypes selected)
-  const isParentFullySelected = (parentType) => {
-    if (selectedTypes === null) return true; // All selected
-    const subtypes = getSubtypes(parentType);
-    return subtypes.every(st => selectedTypes.has(st));
-  };
-
-  // Check if a parent type is partially selected (some but not all subtypes)
-  const isParentPartiallySelected = (parentType) => {
-    if (selectedTypes === null) return false;
-    const subtypes = getSubtypes(parentType);
-    const selectedCount = subtypes.filter(st => selectedTypes.has(st)).length;
-    return selectedCount > 0 && selectedCount < subtypes.length;
-  };
-
-  // Check if a subtype is selected
-  const isSubtypeSelected = (parentType, subtypeId) => {
-    if (selectedTypes === null) return true; // All selected
-    return selectedTypes.has(`${parentType}:${subtypeId}`);
-  };
-
-  // Toggle parent type (select/deselect all subtypes)
-  const toggleParentType = (parentType) => {
-    const subtypes = getSubtypes(parentType);
-    const allSelected = isParentFullySelected(parentType);
-
-    setSelectedTypes(prev => {
-      if (prev === null) {
-        // Currently "all" - switching to specific selection
-        // Add all types except this parent's subtypes (deselect this parent)
-        const newSet = new Set();
-        Object.keys(TYPE_HIERARCHY).forEach(pt => {
-          if (pt !== parentType) {
-            getSubtypes(pt).forEach(st => newSet.add(st));
-          }
-        });
-        return newSet;
-      }
-
-      const newSet = new Set(prev);
-
-      if (allSelected) {
-        // Deselect all subtypes of this parent
-        subtypes.forEach(st => newSet.delete(st));
-        // Allow empty set - will show nothing, which is valid
-        return newSet;
-      } else {
-        // Select all subtypes of this parent
-        subtypes.forEach(st => newSet.add(st));
-      }
-
-      // If all types are now selected, set to null to represent "all"
-      const allSubtypes = Object.keys(TYPE_HIERARCHY).flatMap(pt => getSubtypes(pt));
-      if (allSubtypes.every(st => newSet.has(st))) {
-        return null;
-      }
-
-      return newSet;
-    });
-  };
-
-  // Toggle individual subtype
-  const toggleSubtype = (parentType, subtypeId) => {
-    const key = `${parentType}:${subtypeId}`;
-
-    setSelectedTypes(prev => {
-      if (prev === null) {
-        // Currently "all" - switching to specific selection
-        // Add all types except this one
-        const newSet = new Set();
-        Object.keys(TYPE_HIERARCHY).forEach(pt => {
-          getSubtypes(pt).forEach(st => {
-            if (st !== key) newSet.add(st);
-          });
-        });
-        return newSet;
-      }
-
-      const newSet = new Set(prev);
-
-      if (newSet.has(key)) {
-        newSet.delete(key);
-      } else {
-        newSet.add(key);
-      }
-
-      // If all types are now selected, set to null to represent "all"
-      const allSubtypes = Object.keys(TYPE_HIERARCHY).flatMap(pt => getSubtypes(pt));
-      if (allSubtypes.every(st => newSet.has(st))) {
-        return null;
-      }
-
-      return newSet;
-    });
-  };
-
-  // Get filter label for display
-  const getTypeFilterLabel = () => {
-    if (selectedTypes === null) return 'All Types';
-    if (selectedTypes.size === 0) return 'None Selected';
-    if (selectedTypes.size === 1) {
-      const [type] = selectedTypes;
-      const [parent, subtype] = type.split(':');
-      const subtypeInfo = TYPE_HIERARCHY[parent]?.subtypes.find(s => s.id === subtype);
-      return subtypeInfo?.label || type;
-    }
-    return `${selectedTypes.size} types selected`;
-  };
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -263,23 +113,6 @@ function ComponentsListPage() {
       sortDir: sortDirection
     });
   }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter]);
-
-  // Close type filter popover when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (typeFilterRef.current && !typeFilterRef.current.contains(event.target)) {
-        setTypeFilterOpen(false);
-      }
-    };
-
-    if (typeFilterOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [typeFilterOpen]);
 
   // Fetch charts and data sources from API
   useEffect(() => {
@@ -635,80 +468,10 @@ function ComponentsListPage() {
             selected={namespaceFilter}
             onChange={setNamespaceFilter}
           />
-          <div ref={typeFilterRef} className="type-filter-dropdown">
-            <button
-              type="button"
-              className={`type-filter-button${typeFilterOpen ? ' type-filter-button--open' : ''}`}
-              onClick={() => setTypeFilterOpen(!typeFilterOpen)}
-            >
-              <span>{getTypeFilterLabel()}</span>
-              <ChevronDown size={16} />
-            </button>
-            {typeFilterOpen && (
-            <div className="type-filter-content">
-              <div className="type-filter-header">
-                <span>Filter by Type</span>
-                {selectedTypes !== null && (
-                  <button
-                    type="button"
-                    className="clear-filter-button"
-                    onClick={() => setSelectedTypes(null)}
-                  >
-                    Select All
-                  </button>
-                )}
-              </div>
-              <div className="type-filter-list">
-                {Object.entries(TYPE_HIERARCHY).map(([parentType, config]) => {
-                  const isCollapsed = collapsedTypes.has(parentType);
-                  return (
-                    <div key={parentType} className="type-filter-group">
-                      <div className="type-filter-parent">
-                        <button
-                          type="button"
-                          className="collapse-toggle"
-                          onClick={() => {
-                            setCollapsedTypes(prev => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(parentType)) {
-                                newSet.delete(parentType);
-                              } else {
-                                newSet.add(parentType);
-                              }
-                              return newSet;
-                            });
-                          }}
-                        >
-                          {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                        </button>
-                        <Checkbox
-                          id={`filter-${parentType}`}
-                          labelText={config.label}
-                          checked={isParentFullySelected(parentType)}
-                          indeterminate={isParentPartiallySelected(parentType)}
-                          onChange={() => toggleParentType(parentType)}
-                        />
-                      </div>
-                      {!isCollapsed && (
-                        <div className="type-filter-subtypes">
-                          {config.subtypes.map(subtype => (
-                            <Checkbox
-                              key={subtype.id}
-                              id={`filter-${parentType}-${subtype.id}`}
-                              labelText={subtype.label}
-                              checked={isSubtypeSelected(parentType, subtype.id)}
-                              onChange={() => toggleSubtype(parentType, subtype.id)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            )}
-          </div>
+          <TypeHierarchyFilter
+            selectedTypes={selectedTypes}
+            onChange={setSelectedTypes}
+          />
           <TagFilter
             entityType="components"
             selected={tagFilter}
@@ -813,6 +576,9 @@ function ComponentsListPage() {
                       <div className="tile-header">
                         <h3>{chart.name}</h3>
                         <div className="tile-meta">
+                          {chart.namespace && (
+                            <NamespaceChip name={chart.namespace} />
+                          )}
                           <Tag type={chart.component_type === 'control' ? 'purple' : chart.component_type === 'display' ? 'teal' : 'blue'} size="sm">
                             {chart.component_type === 'control' ? 'CONTROL' : chart.component_type === 'display' ? 'DISPLAY' : 'CHART'}
                           </Tag>

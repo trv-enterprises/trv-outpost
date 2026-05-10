@@ -76,7 +76,7 @@ testing, and documentation.
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                Go backend (port 3001)                                       │
 │                       Gin · Eclipse Paho · Anthropic SDK · Swaggo                           │
-│  /api/connections  /api/charts  /api/dashboards  /api/devices  /api/users                   │
+│  /api/connections  /api/components  /api/dashboards  /api/devices  /api/users               │
 │  /api/tags  /api/ai/sessions  /api/frigate      /mcp/sse  /mcp/message   ...                │
 └─────────────────────────────────────────────────────────────────────────────────────────────┘
                                               │

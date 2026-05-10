@@ -475,6 +475,9 @@ function ConnectionsPage() {
                       </div>
 
                       <div className="tile-meta">
+                        {connection.namespace && (
+                          <NamespaceChip name={connection.namespace} />
+                        )}
                         <Tag type={getTypeColor(connection.type)} size="sm">
                           {connection.type?.toUpperCase() || 'N/A'}
                         </Tag>

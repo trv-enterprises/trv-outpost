@@ -22,6 +22,7 @@ export const COMPONENT_TYPE_HIERARCHY = {
       { id: 'gauge', label: 'Gauge' },
       { id: 'dataview', label: 'Data Table' },
       { id: 'number', label: 'Number' },
+      { id: 'banded_bar', label: 'Banded Bar (Levey-Jennings)' },
       { id: 'custom', label: 'Custom' }
     ]
   },
@@ -29,6 +30,7 @@ export const COMPONENT_TYPE_HIERARCHY = {
     label: 'Displays',
     subtypes: [
       { id: 'frigate_camera', label: 'Frigate Camera' },
+      { id: 'frigate_alerts', label: 'Frigate Alerts' },
       { id: 'weather', label: 'Weather' }
     ]
   },

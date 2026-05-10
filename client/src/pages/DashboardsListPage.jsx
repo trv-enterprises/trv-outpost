@@ -592,6 +592,9 @@ function DashboardsListPage() {
                     </div>
 
                     <div className="tile-meta">
+                      {dashboard.namespace && (
+                        <NamespaceChip name={dashboard.namespace} />
+                      )}
                       <Tooltip
                         label={getComponentNamesLabel(dashboard)}
                         align="bottom"

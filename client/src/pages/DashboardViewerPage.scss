@@ -497,10 +497,20 @@
       display: flex;
       align-items: center;
       gap: spacing.$spacing-03;
+      // Take up available toolbar width so the inline input can grow
+      // toward its max-width instead of shrinking to its min-width.
+      // min-width: 0 lets the flex child honor the wrapper's min as
+      // it competes with the toolbar's right-side controls.
+      flex: 1;
+      min-width: 0;
     }
 
     .dashboard-name-input {
       background: transparent;
+      // Without an explicit width, the bare <input> reverts to its UA
+      // default ~150px regardless of how much room the wrapper offers.
+      // 100% lets it fill the wrapper up to its own max-width cap.
+      width: 100%;
       border: none;
       border-bottom: 1px solid #525252;
       color: #f4f4f4;
@@ -509,7 +519,12 @@
       outline: none;
       padding: 0 spacing.$spacing-02;
       min-width: 200px;
-      max-width: 400px;
+      // Cap so the input never starves the toolbar's right-side
+      // controls (dimensions + zoom). The wrapper's flex chain is
+      // already set up to honor min-width: 0 and ellipsize, so this
+      // bound is just to keep the toolbar visually balanced when the
+      // page is wide.
+      max-width: 720px;
 
       &:focus {
         border-bottom-color: #0f62fe;

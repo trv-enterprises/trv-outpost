@@ -1,0 +1,176 @@
+<mxfile host="Electron" modified="2026-05-08T18:44:59.919Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.3.7 Chrome/112.0.5615.204 Electron/24.5.0 Safari/537.36" version="21.3.7" etag="e5Zm2eatNWb792axoktR" type="device">
+  <diagram id="physical-architecture" name="Physical Architecture">
+    <mxGraphModel dx="1308" dy="861" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="0" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="TRVE Dashboards — Physical Architecture" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#2E3B5C;" parent="1" vertex="1">
+          <mxGeometry x="540" y="30" width="620" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Process boundaries + wire protocols. For external data adapters see [connections diagram]." style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=2;fontColor=#666666;" parent="1" vertex="1">
+          <mxGeometry x="500" y="70" width="700" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-data" value="&lt;b&gt;External data sources&lt;/b&gt;&lt;br&gt;SQL · REST · CSV · MQTT · WebSocket · TCP · Prometheus · EdgeLake · ts-store · Frigate · Weather" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=11;fontStyle=2;verticalAlign=middle;align=center;" parent="1" vertex="1">
+          <mxGeometry x="1400" y="497" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="client-shell" value="Client (browser)&#xa;React 19 + Vite 7 build · served via Caddy" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C9D2E9;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="215" y="130" width="380" height="500" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-1" value="React SPA shell&#xa;(Carbon g100, mode router)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="180" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-2" value="apiClient (REST + auth header)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="228" width="340" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-3" value="StreamConnectionManager&#xa;(SSE consumer, EventSource)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="270" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-4" value="AI session WebSocket client" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="318" width="340" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-5" value="DynamicComponentLoader&#xa;(runtime JSX eval, ECharts renderer)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="360" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-6" value="Control renderer&#xa;(issue commands via apiClient)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="408" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-7" value="AG Grid data-table modal" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="456" width="340" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-8" value="Clerk SDK&#xa;(sign-in widget, token refresh)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="498" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-9" value="Caddy (host process)&#xa;static SPA bundle + /api proxy + TLS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F4E5C2;strokeColor=#A6862F;fontSize=10;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="235" y="546" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-10" value="ErrorBoundary + Mode/Namespace/Theme contexts" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="235" y="594" width="340" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="server-shell" value="Server (Go process, :3001)&#xa;Gin · long-lived goroutines · MCP SSE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#C9D2E9;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="850" y="130" width="380" height="500" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-1" value="Auth middleware&#xa;(Clerk JWT verify, trve_ API keys)" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="870" y="180" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-2" value="REST API handlers (Gin router)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="228" width="340" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-3" value="SSE stream handler&#xa;(/api/stream/*, /api/connections/:id/stream)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="270" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-4" value="WebSocket endpoints&#xa;(AI sessions · ts-store inbound push)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="318" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-5" value="MCP server (/mcp/sse · /mcp/message)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="366" width="340" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-6" value="Stream manager&#xa;ring buffer + retained-state cache + aggregators" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="456" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-7" value="AI agent + tool executor&#xa;(Anthropic SDK, MCP tool registry)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="408" width="340" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-8" value="Connection adapters&#xa;(SQL · REST · MQTT · WS · Prometheus · EdgeLake · ts-store · Frigate · weather · CSV · TCP)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E5D6C2;strokeColor=#A6622F;fontSize=10;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="870" y="504" width="340" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-9" value="Repositories + migrations (MongoDB driver)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="558" width="340" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="srv-10" value="Swagger UI · Docusaurus /docs · /version" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4A5E8A;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="870" y="598" width="340" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-mongo" value="MongoDB 7&lt;br&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;(named volume)&lt;/span&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1165" y="650" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-clerk" value="Clerk&lt;br&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;SSO + JWT issuer&lt;br&gt;(public JWKS endpoint)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="650" y="665" width="140" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-anthropic" value="Anthropic API&lt;br&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;(Claude — AI Builder + dashboard-agent)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1400" y="399.5" width="250" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-extdata" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6E7F44;strokeWidth=2;" parent="1" source="ext-data" target="srv-8" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-extdata-label" value="various wire protocols&#xa;(see connections diagram)" style="text;html=1;align=center;fontSize=10;fontColor=#6E7F44;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="1205" y="480" width="200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-rest" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#4A5E8A;strokeWidth=2;" parent="1" source="cli-2" target="srv-2" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-rest-label" value="HTTPS REST&#xa;(JSON · Bearer/JWT)" style="text;html=1;align=center;fontSize=10;fontColor=#4A5E8A;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="640" y="204" width="160" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-sse" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#0F62FE;strokeWidth=2;dashed=0;" parent="1" source="cli-3" target="srv-3" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-sse-label" value="SSE (text/event-stream)&#xa;server → client push" style="text;html=1;align=center;fontSize=10;fontColor=#0F62FE;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="640" y="251" width="160" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-ws" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#9B59B6;strokeWidth=2;" parent="1" source="cli-4" target="srv-4" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-ws-label" value="WebSocket&#xa;(AI session, full-duplex)" style="text;html=1;align=center;fontSize=10;fontColor=#9B59B6;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="640" y="298" width="160" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-mcp" value="External MCP clients&#xa;(Claude Desktop · mcp-proxy ·&#xa;dashboard-agent CLI)" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#9B59B6;strokeColor=#6B3F86;" parent="1" vertex="1">
+          <mxGeometry x="1540" y="272" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-mcp" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6B3F86;strokeWidth=2;" parent="1" source="ext-mcp" target="srv-5" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1245" y="382" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wire-mcp-label" value="MCP SSE + JSON-RPC" style="text;html=1;align=center;fontSize=10;fontColor=#6B3F86;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1260" y="312" width="180" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-mongo" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;strokeColor=#6E7F44;strokeWidth=2;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="srv-9" target="ext-mongo" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1265" y="574" />
+            </Array>
+            <mxPoint x="1250" y="780" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wire-mongo-label" value="MongoDB &lt;br&gt;wire protocol" style="text;html=1;align=center;fontSize=10;fontColor=#6E7F44;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1280" y="598" width="80" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-clerk-srv" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6E7F44;strokeWidth=2;dashed=1;" parent="1" source="srv-1" target="ext-clerk" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="200" />
+              <mxPoint x="820" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wire-clerk-srv-label" value="JWKS fetch&#xa;(verify JWT)" style="text;html=1;align=center;fontSize=10;fontColor=#6E7F44;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="710" y="416" width="100" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-clerk-cli" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6E7F44;strokeWidth=2;dashed=1;" parent="1" source="cli-8" target="ext-clerk" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="620" y="517" />
+              <mxPoint x="620" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wire-clerk-cli-label" value="OAuth · sign-in · token refresh" style="text;html=1;align=center;fontSize=10;fontColor=#6E7F44;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="570" y="487" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-anthropic" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6B3F86;strokeWidth=2;fillColor=#e1d5e7;" parent="1" source="srv-7" target="ext-anthropic" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wire-anthropic-label" value="HTTPS / Anthropic SDK" style="text;html=1;align=center;fontSize=10;fontColor=#6E7F44;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="1235" y="399.5" width="140" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="caddy-note" value="Caddy reverse-proxies&lt;br&gt;/api/* to server :3001 and serves /* as thestatic SPA bundle.&lt;br&gt;TLS terminates here." style="text;html=1;align=left;fontSize=10;fontStyle=2;fontColor=#A6862F;" parent="1" vertex="1">
+          <mxGeometry x="250" y="650" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dashed" value="dashed = transient/auxiliary &lt;br&gt;(auth handshakes, JWKS pulls)" style="text;html=1;align=left;fontSize=10;fontColor=#666666;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="650" y="584" width="140" height="34" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

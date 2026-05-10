@@ -195,7 +195,7 @@ func main() {
 	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, componentRepo, connectionRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, componentRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg, clerkPublishable)
-	userService := service.NewUserService(userRepo)
+	userService := service.NewUserService(userRepo, apiKeyRepo, configRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, connectionRepo)
 	deviceDiscoveryService := service.NewDeviceDiscoveryService(connectionRepo, deviceTypeRepo, deviceRepo)

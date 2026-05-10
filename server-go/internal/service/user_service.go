@@ -17,12 +17,16 @@ import (
 
 // UserService handles user business logic
 type UserService struct {
-	repo *repository.UserRepository
+	repo       *repository.UserRepository
+	apiKeyRepo *repository.APIKeyRepository
+	configRepo *repository.ConfigRepository
 }
 
-// NewUserService creates a new user service
-func NewUserService(repo *repository.UserRepository) *UserService {
-	return &UserService{repo: repo}
+// NewUserService creates a new user service. apiKeyRepo and configRepo are
+// optional dependencies used for cascade-deletes on user removal; pass nil
+// to skip the corresponding cascade (tests, partial wiring).
+func NewUserService(repo *repository.UserRepository, apiKeyRepo *repository.APIKeyRepository, configRepo *repository.ConfigRepository) *UserService {
+	return &UserService{repo: repo, apiKeyRepo: apiKeyRepo, configRepo: configRepo}
 }
 
 // CreateUser creates a new user
@@ -131,8 +135,42 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *models.Upd
 	return user, nil
 }
 
-// DeleteUser deletes a user
+// DeleteUser deletes a user and cascades to per-user records that are
+// otherwise orphaned by the deletion: API keys (any number, active or
+// revoked) and per-user app_config rows. Cascade is intentional — the
+// admin UI warns up-front that delete is destructive — so the user
+// can't accidentally leave live API tokens that resolve to a missing
+// user_id (auth-middleware lookup would either silently succeed or
+// 500 depending on resolver behavior, both bad).
 func (s *UserService) DeleteUser(ctx context.Context, id string) error {
+	user, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to find user: %w", err)
+	}
+	if user == nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Cascade: API keys are keyed by user GUID, not the Mongo _id.
+	if s.apiKeyRepo != nil {
+		keys, err := s.apiKeyRepo.FindByUserGUID(ctx, user.GUID)
+		if err != nil {
+			return fmt.Errorf("failed to list api keys for cascade: %w", err)
+		}
+		for _, k := range keys {
+			if err := s.apiKeyRepo.Delete(ctx, k.ID); err != nil {
+				return fmt.Errorf("failed to cascade-delete api key %s: %w", k.ID, err)
+			}
+		}
+	}
+
+	// Cascade: per-user app_config rows.
+	if s.configRepo != nil {
+		if err := s.configRepo.DeleteUserConfig(ctx, id); err != nil {
+			return fmt.Errorf("failed to cascade-delete user config: %w", err)
+		}
+	}
+
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}

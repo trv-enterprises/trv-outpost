@@ -34,6 +34,48 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
     }
   }, [open, chart]);
 
+  // Pin the modal-body scroll position around focus events. Without
+  // this, the browser's implicit focus-scroll re-centers the focused
+  // element inside the scrollable .cds--modal-content, moving the
+  // user's click target out from under their cursor — so the *first*
+  // click only focuses and the *second* click is what actually fires
+  // onClick. The pin captures scrollTop at focusin and then watches
+  // for any scroll events for ~150ms; any movement during that window
+  // is treated as the implicit focus-scroll and reverted. Explicit
+  // scrollIntoView() callers (e.g. validation-error scroll) usually
+  // run synchronously inside event handlers BEFORE focusin fires, so
+  // they're captured as the new "before" value and respected.
+  useEffect(() => {
+    if (!open) return;
+    const setup = () => {
+      const sc = document.querySelector('.component-editor-modal .cds--modal-content');
+      if (!sc) return null;
+      let lockUntil = 0;
+      let lockedTop = 0;
+      const onFocusIn = () => {
+        lockedTop = sc.scrollTop;
+        lockUntil = performance.now() + 150;
+      };
+      const onScroll = () => {
+        if (performance.now() < lockUntil && sc.scrollTop !== lockedTop) {
+          sc.scrollTop = lockedTop;
+        }
+      };
+      sc.addEventListener('focusin', onFocusIn);
+      sc.addEventListener('scroll', onScroll, { passive: true });
+      return () => {
+        sc.removeEventListener('focusin', onFocusIn);
+        sc.removeEventListener('scroll', onScroll);
+      };
+    };
+    let cleanup = setup();
+    if (!cleanup) {
+      const t = setTimeout(() => { cleanup = setup(); }, 50);
+      return () => { clearTimeout(t); if (cleanup) cleanup(); };
+    }
+    return cleanup;
+  }, [open]);
+
   const handleSave = async (chartPayload) => {
     setSaving(true);
     try {

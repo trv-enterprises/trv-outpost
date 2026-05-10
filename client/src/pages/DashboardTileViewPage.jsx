@@ -22,6 +22,7 @@ import {
 } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
+import NamespaceChip from '../components/shared/NamespaceChip';
 import TagFilter from '../components/shared/TagFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
@@ -497,6 +498,9 @@ function DashboardTileViewPage() {
                 )}
                 <div className="tile-footer">
                   <div className="tile-tags">
+                    {dashboard.namespace && (
+                      <NamespaceChip name={dashboard.namespace} />
+                    )}
                     {dashboard.settings?.refresh_interval > 0 && (
                       <Tag type="green" size="sm">
                         <Time size={12} />

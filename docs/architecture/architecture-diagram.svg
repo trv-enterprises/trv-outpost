@@ -110,7 +110,7 @@
   <text x="830" y="210" text-anchor="middle" fill="#525252" font-size="7">SQL/API/CSV/Socket</text>
 
   <rect x="895" y="165" width="120" height="50" rx="2" fill="#1a1a1a"/>
-  <text x="955" y="182" text-anchor="middle" fill="#78a9ff" font-size="10" font-weight="500">/api/charts</text>
+  <text x="955" y="182" text-anchor="middle" fill="#78a9ff" font-size="10" font-weight="500">/api/components</text>
   <text x="955" y="198" text-anchor="middle" fill="#6f6f6f" font-size="8">CRUD + Versions</text>
   <text x="955" y="210" text-anchor="middle" fill="#525252" font-size="7">Draft/Publish/History</text>
 
@@ -201,7 +201,7 @@
   <text x="130" y="650" text-anchor="middle" fill="#e8daff" font-size="14" font-weight="600">MongoDB 7</text>
   <text x="130" y="670" text-anchor="middle" fill="#a56eff" font-size="10">Primary Database</text>
   <rect x="55" y="680" width="150" height="25" rx="2" fill="#1a1a1a"/>
-  <text x="130" y="697" text-anchor="middle" fill="#c6c6c6" font-size="9">layouts, charts, dashboards</text>
+  <text x="130" y="697" text-anchor="middle" fill="#c6c6c6" font-size="9">layouts, components, dashboards</text>
 
   <!-- Redis -->
   <rect x="240" y="620" width="180" height="100" rx="6" fill="url(#externalGrad)" stroke="#be95ff" stroke-width="2"/>
@@ -286,7 +286,7 @@
   <text x="280" y="807" fill="#78a9ff" font-size="10">GET /api/dashboards/:id</text>
   <text x="280" y="825" fill="#6f6f6f" font-size="9">Fetch dashboard with panels</text>
 
-  <text x="280" y="850" fill="#78a9ff" font-size="10">GET /api/charts/:id</text>
+  <text x="280" y="850" fill="#78a9ff" font-size="10">GET /api/components/:id</text>
   <text x="280" y="868" fill="#6f6f6f" font-size="9">Get chart with component_code</text>
 
   <text x="520" y="807" fill="#78a9ff" font-size="10">POST /api/ai/sessions</text>
@@ -298,7 +298,7 @@
   <text x="760" y="807" fill="#78a9ff" font-size="10">POST /api/datasources/:id/query</text>
   <text x="760" y="825" fill="#6f6f6f" font-size="9">Execute query against source</text>
 
-  <text x="760" y="850" fill="#78a9ff" font-size="10">GET /api/charts/:id/versions</text>
+  <text x="760" y="850" fill="#78a9ff" font-size="10">GET /api/components/:id/versions</text>
   <text x="760" y="868" fill="#6f6f6f" font-size="9">List chart version history</text>
 
   <text x="1000" y="807" fill="#78a9ff" font-size="10">GET /mcp/sse</text>
