@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Modal, Search, Tag, Tile, Loading
+  Modal, Search, Tag, Tile, Loading, Dropdown
 } from '@carbon/react';
 import {
   ChartLineSmooth, ChartBar, ChartArea, ChartPie,
@@ -86,17 +86,24 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   const [selectedTypes, setSelectedTypes] = useState(() => categoryToTypeSet(initialCategory));
   const [tagFilter, setTagFilter] = useState([]);
   const [namespaceFilter, setNamespaceFilter] = useState([]);
+  const [connectionFilter, setConnectionFilter] = useState('all'); // 'all' or connection id
+  // Connection map (id → name) used to populate the connection dropdown
+  // and label the selected item. Fetched in parallel with components on
+  // open. Same shape as the connection map on the list pages.
+  const [connections, setConnections] = useState({});
   const [sortKey, setSortKey] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     if (open) {
       fetchItems();
+      fetchConnections();
       setSelected(null);
       setSearchTerm('');
       setSelectedTypes(categoryToTypeSet(initialCategory));
       setTagFilter([]);
       setNamespaceFilter([]);
+      setConnectionFilter('all');
       setSortKey('name');
       setSortDirection('asc');
     }
@@ -114,6 +121,21 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       setItems([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchConnections = async () => {
+    try {
+      const data = await apiClient.getConnections();
+      const list = data.connections || data.items || data || [];
+      const map = {};
+      (Array.isArray(list) ? list : []).forEach(c => {
+        if (c?.id) map[c.id] = c.name || c.id;
+      });
+      setConnections(map);
+    } catch (err) {
+      console.error('Failed to fetch connections:', err);
+      setConnections({});
     }
   };
 
@@ -136,6 +158,20 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       result = result.filter(item => {
         const itemTags = item.tags || [];
         return tagFilter.some(t => itemTags.includes(t));
+      });
+    }
+
+    // Connection filter. Components reference connections through one of
+    // three fields: connection_id (charts/controls), or for displays
+    // display_config.frigate_connection_id / mqtt_connection_id. Mirrors
+    // the same fan-out used by ComponentsListPage.
+    if (connectionFilter !== 'all') {
+      result = result.filter(item => {
+        if (item.connection_id === connectionFilter) return true;
+        const dc = item.display_config;
+        if (dc?.frigate_connection_id === connectionFilter) return true;
+        if (dc?.mqtt_connection_id === connectionFilter) return true;
+        return false;
       });
     }
 
@@ -166,7 +202,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       return 0;
     });
     return sorted;
-  }, [items, namespaceFilter, selectedTypes, tagFilter, searchTerm, sortKey, sortDirection]);
+  }, [items, namespaceFilter, selectedTypes, tagFilter, connectionFilter, searchTerm, sortKey, sortDirection]);
 
   const handleSelect = () => {
     if (selected) onSelect(selected);
@@ -252,17 +288,40 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
             selected={tagFilter}
             onChange={setTagFilter}
           />
+          <Dropdown
+            id="connection-filter-component-picker"
+            className="connection-filter-dropdown"
+            label="Filter by connection"
+            titleText=""
+            items={[
+              { id: 'all', text: 'All Connections' },
+              ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
+            ]}
+            itemToString={(item) => item?.text || ''}
+            selectedItem={{
+              id: connectionFilter,
+              text: connectionFilter === 'all'
+                ? 'All Connections'
+                : (connections[connectionFilter] || 'Unknown')
+            }}
+            onChange={({ selectedItem }) => {
+              setConnectionFilter(selectedItem?.id || 'all');
+            }}
+            size="md"
+          />
           <ResetFiltersButton
             active={
               !!searchTerm ||
               namespaceFilter.length > 0 ||
               tagFilter.length > 0 ||
+              connectionFilter !== 'all' ||
               !sameTypeSet(selectedTypes, categoryToTypeSet(initialCategory))
             }
             onReset={() => {
               setSearchTerm('');
               setNamespaceFilter([]);
               setTagFilter([]);
+              setConnectionFilter('all');
               setSelectedTypes(categoryToTypeSet(initialCategory));
             }}
           />
