@@ -4301,7 +4301,7 @@
           "response": []
         },
         {
-          "name": "Get user by GUID",
+          "name": "Get user by GUID (admin only)",
           "request": {
             "method": "GET",
             "header": [
@@ -4331,12 +4331,12 @@
                 }
               ]
             },
-            "description": "Get user by GUID\n\nReturns a user by their GUID (auth header value)\n\n\nResponses: 200, 404"
+            "description": "Get user by GUID (admin only)\n\nReturns a user by their GUID. Requires Manage capability.\n\n\nResponses: 200, 403, 404"
           },
           "response": []
         },
         {
-          "name": "Get user by ID",
+          "name": "Get user by ID (admin only)",
           "request": {
             "method": "GET",
             "header": [
@@ -4365,7 +4365,7 @@
                 }
               ]
             },
-            "description": "Get user by ID\n\nReturns a user by their ID\n\n\nResponses: 200, 404"
+            "description": "Get user by ID (admin only)\n\nReturns a user by their ID. Requires Manage capability.\n\n\nResponses: 200, 403, 404"
           },
           "response": []
         },

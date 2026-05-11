@@ -873,10 +873,10 @@ class APIClient {
   }
 
   // Resolve a user by GUID (the value used in the X-User-ID header
-  // and persisted in localStorage). Open to any authenticated caller
-  // and returns a redacted projection for non-Manage callers; used
-  // by App.jsx bootstrap to convert a stored / admin-default GUID
-  // into a User record without hitting the Manage-only directory.
+  // and persisted in localStorage). Manage-only — admins use this in
+  // the user-edit flows. SPA bootstrap and the header user pill
+  // resolve self-identity via /api/auth/me, which carries id/guid/
+  // name/capabilities without exposing any other user record.
   async getUserByGuid(guid) {
     return this.request(`/api/users/by-guid/${encodeURIComponent(guid)}`);
   }

@@ -141,11 +141,46 @@ function AppContent({ onDisconnect }) {
 
         // Try to load the full user directory. This succeeds for
         // Manage users (admins) and gives them the in-header user
-        // switcher; it 403s for everyone else, which is fine — the
-        // tier-2/3 GUID resolution below uses the per-GUID endpoint
-        // that stays open to all authenticated callers.
+        // switcher; it 403s for everyone else, which is expected.
+        // The bootstrap doesn't depend on the list for identity
+        // resolution — /api/auth/me carries everything we need for
+        // the current user.
+        //
+        // Dev-mode caveat: when a developer uses DevUserSwitcher to
+        // act-as a non-Manage user (e.g. Support), the very next page
+        // load makes getUsers() 403 — leaving the switcher empty with
+        // no way back to Admin from the UI. Cache the list in
+        // localStorage on every successful load and fall back to that
+        // cache when the live call returns empty. The cache is keyed
+        // on `import.meta.env.DEV` so Vite tree-shakes the whole
+        // branch out of production bundles. Cached entries are only
+        // used to populate the switcher menu; they are never trusted
+        // for identity decisions (those go through /auth/me).
         const response = await apiClient.getUsers().catch(() => ({ users: [] }));
-        const list = response?.users || [];
+        let list = response?.users || [];
+        if (import.meta.env.DEV) {
+          const DEV_SWITCHER_CACHE_KEY = 'devUserSwitcher.users';
+          if (list.length > 0) {
+            try {
+              localStorage.setItem(DEV_SWITCHER_CACHE_KEY, JSON.stringify(list));
+            } catch {
+              // QuotaExceededError or private-mode storage — ignore.
+            }
+          } else {
+            try {
+              const cached = localStorage.getItem(DEV_SWITCHER_CACHE_KEY);
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  list = parsed;
+                }
+              }
+            } catch {
+              // Malformed cache — ignore; user can clear localStorage
+              // and reload as an admin to repopulate.
+            }
+          }
+        }
         setUsers(list);
 
         // Tier 1: ?user_id=<guid> URL param. Strip from address bar
@@ -162,15 +197,22 @@ function AppContent({ onDisconnect }) {
           apiClient.setCurrentUser(fromUrl);
         }
 
-        // resolveUserByGuid: look up a user by GUID, preferring the
-        // already-loaded list (admin path) and falling back to the
-        // per-GUID endpoint (non-admin path). Returns null on miss.
-        const resolveUserByGuid = async (guid) => {
-          if (!guid) return null;
-          const hit = list.find((u) => u.guid === guid);
-          if (hit) return hit;
+        // resolveSelf: fetch the authenticated user's own record via
+        // /api/auth/me. Returns null when no credential resolves to
+        // an active user. Since v0.15.2 the response carries name +
+        // guid alongside capabilities, so the SPA bootstrap doesn't
+        // need any second user lookup — no directory enumeration,
+        // no other-user reads.
+        const resolveSelf = async () => {
           try {
-            return await apiClient.getUserByGuid(guid);
+            const me = await apiClient.getCurrentUser();
+            return {
+              id: me.user_id,
+              guid: me.guid || me.user_id, // server populates guid as of v0.15.2; tolerate older builds
+              name: me.name,
+              active: me.active !== false,
+              capabilities: me.capabilities,
+            };
           } catch {
             return null;
           }
@@ -178,34 +220,25 @@ function AppContent({ onDisconnect }) {
 
         // If a Tier 0 API key was set above, /api/auth/me identifies
         // the user (the apikey'd request resolves them server-side).
-        // This wins ahead of the localStorage / admin-default
-        // tiers — the URL key was an explicit authentication signal.
+        // This wins ahead of the localStorage / admin-default tiers —
+        // the URL key was an explicit authentication signal.
         if (apiClient.apiKey) {
-          try {
-            const me = await apiClient.getCurrentUser();
-            // /api/auth/me returns { user_id (mongo _id), name,
-            // capabilities, can_design, can_manage }. Look the user
-            // up in the users list (when accessible) to get the GUID,
-            // otherwise synthesize a minimal user record.
-            const owner = list.find((u) => u.id === me.user_id) || {
-              id: me.user_id,
-              guid: me.user_id, // best-effort placeholder; UI uses name primarily
-              name: me.name,
-              capabilities: me.capabilities,
-            };
-            setCurrentUser(owner);
+          const me = await resolveSelf();
+          if (me) {
+            setCurrentUser(me);
             setIdentityResolved(true);
             return;
-          } catch (e) {
-            console.warn('Bootstrap: API key did not resolve a user', e);
-            // Fall through to legacy tiers.
           }
+          console.warn('Bootstrap: API key did not resolve a user');
         }
 
-        // Tier 2: whatever is now in localStorage (just-set above
-        // OR persisted from a prior session).
-        let guid = apiClient.getCurrentUserGuid();
-        let user = await resolveUserByGuid(guid);
+        // Tier 2: localStorage GUID (just-set above OR persisted
+        // from a prior session) is already on the apiClient as the
+        // X-User-ID header; /api/auth/me confirms it resolves.
+        let user = null;
+        if (apiClient.getCurrentUserGuid()) {
+          user = await resolveSelf();
+        }
 
         // Tier 3: admin-configured default. Only consulted when no
         // identity has been established yet for this browser.
@@ -214,9 +247,13 @@ function AppContent({ onDisconnect }) {
             const adminDefault = await apiClient.getSetting('default_browser_user_guid');
             const def = (adminDefault?.value || '').toString().trim();
             if (def) {
-              user = await resolveUserByGuid(def);
-              if (user) {
-                apiClient.setCurrentUser(user.guid);
+              apiClient.setCurrentUser(def);
+              user = await resolveSelf();
+              if (!user) {
+                // The admin-default GUID didn't resolve (user deleted
+                // or deactivated). Clear it so we don't keep sending
+                // a dead header on every subsequent request.
+                apiClient.setCurrentUser(null);
               }
             }
           } catch {

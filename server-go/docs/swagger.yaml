@@ -2523,8 +2523,10 @@ definitions:
         type: string
     type: object
   models.UserCapabilitiesResponse:
-    description: Current user's capabilities and access permissions
+    description: Current user's identity, capabilities, and access permissions
     properties:
+      active:
+        type: boolean
       can_design:
         type: boolean
       can_manage:
@@ -2533,9 +2535,13 @@ definitions:
         items:
           $ref: '#/definitions/models.Capability'
         type: array
+      guid:
+        description: Auth-header GUID; what the SPA persists
+        type: string
       name:
         type: string
       user_id:
+        description: Mongo _id of the user record
         type: string
     type: object
   models.UserConfigResponse:
@@ -5948,7 +5954,7 @@ paths:
       tags:
       - Users
     get:
-      description: Returns a user by their ID
+      description: Returns a user by their ID. Requires Manage capability.
       parameters:
       - description: User ID
         in: path
@@ -5962,13 +5968,19 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.User'
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: Not Found
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Get user by ID
+      summary: Get user by ID (admin only)
       tags:
       - Users
     put:
@@ -6011,7 +6023,7 @@ paths:
       - Users
   /users/by-guid/{guid}:
     get:
-      description: Returns a user by their GUID (auth header value)
+      description: Returns a user by their GUID. Requires Manage capability.
       parameters:
       - description: User GUID
         in: path
@@ -6025,13 +6037,19 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.User'
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: Not Found
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Get user by GUID
+      summary: Get user by GUID (admin only)
       tags:
       - Users
 swagger: "2.0"

@@ -109,12 +109,12 @@ func buildRouteRules() []RouteCapability {
 		// rule that wins because it appears first in the slice.
 		{PathPrefix: "/api/api-keys/all", Method: "GET", Required: models.CapabilityManage},
 
-		// Users — listing the full directory is a Manage capability.
-		// Single-user GET (`/api/users/:id`) stays open so the SPA
-		// bootstrap can resolve a GUID claim into a user record;
-		// `auth_handler.go::GetUser` redacts the response for non-Manage
-		// callers so the open endpoint isn't an enumeration leak.
-		{PathPrefix: "/api/users", Method: "GET", Required: models.CapabilityManage, Exact: true},
+		// Users — every read and write requires Manage. There is no
+		// self-management UI today, so non-Manage callers have no
+		// reason to hit any `/api/users/*` endpoint. The SPA bootstrap
+		// uses /api/auth/me for self-info (it carries id/guid/name/
+		// capabilities), so locking the whole group is safe.
+		{PathPrefix: "/api/users", Method: "GET", Required: models.CapabilityManage},
 
 		// Settings — listing every user-configurable setting is admin-
 		// only. Per-key reads (`/api/settings/:key`) stay open because

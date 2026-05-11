@@ -77,18 +77,18 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetUser returns a specific user by ID. Open to any authenticated
-// caller so the SPA bootstrap can resolve a GUID claim (from
-// localStorage, URL param, or admin default) into a User record for
-// the in-app header. Non-Manage callers see a redacted view —
-// identity fields only, no email / clerk linkage / capability list —
-// so this endpoint can't be used as a directory-disclosure leak.
-// @Summary Get user by ID
-// @Description Returns a user by their ID
+// GetUser returns a specific user by ID. Manage-only. There is no
+// self-management UI today, so non-Manage callers have no business
+// reading another user's record — and they get their own identity
+// via /api/auth/me, which carries everything the SPA bootstrap and
+// header pill need (id, guid, name, capabilities).
+// @Summary Get user by ID (admin only)
+// @Description Returns a user by their ID. Requires Manage capability.
 // @Tags Users
 // @Produce json
 // @Param id path string true "User ID"
 // @Success 200 {object} models.User
+// @Failure 403 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Router /users/{id} [get]
 func (h *AuthHandler) GetUser(c *gin.Context) {
@@ -100,44 +100,20 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 		return
 	}
 
-	caller := middleware.GetUser(c)
-	if caller == nil || !caller.HasManageAccess() {
-		c.JSON(http.StatusOK, redactUser(user))
-		return
-	}
-
 	c.JSON(http.StatusOK, user)
 }
 
-// redactUser returns a minimal projection of a User suitable for
-// non-Manage callers. Includes only the fields the SPA bootstrap and
-// header user pill need (id, guid, name, active, kind). Email,
-// clerk_user_id, and the capability list are stripped so this
-// endpoint cannot be used as an enumerable directory.
-func redactUser(u *models.User) gin.H {
-	if u == nil {
-		return nil
-	}
-	return gin.H{
-		"id":     u.ID,
-		"guid":   u.GUID,
-		"name":   u.Name,
-		"active": u.Active,
-	}
-}
-
-// GetUserByGUID resolves a single user record from a GUID. Open to any
-// authenticated caller so the SPA bootstrap can convert a localStorage
-// or admin-default GUID claim into a User for the header pill without
-// hitting the Manage-only list endpoint. Returns the same redacted
-// shape as `GetUser` for non-Manage callers — knowing a GUID is not
-// permission to read another user's email / clerk linkage.
-// @Summary Get user by GUID
-// @Description Returns a user by their GUID (auth header value)
+// GetUserByGUID resolves a single user record from a GUID.
+// Manage-only — same reasoning as GetUser. The SPA bootstrap uses
+// /api/auth/me for self-info, so this endpoint is only ever called
+// from admin Manage UIs.
+// @Summary Get user by GUID (admin only)
+// @Description Returns a user by their GUID. Requires Manage capability.
 // @Tags Users
 // @Produce json
 // @Param guid path string true "User GUID"
 // @Success 200 {object} models.User
+// @Failure 403 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Router /users/by-guid/{guid} [get]
 func (h *AuthHandler) GetUserByGUID(c *gin.Context) {
@@ -150,12 +126,6 @@ func (h *AuthHandler) GetUserByGUID(c *gin.Context) {
 	}
 	if user == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	caller := middleware.GetUser(c)
-	if caller == nil || !caller.HasManageAccess() {
-		c.JSON(http.StatusOK, redactUser(user))
 		return
 	}
 

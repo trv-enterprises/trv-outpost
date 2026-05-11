@@ -4631,14 +4631,14 @@ const docTemplate = `{
         },
         "/users/by-guid/{guid}": {
             "get": {
-                "description": "Returns a user by their GUID (auth header value)",
+                "description": "Returns a user by their GUID. Requires Manage capability.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Users"
                 ],
-                "summary": "Get user by GUID",
+                "summary": "Get user by GUID (admin only)",
                 "parameters": [
                     {
                         "type": "string",
@@ -4655,6 +4655,15 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.User"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -4669,14 +4678,14 @@ const docTemplate = `{
         },
         "/users/{id}": {
             "get": {
-                "description": "Returns a user by their ID",
+                "description": "Returns a user by their ID. Requires Manage capability.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Users"
                 ],
-                "summary": "Get user by ID",
+                "summary": "Get user by ID (admin only)",
                 "parameters": [
                     {
                         "type": "string",
@@ -4691,6 +4700,15 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.User"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "404": {
@@ -8361,9 +8379,12 @@ const docTemplate = `{
             }
         },
         "models.UserCapabilitiesResponse": {
-            "description": "Current user's capabilities and access permissions",
+            "description": "Current user's identity, capabilities, and access permissions",
             "type": "object",
             "properties": {
+                "active": {
+                    "type": "boolean"
+                },
                 "can_design": {
                     "type": "boolean"
                 },
@@ -8376,10 +8397,15 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.Capability"
                     }
                 },
+                "guid": {
+                    "description": "Auth-header GUID; what the SPA persists",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "user_id": {
+                    "description": "Mongo _id of the user record",
                     "type": "string"
                 }
             }

@@ -192,11 +192,16 @@ func (s *UserService) ListUsers(ctx context.Context, page, pageSize int) (*model
 	}, nil
 }
 
-// GetCapabilities returns the capabilities response for a user
+// GetCapabilities returns the self-info response for a user. This is
+// what the SPA bootstrap calls via /api/auth/me — it carries enough
+// to render the header user pill, persist identity to localStorage,
+// and gate Design/Manage UI without any further user lookups.
 func (s *UserService) GetCapabilities(ctx context.Context, user *models.User) *models.UserCapabilitiesResponse {
 	return &models.UserCapabilitiesResponse{
 		UserID:       user.ID,
+		GUID:         user.GUID,
 		Name:         user.Name,
+		Active:       user.Active,
 		Capabilities: user.Capabilities,
 		CanDesign:    user.HasDesignAccess(),
 		CanManage:    user.HasManageAccess(),

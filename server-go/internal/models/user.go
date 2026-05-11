@@ -60,11 +60,18 @@ func (u *User) HasManageAccess() bool {
 	return u.HasCapability(CapabilityManage)
 }
 
-// UserCapabilitiesResponse is returned by /api/auth/me endpoint
-// @Description Current user's capabilities and access permissions
+// UserCapabilitiesResponse is returned by /api/auth/me endpoint.
+// This is the SPA bootstrap's primary "who am I" payload — adding
+// fields here is preferable to introducing a parallel self-info
+// endpoint. The GUID is included so the client can set the header
+// user pill and persist the identity to localStorage without a
+// follow-up lookup.
+// @Description Current user's identity, capabilities, and access permissions
 type UserCapabilitiesResponse struct {
-	UserID       string       `json:"user_id"`
+	UserID       string       `json:"user_id"` // Mongo _id of the user record
+	GUID         string       `json:"guid"`    // Auth-header GUID; what the SPA persists
 	Name         string       `json:"name"`
+	Active       bool         `json:"active"`
 	Capabilities []Capability `json:"capabilities"`
 	CanDesign    bool         `json:"can_design"`
 	CanManage    bool         `json:"can_manage"`
