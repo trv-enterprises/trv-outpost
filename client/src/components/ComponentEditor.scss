@@ -64,6 +64,10 @@
   .component-type-section {
     margin-bottom: spacing.$spacing-05;
     max-width: 300px;
+    // Same shrink-protection as the custom-code warning + tab switcher.
+    // Without flex-shrink: 0 the editor's flex column will steal this
+    // row's height when the viewport is short.
+    flex-shrink: 0;
   }
 
   // Chart metadata section (name, type, description)
@@ -148,6 +152,13 @@
     border: 1px solid var(--cds-border-strong-01); // #6f6f6f - visible border around buttons
     border-radius: 4px;
     overflow: hidden;
+    // Reserve a fixed-height row in the editor's flex column so the
+    // tab switcher doesn't get squeezed to a sliver when the viewport
+    // shrinks (devtools open, short modal, etc). Without these the
+    // parent's other flex children push down and steal this row's
+    // height, clipping descenders or collapsing it to a single line.
+    flex: 0 0 auto;
+    min-height: 36px;
   }
 
   // ContentSwitcher styling - matches Carbon g100 theme
@@ -179,6 +190,10 @@
       .cds--content-switcher__label {
         color: var(--cds-text-primary); // grey 10 for unselected
         background-color: transparent;
+        // Carbon's default line-height: 1 on the switcher label
+        // crops descenders ("g", "y", "p") inside the 32px row.
+        // Bumping to 1.4 gives the glyph baseline enough room.
+        line-height: 1.4;
       }
 
       &:hover:not(.cds--content-switcher--selected) {
@@ -243,11 +258,19 @@
     &.preview-tab {
       display: flex;
       flex-direction: column;
+      // Claim all the vertical space the tab-panels container offers.
+      // Without this, the preview tab sized to its content and the
+      // chart-preview-container's `height: 400px` cap kept the chart
+      // tiny no matter how tall the modal was.
+      flex: 1;
+      min-height: 0;
     }
 
     &.code-tab {
       display: flex;
       flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
   }
 
@@ -905,8 +928,10 @@
   // Chart preview container
   .chart-preview-container {
     flex: 1;
+    // Floor for the standalone-page case where the parent doesn't
+    // constrain height. In a modal the parent's flex chain takes over
+    // and the preview grows to fill the modal body.
     min-height: 400px;
-    height: 400px;
     background-color: var(--cds-layer-01);
     border-radius: 4px;
     border: 1px solid #393939;
@@ -1038,6 +1063,70 @@
     }
   }
 
+  // Custom-code mode runtime context strip. Shown above the code editor
+  // to surface the connection / query / parser / sliding-window settings
+  // that govern what `data` looks like at runtime — none of which are
+  // visible in the React source itself.
+  .custom-code-runtime-summary {
+    margin-bottom: spacing.$spacing-04;
+    padding: spacing.$spacing-04 spacing.$spacing-05;
+    background-color: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle-01);
+    border-left: 3px solid var(--cds-interactive);
+    border-radius: 2px;
+
+    .summary-row {
+      display: flex;
+      align-items: baseline;
+      gap: spacing.$spacing-04;
+      padding: spacing.$spacing-02 0;
+
+      & + .summary-row {
+        border-top: 1px dashed var(--cds-border-subtle-02);
+      }
+    }
+
+    .summary-label {
+      flex: 0 0 110px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--cds-text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .summary-value {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.875rem;
+      color: var(--cds-text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &--code {
+        font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+        font-size: 0.8125rem;
+        background-color: var(--cds-layer-02);
+        padding: 2px 6px;
+        border-radius: 2px;
+      }
+    }
+
+    .summary-empty {
+      color: var(--cds-text-helper);
+      font-style: italic;
+    }
+
+    .summary-actions {
+      margin-top: spacing.$spacing-02;
+      padding-top: spacing.$spacing-02;
+      border-top: 1px solid var(--cds-border-subtle-01);
+      display: flex;
+      justify-content: flex-end;
+    }
+  }
+
   // Inline notification spacing
   .cds--inline-notification {
     margin-top: spacing.$spacing-04;
@@ -1046,27 +1135,56 @@
   // Custom code warning at top.
   // Carbon's InlineNotification clamps to a single-row min height, which
   // truncates the wrapped subtitle and hides the action button behind the
-  // type-tabs row below. Force the layout to grow with its content.
+  // type-tabs row below. Force the layout to grow with its content, AND
+  // refuse to shrink so the row stays at its natural height when the
+  // viewport gets squeezed (devtools open, short modal). Without
+  // flex-shrink: 0 the surrounding flex column would steal this row's
+  // height and crop the icon + text.
   .custom-code-warning {
     margin-bottom: spacing.$spacing-05;
     margin-top: 0;
     max-width: none;
-    min-block-size: 0;
+    min-block-size: 48px;
+    flex-shrink: 0;
 
     .cds--inline-notification__details {
-      align-items: flex-start;
+      // Center the warning icon + text vertically. Carbon's default
+      // align-items: flex-start is meant for multi-line subtitles
+      // (icon stays at the top), but our subtitle stays on a single
+      // line at typical widths, so center reads better.
+      align-items: center;
       flex: 1 1 auto;
       min-block-size: 0;
     }
 
+    // Carbon's icon SVG is a flex item inside the details row that
+    // explicitly sets `align-self` to top-anchor the icon (the
+    // assumption being a multi-line subtitle should keep the icon at
+    // the top). For our one-line subtitle that reads as "icon stuck
+    // in the top-left corner of an oversized box." Force vertical
+    // center + add a margin so it sits next to the text baseline.
+    .cds--inline-notification__icon {
+      align-self: center;
+      margin-block: 0;
+    }
+
     .cds--inline-notification__text-wrapper {
       flex: 1 1 auto;
-      padding-block: spacing.$spacing-03;
+      padding-block: spacing.$spacing-04;
+      // Defensive line-height — Carbon's default of 1.28571 inside a
+      // 32px InlineNotification row clips descenders ("y" in
+      // "verbatim", "g" in "mapping").
+      line-height: 1.45;
     }
 
     .cds--inline-notification__subtitle {
       display: block;
       white-space: normal;
+      line-height: 1.45;
+    }
+
+    .cds--inline-notification__title {
+      line-height: 1.45;
     }
 
     .cds--inline-notification__action-button {

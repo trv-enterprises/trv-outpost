@@ -17,7 +17,76 @@ import DynamicComponentLoader from './DynamicComponentLoader';
 import { ControlRenderer, CONTROL_TYPE_INFO } from './controls';
 import { transformData } from '../utils/dataTransforms';
 import apiClient from '../api/client';
+import { getDataDrivenChartCode, getStaticChartCode } from './ComponentEditor';
 import './AIComponentPreview.scss';
+
+// Build component_code from the structured fields on a component when
+// the persisted `component_code` is empty. This is the configure-first
+// path: AI tools like update_data_mapping / update_chart_options
+// populate the structured fields but don't (and shouldn't) call
+// set_custom_code, so the agent finishes with use_custom_code=false and
+// component_code="". Both the preview pane and the save handler need
+// to materialize code from those fields — the manual editor's same
+// generator runs here so AI-built and human-built components render
+// identically.
+function generateComponentCodeFromConfig(component) {
+  if (!component) return '';
+  const chartType = component.chart_type || 'bar';
+  const connectionId = component.connection_id || '';
+  const queryConfig = component.query_config || {};
+  const queryRaw = queryConfig.raw || '';
+  const queryType = queryConfig.type || 'sql';
+  const queryParams = queryConfig.params || {};
+  const dataMapping = component.data_mapping || {};
+  const options = component.options || {};
+  const xAxis = dataMapping.x_axis || '';
+  // Normalize y_axis to an array — the AI can send a string or an array.
+  let yAxisCols = dataMapping.y_axis;
+  if (typeof yAxisCols === 'string') yAxisCols = yAxisCols ? [yAxisCols] : [];
+  if (!Array.isArray(yAxisCols)) yAxisCols = [];
+  const seriesCol = dataMapping.series || '';
+  const columnAliases = dataMapping.column_aliases || {};
+  const slidingWindow = dataMapping.sliding_window || null;
+  const isStreaming = !!slidingWindow && slidingWindow.duration > 0;
+  const parserConfig = dataMapping.parser || null;
+  const isTSStoreStreaming = queryType === 'tsstore' && (queryRaw === 'subscribe' || queryRaw === 'stream');
+  const transforms = {
+    filters: dataMapping.filters || [],
+    aggregation: dataMapping.aggregation || null,
+    sortBy: dataMapping.sort_by || '',
+    sortOrder: dataMapping.sort_order || 'desc',
+    limit: dataMapping.limit || 0,
+    xAxisFormat: dataMapping.x_axis_format || 'chart',
+    xAxisLabel: dataMapping.x_axis_label || '',
+    yAxisLabel: dataMapping.y_axis_label || '',
+    yAxisLabels: dataMapping.y_axis_labels || [],
+    visibleColumns: dataMapping.visible_columns || null,
+    chartName: component.title || component.name || '',
+  };
+  // No connection set yet → use the static placeholder template so
+  // there's still something visible while the user is mid-configuration.
+  if (!connectionId || !queryRaw) {
+    return getStaticChartCode(chartType);
+  }
+  return getDataDrivenChartCode(
+    chartType,
+    connectionId,
+    queryRaw,
+    queryType,
+    xAxis,
+    yAxisCols,
+    transforms,
+    options,
+    queryParams,
+    seriesCol,
+    columnAliases,
+    isStreaming,
+    slidingWindow,
+    parserConfig,
+    component.id || '',
+    isTSStoreStreaming,
+  );
+}
 
 // Filter operator labels for display
 const FILTER_OP_LABELS = {
@@ -457,51 +526,66 @@ function AIComponentPreview({ component, onNameChange }) {
           </div>
         )}
 
-        {/* Preview Tab */}
-        {activeTab === 1 && (
-          <div className="tab-content preview-tab">
-            {previewLoading ? (
-              <div className="loading-container">
-                <Loading description="Loading preview..." withOverlay={false} />
-              </div>
-            ) : previewError ? (
-              <div className="error-container">
-                <p className="error-text">{previewError}</p>
-                <Button kind="tertiary" size="sm" onClick={runQuery}>
-                  Retry
-                </Button>
-              </div>
-            ) : component.component_code ? (
-              <div className="chart-preview-container">
-                <DynamicComponentLoader
-                  code={component.component_code}
-                  componentMeta={component}
-                  props={componentFetchesOwnData ? {} : { data: transformedData }}
-                />
-              </div>
-            ) : (
-              <div className="no-preview">
-                <p>No component preview available</p>
-                <p className="hint">Run query in Connection tab to see preview</p>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Preview Tab. effectiveCode = use_custom_code path uses the
+            user-supplied code as-is; the generated path falls back to
+            running the same code-generator the manual editor uses, so
+            an AI session that finished by calling update_data_mapping /
+            update_chart_options (configure-first policy) still shows a
+            live preview without needing to call set_custom_code. */}
+        {(() => {
+          const effectiveCode =
+            component.use_custom_code && component.component_code
+              ? component.component_code
+              : generateComponentCodeFromConfig(component);
 
-        {/* Code Tab */}
-        {activeTab === 2 && (
-          <div className="tab-content code-tab">
-            {component.component_code ? (
-              <div className="code-display">
-                <pre><code>{component.component_code}</code></pre>
-              </div>
-            ) : (
-              <div className="no-code">
-                <p>No component code generated yet</p>
-              </div>
-            )}
-          </div>
-        )}
+          return (
+            <>
+              {activeTab === 1 && (
+                <div className="tab-content preview-tab">
+                  {previewLoading ? (
+                    <div className="loading-container">
+                      <Loading description="Loading preview..." withOverlay={false} />
+                    </div>
+                  ) : previewError ? (
+                    <div className="error-container">
+                      <p className="error-text">{previewError}</p>
+                      <Button kind="tertiary" size="sm" onClick={runQuery}>
+                        Retry
+                      </Button>
+                    </div>
+                  ) : effectiveCode ? (
+                    <div className="chart-preview-container">
+                      <DynamicComponentLoader
+                        code={effectiveCode}
+                        componentMeta={component}
+                        props={componentFetchesOwnData ? {} : { data: transformedData }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="no-preview">
+                      <p>No component preview available</p>
+                      <p className="hint">Run query in Connection tab to see preview</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 2 && (
+                <div className="tab-content code-tab">
+                  {effectiveCode ? (
+                    <div className="code-display">
+                      <pre><code>{effectiveCode}</code></pre>
+                    </div>
+                  ) : (
+                    <div className="no-code">
+                      <p>No component code generated yet</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Metadata Footer */}

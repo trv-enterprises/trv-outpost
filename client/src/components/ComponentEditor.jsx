@@ -1738,12 +1738,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       )}
 
       {/* Chart Configuration - shown when componentType is 'chart'.
-          Custom-code mode hides the Connection tab — the data-mapping form
-          doesn't drive the rendered chart, so showing it would be misleading. */}
+          The Connection tab stays visible in custom-code mode because the
+          connection + query + parser + sliding window all govern what
+          `data` looks like at runtime — those fields aren't in the React
+          code but they shape its input. Inside the tab, the data-mapping
+          and chart-options subsections hide themselves when in custom-
+          code mode (the user controls those things directly in their
+          JSX, so the form values are no longer load-bearing). */}
       {componentType === 'chart' && (() => {
-        const tabs = showCustomCode
-          ? [{ key: 'preview', label: 'Preview' }, { key: 'code', label: 'Code' }]
-          : [{ key: 'datasource', label: 'Connection' }, { key: 'preview', label: 'Preview' }, { key: 'code', label: 'Code' }];
+        const tabs = [
+          { key: 'datasource', label: 'Connection' },
+          { key: 'preview', label: 'Preview' },
+          { key: 'code', label: 'Code' },
+        ];
         const activeKey = tabs[Math.min(activeTab, tabs.length - 1)]?.key || tabs[0].key;
         const isOnTab = (key) => activeKey === key;
         return (
@@ -2265,6 +2272,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   />
                 )}
 
+                {!showCustomCode && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -2590,9 +2598,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     )
                   )}
                 </div>
+                )}
 
                 {/* Chart Options Section - Gauge */}
-                {chartType === 'number' && (
+                {!showCustomCode && chartType === 'number' && (
                   <div className="chart-options-section">
                     <h4>Number Options</h4>
                     <Grid narrow>
@@ -2623,7 +2632,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {chartType === 'gauge' && (
+                {!showCustomCode && chartType === 'gauge' && (
                   <div className="chart-options-section">
                     <h4>Gauge Options</h4>
                     <Grid narrow>
@@ -2703,8 +2712,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {/* Chart Options Section - Pie */}
-                {chartType === 'pie' && (
+                {/* Chart Options Section - Pie. (Outer gate added via the
+                    Number block's `!showCustomCode` doesn't reach here —
+                    each section needs its own.) */}
+                {!showCustomCode && chartType === 'pie' && (
                   <div className="chart-options-section">
                     <h4>Pie Chart Options</h4>
                     <Grid narrow>
@@ -2736,7 +2747,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 )}
 
                 {/* Chart Options Section - Bar/Line/Area */}
-                {['bar', 'line', 'area'].includes(chartType) && (
+                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && (
                   <div className="chart-options-section">
                     <h4>Chart Options</h4>
                     <Grid narrow>
@@ -2777,6 +2788,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 )}
 
                 {/* Filters Section */}
+                {!showCustomCode && (
                 <div className="filters-section">
                   <div className="section-header">
                     <h4>Filters (Client-Side)</h4>
@@ -2870,11 +2882,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </p>
                   )}
                 </div>
+                )}
 
                 {/* Aggregation & Sorting Section — chart-type-gated.
                     Banded-bar (and any future per-row-aggregated type) opts
                     out via hasAggregation:false in CHART_TYPE_CONFIG. */}
-                {chartTypeConfig.hasAggregation !== false && (
+                {!showCustomCode && chartTypeConfig.hasAggregation !== false && (
                 <div className="aggregation-section">
                   <h4>Aggregation & Sorting</h4>
                   {availableColumns.length > 0 ? (
@@ -3123,7 +3136,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 </div>
 
                 {/* Band Columns - banded_bar (Levey-Jennings) only */}
-                {chartType === 'banded_bar' && (
+                {!showCustomCode && chartType === 'banded_bar' && (
                   <div className="reference-levels-section">
                     <div className="section-header">
                       <h4>Band Columns</h4>
@@ -3449,6 +3462,64 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 Available: useState, useEffect, useMemo, useCallback, useRef, useData, transformData, toObjects, getValue, formatTimestamp, formatCellValue, echarts, ReactECharts
               </p>
             </div>
+
+            {/* Runtime-context summary. The connection, query, parser
+                config, and sliding window are NOT inlined into the
+                React code — the runtime resolves them via
+                `query_config` and `data_mapping.{parser, sliding_window}`
+                before invoking the component with `data`. So in
+                custom-code mode the user can't see those settings by
+                reading the code; this strip surfaces them and links
+                back to the Connection tab where they're edited. */}
+            {showCustomCode && (selectedDatasource || queryRaw || parserDataPath || slidingWindowEnabled) && (
+              <div className="custom-code-runtime-summary">
+                <div className="summary-row">
+                  <span className="summary-label">Connection</span>
+                  <span className="summary-value">
+                    {selectedDatasource
+                      ? `${selectedDatasource.name} (${selectedDatasource.type})`
+                      : <em className="summary-empty">Not set</em>}
+                  </span>
+                </div>
+                {queryRaw && (
+                  <div className="summary-row">
+                    <span className="summary-label">Query</span>
+                    <code className="summary-value summary-value--code">
+                      {queryRaw.length > 120 ? `${queryRaw.slice(0, 120)}…` : queryRaw}
+                    </code>
+                  </div>
+                )}
+                {(parserDataPath || parserTimestampField) && (
+                  <div className="summary-row">
+                    <span className="summary-label">Parser</span>
+                    <span className="summary-value">
+                      {parserDataPath ? `data_path: ${parserDataPath}` : ''}
+                      {parserDataPath && parserTimestampField ? ' · ' : ''}
+                      {parserTimestampField ? `timestamp: ${parserTimestampField}` : ''}
+                      {parserTimestampScale ? ` (${parserTimestampScale})` : ''}
+                    </span>
+                  </div>
+                )}
+                {slidingWindowEnabled && slidingWindowDuration && (
+                  <div className="summary-row">
+                    <span className="summary-label">Sliding window</span>
+                    <span className="summary-value">
+                      {slidingWindowDuration}{slidingWindowTimestampCol ? ` on ${slidingWindowTimestampCol}` : ''}
+                    </span>
+                  </div>
+                )}
+                <div className="summary-actions">
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    onClick={() => setActiveTab(0)}
+                  >
+                    Edit in Connection tab
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <TextArea
               id="component-code"
               labelText=""
@@ -3492,8 +3563,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   );
 });
 
-// Helper functions to generate chart code
-function getStaticChartCode(chartType) {
+// Helper functions to generate chart code.
+// Exported so AIComponentPreview (and any future render path that
+// needs to materialize a component from its structured config) can
+// reuse the exact same generator the manual editor runs at save time,
+// keeping the rendered output consistent across surfaces.
+export function getStaticChartCode(chartType) {
   const templates = {
     bar: `const Component = () => {
   const [data] = useState([
@@ -3655,7 +3730,7 @@ function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '', isTSStoreStreaming = false) {
+export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '', isTSStoreStreaming = false) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 

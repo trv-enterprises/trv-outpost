@@ -26,7 +26,57 @@ import AiIcon from '../components/icons/AiIcon';
 import AIComponentPreview from '../components/AIComponentPreview';
 import { useAISession } from '../hooks/useAISession';
 import apiClient from '../api/client';
+import { getDataDrivenChartCode, getStaticChartCode } from '../components/ComponentEditor';
 import './AIBuilderPage.scss';
+
+// Mirror of the materializer in AIComponentPreview — kept inline here
+// so the save flow doesn't have to import a component just to reach
+// its helper. Builds React component_code from the structured config
+// fields the AI agent populated via update_data_mapping /
+// update_chart_options / etc. Persisted on the component record so
+// dashboards render the chart the same way the AI preview did.
+function generateComponentCodeFromConfig(component) {
+  if (!component) return '';
+  const chartType = component.chart_type || 'bar';
+  const connectionId = component.connection_id || '';
+  const queryConfig = component.query_config || {};
+  const queryRaw = queryConfig.raw || '';
+  const queryType = queryConfig.type || 'sql';
+  const queryParams = queryConfig.params || {};
+  const dataMapping = component.data_mapping || {};
+  const options = component.options || {};
+  const xAxis = dataMapping.x_axis || '';
+  let yAxisCols = dataMapping.y_axis;
+  if (typeof yAxisCols === 'string') yAxisCols = yAxisCols ? [yAxisCols] : [];
+  if (!Array.isArray(yAxisCols)) yAxisCols = [];
+  const seriesCol = dataMapping.series || '';
+  const columnAliases = dataMapping.column_aliases || {};
+  const slidingWindow = dataMapping.sliding_window || null;
+  const isStreaming = !!slidingWindow && slidingWindow.duration > 0;
+  const parserConfig = dataMapping.parser || null;
+  const isTSStoreStreaming = queryType === 'tsstore' && (queryRaw === 'subscribe' || queryRaw === 'stream');
+  const transforms = {
+    filters: dataMapping.filters || [],
+    aggregation: dataMapping.aggregation || null,
+    sortBy: dataMapping.sort_by || '',
+    sortOrder: dataMapping.sort_order || 'desc',
+    limit: dataMapping.limit || 0,
+    xAxisFormat: dataMapping.x_axis_format || 'chart',
+    xAxisLabel: dataMapping.x_axis_label || '',
+    yAxisLabel: dataMapping.y_axis_label || '',
+    yAxisLabels: dataMapping.y_axis_labels || [],
+    visibleColumns: dataMapping.visible_columns || null,
+    chartName: component.title || component.name || '',
+  };
+  if (!connectionId || !queryRaw) {
+    return getStaticChartCode(chartType);
+  }
+  return getDataDrivenChartCode(
+    chartType, connectionId, queryRaw, queryType, xAxis, yAxisCols,
+    transforms, options, queryParams, seriesCol, columnAliases,
+    isStreaming, slidingWindow, parserConfig, component.id || '', isTSStoreStreaming,
+  );
+}
 
 /**
  * AIBuilderPage Component
@@ -175,6 +225,30 @@ function AIBuilderPage() {
 
     setSaving(true);
     try {
+      // If the AI followed the configure-first policy, component_code
+      // is empty on the draft — the agent set up data_mapping / query_config
+      // / options / chart_type but never called set_custom_code. Generate
+      // the React source from those structured fields now so the saved
+      // component carries the same renderable code a human-built component
+      // would. Skip when the user supplied custom code explicitly
+      // (use_custom_code=true) or when codegen has nothing to work with.
+      if (component?.id && !component.use_custom_code) {
+        const generated = generateComponentCodeFromConfig(component);
+        if (generated && generated !== (component.component_code || '')) {
+          try {
+            await apiClient.updateComponent(component.id, {
+              component_code: generated,
+              use_custom_code: false,
+            });
+          } catch (err) {
+            // Non-fatal: the session save below still writes the
+            // structured fields, and the preview-render fallback in
+            // AIComponentPreview generates on the fly. Worst case the
+            // dashboard panel falls back to the same fallback path.
+            console.warn('Pre-save component_code persist failed:', err);
+          }
+        }
+      }
       const savedComponent = await saveSession(componentName.trim());
       // If launched from a dashboard panel, pass back the component ID so
       // the dashboard page can attach it to the panel in its unsaved state

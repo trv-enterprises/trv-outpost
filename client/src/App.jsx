@@ -359,9 +359,14 @@ function AppContent({ onDisconnect }) {
     if (path.startsWith('/design/')) routeMode = MODES.DESIGN;
     else if (path.startsWith('/view/')) routeMode = isEditingDashboard ? MODES.DESIGN : MODES.VIEW;
     else if (path.startsWith('/manage')) routeMode = MODES.MANAGE;
-    if (routeMode && routeMode !== currentMode) {
+    // /account/* and any other off-mode route resolves to null so the
+    // header pill is unlit. Otherwise the user gets stranded on a page
+    // that highlights a mode whose nav doesn't match what they're
+    // looking at, and clicking the lit pill does nothing because
+    // handleModeChange short-circuits when newMode === currentMode.
+    if (routeMode !== currentMode) {
       setCurrentMode(routeMode);
-      localStorage.setItem('dashboardMode', routeMode);
+      if (routeMode) localStorage.setItem('dashboardMode', routeMode);
     }
   }, [location.pathname, isEditingDashboard, currentMode]);
 
@@ -544,8 +549,10 @@ function AppContent({ onDisconnect }) {
       />
       <ToastStack />
 
-      {/* Hide sidebar in View mode - uses tile view instead */}
-      {currentMode !== MODES.VIEW && (
+      {/* Hide sidebar in View mode (uses tile view instead) and on
+          off-mode routes like /account/* where currentMode is null —
+          showing a Design/Manage sidenav there would be misleading. */}
+      {currentMode && currentMode !== MODES.VIEW && (
         <SideNav
           aria-label="Side navigation"
           expanded={isSideNavExpanded}
@@ -556,7 +563,7 @@ function AppContent({ onDisconnect }) {
         </SideNav>
       )}
 
-      <Content className={`app-content ${currentMode === MODES.VIEW ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}>
+      <Content className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}>
         <Routes>
           {/* Default route redirects to View mode - first dashboard or fallback */}
           <Route path="/" element={
