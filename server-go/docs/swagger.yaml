@@ -6009,4 +6009,29 @@ paths:
       summary: Update a user
       tags:
       - Users
+  /users/by-guid/{guid}:
+    get:
+      description: Returns a user by their GUID (auth header value)
+      parameters:
+      - description: User GUID
+        in: path
+        name: guid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get user by GUID
+      tags:
+      - Users
 swagger: "2.0"

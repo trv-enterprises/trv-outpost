@@ -179,6 +179,19 @@ func toInt(v interface{}) int {
 	}
 }
 
+// publicSystemConfigKeys lists every key from the system app_config
+// document that is safe to return on the unauthenticated
+// /api/config/system endpoint. The SPA bootstrap calls this before
+// sign-in (for Clerk-publishable-key discovery), so the response must
+// never include anything that would harm a deployment if read by an
+// anonymous caller. Keep this allowlist tight — anything not listed
+// is dropped silently. To expose a new public key, add it here AND
+// confirm the value can't carry a secret (no tokens, passwords,
+// URLs-with-creds, internal hostnames, etc.).
+var publicSystemConfigKeys = map[string]struct{}{
+	models.ConfigKeyCurrentDimension: {},
+}
+
 // GetSystemConfig retrieves system configuration with layout dimensions
 func (s *ConfigService) GetSystemConfig(ctx context.Context) (*models.SystemConfigResponse, error) {
 	appConfig, err := s.repo.GetSystemConfig(ctx)
@@ -196,8 +209,21 @@ func (s *ConfigService) GetSystemConfig(ctx context.Context) (*models.SystemConf
 		appConfig.Settings[models.ConfigKeyCurrentDimension] = defaultDimension
 	}
 
+	// Filter Settings down to the public allowlist. The on-disk
+	// app_config.settings map is a free-form key/value store that
+	// admins (or future code paths) can write any key into via PUT
+	// /api/config/system. Returning the whole map on the open GET
+	// endpoint would silently leak whatever future commits decide
+	// to stash there. Drop everything not in the allowlist.
+	publicSettings := make(map[string]interface{}, len(publicSystemConfigKeys))
+	for k := range publicSystemConfigKeys {
+		if v, ok := appConfig.Settings[k]; ok {
+			publicSettings[k] = v
+		}
+	}
+
 	return &models.SystemConfigResponse{
-		Settings:            appConfig.Settings,
+		Settings:            publicSettings,
 		LayoutDimensions:    dimensions,
 		DefaultDimension:    defaultDimension,
 		ClerkPublishableKey: s.clerkPublishableKey,

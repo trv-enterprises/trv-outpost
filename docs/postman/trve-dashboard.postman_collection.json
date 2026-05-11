@@ -4225,7 +4225,7 @@
     },
     {
       "name": "Users",
-      "description": "users endpoints (5).",
+      "description": "users endpoints (6).",
       "item": [
         {
           "name": "Create a new user",
@@ -4297,6 +4297,41 @@
               ]
             },
             "description": "Delete a user\n\nDeletes a user account\n\n\nResponses: 204, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get user by GUID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/by-guid/{guid}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "by-guid",
+                ":guid"
+              ],
+              "variable": [
+                {
+                  "key": "guid",
+                  "value": "",
+                  "description": "User GUID"
+                }
+              ]
+            },
+            "description": "Get user by GUID\n\nReturns a user by their GUID (auth header value)\n\n\nResponses: 200, 404"
           },
           "response": []
         },

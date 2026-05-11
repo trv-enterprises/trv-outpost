@@ -367,10 +367,16 @@ func main() {
 			auth.GET("/me", authHandler.GetMe)
 		}
 
-		// User management routes (admin only - enforced by middleware)
+		// User management routes. Writes (POST/PUT/DELETE) and the
+		// full-directory GET require Manage. The single-record GETs
+		// (`/:id` and `/by-guid/:guid`) stay open to any authenticated
+		// caller so the SPA bootstrap can resolve a GUID claim into a
+		// User record for the in-app header; both return a redacted
+		// view for non-Manage callers (see auth_handler.go::redactUser).
 		users := api.Group("/users")
 		{
 			users.GET("", authHandler.ListUsers)
+			users.GET("/by-guid/:guid", authHandler.GetUserByGUID) // before /:id so the router doesn't shadow it
 			users.GET("/:id", authHandler.GetUser)
 			users.POST("", authHandler.CreateUser)
 			users.PUT("/:id", authHandler.UpdateUser)

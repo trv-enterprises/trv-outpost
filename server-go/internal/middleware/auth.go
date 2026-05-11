@@ -31,6 +31,7 @@ type RouteCapability struct {
 	Method     string             // HTTP method (empty = all methods)
 	Required   models.Capability  // Required capability
 	WriteOnly  bool               // If true, only applies to write operations (POST, PUT, DELETE)
+	Exact      bool               // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
 }
 
 // AuthMiddleware provides authentication and authorization
@@ -107,6 +108,20 @@ func buildRouteRules() []RouteCapability {
 		// /api/api-keys/all view is admin-only, gated by a more specific
 		// rule that wins because it appears first in the slice.
 		{PathPrefix: "/api/api-keys/all", Method: "GET", Required: models.CapabilityManage},
+
+		// Users — listing the full directory is a Manage capability.
+		// Single-user GET (`/api/users/:id`) stays open so the SPA
+		// bootstrap can resolve a GUID claim into a user record;
+		// `auth_handler.go::GetUser` redacts the response for non-Manage
+		// callers so the open endpoint isn't an enumeration leak.
+		{PathPrefix: "/api/users", Method: "GET", Required: models.CapabilityManage, Exact: true},
+
+		// Settings — listing every user-configurable setting is admin-
+		// only. Per-key reads (`/api/settings/:key`) stay open because
+		// View/Design code legitimately reads individual runtime values
+		// (tile_font_size, default_dashboard_fit_mode, enabled_types,
+		// etc.) on every page load.
+		{PathPrefix: "/api/settings", Method: "GET", Required: models.CapabilityManage, Exact: true},
 	}
 }
 
@@ -364,7 +379,17 @@ func (m *AuthMiddleware) getRequiredCapability(path, method string) models.Capab
 	}
 
 	for _, rule := range m.rules {
-		if strings.HasPrefix(path, rule.PathPrefix) {
+		var matches bool
+		if rule.Exact {
+			// Exact-match rules gate the collection root (e.g.
+			// GET /api/users) without affecting nested paths
+			// (GET /api/users/:id). Trailing slash is tolerated so
+			// /api/users/ behaves the same as /api/users.
+			matches = path == rule.PathPrefix || path == rule.PathPrefix+"/"
+		} else {
+			matches = strings.HasPrefix(path, rule.PathPrefix)
+		}
+		if matches {
 			if rule.Method == "" || rule.Method == method {
 				return rule.Required
 			}

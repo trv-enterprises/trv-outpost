@@ -139,6 +139,11 @@ function AppContent({ onDisconnect }) {
           window.history.replaceState(null, '', cleanUrl);
         }
 
+        // Try to load the full user directory. This succeeds for
+        // Manage users (admins) and gives them the in-header user
+        // switcher; it 403s for everyone else, which is fine — the
+        // tier-2/3 GUID resolution below uses the per-GUID endpoint
+        // that stays open to all authenticated callers.
         const response = await apiClient.getUsers().catch(() => ({ users: [] }));
         const list = response?.users || [];
         setUsers(list);
@@ -156,6 +161,20 @@ function AppContent({ onDisconnect }) {
           window.history.replaceState(null, '', cleanUrl);
           apiClient.setCurrentUser(fromUrl);
         }
+
+        // resolveUserByGuid: look up a user by GUID, preferring the
+        // already-loaded list (admin path) and falling back to the
+        // per-GUID endpoint (non-admin path). Returns null on miss.
+        const resolveUserByGuid = async (guid) => {
+          if (!guid) return null;
+          const hit = list.find((u) => u.guid === guid);
+          if (hit) return hit;
+          try {
+            return await apiClient.getUserByGuid(guid);
+          } catch {
+            return null;
+          }
+        };
 
         // If a Tier 0 API key was set above, /api/auth/me identifies
         // the user (the apikey'd request resolves them server-side).
@@ -186,7 +205,7 @@ function AppContent({ onDisconnect }) {
         // Tier 2: whatever is now in localStorage (just-set above
         // OR persisted from a prior session).
         let guid = apiClient.getCurrentUserGuid();
-        let user = guid ? list.find((u) => u.guid === guid) : null;
+        let user = await resolveUserByGuid(guid);
 
         // Tier 3: admin-configured default. Only consulted when no
         // identity has been established yet for this browser.
@@ -195,7 +214,7 @@ function AppContent({ onDisconnect }) {
             const adminDefault = await apiClient.getSetting('default_browser_user_guid');
             const def = (adminDefault?.value || '').toString().trim();
             if (def) {
-              user = list.find((u) => u.guid === def) || null;
+              user = await resolveUserByGuid(def);
               if (user) {
                 apiClient.setCurrentUser(user.guid);
               }
@@ -210,7 +229,8 @@ function AppContent({ onDisconnect }) {
         // this is intentionally skipped — a fresh visitor with no
         // URL param, no localStorage, and no admin default sees the
         // sign-in stub instead of being silently logged in as
-        // someone.
+        // someone. Also skipped when `list` is empty — non-admin
+        // bootstraps don't have a directory to pick from.
         if (!user && import.meta.env.DEV && list.length > 0) {
           user = list[0];
           apiClient.setCurrentUser(user.guid);
