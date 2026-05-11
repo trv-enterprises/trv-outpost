@@ -360,6 +360,14 @@ type APIConfig struct {
 	RetryCount      int                `json:"retry_count,omitempty" bson:"retry_count,omitempty"`
 	RetryDelay      int                `json:"retry_delay,omitempty" bson:"retry_delay,omitempty"`      // milliseconds
 	ResponseConfig  *APIResponseConfig `json:"response_config,omitempty" bson:"response_config,omitempty"` // Response parsing config
+	// InsecureSkipVerify disables TLS certificate verification for
+	// this connection. The adapter only honors this when the server
+	// deployment also has `api.allow_insecure_tls: true` — both gates
+	// must agree before verification is actually skipped. Intended
+	// for development / homelab sources with self-signed certs
+	// (Proxmox UI, internal management appliances). Never set on a
+	// public-internet endpoint; MITM goes undetected when on.
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
 }
 
 // APIResponseConfig specifies how to parse API responses

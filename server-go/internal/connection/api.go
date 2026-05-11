@@ -6,16 +6,74 @@ package connection
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
+
+// allowInsecureTLS is the deployment-wide gate that decides whether
+// per-connection InsecureSkipVerify flags are honored. Stored as an
+// int32 (0 = false, 1 = true) for lock-free reads via atomic.LoadInt32.
+// Defaults to 0 (deny) and is set once at server startup via
+// SetAllowInsecureTLS from cmd/server/main.go after config load.
+var allowInsecureTLS int32
+
+// SetAllowInsecureTLS is the server-level kill switch for per-connection
+// TLS verification bypass. Called once at server boot from
+// cmd/server/main.go with `cfg.API.AllowInsecureTLS`. When false (the
+// default), every REST API adapter performs full TLS verification
+// regardless of what's persisted on individual connection records.
+func SetAllowInsecureTLS(allow bool) {
+	if allow {
+		atomic.StoreInt32(&allowInsecureTLS, 1)
+		log.Printf("api adapter: insecure TLS skip is ENABLED at the server level — per-connection insecure_skip_verify flags will be honored")
+	} else {
+		atomic.StoreInt32(&allowInsecureTLS, 0)
+	}
+}
+
+// effectiveInsecureSkipVerify returns true iff both gates are open:
+// the deployment opted in via api.allow_insecure_tls AND this specific
+// connection opted in via api.insecure_skip_verify. Either gate
+// closed → full TLS verification (the safe default).
+func effectiveInsecureSkipVerify(connWantsSkip bool) bool {
+	return connWantsSkip && atomic.LoadInt32(&allowInsecureTLS) == 1
+}
+
+// IsInsecureTLSAllowed exposes the server-level kill-switch state to
+// callers outside this package (e.g. the connection-test service)
+// that want to log a parity warning when a per-conn flag is set but
+// the deployment has not allowed it.
+func IsInsecureTLSAllowed() bool {
+	return atomic.LoadInt32(&allowInsecureTLS) == 1
+}
+
+// BuildAPIHTTPClient constructs the http.Client used by both the
+// registry-path adapter and the legacy APIDataSource. Centralizing
+// the construction keeps the two callers from drifting on TLS
+// posture or timeout handling.
+func BuildAPIHTTPClient(timeoutSec int, connWantsSkip bool) *http.Client {
+	timeout := 30 * time.Second
+	if timeoutSec > 0 {
+		timeout = time.Duration(timeoutSec) * time.Second
+	}
+	client := &http.Client{Timeout: timeout}
+	if effectiveInsecureSkipVerify(connWantsSkip) {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // gated by server-wide allow + per-connection flag
+		}
+	}
+	return client
+}
 
 func init() {
 	// Register REST API adapter
@@ -44,6 +102,7 @@ func apiConfigSchema() []registry.ConfigField {
 		{Name: "retry_count", Type: "int", Required: false, Default: 3, Description: "Retry count"},
 		{Name: "retry_delay", Type: "int", Required: false, Default: 1000, Description: "Retry delay (ms)"},
 		{Name: "data_path", Type: "string", Required: false, Description: "JSON path to data array"},
+		{Name: "insecure_skip_verify", Type: "bool", Required: false, Default: false, Description: "Skip TLS certificate verification for HTTPS endpoints (self-signed certs). Server must also have api.allow_insecure_tls enabled."},
 	}
 }
 
@@ -113,15 +172,21 @@ func newAPIAdapterFromConfig(config map[string]interface{}) (*APIAdapter, error)
 	if dataPath, ok := config["data_path"].(string); ok {
 		apiConfig.ResponseConfig = &models.APIResponseConfig{DataPath: dataPath}
 	}
+	if skip, ok := config["insecure_skip_verify"].(bool); ok {
+		apiConfig.InsecureSkipVerify = skip
+	}
 
-	timeout := 30 * time.Second
-	if apiConfig.Timeout > 0 {
-		timeout = time.Duration(apiConfig.Timeout) * time.Second
+	// Warn — but don't fail — when the connection asks for skip-verify
+	// but the server hasn't allowed it. The connection still works
+	// (with full verification); the user just sees a hint in the log
+	// that their per-connection flag is being ignored.
+	if apiConfig.InsecureSkipVerify && atomic.LoadInt32(&allowInsecureTLS) != 1 {
+		log.Printf("api adapter %s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", apiConfig.URL)
 	}
 
 	return &APIAdapter{
 		config: apiConfig,
-		client: &http.Client{Timeout: timeout},
+		client: BuildAPIHTTPClient(apiConfig.Timeout, apiConfig.InsecureSkipVerify),
 	}, nil
 }
 
@@ -451,18 +516,12 @@ type APIDataSource struct {
 
 // NewAPIDataSource creates a new API datasource
 func NewAPIDataSource(config *models.APIConfig) (*APIDataSource, error) {
-	timeout := 30 * time.Second
-	if config.Timeout > 0 {
-		timeout = time.Duration(config.Timeout) * time.Second
+	if config.InsecureSkipVerify && atomic.LoadInt32(&allowInsecureTLS) != 1 {
+		log.Printf("api datasource %s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", config.URL)
 	}
-
-	client := &http.Client{
-		Timeout: timeout,
-	}
-
 	return &APIDataSource{
 		config: config,
-		client: client,
+		client: BuildAPIHTTPClient(config.Timeout, config.InsecureSkipVerify),
 	}, nil
 }
 

@@ -5120,6 +5120,10 @@
                         "type": "string"
                     }
                 },
+                "insecure_skip_verify": {
+                    "description": "InsecureSkipVerify disables TLS certificate verification for\nthis connection. The adapter only honors this when the server\ndeployment also has `api.allow_insecure_tls: true` — both gates\nmust agree before verification is actually skipped. Intended\nfor development / homelab sources with self-signed certs\n(Proxmox UI, internal management appliances). Never set on a\npublic-internet endpoint; MITM goes undetected when on.",
+                    "type": "boolean"
+                },
                 "method": {
                     "description": "HTTP method (GET, POST, etc.)",
                     "type": "string"

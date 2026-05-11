@@ -1028,6 +1028,32 @@ function ConnectionDetailPage() {
           placeholder="data"
           helperText="For wrapped JSON responses, the key containing the data array (e.g., 'data' for {data: [...], total, limit}). Leave blank if the response is already a bare array."
         />
+
+        {/* TLS advanced: only meaningful for HTTPS endpoints. The
+            toggle is hidden for plain HTTP because it has no effect
+            there, and showing it would just be noise. Whether the
+            server actually honors the per-connection flag depends
+            on `api.allow_insecure_tls` in the server config — that
+            second gate is intentional, so a user can't bypass TLS
+            verification without an admin having opted in
+            deployment-wide. */}
+        {(apiConfig.url || '').toLowerCase().startsWith('https://') && (
+          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--cds-border-subtle-01)' }}>
+            <Toggle
+              id="api-insecure-skip-verify"
+              labelText="Skip TLS certificate verification"
+              labelA="Off"
+              labelB="On"
+              toggled={!!apiConfig.insecure_skip_verify}
+              onToggle={(checked) => updateConfig('api.insecure_skip_verify', checked)}
+            />
+            <div style={{ marginTop: '0.5rem', color: 'var(--cds-text-helper)', fontSize: '0.75rem' }}>
+              {apiConfig.insecure_skip_verify
+                ? 'Verification disabled — MITM attacks against this endpoint will go undetected. Only use for self-signed certs on trusted local networks (e.g. a homelab Proxmox UI). The server must also have api.allow_insecure_tls enabled for this to take effect.'
+                : 'For self-signed certs on trusted local networks only. Enable api.allow_insecure_tls in the server config first; otherwise this toggle has no effect.'}
+            </div>
+          </div>
+        )}
       </div>
     );
   };

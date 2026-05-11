@@ -26,6 +26,18 @@ type Config struct {
 	Swagger          SwaggerConfig               `mapstructure:"swagger"`
 	StaticFiles      StaticFilesConfig           `mapstructure:"static_files"`
 	Settings         []SettingDefinition         `mapstructure:"settings"`
+	API              APIConnectionConfig         `mapstructure:"api"`
+}
+
+// APIConnectionConfig holds deployment-wide policy for REST API
+// connection adapters. AllowInsecureTLS is the kill switch for
+// per-connection InsecureSkipVerify flags: even if a connection has
+// `insecure_skip_verify: true`, the adapter only honors it when this
+// server-level allow is also true. Both must be set, intentionally,
+// before TLS verification is skipped. Defaults to false in every
+// environment that doesn't explicitly opt in.
+type APIConnectionConfig struct {
+	AllowInsecureTLS bool `mapstructure:"allow_insecure_tls"`
 }
 
 // SettingDefinition represents a configuration setting definition in the YAML file

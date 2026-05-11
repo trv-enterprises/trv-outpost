@@ -212,6 +212,16 @@ definitions:
           type: string
         description: Request headers
         type: object
+      insecure_skip_verify:
+        description: |-
+          InsecureSkipVerify disables TLS certificate verification for
+          this connection. The adapter only honors this when the server
+          deployment also has `api.allow_insecure_tls: true` — both gates
+          must agree before verification is actually skipped. Intended
+          for development / homelab sources with self-signed certs
+          (Proxmox UI, internal management appliances). Never set on a
+          public-internet endpoint; MITM goes undetected when on.
+        type: boolean
       method:
         description: HTTP method (GET, POST, etc.)
         type: string

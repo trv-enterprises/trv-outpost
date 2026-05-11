@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -689,14 +690,13 @@ func (s *ConnectionService) validateEdgeLakeConfig(config *models.EdgeLakeConfig
 
 // testAPIConnection tests an API connection
 func (s *ConnectionService) testAPIConnection(ctx context.Context, config *models.APIConfig) *models.TestConnectionResponse {
-	timeout := 30 * time.Second
-	if config.Timeout > 0 {
-		timeout = time.Duration(config.Timeout) * time.Second
+	// Use the shared builder so the test-connection path honors the
+	// same TLS posture as the runtime adapter (both gates: per-conn
+	// insecure_skip_verify AND deployment-wide api.allow_insecure_tls).
+	if config.InsecureSkipVerify && !connection.IsInsecureTLSAllowed() {
+		log.Printf("test api connection %s: insecure_skip_verify is set but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", config.URL)
 	}
-
-	client := &http.Client{
-		Timeout: timeout,
-	}
+	client := connection.BuildAPIHTTPClient(config.Timeout, config.InsecureSkipVerify)
 
 	method := "GET"
 	if config.Method != "" {

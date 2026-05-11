@@ -30,6 +30,17 @@ llm:
   timeout: 120s
   base_url: https://api.anthropic.com/v1
 
+# api: deployment-wide policy for REST API connection adapters.
+# allow_insecure_tls is the kill switch for per-connection
+# insecure_skip_verify flags. Both must be true (this AND the
+# per-connection flag) before TLS verification is actually skipped.
+# Keep this false in production; override via
+# DASHBOARD_API_ALLOW_INSECURE_TLS=true only when you have
+# self-signed-cert sources (e.g. a homelab Proxmox UI) that you have
+# consciously decided to trust.
+api:
+  allow_insecure_tls: false
+
 validation:
   max_code_size: 100000  # bytes
   dangerous_patterns:

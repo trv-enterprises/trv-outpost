@@ -36,7 +36,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "github.com/trv-enterprises/trve-dashboard/docs"       // Swagger docs
-	_ "github.com/trv-enterprises/trve-dashboard/internal/connection" // Register adapters via init()
+	"github.com/trv-enterprises/trve-dashboard/internal/connection" // Registers adapters via init() and exposes SetAllowInsecureTLS for deployment policy
 )
 
 // @title TRVE Dashboards API
@@ -59,6 +59,11 @@ func main() {
 	} else {
 		gin.SetMode(gin.DebugMode)
 	}
+
+	// Wire deployment-wide API adapter policy. Per-connection
+	// insecure_skip_verify flags are only honored when this is true;
+	// default is false (full TLS verification everywhere).
+	connection.SetAllowInsecureTLS(cfg.API.AllowInsecureTLS)
 
 	// Initialize MongoDB
 	mongodb, err := database.NewMongoDB(cfg.MongoDB)
