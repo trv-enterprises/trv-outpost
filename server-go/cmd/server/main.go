@@ -319,6 +319,9 @@ func main() {
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService)
 	systemUserHandler := handlers.NewSystemUserHandler(userService, apiKeyService)
+	eventHub := service.NewEventHub()
+	eventsHandler := handlers.NewEventsHandler(eventHub)
+	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
@@ -402,6 +405,26 @@ func main() {
 			systemUsers.DELETE("/:id", systemUserHandler.DeleteSystemUser)
 			systemUsers.GET("/:id/api-keys", systemUserHandler.ListSystemUserAPIKeys)
 			systemUsers.POST("/:id/api-keys", systemUserHandler.CreateSystemUserAPIKey)
+		}
+
+		// Events — SSE fan-out of in-process events (alerts, etc.)
+		// to logged-in clients. One stream per browser tab; events
+		// are scoped by namespace when authz lands (today: every
+		// authenticated subscriber sees every event).
+		events := api.Group("/events")
+		{
+			events.GET("/stream", eventsHandler.Stream)
+		}
+
+		// Inbound webhooks — external integrations POST alert
+		// payloads here. Auth runs via the standard API-key
+		// middleware (Bearer trve_... on a system-user key). The
+		// handler validates the connection_id in the path against
+		// the payload's store_name so a misconfigured rule can't
+		// surface as a notification against the wrong connection.
+		webhooks := api.Group("/webhooks")
+		{
+			webhooks.POST("/tsstore/:connection_id", webhookHandler.HandleTSStoreAlert)
 		}
 
 		// Connection routes (new terminology - preferred)

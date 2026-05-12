@@ -4429,6 +4429,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/stream": {
+            "get": {
+                "description": "Open a Server-Sent-Events stream of dashboard events (alerts, etc.). One stream per browser tab. EventSource compatible.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Subscribe to dashboard events (SSE)",
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Check if the server and dependencies are healthy",
@@ -5044,6 +5073,68 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/webhooks/tsstore/{connection_id}": {
+            "post": {
+                "description": "Endpoint configured as a webhook URL on a ts-store alert rule. Fans the alert out to logged-in clients via SSE.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Receive a ts-store webhook alert",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard connection ID (type=tsstore) the rule belongs to",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ts-store Alert payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.tsstoreAlertPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -5214,6 +5305,28 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "handlers.tsstoreAlertPayload": {
+            "type": "object",
+            "properties": {
+                "condition": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "rule_name": {
+                    "type": "string"
+                },
+                "store_name": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "nanoseconds since unix epoch",
+                    "type": "integer"
                 }
             }
         },

@@ -3005,6 +3005,39 @@
       ]
     },
     {
+      "name": "Events",
+      "description": "events endpoints (1).",
+      "item": [
+        {
+          "name": "Subscribe to dashboard events (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/events/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "events",
+                "stream"
+              ]
+            },
+            "description": "Subscribe to dashboard events (SSE)\n\nOpen a Server-Sent-Events stream of dashboard events (alerts, etc.). One stream per browser tab. EventSource compatible.\n\n\nResponses: 200, 401"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Frigate (NVR)",
       "description": "frigate endpoints (10).",
       "item": [
@@ -4635,6 +4668,60 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"active\": false,\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"clerk_user_id\": \"\",\n  \"email\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "description": "webhooks endpoints (1).",
+      "item": [
+        {
+          "name": "Receive a ts-store webhook alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/tsstore/{connection_id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "tsstore",
+                ":connection_id"
+              ],
+              "variable": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Dashboard connection ID (type=tsstore) the rule belongs to"
+                }
+              ]
+            },
+            "description": "Receive a ts-store webhook alert\n\nEndpoint configured as a webhook URL on a ts-store alert rule. Fans the alert out to logged-in clients via SSE.\n\n\nResponses: 202, 400, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"condition\": \"\",\n  \"data\": {},\n  \"rule_name\": \"\",\n  \"store_name\": \"\",\n  \"timestamp\": 0\n}",
               "options": {
                 "raw": {
                   "language": "json"

@@ -114,6 +114,21 @@ definitions:
     - timestamp_col
     - value_cols
     type: object
+  handlers.tsstoreAlertPayload:
+    properties:
+      condition:
+        type: string
+      data:
+        additionalProperties: true
+        type: object
+      rule_name:
+        type: string
+      store_name:
+        type: string
+      timestamp:
+        description: nanoseconds since unix epoch
+        type: integer
+    type: object
   mcp.JSONRPCError:
     properties:
       code:
@@ -5833,6 +5848,26 @@ paths:
       summary: Test a datasource connection
       tags:
       - datasources
+  /events/stream:
+    get:
+      description: Open a Server-Sent-Events stream of dashboard events (alerts, etc.).
+        One stream per browser tab. EventSource compatible.
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Subscribe to dashboard events (SSE)
+      tags:
+      - Events
   /health:
     get:
       description: Check if the server and dependencies are healthy
@@ -6242,4 +6277,46 @@ paths:
       summary: Get user by GUID (admin only)
       tags:
       - Users
+  /webhooks/tsstore/{connection_id}:
+    post:
+      consumes:
+      - application/json
+      description: Endpoint configured as a webhook URL on a ts-store alert rule.
+        Fans the alert out to logged-in clients via SSE.
+      parameters:
+      - description: Dashboard connection ID (type=tsstore) the rule belongs to
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: ts-store Alert payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.tsstoreAlertPayload'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Receive a ts-store webhook alert
+      tags:
+      - Webhooks
 swagger: "2.0"
