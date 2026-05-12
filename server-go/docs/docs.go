@@ -5634,12 +5634,14 @@ const docTemplate = `{
             "enum": [
                 "view",
                 "design",
-                "manage"
+                "manage",
+                "webhook"
             ],
             "x-enum-varnames": [
                 "CapabilityView",
                 "CapabilityDesign",
-                "CapabilityManage"
+                "CapabilityManage",
+                "CapabilityWebhook"
             ]
         },
         "models.ChartDataMapping": {

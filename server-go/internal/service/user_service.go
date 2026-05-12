@@ -82,11 +82,17 @@ func (s *UserService) CreateSystemUser(ctx context.Context, name string) (*model
 		return nil, errors.New("user with this name already exists")
 	}
 
+	// System users default to the floor: view (so /auth/me works
+	// and authenticated reads succeed) plus webhook (the one
+	// privilege that distinguishes a system user — the right to
+	// POST to /api/webhooks/*). No design, no manage. An admin who
+	// wants to broaden a system user can edit the record via the
+	// regular Users update path.
 	user := &models.User{
 		ID:           uuid.New().String(),
 		GUID:         uuid.New().String(),
 		Name:         name,
-		Capabilities: []models.Capability{models.CapabilityView},
+		Capabilities: []models.Capability{models.CapabilityView, models.CapabilityWebhook},
 		Active:       true,
 		Kind:         models.UserKindSystem,
 	}

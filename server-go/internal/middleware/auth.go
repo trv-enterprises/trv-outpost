@@ -128,6 +128,16 @@ func buildRouteRules() []RouteCapability {
 		// receiver), so the full surface (list, create, delete, mint
 		// key) is gated end-to-end.
 		{PathPrefix: "/api/system-users", Required: models.CapabilityManage},
+
+		// Inbound webhooks — gated on the dedicated webhook
+		// capability. Making this an explicit rule (rather than
+		// relying on "no rule = any authenticated caller") means the
+		// contract is self-documenting: only principals carrying
+		// `webhook` can POST to /api/webhooks/*. System users get
+		// the capability at creation time; humans don't get it by
+		// default. To revoke an integration without deleting it,
+		// remove `webhook` from the system user's capabilities.
+		{PathPrefix: "/api/webhooks", Required: models.CapabilityWebhook},
 	}
 }
 

@@ -18,6 +18,14 @@ const (
 	CapabilityDesign Capability = "design"
 	// CapabilityManage allows access to Manage mode
 	CapabilityManage Capability = "manage"
+	// CapabilityWebhook allows the caller to POST to /api/webhooks/*
+	// endpoints. Deliberately a narrow, single-purpose privilege
+	// granted by default to system users (and only to system users,
+	// today). Splitting it out from view/design/manage means the
+	// contract for webhook endpoints is self-documenting and a
+	// future operator can revoke an integration's ability to surface
+	// alerts without disturbing anything else.
+	CapabilityWebhook Capability = "webhook"
 )
 
 // UserKind discriminates real humans from non-interactive service

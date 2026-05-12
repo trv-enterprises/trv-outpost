@@ -349,11 +349,13 @@ definitions:
     - view
     - design
     - manage
+    - webhook
     type: string
     x-enum-varnames:
     - CapabilityView
     - CapabilityDesign
     - CapabilityManage
+    - CapabilityWebhook
   models.ChartDataMapping:
     description: Mapping configuration from data columns to chart axes/series
     properties:
