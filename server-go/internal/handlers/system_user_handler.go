@@ -31,18 +31,20 @@ func NewSystemUserHandler(users *service.UserService, apiKeys *service.APIKeySer
 }
 
 // CreateSystemUserRequest is the body of POST /api/system-users.
-// Intentionally minimal: only a display name. Capabilities default
-// to "view" (the floor — enough for inbound webhook receivers); to
-// grant more, an admin can call the regular Users update path with
-// the new ID. Email and ClerkUserID are not accepted on this route
-// because system principals do not sign in interactively.
+// Display name is required; capabilities are optional. When omitted,
+// the service grants the default set (view + webhook) — the canonical
+// set for inbound integrations. To grant a broader set (design,
+// manage), pass an explicit list. Email and ClerkUserID are not
+// accepted on this route because system principals do not sign in
+// interactively.
 type CreateSystemUserRequest struct {
-	Name string `json:"name" binding:"required"`
+	Name         string              `json:"name" binding:"required"`
+	Capabilities []models.Capability `json:"capabilities,omitempty"`
 }
 
 // CreateSystemUser provisions a new system principal.
 // @Summary Create a system user (admin only)
-// @Description Creates a non-interactive service principal. Capabilities default to ["view"]; mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.
+// @Description Creates a non-interactive service principal. Capabilities default to ["view","webhook"] when omitted. Mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.
 // @Tags SystemUsers
 // @Accept json
 // @Produce json
@@ -57,7 +59,7 @@ func (h *SystemUserHandler) CreateSystemUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	user, err := h.users.CreateSystemUser(c.Request.Context(), req.Name)
+	user, err := h.users.CreateSystemUser(c.Request.Context(), req.Name, req.Capabilities)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

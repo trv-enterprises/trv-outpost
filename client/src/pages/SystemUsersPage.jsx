@@ -12,6 +12,8 @@ import {
   Modal,
   Tag,
   Tile,
+  Checkbox,
+  FormGroup,
 } from '@carbon/react';
 import { TrashCan, Add, Password } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -147,6 +149,11 @@ function SystemUsersPage() {
                   <div className="system-user-card__meta">
                     <Tag type="cool-gray" size="sm">system</Tag>
                     {!user.active && <Tag type="red" size="sm">inactive</Tag>}
+                    {(user.capabilities || []).map((cap) => (
+                      <Tag key={cap} type={cap === 'webhook' ? 'blue' : 'gray'} size="sm">
+                        {cap}
+                      </Tag>
+                    ))}
                     <span className="system-user-card__guid">{user.guid}</span>
                   </div>
                 </div>
@@ -243,6 +250,13 @@ function SystemUsersPage() {
 
 function CreateSystemUserModal({ onClose, onCreated }) {
   const [name, setName] = useState('');
+  // Capability state. `view` is locked on — without it the system
+  // user can't even call /auth/me, which makes the account useless;
+  // the server enforces this too via normalizeCapabilities. `webhook`
+  // is the canonical privilege for inbound integrations and defaults
+  // to on. design / manage aren't surfaced here — broaden via the
+  // regular users API if a future integration genuinely needs them.
+  const [webhook, setWebhook] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -255,7 +269,9 @@ function CreateSystemUserModal({ onClose, onCreated }) {
     try {
       setSubmitting(true);
       setErr(null);
-      await apiClient.createSystemUser({ name: trimmed });
+      const capabilities = ['view'];
+      if (webhook) capabilities.push('webhook');
+      await apiClient.createSystemUser({ name: trimmed, capabilities });
       onCreated();
     } catch (e) {
       setErr(e.message);
@@ -276,7 +292,7 @@ function CreateSystemUserModal({ onClose, onCreated }) {
     >
       <p style={{ marginBottom: 'var(--cds-spacing-05)' }}>
         Give the system user a memorable name that describes what integration will own it
-        (e.g. <code>tsstore-webhook-recvr</code>). Capabilities default to <code>view</code>.
+        (e.g. <code>tsstore-webhook-recvr</code>).
       </p>
       <TextInput
         id="system-user-name"
@@ -287,6 +303,29 @@ function CreateSystemUserModal({ onClose, onCreated }) {
         invalid={!!err}
         invalidText={err}
       />
+
+      <FormGroup
+        legendText="Capabilities"
+        style={{ marginTop: 'var(--cds-spacing-05)' }}
+      >
+        <Checkbox
+          id="cap-view"
+          labelText="View (read-only access — required)"
+          checked
+          disabled
+          readOnly
+        />
+        <Checkbox
+          id="cap-webhook"
+          labelText="Webhook (POST to /api/webhooks/*)"
+          checked={webhook}
+          onChange={(_, { checked }) => setWebhook(checked)}
+        />
+        <div style={{ marginTop: 'var(--cds-spacing-03)', color: 'var(--cds-text-helper)', fontSize: '0.75rem' }}>
+          Only the capabilities an integration actually needs — a leaked key
+          can do everything the system user can.
+        </div>
+      </FormGroup>
     </Modal>
   );
 }

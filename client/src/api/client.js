@@ -1018,10 +1018,12 @@ class APIClient {
     return this.request('/api/system-users');
   }
 
-  async createSystemUser({ name } = {}) {
+  async createSystemUser({ name, capabilities } = {}) {
+    const body = { name };
+    if (Array.isArray(capabilities)) body.capabilities = capabilities;
     return this.request('/api/system-users', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(body),
     });
   }
 

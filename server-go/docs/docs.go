@@ -4583,7 +4583,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a non-interactive service principal. Capabilities default to [\"view\"]; mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.",
+                "description": "Creates a non-interactive service principal. Capabilities default to [\"view\",\"webhook\"] when omitted. Mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5158,6 +5158,12 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Capability"
+                    }
+                },
                 "name": {
                     "type": "string"
                 }

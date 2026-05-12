@@ -66,11 +66,23 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 // CreateSystemUser creates a non-interactive service principal. It
 // is a deliberately separate code path from CreateUser so the
 // human-creation API can't be tricked into minting a system
-// principal by stuffing a `kind` field into the request body. System
-// users have capabilities="view" (the floor — enough to call inbound
-// webhook receivers), no email, and a synthesized name that admins
-// label per integration (e.g. "tsstore-webhook-recvr").
-func (s *UserService) CreateSystemUser(ctx context.Context, name string) (*models.User, error) {
+// principal by stuffing a `kind` field into the request body.
+//
+// Capability policy:
+//   - `view` is always granted (the floor — needed for /auth/me and
+//     for any authenticated read the integration might need).
+//   - `webhook` is granted unless the caller explicitly drops it.
+//     This is the canonical privilege for inbound integrations; the
+//     create-modal in the UI defaults it to on.
+//   - `design` and `manage` are accepted if explicitly requested but
+//     are not surfaced in the default UI. They exist so an operator
+//     CAN broaden a system user if a future integration legitimately
+//     needs them (e.g. a script that auto-creates dashboards), not
+//     because they're routine.
+//
+// Pass capabilities=nil to get the default (view + webhook). Pass an
+// explicit slice to override; "view" is always added if missing.
+func (s *UserService) CreateSystemUser(ctx context.Context, name string, capabilities []models.Capability) (*models.User, error) {
 	if name == "" {
 		return nil, errors.New("system user name is required")
 	}
@@ -82,17 +94,22 @@ func (s *UserService) CreateSystemUser(ctx context.Context, name string) (*model
 		return nil, errors.New("user with this name already exists")
 	}
 
-	// System users default to the floor: view (so /auth/me works
-	// and authenticated reads succeed) plus webhook (the one
-	// privilege that distinguishes a system user — the right to
-	// POST to /api/webhooks/*). No design, no manage. An admin who
-	// wants to broaden a system user can edit the record via the
-	// regular Users update path.
+	caps := capabilities
+	if caps == nil {
+		caps = []models.Capability{models.CapabilityView, models.CapabilityWebhook}
+	}
+	// Defense in depth: always include view, even if the caller's
+	// list omitted it. A system user without view can't authenticate
+	// past the route-rule check on /auth/me, which would make the
+	// account useless. Dedupe + validate each entry against the
+	// known capability set.
+	caps = normalizeCapabilities(caps)
+
 	user := &models.User{
 		ID:           uuid.New().String(),
 		GUID:         uuid.New().String(),
 		Name:         name,
-		Capabilities: []models.Capability{models.CapabilityView, models.CapabilityWebhook},
+		Capabilities: caps,
 		Active:       true,
 		Kind:         models.UserKindSystem,
 	}
@@ -100,6 +117,41 @@ func (s *UserService) CreateSystemUser(ctx context.Context, name string) (*model
 		return nil, fmt.Errorf("failed to create system user: %w", err)
 	}
 	return user, nil
+}
+
+// normalizeCapabilities deduplicates the slice, drops unknown values,
+// and guarantees `view` is present. Order is stable for whichever
+// values the caller supplied; `view` (when injected) goes first.
+func normalizeCapabilities(in []models.Capability) []models.Capability {
+	known := map[models.Capability]bool{
+		models.CapabilityView:    true,
+		models.CapabilityDesign:  true,
+		models.CapabilityManage:  true,
+		models.CapabilityWebhook: true,
+	}
+	seen := map[models.Capability]bool{}
+	out := make([]models.Capability, 0, len(in)+1)
+	if !containsCapability(in, models.CapabilityView) {
+		out = append(out, models.CapabilityView)
+		seen[models.CapabilityView] = true
+	}
+	for _, c := range in {
+		if !known[c] || seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+func containsCapability(haystack []models.Capability, needle models.Capability) bool {
+	for _, c := range haystack {
+		if c == needle {
+			return true
+		}
+	}
+	return false
 }
 
 // ListSystemUsers returns every system principal in the deployment.

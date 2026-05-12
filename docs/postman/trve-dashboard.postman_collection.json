@@ -4254,10 +4254,10 @@
                 "system-users"
               ]
             },
-            "description": "Create a system user (admin only)\n\nCreates a non-interactive service principal. Capabilities default to [\"view\"]; mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.\n\n\nResponses: 201, 400, 403",
+            "description": "Create a system user (admin only)\n\nCreates a non-interactive service principal. Capabilities default to [\"view\",\"webhook\"] when omitted. Mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.\n\n\nResponses: 201, 400, 403",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"\"\n}",
+              "raw": "{\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"name\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

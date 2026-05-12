@@ -11,6 +11,10 @@ definitions:
     type: object
   handlers.CreateSystemUserRequest:
     properties:
+      capabilities:
+        items:
+          $ref: '#/definitions/models.Capability'
+        type: array
       name:
         type: string
     required:
@@ -5956,8 +5960,8 @@ paths:
       consumes:
       - application/json
       description: Creates a non-interactive service principal. Capabilities default
-        to ["view"]; mint an API key via /api/system-users/:id/api-keys to authenticate
-        inbound webhooks as this user.
+        to ["view","webhook"] when omitted. Mint an API key via /api/system-users/:id/api-keys
+        to authenticate inbound webhooks as this user.
       parameters:
       - description: System user parameters
         in: body
