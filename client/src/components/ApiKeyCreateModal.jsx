@@ -12,6 +12,7 @@ import {
 } from '@carbon/react';
 import { Copy, CheckmarkFilled } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import { copyTextToClipboard } from '../utils/clipboard';
 import './ApiKeyCreateModal.scss';
 
 /**
@@ -61,11 +62,11 @@ function ApiKeyCreateModal({ onClose, onCreated, createFn, modalHeading }) {
   const handleCopy = async () => {
     if (!createdToken?.token) return;
     try {
-      await navigator.clipboard.writeText(createdToken.token);
+      await copyTextToClipboard(createdToken.token);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      setError('Could not copy to clipboard: ' + err.message);
+      setError('Could not copy to clipboard: ' + (err?.message || 'unknown error'));
     }
   };
 

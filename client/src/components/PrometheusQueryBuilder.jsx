@@ -20,6 +20,7 @@ import {
 } from '@carbon/react';
 import { Add, TrashCan, Play, Copy } from '@carbon/icons-react';
 import api from '../api/client';
+import { copyTextToClipboard } from '../utils/clipboard';
 import './PrometheusQueryBuilder.scss';
 
 /**
@@ -285,9 +286,13 @@ const PrometheusQueryBuilder = ({
     }
   };
 
-  // Copy query to clipboard
+  // Copy query to clipboard. Routes through the shared helper so the
+  // fallback path works on non-secure (plain HTTP) deployments where
+  // navigator.clipboard is undefined.
   const copyQuery = () => {
-    navigator.clipboard.writeText(generatedQuery);
+    copyTextToClipboard(generatedQuery).catch((err) => {
+      console.warn('Copy query failed', err);
+    });
   };
 
   if (loading) {

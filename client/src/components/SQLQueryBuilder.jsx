@@ -18,6 +18,7 @@ import {
 } from '@carbon/react';
 import { Add, TrashCan, Play, Copy } from '@carbon/icons-react';
 import api from '../api/client';
+import { copyTextToClipboard } from '../utils/clipboard';
 import './SQLQueryBuilder.scss';
 
 /**
@@ -241,7 +242,9 @@ const SQLQueryBuilder = ({
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(generatedQuery);
+    copyTextToClipboard(generatedQuery).catch((err) => {
+      console.warn('Copy query failed', err);
+    });
   };
 
   // Get columns for selected table
