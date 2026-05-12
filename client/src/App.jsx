@@ -43,6 +43,7 @@ import ManageModeNav from './components/navigation/ManageModeNav';
 import UsersListPage from './pages/UsersListPage';
 import UserDetailPage from './pages/UserDetailPage';
 import SettingsPage from './pages/SettingsPage';
+import SystemUsersPage from './pages/SystemUsersPage';
 import DevicesPage from './pages/DevicesPage';
 import NamespacesPage from './pages/NamespacesPage';
 import ApiKeysListPage from './pages/ApiKeysListPage';
@@ -55,6 +56,7 @@ import DevUserSwitcher from './components/DevUserSwitcher';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
+import { useEventStream } from './hooks/useEventStream';
 import { MODES } from './config/layoutConfig';
 import buildInfo from '../build.json';
 import './App.scss';
@@ -84,7 +86,7 @@ function AppContent({ onDisconnect }) {
   const [firstDashboardId, setFirstDashboardId] = useState(null);
   const [dashboardsLoaded, setDashboardsLoaded] = useState(false);
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
-  const { notifications } = useNotifications();
+  const { notifications, addNotification } = useNotifications();
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   // Goes true once the bootstrap chain has finished trying (success
@@ -360,6 +362,14 @@ function AppContent({ onDisconnect }) {
   useEffect(() => {
     fetchCapabilities();
   }, [fetchCapabilities]);
+
+  // Server-pushed events (alerts today) land here via SSE. Only
+  // opened once identity is resolved AND we have a user — the
+  // unauthenticated sign-in stub doesn't need a stream.
+  useEventStream({
+    ready: identityResolved && !!currentUser,
+    addNotification,
+  });
 
   // Handle user selection change
   const handleUserChange = (user) => {
@@ -650,6 +660,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/manage" element={<Navigate to="/manage/users" replace />} />
           <Route path="/manage/users" element={<UsersListPage />} />
           <Route path="/manage/users/:id" element={<UserDetailPage />} />
+          <Route path="/manage/system-users" element={<SystemUsersPage />} />
           <Route path="/manage/devices" element={<DevicesPage />} />
           <Route path="/manage/settings" element={<SettingsPage />} />
           <Route path="/manage/namespaces" element={<NamespacesPage />} />

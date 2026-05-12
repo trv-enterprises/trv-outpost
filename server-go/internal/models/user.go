@@ -18,6 +18,27 @@ const (
 	CapabilityDesign Capability = "design"
 	// CapabilityManage allows access to Manage mode
 	CapabilityManage Capability = "manage"
+	// CapabilityWebhook allows the caller to POST to /api/webhooks/*
+	// endpoints. Deliberately a narrow, single-purpose privilege
+	// granted by default to system users (and only to system users,
+	// today). Splitting it out from view/design/manage means the
+	// contract for webhook endpoints is self-documenting and a
+	// future operator can revoke an integration's ability to surface
+	// alerts without disturbing anything else.
+	CapabilityWebhook Capability = "webhook"
+)
+
+// UserKind discriminates real humans from non-interactive service
+// principals (system users). Kind=="system" users cannot sign in via
+// the IdP / Clerk path; they exist only so admins can mint API keys
+// that aren't bound to a real person's account lifecycle. Used today
+// by the ts-store webhook receiver — an admin creates one system user
+// per integration, mints a key, hands it to the external service.
+type UserKind string
+
+const (
+	UserKindHuman  UserKind = "human"
+	UserKindSystem UserKind = "system"
 )
 
 // User represents a user in the system
@@ -29,6 +50,12 @@ type User struct {
 	Email        string       `json:"email,omitempty" bson:"email"`       // Optional email
 	Capabilities []Capability `json:"capabilities" bson:"capabilities"`   // User capabilities
 	Active       bool         `json:"active" bson:"active"`               // Whether user is active
+	// Kind discriminates humans from system principals. Defaults to
+	// "human" on every existing record (the migration sets it when
+	// the field is missing). Anything other than "human" is treated
+	// as a system user — no interactive sign-in path, IdP/Clerk
+	// rejects, exists only for API-key issuance.
+	Kind         UserKind     `json:"kind,omitempty" bson:"kind,omitempty"`
 	// ClerkUserID links this dashboard user to a Clerk identity. Set on
 	// first sign-in via JIT-link from email match, or by an admin from
 	// the Users page. Subsequent sign-ins resolve via this field
@@ -38,6 +65,14 @@ type User struct {
 	ClerkUserID  string       `json:"clerk_user_id,omitempty" bson:"clerk_user_id,omitempty"`
 	Created      time.Time    `json:"created" bson:"created"`
 	Updated      time.Time    `json:"updated" bson:"updated"`
+}
+
+// IsSystem reports whether this user is a non-interactive service
+// principal. Empty Kind is treated as human (back-compat with records
+// that pre-date the field — the migration fixes them up but reads
+// shouldn't depend on the migration having run).
+func (u *User) IsSystem() bool {
+	return u.Kind == UserKindSystem
 }
 
 // HasCapability checks if user has a specific capability

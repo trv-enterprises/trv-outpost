@@ -22,8 +22,17 @@ import './ApiKeyCreateModal.scss';
  * stage two — the server only persists the bcrypt hash and a short
  * plaintext prefix, so once this modal closes the plaintext can't be
  * recovered.
+ *
+ * Props:
+ *   onClose, onCreated — modal lifecycle callbacks (required).
+ *   createFn — async ({ name }) => createAPIKeyResponse. Defaults to
+ *              apiClient.createAPIKey (the caller's own key). Pass
+ *              apiClient.createSystemUserAPIKey.bind(apiClient, id)
+ *              to mint a key for a specific system user; same response
+ *              shape, same one-time-reveal UI.
+ *   modalHeading — override the default "Create API key" label.
  */
-function ApiKeyCreateModal({ onClose, onCreated }) {
+function ApiKeyCreateModal({ onClose, onCreated, createFn, modalHeading }) {
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -39,7 +48,8 @@ function ApiKeyCreateModal({ onClose, onCreated }) {
     try {
       setSubmitting(true);
       setError(null);
-      const resp = await apiClient.createAPIKey({ name: trimmed });
+      const fn = createFn || ((args) => apiClient.createAPIKey(args));
+      const resp = await fn({ name: trimmed });
       setCreatedToken(resp);
     } catch (err) {
       setError(err.message);
@@ -129,7 +139,7 @@ function ApiKeyCreateModal({ onClose, onCreated }) {
   return (
     <Modal
       open
-      modalHeading="Create API key"
+      modalHeading={modalHeading || 'Create API key'}
       primaryButtonText={submitting ? 'Creating…' : 'Create'}
       secondaryButtonText="Cancel"
       onRequestSubmit={handleCreate}

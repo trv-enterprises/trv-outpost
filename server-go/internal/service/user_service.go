@@ -53,6 +53,7 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 		Email:        req.Email,
 		Capabilities: capabilities,
 		Active:       true,
+		Kind:         models.UserKindHuman,
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
@@ -60,6 +61,56 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 	}
 
 	return user, nil
+}
+
+// CreateSystemUser creates a non-interactive service principal. It
+// is a deliberately separate code path from CreateUser so the
+// human-creation API can't be tricked into minting a system
+// principal by stuffing a `kind` field into the request body. System
+// users have capabilities="view" (the floor — enough to call inbound
+// webhook receivers), no email, and a synthesized name that admins
+// label per integration (e.g. "tsstore-webhook-recvr").
+func (s *UserService) CreateSystemUser(ctx context.Context, name string) (*models.User, error) {
+	if name == "" {
+		return nil, errors.New("system user name is required")
+	}
+	existing, err := s.repo.GetByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check name uniqueness: %w", err)
+	}
+	if existing != nil {
+		return nil, errors.New("user with this name already exists")
+	}
+
+	// System users default to the floor: view (so /auth/me works
+	// and authenticated reads succeed) plus webhook (the one
+	// privilege that distinguishes a system user — the right to
+	// POST to /api/webhooks/*). No design, no manage. An admin who
+	// wants to broaden a system user can edit the record via the
+	// regular Users update path.
+	user := &models.User{
+		ID:           uuid.New().String(),
+		GUID:         uuid.New().String(),
+		Name:         name,
+		Capabilities: []models.Capability{models.CapabilityView, models.CapabilityWebhook},
+		Active:       true,
+		Kind:         models.UserKindSystem,
+	}
+	if err := s.repo.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create system user: %w", err)
+	}
+	return user, nil
+}
+
+// ListSystemUsers returns every system principal in the deployment.
+// Returned full record (no redaction) because callers are gated on
+// Manage capability — same posture as ListUsers.
+func (s *UserService) ListSystemUsers(ctx context.Context) ([]models.User, error) {
+	users, err := s.repo.ListByKind(ctx, models.UserKindSystem)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list system users: %w", err)
+	}
+	return users, nil
 }
 
 // GetUser retrieves a user by ID

@@ -122,6 +122,22 @@ func buildRouteRules() []RouteCapability {
 		// (tile_font_size, default_dashboard_fit_mode, enabled_types,
 		// etc.) on every page load.
 		{PathPrefix: "/api/settings", Method: "GET", Required: models.CapabilityManage, Exact: true},
+
+		// System users — every operation is admin-only. These records
+		// drive inbound-integration auth (e.g. ts-store webhook
+		// receiver), so the full surface (list, create, delete, mint
+		// key) is gated end-to-end.
+		{PathPrefix: "/api/system-users", Required: models.CapabilityManage},
+
+		// Inbound webhooks — gated on the dedicated webhook
+		// capability. Making this an explicit rule (rather than
+		// relying on "no rule = any authenticated caller") means the
+		// contract is self-documenting: only principals carrying
+		// `webhook` can POST to /api/webhooks/*. System users get
+		// the capability at creation time; humans don't get it by
+		// default. To revoke an integration without deleting it,
+		// remove `webhook` from the system user's capabilities.
+		{PathPrefix: "/api/webhooks", Required: models.CapabilityWebhook},
 	}
 }
 
@@ -196,6 +212,14 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 
 		if !user.Active {
 			c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
+			c.Abort()
+			return
+		}
+		// System users may only authenticate via API key. Allowing
+		// a bare X-User-ID claim for a system principal would let
+		// any unauthenticated caller impersonate the service.
+		if user.IsSystem() {
+			c.JSON(http.StatusForbidden, gin.H{"error": "System users must authenticate via API key"})
 			c.Abort()
 			return
 		}
@@ -287,6 +311,14 @@ func (m *AuthMiddleware) authenticateIdP(c *gin.Context, token string) {
 	}
 	if !user.Active {
 		c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
+		c.Abort()
+		return
+	}
+	// System users have no interactive sign-in path. An IdP token
+	// resolving to a system user means the IdP linkage is wrong;
+	// reject before we let it impersonate a service principal.
+	if user.IsSystem() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "System users cannot sign in interactively"})
 		c.Abort()
 		return
 	}

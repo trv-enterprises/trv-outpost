@@ -4429,6 +4429,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/stream": {
+            "get": {
+                "description": "Open a Server-Sent-Events stream of dashboard events (alerts, etc.). One stream per browser tab. EventSource compatible.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Subscribe to dashboard events (SSE)",
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Check if the server and dependencies are healthy",
@@ -4518,6 +4547,241 @@ const docTemplate = `{
                         "description": "SSE stream",
                         "schema": {
                             "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/system-users": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemUsers"
+                ],
+                "summary": "List system users (admin only)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.User"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a non-interactive service principal. Capabilities default to [\"view\"]; mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemUsers"
+                ],
+                "summary": "Create a system user (admin only)",
+                "parameters": [
+                    {
+                        "description": "System user parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CreateSystemUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.User"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/system-users/{id}": {
+            "delete": {
+                "tags": [
+                    "SystemUsers"
+                ],
+                "summary": "Delete a system user (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "System user ID (Mongo _id)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/system-users/{id}/api-keys": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemUsers"
+                ],
+                "summary": "List API keys for a system user (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "System user ID (Mongo _id)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.APIKey"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SystemUsers"
+                ],
+                "summary": "Mint an API key for a system user (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "System user ID (Mongo _id)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Key parameters (just a label)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateAPIKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateAPIKeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -4809,6 +5073,68 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/webhooks/tsstore/{connection_id}": {
+            "post": {
+                "description": "Endpoint configured as a webhook URL on a ts-store alert rule. Fans the alert out to logged-in clients via SSE.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Receive a ts-store webhook alert",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard connection ID (type=tsstore) the rule belongs to",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ts-store Alert payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.tsstoreAlertPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -4823,6 +5149,17 @@ const docTemplate = `{
                 },
                 "type_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.CreateSystemUserRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -4968,6 +5305,28 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "handlers.tsstoreAlertPayload": {
+            "type": "object",
+            "properties": {
+                "condition": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "rule_name": {
+                    "type": "string"
+                },
+                "store_name": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "nanoseconds since unix epoch",
+                    "type": "integer"
                 }
             }
         },
@@ -5275,12 +5634,14 @@ const docTemplate = `{
             "enum": [
                 "view",
                 "design",
-                "manage"
+                "manage",
+                "webhook"
             ],
             "x-enum-varnames": [
                 "CapabilityView",
                 "CapabilityDesign",
-                "CapabilityManage"
+                "CapabilityManage",
+                "CapabilityWebhook"
             ]
         },
         "models.ChartDataMapping": {
@@ -8373,6 +8734,14 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "kind": {
+                    "description": "Kind discriminates humans from system principals. Defaults to\n\"human\" on every existing record (the migration sets it when\nthe field is missing). Anything other than \"human\" is treated\nas a system user — no interactive sign-in path, IdP/Clerk\nrejects, exists only for API-key issuance.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.UserKind"
+                        }
+                    ]
+                },
                 "name": {
                     "description": "Display name",
                     "type": "string"
@@ -8425,6 +8794,17 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.UserKind": {
+            "type": "string",
+            "enum": [
+                "human",
+                "system"
+            ],
+            "x-enum-varnames": [
+                "UserKindHuman",
+                "UserKindSystem"
+            ]
         },
         "models.UserListResponse": {
             "description": "Response containing a list of users with pagination",
