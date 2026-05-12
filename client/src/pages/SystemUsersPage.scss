@@ -1,0 +1,123 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing' as *;
+
+.system-users-page {
+  padding: $spacing-07;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: $spacing-05;
+    margin-bottom: $spacing-06;
+
+    h1 {
+      margin: 0 0 $spacing-03 0;
+    }
+  }
+
+  &__subtitle {
+    color: var(--cds-text-helper);
+    max-width: 720px;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  &__empty {
+    text-align: center;
+    padding: $spacing-07;
+    color: var(--cds-text-helper);
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-05;
+  }
+}
+
+.system-user-card {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: $spacing-05;
+
+    h3 {
+      margin: 0 0 $spacing-02 0;
+    }
+  }
+
+  &__meta {
+    display: flex;
+    gap: $spacing-03;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  &__guid {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--cds-text-helper);
+  }
+
+  &__actions {
+    display: flex;
+    gap: $spacing-03;
+    align-items: center;
+  }
+
+  &__keys {
+    border-top: 1px solid var(--cds-border-subtle-01);
+    padding-top: $spacing-05;
+
+    h4 {
+      margin: 0 0 $spacing-04 0;
+      font-size: 0.875rem;
+      color: var(--cds-text-helper);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+  }
+
+  &__no-keys {
+    color: var(--cds-text-helper);
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  &__key-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-03;
+  }
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-04;
+  padding: $spacing-03 $spacing-04;
+  background: var(--cds-layer-02);
+  border-radius: 4px;
+
+  .key-prefix {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.875rem;
+  }
+
+  .key-name {
+    flex: 1;
+    color: var(--cds-text-secondary);
+  }
+}

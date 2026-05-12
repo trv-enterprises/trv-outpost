@@ -438,6 +438,84 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 
 ---
 
+## N. ts-store Alert Webhook Receiver (Phase 1)
+
+The dashboard receives ts-store alerts via webhook and surfaces them in
+the notification bell panel. Rule authoring on ts-store is **manual**
+in this phase (curl recipe below); Phase 2 will add an in-app component
+for managing rules from the dashboard.
+
+### N.1 System user provisioning
+- [ ] Manage → System Users page loads (admin only).
+- [ ] Non-admin (Support / Designer) sees 403 / has no nav link.
+- [ ] Create a system user named `tsstore-webhook-recvr`.
+- [ ] System user shows up in the list with `kind: system` tag.
+- [ ] Mint an API key — one-time-reveal modal appears with `trve_...` token.
+- [ ] Copy the token; modal closes.
+- [ ] Listed key shows `trve_<prefix>…` and `active` tag.
+- [ ] Revoke an individual key — confirms before revoking; key flips to `revoked` tag.
+- [ ] Delete the system user — confirms; user disappears; cascaded keys gone.
+
+### N.2 Auth posture
+- [ ] System user CANNOT sign in via `X-User-ID: <guid>` — server returns 403.
+- [ ] System user CANNOT sign in via IdP / Clerk (when Clerk enabled).
+- [ ] Inbound call with `Authorization: Bearer trve_<key>` resolves to the system user;
+  `/api/auth/me` returns the system user record.
+
+### N.3 Webhook receiver
+- [ ] `POST /api/webhooks/tsstore/:connection_id` with no auth returns 401.
+- [ ] Wrong-shape body returns 400.
+- [ ] `connection_id` not in DB returns 404.
+- [ ] `connection_id` of non-tsstore type returns 400.
+- [ ] Payload `store_name` mismatching the connection's configured `store_name` returns 400.
+- [ ] Well-formed payload returns 202 within a few ms.
+
+### N.4 SSE fan-out
+- [ ] App load opens `/api/events/stream`; browser console shows `[events] SSE connected`.
+- [ ] Server log shows `events: SSE opened user=...`.
+- [ ] After firing a webhook, every open browser tab (any logged-in user) receives a bell-panel
+  entry titled `<rule_name> on <connection.name>`, subtitle = condition string.
+- [ ] Bell panel badge increments by 1; entry persists until cleared.
+- [ ] No corner toast is shown (Phase-1 design choice: bell panel only).
+
+### N.5 Manual ts-store rule configuration
+
+Use the ts-store HTTP API to register a webhook rule. Run from any host
+that can reach both the ts-store and the dashboard:
+
+```bash
+TS_STORE_URL="http://<ts-store-host>:21080"
+DASH_URL="http://<dashboard-host>"        # e.g. http://100.97.221.61
+STORE="journal-logs"                      # ts-store's `store_name`
+CONN_ID="<dashboard-connection-uuid>"     # from /api/connections (filter by type=tsstore)
+TOKEN="trve_<system-user-key>"            # from Manage → System Users
+
+curl -X POST "${TS_STORE_URL}/api/stores/${STORE}/alerts/webhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":          "'"${DASH_URL}/api/webhooks/tsstore/${CONN_ID}"'",
+    "headers":      { "Authorization": "Bearer '"${TOKEN}"'" },
+    "rules":        [ { "name": "high-temp", "condition": "temperature > 80", "cooldown": "30s" } ],
+    "poll_interval": "1s",
+    "timeout":       "10s"
+  }'
+```
+
+- [ ] ts-store returns 201 and the persisted webhook config.
+- [ ] Inject a record into the store with `temperature > 80`.
+- [ ] Within ~1s, an alert appears in the dashboard bell panel.
+- [ ] Repeat within the cooldown window — only one alert fires (cooldown honored on ts-store side).
+- [ ] Restart ts-store — the rule persists; alerts continue to fire after restart.
+
+### N.6 Negative paths
+- [ ] System user revoked while ts-store is still configured: next webhook fires → server returns 401;
+  ts-store logs the failure but does not retry (expected per ts-store webhook policy).
+- [ ] Dashboard server restart with an active SSE: client EventSource auto-reconnects; `connected`
+  event fires again; no missed alerts during the brief window (ts-store fires-and-forgets, so any
+  alert that lands during the gap is logged-and-lost — known limitation).
+
+---
+
 ## Notes
 
 Use this space to track issues found during testing:

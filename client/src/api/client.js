@@ -1010,6 +1010,36 @@ class APIClient {
     });
   }
 
+  // ── System Users (admin-only service principals) ──────────────────
+  // Non-interactive user records whose only purpose is to own API
+  // keys for inbound integrations (ts-store webhook receiver, etc.).
+  // No interactive sign-in path; IdP/Clerk rejects.
+  async listSystemUsers() {
+    return this.request('/api/system-users');
+  }
+
+  async createSystemUser({ name } = {}) {
+    return this.request('/api/system-users', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteSystemUser(id) {
+    return this.request(`/api/system-users/${id}`, { method: 'DELETE' });
+  }
+
+  async listSystemUserAPIKeys(id) {
+    return this.request(`/api/system-users/${id}/api-keys`);
+  }
+
+  async createSystemUserAPIKey(id, { name } = {}) {
+    return this.request(`/api/system-users/${id}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   // ── Dashboard export / import ─────────────────────────────────────
   async previewExportDashboards(dashboardIds) {
     return this.request('/api/dashboards/export/preview', {
