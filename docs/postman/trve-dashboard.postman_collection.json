@@ -4192,6 +4192,194 @@
       ]
     },
     {
+      "name": "SystemUsers",
+      "description": "systemusers endpoints (5).",
+      "item": [
+        {
+          "name": "Create a system user (admin only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system-users"
+              ]
+            },
+            "description": "Create a system user (admin only)\n\nCreates a non-interactive service principal. Capabilities default to [\"view\"]; mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.\n\n\nResponses: 201, 400, 403",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a system user (admin only)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-users/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system-users",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "System user ID (Mongo _id)"
+                }
+              ]
+            },
+            "description": "Delete a system user (admin only)\n\n\nResponses: 204, 403, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List API keys for a system user (admin only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-users/{id}/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system-users",
+                ":id",
+                "api-keys"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "System user ID (Mongo _id)"
+                }
+              ]
+            },
+            "description": "List API keys for a system user (admin only)\n\n\nResponses: 200, 403, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List system users (admin only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system-users"
+              ]
+            },
+            "description": "List system users (admin only)\n\n\nResponses: 200, 403"
+          },
+          "response": []
+        },
+        {
+          "name": "Mint an API key for a system user (admin only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-users/{id}/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system-users",
+                ":id",
+                "api-keys"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "System user ID (Mongo _id)"
+                }
+              ]
+            },
+            "description": "Mint an API key for a system user (admin only)\n\n\nResponses: 201, 400, 403, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expires_at\": \"\",\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Tags",
       "description": "tags endpoints (1).",
       "item": [

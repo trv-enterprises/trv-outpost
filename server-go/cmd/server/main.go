@@ -318,6 +318,7 @@ func main() {
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService)
+	systemUserHandler := handlers.NewSystemUserHandler(userService, apiKeyService)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
@@ -386,6 +387,21 @@ func main() {
 			users.POST("", authHandler.CreateUser)
 			users.PUT("/:id", authHandler.UpdateUser)
 			users.DELETE("/:id", authHandler.DeleteUser)
+		}
+
+		// System users — non-interactive service principals used by
+		// inbound integrations (ts-store webhook receiver, etc.).
+		// Every route here is gated to Manage by the route rules in
+		// middleware/auth.go. The route group is separate from /users
+		// so an admin can grant integration-specific permissions
+		// without touching the human-user routes.
+		systemUsers := api.Group("/system-users")
+		{
+			systemUsers.GET("", systemUserHandler.ListSystemUsers)
+			systemUsers.POST("", systemUserHandler.CreateSystemUser)
+			systemUsers.DELETE("/:id", systemUserHandler.DeleteSystemUser)
+			systemUsers.GET("/:id/api-keys", systemUserHandler.ListSystemUserAPIKeys)
+			systemUsers.POST("/:id/api-keys", systemUserHandler.CreateSystemUserAPIKey)
 		}
 
 		// Connection routes (new terminology - preferred)

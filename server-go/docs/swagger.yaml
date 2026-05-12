@@ -9,6 +9,13 @@ definitions:
       type_count:
         type: integer
     type: object
+  handlers.CreateSystemUserRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
   handlers.ExecuteCommandRequest:
     properties:
       action:
@@ -2526,6 +2533,15 @@ definitions:
         type: string
       id:
         type: string
+      kind:
+        allOf:
+        - $ref: '#/definitions/models.UserKind'
+        description: |-
+          Kind discriminates humans from system principals. Defaults to
+          "human" on every existing record (the migration sets it when
+          the field is missing). Anything other than "human" is treated
+          as a system user — no interactive sign-in path, IdP/Clerk
+          rejects, exists only for API-key issuance.
       name:
         description: Display name
         type: string
@@ -2562,6 +2578,14 @@ definitions:
       user_id:
         type: string
     type: object
+  models.UserKind:
+    enum:
+    - human
+    - system
+    type: string
+    x-enum-varnames:
+    - UserKindHuman
+    - UserKindSystem
   models.UserListResponse:
     description: Response containing a list of users with pagination
     properties:
@@ -5871,6 +5895,162 @@ paths:
       summary: MCP SSE Connection
       tags:
       - MCP
+  /system-users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List system users (admin only)
+      tags:
+      - SystemUsers
+    post:
+      consumes:
+      - application/json
+      description: Creates a non-interactive service principal. Capabilities default
+        to ["view"]; mint an API key via /api/system-users/:id/api-keys to authenticate
+        inbound webhooks as this user.
+      parameters:
+      - description: System user parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateSystemUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a system user (admin only)
+      tags:
+      - SystemUsers
+  /system-users/{id}:
+    delete:
+      parameters:
+      - description: System user ID (Mongo _id)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a system user (admin only)
+      tags:
+      - SystemUsers
+  /system-users/{id}/api-keys:
+    get:
+      parameters:
+      - description: System user ID (Mongo _id)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.APIKey'
+            type: array
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List API keys for a system user (admin only)
+      tags:
+      - SystemUsers
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: System user ID (Mongo _id)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Key parameters (just a label)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.CreateAPIKeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Mint an API key for a system user (admin only)
+      tags:
+      - SystemUsers
   /tags:
     get:
       description: Returns a merged list of tags across connections, components, and

@@ -202,6 +202,36 @@ func (r *UserRepository) List(ctx context.Context, page, pageSize int) ([]models
 	return users, total, nil
 }
 
+// ListByKind returns every user matching the given kind, no
+// pagination. Used by the system-users admin page (which expects to
+// show every system principal) and for the regular users list when
+// the caller wants to exclude system users from the human directory.
+// "" for kind matches every kind, including records that pre-date
+// the field (treated as human by IsSystem).
+func (r *UserRepository) ListByKind(ctx context.Context, kind models.UserKind) ([]models.User, error) {
+	filter := bson.M{}
+	if kind == models.UserKindSystem {
+		filter = bson.M{"kind": string(kind)}
+	} else if kind == models.UserKindHuman {
+		// Human means: kind=="human" OR field missing. The migration
+		// fixes the missing case but we don't rely on it.
+		filter = bson.M{"$or": []bson.M{
+			{"kind": string(models.UserKindHuman)},
+			{"kind": bson.M{"$exists": false}},
+		}}
+	}
+	cursor, err := r.collection.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var users []models.User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 // UpsertByName creates or updates a user by name (for seeding)
 func (r *UserRepository) UpsertByName(ctx context.Context, user *models.User) error {
 	now := time.Now()

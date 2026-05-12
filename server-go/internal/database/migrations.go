@@ -31,6 +31,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"rename_datasource_id_field_v1", migrateRenameDatasourceIDField},
 		{"rename_datasourceId_in_component_code_v1", migrateRenameDatasourceIdInComponentCode},
 		{"drop_mask_secrets_v1", migrateDropMaskSecrets},
+		{"users_kind_human_default_v1", migrateUsersKindHumanDefault},
 	}
 
 	coll := db.Collection("migrations")
@@ -492,5 +493,24 @@ func migrateDropMaskSecrets(ctx context.Context, db *mongo.Database) error {
 		return fmt.Errorf("drop mask_secrets: %w", err)
 	}
 	log.Printf("  connections: dropped mask_secrets from %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateUsersKindHumanDefault stamps `kind: "human"` on every
+// existing user record that lacks the field. After v0.16.x the User
+// model distinguishes humans from system principals via a `kind`
+// field; pre-migration records have no kind, which IsSystem()
+// already treats as "human" but the explicit value keeps queries
+// like `{kind: "system"}` correct.
+func migrateUsersKindHumanDefault(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("users").UpdateMany(
+		ctx,
+		bson.M{"kind": bson.M{"$exists": false}},
+		bson.M{"$set": bson.M{"kind": "human"}},
+	)
+	if err != nil {
+		return fmt.Errorf("set users.kind=human: %w", err)
+	}
+	log.Printf("  users: set kind=human on %d documents", res.ModifiedCount)
 	return nil
 }
