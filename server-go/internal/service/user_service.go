@@ -65,7 +65,7 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 
 // CreateSystemUser creates a non-interactive service principal. It
 // is a deliberately separate code path from CreateUser so the
-// human-creation API can't be tricked into minting a system
+// human-creation API can't be tricked into generating a system
 // principal by stuffing a `kind` field into the request body.
 //
 // Capability policy:

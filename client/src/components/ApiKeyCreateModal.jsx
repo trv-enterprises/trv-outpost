@@ -28,7 +28,7 @@ import './ApiKeyCreateModal.scss';
  *   createFn — async ({ name }) => createAPIKeyResponse. Defaults to
  *              apiClient.createAPIKey (the caller's own key). Pass
  *              apiClient.createSystemUserAPIKey.bind(apiClient, id)
- *              to mint a key for a specific system user; same response
+ *              to generate a key for a specific system user; same response
  *              shape, same one-time-reveal UI.
  *   modalHeading — override the default "Create API key" label.
  */

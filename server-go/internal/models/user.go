@@ -30,10 +30,11 @@ const (
 
 // UserKind discriminates real humans from non-interactive service
 // principals (system users). Kind=="system" users cannot sign in via
-// the IdP / Clerk path; they exist only so admins can mint API keys
-// that aren't bound to a real person's account lifecycle. Used today
-// by the ts-store webhook receiver — an admin creates one system user
-// per integration, mints a key, hands it to the external service.
+// the IdP / Clerk path; they exist only so admins can generate API
+// keys that aren't bound to a real person's account lifecycle. Used
+// today by the ts-store webhook receiver — an admin creates one
+// system user per integration, generates a key, hands it to the
+// external service.
 type UserKind string
 
 const (

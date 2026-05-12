@@ -31,7 +31,7 @@ import './SystemUsersPage.scss';
  * UI surface (deliberately minimal):
  *   - List of system users with their API keys inline.
  *   - Create new system user (name only — capabilities default to "view").
- *   - Mint a new API key for any system user (one-time-reveal modal).
+ *   - Generate a new API key for any system user (one-time-reveal modal).
  *   - Revoke individual keys (existing per-key DELETE on /api/api-keys/:id).
  *   - Delete a system user entirely (cascades to its keys).
  *
@@ -164,7 +164,7 @@ function SystemUsersPage() {
                     renderIcon={Password}
                     onClick={() => setCreateKeyForUser(user)}
                   >
-                    Mint API key
+                    Generate API key
                   </Button>
                   <IconButton
                     label="Delete system user"
@@ -188,7 +188,7 @@ function SystemUsersPage() {
                   />
                 ) : (keysByUser[user.id] || []).length === 0 ? (
                   <p className="system-user-card__no-keys">
-                    No keys yet. Mint one to authenticate inbound webhooks as this user.
+                    No keys yet. Generate one to authenticate inbound webhooks as this user.
                   </p>
                 ) : (
                   <ul className="system-user-card__key-list">
@@ -235,7 +235,7 @@ function SystemUsersPage() {
 
       {createKeyForUser && (
         <ApiKeyCreateModal
-          modalHeading={`Mint API key for ${createKeyForUser.name}`}
+          modalHeading={`Generate API key for ${createKeyForUser.name}`}
           createFn={({ name }) => apiClient.createSystemUserAPIKey(createKeyForUser.id, { name })}
           onClose={() => setCreateKeyForUser(null)}
           onCreated={() => {

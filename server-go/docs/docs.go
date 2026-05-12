@@ -4583,7 +4583,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a non-interactive service principal. Capabilities default to [\"view\",\"webhook\"] when omitted. Mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.",
+                "description": "Creates a non-interactive service principal. Capabilities default to [\"view\",\"webhook\"] when omitted. Generate an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4731,7 +4731,7 @@ const docTemplate = `{
                 "tags": [
                     "SystemUsers"
                 ],
-                "summary": "Mint an API key for a system user (admin only)",
+                "summary": "Generate an API key for a system user (admin only)",
                 "parameters": [
                     {
                         "type": "string",

@@ -5960,7 +5960,7 @@ paths:
       consumes:
       - application/json
       description: Creates a non-interactive service principal. Capabilities default
-        to ["view","webhook"] when omitted. Mint an API key via /api/system-users/:id/api-keys
+        to ["view","webhook"] when omitted. Generate an API key via /api/system-users/:id/api-keys
         to authenticate inbound webhooks as this user.
       parameters:
       - description: System user parameters
@@ -6089,7 +6089,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Mint an API key for a system user (admin only)
+      summary: Generate an API key for a system user (admin only)
       tags:
       - SystemUsers
   /tags:

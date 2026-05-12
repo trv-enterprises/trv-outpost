@@ -15,7 +15,7 @@ import (
 // SystemUserHandler manages non-interactive service principals.
 // Routes are Manage-only (gated by the auth middleware). The handler
 // reuses UserService.CreateSystemUser / ListSystemUsers / DeleteUser
-// and APIKeyService.Create to mint keys for the system principal —
+// and APIKeyService.Create to generate keys for the system principal —
 // no new key-storage code, the existing trve_<base32> token shape
 // works unchanged for inbound webhook callers.
 type SystemUserHandler struct {
@@ -44,7 +44,7 @@ type CreateSystemUserRequest struct {
 
 // CreateSystemUser provisions a new system principal.
 // @Summary Create a system user (admin only)
-// @Description Creates a non-interactive service principal. Capabilities default to ["view","webhook"] when omitted. Mint an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.
+// @Description Creates a non-interactive service principal. Capabilities default to ["view","webhook"] when omitted. Generate an API key via /api/system-users/:id/api-keys to authenticate inbound webhooks as this user.
 // @Tags SystemUsers
 // @Accept json
 // @Produce json
@@ -115,11 +115,11 @@ func (h *SystemUserHandler) DeleteSystemUser(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// CreateSystemUserAPIKey mints a new trve_<base32> API key whose
+// CreateSystemUserAPIKey generates a new trve_<base32> API key whose
 // owner is the named system user. Plaintext token is returned once
 // and never again. Use for inbound-webhook receivers where the
 // external service (e.g. ts-store) needs a stable bearer token.
-// @Summary Mint an API key for a system user (admin only)
+// @Summary Generate an API key for a system user (admin only)
 // @Tags SystemUsers
 // @Accept json
 // @Produce json

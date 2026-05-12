@@ -125,7 +125,7 @@ func buildRouteRules() []RouteCapability {
 
 		// System users — every operation is admin-only. These records
 		// drive inbound-integration auth (e.g. ts-store webhook
-		// receiver), so the full surface (list, create, delete, mint
+		// receiver), so the full surface (list, create, delete, generate
 		// key) is gated end-to-end.
 		{PathPrefix: "/api/system-users", Required: models.CapabilityManage},
 
