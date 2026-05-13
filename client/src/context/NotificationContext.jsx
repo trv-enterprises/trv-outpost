@@ -44,6 +44,15 @@ export function NotificationProvider({ children }) {
   // Transient toasts. Separate from `notifications` so they don't
   // pollute the bell panel after dismissal.
   const [toasts, setToasts] = useState([]);
+  // Bell-panel open state. Lives in the context (rather than in
+  // App-only state) so any component — e.g. the fullscreen
+  // dashboard-viewer toolbar, which is outside the App header —
+  // can open the panel. Keeps the "only one panel at a time" guarantee
+  // because there's a single boolean.
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openPanel = useCallback(() => setPanelOpen(true), []);
+  const closePanel = useCallback(() => setPanelOpen(false), []);
+  const togglePanel = useCallback(() => setPanelOpen((v) => !v), []);
 
   const addNotification = useCallback((notification) => {
     // notification: { kind: 'success'|'error'|'info'|'warning', title, subtitle }
@@ -86,6 +95,10 @@ export function NotificationProvider({ children }) {
       toasts,
       pushToast,
       dismissToast,
+      panelOpen,
+      openPanel,
+      closePanel,
+      togglePanel,
     }}>
       {children}
     </NotificationContext.Provider>

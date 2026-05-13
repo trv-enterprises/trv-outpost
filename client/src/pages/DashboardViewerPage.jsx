@@ -41,7 +41,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
-  Download
+  Download,
+  Notification
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -185,7 +186,7 @@ function DashboardViewerPage({ canDesign = false }) {
     setIsEditingDashboard(isEditMode || fromDesign);
     return () => setIsEditingDashboard(false);
   }, [isEditMode, fromDesign, setIsEditingDashboard]);
-  const { pushToast } = useNotifications();
+  const { pushToast, notifications, togglePanel: toggleNotificationPanel } = useNotifications();
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
   // Server-rejection error for the dashboard name (e.g., duplicate
@@ -1681,6 +1682,28 @@ function DashboardViewerPage({ canDesign = false }) {
                   onClick={() => setExportModalOpen(true)}
                 >
                   <Download size={20} />
+                </IconButton>
+              )}
+              {/* Notifications bell — only rendered in fullscreen,
+                  because outside fullscreen the App-level header
+                  already shows one and double-rendering would be
+                  confusing. In fullscreen the App header is hidden
+                  but the panel itself (mounted in App) still
+                  overlays the viewer, so we just need a trigger. */}
+              {isFullscreen && (
+                <IconButton
+                  kind="ghost"
+                  label="Notifications"
+                  align="bottom"
+                  onClick={toggleNotificationPanel}
+                  className="notification-badge"
+                >
+                  <Notification size={20} />
+                  {notifications.length > 0 && (
+                    <span className="notification-badge__count">
+                      {notifications.length > 99 ? '99+' : notifications.length}
+                    </span>
+                  )}
                 </IconButton>
               )}
               <IconButton

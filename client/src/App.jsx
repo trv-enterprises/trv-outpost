@@ -85,8 +85,7 @@ function AppContent({ onDisconnect }) {
   });
   const [firstDashboardId, setFirstDashboardId] = useState(null);
   const [dashboardsLoaded, setDashboardsLoaded] = useState(false);
-  const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
-  const { notifications, addNotification } = useNotifications();
+  const { notifications, addNotification, panelOpen: notificationPanelOpen, togglePanel: toggleNotificationPanel, closePanel: closeNotificationPanel } = useNotifications();
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   // Goes true once the bootstrap chain has finished trying (success
@@ -583,7 +582,7 @@ function AppContent({ onDisconnect }) {
 
               <HeaderGlobalAction
                 aria-label="Notifications"
-                onClick={() => setNotificationPanelOpen(!notificationPanelOpen)}
+                onClick={toggleNotificationPanel}
                 className="notification-badge"
               >
                 <Notification size={20} />
@@ -612,7 +611,7 @@ function AppContent({ onDisconnect }) {
 
       <NotificationPanel
         open={notificationPanelOpen}
-        onClose={() => setNotificationPanelOpen(false)}
+        onClose={closeNotificationPanel}
       />
       <ToastStack />
 
