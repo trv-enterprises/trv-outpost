@@ -63,9 +63,11 @@ export function useEventStream({ ready, addNotification }) {
         return;
       }
       addNotification({
+        alertId: payload.id,                       // ties the bell row to the persisted record for seen / pin actions
         kind: payload.severity === 'error' ? 'error' : 'warning',
         title: payload.title || 'Alert',
         subtitle: payload.subtitle || '',
+        timestamp: payload.fired_at ? new Date(payload.fired_at).getTime() : Date.now(),
       });
     });
 

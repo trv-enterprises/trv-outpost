@@ -303,6 +303,125 @@ const docTemplate = `{
                 }
             }
         },
+        "/alerts": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "List visible alerts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AlertListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/alerts/{id}/pin": {
+            "post": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Pin an alert (keep visible)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Alert ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Unpin an alert",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Alert ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/alerts/{id}/seen": {
+            "post": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Mark an alert seen (dismiss)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Alert ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/ai/debug": {
             "get": {
                 "description": "Stream real-time debug events from the AI agent including LLM requests, responses, and tool calls",
@@ -5574,6 +5693,94 @@ const docTemplate = `{
                 "data_path": {
                     "description": "DataPath is the JSON path to the array of records (e.g., \"data\", \"results\", \"items\")\nIf empty, assumes response is already an array or will be parsed as key-value pairs",
                     "type": "string"
+                }
+            }
+        },
+        "models.Alert": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt drives the MongoDB TTL index. Defaults to 30 days\npast ReceivedAt; once a per-deployment retention setting lands\nthis becomes computed from that. Pinned alerts are still\nsubject to TTL — pinning is \"stay visible until cleared,\" not\n\"keep forever.\"",
+                    "type": "string"
+                },
+                "fired_at": {
+                    "description": "when the upstream rule evaluated",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "namespace of the originating connection; reserved for future per-user namespace gating",
+                    "type": "string"
+                },
+                "payload": {
+                    "description": "raw upstream payload — opaque to today's UI, surfaced when an expand affordance lands",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "pinned": {
+                    "description": "Pinned keeps an alert visible regardless of Seen. Toggled via\nPOST /api/alerts/:id/pin / DELETE /api/alerts/:id/pin. A user\npins an alert when they want another user to see it; an\nunpin from anyone returns the alert to normal seen-tracking.",
+                    "type": "boolean"
+                },
+                "pinned_at": {
+                    "type": "string"
+                },
+                "pinned_by": {
+                    "type": "string"
+                },
+                "received_at": {
+                    "description": "when the dashboard ingested it",
+                    "type": "string"
+                },
+                "rule_name": {
+                    "type": "string"
+                },
+                "seen": {
+                    "description": "Seen is the global \"first reader clears it\" flag. Flipped to\ntrue by POST /api/alerts/:id/seen; flipped back to false when\nthe alert is pinned (so a pin acts like an \"unread\" reset).",
+                    "type": "boolean"
+                },
+                "seen_at": {
+                    "type": "string"
+                },
+                "seen_by": {
+                    "description": "SeenBy / PinnedBy track who last performed each action — for\naudit only. The list semantics are intentionally simple\n(single user GUID, last writer wins) so we don't drift back\ntoward a per-user-seen model.",
+                    "type": "string"
+                },
+                "severity": {
+                    "description": "\"info\" | \"warning\" | \"error\"",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "free-form integration name (ts-store store name, etc.)",
+                    "type": "string"
+                },
+                "subtitle": {
+                    "type": "string"
+                },
+                "title": {
+                    "description": "bell-panel headline",
+                    "type": "string"
+                }
+            }
+        },
+        "models.AlertListResponse": {
+            "type": "object",
+            "properties": {
+                "alerts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Alert"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "visible": {
+                    "type": "integer"
                 }
             }
         },

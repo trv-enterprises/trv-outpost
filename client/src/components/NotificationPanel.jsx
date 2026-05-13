@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useRef, useEffect } from 'react';
-import { Close } from '@carbon/icons-react';
+import { Close, Pin, PinFilled } from '@carbon/icons-react';
 import {
   CheckmarkFilled,
   ErrorFilled,
@@ -32,7 +32,7 @@ function formatTime(timestamp) {
  * Shows a scrollable list of notifications with dismiss (X) per item.
  */
 function NotificationPanel({ open, onClose }) {
-  const { notifications, removeNotification, clearAll } = useNotifications();
+  const { notifications, removeNotification, setPinned, clearAll } = useNotifications();
   const panelRef = useRef(null);
 
   // Close on outside click
@@ -69,8 +69,12 @@ function NotificationPanel({ open, onClose }) {
         ) : (
           notifications.map((n) => {
             const Icon = KIND_ICONS[n.kind] || KIND_ICONS.info;
+            const PinIcon = n.pinned ? PinFilled : Pin;
             return (
-              <div key={n.id} className={`notification-panel__item notification-panel__item--${n.kind || 'info'}`}>
+              <div
+                key={n.id}
+                className={`notification-panel__item notification-panel__item--${n.kind || 'info'}${n.pinned ? ' notification-panel__item--pinned' : ''}`}
+              >
                 <Icon size={16} className="notification-panel__item-icon" />
                 <div className="notification-panel__item-content">
                   <span className="notification-panel__item-title">{n.title}</span>
@@ -79,6 +83,16 @@ function NotificationPanel({ open, onClose }) {
                   )}
                   <span className="notification-panel__item-time">{formatTime(n.timestamp)}</span>
                 </div>
+                {n.alertId && (
+                  <button
+                    className="notification-panel__item-pin"
+                    onClick={() => setPinned(n.id, !n.pinned)}
+                    aria-label={n.pinned ? 'Unpin notification' : 'Pin notification (keep visible for other users)'}
+                    title={n.pinned ? 'Pinned — click to unpin' : 'Pin to keep visible for other users'}
+                  >
+                    <PinIcon size={14} />
+                  </button>
+                )}
                 <button
                   className="notification-panel__item-close"
                   onClick={() => removeNotification(n.id)}

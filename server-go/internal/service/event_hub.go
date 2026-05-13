@@ -30,10 +30,11 @@ type Event struct {
 
 // AlertPayload is the shape clients see for Kind=="alert" events.
 // Surface-level fields only — the bell-panel UI renders Title +
-// Subtitle directly; FiredAt drives ordering. The Source and RuleName
-// give the user enough to find the underlying record / connection
-// without exposing internal IDs.
+// Subtitle directly; FiredAt drives ordering. ID is the persisted
+// alert record's canonical id; clients use it to call /alerts/:id/seen
+// and /alerts/:id/pin from the bell-panel row actions.
 type AlertPayload struct {
+	ID        string    `json:"id,omitempty"`          // persisted alert record id (set when persistence succeeded)
 	Severity  string    `json:"severity"`              // "info" | "warning" | "error"
 	Title     string    `json:"title"`                 // e.g. "high-temp on Proxmox API"
 	Subtitle  string    `json:"subtitle,omitempty"`    // e.g. condition string

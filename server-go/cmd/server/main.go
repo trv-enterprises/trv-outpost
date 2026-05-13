@@ -139,6 +139,7 @@ func main() {
 	deviceRepo := repository.NewDeviceRepository(mongodb.Database)
 	namespaceRepo := repository.NewNamespaceRepository(mongodb.Database)
 	apiKeyRepo := repository.NewAPIKeyRepository(mongodb.Database)
+	alertRepo := repository.NewAlertRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := componentRepo.CreateIndexes(ctx); err != nil {
@@ -183,6 +184,11 @@ func main() {
 	// Create API key indexes
 	if err := apiKeyRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create API key indexes: %v", err)
+	}
+
+	// Create alert indexes (incl. TTL for retention sweep)
+	if err := alertRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create alert indexes: %v", err)
 	}
 
 	// Read Clerk env vars early — both feed into services constructed
@@ -321,7 +327,9 @@ func main() {
 	systemUserHandler := handlers.NewSystemUserHandler(userService, apiKeyService)
 	eventHub := service.NewEventHub()
 	eventsHandler := handlers.NewEventsHandler(eventHub)
-	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub)
+	alertService := service.NewAlertService(alertRepo)
+	alertHandler := handlers.NewAlertHandler(alertService)
+	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub, alertService)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
@@ -414,6 +422,20 @@ func main() {
 		events := api.Group("/events")
 		{
 			events.GET("/stream", eventsHandler.Stream)
+		}
+
+		// Alerts — persisted bell-panel records. The SSE stream
+		// above pushes alerts live to currently-connected clients;
+		// these endpoints back the bell-on-load hydrate plus
+		// per-row dismiss / pin actions. "First reader clears it"
+		// semantics with a per-record Pinned override so a user
+		// can keep an alert visible until someone unpins it.
+		alerts := api.Group("/alerts")
+		{
+			alerts.GET("", alertHandler.ListAlerts)
+			alerts.POST("/:id/seen", alertHandler.MarkSeen)
+			alerts.POST("/:id/pin", alertHandler.Pin)
+			alerts.DELETE("/:id/pin", alertHandler.Unpin)
 		}
 
 		// Inbound webhooks — external integrations POST alert

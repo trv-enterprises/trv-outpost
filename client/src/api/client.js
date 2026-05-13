@@ -1042,6 +1042,27 @@ class APIClient {
     });
   }
 
+  // ── Alerts (persisted bell-panel records) ─────────────────────────
+  // Live alerts still arrive via SSE (/api/events/stream); these
+  // endpoints back the bell-on-load hydrate and the per-row dismiss
+  // / pin actions. "First reader clears it" semantics with a
+  // per-record pin override.
+  async listAlerts() {
+    return this.request('/api/alerts');
+  }
+
+  async markAlertSeen(id) {
+    return this.request(`/api/alerts/${id}/seen`, { method: 'POST' });
+  }
+
+  async pinAlert(id) {
+    return this.request(`/api/alerts/${id}/pin`, { method: 'POST' });
+  }
+
+  async unpinAlert(id) {
+    return this.request(`/api/alerts/${id}/pin`, { method: 'DELETE' });
+  }
+
   // ── Dashboard export / import ─────────────────────────────────────
   async previewExportDashboards(dashboardIds) {
     return this.request('/api/dashboards/export/preview', {

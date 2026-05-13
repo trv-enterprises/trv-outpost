@@ -307,6 +307,86 @@ definitions:
           If empty, assumes response is already an array or will be parsed as key-value pairs
         type: string
     type: object
+  models.Alert:
+    properties:
+      connection_id:
+        type: string
+      expires_at:
+        description: |-
+          ExpiresAt drives the MongoDB TTL index. Defaults to 30 days
+          past ReceivedAt; once a per-deployment retention setting lands
+          this becomes computed from that. Pinned alerts are still
+          subject to TTL — pinning is "stay visible until cleared," not
+          "keep forever."
+        type: string
+      fired_at:
+        description: when the upstream rule evaluated
+        type: string
+      id:
+        type: string
+      namespace:
+        description: namespace of the originating connection; reserved for future
+          per-user namespace gating
+        type: string
+      payload:
+        additionalProperties: true
+        description: raw upstream payload — opaque to today's UI, surfaced when an
+          expand affordance lands
+        type: object
+      pinned:
+        description: |-
+          Pinned keeps an alert visible regardless of Seen. Toggled via
+          POST /api/alerts/:id/pin / DELETE /api/alerts/:id/pin. A user
+          pins an alert when they want another user to see it; an
+          unpin from anyone returns the alert to normal seen-tracking.
+        type: boolean
+      pinned_at:
+        type: string
+      pinned_by:
+        type: string
+      received_at:
+        description: when the dashboard ingested it
+        type: string
+      rule_name:
+        type: string
+      seen:
+        description: |-
+          Seen is the global "first reader clears it" flag. Flipped to
+          true by POST /api/alerts/:id/seen; flipped back to false when
+          the alert is pinned (so a pin acts like an "unread" reset).
+        type: boolean
+      seen_at:
+        type: string
+      seen_by:
+        description: |-
+          SeenBy / PinnedBy track who last performed each action — for
+          audit only. The list semantics are intentionally simple
+          (single user GUID, last writer wins) so we don't drift back
+          toward a per-user-seen model.
+        type: string
+      severity:
+        description: '"info" | "warning" | "error"'
+        type: string
+      source:
+        description: free-form integration name (ts-store store name, etc.)
+        type: string
+      subtitle:
+        type: string
+      title:
+        description: bell-panel headline
+        type: string
+    type: object
+  models.AlertListResponse:
+    properties:
+      alerts:
+        items:
+          $ref: '#/definitions/models.Alert'
+        type: array
+      total:
+        type: integer
+      visible:
+        type: integer
+    type: object
   models.BandColumns:
     properties:
       mean:
@@ -3060,6 +3140,83 @@ paths:
       summary: Subscribe to AI session events via WebSocket
       tags:
       - ai
+  /alerts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AlertListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List visible alerts
+      tags:
+      - Alerts
+  /alerts/{id}/pin:
+    delete:
+      parameters:
+      - description: Alert ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Unpin an alert
+      tags:
+      - Alerts
+    post:
+      parameters:
+      - description: Alert ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Pin an alert (keep visible)
+      tags:
+      - Alerts
+  /alerts/{id}/seen:
+    post:
+      parameters:
+      - description: Alert ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Mark an alert seen (dismiss)
+      tags:
+      - Alerts
   /api/ai/debug:
     get:
       description: Stream real-time debug events from the AI agent including LLM requests,

@@ -267,6 +267,143 @@
       ]
     },
     {
+      "name": "Alerts",
+      "description": "alerts endpoints (4).",
+      "item": [
+        {
+          "name": "List visible alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "List visible alerts\n\n\nResponses: 200, 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark an alert seen (dismiss)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/{id}/seen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                ":id",
+                "seen"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Alert ID"
+                }
+              ]
+            },
+            "description": "Mark an alert seen (dismiss)\n\n\nResponses: 204, 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Pin an alert (keep visible)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/{id}/pin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                ":id",
+                "pin"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Alert ID"
+                }
+              ]
+            },
+            "description": "Pin an alert (keep visible)\n\n\nResponses: 204, 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Unpin an alert",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/{id}/pin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                ":id",
+                "pin"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Alert ID"
+                }
+              ]
+            },
+            "description": "Unpin an alert\n\n\nResponses: 204, 401"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "API Keys",
       "description": "api-keys endpoints (4).",
       "item": [

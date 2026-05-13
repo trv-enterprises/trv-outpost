@@ -85,7 +85,7 @@ function AppContent({ onDisconnect }) {
   });
   const [firstDashboardId, setFirstDashboardId] = useState(null);
   const [dashboardsLoaded, setDashboardsLoaded] = useState(false);
-  const { notifications, addNotification, panelOpen: notificationPanelOpen, togglePanel: toggleNotificationPanel, closePanel: closeNotificationPanel } = useNotifications();
+  const { notifications, addNotification, hydrateFromServer: hydrateNotifications, panelOpen: notificationPanelOpen, togglePanel: toggleNotificationPanel, closePanel: closeNotificationPanel } = useNotifications();
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   // Goes true once the bootstrap chain has finished trying (success
@@ -369,6 +369,16 @@ function AppContent({ onDisconnect }) {
     ready: identityResolved && !!currentUser,
     addNotification,
   });
+
+  // Hydrate the bell from /api/alerts once auth is settled — covers
+  // the "alert fired while no one was logged in" case. SSE picks up
+  // anything new after this; the reducer dedupes on alertId so live
+  // pushes don't double-render an already-hydrated row.
+  useEffect(() => {
+    if (identityResolved && currentUser) {
+      hydrateNotifications();
+    }
+  }, [identityResolved, currentUser, hydrateNotifications]);
 
   // Handle user selection change
   const handleUserChange = (user) => {

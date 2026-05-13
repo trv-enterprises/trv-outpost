@@ -84,6 +84,33 @@
     &--info .notification-panel__item-icon {
       fill: #78a9ff;
     }
+
+    // Pinned rows get a left-edge accent and a slightly different
+    // background so they stand out in a crowded panel.
+    &--pinned {
+      background-color: rgba(120, 169, 255, 0.06);
+      border-left: 2px solid #78a9ff;
+    }
+  }
+
+  &__item-pin {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--cds-text-secondary);
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: var(--cds-text-primary);
+    }
+
+    svg { fill: currentColor !important; }
   }
 
   &__item-icon {

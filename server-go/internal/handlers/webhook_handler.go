@@ -30,13 +30,16 @@ import (
 type WebhookHandler struct {
 	connections *service.ConnectionService
 	hub         *service.EventHub
+	alerts      *service.AlertService
 }
 
-// NewWebhookHandler wires the inbound webhook receiver to the
-// connection lookup (for routing-validation + namespace recovery)
-// and the event hub (for fan-out to logged-in clients).
-func NewWebhookHandler(connections *service.ConnectionService, hub *service.EventHub) *WebhookHandler {
-	return &WebhookHandler{connections: connections, hub: hub}
+// NewWebhookHandler wires the inbound webhook receiver to:
+//   - the connection lookup (routing validation + namespace recovery),
+//   - the alert service (persistence — so the bell can hydrate on
+//     reload even if nobody was logged in when the alert fired),
+//   - the event hub (live fan-out to currently-connected clients).
+func NewWebhookHandler(connections *service.ConnectionService, hub *service.EventHub, alerts *service.AlertService) *WebhookHandler {
+	return &WebhookHandler{connections: connections, hub: hub, alerts: alerts}
 }
 
 // tsstoreAlertPayload mirrors ts-store's outbound webhook JSON shape
@@ -137,10 +140,39 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 		firedAt = time.Now()
 	}
 
+	// Persist first, fan-out second. Persistence is the
+	// "doesn't get lost if nobody is watching" guarantee; the SSE
+	// publish is only useful for currently-connected clients. If
+	// persistence fails we still want to publish (better to deliver
+	// to active users than to drop the alert entirely), but we log
+	// the failure prominently — a persistence outage means the
+	// bell-on-load story is silently broken.
+	recorded, err := h.alerts.Record(c.Request.Context(), &models.Alert{
+		FiredAt:      firedAt,
+		Severity:     "warning",
+		Title:        title,
+		Subtitle:     payload.Condition,
+		Source:       payload.StoreName,
+		RuleName:     payload.RuleName,
+		Namespace:    conn.Namespace,
+		ConnectionID: connectionID,
+		Payload:      payload.Data,
+	})
+	if err != nil {
+		log.Printf("webhook: ALERT PERSIST FAILED connection=%s rule=%s err=%v (continuing to publish)",
+			connectionID, payload.RuleName, err)
+		recorded = nil
+	}
+
+	alertID := ""
+	if recorded != nil {
+		alertID = recorded.ID
+	}
 	ev := service.Event{
 		Kind:      "alert",
 		Namespace: conn.Namespace,
 		Payload: service.AlertPayload{
+			ID:       alertID,
 			Severity: "warning",
 			Title:    title,
 			Subtitle: payload.Condition,
@@ -151,8 +183,8 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 	}
 	h.hub.Publish(ev)
 
-	log.Printf("webhook: ts-store alert connection=%s rule=%s store=%s subscribers=%d",
-		connectionID, payload.RuleName, payload.StoreName, h.hub.SubscriberCount())
+	log.Printf("webhook: ts-store alert connection=%s rule=%s store=%s alert_id=%s subscribers=%d",
+		connectionID, payload.RuleName, payload.StoreName, alertID, h.hub.SubscriberCount())
 
-	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
+	c.JSON(http.StatusAccepted, gin.H{"status": "accepted", "alert_id": alertID})
 }
