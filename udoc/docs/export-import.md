@@ -26,8 +26,8 @@ The bundle is a JSON file with this rough shape:
 {
   "format_version": 1,
   "exported_at": "2026-04-19T10:00:00Z",
-  "exported_by": "tviviano",
-  "source_namespace": "tviviano-homelab",
+  "exported_by": "alice",
+  "source_namespace": "my-homelab",
   "objects": {
     "connections": [ ... ],
     "components": [ ... ],

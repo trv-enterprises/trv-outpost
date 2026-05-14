@@ -215,12 +215,12 @@ MongoDB collection name.
   "_id": "67ff...3a",
   "namespace": "default",
   "name": "Home MQTT Broker",
-  "description": "Mosquitto on services-lxc",
+  "description": "Mosquitto on the services host",
   "type": "mqtt",
   "tags": ["home", "mqtt"],
   "config": {
     "mqtt": {
-      "host": "192.168.1.216",
+      "host": "broker.example.local",
       "port": 1883,
       "client_id": "dashboard",
       "username": "dashboard",

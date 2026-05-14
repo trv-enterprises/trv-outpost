@@ -36,7 +36,7 @@ For everything else — `$set`, `$unset`, `$rename`, simple aggregation rewrites
   - `display` — non-chart visual components (frigate cameras, frigate alerts, weather). Discriminated by `display_type`.
   - `control` — interactive components (buttons, toggles, sliders, plugs, dimmers). Discriminated by `control_type`.
 - The word "chart" in UI/code refers strictly to `component_type=chart`. Don't use "chart" as a synonym for "component".
-- **Namespace** = the conflict-domain grouping on connections/components/dashboards. Uniqueness is `(namespace, name)` — two namespaces can each have an entity called `Home`. Slug-safe strings like `default`, `tviviano-homelab`. Namespaces are first-class records (name, description, color) managed at `/manage/namespaces`; active namespace is a per-user preference keyed on `active_namespace` in app_config. **Don't conflate with tags** — tags are descriptive (`environment:prod`), namespace is structural.
+- **Namespace** = the conflict-domain grouping on connections/components/dashboards. Uniqueness is `(namespace, name)` — two namespaces can each have an entity called `Home`. Slug-safe strings like `default`, `my-homelab`. Namespaces are first-class records (name, description, color) managed at `/manage/namespaces`; active namespace is a per-user preference keyed on `active_namespace` in app_config. **Don't conflate with tags** — tags are descriptive (`environment:prod`), namespace is structural.
 
 ### 3. Full-Stack Awareness
 - **Always consider frontend impact**: When making backend changes (API endpoints, models, response formats), identify and implement the corresponding frontend changes (API client, components, forms, types).

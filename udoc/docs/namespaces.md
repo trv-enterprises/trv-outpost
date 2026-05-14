@@ -49,7 +49,7 @@ Dashboards filter doesn't affect the Connections filter, etc.).
 
 Each namespace has:
 
-- **Slug** — a lowercase identifier like `default`, `tviviano-homelab`,
+- **Slug** — a lowercase identifier like `default`, `my-homelab`,
   `public-examples`. Letters, numbers, hyphens; 3-32 characters.
 - **Description** — a free-form note shown only on the management
   page.

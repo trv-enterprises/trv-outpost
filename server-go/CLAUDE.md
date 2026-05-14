@@ -377,7 +377,7 @@ type DashboardSettings struct {
 5. Test against EdgeLake cluster endpoints
 
 **Reference:**
-- EdgeLake documentation: `/Users/tviviano/Documents/GitHub/documentation`
+- EdgeLake documentation: see the EdgeLake project's own repo.
 - EdgeLake Docker commands: `mel down/clean/up <edgelake-type>`
 
 ## Important Notes
@@ -395,7 +395,7 @@ Server requires Go 1.23 from Homebrew (not system Go):
 ```bash
 export PATH="/opt/homebrew/opt/go@1.23/bin:$PATH"
 export GOROOT="/opt/homebrew/opt/go@1.23/libexec"
-export GOPATH="/Users/tviviano/go"
+export GOPATH="$HOME/go"
 ```
 
 ### Running the Server

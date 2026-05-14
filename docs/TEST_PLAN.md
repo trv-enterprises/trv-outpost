@@ -485,7 +485,7 @@ that can reach both the ts-store and the dashboard:
 
 ```bash
 TS_STORE_URL="http://<ts-store-host>:21080"
-DASH_URL="http://<dashboard-host>"        # e.g. http://100.97.221.61
+DASH_URL="http://<dashboard-host>"        # e.g. https://dashboard.example.com
 STORE="journal-logs"                      # ts-store's `store_name`
 CONN_ID="<dashboard-connection-uuid>"     # from /api/connections (filter by type=tsstore)
 TOKEN="trve_<system-user-key>"            # from Manage → System Users
