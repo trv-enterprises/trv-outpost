@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { SideNavItems, Tag, Tooltip } from '@carbon/react';
 import { Dashboard } from '@carbon/icons-react';
-import { API_BASE } from '../../api/client';
+import apiClient from '../../api/client';
 import './ViewModeNav.scss';
 
 /**
@@ -25,12 +25,16 @@ function ViewModeNav({ location, navigate }) {
 
   const fetchDashboards = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/dashboards?page=1&page_size=100&include_connections=true`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.dashboards) {
-          setDashboards(data.dashboards);
-        }
+      // Must go through apiClient — raw fetch() sends no auth
+      // headers and 401s for any visitor whose credential isn't a
+      // cookie (kiosks on ?user_id=, API-key bookmarks, etc.).
+      const data = await apiClient.getDashboards({
+        page: 1,
+        page_size: 100,
+        include_connections: true,
+      });
+      if (data?.dashboards) {
+        setDashboards(data.dashboards);
       }
     } catch (err) {
       console.error('Failed to fetch dashboards:', err);
