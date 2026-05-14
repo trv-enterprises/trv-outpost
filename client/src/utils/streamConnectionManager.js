@@ -260,10 +260,18 @@ class StreamConnectionManager {
 
     const { topics } = connection;
 
-    // Build URL
+    // Build URL. EventSource cannot set headers, so credentials must
+    // ride the query string. We prefer ?token=<apiKey> when an API
+    // key is set (kiosk / agent / electron auth path); otherwise fall
+    // back to ?user_id=<guid> (legacy header-equivalent). At least
+    // one must be present under the auth-required-by-default policy
+    // — without it the SSE 401s, leaving downstream widgets (weather,
+    // control-state readers, etc.) stuck in their "Connecting…" state.
+    const apiKey = apiClient.apiKey;
     const userGuid = apiClient.getCurrentUserGuid();
     const params = new URLSearchParams();
-    if (userGuid) params.set('user_id', userGuid);
+    if (apiKey) params.set('token', apiKey);
+    else if (userGuid) params.set('user_id', userGuid);
     if (topics) params.set('topics', topics);
     const queryString = params.toString();
     let url = `${API_BASE}/api/connections/${connectionId}/stream`;

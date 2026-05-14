@@ -226,6 +226,17 @@ function AppContent({ onDisconnect }) {
         if (apiClient.apiKey) {
           const me = await resolveSelf();
           if (me) {
+            // Propagate the resolved GUID to apiClient + localStorage.
+            // Without this, getCurrentUserGuid() returns null on every
+            // subsequent call — which breaks anything that needs a
+            // user id but can't read the bearer token directly:
+            // /api/config/user/<guid> (the kiosk's own preferences,
+            // including default_dashboard_id), and the EventSource
+            // URLs StreamConnectionManager builds for SSE streams
+            // (EventSource can't set Authorization headers, so streams
+            // either ride ?user_id= or — when an API key is available —
+            // ?token=; both need the GUID/key to be discoverable).
+            apiClient.setCurrentUser(me.guid);
             setCurrentUser(me);
             setIdentityResolved(true);
             return;

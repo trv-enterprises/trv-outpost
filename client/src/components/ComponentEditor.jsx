@@ -1127,8 +1127,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Stays open until data arrives + 2s buffer, or user clicks "Stop Capture", or 5 min max timeout.
     // NOTE: This block is outside try/catch/finally so setPreviewLoading stays true until finishCapture.
     if (isMQTT) {
+        // EventSource can't set headers, so credentials ride the
+        // query string: prefer ?token=<apiKey>, fall back to
+        // ?user_id=<guid>. Either resolves to an authenticated user
+        // server-side; without one the auth-required default 401s
+        // the stream and the MQTT capture sits empty.
+        const authParam = apiClient.apiKey
+          ? `token=${encodeURIComponent(apiClient.apiKey)}`
+          : `user_id=${apiClient.getCurrentUserGuid() || ''}`;
         const topicParam = queryRaw ? `&topics=${encodeURIComponent(queryRaw)}` : '';
-        const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?user_id=${apiClient.getCurrentUserGuid() || ''}${topicParam}`;
+        const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
         const es = new EventSource(sseUrl);
         mqttCaptureRef.current = es;
         const rawRecords = [];
