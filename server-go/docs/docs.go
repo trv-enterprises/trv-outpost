@@ -3282,7 +3282,7 @@ const docTemplate = `{
         },
         "/config/user/{user_id}": {
             "get": {
-                "description": "Retrieves configuration for a specific user",
+                "description": "Retrieves configuration for the calling user. The path's user_id MUST equal the caller's own GUID — admin overrides are not honored on this route.",
                 "produces": [
                     "application/json"
                 ],
@@ -3293,7 +3293,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "User ID",
+                        "description": "User GUID — must match the caller's own",
                         "name": "user_id",
                         "in": "path",
                         "required": true
@@ -3304,6 +3304,24 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.UserConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "500": {
@@ -3318,7 +3336,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Updates configuration for a specific user",
+                "description": "Updates configuration for the calling user. The path's user_id MUST equal the caller's own GUID — admin overrides are not honored on this route.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3332,7 +3350,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "User ID",
+                        "description": "User GUID — must match the caller's own",
                         "name": "user_id",
                         "in": "path",
                         "required": true
@@ -3356,6 +3374,24 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {

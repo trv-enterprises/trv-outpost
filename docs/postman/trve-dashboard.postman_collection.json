@@ -1119,11 +1119,11 @@
                 {
                   "key": "user_id",
                   "value": "",
-                  "description": "User ID"
+                  "description": "User GUID — must match the caller's own"
                 }
               ]
             },
-            "description": "Get user configuration\n\nRetrieves configuration for a specific user\n\n\nResponses: 200, 500"
+            "description": "Get user configuration\n\nRetrieves configuration for the calling user. The path's user_id MUST equal the caller's own GUID — admin overrides are not honored on this route.\n\n\nResponses: 200, 401, 403, 500"
           },
           "response": []
         },
@@ -1198,11 +1198,11 @@
                 {
                   "key": "user_id",
                   "value": "",
-                  "description": "User ID"
+                  "description": "User GUID — must match the caller's own"
                 }
               ]
             },
-            "description": "Update user configuration\n\nUpdates configuration for a specific user\n\n\nResponses: 200, 400, 500",
+            "description": "Update user configuration\n\nUpdates configuration for the calling user. The path's user_id MUST equal the caller's own GUID — admin overrides are not honored on this route.\n\n\nResponses: 200, 400, 401, 403, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"settings\": {}\n}",

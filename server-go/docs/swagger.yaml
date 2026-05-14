@@ -5167,9 +5167,11 @@ paths:
       - config
   /config/user/{user_id}:
     get:
-      description: Retrieves configuration for a specific user
+      description: Retrieves configuration for the calling user. The path's user_id
+        MUST equal the caller's own GUID — admin overrides are not honored on this
+        route.
       parameters:
-      - description: User ID
+      - description: User GUID — must match the caller's own
         in: path
         name: user_id
         required: true
@@ -5181,6 +5183,18 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.UserConfigResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -5193,9 +5207,11 @@ paths:
     put:
       consumes:
       - application/json
-      description: Updates configuration for a specific user
+      description: Updates configuration for the calling user. The path's user_id
+        MUST equal the caller's own GUID — admin overrides are not honored on this
+        route.
       parameters:
-      - description: User ID
+      - description: User GUID — must match the caller's own
         in: path
         name: user_id
         required: true
@@ -5215,6 +5231,18 @@ paths:
             $ref: '#/definitions/models.UserConfigResponse'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
           schema:
             additionalProperties:
               type: string
