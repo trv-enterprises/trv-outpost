@@ -109,6 +109,26 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/config/system", Method: "GET", Public: true, Exact: true},
 		{PathPrefix: "/api/health", Method: "GET", Public: true, Exact: true},
 
+		// Frigate proxy reads. Snapshot / thumbnail / clip / HLS
+		// endpoints are loaded via `<img src=...>` / `<video src=...>`
+		// in dashboard widgets — the browser fetches them as plain
+		// anonymous GETs with no Authorization header, so the
+		// auth-required default would 401 every widget on every
+		// authenticated page. The sibling JSON endpoints (cameras /
+		// events / reviews / info) are ALSO grouped here for
+		// consistency: they describe what the media endpoints expose,
+		// so the access posture is identical. POST stays gated by
+		// the auth-required default — the only mutation here
+		// (/reviews/viewed) needs a real user.
+		//
+		// Trade-off: any caller who knows a connection_id UUID can
+		// read frigate media for that connection. The UUID is not
+		// designed as a security boundary; this assumes the
+		// deployment perimeter (e.g. tailnet, LAN, VPN) is the real
+		// access control. Reconsider when we ship a public-facing
+		// deployment.
+		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
+
 		// Design mode routes - require design capability for write operations
 		// Read operations are allowed for VIEW users so they can see dashboards
 
