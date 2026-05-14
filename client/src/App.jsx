@@ -479,15 +479,33 @@ function AppContent({ onDisconnect }) {
     }
   };
 
-  // Initial fetch of default dashboard for app load redirect
+  // Initial fetch of default dashboard for app load redirect.
+  //
+  // Gated on identityResolved so we read the user's own
+  // default_dashboard_id, not the global "first alphabetical"
+  // fallback. The bootstrap chain that resolves a Clerk session,
+  // a ?key=trve_... URL param, or an X-User-ID header is
+  // asynchronous; the original empty-deps effect ran during the
+  // brief window where apiClient.getCurrentUserGuid() still
+  // returns null. fetchDefaultDashboard fell through to the
+  // alphabetical-first dashboard, the Navigate fired, and the
+  // URL replaced before identity resolved — the kiosk landed on
+  // the wrong board.
+  //
+  // Now: wait for identityResolved; rerun if currentUser flips
+  // (e.g. dev user-switcher). The Route path="/" guard at the
+  // bottom of the tree already renders null while
+  // dashboardsLoaded is false, so the redirect doesn't race with
+  // this fetch.
   useEffect(() => {
+    if (!identityResolved) return;
     const loadDefaultDashboard = async () => {
       const defaultId = await fetchDefaultDashboard();
       setFirstDashboardId(defaultId);
       setDashboardsLoaded(true);
     };
     loadDefaultDashboard();
-  }, []);
+  }, [identityResolved, currentUser]);
 
   // Render navigation based on current mode
   const renderNavigation = () => {
