@@ -157,12 +157,25 @@ func buildRouteRules() []RouteCapability {
 		// capabilities), so locking the whole group is safe.
 		{PathPrefix: "/api/users", Method: "GET", Required: models.CapabilityManage},
 
-		// Settings — listing every user-configurable setting is admin-
-		// only. Per-key reads (`/api/settings/:key`) stay open because
-		// View/Design code legitimately reads individual runtime values
-		// (tile_font_size, default_dashboard_fit_mode, enabled_types,
-		// etc.) on every page load.
+		// Settings — three rules with different posture per path/verb:
+		//   1. GET /api/settings (collection root): Manage-only —
+		//      listing every user-configurable setting is admin-tier.
+		//   2. GET /api/settings/<key>: Public — View/Design code
+		//      and the SPA bootstrap need to read individual runtime
+		//      values (default_browser_user_guid, tile_font_size,
+		//      default_dashboard_fit_mode, enabled_types, etc.)
+		//      BEFORE identity is resolved. Under the auth-required
+		//      default these would be 401, breaking the bootstrap
+		//      Tier-3 admin-default fallback. Trailing slash on the
+		//      prefix is intentional — `/api/settings` alone (no
+		//      slash) keeps falling into rule (1).
+		//   3. PUT /api/settings/<key>: Manage-only — the children
+		//      need explicit gating because the Exact:true on rule
+		//      (1) doesn't cover them, and we don't want any
+		//      authenticated user mutating settings.
 		{PathPrefix: "/api/settings", Method: "GET", Required: models.CapabilityManage, Exact: true},
+		{PathPrefix: "/api/settings/", Method: "GET", Public: true},
+		{PathPrefix: "/api/settings/", Method: "PUT", Required: models.CapabilityManage},
 
 		// System users — every operation is admin-only. These records
 		// drive inbound-integration auth (e.g. ts-store webhook
