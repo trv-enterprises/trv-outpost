@@ -32,6 +32,15 @@ type RouteCapability struct {
 	Required   models.Capability  // Required capability
 	WriteOnly  bool               // If true, only applies to write operations (POST, PUT, DELETE)
 	Exact      bool               // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
+	// Public marks a route as exempt from the deployment-wide
+	// "authentication required" default. Set this only for genuine
+	// pre-auth surfaces — endpoints that must answer before a user
+	// has identity, e.g. /api/auth/me (so the bootstrap can learn
+	// "you have no identity, render the sign-in stub") and the
+	// Clerk-publishable-key discovery on /api/config/system.
+	// Every other endpoint inherits the secure default: no creds
+	// → 401.
+	Public bool
 }
 
 // AuthMiddleware provides authentication and authorization
@@ -65,9 +74,41 @@ func NewAuthMiddleware(
 	}
 }
 
-// buildRouteRules defines which routes require which capabilities
+// buildRouteRules defines which routes require which capabilities.
+//
+// Authorize() now enforces "authenticated user required" as the
+// deployment-wide default: any /api/* route without an explicit
+// Public:true exemption requires the caller to have presented a
+// valid credential (Clerk JWT, API key, or X-User-ID). Per-capability
+// rules in this slice add the next layer — e.g. POST/PUT/DELETE on
+// most routes require Design or Manage on top of "authenticated."
+//
+// The `view` capability is the floor: every user record we accept
+// at creation time carries view (UserService.CreateUser /
+// CreateSystemUser both inject it). So "authenticated" effectively
+// means "view." We don't need a per-route View rule — the structural
+// default does the work.
 func buildRouteRules() []RouteCapability {
 	return []RouteCapability{
+		// PUBLIC routes — exempt from the auth-required default.
+		// Only used for endpoints that must answer pre-identity.
+		//
+		// /api/auth/me: the SPA bootstrap calls this to ask the
+		// server "who am I?" — it has to be reachable before
+		// identity is resolved so the bootstrap can learn the
+		// answer (or learn "no creds, render sign-in stub").
+		//
+		// /api/config/system: Clerk publishable key discovery
+		// happens before sign-in. The response is whitelisted via
+		// publicSystemConfigKeys (config_service.go) so the
+		// exemption only exposes layout-dimensions + Clerk key,
+		// never arbitrary system settings.
+		//
+		// /api/health: liveness probe. No identity required.
+		{PathPrefix: "/api/auth/me", Method: "GET", Public: true, Exact: true},
+		{PathPrefix: "/api/config/system", Method: "GET", Public: true, Exact: true},
+		{PathPrefix: "/api/health", Method: "GET", Public: true, Exact: true},
+
 		// Design mode routes - require design capability for write operations
 		// Read operations are allowed for VIEW users so they can see dashboards
 
@@ -353,19 +394,32 @@ func extractBearerToken(c *gin.Context) string {
 	return strings.TrimSpace(auth[len(prefix):])
 }
 
-// Authorize checks if the current user has permission for the route
+// Authorize checks if the current user has permission for the route.
+//
+// Policy:
+//   - Explicit Public:true rule matches → allow without auth.
+//   - Explicit capability rule matches → require that capability
+//     (which implies the caller is authenticated).
+//   - No rule matches → require the caller is authenticated, no
+//     specific capability needed. This is the deployment-wide
+//     "auth required by default" floor. Routes that genuinely need
+//     to answer pre-auth (the bootstrap surface) must declare
+//     themselves with Public:true.
 func (m *AuthMiddleware) Authorize() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 		method := c.Request.Method
 
-		// Find required capability for this route
-		requiredCap := m.getRequiredCapability(path, method)
-		if requiredCap == "" {
-			// No specific capability required - allow all authenticated users
+		// Public exemption — answer the route regardless of auth.
+		if m.matchesPublic(path, method) {
 			c.Next()
 			return
 		}
+
+		// Find required capability for this route. Returns "" when
+		// no rule matches; we treat that as "authenticated user
+		// required, no specific capability."
+		requiredCap := m.getRequiredCapability(path, method)
 
 		// Get user from context (may be nil if no auth header)
 		userInterface, exists := c.Get(UserContextKey)
@@ -382,6 +436,15 @@ func (m *AuthMiddleware) Authorize() gin.HandlerFunc {
 			return
 		}
 
+		// No specific capability needed beyond "authenticated."
+		// Every user we accept at creation time carries view (the
+		// floor), so this branch covers the common case: a logged-in
+		// user reading whatever they're entitled to read.
+		if requiredCap == "" {
+			c.Next()
+			return
+		}
+
 		// Check if user has required capability
 		if !user.HasCapability(requiredCap) {
 			c.JSON(http.StatusForbidden, gin.H{
@@ -395,6 +458,28 @@ func (m *AuthMiddleware) Authorize() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// matchesPublic reports whether the given path/method is exempt from
+// the auth-required default — i.e. matches a rule with Public:true.
+// Same matching semantics as getRequiredCapability (Exact vs prefix,
+// optional method filter).
+func (m *AuthMiddleware) matchesPublic(path, method string) bool {
+	for _, rule := range m.rules {
+		if !rule.Public {
+			continue
+		}
+		var matches bool
+		if rule.Exact {
+			matches = path == rule.PathPrefix || path == rule.PathPrefix+"/"
+		} else {
+			matches = strings.HasPrefix(path, rule.PathPrefix)
+		}
+		if matches && (rule.Method == "" || rule.Method == method) {
+			return true
+		}
+	}
+	return false
 }
 
 // getRequiredCapability returns the capability required for a path/method
