@@ -34,13 +34,18 @@ type Event struct {
 // alert record's canonical id; clients use it to call /alerts/:id/seen
 // and /alerts/:id/pin from the bell-panel row actions.
 type AlertPayload struct {
-	ID        string    `json:"id,omitempty"`          // persisted alert record id (set when persistence succeeded)
-	Severity  string    `json:"severity"`              // "info" | "warning" | "error"
-	Title     string    `json:"title"`                 // e.g. "high-temp on Proxmox API"
-	Subtitle  string    `json:"subtitle,omitempty"`    // e.g. condition string
-	Source    string    `json:"source,omitempty"`      // ts-store store name
-	RuleName  string    `json:"rule_name,omitempty"`   // user-defined rule identifier
-	FiredAt   time.Time `json:"fired_at"`              // when ts-store evaluated the rule
+	ID          string    `json:"id,omitempty"`           // persisted alert record id (set when persistence succeeded)
+	Severity    string    `json:"severity"`               // "info" | "warning" | "error"
+	Title       string    `json:"title"`                  // e.g. "high-temp on Proxmox API"
+	Subtitle    string    `json:"subtitle,omitempty"`     // e.g. condition string
+	Source      string    `json:"source,omitempty"`       // ts-store store name
+	RuleName    string    `json:"rule_name,omitempty"`    // user-defined rule identifier
+	FiredAt     time.Time `json:"fired_at"`               // when ts-store evaluated the rule
+	// DashboardID, when present, is the decoded target dashboard
+	// the bell row links to via "Open dashboard." Comes from
+	// JSON-decoding the producer's external_ref. Empty when the
+	// producer didn't supply one or used a non-dashboard schema.
+	DashboardID string `json:"dashboard_id,omitempty"`
 }
 
 // EventHub is an in-process pub/sub fan-out. Subscribers register

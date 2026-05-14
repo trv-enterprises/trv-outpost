@@ -125,6 +125,8 @@ definitions:
       data:
         additionalProperties: true
         type: object
+      external_ref:
+        type: string
       rule_name:
         type: string
       store_name:
@@ -311,6 +313,16 @@ definitions:
     properties:
       connection_id:
         type: string
+      dashboard_id:
+        description: |-
+          DashboardID is the decoded `{"dashboard_id":"…"}` from
+          ExternalRef, populated at ingest time when the producer
+          followed that convention. Surfaces as the bell-row "Open
+          dashboard" link target. Empty when the producer didn't set
+          external_ref, or set it to something that wasn't a
+          dashboard_id-shaped JSON object — the bell row just hides the
+          link button in that case.
+        type: string
       expires_at:
         description: |-
           ExpiresAt drives the MongoDB TTL index. Defaults to 30 days
@@ -318,6 +330,15 @@ definitions:
           this becomes computed from that. Pinned alerts are still
           subject to TTL — pinning is "stay visible until cleared," not
           "keep forever."
+        type: string
+      external_ref:
+        description: |-
+          ExternalRef is the verbatim pass-through string the producer
+          (ts-store) attaches to its rule. We do not parse it on the
+          server beyond an opportunistic JSON-decode into DashboardID
+          for the deep-link case — anything we don't understand is left
+          alone so future producers can stash arbitrary structured data
+          there without requiring a server change.
         type: string
       fired_at:
         description: when the upstream rule evaluated

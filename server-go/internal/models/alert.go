@@ -33,6 +33,21 @@ type Alert struct {
 	Namespace    string                 `json:"namespace,omitempty" bson:"namespace,omitempty"` // namespace of the originating connection; reserved for future per-user namespace gating
 	ConnectionID string                 `json:"connection_id,omitempty" bson:"connection_id,omitempty"`
 	Payload      map[string]interface{} `json:"payload,omitempty" bson:"payload,omitempty"` // raw upstream payload — opaque to today's UI, surfaced when an expand affordance lands
+	// ExternalRef is the verbatim pass-through string the producer
+	// (ts-store) attaches to its rule. We do not parse it on the
+	// server beyond an opportunistic JSON-decode into DashboardID
+	// for the deep-link case — anything we don't understand is left
+	// alone so future producers can stash arbitrary structured data
+	// there without requiring a server change.
+	ExternalRef string `json:"external_ref,omitempty" bson:"external_ref,omitempty"`
+	// DashboardID is the decoded `{"dashboard_id":"…"}` from
+	// ExternalRef, populated at ingest time when the producer
+	// followed that convention. Surfaces as the bell-row "Open
+	// dashboard" link target. Empty when the producer didn't set
+	// external_ref, or set it to something that wasn't a
+	// dashboard_id-shaped JSON object — the bell row just hides the
+	// link button in that case.
+	DashboardID string `json:"dashboard_id,omitempty" bson:"dashboard_id,omitempty"`
 	// Seen is the global "first reader clears it" flag. Flipped to
 	// true by POST /api/alerts/:id/seen; flipped back to false when
 	// the alert is pinned (so a pin acts like an "unread" reset).

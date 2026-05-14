@@ -5,9 +5,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -47,12 +49,41 @@ func NewWebhookHandler(connections *service.ConnectionService, hub *service.Even
 // loose where ts-store is loose — the dashboard cares about
 // store_name, rule_name, condition, and timestamp; `data` is opaque
 // for now and rendered raw if a user expands the notification.
+//
+// ExternalRef arrived in ts-store v0.6.3 — an opaque pass-through
+// string the rule author attaches to a rule. The dashboard convention
+// is `{"dashboard_id":"<uuid>"}` (JSON-encoded compound key), but the
+// field is treated as free-form: we keep the raw string and ALSO try
+// to JSON-decode it for the bell-row deep-link case. Anything we
+// don't understand is silently kept as-is.
 type tsstoreAlertPayload struct {
-	RuleName  string                 `json:"rule_name"`
-	Condition string                 `json:"condition"`
-	Timestamp int64                  `json:"timestamp"` // nanoseconds since unix epoch
-	Data      map[string]interface{} `json:"data"`
-	StoreName string                 `json:"store_name"`
+	RuleName    string                 `json:"rule_name"`
+	Condition   string                 `json:"condition"`
+	Timestamp   int64                  `json:"timestamp"` // nanoseconds since unix epoch
+	Data        map[string]interface{} `json:"data"`
+	StoreName   string                 `json:"store_name"`
+	ExternalRef string                 `json:"external_ref,omitempty"`
+}
+
+// decodeExternalRef opportunistically parses the dashboard
+// convention `{"dashboard_id":"<uuid>"}` out of the rule's
+// external_ref. Returns the dashboard id when found; empty string
+// for anything else (empty input, non-JSON, JSON without a
+// dashboard_id field, dashboard_id not a string). Never returns an
+// error — a bad external_ref is a soft failure, not a webhook
+// failure.
+func decodeExternalRef(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ""
+	}
+	var parsed struct {
+		DashboardID string `json:"dashboard_id"`
+	}
+	if err := json.Unmarshal([]byte(ref), &parsed); err != nil {
+		return ""
+	}
+	return parsed.DashboardID
 }
 
 // HandleTSStoreAlert receives an alert from a ts-store webhook rule
@@ -140,6 +171,13 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 		firedAt = time.Now()
 	}
 
+	// Decode the dashboard convention out of external_ref. Soft
+	// failure — anything we don't understand is kept on ExternalRef
+	// so future producers / future schema can still see the raw
+	// value, but DashboardID stays empty and the bell row just
+	// doesn't render an "Open dashboard" link.
+	dashboardID := decodeExternalRef(payload.ExternalRef)
+
 	// Persist first, fan-out second. Persistence is the
 	// "doesn't get lost if nobody is watching" guarantee; the SSE
 	// publish is only useful for currently-connected clients. If
@@ -157,6 +195,8 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 		Namespace:    conn.Namespace,
 		ConnectionID: connectionID,
 		Payload:      payload.Data,
+		ExternalRef:  payload.ExternalRef,
+		DashboardID:  dashboardID,
 	})
 	if err != nil {
 		log.Printf("webhook: ALERT PERSIST FAILED connection=%s rule=%s err=%v (continuing to publish)",
@@ -172,13 +212,14 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 		Kind:      "alert",
 		Namespace: conn.Namespace,
 		Payload: service.AlertPayload{
-			ID:       alertID,
-			Severity: "warning",
-			Title:    title,
-			Subtitle: payload.Condition,
-			Source:   payload.StoreName,
-			RuleName: payload.RuleName,
-			FiredAt:  firedAt,
+			ID:          alertID,
+			Severity:    "warning",
+			Title:       title,
+			Subtitle:    payload.Condition,
+			Source:      payload.StoreName,
+			RuleName:    payload.RuleName,
+			FiredAt:     firedAt,
+			DashboardID: dashboardID,
 		},
 	}
 	h.hub.Publish(ev)

@@ -4858,7 +4858,7 @@
             "description": "Receive a ts-store webhook alert\n\nEndpoint configured as a webhook URL on a ts-store alert rule. Fans the alert out to logged-in clients via SSE.\n\n\nResponses: 202, 400, 404",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"condition\": \"\",\n  \"data\": {},\n  \"rule_name\": \"\",\n  \"store_name\": \"\",\n  \"timestamp\": 0\n}",
+              "raw": "{\n  \"condition\": \"\",\n  \"data\": {},\n  \"external_ref\": \"\",\n  \"rule_name\": \"\",\n  \"store_name\": \"\",\n  \"timestamp\": 0\n}",
               "options": {
                 "raw": {
                   "language": "json"

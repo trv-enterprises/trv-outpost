@@ -81,7 +81,12 @@ func (r *AlertRepository) ListVisible(ctx context.Context, limit int64) ([]model
 	}
 	defer cursor.Close(ctx)
 
-	var alerts []models.Alert
+	// Initialize as a zero-length slice (not nil) so an empty
+	// result marshals to JSON `[]` rather than `null`. Non-React
+	// consumers (Postman, scripts, TypeScript codegen) will be
+	// surprised by `null` for a list-shaped field; the React client
+	// already tolerates either.
+	alerts := []models.Alert{}
 	if err := cursor.All(ctx, &alerts); err != nil {
 		return nil, 0, err
 	}

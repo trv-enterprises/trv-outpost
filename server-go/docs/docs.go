@@ -5443,6 +5443,9 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": true
                 },
+                "external_ref": {
+                    "type": "string"
+                },
                 "rule_name": {
                     "type": "string"
                 },
@@ -5702,8 +5705,16 @@ const docTemplate = `{
                 "connection_id": {
                     "type": "string"
                 },
+                "dashboard_id": {
+                    "description": "DashboardID is the decoded ` + "`" + `{\"dashboard_id\":\"…\"}` + "`" + ` from\nExternalRef, populated at ingest time when the producer\nfollowed that convention. Surfaces as the bell-row \"Open\ndashboard\" link target. Empty when the producer didn't set\nexternal_ref, or set it to something that wasn't a\ndashboard_id-shaped JSON object — the bell row just hides the\nlink button in that case.",
+                    "type": "string"
+                },
                 "expires_at": {
                     "description": "ExpiresAt drives the MongoDB TTL index. Defaults to 30 days\npast ReceivedAt; once a per-deployment retention setting lands\nthis becomes computed from that. Pinned alerts are still\nsubject to TTL — pinning is \"stay visible until cleared,\" not\n\"keep forever.\"",
+                    "type": "string"
+                },
+                "external_ref": {
+                    "description": "ExternalRef is the verbatim pass-through string the producer\n(ts-store) attaches to its rule. We do not parse it on the\nserver beyond an opportunistic JSON-decode into DashboardID\nfor the deep-link case — anything we don't understand is left\nalone so future producers can stash arbitrary structured data\nthere without requiring a server change.",
                     "type": "string"
                 },
                 "fired_at": {
