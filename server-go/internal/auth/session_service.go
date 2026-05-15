@@ -138,14 +138,15 @@ func (s *SessionService) IssueTokenPair(ctx context.Context, user *models.User, 
 // caller should clear the client's stored refresh token and force
 // re-bootstrap via /auth/session.
 //
-// userLookup is the narrow shape we need to re-fetch the user
+// UserLookup is the narrow shape we need to re-fetch the user
 // record at refresh time — capabilities may have changed since the
 // access token was last issued, so refresh re-loads the user and
 // stamps current capabilities onto the new access token. Without
 // this, a demoted user keeps their old capabilities until their
-// refresh expires, which can be days.
+// refresh expires, which can be days. Implemented by
+// service.UserService.GetUser.
 type UserLookup interface {
-	GetUserByID(ctx context.Context, id string) (*models.User, error)
+	GetUser(ctx context.Context, id string) (*models.User, error)
 }
 
 func (s *SessionService) RefreshTokenPair(ctx context.Context, rawRefresh string, users UserLookup) (*TokenPair, error) {
@@ -168,7 +169,7 @@ func (s *SessionService) RefreshTokenPair(ctx context.Context, rawRefresh string
 	// Re-fetch user so capability changes are picked up on the new
 	// access token. If the user has been deactivated since the
 	// refresh was issued, refuse.
-	user, err := users.GetUserByID(ctx, claims.UserID)
+	user, err := users.GetUser(ctx, claims.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("lookup user: %w", err)
 	}
@@ -200,6 +201,19 @@ func (s *SessionService) RefreshTokenPair(ctx context.Context, rawRefresh string
 		AccessExpires:  accessClaims.ExpiresAt.Time,
 		RefreshExpires: newRefreshClaims.ExpiresAt.Time,
 	}, nil
+}
+
+// PeekClaims parses a refresh token WITHOUT enforcing expiry.
+// Used by Logout to recover the family_id from an expired-but-
+// otherwise-valid refresh token so we can still revoke the family.
+// Never use this for authz — callers must not treat the returned
+// claims as authenticating anything.
+func (s *SessionService) PeekClaims(rawRefresh string) (*Claims, error) {
+	claims, err := s.signer.VerifyToken(rawRefresh, TokenTypeRefresh)
+	if err == nil || errors.Is(err, ErrTokenExpired) {
+		return claims, nil
+	}
+	return nil, err
 }
 
 // RevokeFamily marks a refresh-token family as poisoned. Subsequent
