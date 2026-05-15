@@ -68,20 +68,23 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 // human-creation API can't be tricked into generating a system
 // principal by stuffing a `kind` field into the request body.
 //
-// Capability policy:
-//   - `view` is always granted (the floor — needed for /auth/me and
-//     for any authenticated read the integration might need).
-//   - `webhook` is granted unless the caller explicitly drops it.
-//     This is the canonical privilege for inbound integrations; the
-//     create-modal in the UI defaults it to on.
-//   - `design` and `manage` are accepted if explicitly requested but
-//     are not surfaced in the default UI. They exist so an operator
-//     CAN broaden a system user if a future integration legitimately
-//     needs them (e.g. a script that auto-creates dashboards), not
-//     because they're routine.
+// Capability policy (post-v0.17.0):
+//   - When capabilities=nil: default to [view, webhook]. This is the
+//     kiosk-shaped principal — can display dashboards AND receive
+//     inbound webhook posts. Most common case in the admin UI.
+//   - When capabilities is explicit: take it verbatim (after dedupe
+//     and known-value filtering). Webhook-only principals (e.g.
+//     ts-store webhook receivers) carry just [webhook] — they can
+//     POST to /api/webhooks/* but cannot snoop the dashboard's read
+//     surface. Kiosk-only principals carry just [view].
+//   - `design` and `manage` on a system principal are accepted if
+//     explicitly requested; not surfaced in the default UI. Useful
+//     for scripts that legitimately need to mutate, not routine.
 //
-// Pass capabilities=nil to get the default (view + webhook). Pass an
-// explicit slice to override; "view" is always added if missing.
+// The pre-v0.17.0 "always inject view" behavior was load-bearing
+// only because the route-rule table didn't enforce view explicitly;
+// the new structural floor (Authorize() requires view on any route
+// without an explicit Required) means we can drop the injection.
 func (s *UserService) CreateSystemUser(ctx context.Context, name string, capabilities []models.Capability) (*models.User, error) {
 	if name == "" {
 		return nil, errors.New("system user name is required")
@@ -98,12 +101,12 @@ func (s *UserService) CreateSystemUser(ctx context.Context, name string, capabil
 	if caps == nil {
 		caps = []models.Capability{models.CapabilityView, models.CapabilityWebhook}
 	}
-	// Defense in depth: always include view, even if the caller's
-	// list omitted it. A system user without view can't authenticate
-	// past the route-rule check on /auth/me, which would make the
-	// account useless. Dedupe + validate each entry against the
-	// known capability set.
-	caps = normalizeCapabilities(caps)
+	// Dedupe + drop unknown values, but do NOT inject view —
+	// webhook-only system users (ts-store) deliberately lack it.
+	caps = normalizeCapabilitiesNoForceView(caps)
+	if len(caps) == 0 {
+		return nil, errors.New("system user must have at least one capability")
+	}
 
 	user := &models.User{
 		ID:           uuid.New().String(),
@@ -119,9 +122,32 @@ func (s *UserService) CreateSystemUser(ctx context.Context, name string, capabil
 	return user, nil
 }
 
+// normalizeCapabilitiesNoForceView dedupes + filters to known values
+// WITHOUT injecting view. Used for system users where webhook-only
+// principals deliberately lack view (so they can ONLY hit
+// /api/webhooks/*, not snoop the read surface).
+func normalizeCapabilitiesNoForceView(in []models.Capability) []models.Capability {
+	known := map[models.Capability]bool{
+		models.CapabilityView:    true,
+		models.CapabilityDesign:  true,
+		models.CapabilityManage:  true,
+		models.CapabilityWebhook: true,
+	}
+	seen := map[models.Capability]bool{}
+	out := make([]models.Capability, 0, len(in))
+	for _, c := range in {
+		if !known[c] || seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
 // normalizeCapabilities deduplicates the slice, drops unknown values,
-// and guarantees `view` is present. Order is stable for whichever
-// values the caller supplied; `view` (when injected) goes first.
+// and guarantees `view` is present. Used for HUMAN users (CreateUser)
+// where every interactive principal needs view at minimum.
 func normalizeCapabilities(in []models.Capability) []models.Capability {
 	known := map[models.Capability]bool{
 		models.CapabilityView:    true,

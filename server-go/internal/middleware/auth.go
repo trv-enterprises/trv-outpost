@@ -75,18 +75,24 @@ func NewAuthMiddleware(
 
 // buildRouteRules defines which routes require which capabilities.
 //
-// Authorize() now enforces "authenticated user required" as the
-// deployment-wide default: any /api/* route without an explicit
-// Public:true exemption requires the caller to have presented a
-// valid credential (Clerk JWT, API key, or X-User-ID). Per-capability
-// rules in this slice add the next layer — e.g. POST/PUT/DELETE on
-// most routes require Design or Manage on top of "authenticated."
+// Authorize() policy:
+//   - Public:true rule matches → allow without auth (bootstrap
+//     surfaces only).
+//   - Explicit Required rule matches → require that capability.
+//   - No rule matches → require CapabilityView. This is the
+//     structural floor; everything that isn't an admin write needs
+//     view at minimum.
 //
-// The `view` capability is the floor: every user record we accept
-// at creation time carries view (UserService.CreateUser /
-// CreateSystemUser both inject it). So "authenticated" effectively
-// means "view." We don't need a per-route View rule — the structural
-// default does the work.
+// Why view-as-floor matters: webhook-only system users carry
+// capabilities = [webhook] (no view). With view enforced
+// implicitly, they can ONLY reach /api/webhooks/* — which has its
+// own explicit Required:CapabilityWebhook rule. They can't snoop
+// the dashboard. Kiosk system users carry [view] (or [view,
+// webhook]) and work everywhere a read is expected.
+//
+// Practical consequence: the rules below don't enumerate view
+// reads. They focus on the elevations (design, manage, webhook).
+// Anything without a rule defaults to view.
 func buildRouteRules() []RouteCapability {
 	return []RouteCapability{
 		// PUBLIC routes — exempt from the auth-required default.
@@ -368,13 +374,17 @@ func (m *AuthMiddleware) Authorize() gin.HandlerFunc {
 			return
 		}
 
-		// No specific capability needed beyond "authenticated."
-		// Every user we accept at creation time carries view (the
-		// floor), so this branch covers the common case: a logged-in
-		// user reading whatever they're entitled to read.
+		// "No explicit rule" no longer means "any authenticated user."
+		// It means "authenticated user with the view capability."
+		// Routes that don't declare a specific Required end up here:
+		// they're reads, and reads require view. Webhook-only system
+		// principals (capabilities = [webhook]) intentionally cannot
+		// reach these routes — they should ONLY hit /api/webhooks/*,
+		// which has its own explicit Required:CapabilityWebhook rule.
+		// Kiosk system users (capabilities = [view] or [view, webhook])
+		// fit cleanly.
 		if requiredCap == "" {
-			c.Next()
-			return
+			requiredCap = models.CapabilityView
 		}
 
 		// Check if user has required capability
