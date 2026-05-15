@@ -33,20 +33,13 @@ export function useEventStream({ ready, addNotification }) {
   useEffect(() => {
     if (!ready || typeof addNotification !== 'function') return undefined;
 
-    // Build the SSE URL with whichever credential we have. API key
-    // wins (it's a stronger assertion than X-User-ID); fall through
-    // to the legacy GUID. If we have neither, skip — the SSE call
+    // SSE auth: access JWT in the ?st= query (EventSource can't
+    // set headers). Skip when no token is available — the request
     // would 401 anyway.
-    const url = new URL(`${apiClient.baseURL}/api/events/stream`);
-    if (apiClient.apiKey) {
-      url.searchParams.set('token', apiClient.apiKey);
-    } else {
-      const guid = apiClient.getCurrentUserGuid();
-      if (!guid) return undefined;
-      url.searchParams.set('user_id', guid);
-    }
-
-    const source = new EventSource(url.toString());
+    const auth = apiClient.streamAuthQuery();
+    if (!auth) return undefined;
+    const url = `${apiClient.baseURL}/api/events/stream?${auth}`;
+    const source = new EventSource(url);
 
     source.addEventListener('connected', () => {
       // Quiet — don't surface every reconnect as a UI event.

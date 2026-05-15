@@ -110,6 +110,149 @@ class APIClient {
     // for connection failures, '__server__' for connectionless server
     // failures (network down / 5xx from a non-connection endpoint).
     this.connectionFailureDebounce = new Map();
+
+    // v0.17.0 session token. Once bootstrap (POST /api/auth/session)
+    // returns a pair, every request rides on this access token. The
+    // refresh token is in an httpOnly cookie the server set; the
+    // browser sends it automatically on /api/auth/refresh calls.
+    // No localStorage for the access token by design — it has a
+    // short TTL (15 min default) and gets refreshed on demand or on
+    // 401. Keeps the token off disk where XSS scripts hunt.
+    this.accessToken = null;
+    this.accessExpiresAt = null;     // ms epoch, used by schedulers
+    // Coalesce concurrent refresh attempts. If 12 panels 401 at once,
+    // we want ONE /auth/refresh call, not 12.
+    this._refreshPromise = null;
+    // Optional callback when refresh fails permanently — App.jsx
+    // wires this to a re-bootstrap. Set via setSessionExpiredHandler.
+    this.onSessionExpired = null;
+  }
+
+  // setAccessToken stamps the JWT and remembers its exp. Called by
+  // App.jsx after a successful /auth/session or /auth/refresh.
+  // Pass null to clear (sign-out path).
+  setAccessToken(token, expiresAt) {
+    this.accessToken = token || null;
+    this.accessExpiresAt = expiresAt ? new Date(expiresAt).getTime() : null;
+  }
+
+  getAccessToken() {
+    return this.accessToken;
+  }
+
+  // setSessionExpiredHandler lets App.jsx subscribe to "refresh
+  // failed permanently, you need to bootstrap again." Fired only
+  // when refresh-and-retry exhausts; transient refresh successes
+  // don't notify.
+  setSessionExpiredHandler(handler) {
+    this.onSessionExpired = typeof handler === 'function' ? handler : null;
+  }
+
+  // createSession is the explicit bootstrap call. App.jsx calls this
+  // once on mount with whatever inbound credential it has (Clerk JWT
+  // via tokenProvider, API key via setApiKey + URL param, or GUID
+  // via setCurrentUser). The server walks its IdP registry to find
+  // which credential validates, mints a JWT pair, sets the refresh
+  // cookie, returns the access token in the body.
+  //
+  // After this resolves, every subsequent request rides the access
+  // token automatically.
+  async createSession() {
+    const headers = { 'Content-Type': 'application/json' };
+    // Forward the inbound credentials the server's IdP registry
+    // knows how to look at. Clerk's tokenProvider goes in
+    // Authorization; the API key (if set) does too — server
+    // dispatches by shape. X-User-ID and ?user_id= still ride
+    // their respective channels.
+    if (this.tokenProvider) {
+      try {
+        const token = await this.tokenProvider();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      } catch (err) {
+        console.warn('apiClient: bootstrap tokenProvider error', err);
+      }
+    }
+    if (!headers['Authorization'] && this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+    const guid = this.getCurrentUserGuid();
+    if (!headers['Authorization'] && guid) {
+      headers['X-User-ID'] = guid;
+    }
+
+    const response = await fetch(`${this.baseURL}/api/auth/session`, {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      const err = new Error(`bootstrap failed (HTTP ${response.status})`);
+      err.status = response.status;
+      err.body = text;
+      throw err;
+    }
+    const data = await response.json();
+    this.setAccessToken(data.access_token, data.expires_at);
+    return data;
+  }
+
+  // _refreshSession exchanges the refresh cookie for a new access
+  // token. Coalesced — concurrent callers share one in-flight
+  // promise. Returns true on success, false when refresh
+  // permanently failed (cookie missing, refresh revoked, etc.) and
+  // notifies the session-expired handler in that case.
+  async _refreshSession() {
+    if (this._refreshPromise) {
+      return this._refreshPromise;
+    }
+    this._refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${this.baseURL}/api/auth/refresh`, {
+          method: 'POST',
+          credentials: 'same-origin',
+        });
+        if (!response.ok) {
+          this.accessToken = null;
+          this.accessExpiresAt = null;
+          if (this.onSessionExpired) {
+            try { this.onSessionExpired(); } catch (e) { console.warn(e); }
+          }
+          return false;
+        }
+        const data = await response.json();
+        this.setAccessToken(data.access_token, data.expires_at);
+        return true;
+      } catch (err) {
+        console.warn('apiClient: refresh failed', err);
+        this.accessToken = null;
+        this.accessExpiresAt = null;
+        if (this.onSessionExpired) {
+          try { this.onSessionExpired(); } catch (e) { console.warn(e); }
+        }
+        return false;
+      } finally {
+        this._refreshPromise = null;
+      }
+    })();
+    return this._refreshPromise;
+  }
+
+  // logout calls POST /api/auth/logout to revoke the refresh family
+  // and clear the cookie, then clears local state. Best-effort —
+  // network failures still clear local state.
+  async logout() {
+    try {
+      await fetch(`${this.baseURL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+    } catch (err) {
+      console.warn('apiClient: logout call failed', err);
+    }
+    this.accessToken = null;
+    this.accessExpiresAt = null;
   }
 
   // setTokenProvider lets the Clerk integration plug in a
@@ -239,40 +382,22 @@ class APIClient {
       ...options.headers,
     };
 
-    // Auth header precedence:
-    //   1. Clerk JWT (when tokenProvider is wired AND it returns one)
-    //   2. API key (`trve_…`) — Electron, kiosk, dashboard-agent, etc.
-    //   3. X-User-ID legacy header — browser dev mode + back-compat
-    // The server dispatches Bearer tokens by shape, so a JWT and an
-    // API key share the same Authorization header but never collide.
-    // X-User-ID is only attached when no Bearer was set.
-    let bearerSet = false;
-    if (this.tokenProvider) {
-      try {
-        const token = await this.tokenProvider();
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-          bearerSet = true;
-        }
-      } catch (err) {
-        // Don't block the request on a token-fetch hiccup; let the
-        // API-key / X-User-ID paths try. Server will 401 if neither
-        // works.
-        console.warn('apiClient: tokenProvider error, falling back', err);
-      }
-    }
-    if (!bearerSet && this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-      bearerSet = true;
-    }
-
-    // Add user authentication header if we have a current user.
-    // Sent alongside Bearer when both exist: the server prefers
-    // Bearer (Clerk JWT or API key) and only falls back to
-    // X-User-ID when no Bearer is present, so this is harmless.
-    const userGuid = this.getCurrentUserGuid();
-    if (userGuid && !bearerSet) {
-      headers['X-User-ID'] = userGuid;
+    // v0.17.0 auth: every authenticated request rides on our own
+    // access JWT. The bootstrap endpoint (/api/auth/session) is the
+    // only place that knows about the inbound credential channels
+    // (Clerk JWT, API key, X-User-ID, ?user_id=) — after that we
+    // exclusively use our access token.
+    //
+    // Exceptions:
+    //   - The bootstrap endpoint itself: we still need to send the
+    //     inbound credential to it, so we DON'T strip those legacy
+    //     auth surfaces. Callers route through createSession()
+    //     which formats the inbound credential as needed.
+    //   - The refresh endpoint: takes the refresh token from the
+    //     httpOnly cookie the browser sends automatically. No
+    //     Authorization header needed.
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
     // Pull internal options out before spreading into fetch — fetch
@@ -280,9 +405,19 @@ class APIClient {
     // network layer.
     const connectionId = options.connectionId || null;
     const explicitTimeout = options.timeout;
+    const skipRefreshRetry = options.skipRefreshRetry === true;
     const config = { headers, ...options };
     delete config.connectionId;
     delete config.timeout;
+    delete config.skipRefreshRetry;
+    // Send the refresh cookie on every same-origin call so the
+    // /auth/refresh round-trip works without the caller threading
+    // credentials explicitly. Harmless on non-/auth routes — the
+    // cookie's Path is scoped to /api/auth so it's not actually
+    // sent on regular API calls.
+    if (!config.credentials) {
+      config.credentials = 'same-origin';
+    }
 
     // Apply a default timeout via AbortController unless the caller
     // supplied their own signal (their abort policy wins) or asked
@@ -324,6 +459,27 @@ class APIClient {
       }
 
       if (!response.ok) {
+        // 401 with hint:"refresh" → access token expired but the
+        // refresh token (cookie) might still be good. Try ONE
+        // refresh and re-issue this request. Coalesced via
+        // _refreshPromise so concurrent 401s don't stampede the
+        // refresh endpoint.
+        //
+        // skipRefreshRetry guards against infinite recursion: the
+        // refresh call itself, and the retry after a refresh, both
+        // pass it through.
+        if (response.status === 401 && data?.hint === 'refresh' && !skipRefreshRetry && this.accessToken) {
+          const refreshed = await this._refreshSession();
+          if (refreshed) {
+            // Re-issue with the new access token. Mark skip so a
+            // second 401 doesn't recurse.
+            return this.request(endpoint, { ...options, skipRefreshRetry: true });
+          }
+          // Refresh failed permanently — fall through to the 401
+          // error below. The session-expired handler has already
+          // been notified inside _refreshSession.
+        }
+
         // Two failure shapes count as connection-unreachable:
         //   (1) Gateway-style 5xx — 502 / 503 / 504 — typically a
         //       reverse proxy reporting the backend is down.
@@ -799,19 +955,35 @@ class APIClient {
     });
   }
 
+  // streamAuthQuery returns the auth fragment for SSE/WS URLs.
+  // EventSource and WebSocket can't set Authorization headers, so
+  // the access token rides ?st= instead. Returns "" when no token
+  // is set — the request will then 401 from the auth middleware,
+  // which is the correct failure signal.
+  streamAuthQuery() {
+    if (this.accessToken) {
+      return `st=${encodeURIComponent(this.accessToken)}`;
+    }
+    return '';
+  }
+
   // Returns WebSocket URL for AI session events
   getAISessionWebSocketURL(sessionId) {
     // Convert http(s) to ws(s)
     const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws';
     const host = this.baseURL.replace(/^https?:\/\//, '');
-    return `${wsProtocol}://${host}/api/ai/sessions/${sessionId}/ws`;
+    const auth = this.streamAuthQuery();
+    const qs = auth ? `?${auth}` : '';
+    return `${wsProtocol}://${host}/api/ai/sessions/${sessionId}/ws${qs}`;
   }
 
   // Returns WebSocket URL for Frigate JSMPEG live stream proxy
   getFrigateLiveStreamUrl(connectionId, camera) {
     const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws';
     const host = this.baseURL.replace(/^https?:\/\//, '');
-    return `${wsProtocol}://${host}/api/frigate/${connectionId}/live/${encodeURIComponent(camera)}`;
+    const auth = this.streamAuthQuery();
+    const qs = auth ? `?${auth}` : '';
+    return `${wsProtocol}://${host}/api/frigate/${connectionId}/live/${encodeURIComponent(camera)}${qs}`;
   }
 
   // Config endpoints
