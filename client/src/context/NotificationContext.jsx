@@ -26,6 +26,14 @@ function notificationReducer(state, action) {
       return state.filter(n => n.id !== action.id);
     case 'CLEAR':
       return [];
+    case 'CLEAR_UNPINNED':
+      // "Clear all" semantics: drop every unpinned row regardless of
+      // origin (server-persisted alerts get marked seen alongside —
+      // see clearAll). Differs from HYDRATE, which intentionally
+      // preserves local-only rows so a page-load refresh doesn't
+      // wipe a toast that fired client-side. The user clicking
+      // "Clear all" is asking for the wipe; HYDRATE isn't.
+      return state.filter((n) => n.pinned);
     case 'SET_PINNED':
       return state.map(n => n.id === action.id ? { ...n, pinned: action.pinned } : n);
     case 'HYDRATE':
@@ -139,15 +147,17 @@ export function NotificationProvider({ children }) {
 
   const clearAll = useCallback(async () => {
     // Mirror server behaviour: pinned entries don't drop on "clear all."
-    // They remain in state and continue to render.
+    // They remain in state and continue to render. EVERY non-pinned row
+    // drops — both server-persisted alerts (also marked seen) and
+    // local-only connection/server notifications (no server state to
+    // touch). Going through HYDRATE would preserve local-only rows
+    // because HYDRATE's job is to merge server state into the bell
+    // without trampling client-side toasts; that's the wrong semantic
+    // for an explicit user-driven clear, so use a dedicated action.
     const ids = notificationsRef.current
       .filter((n) => n.alertId && !n.pinned)
       .map((n) => n.alertId);
-    // Drop non-pinned from local state; keep pinned visible.
-    dispatch({
-      type: 'HYDRATE',
-      alerts: notificationsRef.current.filter((n) => n.pinned),
-    });
+    dispatch({ type: 'CLEAR_UNPINNED' });
     // Fire seen for each persisted entry (best-effort, fire-and-forget).
     for (const aid of ids) {
       apiClient.markAlertSeen(aid).catch((err) => console.warn('clearAll seen failed', err));
