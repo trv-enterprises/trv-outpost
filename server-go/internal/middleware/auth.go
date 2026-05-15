@@ -12,17 +12,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
-	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
 
 const (
-	// UserContextKey is the key used to store user in gin context
+	// UserContextKey is the key used to store user in gin context.
+	// Post-refactor this holds a JWT-derived *models.User shim, not
+	// a freshly-fetched DB record. Handlers that need full fidelity
+	// (admin mutations, audit fields) must re-fetch via userService.
 	UserContextKey = "user"
-	// AuthHeader is the header name for user GUID
-	AuthHeader = "X-User-ID"
-	// AuthQueryParam is the query parameter name for user GUID (fallback for EventSource)
-	AuthQueryParam = "user_id"
+	// ClaimsContextKey holds the parsed *auth.Claims. The right
+	// surface for routine authz — DoesUserHavePriv reads from it.
+	ClaimsContextKey = "claims"
 )
 
 // RouteCapability defines which capability is required for a route pattern
@@ -43,34 +44,32 @@ type RouteCapability struct {
 	Public bool
 }
 
-// AuthMiddleware provides authentication and authorization
+// AuthMiddleware provides authentication and authorization. After
+// the session-token refactor, every authenticated request carries
+// our own access JWT — minted at /api/auth/session by trading any
+// of the inbound credentials (Clerk JWT, API key, X-User-ID,
+// ?user_id=) for a pair. Middleware here verifies the access
+// token; the inbound channels live only at the bootstrap handler.
+//
+// userService stays so handlers needing a fully-populated *User
+// (e.g. for admin operations that mutate the user record) can
+// look it up from the JWT's UserID. Routine authz uses the JWT
+// claims directly via DoesUserHavePriv.
 type AuthMiddleware struct {
-	userService     *service.UserService
-	apiKeyService   *service.APIKeyService
-	identityVerifier auth.IdentityVerifier   // nil when Clerk/OIDC mode is disabled
-	userRepo        *repository.UserRepository // for ResolveUserByVerifiedIdentity
-	rules           []RouteCapability
+	userService *service.UserService
+	sessions    *auth.SessionService
+	rules       []RouteCapability
 }
 
-// NewAuthMiddleware creates a new auth middleware. The API key service
-// is required for production. The identityVerifier is optional —
-// nil means "no external IdP configured, fall through to API-key /
-// X-User-ID legacy auth." When non-nil, Bearer tokens that don't look
-// like API keys are dispatched to the verifier (Clerk JWTs today,
-// generic OIDC in v0.11). userRepo is used by the verified-identity
-// resolution path.
+// NewAuthMiddleware creates the session-token middleware.
 func NewAuthMiddleware(
 	userService *service.UserService,
-	apiKeyService *service.APIKeyService,
-	identityVerifier auth.IdentityVerifier,
-	userRepo *repository.UserRepository,
+	sessions *auth.SessionService,
 ) *AuthMiddleware {
 	return &AuthMiddleware{
-		userService:      userService,
-		apiKeyService:    apiKeyService,
-		identityVerifier: identityVerifier,
-		userRepo:         userRepo,
-		rules:            buildRouteRules(),
+		userService: userService,
+		sessions:    sessions,
+		rules:       buildRouteRules(),
 	}
 }
 
@@ -244,168 +243,68 @@ func buildRouteRules() []RouteCapability {
 // asked for Bearer auth and got it wrong.
 func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Authorization: Bearer …
-		if token := extractBearerToken(c); token != "" {
-			m.authenticateBearer(c, token)
-			return
+		// Extract the access token from one of three channels:
+		//   1. Authorization: Bearer <token>           (regular fetch)
+		//   2. ?st=<token>                             (EventSource, WebSocket)
+		//   3. Sec-WebSocket-Protocol: trve.<token>    (future polish; see plans-maybe)
+		// Channels 1 and 2 are sufficient for v0.17.0 — channel 3
+		// is a future refinement that keeps WS tokens out of URLs.
+		token := extractBearerToken(c)
+		if token == "" {
+			token = strings.TrimSpace(c.Query("st"))
 		}
-
-		// 2. ?token=<token> — query-param fallback for EventSource.
-		// Accept both API keys and (when configured) JWTs; dispatch
-		// by token shape inside authenticateBearer.
-		if qToken := strings.TrimSpace(c.Query("token")); qToken != "" {
-			if looksLikeAPIKey(qToken) || m.identityVerifier != nil {
-				m.authenticateBearer(c, qToken)
-				return
-			}
-		}
-
-		// 3 & 4. Legacy X-User-ID header / ?user_id query param
-		guid := c.GetHeader(AuthHeader)
-		if guid == "" {
-			guid = c.Query(AuthQueryParam)
-		}
-		if guid == "" {
-			// 5. No credentials — let route authorization decide.
+		if token == "" {
+			// No credential — defer to Authorize(). Public:true rules
+			// pass through; everything else gets 401 from the default
+			// "auth required" policy.
 			c.Next()
 			return
 		}
 
-		user, err := m.userService.GetUserByGUID(c.Request.Context(), guid)
+		claims, err := m.sessions.VerifyAccessToken(token)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate"})
+			if errors.Is(err, auth.ErrTokenExpired) {
+				// Distinct status hint so the client knows to refresh
+				// and retry instead of re-bootstrapping. apiClient's
+				// 401-handler does the refresh round-trip on this.
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Access token expired",
+					"hint":  "refresh",
+				})
+				c.Abort()
+				return
+			}
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access token"})
 			c.Abort()
 			return
 		}
 
-		if user == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
-			c.Abort()
-			return
-		}
-
-		if !user.Active {
-			c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
-			c.Abort()
-			return
-		}
-		// System users may only authenticate via API key. Allowing
-		// a bare X-User-ID claim for a system principal would let
-		// any unauthenticated caller impersonate the service.
-		if user.IsSystem() {
-			c.JSON(http.StatusForbidden, gin.H{"error": "System users must authenticate via API key"})
-			c.Abort()
-			return
-		}
-
-		c.Set(UserContextKey, user)
+		// Attach both the claims (cheap, synchronous authz) and a
+		// lightweight User shim (for handlers that need the full
+		// record). The shim is the JWT-derived view — handlers that
+		// mutate the user must re-fetch from the DB.
+		c.Set(ClaimsContextKey, claims)
+		c.Set(UserContextKey, claimsToUser(claims))
 		c.Next()
 	}
 }
 
-// authenticateBearer dispatches a Bearer token to the right validator
-// based on its shape. Aborts the request with 401/403 on failure.
-func (m *AuthMiddleware) authenticateBearer(c *gin.Context, token string) {
-	if looksLikeAPIKey(token) {
-		m.authenticateAPIKey(c, token)
-		return
+// claimsToUser builds a lightweight *User from JWT claims. Routine
+// authz uses claims directly; this exists for handlers/code that
+// still consume *User (e.g. legacy helpers, audit logging). Fields
+// that aren't in the JWT (CreatedAt, Email, etc.) are zero — if a
+// handler needs them, re-fetch from userService.
+func claimsToUser(claims *auth.Claims) *models.User {
+	if claims == nil {
+		return nil
 	}
-	// Anything that isn't an API key gets routed to the configured
-	// IdP verifier. If no verifier is configured, this is a 401 —
-	// arbitrary opaque tokens are not honored.
-	if m.identityVerifier == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "No identity provider configured for this token type"})
-		c.Abort()
-		return
+	return &models.User{
+		ID:           claims.UserID,
+		GUID:         claims.GUID,
+		Active:       true, // verified-token implies active at issuance
+		Kind:         claims.Kind,
+		Capabilities: claims.Capabilities,
 	}
-	m.authenticateIdP(c, token)
-}
-
-// authenticateAPIKey validates a `trve_…` token and sets the user
-// context. Used by dashboard-agent, MCP clients, and scripts.
-func (m *AuthMiddleware) authenticateAPIKey(c *gin.Context, token string) {
-	if m.apiKeyService == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "API keys are not enabled"})
-		c.Abort()
-		return
-	}
-	key, err := m.apiKeyService.Validate(c.Request.Context(), token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
-		c.Abort()
-		return
-	}
-	user, err := m.userService.GetUserByGUID(c.Request.Context(), key.UserGUID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate"})
-		c.Abort()
-		return
-	}
-	if user == nil {
-		// Key references a deleted user — treat as invalid.
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
-		c.Abort()
-		return
-	}
-	if !user.Active {
-		c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
-		c.Abort()
-		return
-	}
-	c.Set(UserContextKey, user)
-	c.Next()
-}
-
-// authenticateIdP validates a JWT against the configured identity
-// verifier (Clerk today) and resolves to a dashboard User using the
-// hybrid Clerk-ID-then-email JIT-link policy.
-func (m *AuthMiddleware) authenticateIdP(c *gin.Context, token string) {
-	identity, err := m.identityVerifier.VerifyToken(c.Request.Context(), token)
-	if err != nil {
-		// Don't leak verifier internals to the caller — this is a
-		// classic 401 either way.
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session token"})
-		c.Abort()
-		return
-	}
-
-	user, err := auth.ResolveUserByVerifiedIdentity(c.Request.Context(), m.userRepo, identity)
-	if err != nil {
-		if errors.Is(err, auth.ErrUserNotAuthorized) {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Account not authorized for this deployment",
-				"hint":  "An admin must create a matching user record before you can sign in.",
-			})
-			c.Abort()
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to authenticate"})
-		c.Abort()
-		return
-	}
-	if !user.Active {
-		c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
-		c.Abort()
-		return
-	}
-	// System users have no interactive sign-in path. An IdP token
-	// resolving to a system user means the IdP linkage is wrong;
-	// reject before we let it impersonate a service principal.
-	if user.IsSystem() {
-		c.JSON(http.StatusForbidden, gin.H{"error": "System users cannot sign in interactively"})
-		c.Abort()
-		return
-	}
-	c.Set(UserContextKey, user)
-	c.Next()
-}
-
-// looksLikeAPIKey is the cheap dispatch test for distinguishing a
-// dashboard API key from anything else (currently always a Clerk JWT
-// when an IdP is configured). API keys are exactly `trve_<base32>`;
-// JWTs are dot-delimited base64. Easy and unambiguous.
-func looksLikeAPIKey(token string) bool {
-	return strings.HasPrefix(token, "trve_")
 }
 
 // extractBearerToken pulls the token out of an `Authorization: Bearer
@@ -548,7 +447,9 @@ func (m *AuthMiddleware) getRequiredCapability(path, method string) models.Capab
 	return "" // No specific capability required
 }
 
-// GetUser retrieves the user from gin context
+// GetUser retrieves the user from gin context. Lightweight shim
+// built from JWT claims — for code that needs full DB fidelity,
+// re-fetch via userService.GetUser(ctx, GetUser(c).ID).
 func GetUser(c *gin.Context) *models.User {
 	userInterface, exists := c.Get(UserContextKey)
 	if !exists || userInterface == nil {
@@ -559,6 +460,22 @@ func GetUser(c *gin.Context) *models.User {
 		return nil
 	}
 	return user
+}
+
+// GetClaims retrieves the parsed JWT claims from gin context. The
+// right surface for routine authz: every authz check on a route
+// after Authenticate() can read claims here and pass them to
+// auth.DoesUserHavePriv.
+func GetClaims(c *gin.Context) *auth.Claims {
+	v, exists := c.Get(ClaimsContextKey)
+	if !exists || v == nil {
+		return nil
+	}
+	claims, ok := v.(*auth.Claims)
+	if !ok {
+		return nil
+	}
+	return claims
 }
 
 // RequireAuth is a helper middleware that requires authentication

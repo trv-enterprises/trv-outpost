@@ -203,6 +203,14 @@ func (s *SessionService) RefreshTokenPair(ctx context.Context, rawRefresh string
 	}, nil
 }
 
+// VerifyAccessToken validates an access token and returns its claims.
+// Thin pass-through to the signer with the type lock pinned to
+// access — refresh tokens presented at normal API endpoints fail
+// the same way bad signatures do.
+func (s *SessionService) VerifyAccessToken(raw string) (*Claims, error) {
+	return s.signer.VerifyToken(raw, TokenTypeAccess)
+}
+
 // PeekClaims parses a refresh token WITHOUT enforcing expiry.
 // Used by Logout to recover the family_id from an expired-but-
 // otherwise-valid refresh token so we can still revoke the family.
