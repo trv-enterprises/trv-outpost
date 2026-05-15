@@ -15,19 +15,16 @@ import './ModeToggle.scss';
  *
  * @param {string} currentMode - Currently active mode
  * @param {function} onModeChange - Callback when mode changes
- * @param {object} capabilities - User capabilities { can_design, can_manage }
+ * @param {object} capabilities - User capabilities { can_view, can_design, can_manage }
  */
 function ModeToggle({ currentMode, onModeChange, capabilities = {} }) {
-  // Check if user has any capabilities beyond view-only
-  const hasDesignOrManage = capabilities.can_design || capabilities.can_manage;
-
   const allModes = [
     {
       id: MODES.VIEW,
       icon: Dashboard,
       label: 'View',
       description: 'View dashboards',
-      requiresCapability: null // Everyone can view
+      requiresCapability: 'can_view'
     },
     {
       id: MODES.DESIGN,
@@ -45,16 +42,20 @@ function ModeToggle({ currentMode, onModeChange, capabilities = {} }) {
     }
   ];
 
-  // Filter modes based on user capabilities
-  // Hide View button if user only has view access (no mode switching needed)
-  const modes = allModes.filter(mode => {
-    // If user only has view access, don't show the View button (they're always in view mode)
-    if (mode.id === MODES.VIEW && !hasDesignOrManage) return false;
-    if (!mode.requiresCapability) return true;
-    return capabilities[mode.requiresCapability] === true;
-  });
+  // Show only modes the user can actually enter. Previously the
+  // View button was hidden for view-only users (since they
+  // couldn't switch anywhere else anyway). After v0.17.0 some
+  // principals lack view entirely (webhook-only system users),
+  // so we now gate View the same way Design and Manage are gated:
+  // show iff the matching capability is present.
+  //
+  // If a user has more than one mode available, show all of them
+  // — switching between View and Design or View and Manage is the
+  // common case for power users.
+  const modes = allModes.filter(mode => capabilities[mode.requiresCapability] === true);
 
-  // If no modes to show (view-only user), don't render anything
+  // No modes to show → no toggle. The route tree will surface a
+  // "no UI access" stub for this case.
   if (modes.length === 0) return null;
 
   return (

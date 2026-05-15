@@ -98,7 +98,7 @@ function AppContent({ onDisconnect }) {
   // legacy-bootstrap deployments have nothing to sign out of, so
   // we hide it there to avoid a misleading affordance.
   const [clerkActive, setClerkActive] = useState(false);
-  const [userCapabilities, setUserCapabilities] = useState({ can_design: false, can_manage: false });
+  const [userCapabilities, setUserCapabilities] = useState({ can_view: false, can_design: false, can_manage: false });
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
@@ -298,19 +298,37 @@ function AppContent({ onDisconnect }) {
     if (!currentUser) return;
     try {
       const capabilities = await apiClient.getCurrentUser();
-      setUserCapabilities(capabilities);
+      // can_view is derived client-side from the capabilities list.
+      // Server returns can_design and can_manage as convenience
+      // booleans but doesn't (yet) ship can_view — keep the
+      // derivation here so the contract is forward-compatible if
+      // the server adds it later.
+      const can_view = Array.isArray(capabilities.capabilities) &&
+        capabilities.capabilities.includes('view');
+      setUserCapabilities({ ...capabilities, can_view });
       // Hydrate persisted list prefs from user config (view mode, sort, filters per list page)
       hydrateListPrefs();
-      // If current mode is not allowed for this user, switch to VIEW
-      if (currentMode === MODES.DESIGN && !capabilities.can_design) {
-        handleModeChange(MODES.VIEW);
-      } else if (currentMode === MODES.MANAGE && !capabilities.can_manage) {
-        handleModeChange(MODES.VIEW);
+      // If current mode isn't allowed, switch to whatever IS.
+      // Cascade: prefer view, then design, then manage. If none
+      // are allowed, leave mode where it is (the route-tree guard
+      // will surface a "no UI access" stub).
+      const fallback = can_view
+        ? MODES.VIEW
+        : capabilities.can_design
+          ? MODES.DESIGN
+          : capabilities.can_manage
+            ? MODES.MANAGE
+            : null;
+      if (currentMode === MODES.VIEW && !can_view && fallback) {
+        handleModeChange(fallback);
+      } else if (currentMode === MODES.DESIGN && !capabilities.can_design && fallback) {
+        handleModeChange(fallback);
+      } else if (currentMode === MODES.MANAGE && !capabilities.can_manage && fallback) {
+        handleModeChange(fallback);
       }
     } catch (err) {
       console.error('Failed to fetch capabilities:', err);
-      // Default to VIEW-only if we can't fetch capabilities
-      setUserCapabilities({ can_design: false, can_manage: false });
+      setUserCapabilities({ can_view: false, can_design: false, can_manage: false });
     }
   }, [currentUser, currentMode]);
 
@@ -510,6 +528,35 @@ function AppContent({ onDisconnect }) {
     );
   }
 
+  // Bootstrap is still in flight (initial load or post-refresh).
+  // Don't render the route tree yet — pages mount eagerly and fire
+  // /api/* calls in their own useEffect, which would race the
+  // session bootstrap and 401. Soft navigation doesn't have this
+  // issue (App stays mounted, accessToken is already in memory);
+  // hard refresh does, because access tokens live in JS memory only
+  // and the new page has to re-bootstrap from URL/admin-default.
+  //
+  // We hold here ONLY while identity is unresolved. Once resolved,
+  // either the route tree renders (currentUser present) or the
+  // sign-in-not-configured stub above kicks in (currentUser nil in
+  // prod). Dev mode never sees the stub but still benefits from
+  // the bootstrap wait — pages no longer pre-render with a null
+  // access token.
+  if (!identityResolved) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        color: 'var(--cds-text-secondary)',
+        background: 'var(--cds-background)',
+      }}>
+        <Loading description="Loading…" withOverlay={false} />
+      </div>
+    );
+  }
+
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
     <div className={electronMode ? 'electron-mode' : ''}>
@@ -615,15 +662,29 @@ function AppContent({ onDisconnect }) {
 
       <Content className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}>
         <Routes>
-          {/* Default route redirects to View mode - first dashboard or fallback */}
+          {/* Default route. Cascade by capability:
+              1. can_view → first dashboard (or /view/dashboards if none)
+              2. can_manage → /manage
+              3. can_design → /design/dashboards
+              4. nothing → no permitted landing; route falls through
+                 to the 404/blank, which is fine for a principal that
+                 shouldn't be in a browser anyway (e.g. webhook-only
+                 system user). */}
           <Route path="/" element={
-            dashboardsLoaded ? (
-              firstDashboardId ? (
-                <Navigate to={`/view/dashboards/${firstDashboardId}`} replace />
-              ) : (
-                <Navigate to="/view/dashboards" replace />
-              )
-            ) : null
+            !identityResolved ? null :
+              userCapabilities.can_view ? (
+                dashboardsLoaded ? (
+                  firstDashboardId ? (
+                    <Navigate to={`/view/dashboards/${firstDashboardId}`} replace />
+                  ) : (
+                    <Navigate to="/view/dashboards" replace />
+                  )
+                ) : null
+              ) : userCapabilities.can_manage ? (
+                <Navigate to="/manage" replace />
+              ) : userCapabilities.can_design ? (
+                <Navigate to="/design/dashboards" replace />
+              ) : null
           } />
 
           {/* Design Mode Routes */}
