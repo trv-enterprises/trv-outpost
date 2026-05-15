@@ -58,17 +58,28 @@ type RouteCapability struct {
 type AuthMiddleware struct {
 	userService *service.UserService
 	sessions    *auth.SessionService
+	apiKeys     *service.APIKeyService
 	rules       []RouteCapability
 }
 
 // NewAuthMiddleware creates the session-token middleware.
+//
+// apiKeys is the only "back-channel" credential we still honor on
+// every request: service principals (ts-store webhooks, dashboard-
+// agent, scripts) send `Authorization: Bearer trve_…` directly
+// rather than going through the bootstrap-then-session-token dance.
+// The interactive (browser) auth flow goes through session tokens
+// exclusively; API keys are explicitly the non-interactive shape.
+// Pass nil if you genuinely want JWT-only.
 func NewAuthMiddleware(
 	userService *service.UserService,
 	sessions *auth.SessionService,
+	apiKeys *service.APIKeyService,
 ) *AuthMiddleware {
 	return &AuthMiddleware{
 		userService: userService,
 		sessions:    sessions,
+		apiKeys:     apiKeys,
 		rules:       buildRouteRules(),
 	}
 }
@@ -249,24 +260,89 @@ func buildRouteRules() []RouteCapability {
 // asked for Bearer auth and got it wrong.
 func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Extract the access token from one of three channels:
-		//   1. Authorization: Bearer <token>           (regular fetch)
-		//   2. ?st=<token>                             (EventSource, WebSocket)
-		//   3. Sec-WebSocket-Protocol: trve.<token>    (future polish; see plans-maybe)
-		// Channels 1 and 2 are sufficient for v0.17.0 — channel 3
-		// is a future refinement that keeps WS tokens out of URLs.
+		// Two credential channels, dispatched by shape:
+		//
+		//   trve_…    → API key (long-lived, revocable). The
+		//               credential IS the session — validated
+		//               against the api_keys collection on every
+		//               request, no bootstrap dance, no refresh.
+		//               Used by ANY principal calling from outside
+		//               a browser: ts-store webhook (system user),
+		//               dashboard-agent CLI (system or human),
+		//               kiosks, the user's own cron job script.
+		//               Both human-minted keys (POST /api/api-keys)
+		//               and admin-minted system-user keys (Manage →
+		//               System Users → Generate) take this path
+		//               identically.
+		//   anything  → access JWT (short-lived; minted at
+		//   else        /api/auth/session for interactive
+		//               browser sessions only).
+		//
+		// Transport carriers, in order:
+		//   1. Authorization: Bearer <token>   (fetch)
+		//   2. ?st=<token>                     (EventSource / WS)
+		//
+		// API keys: the credential IS the session — revocation
+		// happens by deleting the api_keys row, not by waiting
+		// for an expiry. This is the standard service-principal
+		// model (Stripe/GitHub-shape). Treating API keys as
+		// "trade for a refresh JWT" would force admin-revoked
+		// kiosks to wait out the refresh-token TTL before they
+		// stop, which defeats the point of revocation.
 		token := extractBearerToken(c)
 		if token == "" {
 			token = strings.TrimSpace(c.Query("st"))
 		}
 		if token == "" {
 			// No credential — defer to Authorize(). Public:true rules
-			// pass through; everything else gets 401 from the default
-			// "auth required" policy.
+			// pass through; everything else gets 401.
 			c.Next()
 			return
 		}
 
+		// API-key shape: validate directly, no JWT involved.
+		if strings.HasPrefix(token, "trve_") {
+			if m.apiKeys == nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "API keys not enabled"})
+				c.Abort()
+				return
+			}
+			key, err := m.apiKeys.Validate(c.Request.Context(), token)
+			if err != nil || key == nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+				c.Abort()
+				return
+			}
+			user, err := m.userService.GetUserByGUID(c.Request.Context(), key.UserGUID)
+			if err != nil || user == nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "API key owner not found"})
+				c.Abort()
+				return
+			}
+			if !user.Active {
+				c.JSON(http.StatusForbidden, gin.H{"error": "API key owner inactive"})
+				c.Abort()
+				return
+			}
+			// Synthesize claims so downstream authz uses the same
+			// shape regardless of which credential resolved. No
+			// JWT minted — claims live only in the request context
+			// for this single request.
+			claims := &auth.Claims{
+				UserID:        user.ID,
+				GUID:          user.GUID,
+				Capabilities:  user.Capabilities,
+				Kind:          user.Kind,
+				SourceChannel: "apikey",
+				Type:          auth.TokenTypeAccess,
+			}
+			c.Set(ClaimsContextKey, claims)
+			c.Set(UserContextKey, user)
+			c.Next()
+			return
+		}
+
+		// JWT shape: verify our access token.
 		claims, err := m.sessions.VerifyAccessToken(token)
 		if err != nil {
 			if errors.Is(err, auth.ErrTokenExpired) {
@@ -285,10 +361,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Attach both the claims (cheap, synchronous authz) and a
-		// lightweight User shim (for handlers that need the full
-		// record). The shim is the JWT-derived view — handlers that
-		// mutate the user must re-fetch from the DB.
 		c.Set(ClaimsContextKey, claims)
 		c.Set(UserContextKey, claimsToUser(claims))
 		c.Next()

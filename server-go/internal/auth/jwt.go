@@ -198,7 +198,14 @@ func (s *TokenSigner) VerifyToken(raw string, expected TokenType) (*Claims, erro
 	// Pull claims out even when parsing errored — jwt v5 still
 	// populates them on expiry, and PeekClaims (used by Logout to
 	// recover family_id from an expired refresh) needs them.
-	claims, _ := parsed.Claims.(*Claims)
+	// `parsed` itself may be nil for malformed tokens (e.g. an API
+	// key shaped `trve_…` that isn't dot-delimited JWT) — guard
+	// before touching it, otherwise we panic and return 500 instead
+	// of the intended 401.
+	var claims *Claims
+	if parsed != nil {
+		claims, _ = parsed.Claims.(*Claims)
+	}
 	if err != nil {
 		// Detect expiry explicitly so the middleware can hint
 		// "refresh and retry" instead of treating it the same as a
@@ -208,7 +215,7 @@ func (s *TokenSigner) VerifyToken(raw string, expected TokenType) (*Claims, erro
 		}
 		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
 	}
-	if claims == nil || !parsed.Valid {
+	if parsed == nil || claims == nil || !parsed.Valid {
 		return nil, ErrInvalidToken
 	}
 	if expected != "" {

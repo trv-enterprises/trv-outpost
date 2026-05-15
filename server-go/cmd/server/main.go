@@ -414,7 +414,7 @@ func main() {
 	}
 	authSessionHandler := handlers.NewAuthSessionHandler(sessionService, idpRegistry, userService, cookieCfg)
 
-	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService)
+	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService)
 
 	// Initialize MCP
 	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, typeFilter)
