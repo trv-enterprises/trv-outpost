@@ -93,6 +93,15 @@ definitions:
       name:
         type: string
     type: object
+  handlers.SessionResponse:
+    properties:
+      access_token:
+        type: string
+      expires_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.UserCapabilitiesResponse'
+    type: object
   handlers.StreamAggregatedRequest:
     properties:
       function:
@@ -4700,6 +4709,14 @@ paths:
       summary: Subscribe to server status via WebSocket
       tags:
       - system
+  /auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+      summary: Revoke the current session
+      tags:
+      - auth
   /auth/me:
     get:
       description: Returns the authenticated user's ID, name, and capabilities
@@ -4719,6 +4736,44 @@ paths:
       summary: Get current user capabilities
       tags:
       - Auth
+  /auth/refresh:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SessionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh access token using the refresh-cookie
+      tags:
+      - auth
+  /auth/session:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SessionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Bootstrap a session from any supported inbound credential
+      tags:
+      - auth
   /components:
     get:
       description: Get a paginated list of components (latest version of each) with
