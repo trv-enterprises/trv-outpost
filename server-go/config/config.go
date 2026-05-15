@@ -27,6 +27,26 @@ type Config struct {
 	StaticFiles      StaticFilesConfig           `mapstructure:"static_files"`
 	Settings         []SettingDefinition         `mapstructure:"settings"`
 	API              APIConnectionConfig         `mapstructure:"api"`
+	Auth             AuthConfig                  `mapstructure:"auth"`
+}
+
+// AuthConfig holds session-token policy. JWTSecret is the HS256
+// signing key for our own access+refresh JWTs — MUST be set in
+// production (>= 32 bytes). Empty means "generate a random secret
+// at boot" — fine for dev but invalidates every token on restart,
+// so don't use in prod.
+//
+// Issuer ends up as the `iss` claim. Useful for distinguishing
+// dev/staging/prod tokens if they ever cross environments.
+//
+// CookieSecure controls the Secure flag on the refresh cookie —
+// true on HTTPS deployments, false on plain HTTP (dev, homelab).
+// CookieSameSite is "Lax" (dev) or "Strict" (prod).
+type AuthConfig struct {
+	JWTSecret      string `mapstructure:"jwt_secret"`
+	Issuer         string `mapstructure:"issuer"`
+	CookieSecure   bool   `mapstructure:"cookie_secure"`
+	CookieSameSite string `mapstructure:"cookie_samesite"` // "lax" | "strict" | "none"
 }
 
 // APIConnectionConfig holds deployment-wide policy for REST API

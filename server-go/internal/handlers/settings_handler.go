@@ -5,12 +5,59 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/auth"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
+
+// validateSettingBounds rejects out-of-range values for keys with
+// known min/max policy. Keys not listed here pass through unchanged
+// — settings are otherwise unstructured.
+func validateSettingBounds(key string, value interface{}) error {
+	switch key {
+	case auth.SettingAccessTTLKey:
+		secs, ok := coerceInt64(value)
+		if !ok {
+			return fmt.Errorf("%s must be a number of seconds", key)
+		}
+		min := int64(auth.MinAccessTokenTTL.Seconds())
+		max := int64(auth.MaxAccessTokenTTL.Seconds())
+		if secs < min || secs > max {
+			return fmt.Errorf("%s must be between %d and %d seconds", key, min, max)
+		}
+	case auth.SettingRefreshTTLKey:
+		secs, ok := coerceInt64(value)
+		if !ok {
+			return fmt.Errorf("%s must be a number of seconds", key)
+		}
+		min := int64(auth.MinRefreshTokenTTL.Seconds())
+		max := int64(auth.MaxRefreshTokenTTL.Seconds())
+		if secs < min || secs > max {
+			return fmt.Errorf("%s must be between %d and %d seconds", key, min, max)
+		}
+	}
+	return nil
+}
+
+func coerceInt64(v interface{}) (int64, bool) {
+	switch x := v.(type) {
+	case int:
+		return int64(x), true
+	case int32:
+		return int64(x), true
+	case int64:
+		return x, true
+	case float32:
+		return int64(x), true
+	case float64:
+		return int64(x), true
+	}
+	return 0, false
+}
 
 // SettingsHandler handles HTTP requests for settings
 type SettingsHandler struct {
@@ -87,6 +134,16 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 	var req models.UpdateSettingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
+		return
+	}
+
+	// Validate / clamp specific keys at the boundary so the
+	// session service (which only reads, never writes) doesn't have
+	// to re-validate on every issuance. Defense in depth — the
+	// session service ALSO clamps when reading, in case a value
+	// reached the DB another way.
+	if err := validateSettingBounds(key, req.Value); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

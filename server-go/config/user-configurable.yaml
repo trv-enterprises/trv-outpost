@@ -76,3 +76,17 @@ settings:
       charts: []
       controls: []
       displays: []
+
+  # Session-token policy (v0.17.0+). Changes apply to tokens issued
+  # AFTER the change — already-minted tokens keep their original exp.
+  # Operators can shorten TTLs to harden, or lengthen for friction-
+  # sensitive deployments (kiosks). Server clamps to safe bounds.
+  - key: auth.access_token_ttl_seconds
+    category: auth
+    description: "Lifetime in seconds of the short-lived access JWT (60-3600). Default 900 = 15 minutes. Lower hardens; higher reduces refresh round-trips."
+    value: 900
+
+  - key: auth.refresh_token_ttl_seconds
+    category: auth
+    description: "Lifetime in seconds of the refresh token (3600-2592000). Default 604800 = 7 days. Drives how often users must re-bootstrap when they don't keep the tab open."
+    value: 604800

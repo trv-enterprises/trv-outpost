@@ -98,7 +98,7 @@ function AppContent({ onDisconnect }) {
   // legacy-bootstrap deployments have nothing to sign out of, so
   // we hide it there to avoid a misleading affordance.
   const [clerkActive, setClerkActive] = useState(false);
-  const [userCapabilities, setUserCapabilities] = useState({ can_design: false, can_manage: false });
+  const [userCapabilities, setUserCapabilities] = useState({ can_view: false, can_design: false, can_manage: false });
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
@@ -121,18 +121,25 @@ function AppContent({ onDisconnect }) {
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        // Tier 0: ?key=trve_… in the URL — kiosk pattern, also
-        // anyone hand-crafting an API-key-authenticated link.
-        // Stamp the key onto apiClient so every subsequent call
-        // sends Authorization: Bearer trve_…, then strip it from
-        // the URL bar. The remainder of the bootstrap proceeds
-        // normally; getCurrentUser() will resolve the user from
-        // the API key's owner instead of the legacy GUID path.
+        // Step 1: gather whatever inbound credential the URL has,
+        // stamp it onto apiClient, strip it from the address bar.
+        // These channels are what the SERVER's IdP registry knows
+        // how to read at /api/auth/session — we just pre-load them.
         const urlParams = new URLSearchParams(window.location.search);
+        let urlCleaned = false;
         const fromKey = urlParams.get('key');
         if (fromKey && fromKey.startsWith('trve_')) {
           apiClient.setApiKey(fromKey);
           urlParams.delete('key');
+          urlCleaned = true;
+        }
+        const fromUrlGuid = urlParams.get('user_id');
+        if (fromUrlGuid) {
+          apiClient.setCurrentUser(fromUrlGuid);
+          urlParams.delete('user_id');
+          urlCleaned = true;
+        }
+        if (urlCleaned) {
           const cleanQuery = urlParams.toString();
           const cleanUrl = window.location.pathname +
             (cleanQuery ? '?' + cleanQuery : '') +
@@ -140,23 +147,25 @@ function AppContent({ onDisconnect }) {
           window.history.replaceState(null, '', cleanUrl);
         }
 
-        // Try to load the full user directory. This succeeds for
-        // Manage users (admins) and gives them the in-header user
-        // switcher; it 403s for everyone else, which is expected.
-        // The bootstrap doesn't depend on the list for identity
-        // resolution — /api/auth/me carries everything we need for
-        // the current user.
-        //
-        // Dev-mode caveat: when a developer uses DevUserSwitcher to
-        // act-as a non-Manage user (e.g. Support), the very next page
-        // load makes getUsers() 403 — leaving the switcher empty with
-        // no way back to Admin from the UI. Cache the list in
-        // localStorage on every successful load and fall back to that
-        // cache when the live call returns empty. The cache is keyed
-        // on `import.meta.env.DEV` so Vite tree-shakes the whole
-        // branch out of production bundles. Cached entries are only
-        // used to populate the switcher menu; they are never trusted
-        // for identity decisions (those go through /auth/me).
+        // Step 2: if we have NO inbound credential yet, consult the
+        // admin-default-browser-user-guid setting (public). This
+        // is the kiosk pattern for deployments where one device
+        // shouldn't have to type anything to identify itself.
+        const hasInbound = !!(apiClient.apiKey || apiClient.tokenProvider || apiClient.getCurrentUserGuid());
+        if (!hasInbound) {
+          try {
+            const adminDefault = await apiClient.getSetting('default_browser_user_guid');
+            const def = (adminDefault?.value || '').toString().trim();
+            if (def) apiClient.setCurrentUser(def);
+          } catch {
+            // Setting may not exist on older deployments — fall through.
+          }
+        }
+
+        // Step 3: load the user directory for the in-header switcher.
+        // Best-effort; 403 for non-Manage callers is expected and
+        // doesn't block bootstrap. Dev-mode keeps a localStorage
+        // cache so the switcher survives an act-as-non-admin reload.
         const response = await apiClient.getUsers().catch(() => ({ users: [] }));
         let list = response?.users || [];
         if (import.meta.env.DEV) {
@@ -165,128 +174,54 @@ function AppContent({ onDisconnect }) {
             try {
               localStorage.setItem(DEV_SWITCHER_CACHE_KEY, JSON.stringify(list));
             } catch {
-              // QuotaExceededError or private-mode storage — ignore.
+              // localStorage may be full or unavailable — non-fatal.
             }
           } else {
             try {
               const cached = localStorage.getItem(DEV_SWITCHER_CACHE_KEY);
               if (cached) {
                 const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  list = parsed;
-                }
+                if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
               }
             } catch {
-              // Malformed cache — ignore; user can clear localStorage
-              // and reload as an admin to repopulate.
+              // Malformed cache JSON — non-fatal.
             }
           }
         }
         setUsers(list);
 
-        // Tier 1: ?user_id=<guid> URL param. Strip from address bar
-        // after capture so a refresh doesn't perpetually re-apply
-        // (and so it doesn't sit in the user's history bar).
-        const fromUrl = urlParams.get('user_id');
-        if (fromUrl) {
-          urlParams.delete('user_id');
-          const cleanQuery = urlParams.toString();
-          const cleanUrl = window.location.pathname +
-            (cleanQuery ? '?' + cleanQuery : '') +
-            window.location.hash;
-          window.history.replaceState(null, '', cleanUrl);
-          apiClient.setCurrentUser(fromUrl);
+        // Dev-only fallback: pick the first user when no inbound
+        // credential has been established. In prod this is skipped
+        // by design — a fresh visitor sees the sign-in stub.
+        if (!apiClient.apiKey && !apiClient.tokenProvider && !apiClient.getCurrentUserGuid() && import.meta.env.DEV && list.length > 0) {
+          apiClient.setCurrentUser(list[0].guid);
         }
 
-        // resolveSelf: fetch the authenticated user's own record via
-        // /api/auth/me. Returns null when no credential resolves to
-        // an active user. Since v0.15.2 the response carries name +
-        // guid alongside capabilities, so the SPA bootstrap doesn't
-        // need any second user lookup — no directory enumeration,
-        // no other-user reads.
-        const resolveSelf = async () => {
-          try {
-            const me = await apiClient.getCurrentUser();
-            return {
-              id: me.user_id,
-              guid: me.guid || me.user_id, // server populates guid as of v0.15.2; tolerate older builds
-              name: me.name,
-              active: me.active !== false,
-              capabilities: me.capabilities,
-            };
-          } catch {
-            return null;
-          }
-        };
-
-        // If a Tier 0 API key was set above, /api/auth/me identifies
-        // the user (the apikey'd request resolves them server-side).
-        // This wins ahead of the localStorage / admin-default tiers —
-        // the URL key was an explicit authentication signal.
-        if (apiClient.apiKey) {
-          const me = await resolveSelf();
-          if (me) {
-            // Propagate the resolved GUID to apiClient + localStorage.
-            // Without this, getCurrentUserGuid() returns null on every
-            // subsequent call — which breaks anything that needs a
-            // user id but can't read the bearer token directly:
-            // /api/config/user/<guid> (the kiosk's own preferences,
-            // including default_dashboard_id), and the EventSource
-            // URLs StreamConnectionManager builds for SSE streams
-            // (EventSource can't set Authorization headers, so streams
-            // either ride ?user_id= or — when an API key is available —
-            // ?token=; both need the GUID/key to be discoverable).
-            apiClient.setCurrentUser(me.guid);
-            setCurrentUser(me);
-            setIdentityResolved(true);
-            return;
-          }
-          console.warn('Bootstrap: API key did not resolve a user');
+        // Step 4: SINGLE bootstrap call. The server walks its IdP
+        // registry, finds whichever credential is presented (API
+        // key, Clerk JWT, X-User-ID, ?user_id=), validates it, and
+        // returns an access JWT + sets the refresh cookie.
+        // After this, every other request just rides the access
+        // token from apiClient.
+        if (!apiClient.apiKey && !apiClient.tokenProvider && !apiClient.getCurrentUserGuid()) {
+          // No inbound credential, no point asking — render the
+          // sign-in stub.
+          return;
         }
-
-        // Tier 2: localStorage GUID (just-set above OR persisted
-        // from a prior session) is already on the apiClient as the
-        // X-User-ID header; /api/auth/me confirms it resolves.
-        let user = null;
-        if (apiClient.getCurrentUserGuid()) {
-          user = await resolveSelf();
-        }
-
-        // Tier 3: admin-configured default. Only consulted when no
-        // identity has been established yet for this browser.
-        if (!user) {
-          try {
-            const adminDefault = await apiClient.getSetting('default_browser_user_guid');
-            const def = (adminDefault?.value || '').toString().trim();
-            if (def) {
-              apiClient.setCurrentUser(def);
-              user = await resolveSelf();
-              if (!user) {
-                // The admin-default GUID didn't resolve (user deleted
-                // or deactivated). Clear it so we don't keep sending
-                // a dead header on every subsequent request.
-                apiClient.setCurrentUser(null);
-              }
-            }
-          } catch {
-            // Setting may not exist on older deployments — fall through
-            // to Tier 4.
-          }
-        }
-
-        // Tier 4 (dev only): default to first user. In production
-        // this is intentionally skipped — a fresh visitor with no
-        // URL param, no localStorage, and no admin default sees the
-        // sign-in stub instead of being silently logged in as
-        // someone. Also skipped when `list` is empty — non-admin
-        // bootstraps don't have a directory to pick from.
-        if (!user && import.meta.env.DEV && list.length > 0) {
-          user = list[0];
-          apiClient.setCurrentUser(user.guid);
-        }
-
-        if (user) {
-          setCurrentUser(user);
+        const session = await apiClient.createSession();
+        if (session?.user) {
+          const me = session.user;
+          setCurrentUser({
+            id: me.user_id,
+            guid: me.guid || me.user_id,
+            name: me.name,
+            active: me.active !== false,
+            capabilities: me.capabilities,
+          });
+          // Sync the GUID side-channel so legacy callsites that
+          // still call getCurrentUserGuid() (config-user routes,
+          // any straggler logic) keep working during the transition.
+          if (me.guid) apiClient.setCurrentUser(me.guid);
         }
       } catch (err) {
         console.error('Failed to bootstrap user identity:', err);
@@ -294,6 +229,16 @@ function AppContent({ onDisconnect }) {
         setIdentityResolved(true);
       }
     };
+
+    // Wire the session-expired handler: when refresh permanently
+    // fails (cookie gone, family revoked), re-bootstrap from scratch.
+    // App.jsx is the only place that knows the inbound-credential
+    // chain, so it owns the recovery path.
+    apiClient.setSessionExpiredHandler(() => {
+      console.warn('Session expired; re-bootstrapping');
+      bootstrap();
+    });
+
     bootstrap();
   }, []);
 
@@ -353,19 +298,37 @@ function AppContent({ onDisconnect }) {
     if (!currentUser) return;
     try {
       const capabilities = await apiClient.getCurrentUser();
-      setUserCapabilities(capabilities);
+      // can_view is derived client-side from the capabilities list.
+      // Server returns can_design and can_manage as convenience
+      // booleans but doesn't (yet) ship can_view — keep the
+      // derivation here so the contract is forward-compatible if
+      // the server adds it later.
+      const can_view = Array.isArray(capabilities.capabilities) &&
+        capabilities.capabilities.includes('view');
+      setUserCapabilities({ ...capabilities, can_view });
       // Hydrate persisted list prefs from user config (view mode, sort, filters per list page)
       hydrateListPrefs();
-      // If current mode is not allowed for this user, switch to VIEW
-      if (currentMode === MODES.DESIGN && !capabilities.can_design) {
-        handleModeChange(MODES.VIEW);
-      } else if (currentMode === MODES.MANAGE && !capabilities.can_manage) {
-        handleModeChange(MODES.VIEW);
+      // If current mode isn't allowed, switch to whatever IS.
+      // Cascade: prefer view, then design, then manage. If none
+      // are allowed, leave mode where it is (the route-tree guard
+      // will surface a "no UI access" stub).
+      const fallback = can_view
+        ? MODES.VIEW
+        : capabilities.can_design
+          ? MODES.DESIGN
+          : capabilities.can_manage
+            ? MODES.MANAGE
+            : null;
+      if (currentMode === MODES.VIEW && !can_view && fallback) {
+        handleModeChange(fallback);
+      } else if (currentMode === MODES.DESIGN && !capabilities.can_design && fallback) {
+        handleModeChange(fallback);
+      } else if (currentMode === MODES.MANAGE && !capabilities.can_manage && fallback) {
+        handleModeChange(fallback);
       }
     } catch (err) {
       console.error('Failed to fetch capabilities:', err);
-      // Default to VIEW-only if we can't fetch capabilities
-      setUserCapabilities({ can_design: false, can_manage: false });
+      setUserCapabilities({ can_view: false, can_design: false, can_manage: false });
     }
   }, [currentUser, currentMode]);
 
@@ -565,6 +528,35 @@ function AppContent({ onDisconnect }) {
     );
   }
 
+  // Bootstrap is still in flight (initial load or post-refresh).
+  // Don't render the route tree yet — pages mount eagerly and fire
+  // /api/* calls in their own useEffect, which would race the
+  // session bootstrap and 401. Soft navigation doesn't have this
+  // issue (App stays mounted, accessToken is already in memory);
+  // hard refresh does, because access tokens live in JS memory only
+  // and the new page has to re-bootstrap from URL/admin-default.
+  //
+  // We hold here ONLY while identity is unresolved. Once resolved,
+  // either the route tree renders (currentUser present) or the
+  // sign-in-not-configured stub above kicks in (currentUser nil in
+  // prod). Dev mode never sees the stub but still benefits from
+  // the bootstrap wait — pages no longer pre-render with a null
+  // access token.
+  if (!identityResolved) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        color: 'var(--cds-text-secondary)',
+        background: 'var(--cds-background)',
+      }}>
+        <Loading description="Loading…" withOverlay={false} />
+      </div>
+    );
+  }
+
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
     <div className={electronMode ? 'electron-mode' : ''}>
@@ -670,15 +662,29 @@ function AppContent({ onDisconnect }) {
 
       <Content className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}>
         <Routes>
-          {/* Default route redirects to View mode - first dashboard or fallback */}
+          {/* Default route. Cascade by capability:
+              1. can_view → first dashboard (or /view/dashboards if none)
+              2. can_manage → /manage
+              3. can_design → /design/dashboards
+              4. nothing → no permitted landing; route falls through
+                 to the 404/blank, which is fine for a principal that
+                 shouldn't be in a browser anyway (e.g. webhook-only
+                 system user). */}
           <Route path="/" element={
-            dashboardsLoaded ? (
-              firstDashboardId ? (
-                <Navigate to={`/view/dashboards/${firstDashboardId}`} replace />
-              ) : (
-                <Navigate to="/view/dashboards" replace />
-              )
-            ) : null
+            !identityResolved ? null :
+              userCapabilities.can_view ? (
+                dashboardsLoaded ? (
+                  firstDashboardId ? (
+                    <Navigate to={`/view/dashboards/${firstDashboardId}`} replace />
+                  ) : (
+                    <Navigate to="/view/dashboards" replace />
+                  )
+                ) : null
+              ) : userCapabilities.can_manage ? (
+                <Navigate to="/manage" replace />
+              ) : userCapabilities.can_design ? (
+                <Navigate to="/design/dashboards" replace />
+              ) : null
           } />
 
           {/* Design Mode Routes */}

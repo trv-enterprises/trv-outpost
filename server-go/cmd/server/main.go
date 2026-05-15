@@ -6,6 +6,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,6 +23,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
+	"github.com/trv-enterprises/trve-dashboard/internal/auth/idp"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
 	"github.com/trv-enterprises/trve-dashboard/internal/handlers"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
@@ -355,25 +358,89 @@ func main() {
 		fmt.Println("· Clerk identity verifier disabled (CLERK_SECRET_KEY not set)")
 	}
 
-	// Initialize auth middleware. The API key service is passed so the
-	// middleware can resolve `Authorization: Bearer trve_...` tokens to a
-	// user, in addition to the legacy X-User-ID header path. The
-	// identity verifier (when non-nil) handles `Authorization: Bearer
-	// <jwt>` for browser sessions issued by Clerk.
-	authMiddleware := middleware.NewAuthMiddleware(userService, apiKeyService, identityVerifier, userRepo)
+	// Initialize the session-token plumbing. After v0.17.0, every
+	// authenticated request to /api/* carries a dashboard-issued
+	// access JWT — the four inbound credential channels (Clerk JWT,
+	// API key, X-User-ID, ?user_id=) only ride to /api/auth/session
+	// where they're traded for a JWT pair. The bootstrap handler
+	// walks the IdP registry; the registry order is deliberate (API
+	// keys win over Clerk over legacy GUID).
+	jwtSecret := cfg.Auth.JWTSecret
+	if jwtSecret == "" {
+		// Dev fallback: generate a random 64-byte secret at boot. This
+		// invalidates every issued token on restart — fine for local
+		// dev but DON'T run a production deployment this way.
+		buf := make([]byte, 64)
+		if _, err := rand.Read(buf); err != nil {
+			log.Fatalf("Failed to seed random JWT secret: %v", err)
+		}
+		jwtSecret = hex.EncodeToString(buf)
+		log.Println("⚠️  AUTH: jwt_secret not configured — using ephemeral random secret. All sessions invalidate on restart.")
+	}
+	tokenSigner, err := auth.NewTokenSigner(jwtSecret, cfg.Auth.Issuer)
+	if err != nil {
+		log.Fatalf("Failed to init token signer: %v", err)
+	}
+	revokedFamiliesRepo := repository.NewRevokedFamiliesRepository(mongodb.Database)
+	if err := revokedFamiliesRepo.CreateIndexes(context.Background()); err != nil {
+		log.Printf("⚠️  revoked_refresh_families index creation: %v", err)
+	}
+	sessionService := auth.NewSessionService(tokenSigner, revokedFamiliesRepo, settingsService)
+
+	// IdP registry — order matters: API key first (unambiguous prefix
+	// wins), Clerk JWT second (when configured), legacy GUID last
+	// (anyone-who-knows-the-GUID-becomes-them; dev/homelab only).
+	idps := []idp.IdentityProvider{
+		idp.NewAPIKeyIdP(apiKeyService, userService),
+	}
+	if identityVerifier != nil {
+		idps = append(idps, idp.NewClerkJWTIdP(identityVerifier, userRepo))
+	}
+	idps = append(idps, idp.NewLegacyGUIDIdP(userService))
+	idpRegistry := idp.NewRegistry(idps...)
+
+	// Bootstrap handler — /api/auth/session, /api/auth/refresh,
+	// /api/auth/logout. Registered as PUBLIC below; the inbound
+	// credentials are read inside the handler via the registry.
+	cookieCfg := handlers.DefaultRefreshCookie()
+	cookieCfg.Secure = cfg.Auth.CookieSecure
+	switch strings.ToLower(cfg.Auth.CookieSameSite) {
+	case "strict":
+		cookieCfg.SameSite = http.SameSiteStrictMode
+	case "none":
+		cookieCfg.SameSite = http.SameSiteNoneMode
+	default:
+		cookieCfg.SameSite = http.SameSiteLaxMode
+	}
+	authSessionHandler := handlers.NewAuthSessionHandler(sessionService, idpRegistry, userService, cookieCfg)
+
+	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService)
 
 	// Initialize MCP
 	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, typeFilter)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
-	// API routes with authentication and authorization middleware
-	// (Note: there is no public /api/auth/login endpoint anymore;
-	// non-browser clients authenticate via API keys —
-	// `Authorization: Bearer trve_…` — and validate by calling
-	// /api/auth/me which is mounted on the authenticated group below.)
+	// PUBLIC bootstrap routes — must be reachable BEFORE the auth
+	// middleware runs because they accept the inbound credentials
+	// (Clerk JWT, API key, X-User-ID, ?user_id=) that the middleware
+	// no longer knows about. Mounted on the bare router so neither
+	// Authenticate nor Authorize fires.
+	publicAuth := router.Group("/api/auth")
+	{
+		publicAuth.POST("/session", authSessionHandler.CreateSession)
+		publicAuth.POST("/refresh", authSessionHandler.Refresh)
+		publicAuth.POST("/logout", authSessionHandler.Logout)
+	}
+
+	// API routes with authentication and authorization middleware.
+	// Every route in this group requires a valid access JWT (presented
+	// as Authorization: Bearer or ?st= for SSE/WS). Routes that need
+	// to answer pre-auth (e.g. /api/auth/me's "you have no identity"
+	// response, /api/health) are flagged Public:true in the route-
+	// rules table; Authorize() lets them through unauthenticated.
 	api := router.Group("/api")
-	api.Use(authMiddleware.Authenticate()) // Authenticate all API requests
-	api.Use(authMiddleware.Authorize())    // Check route permissions
+	api.Use(authMiddleware.Authenticate())
+	api.Use(authMiddleware.Authorize())
 	{
 		// Health check
 		api.GET("/health", healthCheck(mongodb))

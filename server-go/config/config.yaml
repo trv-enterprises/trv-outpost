@@ -41,6 +41,30 @@ llm:
 api:
   allow_insecure_tls: false
 
+# Session-token auth policy. All four fields are typically overridden
+# via the DASHBOARD_AUTH_* environment variables in production; the
+# YAML defaults here are for local dev only.
+#
+# jwt_secret: HS256 signing key for our access+refresh tokens. MUST
+# be at least 32 bytes in production. Leave empty for local dev — the
+# server generates a random secret at boot (which invalidates every
+# session on restart, NEVER use empty in production).
+#
+# issuer: stamped on `iss` JWT claim. Useful for tagging
+# dev/staging/prod tokens distinctly.
+#
+# cookie_secure: true on HTTPS deployments, false on plain HTTP
+# (dev, homelab). When false the refresh cookie is sent over HTTP
+# which is a downgrade — keep false ONLY behind a tailnet/VPN.
+#
+# cookie_samesite: "lax" (dev), "strict" (production), or "none".
+# "none" requires cookie_secure=true.
+auth:
+  jwt_secret: ""
+  issuer: "trve-dashboard"
+  cookie_secure: false
+  cookie_samesite: "lax"
+
 validation:
   max_code_size: 100000  # bytes
   dangerous_patterns:
