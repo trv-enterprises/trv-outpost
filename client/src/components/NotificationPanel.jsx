@@ -3,7 +3,8 @@
 // See LICENSE file for details.
 
 import { useRef, useEffect } from 'react';
-import { Close, Pin, PinFilled } from '@carbon/icons-react';
+import { useNavigate } from 'react-router-dom';
+import { Close, Pin, PinFilled, Launch } from '@carbon/icons-react';
 import {
   CheckmarkFilled,
   ErrorFilled,
@@ -33,7 +34,19 @@ function formatTime(timestamp) {
  */
 function NotificationPanel({ open, onClose }) {
   const { notifications, removeNotification, setPinned, clearAll } = useNotifications();
+  const navigate = useNavigate();
   const panelRef = useRef(null);
+
+  // Open the dashboard the alert deep-links to. Closes the panel
+  // (the dashboard is the user's new context), but does NOT mark
+  // the alert seen — dismiss stays explicit per the Phase 2 design.
+  // The user opening the dashboard is "I'm investigating," not
+  // "I'm done with this alert."
+  const handleOpenDashboard = (dashboardId) => {
+    if (!dashboardId) return;
+    onClose();
+    navigate(`/view/dashboards/${dashboardId}`);
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -83,6 +96,16 @@ function NotificationPanel({ open, onClose }) {
                   )}
                   <span className="notification-panel__item-time">{formatTime(n.timestamp)}</span>
                 </div>
+                {n.dashboardId && (
+                  <button
+                    className="notification-panel__item-open"
+                    onClick={() => handleOpenDashboard(n.dashboardId)}
+                    aria-label="Open dashboard"
+                    title="Open the dashboard this alert points at"
+                  >
+                    <Launch size={14} />
+                  </button>
+                )}
                 {n.alertId && (
                   <button
                     className="notification-panel__item-pin"

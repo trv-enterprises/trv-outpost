@@ -167,9 +167,27 @@ class APIClient {
     if (connectionId) {
       const name = this.connectionNameCache.get(connectionId);
       title = 'Connection unreachable';
-      subtitle = name
-        ? `${name} did not respond. Check the connection or its endpoint.`
-        : 'A connection did not respond. Check the connection or its endpoint.';
+      if (name) {
+        subtitle = `${name} did not respond. Check the connection or its endpoint.`;
+      } else {
+        // Cache miss — the user still needs to know *which* connection
+        // broke. A bare "A connection did not respond" gives them no
+        // way to act. The UUID prefix is enough to disambiguate even
+        // on deployments with many connections, and is recoverable
+        // (they can match it against the connections list).
+        // Eager name fetch below populates the cache so subsequent
+        // failures render the friendly name.
+        const idHint = connectionId.slice(0, 8);
+        subtitle = `Connection ${idHint} did not respond. Check the connection or its endpoint.`;
+        // Fire-and-forget — fills the cache for next time. We don't
+        // await; the current notification ships with the UUID-hint
+        // copy, and the next failure (or page refresh) picks up the
+        // real name. Errors are swallowed — the user is already
+        // looking at a connection-down notification; they don't need
+        // a second "couldn't fetch connection metadata" toast layered
+        // on top.
+        this.getConnection(connectionId).catch(() => {});
+      }
     } else {
       title = 'Server unreachable';
       subtitle = 'The dashboard server is not responding. Check that it is running.';

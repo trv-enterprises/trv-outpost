@@ -93,7 +93,8 @@
     }
   }
 
-  &__item-pin {
+  &__item-pin,
+  &__item-open {
     flex-shrink: 0;
     background: none;
     border: none;

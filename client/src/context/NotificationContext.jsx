@@ -97,6 +97,7 @@ export function NotificationProvider({ children }) {
         id: nextId++,
         timestamp: a.fired_at ? new Date(a.fired_at).getTime() : Date.now(),
         alertId: a.id,
+        dashboardId: a.dashboard_id || '',  // decoded from external_ref; empty when producer didn't supply one
         kind: a.severity === 'error' ? 'error' : a.severity === 'info' ? 'info' : 'warning',
         title: a.title,
         subtitle: a.subtitle,
