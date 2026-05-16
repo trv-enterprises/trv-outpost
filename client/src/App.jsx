@@ -208,6 +208,13 @@ function AppContent({ onDisconnect }) {
           // sign-in stub.
           return;
         }
+        // Snapshot which credential channel we're bootstrapping with
+        // BEFORE createSession runs — the call itself sets state
+        // (accessToken, etc.) but doesn't tell us which IdP resolved.
+        // We need this to decide whether to show the Sign-Out
+        // affordance: that only makes sense for Clerk SSO sessions,
+        // not API-key kiosks or X-User-ID dev mode.
+        const bootstrappedViaClerk = !!apiClient.tokenProvider;
         const session = await apiClient.createSession();
         if (session?.user) {
           const me = session.user;
@@ -222,6 +229,14 @@ function AppContent({ onDisconnect }) {
           // still call getCurrentUserGuid() (config-user routes,
           // any straggler logic) keep working during the transition.
           if (me.guid) apiClient.setCurrentUser(me.guid);
+          // Flip clerkActive when the Clerk SDK provided the inbound
+          // token. AccountMenu reads this to decide whether to render
+          // the Sign-Out item — kiosks and dev-mode acts-as flows
+          // intentionally don't surface it (there's no Clerk session
+          // to sign out of).
+          if (bootstrappedViaClerk) {
+            setClerkActive(true);
+          }
         }
       } catch (err) {
         console.error('Failed to bootstrap user identity:', err);

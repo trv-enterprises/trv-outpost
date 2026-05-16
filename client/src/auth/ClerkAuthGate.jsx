@@ -2,9 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { SignedIn, SignedOut, SignIn, useUser } from '@clerk/clerk-react';
-import { useEffect, useState } from 'react';
-import apiClient from '../api/client';
+import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
 import ClerkSessionBridge from './ClerkSessionBridge';
 
 /**
@@ -29,11 +27,20 @@ import ClerkSessionBridge from './ClerkSessionBridge';
  * theme comes through; we don't try to re-skin it.
  */
 export default function ClerkAuthGate({ children }) {
+  // Note: pre-v0.17.0 this also mounted ClerkLegacyIDBridge, which
+  // eagerly hit /api/auth/me with the Clerk JWT to JIT-link the
+  // dashboard user record. That role is now App.jsx's bootstrap
+  // effect via apiClient.createSession() — the bootstrap endpoint
+  // walks the IdP registry which performs the same JIT link, and
+  // App.jsx reads `apiClient.tokenProvider` to decide whether to
+  // flip `clerkActive` for the Sign-Out menu item. Removing the
+  // bridge avoids a redundant /api/auth/me call that fires BEFORE
+  // the access token is set (which now 401s under the
+  // session-token middleware).
   return (
     <>
       <SignedIn>
         <ClerkSessionBridge />
-        <ClerkLegacyIDBridge />
         {children}
       </SignedIn>
       <SignedOut>
@@ -41,79 +48,6 @@ export default function ClerkAuthGate({ children }) {
       </SignedOut>
     </>
   );
-}
-
-/**
- * ClerkLegacyIDBridge
- *
- * On first sign-in, hit `/api/auth/me` with the Clerk JWT. The
- * server's middleware will JIT-link the Clerk identity to the
- * matching User record (by email) and return the resolved user.
- * We stash the user's GUID into apiClient.setCurrentUser so the
- * existing pages that read `currentUserGuid` from localStorage
- * keep working without rewrites. A side-effect-only component.
- */
-function ClerkLegacyIDBridge() {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const [synced, setSynced] = useState(false);
-
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || synced) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        // /api/auth/me validates the bearer (set by ClerkSessionBridge)
-        // and returns the resolved dashboard user's capabilities.
-        // The very first call on a deployment also creates the
-        // JIT-link in MongoDB. The response shape is
-        // UserCapabilitiesResponse: { user_id (mongo _id), name,
-        // capabilities, can_design, can_manage } — note `user_id`
-        // is the internal _id, NOT the GUID. We then fetch the full
-        // user record to get the GUID and stash it where App.jsx
-        // expects it.
-        const me = await apiClient.request('/api/auth/me');
-        if (cancelled) return;
-        const userID = me?.user_id;
-        if (!userID) {
-          console.warn('Clerk auth bridge: /api/auth/me returned no user_id', me);
-          setSynced(true);
-          return;
-        }
-
-        // Fetch full user record so we have the GUID + email.
-        const fullUser = await apiClient.getUser(userID);
-        if (cancelled || !fullUser?.guid) {
-          setSynced(true);
-          return;
-        }
-
-        // Persist the GUID into apiClient + localStorage so the
-        // legacy X-User-ID fallback path also works (e.g. for
-        // requests that fire before ClerkSessionBridge attaches a
-        // token, or for tools that read currentUserGuid directly).
-        apiClient.setCurrentUser(fullUser.guid);
-
-        // Notify App.jsx so its `currentUser` state updates and the
-        // header/dropdown show the right name. App.jsx listens for
-        // this event in its bootstrap effect; using an event keeps
-        // the bridge decoupled from App's shape.
-        window.dispatchEvent(new CustomEvent('clerk-user-resolved', {
-          detail: { user: fullUser },
-        }));
-
-        setSynced(true);
-      } catch (err) {
-        // 401 here means the server couldn't match the Clerk
-        // identity to any user record. The /api/auth/me response
-        // includes a hint; surface it to the user.
-        console.warn('Clerk auth bridge: /api/auth/me failed', err);
-        setSynced(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isLoaded, isSignedIn, user, synced]);
-
-  return null;
 }
 
 /**
