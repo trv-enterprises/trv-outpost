@@ -47,6 +47,22 @@ type AuthConfig struct {
 	Issuer         string `mapstructure:"issuer"`
 	CookieSecure   bool   `mapstructure:"cookie_secure"`
 	CookieSameSite string `mapstructure:"cookie_samesite"` // "lax" | "strict" | "none"
+
+	// AllowLegacyGUID enables the LegacyGUIDIdP at the bootstrap
+	// endpoint. When true, /api/auth/session accepts an X-User-ID
+	// header or ?user_id= query param and trusts it as identity
+	// assertion (whoever knows the GUID becomes that user). Useful
+	// for dev mode (the user-switcher), kiosk URL bookmarks, and
+	// migration grace periods on tailnet-only deployments.
+	//
+	// Default false. Production deployments — anywhere a real IdP
+	// (Clerk, OIDC, SAML) is the authoritative sign-in — must keep
+	// this off. Otherwise anyone who learns a user's GUID
+	// (URLs, logs, exports, support tickets) can impersonate them
+	// at the bootstrap endpoint.
+	//
+	// Override per-environment via DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true.
+	AllowLegacyGUID bool `mapstructure:"allow_legacy_guid"`
 }
 
 // APIConnectionConfig holds deployment-wide policy for REST API

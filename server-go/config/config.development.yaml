@@ -1,0 +1,15 @@
+# Development overrides — merged on top of config.yaml when
+# ENV=development (the default when DASHBOARD_ENV is unset).
+#
+# Production deployments (ENV=production) get config.production.yaml
+# instead, which deliberately does NOT enable legacy-GUID auth.
+
+auth:
+  # Local dev relies on the X-User-ID-style identity assertion:
+  #   - `npm run dev` user-switcher dropdown
+  #   - curl smoke tests using `X-User-ID: admin-…`
+  #   - any browser tab opened to `?user_id=<guid>`
+  # Enable here so they work without env-var ceremony. NEVER set
+  # this on a production deployment — see config.yaml for the
+  # full reasoning.
+  allow_legacy_guid: true

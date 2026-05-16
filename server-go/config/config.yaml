@@ -41,9 +41,10 @@ llm:
 api:
   allow_insecure_tls: false
 
-# Session-token auth policy. All four fields are typically overridden
-# via the DASHBOARD_AUTH_* environment variables in production; the
-# YAML defaults here are for local dev only.
+# Session-token auth policy. Typically overridden via DASHBOARD_AUTH_*
+# environment variables in production; the YAML defaults here are
+# safe-for-dev (jwt_secret empty triggers an ephemeral random secret;
+# cookies set for HTTP).
 #
 # jwt_secret: HS256 signing key for our access+refresh tokens. MUST
 # be at least 32 bytes in production. Leave empty for local dev — the
@@ -59,11 +60,22 @@ api:
 #
 # cookie_samesite: "lax" (dev), "strict" (production), or "none".
 # "none" requires cookie_secure=true.
+#
+# allow_legacy_guid: when true, /api/auth/session accepts an X-User-ID
+# header or ?user_id= query param as identity assertion (whoever knows
+# the GUID becomes that user). Default false. Enable on:
+#   - local dev (the user-switcher in npm run dev needs this)
+#   - homelab (kiosk URL bookmarks, ?user_id= patterns)
+#   - any tailnet-only deployment behind a network perimeter
+# Disable on production deployments where Clerk/OIDC/SAML is the
+# real authentication path — otherwise anyone with a leaked GUID
+# (URLs, logs, exports) can impersonate at the bootstrap endpoint.
 auth:
   jwt_secret: ""
   issuer: "trve-dashboard"
   cookie_secure: false
   cookie_samesite: "lax"
+  allow_legacy_guid: false
 
 validation:
   max_code_size: 100000  # bytes

@@ -16,8 +16,8 @@ and [API Keys](../../udoc/docs/api-keys.md).
 ```
                        ┌─────────────────────────────────────┐
    Inbound credential  │                                     │
-   ─────────────────►  │  IdP registry  (apikey, clerk,     │
-   (Clerk JWT,         │                  legacy-guid, …)   │
+   ─────────────────►  │  IdP registry  (apikey, clerk,      │
+   (Clerk JWT,         │                  legacy-guid, …)    │
     trve_… key,        │                                     │
     X-User-ID, etc.)   └────────────────┬────────────────────┘
                                         │
@@ -35,11 +35,11 @@ and [API Keys](../../udoc/docs/api-keys.md).
                                         ▼
                        ┌─────────────────────────────────────┐
                        │ Authentication middleware           │
-                       │   verify(jwt) → *Claims              │
+                       │   verify(jwt) → *Claims             │
                        │     OR                              │
-                       │   validate(trve_… key) → *Claims     │
+                       │   validate(trve_… key) → *Claims    │
                        │                                     │
-                       │ attach claims to request context   │
+                       │ attach claims to request context    │
                        └────────────────┬────────────────────┘
                                         │
                           DoesUserHavePriv(claims, needed)

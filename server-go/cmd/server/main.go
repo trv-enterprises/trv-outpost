@@ -389,14 +389,21 @@ func main() {
 
 	// IdP registry — order matters: API key first (unambiguous prefix
 	// wins), Clerk JWT second (when configured), legacy GUID last
-	// (anyone-who-knows-the-GUID-becomes-them; dev/homelab only).
+	// (anyone-who-knows-the-GUID-becomes-them; gated on
+	// cfg.Auth.AllowLegacyGUID so production deployments with a real
+	// IdP don't accept a header-asserted identity).
 	idps := []idp.IdentityProvider{
 		idp.NewAPIKeyIdP(apiKeyService, userService),
 	}
 	if identityVerifier != nil {
 		idps = append(idps, idp.NewClerkJWTIdP(identityVerifier, userRepo))
 	}
-	idps = append(idps, idp.NewLegacyGUIDIdP(userService))
+	if cfg.Auth.AllowLegacyGUID {
+		idps = append(idps, idp.NewLegacyGUIDIdP(userService))
+		fmt.Println("⚠️  Legacy GUID auth ENABLED (auth.allow_legacy_guid=true). X-User-ID and ?user_id= are honored at /api/auth/session. Disable in production.")
+	} else {
+		fmt.Println("· Legacy GUID auth disabled (auth.allow_legacy_guid=false). X-User-ID and ?user_id= are NOT honored at /api/auth/session.")
+	}
 	idpRegistry := idp.NewRegistry(idps...)
 
 	// Bootstrap handler — /api/auth/session, /api/auth/refresh,
