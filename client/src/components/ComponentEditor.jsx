@@ -1091,9 +1091,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   const fetchDatasources = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/connections?page=1&page_size=100`);
-      const data = await response.json();
-      if (data.connections) {
+      // Must go through apiClient — raw fetch() sends no auth headers,
+      // which 401s under the session-token model. apiClient attaches
+      // the access JWT (or API key) automatically.
+      const data = await apiClient.getConnections({ page: 1, page_size: 100 });
+      if (data?.connections) {
         setConnections(data.connections);
       }
     } catch (err) {
@@ -1243,23 +1245,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryParams = { database: edgelakeDatabase };
       }
 
-      const response = await fetch(`${API_BASE}/api/connections/${selectedConnectionId}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: {
-            raw: rawQuery,
-            type: queryType,
-            params: queryParams
-          }
-        })
+      // Must go through apiClient — raw fetch() sends no auth headers
+      // and 401s under session-token auth. apiClient attaches the
+      // access JWT (or API key) and throws an Error with .status / .body
+      // on non-2xx, so the existing error handling works unchanged.
+      const data = await apiClient.queryConnection(selectedConnectionId, {
+        raw: rawQuery,
+        type: queryType,
+        params: queryParams,
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Query failed');
-      }
 
       setPreviewData(data.result_set);
 

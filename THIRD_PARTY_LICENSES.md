@@ -38,3 +38,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+---
+
+## Carbon Design System (favicon + UI components)
+
+- **Files**: `client/public/brain.svg` (favicon — derived from the
+  `ChartMultitype` icon), and the broader `@carbon/react` /
+  `@carbon/icons-react` components used throughout the SPA.
+- **Author**: IBM Corporation
+- **Source**: https://github.com/carbon-design-system/carbon
+- **License**: Apache 2.0
+
+The favicon is the `ChartMultitype` glyph from `@carbon/icons-react`
+exported as a standalone SVG. Carbon icons ship Apache 2.0, the same
+license as this project, so redistribution requires no additional
+notice beyond this acknowledgement.
