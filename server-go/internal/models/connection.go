@@ -779,17 +779,24 @@ var authHeaderNames = map[string]struct{}{
 	"x-access-token":      {},
 }
 
-// maskAuthHeaders returns a copy of headers with any header whose name
-// matches authHeaderNames (case-insensitive) replaced with the masked
-// placeholder. Preserves the original key casing.
+// maskAuthHeaders is the SanitizeForAPI shape: replaces matching
+// header values with the round-trip sentinel.
 func maskAuthHeaders(headers map[string]string) map[string]string {
+	return maskAuthHeadersWith(headers, SecretMaskedValue)
+}
+
+// maskAuthHeadersWith returns a copy of headers with any header whose
+// name matches authHeaderNames (case-insensitive) replaced with
+// `replacement`. Preserves the original key casing. The two call
+// sites (API vs export) supply different replacement strings.
+func maskAuthHeadersWith(headers map[string]string, replacement string) map[string]string {
 	if len(headers) == 0 {
 		return headers
 	}
 	out := make(map[string]string, len(headers))
 	for k, v := range headers {
 		if _, ok := authHeaderNames[strings.ToLower(k)]; ok {
-			out[k] = SecretMaskedValue
+			out[k] = replacement
 		} else {
 			out[k] = v
 		}
@@ -812,11 +819,19 @@ func maskURLUserinfo(raw string) string {
 	return u.String()
 }
 
-// maskSQLOptions redacts password-like segments inside a SQL connection
-// options string (e.g. "sslmode=require&password=hunter2&connect_timeout=10").
-// Supports `&`-separated, `;`-separated, and space-separated key=value
-// pairs — the three common driver conventions. Keys matched case-insensitively.
+// maskSQLOptions is the SanitizeForAPI shape: replaces password-like
+// segments with the round-trip sentinel.
 func maskSQLOptions(opts string) string {
+	return maskSQLOptionsWith(opts, SecretMaskedValue)
+}
+
+// maskSQLOptionsWith redacts password-like segments inside a SQL
+// connection options string (e.g.
+// "sslmode=require&password=hunter2&connect_timeout=10") with the
+// supplied replacement value. Supports `&`-separated, `;`-separated,
+// and space-separated key=value pairs — the three common driver
+// conventions. Keys matched case-insensitively.
+func maskSQLOptionsWith(opts, replacement string) string {
 	if opts == "" {
 		return opts
 	}
@@ -833,7 +848,7 @@ func maskSQLOptions(opts string) string {
 		}
 		key := strings.ToLower(strings.TrimSpace(kv[:eq]))
 		if _, ok := sensitiveKeys[key]; ok {
-			return kv[:eq+1] + SecretMaskedValue
+			return kv[:eq+1] + replacement
 		}
 		return kv
 	}
@@ -851,30 +866,53 @@ func maskSQLOptions(opts string) string {
 	return strings.Join(parts, sep)
 }
 
-// SanitizeForAPI returns a copy of the connection with every secret
-// field masked. The API never returns unmasked credentials; callers
-// updating a connection must POST/PUT new values to overwrite.
+// SanitizeForAPI returns a copy of the connection with every populated
+// secret field replaced by the SecretMaskedValue sentinel. Empty
+// secrets stay empty. The editor reads this shape: a "********"
+// sentinel tells SecretTextInput "the server has a value here, leave
+// it alone to preserve"; an empty string tells the editor "there is
+// nothing here, the user must fill it in."
+//
+// The sentinel doubles as the round-trip contract on update: when
+// the editor saves with a "********" still in a field, the server's
+// preserveSecrets() restores the actual value from disk before
+// writing. Any other value (including empty) replaces what was
+// stored. See connection_service.go::preserveSecrets.
 func (d *Connection) SanitizeForAPI() *Connection {
-	return d.sanitize()
+	return d.sanitize(SecretMaskedValue)
 }
 
-// SanitizeForExport is an alias for SanitizeForAPI retained for clarity
-// at call sites that build publishable bundles.
+// SanitizeForExport returns a copy of the connection with every
+// populated secret field replaced by the empty string. Unlike the
+// API path, the export path's contract is "bundles never carry
+// secrets in any form" — there is no round-trip sentinel because
+// there is nothing to round-trip to. Importing a bundle never
+// overwrites existing secrets (the import-update path explicitly
+// preserves existing secrets regardless of bundle contents); a
+// new-connection import lands with empty secret fields that an
+// admin must fill in via the editor on the target deployment.
+//
+// Emitting "" instead of "********" makes raw-JSON readers see
+// exactly what will land in the DB: nothing. The field name is
+// still present so it's discoverable as something that needs a
+// value.
 func (d *Connection) SanitizeForExport() *Connection {
-	return d.sanitize()
+	return d.sanitize("")
 }
 
-// sanitize returns a masked copy of the datasource. Every secret-bearing
-// field across every ConnectionConfig sub-struct is redacted.
-func (d *Connection) sanitize() *Connection {
+// sanitize returns a masked copy of the connection. replacement is
+// the string substituted for every populated secret field. Pass
+// SecretMaskedValue for the API/editor shape, "" for the export-
+// bundle shape.
+func (d *Connection) sanitize(replacement string) *Connection {
 	sanitized := *d
 
 	if d.Config.SQL != nil {
 		sqlCopy := *d.Config.SQL
 		if sqlCopy.Password != "" {
-			sqlCopy.Password = SecretMaskedValue
+			sqlCopy.Password = replacement
 		}
-		sqlCopy.Options = maskSQLOptions(sqlCopy.Options)
+		sqlCopy.Options = maskSQLOptionsWith(sqlCopy.Options, replacement)
 		sanitized.Config.SQL = &sqlCopy
 	}
 
@@ -884,22 +922,23 @@ func (d *Connection) sanitize() *Connection {
 		if len(apiCopy.AuthCredentials) > 0 {
 			maskedCreds := make(map[string]string, len(apiCopy.AuthCredentials))
 			for k := range apiCopy.AuthCredentials {
-				maskedCreds[k] = SecretMaskedValue
+				maskedCreds[k] = replacement
 			}
 			apiCopy.AuthCredentials = maskedCreds
 		}
-		apiCopy.Headers = maskAuthHeaders(apiCopy.Headers)
+		apiCopy.Headers = maskAuthHeadersWith(apiCopy.Headers, replacement)
 		// Body and QueryParams are user-authored freeform fields that
 		// commonly contain tokens or api keys. We can't reliably
 		// redact inside them, so mask them whole on any non-empty
-		// value. Importer will prompt the user to re-enter.
+		// value. Importer will prompt the user to re-enter (or, on
+		// the export path, leaves the field empty for discovery).
 		if apiCopy.Body != "" {
-			apiCopy.Body = SecretMaskedValue
+			apiCopy.Body = replacement
 		}
 		if len(apiCopy.QueryParams) > 0 {
 			maskedParams := make(map[string]string, len(apiCopy.QueryParams))
 			for k := range apiCopy.QueryParams {
-				maskedParams[k] = SecretMaskedValue
+				maskedParams[k] = replacement
 			}
 			apiCopy.QueryParams = maskedParams
 		}
@@ -909,16 +948,16 @@ func (d *Connection) sanitize() *Connection {
 	if d.Config.TSStore != nil {
 		tsCopy := *d.Config.TSStore
 		if tsCopy.APIKey != "" {
-			tsCopy.APIKey = SecretMaskedValue
+			tsCopy.APIKey = replacement
 		}
-		tsCopy.Headers = maskAuthHeaders(tsCopy.Headers)
+		tsCopy.Headers = maskAuthHeadersWith(tsCopy.Headers, replacement)
 		sanitized.Config.TSStore = &tsCopy
 	}
 
 	if d.Config.Socket != nil {
 		socketCopy := *d.Config.Socket
 		socketCopy.URL = maskURLUserinfo(socketCopy.URL)
-		socketCopy.Headers = maskAuthHeaders(socketCopy.Headers)
+		socketCopy.Headers = maskAuthHeadersWith(socketCopy.Headers, replacement)
 		sanitized.Config.Socket = &socketCopy
 	}
 
@@ -926,7 +965,7 @@ func (d *Connection) sanitize() *Connection {
 		promCopy := *d.Config.Prometheus
 		promCopy.URL = maskURLUserinfo(promCopy.URL)
 		if promCopy.Password != "" {
-			promCopy.Password = SecretMaskedValue
+			promCopy.Password = replacement
 		}
 		sanitized.Config.Prometheus = &promCopy
 	}
@@ -935,7 +974,7 @@ func (d *Connection) sanitize() *Connection {
 		mqttCopy := *d.Config.MQTT
 		mqttCopy.BrokerURL = maskURLUserinfo(mqttCopy.BrokerURL)
 		if mqttCopy.Password != "" {
-			mqttCopy.Password = SecretMaskedValue
+			mqttCopy.Password = replacement
 		}
 		sanitized.Config.MQTT = &mqttCopy
 	}
@@ -943,7 +982,7 @@ func (d *Connection) sanitize() *Connection {
 	if d.Config.Frigate != nil {
 		frigateCopy := *d.Config.Frigate
 		if frigateCopy.Password != "" {
-			frigateCopy.Password = SecretMaskedValue
+			frigateCopy.Password = replacement
 		}
 		sanitized.Config.Frigate = &frigateCopy
 	}

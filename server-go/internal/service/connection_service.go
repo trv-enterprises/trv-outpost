@@ -306,6 +306,127 @@ func preserveSecrets(newConfig, existingConfig *models.ConnectionConfig) {
 	}
 }
 
+// preserveAllSecretsFromExisting overwrites every secret field on
+// newConfig with whatever is in existingConfig — regardless of what
+// the new value looks like. Used by the bundle-import update path
+// (dashboard_import.go::applyConnection): bundles can't clobber
+// existing credentials, even with an explicit "" or a different
+// secret. This is intentional. Cross-environment bundle imports
+// should never affect the target's secrets; an admin fills them in
+// via the editor on the target deployment.
+//
+// Differs from preserveSecrets, which only restores from existing
+// when the new value is the SecretMaskedValue sentinel (the editor
+// round-trip contract). Here we don't care what the new value is.
+func preserveAllSecretsFromExisting(newConfig, existingConfig *models.ConnectionConfig) {
+	if newConfig.SQL != nil && existingConfig.SQL != nil {
+		newConfig.SQL.Password = existingConfig.SQL.Password
+		newConfig.SQL.Options = existingConfig.SQL.Options
+	}
+	if newConfig.API != nil && existingConfig.API != nil {
+		newConfig.API.URL = existingConfig.API.URL
+		newConfig.API.AuthCredentials = existingConfig.API.AuthCredentials
+		newConfig.API.Headers = existingConfig.API.Headers
+		newConfig.API.Body = existingConfig.API.Body
+		newConfig.API.QueryParams = existingConfig.API.QueryParams
+	}
+	if newConfig.TSStore != nil && existingConfig.TSStore != nil {
+		newConfig.TSStore.APIKey = existingConfig.TSStore.APIKey
+		newConfig.TSStore.Headers = existingConfig.TSStore.Headers
+	}
+	if newConfig.Socket != nil && existingConfig.Socket != nil {
+		newConfig.Socket.URL = existingConfig.Socket.URL
+		newConfig.Socket.Headers = existingConfig.Socket.Headers
+	}
+	if newConfig.Prometheus != nil && existingConfig.Prometheus != nil {
+		newConfig.Prometheus.URL = existingConfig.Prometheus.URL
+		newConfig.Prometheus.Password = existingConfig.Prometheus.Password
+	}
+	if newConfig.MQTT != nil && existingConfig.MQTT != nil {
+		newConfig.MQTT.BrokerURL = existingConfig.MQTT.BrokerURL
+		newConfig.MQTT.Password = existingConfig.MQTT.Password
+	}
+	if newConfig.Frigate != nil && existingConfig.Frigate != nil {
+		newConfig.Frigate.Password = existingConfig.Frigate.Password
+	}
+}
+
+// stripPlaceholderSecrets clears every secret field on cfg that holds
+// the SecretMaskedValue sentinel (or any other non-empty placeholder
+// the bundle might carry). Used by the bundle-import create path so
+// new connections land with truly-empty secret fields, not the
+// literal "********" string — which would otherwise reach adapters
+// at query time and produce confusing upstream errors like
+// "invalid API key format".
+//
+// For freeform fields (API.Body, API.QueryParams, API.URL) where a
+// caller might legitimately include the placeholder as part of their
+// payload, we only strip the exact-match sentinel — substrings stay.
+func stripPlaceholderSecrets(cfg *models.ConnectionConfig) {
+	if cfg.SQL != nil {
+		if cfg.SQL.Password == models.SecretMaskedValue {
+			cfg.SQL.Password = ""
+		}
+		// Options is freeform; can't safely strip without re-parsing.
+		// If the original bundle was emitted by SanitizeForExport it
+		// already has "" inline; legacy bundles with literal
+		// "********" segments stay as-is (the user will see them
+		// when they open the editor and can re-enter).
+	}
+	if cfg.API != nil {
+		for k, v := range cfg.API.AuthCredentials {
+			if v == models.SecretMaskedValue {
+				cfg.API.AuthCredentials[k] = ""
+			}
+		}
+		for k, v := range cfg.API.Headers {
+			if v == models.SecretMaskedValue {
+				cfg.API.Headers[k] = ""
+			}
+		}
+		if cfg.API.Body == models.SecretMaskedValue {
+			cfg.API.Body = ""
+		}
+		for k, v := range cfg.API.QueryParams {
+			if v == models.SecretMaskedValue {
+				cfg.API.QueryParams[k] = ""
+			}
+		}
+	}
+	if cfg.TSStore != nil {
+		if cfg.TSStore.APIKey == models.SecretMaskedValue {
+			cfg.TSStore.APIKey = ""
+		}
+		for k, v := range cfg.TSStore.Headers {
+			if v == models.SecretMaskedValue {
+				cfg.TSStore.Headers[k] = ""
+			}
+		}
+	}
+	if cfg.Socket != nil {
+		for k, v := range cfg.Socket.Headers {
+			if v == models.SecretMaskedValue {
+				cfg.Socket.Headers[k] = ""
+			}
+		}
+	}
+	if cfg.Prometheus != nil {
+		if cfg.Prometheus.Password == models.SecretMaskedValue {
+			cfg.Prometheus.Password = ""
+		}
+	}
+	if cfg.MQTT != nil {
+		if cfg.MQTT.Password == models.SecretMaskedValue {
+			cfg.MQTT.Password = ""
+		}
+	}
+	if cfg.Frigate != nil {
+		if cfg.Frigate.Password == models.SecretMaskedValue {
+			cfg.Frigate.Password = ""
+		}
+	}
+}
+
 // resolveMaskedSecrets looks up an existing connection by ID and replaces any
 // masked secret values ("********") in the test request with the real values from DB.
 // This allows testing with current form values without exposing secrets to the frontend.

@@ -288,11 +288,20 @@ func (s *DashboardService) classifyDashboard(ctx context.Context, inc models.Das
 
 // ── apply writers ───────────────────────────────────────────────────
 
-// applyConnection creates or overwrites a connection. The isUpdate flag
-// tells us whether to delete-then-insert (preserving ID + timestamps)
-// or just insert fresh. Masked password placeholders are handled here:
-// on update we preserve the existing secret; on create we leave the
-// placeholder literal for the user to fix.
+// applyConnection creates or overwrites a connection. Secret-handling
+// policy (v0.17.4+):
+//   - CREATE: incoming secret values from the bundle are explicitly
+//     stripped — bundles never carry usable credentials and we don't
+//     want to land a literal "********" sentinel in the DB (which
+//     would cause adapters to send that as the actual key and
+//     produce confusing "invalid API key format" errors from
+//     upstream). The connection lands with empty secret fields that
+//     an admin fills in via the editor on the target deployment.
+//   - UPDATE: existing secrets are always preserved, regardless of
+//     what the bundle says. Bundles can't clobber secrets — even
+//     an explicit "" in the bundle is ignored. This is a deliberate
+//     footgun guard: cross-environment bundle import shouldn't be
+//     a way to wipe production credentials by accident.
 func (s *DashboardService) applyConnection(ctx context.Context, inc models.Connection, targetNs string, isUpdate bool) error {
 	inc.Namespace = targetNs
 	now := time.Now()
@@ -304,7 +313,10 @@ func (s *DashboardService) applyConnection(ctx context.Context, inc models.Conne
 			return err
 		}
 		if existing != nil {
-			preserveSecrets(&inc.Config, &existing.Config)
+			// Force-preserve: bundle secrets are ignored entirely.
+			// Whatever the existing record holds, that's what we
+			// keep.
+			preserveAllSecretsFromExisting(&inc.Config, &existing.Config)
 			// Keep the original created_at — overwrites shouldn't
 			// appear younger than they really are.
 			inc.CreatedAt = existing.CreatedAt
@@ -314,6 +326,12 @@ func (s *DashboardService) applyConnection(ctx context.Context, inc models.Conne
 			return err
 		}
 	} else {
+		// New connection from a bundle. Strip any sentinel or other
+		// non-empty secret values defensively — bundles emitted by
+		// SanitizeForExport already have "" for secrets, but old
+		// bundles (or hand-edited ones) may still carry "********"
+		// or some other literal. Land with empty secrets every time.
+		stripPlaceholderSecrets(&inc.Config)
 		if inc.CreatedAt.IsZero() {
 			inc.CreatedAt = now
 		}

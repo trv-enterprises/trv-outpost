@@ -32,6 +32,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"rename_datasourceId_in_component_code_v1", migrateRenameDatasourceIdInComponentCode},
 		{"drop_mask_secrets_v1", migrateDropMaskSecrets},
 		{"users_kind_human_default_v1", migrateUsersKindHumanDefault},
+		{"strip_literal_secret_sentinels_v1", migrateStripLiteralSecretSentinels},
 	}
 
 	coll := db.Collection("migrations")
@@ -512,5 +513,110 @@ func migrateUsersKindHumanDefault(ctx context.Context, db *mongo.Database) error
 		return fmt.Errorf("set users.kind=human: %w", err)
 	}
 	log.Printf("  users: set kind=human on %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateStripLiteralSecretSentinels cleans up connection records
+// that have the literal "********" sentinel stored in a secret
+// field. Such records came from v0.16.x bundle-import-create, which
+// inserted the bundle's masked placeholder verbatim into the DB.
+// Those connections then sent "********" as the actual credential
+// at runtime, producing confusing upstream errors like ts-store's
+// `{"error":"invalid API key format"}`.
+//
+// Post-v0.17.4 the import path strips the sentinel itself (see
+// service/connection_service.go::stripPlaceholderSecrets), so new
+// imports land empty. This migration patches up the leftover
+// records from before the fix.
+//
+// The list of fields below mirrors what models.Connection.sanitize
+// masks, so a record that the sanitizer would have replaced with
+// the sentinel is exactly the record we clear here.
+func migrateStripLiteralSecretSentinels(ctx context.Context, db *mongo.Database) error {
+	const sentinel = "********"
+	fields := []string{
+		"config.sql.password",
+		"config.tsstore.api_key",
+		"config.prometheus.password",
+		"config.mqtt.password",
+		"config.frigate.password",
+	}
+	totalModified := int64(0)
+	for _, f := range fields {
+		res, err := db.Collection("connections").UpdateMany(
+			ctx,
+			bson.M{f: sentinel},
+			bson.M{"$set": bson.M{f: ""}},
+		)
+		if err != nil {
+			return fmt.Errorf("strip sentinel from %s: %w", f, err)
+		}
+		if res.ModifiedCount > 0 {
+			log.Printf("  connections: cleared sentinel from %s in %d documents", f, res.ModifiedCount)
+			totalModified += res.ModifiedCount
+		}
+	}
+	// Map-valued fields (API.auth_credentials, API.headers,
+	// TSStore.headers, Socket.headers, API.query_params) can't be
+	// patched as cheaply with a single update — each map key would
+	// need its own filter. Stream through and rewrite per-document
+	// when any map value equals the sentinel.
+	for _, coll := range []string{"connections"} {
+		cur, err := db.Collection(coll).Find(ctx, bson.M{})
+		if err != nil {
+			return fmt.Errorf("scan %s for map-secret sentinels: %w", coll, err)
+		}
+		for cur.Next(ctx) {
+			var doc bson.M
+			if err := cur.Decode(&doc); err != nil {
+				continue
+			}
+			id, _ := doc["_id"]
+			cfg, _ := doc["config"].(bson.M)
+			if cfg == nil {
+				continue
+			}
+			update := bson.M{}
+			stripMapField := func(parentKey, mapKey string) {
+				parent, _ := cfg[parentKey].(bson.M)
+				if parent == nil {
+					return
+				}
+				m, _ := parent[mapKey].(bson.M)
+				if m == nil {
+					return
+				}
+				changed := false
+				for k, v := range m {
+					if s, ok := v.(string); ok && s == sentinel {
+						m[k] = ""
+						changed = true
+					}
+				}
+				if changed {
+					update["config."+parentKey+"."+mapKey] = m
+				}
+			}
+			stripMapField("api", "auth_credentials")
+			stripMapField("api", "headers")
+			stripMapField("api", "query_params")
+			stripMapField("tsstore", "headers")
+			stripMapField("socket", "headers")
+			// API.body is a string, not a map.
+			if api, ok := cfg["api"].(bson.M); ok {
+				if body, ok := api["body"].(string); ok && body == sentinel {
+					update["config.api.body"] = ""
+				}
+			}
+			if len(update) > 0 {
+				_, err := db.Collection(coll).UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": update})
+				if err == nil {
+					totalModified++
+				}
+			}
+		}
+		cur.Close(ctx)
+	}
+	log.Printf("  connections: stripped %d total literal-sentinel secret occurrences", totalModified)
 	return nil
 }
