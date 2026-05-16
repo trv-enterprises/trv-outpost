@@ -382,21 +382,25 @@ class APIClient {
       ...options.headers,
     };
 
-    // v0.17.0 auth: every authenticated request rides on our own
-    // access JWT. The bootstrap endpoint (/api/auth/session) is the
-    // only place that knows about the inbound credential channels
-    // (Clerk JWT, API key, X-User-ID, ?user_id=) — after that we
-    // exclusively use our access token.
+    // Credential attachment, in priority order:
     //
-    // Exceptions:
-    //   - The bootstrap endpoint itself: we still need to send the
-    //     inbound credential to it, so we DON'T strip those legacy
-    //     auth surfaces. Callers route through createSession()
-    //     which formats the inbound credential as needed.
-    //   - The refresh endpoint: takes the refresh token from the
-    //     httpOnly cookie the browser sends automatically. No
-    //     Authorization header needed.
-    if (this.accessToken) {
+    //   1. API key (`trve_…`) when one is set. Long-lived, revoke-by-
+    //      delete; lifecycle matches always-on displays (kiosks,
+    //      status boards). The server's middleware accepts `trve_…`
+    //      as a first-class credential — no JWT involved on the wire.
+    //      A kiosk bootstrapped with ?key=trve_… stays alive
+    //      indefinitely until the key is revoked.
+    //   2. Access JWT otherwise. Browser users without a personal
+    //      API key (Clerk SSO, X-User-ID dev, ?user_id= URL) get
+    //      this path — short-lived token, refresh via httpOnly
+    //      cookie when needed.
+    //
+    // Note: the bootstrap endpoint (/api/auth/session) takes any
+    // inbound credential the IdP registry recognizes — different
+    // attachment logic lives in createSession() below.
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    } else if (this.accessToken) {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
@@ -465,10 +469,17 @@ class APIClient {
         // _refreshPromise so concurrent 401s don't stampede the
         // refresh endpoint.
         //
-        // skipRefreshRetry guards against infinite recursion: the
-        // refresh call itself, and the retry after a refresh, both
-        // pass it through.
-        if (response.status === 401 && data?.hint === 'refresh' && !skipRefreshRetry && this.accessToken) {
+        // Skip refresh when:
+        //   - skipRefreshRetry is set (recursion guard for the
+        //     post-refresh retry attempt).
+        //   - We sent the API key as the credential. API-key 401s
+        //     mean the key is revoked/deleted — refresh wouldn't
+        //     help, and would mask the real failure with a misleading
+        //     "session expired" round-trip.
+        //   - No access token is set (the credential we used wasn't
+        //     a refreshable JWT in the first place).
+        const usedApiKey = !!this.apiKey;
+        if (response.status === 401 && data?.hint === 'refresh' && !skipRefreshRetry && !usedApiKey && this.accessToken) {
           const refreshed = await this._refreshSession();
           if (refreshed) {
             // Re-issue with the new access token. Mark skip so a
@@ -957,10 +968,14 @@ class APIClient {
 
   // streamAuthQuery returns the auth fragment for SSE/WS URLs.
   // EventSource and WebSocket can't set Authorization headers, so
-  // the access token rides ?st= instead. Returns "" when no token
-  // is set — the request will then 401 from the auth middleware,
-  // which is the correct failure signal.
+  // the credential rides ?st= instead. Same precedence as request():
+  // API key wins (kiosk-friendly, no expiry), JWT falls through.
+  // Returns "" when neither is set — the request will then 401 from
+  // the auth middleware, which is the correct failure signal.
   streamAuthQuery() {
+    if (this.apiKey) {
+      return `st=${encodeURIComponent(this.apiKey)}`;
+    }
     if (this.accessToken) {
       return `st=${encodeURIComponent(this.accessToken)}`;
     }
