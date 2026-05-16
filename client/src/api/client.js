@@ -131,9 +131,24 @@ class APIClient {
   // setAccessToken stamps the JWT and remembers its exp. Called by
   // App.jsx after a successful /auth/session or /auth/refresh.
   // Pass null to clear (sign-out path).
+  //
+  // Side-effect: dispatches `apiclient-authenticated` on the window
+  // when transitioning from "no token" to "has token." Providers
+  // mounted above the route tree (EnabledTypesProvider, etc.) that
+  // need to fire data calls after bootstrap completes listen for
+  // this. Browser-only — no-op in non-window contexts.
   setAccessToken(token, expiresAt) {
+    const hadToken = !!this.accessToken;
     this.accessToken = token || null;
     this.accessExpiresAt = expiresAt ? new Date(expiresAt).getTime() : null;
+    const hasToken = !!this.accessToken;
+    if (!hadToken && hasToken && typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new Event('apiclient-authenticated'));
+      } catch {
+        // window.Event missing in unusual environments — non-fatal.
+      }
+    }
   }
 
   getAccessToken() {
@@ -265,15 +280,29 @@ class APIClient {
 
   // setApiKey stamps a `trve_…` API key onto the apiClient and
   // persists it. Every subsequent request attaches it as
-  // Authorization: Bearer trve_… (unless a Clerk JWT is also
-  // available, in which case Clerk wins). Pass null/empty to clear.
+  // Authorization: Bearer trve_…. Pass null/empty to clear.
+  //
+  // Side-effect: dispatches `apiclient-authenticated` when transitioning
+  // from "no credential" to "has API key" — same signal that
+  // setAccessToken fires. Providers above the route tree listen for
+  // it so their initial data fetch happens after a credential is
+  // available, not before.
   setApiKey(key) {
+    const hadCred = !!this.apiKey || !!this.accessToken;
     if (typeof key === 'string' && key.startsWith('trve_')) {
       this.apiKey = key;
       try { localStorage.setItem('apiKey', key); } catch { /* ignore */ }
     } else {
       this.apiKey = null;
       try { localStorage.removeItem('apiKey'); } catch { /* ignore */ }
+    }
+    const hasCred = !!this.apiKey || !!this.accessToken;
+    if (!hadCred && hasCred && typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new Event('apiclient-authenticated'));
+      } catch {
+        // window.Event missing in unusual environments — non-fatal.
+      }
     }
   }
 

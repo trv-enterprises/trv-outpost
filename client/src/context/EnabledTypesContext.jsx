@@ -25,6 +25,13 @@ export function EnabledTypesProvider({ children }) {
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
+    // Skip the call entirely when no credential is set yet — the
+    // request would 401 and we'd be stuck with catalog=null until
+    // someone called refresh(). The `apiclient-authenticated`
+    // listener below re-fires this once bootstrap completes.
+    if (!apiClient.apiKey && !apiClient.accessToken) {
+      return;
+    }
     setLoading(true);
     try {
       const data = await apiClient.getRegistryCatalog();
@@ -44,6 +51,15 @@ export function EnabledTypesProvider({ children }) {
 
   useEffect(() => {
     load();
+    // EnabledTypesProvider mounts above the route tree, so the first
+    // render happens BEFORE App.jsx's bootstrap finishes. apiClient
+    // dispatches `apiclient-authenticated` the moment a credential
+    // becomes available (createSession success, ?key= URL stamp).
+    // Re-running load() at that point fills the catalog without
+    // requiring the user to refresh.
+    const onAuth = () => { load(); };
+    window.addEventListener('apiclient-authenticated', onAuth);
+    return () => window.removeEventListener('apiclient-authenticated', onAuth);
   }, [load]);
 
   // Build sets of enabled IDs per category for O(1) lookups. When the catalog

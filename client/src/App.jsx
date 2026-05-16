@@ -162,42 +162,30 @@ function AppContent({ onDisconnect }) {
           }
         }
 
-        // Step 3: load the user directory for the in-header switcher.
-        // Best-effort; 403 for non-Manage callers is expected and
-        // doesn't block bootstrap. Dev-mode keeps a localStorage
-        // cache so the switcher survives an act-as-non-admin reload.
-        const response = await apiClient.getUsers().catch(() => ({ users: [] }));
-        let list = response?.users || [];
-        if (import.meta.env.DEV) {
-          const DEV_SWITCHER_CACHE_KEY = 'devUserSwitcher.users';
-          if (list.length > 0) {
-            try {
-              localStorage.setItem(DEV_SWITCHER_CACHE_KEY, JSON.stringify(list));
-            } catch {
-              // localStorage may be full or unavailable — non-fatal.
-            }
-          } else {
-            try {
-              const cached = localStorage.getItem(DEV_SWITCHER_CACHE_KEY);
-              if (cached) {
-                const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        // Dev-only fallback: when no inbound credential has been
+        // established at this point, pick the first cached user from
+        // the dev-switcher's localStorage cache so we have something
+        // to bootstrap with. The live directory call below would
+        // 401 pre-bootstrap; the cache survives between sessions
+        // and is good enough for picking SOME user to start with.
+        // In prod this is intentionally skipped — a fresh visitor
+        // with no URL key / no localStorage GUID / no admin default
+        // sees the sign-in stub.
+        if (!apiClient.apiKey && !apiClient.tokenProvider && !apiClient.getCurrentUserGuid() && import.meta.env.DEV) {
+          try {
+            const cached = localStorage.getItem('devUserSwitcher.users');
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].guid) {
+                apiClient.setCurrentUser(parsed[0].guid);
               }
-            } catch {
-              // Malformed cache JSON — non-fatal.
             }
+          } catch {
+            // Malformed cache — non-fatal.
           }
         }
-        setUsers(list);
 
-        // Dev-only fallback: pick the first user when no inbound
-        // credential has been established. In prod this is skipped
-        // by design — a fresh visitor sees the sign-in stub.
-        if (!apiClient.apiKey && !apiClient.tokenProvider && !apiClient.getCurrentUserGuid() && import.meta.env.DEV && list.length > 0) {
-          apiClient.setCurrentUser(list[0].guid);
-        }
-
-        // Step 4: SINGLE bootstrap call. The server walks its IdP
+        // Step 3: SINGLE bootstrap call. The server walks its IdP
         // registry, finds whichever credential is presented (API
         // key, Clerk JWT, X-User-ID, ?user_id=), validates it, and
         // returns an access JWT + sets the refresh cookie.
@@ -238,6 +226,36 @@ function AppContent({ onDisconnect }) {
             setClerkActive(true);
           }
         }
+
+        // Step 4: load the user directory for the in-header switcher.
+        // MUST run AFTER createSession or every call 401s — apiClient
+        // attaches the access token, which doesn't exist pre-bootstrap.
+        // Best-effort; 403 for non-Manage callers is expected and
+        // doesn't block anything. Dev-mode keeps a localStorage cache
+        // so the switcher survives an act-as-non-admin reload.
+        const response = await apiClient.getUsers().catch(() => ({ users: [] }));
+        let list = response?.users || [];
+        if (import.meta.env.DEV) {
+          const DEV_SWITCHER_CACHE_KEY = 'devUserSwitcher.users';
+          if (list.length > 0) {
+            try {
+              localStorage.setItem(DEV_SWITCHER_CACHE_KEY, JSON.stringify(list));
+            } catch {
+              // localStorage may be full or unavailable — non-fatal.
+            }
+          } else {
+            try {
+              const cached = localStorage.getItem(DEV_SWITCHER_CACHE_KEY);
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+              }
+            } catch {
+              // Malformed cache JSON — non-fatal.
+            }
+          }
+        }
+        setUsers(list);
       } catch (err) {
         console.error('Failed to bootstrap user identity:', err);
       } finally {
