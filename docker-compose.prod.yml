@@ -21,6 +21,8 @@ services:
     expose:
       - "3001"
     environment:
+      - ENV=production
+      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID=false
       - DASHBOARD_SERVER_MODE=release
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
