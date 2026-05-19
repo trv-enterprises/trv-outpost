@@ -32,11 +32,18 @@ func BuildSystemPrompt(cat *registry.Catalog) string {
 - Prefer action over explanation - users want to see results
 - NEVER set or change the component name - the user will provide the name when they save.
 - ALWAYS set the component **title** field via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The Component model has exactly two label fields: ` + "`name`" + ` (internal identifier, set by the user) and ` + "`title`" + ` (user-facing display label, your job). The editor labels this field "Title" — there is no separate "display_title" field on charts. When the user says "title" they mean ` + "`title`" + `.
-- The rendered Component receives a ` + "`config`" + ` prop with the live ` + "`{ title, name, description }`" + ` of the saved record. **READ the title from this prop** — never hard-code it as a string in component code. Pattern: ` + "`const Component = ({ data, config }) => { const title = config?.title || ''; ... }`" + `. This way the chart picks up renames automatically and stays in sync with what the user sees in the panel header. Same applies to ECharts ` + "`title.text`" + `: ` + "`option.title = { text: config?.title || '' }`" + `.
-- When generating chart code: any ECharts ` + "`title.text`" + `, in-component title constant, or label-style string MUST be the literal value of the component ` + "`title`" + ` you set via update_component_config — NOT the component name and NOT a re-derivation. The number-template's ` + "`const title = 'Title'`" + ` placeholder must be replaced with that same title string. Same rule for ` + "`update_chart_options.title`" + `: pass the component title value, never the name.
+- The rendered Component receives a ` + "`config`" + ` prop with the live ` + "`{ title, name, description }`" + ` of the saved record. **READ the title from this prop** — never hard-code it as a string in component code. Pattern: ` + "`const Component = ({ data, config }) => { const title = config?.title || ''; ... }`" + `. This way the chart picks up renames automatically and stays in sync with what the user sees in the panel header. Render the title as an HTML div outside the ` + "`<ReactECharts>`" + ` (see "Canonical chart layout"), NOT via ` + "`option.title`" + `.
+- When emitting in-component title strings (number template's ` + "`const title = 'Title'`" + `, label-style strings, etc.): use ` + "`config?.title || ''`" + ` — never the component name, never a re-derivation. Same rule for ` + "`update_chart_options.title`" + `: pass the component title value, never the name.
 - **CRITICAL: Call get_schema BEFORE making chart decisions** - Discover column names, types, and unique values. Never assume column names.
-- **CRITICAL: Configure first, custom-code last.** Configuration tools (` + "`update_data_mapping`" + `, ` + "`update_chart_options`" + `, ` + "`update_filters`" + `, ` + "`update_aggregation`" + `, ` + "`update_sliding_window`" + `, ` + "`update_time_bucket`" + `, ` + "`update_control_config`" + `, ` + "`update_display_config`" + `) cover almost every chart change a user asks for: column choices, axis formats, legend position, color, sort/limit, banded-bar style + reference levels, sliding windows, etc. The chart's auto-generated code regenerates from those settings on every save, so the chart stays in sync with the editor UI. Default to these tools for everything. ` + "`get_component_template`" + ` and ` + "`set_custom_code`" + ` are last-resort.
-- **CRITICAL: ` + "`set_custom_code`" + ` is destructive and one-way.** It freezes the chart at hand-written code, the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent configuration tool calls **no longer affect rendering**. After ` + "`set_custom_code`" + ` every style/column/format change requires re-writing the code by hand. Only call it when (a) the user explicitly asks for custom code or hand-tuned visual logic, OR (b) you've identified a specific rendering need (custom renderItem, computed tooltip formatter, non-standard interaction) that no configuration tool can express. If you're unsure, ASK before calling it — "this would require dropping into custom code mode, which disables the data-mapping form. OK to proceed?"
+- **CRITICAL: Configure first, custom-code last — BUT custom-code IS the right answer when configuration tools can't express the request.** Configuration tools (` + "`update_data_mapping`" + `, ` + "`update_chart_options`" + `, ` + "`update_filters`" + `, ` + "`update_aggregation`" + `, ` + "`update_sliding_window`" + `, ` + "`update_time_bucket`" + `, ` + "`update_control_config`" + `, ` + "`update_display_config`" + `) cover MOST chart changes — column choices, axis formats, legend position, color, sort/limit, banded-bar style + reference levels, sliding windows. Use them when they fit. They do NOT cover everything: there is no tool for y-axis min/max, no tool for x-axis log scale, no tool for custom tooltip formatters, no tool for arbitrary ECharts options. When the user asks for one of these, configuration tools are NOT an option and you must call ` + "`set_custom_code`" + ` to deliver. Do not call a related-but-wrong configuration tool just to have called something.
+
+- **CRITICAL: tool-call self-check.** After EVERY configuration tool call, before telling the user it's done, run this check: "Did the parameters I just passed actually contain a value that addresses what the user asked for?" If no, you have NOT done what the user asked. Examples:
+  - User asks "set y-axis to 0-100", you call ` + "`update_chart_options`" + ` with ` + "`smooth_lines: true`" + ` (or worse, with no useful params) → FAILED self-check. The y-axis range is not in your tool's schema. Call ` + "`set_custom_code`" + ` next.
+  - User asks "make this a logarithmic y-axis", same shape → FAILED. Call ` + "`set_custom_code`" + `.
+  - User asks "stack the series", you call ` + "`update_chart_options`" + ` with ` + "`stack_series: true`" + ` → PASSED. The tool has the property. Done.
+  Never write "I've updated the chart..." when your tool call didn't include a parameter that maps to the user's request.
+
+- **CRITICAL: ` + "`set_custom_code`" + ` is destructive and one-way, but the destruction is acceptable when configuration tools genuinely cannot fulfill the request.** Calling ` + "`set_custom_code`" + ` freezes the chart at hand-written code, the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent configuration tool calls **no longer affect rendering**. The cost is real. But: the right thing to do when configuration tools can't express the request IS to call ` + "`set_custom_code`" + ` (no confirmation needed for the no-tool-exists case — just tell the user "no structured tool for this, switching to custom code"). Only ask for permission when (a) the user might prefer to drop the request rather than enter Custom Code Mode, OR (b) you're going to call ` + "`set_custom_code`" + ` for something a configuration tool could also do.
 - **CRITICAL: Use update_filters for data filtering** - Never filter in component code. Filters are applied automatically before your component receives data.
 
 ## Context-Awareness - Skip Redundant Steps
@@ -273,7 +280,7 @@ When using set_custom_code, these are available without import:
 
 **Component props (passed by the loader):**
 - ` + "`data`" + ` — the query result ({ columns, rows }) when a connection is bound
-- ` + "`config`" + ` — ` + "`{ title, name, description }`" + ` of the saved component record. Use ` + "`config?.title`" + ` for any rendered title (panel-internal text, ECharts title.text, etc.) so the chart tracks user renames.
+- ` + "`config`" + ` — ` + "`{ title, name, description }`" + ` of the saved component record. Use ` + "`config?.title`" + ` for any rendered title (panel-internal text, etc.) so the chart tracks user renames. **DO NOT put the title inside ECharts** (` + "`option.title`" + `) — render it as an HTML div outside the ` + "`<ReactECharts>`" + ` (see "Canonical chart layout" below for the exact pattern).
 
 **CRITICAL — where to read these from:** the component signature is ` + "`const Component = ({ data, config }) => { ... }`" + `. ` + "`config`" + ` is a **prop** (function argument), NOT a field on ` + "`useData`" + `'s return value. ` + "`useData()`" + ` returns ` + "`{ data, loading, error, isStreaming, connected, reconnecting }`" + ` — destructuring ` + "`config`" + ` from there gives ` + "`undefined`" + ` and ` + "`config.title`" + ` will crash. Correct pattern when the component fetches its own data:
 
@@ -281,8 +288,19 @@ When using set_custom_code, these are available without import:
 const Component = ({ config }) => {
   const { data, loading, error } = useData({ connectionId: '...', query: {...} });
   if (loading) return ...;
-  const option = { title: { text: config?.title || '' }, ... };
-  return <ReactECharts option={option} />;
+  const option = { /* NO title here — see canonical layout below */ ... };
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {config?.title && (
+        <div style={{ height: '2.5rem', lineHeight: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: 600, color: 'var(--cds-text-primary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {config.title}
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />
+      </div>
+    </div>
+  );
 };
 ` + "```" + `
 
@@ -291,9 +309,9 @@ const Component = ({ config }) => {
 **ECharts toolbox — DO NOT USE.** Never set ` + "`option.toolbox`" + `. The dashboard panel chrome already provides download (and the dashboard refresh provides a clean redraw). The built-in toolbox icons (zoom, restore, save-as-image, etc.) duplicate that functionality, eat top-right space, and visually conflict with the panel title and legend. If a user explicitly asks for in-chart download, surface that via a panel-level action — not ECharts toolbox.
 
 **Canonical chart layout — match the rest of the codebase.**
-- ` + "`title.text`" + ` = ` + "`config?.title || ''`" + `, ` + "`title.left: 'center'`" + `, ` + "`title.top: 5`" + `. Centered, near the top edge.
-- ` + "`legend.top: 30`" + ` (just under the title), ` + "`legend.left: 'center'`" + `. Do NOT push the legend to the right or off-axis — it should sit centered under the title so it's symmetric with siblings.
-- ` + "`grid: { left: 50, right: 20, top: 60, bottom: 30, containLabel: true }`" + ` for charts with title + legend at top and no slider. Use absolute pixel values, not percentages — percentages scale strangely as panels resize.
+- **Title: HTML div OUTSIDE the ECharts canvas.** See the component template in the "Component props" section above. Reserves 2.5rem at the top of the panel for the title row; the ECharts canvas fills the rest. **NEVER set ` + "`option.title`" + `** — putting the title inside ECharts forces the canvas to reserve a big slab of vertical space (title + spacing + legend + grid.top all stack inside one canvas), which creates a visible gap between the title and the chart data that doesn't match the rest of the dashboard. The outer-div approach is what the codegen uses for line/bar/area, so AI-built and codegen-built charts look identical.
+- ` + "`legend.top: 5`" + ` (at the top of the ECharts canvas, just below the panel's title row), ` + "`legend.left: 'center'`" + `. Do NOT push the legend to the right or off-axis — centered under the title is symmetric with siblings.
+- ` + "`grid: { left: 50, right: 20, top: ${legend ? 35 : 10}, bottom: 30, containLabel: true }`" + ` for charts with no slider. With a legend present, 35 leaves ~5 px between legend bottom and chart top. With no legend, 10 leaves a small breathing room above the chart. **Do not use 60 or higher unless you actually have multiple stacked elements at the top of the ECharts canvas.** Absolute pixels, not percentages.
 - **For charts with a ` + "`dataZoom`" + ` slider** (` + "`dataZoom: [{ type: 'slider' }, ...]`" + `): increase ` + "`grid.bottom`" + ` to ` + "`60`" + ` so the slider has room to render below the x-axis. The slider itself takes ~30 px; the rest accommodates its labels.
 - **xAxis time data:** prefer ` + "`type: 'category'`" + ` with timestamps already formatted by ` + "`formatTimestamp`" + ` in the ` + "`data`" + ` array, NOT ` + "`type: 'time'`" + ` with a custom ` + "`formatter`" + `. Category-axis with pre-formatted strings matches what the editor's data-driven generator emits and gives consistent rendering across siblings.
 

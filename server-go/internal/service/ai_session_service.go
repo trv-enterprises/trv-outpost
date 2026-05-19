@@ -90,16 +90,27 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 		}
 
 		chartVersion = maxVersion + 1
+		// IMPORTANT: copy every user-visible field. Anything dropped
+		// here lands as the zero value on the draft and ends up
+		// erased from the final on save. Hit 2026-05-19 when Title
+		// (and silently Namespace + ComponentType) were missing —
+		// the AI session reported "title is empty" because the
+		// draft's Title was zero even though latestFinal had it set.
 		chart = &models.Component{
 			ID:            latestFinal.ID,
 			Version:       chartVersion,
 			Status:        models.ComponentStatusDraft,
+			ComponentType: latestFinal.ComponentType,
+			Namespace:     latestFinal.Namespace,
 			Name:          latestFinal.Name,
+			Title:         latestFinal.Title,
 			Description:   latestFinal.Description,
 			ChartType:     latestFinal.ChartType,
 			ConnectionID:  latestFinal.ConnectionID,
 			QueryConfig:   latestFinal.QueryConfig,
 			DataMapping:   latestFinal.DataMapping,
+			ControlConfig: latestFinal.ControlConfig,
+			DisplayConfig: latestFinal.DisplayConfig,
 			ComponentCode: latestFinal.ComponentCode,
 			UseCustomCode: latestFinal.UseCustomCode,
 			Options:       latestFinal.Options,

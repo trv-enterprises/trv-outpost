@@ -63,7 +63,16 @@ export function useAISession(chartId = null, preflightContext = {}) {
       return response.session;
     } catch (err) {
       setError(err.message);
-      startingRef.current = false; // Reset guard on error so user can retry
+      // For 409 "already has an active AI session" leave startingRef set
+      // so the page's start-on-mount useEffect doesn't redrive us into
+      // an infinite retry loop. Recovery is via the user clicking
+      // "Discard existing draft" (which clears the orphan and resets
+      // the guard) or navigating away. Any other error gets the old
+      // behaviour: clear the guard so the user can retry.
+      const conflict = /409|already has an active/i.test(err.message || '');
+      if (!conflict) {
+        startingRef.current = false;
+      }
       throw err;
     } finally {
       setLoading(false);
