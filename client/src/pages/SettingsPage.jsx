@@ -31,6 +31,7 @@ import DashboardConfigRefreshIntervalEditorModal, { DEFAULT_DASHBOARD_CONFIG_REF
 import DefaultBrowserUserEditorModal from '../components/DefaultBrowserUserEditorModal';
 import NumericChartNumberSizeEditorModal, { DEFAULT_NUMBER_CHART_SIZE } from '../components/NumericChartNumberSizeEditorModal';
 import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
+import PrimitiveSettingEditorModal from '../components/PrimitiveSettingEditorModal';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
 import './SettingsPage.scss';
 
@@ -57,6 +58,7 @@ function SettingsPage() {
   const [numericChartSizeModalOpen, setNumericChartSizeModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
   const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
+  const [primitiveEditorOpen, setPrimitiveEditorOpen] = useState(false);
   const [mqttConnections, setMqttConnections] = useState([]);
   const { refresh: refreshEnabledTypes } = useEnabledTypes();
 
@@ -116,12 +118,11 @@ function SettingsPage() {
         setEnabledTypesModalOpen(true);
         break;
       default:
-        // For unknown setting types, show a notification
-        setNotification({
-          kind: 'warning',
-          title: 'No editor available',
-          subtitle: `No custom editor is configured for "${setting.key}"`
-        });
+        // No bespoke editor — fall back to the generic primitive
+        // editor (Toggle / NumberInput / TextInput chosen by the
+        // value's runtime type). Settings that need richer UX
+        // should still ship their own modal.
+        setPrimitiveEditorOpen(true);
     }
   };
 
@@ -455,6 +456,20 @@ function SettingsPage() {
           </Select>
         )}
       </Modal>
+
+      {/* Generic primitive editor — fallback for settings without a
+          bespoke modal. Lets newly-added boolean/number/string keys
+          in user-configurable.yaml be editable in the UI without a
+          follow-up JSX change. */}
+      <PrimitiveSettingEditorModal
+        open={primitiveEditorOpen}
+        onClose={() => setPrimitiveEditorOpen(false)}
+        setting={editingSetting}
+        onSave={(value) => {
+          handleSave(editingSetting.key, value);
+          setPrimitiveEditorOpen(false);
+        }}
+      />
     </div>
   );
 }

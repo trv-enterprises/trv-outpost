@@ -4,36 +4,71 @@
 
 @use '@carbon/styles/scss/spacing' as spacing;
 
+// Page layout: the page itself does NOT scroll. The header sits in
+// normal page flow, and the DataTable below has its own scroll
+// region inside the table container with a sticky <thead> row.
+// Constraining the page to the viewport's height + overflow:hidden
+// keeps the inner table-body scroll meaningful (otherwise the page
+// itself would just grow and the inner overflow would never engage).
 .settings-page {
-  padding: spacing.$spacing-05;
-  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--cds-background);
+  padding: spacing.$spacing-06;
 
   .page-header {
-    margin-bottom: spacing.$spacing-06;
+    flex-shrink: 0;
+    max-width: 1200px;
+    margin-bottom: spacing.$spacing-05;
 
     h1 {
       font-size: 2rem;
       font-weight: 400;
-      margin-bottom: spacing.$spacing-03;
+      margin: 0 0 spacing.$spacing-03 0;
     }
 
     .page-description {
       color: var(--cds-text-secondary);
       font-size: 0.875rem;
       max-width: 600px;
+      margin: 0;
     }
   }
 
-  .cds--inline-notification {
+  > .cds--inline-notification {
+    flex-shrink: 0;
     margin-bottom: spacing.$spacing-05;
+    max-width: 1200px;
   }
 
-  .cds--tabs {
-    margin-bottom: spacing.$spacing-05;
-  }
+  // DataTable wrapper. flex:1 + min-height:0 gives the table region
+  // the remaining vertical space; max-width caps it so the scrollbar
+  // sits next to the table content, not floating at the viewport edge.
+  .cds--data-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 
-  .settings-content {
-    padding-top: spacing.$spacing-05;
+    // The scrolling region is the element that wraps <table>; we let
+    // it own overflow-y and pin <thead> sticky so column headers stay
+    // visible while rows scroll.
+    .cds--data-table-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    table.cds--data-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background-color: var(--cds-layer-accent-01);
+    }
   }
 
   .settings-grid {
