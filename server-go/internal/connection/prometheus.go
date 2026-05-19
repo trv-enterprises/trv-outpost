@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -39,6 +40,7 @@ func prometheusConfigSchema() []registry.ConfigField {
 		{Name: "username", Type: "string", Required: false, Description: "Basic auth username"},
 		{Name: "password", Type: "password", Required: false, Description: "Basic auth password"},
 		{Name: "timeout", Type: "int", Required: false, Default: 30, Description: "Query timeout (seconds)"},
+		{Name: "insecure_skip_verify", Type: "bool", Required: false, Default: false, Description: "Skip TLS certificate verification for HTTPS endpoints (self-signed certs). Server must also have api.allow_insecure_tls enabled."},
 	}
 }
 
@@ -66,15 +68,17 @@ func newPrometheusAdapterFromConfig(config map[string]interface{}) (*PrometheusA
 	} else if timeout, ok := config["timeout"].(int); ok {
 		promConfig.Timeout = timeout
 	}
+	if skip, ok := config["insecure_skip_verify"].(bool); ok {
+		promConfig.InsecureSkipVerify = skip
+	}
 
-	httpTimeout := 30 * time.Second
-	if promConfig.Timeout > 0 {
-		httpTimeout = time.Duration(promConfig.Timeout) * time.Second
+	if promConfig.InsecureSkipVerify && !IsInsecureTLSAllowed() {
+		log.Printf("prometheus adapter %s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", promConfig.URL)
 	}
 
 	return &PrometheusAdapter{
 		config: promConfig,
-		client: &http.Client{Timeout: httpTimeout},
+		client: BuildAPIHTTPClient(promConfig.Timeout, promConfig.InsecureSkipVerify),
 	}, nil
 }
 
@@ -473,18 +477,12 @@ type prometheusSeries struct {
 
 // NewPrometheusDataSource creates a new Prometheus data source
 func NewPrometheusDataSource(config *models.PrometheusConfig) (*PrometheusDataSource, error) {
-	timeout := 30 * time.Second
-	if config.Timeout > 0 {
-		timeout = time.Duration(config.Timeout) * time.Second
+	if config.InsecureSkipVerify && !IsInsecureTLSAllowed() {
+		log.Printf("prometheus datasource %s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", config.URL)
 	}
-
-	client := &http.Client{
-		Timeout: timeout,
-	}
-
 	return &PrometheusDataSource{
 		config: config,
-		client: client,
+		client: BuildAPIHTTPClient(config.Timeout, config.InsecureSkipVerify),
 	}, nil
 }
 

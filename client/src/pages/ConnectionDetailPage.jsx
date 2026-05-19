@@ -31,6 +31,7 @@ import { useEnabledTypes } from '../context/EnabledTypesContext';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
 import SecretTextInput, { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
+import TLSSkipVerifyToggle from '../components/shared/TLSSkipVerifyToggle';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -631,6 +632,19 @@ function ConnectionDetailPage() {
           placeholder="e.g., sslmode=verify-full or application_name=dashboard"
           helperText="Additional driver-specific connection parameters"
         />
+
+        {/* SQL TLS skip-verify — only meaningful when SSL is on and
+            the driver actually does network TLS (sqlite is local-file,
+            oracle isn't covered yet by buildConnectionString). */}
+        <TLSSkipVerifyToggle
+          id="sql-insecure-skip-verify"
+          isTls={
+            !!sqlConfig.ssl &&
+            ['postgres', 'mysql', 'mssql'].includes(sqlConfig.driver || 'postgres')
+          }
+          value={sqlConfig.insecure_skip_verify}
+          onChange={(checked) => updateConfig('sql.insecure_skip_verify', checked)}
+        />
       </div>
     );
   };
@@ -886,6 +900,13 @@ function ConnectionDetailPage() {
             </div>
           </div>
         )}
+
+        <TLSSkipVerifyToggle
+          id="socket-insecure-skip-verify"
+          isTls={(socketConfig.url || '').toLowerCase().startsWith('wss://')}
+          value={socketConfig.insecure_skip_verify}
+          onChange={(checked) => updateConfig('socket.insecure_skip_verify', checked)}
+        />
       </div>
     );
   };
@@ -1029,31 +1050,12 @@ function ConnectionDetailPage() {
           helperText="For wrapped JSON responses, the key containing the data array (e.g., 'data' for {data: [...], total, limit}). Leave blank if the response is already a bare array."
         />
 
-        {/* TLS advanced: only meaningful for HTTPS endpoints. The
-            toggle is hidden for plain HTTP because it has no effect
-            there, and showing it would just be noise. Whether the
-            server actually honors the per-connection flag depends
-            on `api.allow_insecure_tls` in the server config — that
-            second gate is intentional, so a user can't bypass TLS
-            verification without an admin having opted in
-            deployment-wide. */}
-        {(apiConfig.url || '').toLowerCase().startsWith('https://') && (
-          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--cds-border-subtle-01)' }}>
-            <Toggle
-              id="api-insecure-skip-verify"
-              labelText="Skip TLS certificate verification"
-              labelA="Off"
-              labelB="On"
-              toggled={!!apiConfig.insecure_skip_verify}
-              onToggle={(checked) => updateConfig('api.insecure_skip_verify', checked)}
-            />
-            <div style={{ marginTop: '0.5rem', color: 'var(--cds-text-helper)', fontSize: '0.75rem' }}>
-              {apiConfig.insecure_skip_verify
-                ? 'Verification disabled — MITM attacks against this endpoint will go undetected. Only use for self-signed certs on trusted local networks (e.g. a homelab Proxmox UI). The server must also have api.allow_insecure_tls enabled for this to take effect.'
-                : 'For self-signed certs on trusted local networks only. Enable api.allow_insecure_tls in the server config first; otherwise this toggle has no effect.'}
-            </div>
-          </div>
-        )}
+        <TLSSkipVerifyToggle
+          id="api-insecure-skip-verify"
+          isTls={(apiConfig.url || '').toLowerCase().startsWith('https://')}
+          value={apiConfig.insecure_skip_verify}
+          onChange={(checked) => updateConfig('api.insecure_skip_verify', checked)}
+        />
       </div>
     );
   };
@@ -1345,6 +1347,13 @@ function ConnectionDetailPage() {
           )}
         </div>
         </>)}
+
+        <TLSSkipVerifyToggle
+          id="tsstore-insecure-skip-verify"
+          isTls={tsstoreConfig.protocol === 'https'}
+          value={tsstoreConfig.insecure_skip_verify}
+          onChange={(checked) => updateConfig('tsstore.insecure_skip_verify', checked)}
+        />
       </div>
     );
   };
@@ -1388,6 +1397,13 @@ function ConnectionDetailPage() {
           min={1}
           max={300}
           helperText="Query timeout in seconds"
+        />
+
+        <TLSSkipVerifyToggle
+          id="prometheus-insecure-skip-verify"
+          isTls={(prometheusConfig.url || '').toLowerCase().startsWith('https://')}
+          value={prometheusConfig.insecure_skip_verify}
+          onChange={(checked) => updateConfig('prometheus.insecure_skip_verify', checked)}
         />
       </div>
     );

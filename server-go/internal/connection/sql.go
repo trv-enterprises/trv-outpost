@@ -382,8 +382,21 @@ func mapDriverName(driver string) string {
 	return driver
 }
 
-// buildConnectionString constructs a connection string from individual config fields
+// buildConnectionString constructs a connection string from individual
+// config fields. SSL + InsecureSkipVerify are translated per-driver:
+//
+//   postgres → sslmode=require (skip-verify) vs sslmode=verify-full (verify)
+//   mysql    → tls=skip-verify (skip-verify) vs tls=true (verify)
+//   mssql    → TrustServerCertificate=true (skip-verify) vs default (verify)
+//   sqlite   → no TLS at all; both flags ignored
+//   oracle   → not yet covered (driver-specific TLS configuration; see TODO)
+//
+// The per-connection skip-verify only takes effect when the server-
+// level api.allow_insecure_tls is also true (the same two-gate model
+// the HTTP adapters use). Both gates closed → full verification.
 func buildConnectionString(config *models.SQLConfig) string {
+	skipTLS := config.InsecureSkipVerify && IsInsecureTLSAllowed()
+
 	switch config.Driver {
 	case "postgres":
 		connStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s",
@@ -392,7 +405,13 @@ func buildConnectionString(config *models.SQLConfig) string {
 			connStr += fmt.Sprintf(" password=%s", config.Password)
 		}
 		if config.SSL {
-			connStr += " sslmode=require"
+			if skipTLS {
+				// lib/pq: `require` encrypts but does not verify the
+				// server cert — equivalent to "skip verify".
+				connStr += " sslmode=require"
+			} else {
+				connStr += " sslmode=verify-full"
+			}
 		} else {
 			connStr += " sslmode=disable"
 		}
@@ -409,7 +428,13 @@ func buildConnectionString(config *models.SQLConfig) string {
 			config.Username, config.Password, config.Host, config.Port, config.Database)
 		params := []string{}
 		if config.SSL {
-			params = append(params, "tls=true")
+			if skipTLS {
+				// go-sql-driver/mysql ships a built-in "skip-verify"
+				// preset that requires TLS but accepts any server cert.
+				params = append(params, "tls=skip-verify")
+			} else {
+				params = append(params, "tls=true")
+			}
 		}
 		if config.Timeout > 0 {
 			params = append(params, fmt.Sprintf("timeout=%ds", config.Timeout))
@@ -434,6 +459,9 @@ func buildConnectionString(config *models.SQLConfig) string {
 			config.Username, config.Password, config.Host, config.Port, config.Database)
 		if config.SSL {
 			connStr += "&encrypt=true"
+			if skipTLS {
+				connStr += "&TrustServerCertificate=true"
+			}
 		}
 		if config.Timeout > 0 {
 			connStr += fmt.Sprintf("&connection+timeout=%d", config.Timeout)
@@ -444,6 +472,10 @@ func buildConnectionString(config *models.SQLConfig) string {
 		return connStr
 
 	case "oracle":
+		// TODO TLS skip-verify for Oracle. The Go Oracle driver
+		// (sijms/go-ora) takes TLS settings via DSN params like
+		// `SSL=true&SSL Verify=false` — different syntax than the
+		// others, worth a separate pass.
 		connStr := fmt.Sprintf("%s/%s@%s:%d/%s",
 			config.Username, config.Password, config.Host, config.Port, config.Database)
 		return connStr

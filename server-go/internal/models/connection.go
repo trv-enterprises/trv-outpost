@@ -292,9 +292,19 @@ type SQLConfig struct {
 	Username       string `json:"username,omitempty" bson:"username,omitempty"`
 	Password       string `json:"password,omitempty" bson:"password,omitempty"`
 	SSL            bool   `json:"ssl,omitempty" bson:"ssl,omitempty"`
-	MaxConnections int    `json:"max_connections,omitempty" bson:"max_connections,omitempty"`
-	Timeout        int    `json:"timeout,omitempty" bson:"timeout,omitempty"` // seconds
-	Options        string `json:"options,omitempty" bson:"options,omitempty"` // Optional connection parameters (e.g., "sslmode=require&connect_timeout=10")
+	// InsecureSkipVerify disables TLS certificate verification when
+	// SSL is true. Same two-gate model as APIConfig — the server-
+	// level api.allow_insecure_tls must also be true. Driver-specific
+	// translation in buildConnectionString:
+	//   postgres → sslmode=require (vs verify-full when off)
+	//   mysql    → tls=skip-verify (vs tls=true when off)
+	//   mssql    → TrustServerCertificate=true (vs default when off)
+	//   sqlite, oracle → ignored (sqlite has no TLS; oracle is
+	//   driver-specific and not yet covered).
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
+	MaxConnections     int  `json:"max_connections,omitempty" bson:"max_connections,omitempty"`
+	Timeout            int  `json:"timeout,omitempty" bson:"timeout,omitempty"` // seconds
+	Options            string `json:"options,omitempty" bson:"options,omitempty"` // Optional connection parameters (e.g., "sslmode=require&connect_timeout=10")
 }
 
 // CSVConfig represents configuration for CSV files
@@ -311,6 +321,11 @@ type CSVConfig struct {
 type SocketConfig struct {
 	URL              string              `json:"url" bson:"url" binding:"required"`
 	Protocol         string              `json:"protocol" bson:"protocol" binding:"required,oneof=tcp websocket"`
+	// InsecureSkipVerify disables TLS certificate verification when
+	// the URL uses wss://. Same two-gate model as APIConfig — the
+	// server-level api.allow_insecure_tls must also be true. Plain
+	// ws:// and tcp:// connections ignore this entirely.
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
 	Bidirectional    bool                `json:"bidirectional,omitempty" bson:"bidirectional,omitempty"`     // WebSocket only — when true, resolves to stream.websocket-bidir (write-capable, used for control commands)
 	Headers          map[string]string   `json:"headers,omitempty" bson:"headers,omitempty"`
 	ReconnectOnError bool                `json:"reconnect_on_error" bson:"reconnect_on_error"`
@@ -416,6 +431,14 @@ type TSStoreConfig struct {
 	Headers   map[string]string `json:"headers,omitempty" bson:"headers,omitempty"`                   // Additional HTTP headers
 	Timeout   int               `json:"timeout,omitempty" bson:"timeout,omitempty"`                   // Request timeout in seconds (default: 30)
 
+	// InsecureSkipVerify disables TLS certificate verification when
+	// Protocol is "https". Same two-gate model as APIConfig: the
+	// deployment must also have `api.allow_insecure_tls: true`
+	// before either gate actually takes effect. Intended for homelab
+	// ts-store instances behind self-signed certs; never set on a
+	// public-internet endpoint.
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
+
 	// Push connection configuration for streaming transport (ts-store v0.2.2+)
 	// Only used when Transport is "streaming". Dashboard calls ts-store API to create
 	// a push connection and ts-store dials out to dashboard's inbound WebSocket endpoint.
@@ -482,6 +505,10 @@ type PrometheusConfig struct {
 	Username string `json:"username,omitempty" bson:"username,omitempty"` // Basic auth username (optional)
 	Password string `json:"password,omitempty" bson:"password,omitempty"` // Basic auth password (optional)
 	Timeout  int    `json:"timeout,omitempty" bson:"timeout,omitempty"`   // Query timeout in seconds (default: 30)
+	// InsecureSkipVerify disables TLS certificate verification when
+	// the URL uses https://. Same two-gate model as APIConfig — the
+	// server-level api.allow_insecure_tls must also be true.
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
 }
 
 // MQTTConfig represents configuration for MQTT broker connections

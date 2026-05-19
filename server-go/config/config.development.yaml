@@ -13,3 +13,12 @@ auth:
   # this on a production deployment — see config.yaml for the
   # full reasoning.
   allow_legacy_guid: true
+
+api:
+  # Local dev only — honors per-connection `insecure_skip_verify`
+  # toggles so homelab endpoints with self-signed certs (Proxmox UI,
+  # internal management appliances) can be tested without disabling
+  # TLS verification system-wide. The per-conn flag is still a
+  # second gate; both must be set to actually skip verification.
+  # NEVER set this on a production deployment — see config.yaml.
+  allow_insecure_tls: true

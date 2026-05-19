@@ -6,8 +6,11 @@ package connection
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +53,7 @@ func websocketConfigSchema() []registry.ConfigField {
 		{Name: "buffer_size", Type: "int", Required: false, Default: 100, Description: "Message buffer size"},
 		{Name: "data_path", Type: "string", Required: false, Description: "JSON path to data payload"},
 		{Name: "timestamp_field", Type: "string", Required: false, Description: "Field containing timestamp"},
+		{Name: "insecure_skip_verify", Type: "bool", Required: false, Default: false, Description: "Skip TLS certificate verification for wss:// endpoints (self-signed certs). Server must also have api.allow_insecure_tls enabled."},
 	}
 }
 
@@ -95,6 +99,9 @@ func newWebSocketAdapterFromConfig(config map[string]interface{}) (*WebSocketAda
 		socketConfig.BufferSize = int(bufSize)
 	} else if bufSize, ok := config["buffer_size"].(int); ok {
 		socketConfig.BufferSize = bufSize
+	}
+	if skip, ok := config["insecure_skip_verify"].(bool); ok {
+		socketConfig.InsecureSkipVerify = skip
 	}
 
 	// Parser config — connection-level. data_path and timestamp_field unwrap
@@ -152,6 +159,14 @@ func (a *WebSocketAdapter) Connect(ctx context.Context) error {
 
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
+	}
+	if strings.HasPrefix(strings.ToLower(a.config.URL), "wss://") {
+		if a.config.InsecureSkipVerify && !IsInsecureTLSAllowed() {
+			log.Printf("websocket adapter %s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", a.config.URL)
+		}
+		if a.config.InsecureSkipVerify && IsInsecureTLSAllowed() {
+			dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // gated by server-wide allow + per-connection flag
+		}
 	}
 
 	headers := make(map[string][]string)

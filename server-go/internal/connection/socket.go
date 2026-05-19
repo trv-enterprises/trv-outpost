@@ -6,8 +6,10 @@ package connection
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -108,10 +110,21 @@ func (s *SocketDataSource) connect() error {
 	}
 }
 
-// connectWebSocket establishes a WebSocket connection
+// connectWebSocket establishes a WebSocket connection. For wss://
+// URLs, the per-connection InsecureSkipVerify flag honors the same
+// two-gate model as APIConfig (per-conn flag AND server-level
+// api.allow_insecure_tls must both be true). Plain ws:// ignores it.
 func (s *SocketDataSource) connectWebSocket() error {
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
+	}
+	if strings.HasPrefix(strings.ToLower(s.config.URL), "wss://") {
+		if s.config.InsecureSkipVerify && !IsInsecureTLSAllowed() {
+			log.Printf("socket datasource %s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it", s.config.URL)
+		}
+		if s.config.InsecureSkipVerify && IsInsecureTLSAllowed() {
+			dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // gated by server-wide allow + per-connection flag
+		}
 	}
 
 	headers := make(map[string][]string)

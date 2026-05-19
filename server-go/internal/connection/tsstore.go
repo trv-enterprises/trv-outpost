@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -43,6 +44,7 @@ func tsstoreConfigSchema() []registry.ConfigField {
 		{Name: "data_type", Type: "string", Required: false, Options: []string{"json", "schema", "text"}, Description: "Data type"},
 		{Name: "api_key", Type: "password", Required: false, Description: "API key"},
 		{Name: "timeout", Type: "int", Required: false, Default: 30, Description: "Timeout (seconds)"},
+		{Name: "insecure_skip_verify", Type: "bool", Required: false, Default: false, Description: "Skip TLS certificate verification for HTTPS endpoints (self-signed certs). Server must also have api.allow_insecure_tls enabled."},
 	}
 }
 
@@ -85,15 +87,21 @@ func newTSStoreAdapterFromConfig(config map[string]interface{}) (*TSStoreAdapter
 	} else if timeout, ok := config["timeout"].(int); ok {
 		tsConfig.Timeout = timeout
 	}
+	if skip, ok := config["insecure_skip_verify"].(bool); ok {
+		tsConfig.InsecureSkipVerify = skip
+	}
 
-	httpTimeout := 30 * time.Second
-	if tsConfig.Timeout > 0 {
-		httpTimeout = time.Duration(tsConfig.Timeout) * time.Second
+	// Same two-gate parity warning as the api adapter: a per-conn
+	// skip flag without the deployment-level allow is silently
+	// ignored, which is hard to debug without a hint at boot.
+	if tsConfig.InsecureSkipVerify && !IsInsecureTLSAllowed() {
+		log.Printf("tsstore adapter %s://%s:%d/%s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it",
+			tsConfig.Protocol, tsConfig.Host, tsConfig.Port, tsConfig.StoreName)
 	}
 
 	return &TSStoreAdapter{
 		config:     tsConfig,
-		httpClient: &http.Client{Timeout: httpTimeout},
+		httpClient: BuildAPIHTTPClient(tsConfig.Timeout, tsConfig.InsecureSkipVerify),
 	}, nil
 }
 
@@ -692,21 +700,19 @@ type wsMessage struct {
 	Message   string          `json:"message,omitempty"`    // For error messages
 }
 
-// NewTSStoreDataSource creates a new TSStore datasource
+// NewTSStoreDataSource creates a new TSStore datasource. Uses
+// BuildAPIHTTPClient so the same two-gate TLS skip model applies
+// here as on the registry adapter: per-conn flag + server allow.
 func NewTSStoreDataSource(config *models.TSStoreConfig) (*TSStoreDataSource, error) {
-	timeout := 30 * time.Second
-	if config.Timeout > 0 {
-		timeout = time.Duration(config.Timeout) * time.Second
+	if config.InsecureSkipVerify && !IsInsecureTLSAllowed() {
+		log.Printf("tsstore datasource %s://%s:%d/%s: insecure_skip_verify is set on this connection but ignored — set api.allow_insecure_tls=true (or DASHBOARD_API_ALLOW_INSECURE_TLS=true) at the server level to honor it",
+			config.Protocol, config.Host, config.Port, config.StoreName)
 	}
 
-	ds := &TSStoreDataSource{
-		config: config,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
-	}
-
-	return ds, nil
+	return &TSStoreDataSource{
+		config:     config,
+		httpClient: BuildAPIHTTPClient(config.Timeout, config.InsecureSkipVerify),
+	}, nil
 }
 
 // Query fetches data from TSStore using the unified /data endpoints.
@@ -1316,6 +1322,28 @@ func (t *TSStoreDataSource) Close() error {
 }
 
 // TestConnection tests the connection to TSStore and returns store info
+// TestConnection runs in two stages so a passing result actually
+// means "the dashboard can use this connection end-to-end" — not
+// just "the host is reachable."
+//
+//  1. GetStoreStats — hits /api/stores/:store/stats, which ts-store
+//     leaves unauthenticated by design (monitoring/dashboards poll
+//     it without a key). Confirms the host is up, the store exists,
+//     protocol/host/port/store_name are right, and lets us auto-
+//     detect the data type below.
+//  2. probeAuth — hits an authenticated endpoint (/alerts) to
+//     confirm the api_key is actually accepted by this store.
+//     ts-store keys are stored as per-store hashes; a key that's
+//     valid for one store can 401 on another (the homelab seed
+//     misses a store, ts-store data was reset, etc.). Stage 1 alone
+//     wouldn't catch this — the symptom would surface later when a
+//     downstream feature tried to read data or hit the alerts
+//     aggregator.
+//
+// The alerts endpoint is the cheapest authenticated probe: it's
+// always present (unlike /schema, which 400s for non-schema stores),
+// has no side effects (unlike /metrics/reset), and returns at most a
+// small JSON list (often empty), so the round-trip is fast.
 func (t *TSStoreDataSource) TestConnection(ctx context.Context) error {
 	stats, err := t.GetStoreStats(ctx)
 	if err != nil {
@@ -1336,5 +1364,36 @@ func (t *TSStoreDataSource) TestConnection(ctx context.Context) error {
 		}
 	}
 
-	return nil
+	return t.probeAuth(ctx)
+}
+
+// probeAuth hits an authenticated endpoint so TestConnection can
+// catch a wrong / missing / unseeded api_key at edit time. Returns
+// nil on any 2xx; shapes a clear error on 401/403 so the user knows
+// the fix is in the store's keys.json (or the api_key field), not
+// the network.
+func (t *TSStoreDataSource) probeAuth(ctx context.Context) error {
+	url := fmt.Sprintf("%s/api/stores/%s/alerts", t.config.BaseURL(), t.config.StoreName)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	t.addHeaders(req)
+
+	resp, err := t.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("authenticated probe failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if t.config.APIKey == "" {
+			return fmt.Errorf("authentication required: this store expects an API key but none is configured")
+		}
+		return fmt.Errorf("api_key rejected by store '%s' (HTTP %d): the key is missing from this store's keys.json on the ts-store host. ts-store keys are per-store hashes — verify the seed reached this store/host", t.config.StoreName, resp.StatusCode)
+	}
+	return fmt.Errorf("authenticated probe returned HTTP %d", resp.StatusCode)
 }
