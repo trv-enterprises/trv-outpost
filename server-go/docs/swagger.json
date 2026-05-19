@@ -5027,6 +5027,167 @@
                 }
             }
         },
+        "/tsstore-alerts/probe": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TSStoreAlerts"
+                ],
+                "summary": "Probe a tsstore connection's auth before submitting a new rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.ProbeConnectionResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tsstore-alerts/rules": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TSStoreAlerts"
+                ],
+                "summary": "Aggregated list of every ts-store alert rule across every tsstore connection",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.TSStoreAggregatedRulesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TSStoreAlerts"
+                ],
+                "summary": "Create a webhook alert rule on a tsstore connection",
+                "parameters": [
+                    {
+                        "description": "Rule",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.CreateWebhookRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/service.CreateWebhookRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tsstore-alerts/rules/{alert_id}": {
+            "delete": {
+                "tags": [
+                    "TSStoreAlerts"
+                ],
+                "summary": "Delete a ts-store alert (and all its rules) on a tsstore connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "TSStore connection ID",
+                        "name": "connection_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Alert ID",
+                        "name": "alert_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "description": "Returns a paginated list of all users",
@@ -7971,6 +8132,10 @@
                 "url"
             ],
             "properties": {
+                "insecure_skip_verify": {
+                    "description": "InsecureSkipVerify disables TLS certificate verification when\nthe URL uses https://. Same two-gate model as APIConfig — the\nserver-level api.allow_insecure_tls must also be true.",
+                    "type": "boolean"
+                },
                 "password": {
                     "description": "Basic auth password (optional)",
                     "type": "string"
@@ -8190,6 +8355,10 @@
                 "host": {
                     "type": "string"
                 },
+                "insecure_skip_verify": {
+                    "description": "InsecureSkipVerify disables TLS certificate verification when\nSSL is true. Same two-gate model as APIConfig — the server-\nlevel api.allow_insecure_tls must also be true. Driver-specific\ntranslation in buildConnectionString:\n  postgres → sslmode=require (vs verify-full when off)\n  mysql    → tls=skip-verify (vs tls=true when off)\n  mssql    → TrustServerCertificate=true (vs default when off)\n  sqlite, oracle → ignored (sqlite has no TLS; oracle is\n  driver-specific and not yet covered).",
+                    "type": "boolean"
+                },
                 "max_connections": {
                     "type": "integer"
                 },
@@ -8320,6 +8489,10 @@
                     "additionalProperties": {
                         "type": "string"
                     }
+                },
+                "insecure_skip_verify": {
+                    "description": "InsecureSkipVerify disables TLS certificate verification when\nthe URL uses wss://. Same two-gate model as APIConfig — the\nserver-level api.allow_insecure_tls must also be true. Plain\nws:// and tcp:// connections ignore this entirely.",
+                    "type": "boolean"
                 },
                 "message_format": {
                     "description": "json, text",
@@ -8483,6 +8656,10 @@
                 "host": {
                     "description": "Hostname or IP address",
                     "type": "string"
+                },
+                "insecure_skip_verify": {
+                    "description": "InsecureSkipVerify disables TLS certificate verification when\nProtocol is \"https\". Same two-gate model as APIConfig: the\ndeployment must also have `api.allow_insecure_tls: true`\nbefore either gate actually takes effect. Intended for homelab\nts-store instances behind self-signed certs; never set on a\npublic-internet endpoint.",
+                    "type": "boolean"
                 },
                 "port": {
                     "description": "Port number",
@@ -9477,6 +9654,160 @@
                     "type": "string"
                 },
                 "type_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.CreateWebhookRuleRequest": {
+            "type": "object",
+            "required": [
+                "condition",
+                "connection_id",
+                "rule_name"
+            ],
+            "properties": {
+                "condition": {
+                    "type": "string"
+                },
+                "connection_id": {
+                    "type": "string"
+                },
+                "cooldown": {
+                    "description": "\"5m\" etc., ts-store duration",
+                    "type": "string"
+                },
+                "dashboard_id": {
+                    "description": "optional bell deep-link target",
+                    "type": "string"
+                },
+                "poll_interval": {
+                    "type": "string"
+                },
+                "rule_name": {
+                    "type": "string"
+                },
+                "timeout": {
+                    "type": "string"
+                },
+                "webhook_headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "webhook_url_override": {
+                    "description": "Optional override. If empty, we use the dashboard's own\nreceiver and embed a fresh per-connection secret. If set, the\ncaller takes responsibility for auth; we DO NOT issue a secret\nand the rule will deliver to whatever URL was provided.",
+                    "type": "string"
+                }
+            }
+        },
+        "service.CreateWebhookRuleResponse": {
+            "type": "object",
+            "properties": {
+                "alert_id": {
+                    "type": "string"
+                },
+                "secret_id": {
+                    "type": "string"
+                },
+                "webhook_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.ProbeConnectionResult": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "http_status": {
+                    "type": "integer"
+                },
+                "ok": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "service.TSStoreAggregatedRule": {
+            "type": "object",
+            "properties": {
+                "alert_id": {
+                    "type": "string"
+                },
+                "alert_target": {
+                    "type": "string"
+                },
+                "alert_type": {
+                    "description": "webhook | ws | mqtt",
+                    "type": "string"
+                },
+                "alerts_fired": {
+                    "type": "integer"
+                },
+                "condition": {
+                    "type": "string"
+                },
+                "connection_id": {
+                    "description": "Identity within ts-store. ts-store owns IDs at the alert level\n(one alert = one transport target = one rule list); rule names\nare unique within a single alert. The composite (connection_id,\nalert_id, rule_name) uniquely identifies a rule in the\ndashboard's view.",
+                    "type": "string"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "cooldown": {
+                    "type": "string"
+                },
+                "dashboard_id": {
+                    "description": "DashboardID is decoded opportunistically from ExternalRef when\nit parses as `{\"dashboard_id\":\"\u003cuuid\u003e\"}`. Empty otherwise —\nrules created by non-dashboard tooling carry whatever the\nproducer chose to put in external_ref.",
+                    "type": "string"
+                },
+                "external_ref": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "rule_name": {
+                    "description": "Rule-level fields straight from ts-store.",
+                    "type": "string"
+                },
+                "state": {
+                    "description": "Operational status. ts-store reports state + alerts_fired at\nthe alert level (not per rule); we mirror onto every rule row\nfor table readability. Last-fired-per-rule is not yet exposed\nby ts-store; left empty until it lands.",
+                    "type": "string"
+                },
+                "store_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.TSStoreAggregatedRulesResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.TSStoreFetchError"
+                    }
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.TSStoreAggregatedRule"
+                    }
+                }
+            }
+        },
+        "service.TSStoreFetchError": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "string"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "error": {
                     "type": "string"
                 }
             }

@@ -1866,6 +1866,12 @@ definitions:
     type: object
   models.PrometheusConfig:
     properties:
+      insecure_skip_verify:
+        description: |-
+          InsecureSkipVerify disables TLS certificate verification when
+          the URL uses https://. Same two-gate model as APIConfig — the
+          server-level api.allow_insecure_tls must also be true.
+        type: boolean
       password:
         description: Basic auth password (optional)
         type: string
@@ -2022,6 +2028,18 @@ definitions:
         type: string
       host:
         type: string
+      insecure_skip_verify:
+        description: |-
+          InsecureSkipVerify disables TLS certificate verification when
+          SSL is true. Same two-gate model as APIConfig — the server-
+          level api.allow_insecure_tls must also be true. Driver-specific
+          translation in buildConnectionString:
+            postgres → sslmode=require (vs verify-full when off)
+            mysql    → tls=skip-verify (vs tls=true when off)
+            mssql    → TrustServerCertificate=true (vs default when off)
+            sqlite, oracle → ignored (sqlite has no TLS; oracle is
+            driver-specific and not yet covered).
+        type: boolean
       max_connections:
         type: integer
       options:
@@ -2109,6 +2127,13 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      insecure_skip_verify:
+        description: |-
+          InsecureSkipVerify disables TLS certificate verification when
+          the URL uses wss://. Same two-gate model as APIConfig — the
+          server-level api.allow_insecure_tls must also be true. Plain
+          ws:// and tcp:// connections ignore this entirely.
+        type: boolean
       message_format:
         description: json, text
         type: string
@@ -2234,6 +2259,15 @@ definitions:
       host:
         description: Hostname or IP address
         type: string
+      insecure_skip_verify:
+        description: |-
+          InsecureSkipVerify disables TLS certificate verification when
+          Protocol is "https". Same two-gate model as APIConfig: the
+          deployment must also have `api.allow_insecure_tls: true`
+          before either gate actually takes effect. Intended for homelab
+          ts-store instances behind self-signed certs; never set on a
+          public-internet endpoint.
+        type: boolean
       port:
         description: Port number
         type: integer
@@ -2953,6 +2987,127 @@ definitions:
           "casita")'
         type: string
       type_id:
+        type: string
+    type: object
+  service.CreateWebhookRuleRequest:
+    properties:
+      condition:
+        type: string
+      connection_id:
+        type: string
+      cooldown:
+        description: '"5m" etc., ts-store duration'
+        type: string
+      dashboard_id:
+        description: optional bell deep-link target
+        type: string
+      poll_interval:
+        type: string
+      rule_name:
+        type: string
+      timeout:
+        type: string
+      webhook_headers:
+        additionalProperties:
+          type: string
+        type: object
+      webhook_url_override:
+        description: |-
+          Optional override. If empty, we use the dashboard's own
+          receiver and embed a fresh per-connection secret. If set, the
+          caller takes responsibility for auth; we DO NOT issue a secret
+          and the rule will deliver to whatever URL was provided.
+        type: string
+    required:
+    - condition
+    - connection_id
+    - rule_name
+    type: object
+  service.CreateWebhookRuleResponse:
+    properties:
+      alert_id:
+        type: string
+      secret_id:
+        type: string
+      webhook_url:
+        type: string
+    type: object
+  service.ProbeConnectionResult:
+    properties:
+      error:
+        type: string
+      http_status:
+        type: integer
+      ok:
+        type: boolean
+    type: object
+  service.TSStoreAggregatedRule:
+    properties:
+      alert_id:
+        type: string
+      alert_target:
+        type: string
+      alert_type:
+        description: webhook | ws | mqtt
+        type: string
+      alerts_fired:
+        type: integer
+      condition:
+        type: string
+      connection_id:
+        description: |-
+          Identity within ts-store. ts-store owns IDs at the alert level
+          (one alert = one transport target = one rule list); rule names
+          are unique within a single alert. The composite (connection_id,
+          alert_id, rule_name) uniquely identifies a rule in the
+          dashboard's view.
+        type: string
+      connection_name:
+        type: string
+      cooldown:
+        type: string
+      dashboard_id:
+        description: |-
+          DashboardID is decoded opportunistically from ExternalRef when
+          it parses as `{"dashboard_id":"<uuid>"}`. Empty otherwise —
+          rules created by non-dashboard tooling carry whatever the
+          producer chose to put in external_ref.
+        type: string
+      external_ref:
+        type: string
+      namespace:
+        type: string
+      rule_name:
+        description: Rule-level fields straight from ts-store.
+        type: string
+      state:
+        description: |-
+          Operational status. ts-store reports state + alerts_fired at
+          the alert level (not per rule); we mirror onto every rule row
+          for table readability. Last-fired-per-rule is not yet exposed
+          by ts-store; left empty until it lands.
+        type: string
+      store_name:
+        type: string
+    type: object
+  service.TSStoreAggregatedRulesResponse:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/service.TSStoreFetchError'
+        type: array
+      rules:
+        items:
+          $ref: '#/definitions/service.TSStoreAggregatedRule'
+        type: array
+    type: object
+  service.TSStoreFetchError:
+    properties:
+      connection_id:
+        type: string
+      connection_name:
+        type: string
+      error:
         type: string
     type: object
   streaming.StreamStatus:
@@ -6367,6 +6522,111 @@ paths:
       summary: List all tags with usage counts
       tags:
       - tags
+  /tsstore-alerts/probe:
+    get:
+      parameters:
+      - description: Connection ID
+        in: query
+        name: connection_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.ProbeConnectionResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Probe a tsstore connection's auth before submitting a new rule
+      tags:
+      - TSStoreAlerts
+  /tsstore-alerts/rules:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.TSStoreAggregatedRulesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Aggregated list of every ts-store alert rule across every tsstore connection
+      tags:
+      - TSStoreAlerts
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateWebhookRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/service.CreateWebhookRuleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a webhook alert rule on a tsstore connection
+      tags:
+      - TSStoreAlerts
+  /tsstore-alerts/rules/{alert_id}:
+    delete:
+      parameters:
+      - description: TSStore connection ID
+        in: query
+        name: connection_id
+        required: true
+        type: string
+      - description: Alert ID
+        in: path
+        name: alert_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a ts-store alert (and all its rules) on a tsstore connection
+      tags:
+      - TSStoreAlerts
   /users:
     get:
       description: Returns a paginated list of all users

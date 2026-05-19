@@ -1994,7 +1994,7 @@
             "description": "Create a new datasource\n\nCreate a new data source (API, WebSocket, or File)\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"description\": \"\",\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"insecure_skip_verify\": null,\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"description\": \"\",\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2544,7 +2544,7 @@
             "description": "Test a datasource connection\n\nTest a datasource connection without saving it\n\n\nResponses: 200, 400",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"id\": \"\",\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"insecure_skip_verify\": null,\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"id\": \"\",\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4670,6 +4670,157 @@
               ]
             },
             "description": "List all tags with usage counts\n\nReturns a merged list of tags across connections, components, and dashboards with per-entity-type counts\n\n\nResponses: 200"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "TSStoreAlerts",
+      "description": "tsstorealerts endpoints (4).",
+      "item": [
+        {
+          "name": "Aggregated list of every ts-store alert rule across every tsstore connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tsstore-alerts/rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tsstore-alerts",
+                "rules"
+              ]
+            },
+            "description": "Aggregated list of every ts-store alert rule across every tsstore connection\n\n\nResponses: 200, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Create a webhook alert rule on a tsstore connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tsstore-alerts/rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tsstore-alerts",
+                "rules"
+              ]
+            },
+            "description": "Create a webhook alert rule on a tsstore connection\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"poll_interval\": \"\",\n  \"rule_name\": \"\",\n  \"timeout\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a ts-store alert (and all its rules) on a tsstore connection",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tsstore-alerts/rules/{alert_id}?connection_id=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tsstore-alerts",
+                "rules",
+                ":alert_id"
+              ],
+              "query": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "TSStore connection ID",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "alert_id",
+                  "value": "",
+                  "description": "Alert ID"
+                }
+              ]
+            },
+            "description": "Delete a ts-store alert (and all its rules) on a tsstore connection\n\n\nResponses: 204, 400, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Probe a tsstore connection's auth before submitting a new rule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tsstore-alerts/probe?connection_id=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tsstore-alerts",
+                "probe"
+              ],
+              "query": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Connection ID",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Probe a tsstore connection's auth before submitting a new rule\n\n\nResponses: 200, 400"
           },
           "response": []
         }
