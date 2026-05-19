@@ -90,3 +90,11 @@ settings:
     category: auth
     description: "Lifetime in seconds of the refresh token (3600-2592000). Default 604800 = 7 days. Drives how often users must re-bootstrap when they don't keep the tab open."
     value: 604800
+
+  # Extensions — optional Design-mode add-on features. Each extension
+  # has its own boolean toggle here. When every extension is disabled,
+  # the "Extensions" group in the Design sidebar hides entirely.
+  - key: extensions.tsstore_alerts.enabled
+    category: extensions
+    description: "ts-store Alerts extension — central /design/extensions/tsstore-alerts page for managing ts-store alert rules across every tsstore connection. Disable to hide the sidebar link and redirect the route."
+    value: true

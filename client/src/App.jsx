@@ -47,6 +47,8 @@ import SystemUsersPage from './pages/SystemUsersPage';
 import DevicesPage from './pages/DevicesPage';
 import NamespacesPage from './pages/NamespacesPage';
 import ApiKeysListPage from './pages/ApiKeysListPage';
+import TsStoreAlertsExtensionPage from './pages/TsStoreAlertsExtensionPage';
+import TsStoreAlertRuleEditorPage from './pages/TsStoreAlertRuleEditorPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { NamespaceProvider } from './context/NamespaceContext';
@@ -728,6 +730,10 @@ function AppContent({ onDisconnect }) {
           <Route path="/design/components/:id" element={<ComponentDetailPage />} />
           <Route path="/design/dashboards" element={<DashboardsListPage />} />
           <Route path="/design/dashboards/:id" element={<DashboardEditRedirect />} />
+
+          {/* Design Mode — Extensions */}
+          <Route path="/design/extensions/tsstore-alerts" element={<TsStoreAlertsExtensionPage />} />
+          <Route path="/design/extensions/tsstore-alerts/new" element={<TsStoreAlertRuleEditorPage />} />
 
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage />} />

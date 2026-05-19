@@ -6,6 +6,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,7 +16,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // WebhookHandler is the inbound surface for external integrations
@@ -30,18 +33,22 @@ import (
 // middleware resolves that to a system user; we don't do any
 // additional auth here.
 type WebhookHandler struct {
-	connections *service.ConnectionService
-	hub         *service.EventHub
-	alerts      *service.AlertService
+	connections   *service.ConnectionService
+	hub           *service.EventHub
+	alerts        *service.AlertService
+	webhookSecrets *repository.WebhookSecretRepository
 }
 
 // NewWebhookHandler wires the inbound webhook receiver to:
 //   - the connection lookup (routing validation + namespace recovery),
 //   - the alert service (persistence — so the bell can hydrate on
 //     reload even if nobody was logged in when the alert fired),
-//   - the event hub (live fan-out to currently-connected clients).
-func NewWebhookHandler(connections *service.ConnectionService, hub *service.EventHub, alerts *service.AlertService) *WebhookHandler {
-	return &WebhookHandler{connections: connections, hub: hub, alerts: alerts}
+//   - the event hub (live fan-out to currently-connected clients),
+//   - the webhook-secret repo (URL-embedded shared secrets for the
+//     public, unauthenticated receiver path used by tsstore alert
+//     rules created via the dashboard's rule wizard).
+func NewWebhookHandler(connections *service.ConnectionService, hub *service.EventHub, alerts *service.AlertService, webhookSecrets *repository.WebhookSecretRepository) *WebhookHandler {
+	return &WebhookHandler{connections: connections, hub: hub, alerts: alerts, webhookSecrets: webhookSecrets}
 }
 
 // tsstoreAlertPayload mirrors ts-store's outbound webhook JSON shape
@@ -124,6 +131,68 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 		return
 	}
 
+	h.acceptTSStoreAlert(c, connectionID)
+}
+
+// HandleTSStoreAlertWithSecret is the public (no-auth) variant of
+// HandleTSStoreAlert. The URL embeds a per-connection shared secret
+// that the dashboard generated when the rule was created. We accept
+// the payload iff the secret resolves to a record bound to the same
+// connection_id. Any lookup failure → 404 (deliberately matches the
+// shape of "not found" to avoid leaking whether the secret exists).
+//
+// This path exists for ts-store rules created via the dashboard's
+// rule wizard, where the user shouldn't have to wire up a system-
+// user API key just to get alerts to flow back to the dashboard
+// they're already authoring in. ts-store fires with no Authorization
+// header; the secret in the URL is the only auth.
+func (h *WebhookHandler) HandleTSStoreAlertWithSecret(c *gin.Context) {
+	connectionID := c.Param("connection_id")
+	secret := c.Param("secret")
+	if connectionID == "" || secret == "" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if h.webhookSecrets == nil {
+		// Misconfigured server — the public-secret route was wired
+		// without a repo. Return 404 rather than 500 so we don't
+		// leak the existence of the path.
+		log.Printf("webhook: secret receiver hit but webhookSecrets repo is nil — refusing")
+		c.Status(http.StatusNotFound)
+		return
+	}
+	ws, err := h.webhookSecrets.FindBySecret(c.Request.Context(), secret)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		log.Printf("webhook: secret lookup failed: %v", err)
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if ws.ConnectionID != connectionID {
+		// Secret valid but bound to a different connection — refuse.
+		// 404 keeps the response shape consistent with "no such
+		// secret" so we don't help an attacker probe.
+		c.Status(http.StatusNotFound)
+		return
+	}
+	// Audit trail — best-effort.
+	go func() {
+		if err := h.webhookSecrets.TouchLastUsed(c.Request.Context(), ws.ID); err != nil {
+			log.Printf("webhook: TouchLastUsed failed for secret %s: %v", ws.ID, err)
+		}
+	}()
+
+	h.acceptTSStoreAlert(c, connectionID)
+}
+
+// acceptTSStoreAlert is the post-auth core of both the authenticated
+// and the secret-gated tsstore receivers. By the time we get here
+// the caller has been authorised in some form; the only difference
+// in the two paths is *how*.
+func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string) {
 	conn, err := h.connections.GetConnection(c.Request.Context(), connectionID)
 	if err != nil || conn == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})

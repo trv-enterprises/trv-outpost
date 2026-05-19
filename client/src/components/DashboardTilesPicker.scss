@@ -1,0 +1,109 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.dashboard-tiles-picker {
+  padding: 0;
+
+  .picker-header {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+    height: 56px;
+    padding: 0 spacing.$spacing-05;
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+    background-color: transparent;
+
+    svg {
+      fill: var(--cds-text-secondary);
+      flex-shrink: 0;
+    }
+
+    span {
+      white-space: nowrap;
+      overflow: hidden;
+    }
+  }
+
+  .picker-loading,
+  .picker-empty {
+    padding: spacing.$spacing-04;
+    color: var(--cds-text-helper);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .dashboard-tiles {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-02;
+    padding: spacing.$spacing-03;
+
+    .dashboard-tile {
+      padding: spacing.$spacing-03;
+      background-color: var(--cds-layer-01);
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background-color: var(--cds-layer-hover-01);
+        border-color: var(--cds-border-strong-01);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--cds-focus);
+        outline-offset: -2px;
+      }
+
+      &.selected {
+        background-color: var(--cds-layer-selected-01);
+        border-color: var(--cds-focus);
+
+        .tile-name {
+          color: var(--cds-link-primary);
+        }
+      }
+
+      .tile-name {
+        color: var(--cds-text-primary);
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: spacing.$spacing-01;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .tile-description {
+        color: var(--cds-text-helper);
+        font-size: 0.75rem;
+        margin-bottom: spacing.$spacing-02;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3;
+      }
+
+      .tile-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: spacing.$spacing-01;
+
+        .cds--tag {
+          font-size: 0.625rem;
+          padding: 0 spacing.$spacing-02;
+          min-height: 18px;
+        }
+      }
+    }
+  }
+}

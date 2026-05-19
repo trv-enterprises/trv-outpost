@@ -1,0 +1,76 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.tsstore-alerts-extension-page {
+  padding: spacing.$spacing-07;
+  color: var(--cds-text-primary);
+
+  &--loading {
+    color: var(--cds-text-helper);
+  }
+
+  .page-header {
+    margin-bottom: spacing.$spacing-06;
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 400;
+      margin: 0 0 spacing.$spacing-03;
+    }
+
+    p {
+      color: var(--cds-text-secondary);
+      font-size: 0.875rem;
+      max-width: 60ch;
+      margin: 0;
+    }
+  }
+
+  .cell-primary {
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+  }
+
+  .cell-secondary {
+    color: var(--cds-text-helper);
+    font-size: 0.75rem;
+    margin-top: spacing.$spacing-01;
+  }
+
+  .condition {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-layer-01);
+    padding: 2px spacing.$spacing-02;
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8125rem;
+  }
+
+  .muted {
+    color: var(--cds-text-helper);
+  }
+
+  .empty-cell {
+    text-align: center;
+    color: var(--cds-text-helper);
+    padding: spacing.$spacing-07 spacing.$spacing-05;
+  }
+
+  .actions-cell {
+    text-align: right;
+    white-space: nowrap;
+
+    .cds--btn {
+      vertical-align: middle;
+    }
+  }
+
+  .delete-confirm {
+    p {
+      margin: 0 0 spacing.$spacing-04;
+    }
+  }
+}

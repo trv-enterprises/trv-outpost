@@ -5,7 +5,9 @@
 package streaming
 
 import (
+	"fmt"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -21,6 +23,23 @@ func SetServerPort(p int) {
 	if p > 0 {
 		serverPort = p
 	}
+}
+
+// DashboardHostPort returns the host:port suggestion remote ts-store
+// instances can reach this dashboard at. Same resolution order as
+// getDashboardHost on TSStoreStream — DASHBOARD_HOST env wins, then
+// autodiscovered LAN/overlay IP, then localhost:<port> as the
+// last-resort fallback. Exposed so other parts of the codebase that
+// need to construct a dashboard-pointing URL (e.g. the alert-rule
+// wizard's default webhook target) share one consistent answer.
+func DashboardHostPort() string {
+	if host := os.Getenv("DASHBOARD_HOST"); host != "" {
+		return host
+	}
+	if ip := discoverReachableHostIP(); ip != "" {
+		return fmt.Sprintf("%s:%d", ip, serverPort)
+	}
+	return fmt.Sprintf("localhost:%d", serverPort)
 }
 
 // discoverReachableHostIP picks an IP address on this machine that

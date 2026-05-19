@@ -7,6 +7,7 @@ package middleware
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +15,12 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
+
+// tsstoreSecretWebhookRE matches the secret-gated tsstore webhook
+// receiver path `/api/webhooks/tsstore/<conn_id>/<secret>`. Anchored
+// and segment-counted so the bare `/api/webhooks/tsstore/<conn_id>`
+// (auth-required, legacy) doesn't accidentally inherit Public exemption.
+var tsstoreSecretWebhookRE = regexp.MustCompile(`^/api/webhooks/tsstore/[^/]+/[^/]+/?$`)
 
 const (
 	// UserContextKey is the key used to store user in gin context.
@@ -33,6 +40,14 @@ type RouteCapability struct {
 	Required   models.Capability  // Required capability
 	WriteOnly  bool               // If true, only applies to write operations (POST, PUT, DELETE)
 	Exact      bool               // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
+	// PathPattern is an optional compiled regex evaluated *in addition
+	// to* PathPrefix's prefix check. When set, the path must match
+	// PathPrefix (prefix) AND PathPattern (anchored). Use this for
+	// the rare case where Exact-vs-prefix isn't expressive enough —
+	// e.g. distinguishing /api/webhooks/tsstore/<conn>/<secret>
+	// (Public, secret-gated) from /api/webhooks/tsstore/<conn>
+	// (auth-required). Both share a prefix.
+	PathPattern *regexp.Regexp
 	// Public marks a route as exempt from the deployment-wide
 	// "authentication required" default. Set this only for genuine
 	// pre-auth surfaces — endpoints that must answer before a user
@@ -144,6 +159,29 @@ func buildRouteRules() []RouteCapability {
 		// access control. Reconsider when we ship a public-facing
 		// deployment.
 		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
+
+		// ts-store Alerts extension — read available to any
+		// authenticated viewer; writes (create/delete a rule)
+		// require Design. Matches the phase-2 decision: the
+		// extension lives in Design mode, authoring is a Design
+		// concern.
+		{PathPrefix: "/api/tsstore-alerts", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
+		{PathPrefix: "/api/tsstore-alerts", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+
+		// Secret-gated tsstore webhook receiver — the URL embeds a
+		// per-connection random secret that the dashboard issues at
+		// rule-creation time. Acts as the auth: handler rejects
+		// unknown secrets as 404. Distinct from the bare
+		// /api/webhooks/tsstore/<conn> path above (auth-required,
+		// legacy). The pattern requires both <connection_id> and
+		// <secret> path params, so it doesn't accidentally exempt
+		// the legacy path from auth.
+		{
+			PathPrefix:  "/api/webhooks/tsstore/",
+			PathPattern: tsstoreSecretWebhookRE,
+			Method:      "POST",
+			Public:      true,
+		},
 
 		// Design mode routes - require design capability for write operations
 		// Read operations are allowed for VIEW users so they can see dashboards
@@ -483,17 +521,35 @@ func (m *AuthMiddleware) matchesPublic(path, method string) bool {
 		if !rule.Public {
 			continue
 		}
-		var matches bool
-		if rule.Exact {
-			matches = path == rule.PathPrefix || path == rule.PathPrefix+"/"
-		} else {
-			matches = strings.HasPrefix(path, rule.PathPrefix)
+		if !routeRuleMatches(rule, path, method) {
+			continue
 		}
-		if matches && (rule.Method == "" || rule.Method == method) {
-			return true
-		}
+		return true
 	}
 	return false
+}
+
+// routeRuleMatches centralises the path/method match logic so the
+// Public exemption and the capability-lookup paths agree. Returns
+// true iff path satisfies the rule's PathPrefix (Exact or prefix)
+// AND its optional PathPattern AND its optional Method.
+func routeRuleMatches(rule RouteCapability, path, method string) bool {
+	var prefixOK bool
+	if rule.Exact {
+		prefixOK = path == rule.PathPrefix || path == rule.PathPrefix+"/"
+	} else {
+		prefixOK = strings.HasPrefix(path, rule.PathPrefix)
+	}
+	if !prefixOK {
+		return false
+	}
+	if rule.PathPattern != nil && !rule.PathPattern.MatchString(path) {
+		return false
+	}
+	if rule.Method != "" && rule.Method != method {
+		return false
+	}
+	return true
 }
 
 // getRequiredCapability returns the capability required for a path/method

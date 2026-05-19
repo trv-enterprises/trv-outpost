@@ -11,7 +11,8 @@ import {
   OverflowMenu,
   OverflowMenuItem,
   Button,
-  Dropdown
+  Dropdown,
+  Tooltip
 } from '@carbon/react';
 import {
   Dashboard,
@@ -193,6 +194,22 @@ function DashboardTileViewPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Multi-line tooltip body for the "N panels" tag — one line per
+  // panel showing the component's title (or name fallback), with
+  // explicit markers for empty panels and panels whose component
+  // was deleted so the count never lies. Mirrors the same helper
+  // on DashboardsListPage so both surfaces show the same content.
+  const getComponentNamesLabel = (dashboard) => {
+    const panels = dashboard.panels || [];
+    if (panels.length === 0) return 'No panels';
+    return panels.map((panel) => {
+      if (!panel.component_id) return '(empty panel)';
+      const c = charts[panel.component_id];
+      if (!c) return '(missing component)';
+      return c.title || c.name || '(unnamed)';
+    }).join('\n');
   };
 
   // Get unique data source names for a dashboard
@@ -508,9 +525,16 @@ function DashboardTileViewPage() {
                       </Tag>
                     )}
                     {dashboard.panels?.length > 0 && (
-                      <Tag type="gray" size="sm">
-                        {dashboard.panels.length} panel{dashboard.panels.length !== 1 ? 's' : ''}
-                      </Tag>
+                      <Tooltip
+                        label={getComponentNamesLabel(dashboard)}
+                        align="bottom"
+                        enterDelayMs={150}
+                        className="tooltip-multiline"
+                      >
+                        <Tag type="gray" size="sm">
+                          {dashboard.panels.length} panel{dashboard.panels.length !== 1 ? 's' : ''}
+                        </Tag>
+                      </Tooltip>
                     )}
                     {getConnectionNames(dashboard).map(dsName => (
                       <Tag key={dsName} type="blue" size="sm">

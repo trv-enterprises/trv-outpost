@@ -143,6 +143,7 @@ func main() {
 	namespaceRepo := repository.NewNamespaceRepository(mongodb.Database)
 	apiKeyRepo := repository.NewAPIKeyRepository(mongodb.Database)
 	alertRepo := repository.NewAlertRepository(mongodb.Database)
+	webhookSecretRepo := repository.NewWebhookSecretRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := componentRepo.CreateIndexes(ctx); err != nil {
@@ -190,6 +191,9 @@ func main() {
 	}
 
 	// Create alert indexes (incl. TTL for retention sweep)
+	if err := webhookSecretRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("⚠ Failed to create webhook_secrets indexes: %v", err)
+	}
 	if err := alertRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create alert indexes: %v", err)
 	}
@@ -332,7 +336,9 @@ func main() {
 	eventsHandler := handlers.NewEventsHandler(eventHub)
 	alertService := service.NewAlertService(alertRepo)
 	alertHandler := handlers.NewAlertHandler(alertService)
-	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub, alertService)
+	tsstoreAlertRulesService := service.NewTSStoreAlertRulesService(connectionService, webhookSecretRepo)
+	tsstoreAlertRulesHandler := handlers.NewTSStoreAlertRulesHandler(tsstoreAlertRulesService)
+	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub, alertService, webhookSecretRepo)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
@@ -512,15 +518,37 @@ func main() {
 			alerts.DELETE("/:id/pin", alertHandler.Unpin)
 		}
 
+		// ts-store Alerts extension — aggregated view over every
+		// ts-store alert rule across every tsstore connection.
+		// Powers the central /design/extensions/tsstore-alerts page.
+		// Distinct from the bell surface (/api/alerts above), which
+		// shows the dashboard's own persisted alert records.
+		tsstoreAlerts := api.Group("/tsstore-alerts")
+		{
+			tsstoreAlerts.GET("/rules", tsstoreAlertRulesHandler.ListAll)
+			tsstoreAlerts.POST("/rules", tsstoreAlertRulesHandler.Create)
+			tsstoreAlerts.DELETE("/rules/:alert_id", tsstoreAlertRulesHandler.DeleteAlert)
+			// Pre-submit probe used by the rule wizard.
+			tsstoreAlerts.GET("/probe", tsstoreAlertRulesHandler.ProbeAuth)
+		}
+
 		// Inbound webhooks — external integrations POST alert
-		// payloads here. Auth runs via the standard API-key
-		// middleware (Bearer trve_... on a system-user key). The
-		// handler validates the connection_id in the path against
-		// the payload's store_name so a misconfigured rule can't
-		// surface as a notification against the wrong connection.
+		// payloads here. Two variants live side by side:
+		//
+		// 1) /tsstore/:connection_id (auth-required) — legacy path
+		//    requiring `Authorization: Bearer trve_<system-user-key>`.
+		//    Kept for back-compat with rules configured before the
+		//    secret-URL flow existed.
+		// 2) /tsstore/:connection_id/:secret (PUBLIC) — used by
+		//    rules created via the dashboard's rule wizard. The
+		//    secret is a per-connection random token issued at rule
+		//    creation; receiver validates `secret → connection_id`
+		//    binding and rejects mismatch as 404. No Authorization
+		//    header from ts-store.
 		webhooks := api.Group("/webhooks")
 		{
 			webhooks.POST("/tsstore/:connection_id", webhookHandler.HandleTSStoreAlert)
+			webhooks.POST("/tsstore/:connection_id/:secret", webhookHandler.HandleTSStoreAlertWithSecret)
 		}
 
 		// Connection routes (new terminology - preferred)

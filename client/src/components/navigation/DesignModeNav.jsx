@@ -7,19 +7,23 @@ import {
   Edit,
   DataBase,
   ChartLineSmooth,
-  Dashboard
+  Dashboard,
+  Apps
 } from '@carbon/icons-react';
+import useExtensions from '../../hooks/useExtensions';
 import './DesignModeNav.scss';
 
 /**
  * DesignModeNav Component
  *
- * Navigation for Design Mode with 3 sections:
- * - Connections: Configure data connections
- * - Components: Create and edit displays and controls
- * - Dashboards: Combine components with layouts
+ * Navigation for Design Mode with two sections:
+ * - Resources: Connections, Components, Dashboards
+ * - Extensions: optional add-on features. Section hides entirely
+ *   when no extension is enabled (admin toggles in Manage → Settings).
  */
 function DesignModeNav({ location, navigate }) {
+  const { enabled: enabledExtensions } = useExtensions();
+
   const designNavItems = [
     {
       path: '/design/connections',
@@ -41,6 +45,24 @@ function DesignModeNav({ location, navigate }) {
     }
   ];
 
+  const renderLink = (item) => {
+    const Icon = item.icon;
+    return (
+      <SideNavLink
+        key={item.path}
+        renderIcon={Icon}
+        href={item.path}
+        isActive={location.pathname.startsWith(item.path)}
+        onClick={(e) => {
+          e.preventDefault();
+          navigate(item.path);
+        }}
+      >
+        {item.label}
+      </SideNavLink>
+    );
+  };
+
   return (
     <SideNavItems>
       <div className="design-mode-nav">
@@ -50,24 +72,21 @@ function DesignModeNav({ location, navigate }) {
         </div>
 
         <div className="nav-links">
-          {designNavItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <SideNavLink
-                key={item.path}
-                renderIcon={Icon}
-                href={item.path}
-                isActive={location.pathname.startsWith(item.path)}
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate(item.path);
-                }}
-              >
-                {item.label}
-              </SideNavLink>
-            );
-          })}
+          {designNavItems.map(renderLink)}
         </div>
+
+        {enabledExtensions.length > 0 && (
+          <>
+            <div className="nav-header nav-header--subsection">
+              <Apps size={16} />
+              <span>Extensions</span>
+            </div>
+
+            <div className="nav-links">
+              {enabledExtensions.map(renderLink)}
+            </div>
+          </>
+        )}
       </div>
     </SideNavItems>
   );

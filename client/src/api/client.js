@@ -1297,6 +1297,38 @@ class APIClient {
     return this.request(`/api/alerts/${id}/pin`, { method: 'DELETE' });
   }
 
+  // ts-store Alerts extension — aggregated view over every ts-store
+  // alert rule across every tsstore connection. Powers
+  // /design/extensions/tsstore-alerts.
+  async listTSStoreAlertRules() {
+    return this.request('/api/tsstore-alerts/rules');
+  }
+
+  async deleteTSStoreAlert(connectionId, alertId) {
+    const q = new URLSearchParams({ connection_id: connectionId }).toString();
+    return this.request(`/api/tsstore-alerts/rules/${alertId}?${q}`, { method: 'DELETE' });
+  }
+
+  // Create a webhook alert rule on a tsstore connection. The server
+  // mints a per-connection URL secret + builds a webhook URL pointing
+  // at this dashboard's own receiver, then POSTs the rule to the
+  // owning tsstore. Returns the new alert id + the generated URL.
+  async createTSStoreAlertRule(body) {
+    return this.request('/api/tsstore-alerts/rules', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // Cheap authenticated probe against a tsstore connection — used by
+  // the rule-create wizard to gate the submit button when the
+  // connection's API key won't pass ts-store auth. Returns
+  // { ok: bool, http_status?: int, error?: string }.
+  async probeTSStoreConnection(connectionId) {
+    const q = new URLSearchParams({ connection_id: connectionId }).toString();
+    return this.request(`/api/tsstore-alerts/probe?${q}`);
+  }
+
   // ── Dashboard export / import ─────────────────────────────────────
   async previewExportDashboards(dashboardIds) {
     return this.request('/api/dashboards/export/preview', {

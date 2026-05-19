@@ -31,6 +31,14 @@
       white-space: nowrap;
       overflow: hidden;
     }
+
+    // Sub-section headers (Extensions, etc.) sit below the first
+    // Resources block, so they get a top border to separate from
+    // the preceding link list and a slightly subdued tone.
+    &--subsection {
+      border-top: 1px solid #393939;
+      margin-top: spacing.$spacing-03;
+    }
   }
 
   .nav-links {

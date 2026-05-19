@@ -1,0 +1,162 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing' as spacing;
+
+.tsstore-alert-rule-editor {
+  // Mirrors the Settings/Connections layout: page is a column flex
+  // that fills the viewport; the body scrolls between a fixed
+  // header and a sticky footer.
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--cds-background);
+
+  &--loading {
+    padding: spacing.$spacing-07;
+    color: var(--cds-text-helper);
+  }
+
+  .editor-header {
+    flex-shrink: 0;
+    padding: spacing.$spacing-05 spacing.$spacing-06 spacing.$spacing-05;
+    max-width: 1200px;
+
+    .cds--btn {
+      margin-bottom: spacing.$spacing-03;
+      padding-left: 0;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 400;
+      margin: 0 0 spacing.$spacing-03;
+    }
+
+    p {
+      color: var(--cds-text-secondary);
+      font-size: 0.875rem;
+      max-width: 70ch;
+      margin: 0;
+    }
+  }
+
+  > .cds--inline-notification {
+    flex-shrink: 0;
+    margin: 0 spacing.$spacing-06 spacing.$spacing-04;
+    max-width: 1200px;
+  }
+
+  .editor-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 spacing.$spacing-06 spacing.$spacing-06;
+    max-width: 1200px;
+
+    .cds--form-item + .cds--form-item {
+      margin-top: spacing.$spacing-05;
+    }
+
+    .cds--fieldset {
+      margin-bottom: spacing.$spacing-07;
+    }
+
+    .connection-row {
+      display: flex;
+      align-items: flex-end;
+      gap: spacing.$spacing-04;
+
+      .namespace-filter-cell {
+        flex: 0 0 220px;
+      }
+
+      .connection-cell {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+    }
+
+    .picker-help {
+      color: var(--cds-text-helper);
+      font-size: 0.75rem;
+      margin: 0 0 spacing.$spacing-04;
+    }
+
+    .dashboard-trigger-row {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-04;
+      padding: spacing.$spacing-03 spacing.$spacing-04;
+      background-color: var(--cds-layer-01);
+      border: 1px solid var(--cds-border-subtle-01);
+      border-radius: 2px;
+    }
+
+    .dashboard-trigger-current {
+      flex: 1 1 auto;
+      min-width: 0;
+
+      .trigger-label {
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+      }
+
+      .trigger-name {
+        color: var(--cds-text-primary);
+        font-weight: 600;
+      }
+
+      .trigger-placeholder {
+        color: var(--cds-text-helper);
+        font-style: italic;
+        font-size: 0.875rem;
+      }
+    }
+
+    .dashboard-trigger-actions {
+      flex-shrink: 0;
+      display: flex;
+      gap: spacing.$spacing-02;
+    }
+
+    .probe-line {
+      margin-top: spacing.$spacing-03;
+      padding: spacing.$spacing-02 spacing.$spacing-03;
+      border-radius: 2px;
+      font-size: 0.75rem;
+      line-height: 1.4;
+
+      &--pending {
+        color: var(--cds-text-helper);
+      }
+
+      &--ok {
+        color: var(--cds-support-success);
+        background-color: var(--cds-notification-success-background);
+      }
+
+      &--bad {
+        color: var(--cds-support-error);
+        background-color: var(--cds-notification-error-background);
+
+        a {
+          color: inherit;
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+
+  .editor-footer {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: spacing.$spacing-03;
+    padding: spacing.$spacing-04 spacing.$spacing-06;
+    border-top: 1px solid var(--cds-border-subtle-01);
+    background-color: var(--cds-layer-01);
+  }
+}

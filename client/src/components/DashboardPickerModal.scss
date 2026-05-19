@@ -1,0 +1,164 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing' as spacing;
+
+.dashboard-picker-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  min-height: 50vh;
+
+  .picker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+    flex-wrap: wrap;
+    padding: spacing.$spacing-03 0 spacing.$spacing-05;
+    flex-shrink: 0;
+
+    .cds--search {
+      flex: 1 1 240px;
+      min-width: 200px;
+    }
+
+    .connection-filter-dropdown {
+      min-width: 220px;
+    }
+  }
+
+  .picker-error {
+    flex-shrink: 0;
+    color: var(--cds-support-error);
+    padding: spacing.$spacing-03;
+    background-color: var(--cds-notification-error-background);
+    border-radius: 2px;
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  .picker-empty {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cds-text-helper);
+    font-style: italic;
+  }
+
+  .picker-tiles {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    // Each row sizes to the tallest tile's natural max-content
+    // (description + tags). Without this clamp the grid stretches
+    // sparse rows to fill the container vertically, producing
+    // overly tall tiles when only a few dashboards match the
+    // filter.
+    grid-auto-rows: minmax(min-content, max-content);
+    // Rows align to the top so the leftover space sits at the
+    // bottom of the modal, not distributed into the tile rows.
+    align-content: flex-start;
+    // Inside a row, all tiles share the row's height (so their
+    // footers line up) — the default `align-items: stretch`. We
+    // leave that as-is.
+    gap: spacing.$spacing-04;
+    padding: spacing.$spacing-02 0 spacing.$spacing-04;
+  }
+
+  .dashboard-tile {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle-01);
+    border-radius: 4px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+
+    &:hover {
+      border-color: var(--cds-border-strong-01);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
+    }
+
+    &--selected {
+      border-color: var(--cds-focus);
+      background-color: var(--cds-layer-selected-01);
+
+      .tile-name {
+        color: var(--cds-link-primary);
+      }
+    }
+
+    .tile-thumbnail {
+      width: 100%;
+      height: 96px;
+      background-color: var(--cds-layer-02);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .thumbnail-placeholder {
+        color: var(--cds-text-helper);
+      }
+    }
+
+    .tile-content {
+      padding: spacing.$spacing-04;
+      display: flex;
+      flex-direction: column;
+      gap: spacing.$spacing-03;
+      // Fill the tile vertically so the footer (margin-top:auto)
+      // can pin to the bottom, giving consistent row alignment when
+      // some tiles have more tags than others.
+      flex: 1 1 auto;
+
+      .tile-name {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--cds-text-primary);
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tile-description {
+        font-size: 0.75rem;
+        color: var(--cds-text-helper);
+        margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.4;
+      }
+
+      .tile-footer {
+        // Anchored to the tile bottom so multi-tag tiles and
+        // sparse-tag tiles in the same row line up at the
+        // bottom edge.
+        margin-top: auto;
+      }
+
+      .tile-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: spacing.$spacing-02;
+      }
+    }
+  }
+}
