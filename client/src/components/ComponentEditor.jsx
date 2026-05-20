@@ -876,7 +876,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       connectionId: selectedConnectionId,
       queryRaw,
       queryType,
-      chartOptions,
       tsstoreQueryType,
       tsstoreSinceDuration,
       tsstoreLimit,
