@@ -22,7 +22,6 @@ import {
   IconButton,
   Loading,
   Link,
-  Tile,
   ContentSwitcher,
   Switch,
   Tag,
@@ -30,13 +29,14 @@ import {
   Checkbox,
   Dropdown
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Information, ChartMultitype, Download, Close, View } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
+import DashboardTile from '../components/DashboardTile';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
 import './DashboardsListPage.scss';
@@ -552,16 +552,20 @@ function DashboardsListPage() {
                   });
                 };
                 return (
-                <Tile
+                <DashboardTile
                   key={dashboard.id}
-                  className={`dashboard-tile ${isTileSelected ? 'is-selected' : ''}`}
+                  dashboard={dashboard}
+                  componentMap={charts}
+                  connectionMap={connections}
+                  selected={isTileSelected}
                   onClick={() => exportMode ? toggleTileSelection() : handleRowClick(dashboard)}
-                >
-                  {exportMode && (
-                    <div
-                      className="tile-export-checkbox"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                  showDate
+                  descriptionMode="tooltip"
+                  onTagClick={(t) => {
+                    if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
+                  }}
+                  badge={exportMode ? (
+                    <div onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         id={`export-tile-${dashboard.id}`}
                         labelText=""
@@ -569,81 +573,9 @@ function DashboardsListPage() {
                         onChange={toggleTileSelection}
                       />
                     </div>
-                  )}
-                  {/* Thumbnail */}
-                  <div className="tile-thumbnail">
-                    {dashboard.thumbnail ? (
-                      <img src={dashboard.thumbnail} alt={dashboard.name} />
-                    ) : (
-                      <div className="tile-thumbnail-placeholder">
-                        <ChartMultitype size={48} />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="tile-content">
-                    <div className="tile-header">
-                      <h3>{dashboard.name}</h3>
-                      {dashboard.description && (
-                        <Tooltip label={dashboard.description} align="bottom">
-                          <button type="button" className="info-button" onClick={(e) => e.stopPropagation()}>
-                            <Information size={16} />
-                          </button>
-                        </Tooltip>
-                      )}
-                    </div>
-
-                    <div className="tile-meta">
-                      {dashboard.namespace && (
-                        <NamespaceChip name={dashboard.namespace} />
-                      )}
-                      <Tooltip
-                        label={getComponentNamesLabel(dashboard)}
-                        align="bottom"
-                        enterDelayMs={150}
-                        className="tooltip-multiline"
-                      >
-                        <Tag type="blue" size="sm">
-                          {(() => {
-                            const n = getPanelCount(dashboard);
-                            return `${n} panel${n === 1 ? '' : 's'}`;
-                          })()}
-                        </Tag>
-                      </Tooltip>
-                      {(dashboard.tags || []).map((t) => (
-                        <Tag
-                          key={`dt-${t}`}
-                          type="cyan"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
-                          }}
-                          title={`Filter by ${t}`}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {t}
-                        </Tag>
-                      ))}
-                    </div>
-
-                    {getConnectionNames(dashboard) !== '-' && (
-                      <div className="tile-connection">
-                        <DataBase size={14} />
-                        <span>{getConnectionNames(dashboard)}</span>
-                      </div>
-                    )}
-
-                    <div className="tile-date">
-                      Updated: {formatDate(dashboard.updated)}
-                    </div>
-                  </div>
-
-                  {/* Actions — hidden in export mode so the tile is a
-                      pure toggle target. */}
-                  {!exportMode && (
-                    <div className="tile-actions">
+                  ) : null}
+                  actions={exportMode ? null : (
+                    <>
                       <IconButton
                         kind="ghost"
                         label="View"
@@ -668,9 +600,9 @@ function DashboardsListPage() {
                       >
                         <TrashCan size={16} />
                       </IconButton>
-                    </div>
+                    </>
                   )}
-                </Tile>
+                />
                 );
               })}
             </div>

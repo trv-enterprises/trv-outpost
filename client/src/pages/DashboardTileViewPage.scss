@@ -81,29 +81,18 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: spacing.$spacing-05;
+    // Tiles size to their own content — chip rows sit directly under
+    // the description rather than getting pushed to the bottom of a
+    // row-stretched container.
+    align-items: start;
   }
 
+  // View-mode-specific tile overrides. Card chrome (thumbnail, name,
+  // description, meta row, drop-indicator pseudo-elements) lives in
+  // DashboardTile.scss — keep this file scoped to what's only true
+  // for the View-mode grid: the yellow default-dashboard border, the
+  // whole-tile grab cursor, and the OverflowMenu visibility tweak.
   .dashboard-tile {
-    background: var(--cds-layer-01);
-    border: 1px solid var(--cds-border-subtle-01);
-    border-radius: 4px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-    display: flex;
-    flex-direction: column;
-
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-      border-color: var(--cds-border-interactive);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
-
-    // Default dashboard styling
     &--default {
       border-color: #f1c21b;
 
@@ -112,152 +101,22 @@
       }
     }
 
-    // Drag-and-drop reorder. Whole-tile drag — the cursor changes
-    // to "grab" when the pointer is over a draggable area, and to
-    // "grabbing" while a drag is in progress.
     cursor: grab;
     &:active {
       cursor: grabbing;
     }
 
-    // Drop indicator. The hover-over tile decides which side the
-    // dragged tile will land on based on which half of the tile the
-    // pointer is over. We render a 4px vertical bar via ::before /
-    // ::after so it sits inside the tile's bounds (overflow: hidden
-    // on the tile clips them otherwise) and is unambiguous about
-    // which side will receive the insertion.
-    position: relative;
-    &--drop-before::before,
-    &--drop-after::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      background-color: var(--cds-border-interactive);
-      pointer-events: none;
-      z-index: 2;
-    }
-    &--drop-before::before {
-      left: 0;
-    }
-    &--drop-after::after {
-      right: 0;
-    }
-
-    .tile-thumbnail {
-      position: relative;
-      width: 100%;
-      height: 160px;
-      background: var(--cds-layer-01);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      border-bottom: 1px solid var(--cds-border-subtle-01);
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        object-position: center center;
+    .tile-actions .tile-menu {
+      // Always visible so users can discover the "Set as Default" option
+      svg {
+        fill: #c6c6c6 !important;
       }
 
-      .thumbnail-placeholder {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(135deg, var(--cds-layer-02) 0%, var(--cds-layer-03) 100%);
+      &:hover {
+        background-color: #4c4c4c;
 
         svg {
-          fill: var(--cds-icon-secondary);
-          opacity: 0.5;
-        }
-      }
-
-    }
-
-    .tile-content {
-      padding: spacing.$spacing-04;
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-
-      .tile-name {
-        margin: 0 0 spacing.$spacing-02 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--cds-text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .tile-description {
-        margin: 0 0 spacing.$spacing-03 0;
-        font-size: 0.875rem;
-        color: var(--cds-text-secondary);
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        line-height: 1.4;
-        min-height: 2.8em;
-      }
-
-      .tile-footer {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        gap: spacing.$spacing-03;
-        margin-top: auto;
-      }
-
-      .tile-tags {
-        display: flex;
-        gap: spacing.$spacing-02;
-        flex-wrap: wrap;
-        flex: 1;
-
-        .cds--tag {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-
-          svg {
-            width: 12px;
-            height: 12px;
-          }
-        }
-      }
-
-      .tile-actions {
-        display: flex;
-        align-items: center;
-        gap: spacing.$spacing-02;
-        flex-shrink: 0;
-        min-width: 24px;
-        min-height: 24px;
-
-        .default-star {
-          fill: #f1c21b;
-        }
-
-        .tile-menu {
-          // Always visible so users can discover the "Set as Default" option
-          svg {
-            fill: #c6c6c6 !important;
-          }
-
-          &:hover {
-            background-color: #4c4c4c;
-
-            svg {
-              fill: #f4f4f4 !important;
-            }
-          }
+          fill: #f4f4f4 !important;
         }
       }
     }

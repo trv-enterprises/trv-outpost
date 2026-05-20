@@ -1,0 +1,277 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing' as spacing;
+
+// Shared dashboard tile card. Used by DashboardsListPage (Design),
+// DashboardTileViewPage (View), and DashboardPickerModal. Layout is
+// thumbnail on top + content below (name, optional description, meta
+// row of chips, optional action slot, optional date).
+//
+// Site-specific chrome (drag handles, action buttons, export checkbox)
+// is composed in by the caller via the `badge` and `actions` slots.
+.dashboard-tile {
+  position: relative;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  // overflow: visible (NOT hidden) so the meta-row Carbon Tooltips
+  // can paint outside the card. Carbon's Tooltip uses Popover, which
+  // positions absolutely WITHIN the trigger's DOM — any ancestor with
+  // overflow:hidden clips it. The thumbnail keeps its own overflow:
+  // hidden below so images still clip to the rounded top corners.
+  overflow: visible;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    border-color: var(--cds-border-interactive);
+    // Raise the hovered tile above its siblings so any tooltip
+    // painted via Carbon's in-DOM Popover stacks above adjacent
+    // tiles instead of sliding under them. Without this, tooltips
+    // that escape the tile bounds (large tooltips on tiles with
+    // many neighbors) get clipped behind whatever sibling tile is
+    // painted next in the grid flow.
+    z-index: 10;
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  // Selection state — drives the picker modal's "highlighted" tile and
+  // the list page's export-mode "checked" tile. The site-specific
+  // visual treatment (yellow star for View-mode default vs. blue
+  // outline for picker selection) layers on top via the caller's
+  // className prop.
+  &--selected {
+    border-color: var(--cds-border-interactive);
+    box-shadow: 0 0 0 2px var(--cds-focus, #0f62fe);
+  }
+
+  // Drop indicator for manual-sort drag-and-drop. A 4px vertical bar
+  // anchored to whichever side the dragged tile will land on.
+  &--drop-before::before,
+  &--drop-after::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background-color: var(--cds-border-interactive);
+    pointer-events: none;
+    z-index: 2;
+  }
+  &--drop-before::before {
+    left: 0;
+  }
+  &--drop-after::after {
+    right: 0;
+  }
+
+  .tile-badge {
+    position: absolute;
+    top: spacing.$spacing-03;
+    left: spacing.$spacing-03;
+    z-index: 3;
+  }
+
+  .tile-thumbnail {
+    position: relative;
+    width: 100%;
+    height: 160px;
+    background: var(--cds-layer-01);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center center;
+    }
+
+    .thumbnail-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        135deg,
+        var(--cds-layer-02) 0%,
+        var(--cds-layer-03) 100%
+      );
+
+      svg {
+        fill: var(--cds-icon-secondary);
+        opacity: 0.5;
+      }
+    }
+  }
+
+  .tile-content {
+    padding: spacing.$spacing-04;
+    display: flex;
+    flex-direction: column;
+    // No flex:1 — let content flow from top so the chip rows sit
+    // directly under the description (or under the 2-line reserve).
+    // Grid container should use align-items:start so tiles size to
+    // their own content; otherwise the outer .dashboard-tile would
+    // stretch to match the tallest sibling and leave dead space
+    // below the chips.
+  }
+
+  // Meta block: 4 chip-rows tall on EVERY tile regardless of how
+  // many descriptive chips a dashboard actually has. The bottom row
+  // is the always-present anchor (comps + conns + actions); rows
+  // above it hold descriptive chips, filled from the top with
+  // whatever the dashboard has. Tiles with no descriptive chips
+  // show empty space above the anchor; tiles with many fill in.
+  // Tile heights stay constant across the grid; chip-count variation
+  // changes how filled the reserve looks, not how tall the tile is.
+  //
+  // Anything that would wrap to a 5th line gets clipped — by design.
+  // 3 rows is comfortably enough for any reasonable tag count; if a
+  // user wants to see all their tags they can open the dashboard
+  // detail view.
+  $tile-chip-row-height: 1.75rem; // ~28px = Carbon sm tag (~24px) + ~2px gap on each side
+  .tile-meta-block {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: calc(#{$tile-chip-row-height} * 4);
+    overflow: hidden;
+  }
+
+  .tile-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: spacing.$spacing-02;
+    margin-bottom: spacing.$spacing-02;
+
+    .tile-name {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--cds-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .info-button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px;
+      color: var(--cds-icon-secondary);
+      flex-shrink: 0;
+
+      &:hover {
+        color: var(--cds-icon-primary);
+      }
+    }
+  }
+
+  .tile-description {
+    margin: 0 0 spacing.$spacing-03 0;
+    font-size: 0.875rem;
+    color: var(--cds-text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+    // Two lines reserved even when the dashboard has no description.
+    // Holds the chip rows below at a consistent vertical position
+    // across every tile in the grid; tiles without a description show
+    // intentional breathing room rather than collapsing and shifting
+    // the rest of the layout up.
+    min-height: 2.8em;
+  }
+
+  // Empty descriptions still need to claim 2 lines so every tile in
+  // the grid has the same upper-section height. Two nbsps separated
+  // by an explicit linefeed force the -webkit-line-clamp to count
+  // them as two visible lines (a single nbsp collapses to one line
+  // under -webkit-box). The text stays invisible (same color as
+  // background) so the reservation reads as breathing room rather
+  // than a placeholder string.
+  .tile-description--empty {
+    white-space: pre-line;
+    &::before {
+      content: '\00a0\A\00a0';
+    }
+  }
+
+  .tile-tags {
+    display: flex;
+    gap: spacing.$spacing-02;
+    flex-wrap: wrap;
+    min-width: 0;
+
+    .cds--tag {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+
+      svg {
+        width: 12px;
+        height: 12px;
+      }
+    }
+
+    // Descriptive chips (namespace, refresh-interval, user tags).
+    // Sits at the top of the reserved 4-row meta-area; the meta-block's
+    // space-between justification handles the gap to the anchor row
+    // without a fixed margin (which would have stacked on top of the
+    // reserved height and made tiles taller than intended).
+    &--descriptive {
+      // No margin-bottom — meta-block handles spacing.
+    }
+
+    // Anchor row chips (comps, conns) — always-present so tile
+    // bottoms line up across the grid.
+    &--anchor {
+      flex: 1;
+    }
+  }
+
+  .tile-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: spacing.$spacing-03;
+  }
+
+  .tile-actions {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    flex-shrink: 0;
+    min-width: 24px;
+    min-height: 24px;
+
+    .default-star {
+      fill: #f1c21b;
+    }
+  }
+
+  .tile-date {
+    color: var(--cds-text-helper);
+    font-size: 0.75rem;
+    margin-top: spacing.$spacing-02;
+  }
+}

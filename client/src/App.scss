@@ -462,10 +462,31 @@ button.cds--overflow-menu {
 // so a multiline label renders one item per line. Apply via
 // `<Tooltip className="tooltip-multiline" ...>`; Carbon lands the class
 // on the tooltip container, which scopes this rule to its .cds--tooltip-content
-// descendant.
-.tooltip-multiline .cds--tooltip-content {
+// descendant. Default Carbon max-inline-size is 288px which truncates
+// long component / connection names — widen so multi-line tooltips can
+// breathe. overflow-wrap still kicks in for genuinely unwrappable strings.
+//
+// Force the popover background + text colors explicitly because Carbon's
+// default Tooltip uses inverse-theme tokens — in a g100-theme app the
+// inverse is light, but other ancestors can flip the inverse back and we
+// end up with light-text-on-light-background. Pinning the colors here
+// stops the rendering from depending on whatever theme tree the tooltip
+// gets painted under.
+.tooltip-multiline .cds--tooltip-content,
+.tooltip-multiline .cds--popover-content {
   white-space: pre-line;
   text-align: left;
+  max-inline-size: 32rem;
+  background-color: #f4f4f4;
+  color: #161616;
+}
+
+// Popover caret needs to match the background or it floats as a
+// disconnected triangle. Carbon paints the caret via the popover's
+// background variable; setting it here keeps the arrow in lockstep.
+.tooltip-multiline {
+  --cds-popover-background-color: #f4f4f4;
+  --cds-popover-text-color: #161616;
 }
 
 // ContentSwitcher dark theme styling - use blue for selected state

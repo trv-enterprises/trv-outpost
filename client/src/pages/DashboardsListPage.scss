@@ -109,156 +109,36 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: spacing.$spacing-05;
+    // Tiles size to their own content — chip rows sit directly under
+    // the description rather than getting pushed to the bottom of a
+    // row-stretched container.
+    align-items: start;
   }
 
-  // Dashboard tile styling
+  // Design-mode list-specific tile overrides on top of the shared
+  // DashboardTile.scss. Card chrome lives in the shared file — this
+  // block only adds Design-mode quirks:
+  //   - hover-fade action row (icon-only View/Edit/Delete buttons in
+  //     the actions slot); we don't want them visible until the user
+  //     hovers because three buttons would clutter every tile
+  //   - per-action hover colors (edit=blue, delete=red)
+  //   - export-checkbox darkening backdrop on hover so the checkbox
+  //     stays legible against light thumbnails
   .dashboard-tile {
-    background-color: var(--cds-layer-01);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 0;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    flex-direction: column;
-    min-height: 280px;
-    overflow: visible;
-    position: relative;
-
-    // Export-mode checkbox sits in the top-left corner over the
-    // thumbnail. No background by default so it doesn't read as a
-    // heavy block against the thumbnail — fade a subtle dark plate
-    // in only on hover to keep the control legible against
-    // light-colored thumbnails at that point.
-    .tile-export-checkbox {
-      position: absolute;
-      top: spacing.$spacing-03;
-      left: spacing.$spacing-03;
-      z-index: 2;
+    .tile-badge {
+      // Backdrop matches the original export-mode treatment — subtle
+      // dark plate that only appears on hover, keeping the checkbox
+      // legible against light-colored thumbnails.
       padding: 0.1rem 0.3rem;
       border-radius: 2px;
       transition: background 0.15s ease;
     }
 
-    &:hover .tile-export-checkbox {
+    &:hover .tile-badge {
       background: rgba(22, 22, 22, 0.6);
     }
 
-    &.is-selected {
-      border-color: var(--cds-interactive, #0f62fe);
-      box-shadow: 0 0 0 2px rgba(15, 98, 254, 0.25);
-    }
-
-    &:hover {
-      background-color: #262626;
-      border-color: #0f62fe;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-      z-index: 10;
-
-      .tile-actions {
-        opacity: 1;
-      }
-    }
-
-    .tile-thumbnail {
-      width: 100%;
-      height: 140px;
-      background-color: #1c1c1c;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        object-position: center center;
-      }
-
-      .tile-thumbnail-placeholder {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100%;
-        color: #525252;
-      }
-    }
-
-    .tile-content {
-      flex: 1;
-      padding: spacing.$spacing-04;
-      display: flex;
-      flex-direction: column;
-      gap: spacing.$spacing-03;
-
-      .tile-header {
-        display: flex;
-        align-items: center;
-        gap: spacing.$spacing-03;
-
-        h3 {
-          color: var(--cds-text-primary);
-          font-size: 1rem;
-          font-weight: 600;
-          margin: 0;
-          flex: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .info-button {
-          background: none;
-          border: none;
-          padding: spacing.$spacing-02;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #6f6f6f;
-          transition: color 0.2s ease;
-          flex-shrink: 0;
-
-          &:hover {
-            color: #78a9ff;
-          }
-        }
-      }
-
-      .tile-meta {
-        display: flex;
-        gap: spacing.$spacing-02;
-        flex-wrap: wrap;
-      }
-
-      .tile-datasource {
-        display: flex;
-        align-items: center;
-        gap: spacing.$spacing-02;
-        color: #c6c6c6;
-        font-size: 0.75rem;
-
-        svg {
-          color: #6f6f6f;
-        }
-      }
-
-      .tile-date {
-        color: #6f6f6f;
-        font-size: 0.75rem;
-        margin-top: auto;
-      }
-    }
-
     .tile-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: spacing.$spacing-02;
-      padding: spacing.$spacing-03 spacing.$spacing-04;
-      border-top: 1px solid #393939;
       opacity: 0;
       transition: opacity 0.2s ease;
 
@@ -293,6 +173,10 @@
           fill: #fa4d56 !important;
         }
       }
+    }
+
+    &:hover .tile-actions {
+      opacity: 1;
     }
   }
 

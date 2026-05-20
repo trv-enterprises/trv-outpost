@@ -6,27 +6,19 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Loading,
-  Tag,
   Search,
   OverflowMenu,
   OverflowMenuItem,
   Button,
   Dropdown,
-  Tooltip
 } from '@carbon/react';
-import {
-  Dashboard,
-  Time,
-  DataBase,
-  StarFilled,
-  Reset
-} from '@carbon/icons-react';
+import { Dashboard, StarFilled, Reset } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
-import NamespaceChip from '../components/shared/NamespaceChip';
 import TagFilter from '../components/shared/TagFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
+import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import './DashboardTileViewPage.scss';
 
@@ -194,38 +186,6 @@ function DashboardTileViewPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Multi-line tooltip body for the "N panels" tag — one line per
-  // panel showing the component's title (or name fallback), with
-  // explicit markers for empty panels and panels whose component
-  // was deleted so the count never lies. Mirrors the same helper
-  // on DashboardsListPage so both surfaces show the same content.
-  const getComponentNamesLabel = (dashboard) => {
-    const panels = dashboard.panels || [];
-    if (panels.length === 0) return 'No panels';
-    return panels.map((panel) => {
-      if (!panel.component_id) return '(empty panel)';
-      const c = charts[panel.component_id];
-      if (!c) return '(missing component)';
-      return c.title || c.name || '(unnamed)';
-    }).join('\n');
-  };
-
-  // Get unique data source names for a dashboard
-  const getConnectionNames = (dashboard) => {
-    if (!dashboard.panels || dashboard.panels.length === 0) return [];
-
-    const dsNames = new Set();
-    dashboard.panels.forEach(panel => {
-      if (panel.component_id) {
-        const chart = charts[panel.component_id];
-        if (chart?.connection_id && connections[chart.connection_id]) {
-          dsNames.add(connections[chart.connection_id]);
-        }
-      }
-    });
-    return Array.from(dsNames);
   };
 
   const handleTileClick = (dashboardId) => {
@@ -482,87 +442,43 @@ function DashboardTileViewPage() {
         <div className="dashboard-tiles-grid">
           {filteredDashboards.map((dashboard) => {
             const dropSide = dragOver?.id === dashboard.id ? dragOver.side : null;
+            const isDefault = defaultDashboardId === dashboard.id;
+            const isManual = sortKey === 'manual';
             return (
-            <div
-              key={dashboard.id}
-              className={[
-                'dashboard-tile',
-                defaultDashboardId === dashboard.id ? 'dashboard-tile--default' : '',
-                dropSide === 'left' ? 'dashboard-tile--drop-before' : '',
-                dropSide === 'right' ? 'dashboard-tile--drop-after' : '',
-              ].filter(Boolean).join(' ')}
-              draggable={sortKey === 'manual'}
-              onDragStart={sortKey === 'manual' ? (e) => handleDragStart(e, dashboard.id) : undefined}
-              onDragOver={sortKey === 'manual' ? (e) => handleDragOver(e, dashboard.id) : undefined}
-              onDragLeave={sortKey === 'manual' ? handleDragLeave : undefined}
-              onDrop={sortKey === 'manual' ? (e) => handleDrop(e, dashboard.id) : undefined}
-              onDragEnd={sortKey === 'manual' ? handleDragEnd : undefined}
-              onClick={() => handleTileClick(dashboard.id)}
-            >
-              <div className="tile-thumbnail">
-                {dashboard.thumbnail ? (
-                  <img src={dashboard.thumbnail} alt={dashboard.name} />
-                ) : (
-                  <div className="thumbnail-placeholder">
-                    <Dashboard size={48} />
-                  </div>
-                )}
-              </div>
-              <div className="tile-content">
-                <h3 className="tile-name">{dashboard.name}</h3>
-                {dashboard.description && (
-                  <p className="tile-description">{dashboard.description}</p>
-                )}
-                <div className="tile-footer">
-                  <div className="tile-tags">
-                    {dashboard.namespace && (
-                      <NamespaceChip name={dashboard.namespace} />
-                    )}
-                    {dashboard.settings?.refresh_interval > 0 && (
-                      <Tag type="green" size="sm">
-                        <Time size={12} />
-                        {dashboard.settings.refresh_interval}s
-                      </Tag>
-                    )}
-                    {dashboard.panels?.length > 0 && (
-                      <Tooltip
-                        label={getComponentNamesLabel(dashboard)}
-                        align="bottom"
-                        enterDelayMs={150}
-                        className="tooltip-multiline"
-                      >
-                        <Tag type="gray" size="sm">
-                          {dashboard.panels.length} panel{dashboard.panels.length !== 1 ? 's' : ''}
-                        </Tag>
-                      </Tooltip>
-                    )}
-                    {getConnectionNames(dashboard).map(dsName => (
-                      <Tag key={dsName} type="blue" size="sm">
-                        <DataBase size={12} />
-                        {dsName}
-                      </Tag>
-                    ))}
-                  </div>
-                  <div className="tile-actions">
-                    {defaultDashboardId === dashboard.id ? (
-                      <StarFilled size={16} className="default-star" />
-                    ) : (
-                      <OverflowMenu
-                        flipped
-                        size="sm"
-                        className="tile-menu"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <OverflowMenuItem
-                          itemText="Set as Default"
-                          onClick={(e) => handleSetDefault(e, dashboard.id)}
-                        />
-                      </OverflowMenu>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+              <DashboardTile
+                key={dashboard.id}
+                dashboard={dashboard}
+                componentMap={charts}
+                connectionMap={connections}
+                onClick={() => handleTileClick(dashboard.id)}
+                showRefreshInterval
+                descriptionMode="inline"
+                className={isDefault ? 'dashboard-tile--default' : ''}
+                draggable={isManual}
+                onDragStart={isManual ? (e) => handleDragStart(e, dashboard.id) : undefined}
+                onDragOver={isManual ? (e) => handleDragOver(e, dashboard.id) : undefined}
+                onDragLeave={isManual ? handleDragLeave : undefined}
+                onDrop={isManual ? (e) => handleDrop(e, dashboard.id) : undefined}
+                onDragEnd={isManual ? handleDragEnd : undefined}
+                dropSide={dropSide}
+                actions={
+                  isDefault ? (
+                    <StarFilled size={16} className="default-star" />
+                  ) : (
+                    <OverflowMenu
+                      flipped
+                      size="sm"
+                      className="tile-menu"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <OverflowMenuItem
+                        itemText="Set as Default"
+                        onClick={(e) => handleSetDefault(e, dashboard.id)}
+                      />
+                    </OverflowMenu>
+                  )
+                }
+              />
             );
           })}
         </div>

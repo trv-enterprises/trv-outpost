@@ -68,27 +68,21 @@
     padding: spacing.$spacing-02 0 spacing.$spacing-04;
   }
 
+  // Picker-specific overrides on top of the shared DashboardTile.scss.
+  // Card chrome (background, border, thumbnail layout, content layout,
+  // footer alignment) lives in the shared file — this block only
+  // expresses what's different about the picker presentation:
+  //   - 96px thumbnail (compact for a modal grid; default is 160px)
+  //   - cover-fit instead of contain-fit (modal preview thumbnails are
+  //     pre-cropped)
+  //   - selected state uses link-primary on the name text
   .dashboard-tile {
-    display: flex;
-    flex-direction: column;
-    background-color: var(--cds-layer-01);
-    border: 1px solid var(--cds-border-subtle-01);
-    border-radius: 4px;
-    cursor: pointer;
-    overflow: hidden;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
-
-    &:hover {
-      border-color: var(--cds-border-strong-01);
-    }
-
     &:focus-visible {
       outline: 2px solid var(--cds-focus);
       outline-offset: -2px;
     }
 
     &--selected {
-      border-color: var(--cds-focus);
       background-color: var(--cds-layer-selected-01);
 
       .tile-name {
@@ -97,67 +91,14 @@
     }
 
     .tile-thumbnail {
-      width: 100%;
       height: 96px;
-      background-color: var(--cds-layer-02);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
 
       img {
-        width: 100%;
-        height: 100%;
         object-fit: cover;
       }
 
       .thumbnail-placeholder {
         color: var(--cds-text-helper);
-      }
-    }
-
-    .tile-content {
-      padding: spacing.$spacing-04;
-      display: flex;
-      flex-direction: column;
-      gap: spacing.$spacing-03;
-      // Fill the tile vertically so the footer (margin-top:auto)
-      // can pin to the bottom, giving consistent row alignment when
-      // some tiles have more tags than others.
-      flex: 1 1 auto;
-
-      .tile-name {
-        font-size: 0.9375rem;
-        font-weight: 600;
-        color: var(--cds-text-primary);
-        margin: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .tile-description {
-        font-size: 0.75rem;
-        color: var(--cds-text-helper);
-        margin: 0;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        line-height: 1.4;
-      }
-
-      .tile-footer {
-        // Anchored to the tile bottom so multi-tag tiles and
-        // sparse-tag tiles in the same row line up at the
-        // bottom edge.
-        margin-top: auto;
-      }
-
-      .tile-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: spacing.$spacing-02;
       }
     }
   }

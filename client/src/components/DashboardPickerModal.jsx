@@ -3,13 +3,12 @@
 // See LICENSE file for details.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Search, Dropdown, Tag, Loading, Tooltip } from '@carbon/react';
-import { Dashboard, Time, DataBase } from '@carbon/icons-react';
+import { Modal, Search, Dropdown, Loading } from '@carbon/react';
 import apiClient from '../api/client';
 import NamespaceFilter from './shared/NamespaceFilter';
 import TagFilter from './shared/TagFilter';
 import ResetFiltersButton from './shared/ResetFiltersButton';
-import NamespaceChip from './shared/NamespaceChip';
+import DashboardTile from './DashboardTile';
 import './DashboardPickerModal.scss';
 
 /**
@@ -103,34 +102,6 @@ function DashboardPickerModal({
     })();
     return () => { cancelled = true; };
   }, [open]);
-
-  // Multi-line tooltip body for the "N panels" tag — same shape as
-  // DashboardTileViewPage / DashboardsListPage so the picker reads
-  // identically to the surfaces it stands in for.
-  const getComponentNamesLabel = (dashboard) => {
-    const panels = dashboard.panels || [];
-    if (panels.length === 0) return 'No panels';
-    return panels.map((panel) => {
-      if (!panel.component_id) return '(empty panel)';
-      const c = components[panel.component_id];
-      if (!c) return '(missing component)';
-      return c.title || c.name || '(unnamed)';
-    }).join('\n');
-  };
-
-  // Resolve the connection-name tags shown on each tile.
-  const getConnectionNames = (dashboard) => {
-    if (!dashboard.panels || dashboard.panels.length === 0) return [];
-    const names = new Set();
-    dashboard.panels.forEach((p) => {
-      if (!p.component_id) return;
-      const c = components[p.component_id];
-      if (c?.connection_id && connectionMap[c.connection_id]) {
-        names.add(connectionMap[c.connection_id]);
-      }
-    });
-    return Array.from(names);
-  };
 
   // Single source of truth for "does this dashboard reference
   // connection X" — mirrors DashboardTileViewPage so behavior is
@@ -270,63 +241,17 @@ function DashboardPickerModal({
         ) : (
           <div className="picker-tiles">
             {filtered.map((d) => (
-              <div
+              <DashboardTile
                 key={d.id}
-                className={`dashboard-tile ${selectedId === d.id ? 'dashboard-tile--selected' : ''}`}
+                dashboard={d}
+                componentMap={components}
+                connectionMap={connectionMap}
+                selected={selectedId === d.id}
                 onClick={() => setPending(d)}
                 onDoubleClick={() => { setPending(d); onSelect?.(d); onClose?.(); }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setPending(d);
-                  }
-                }}
-              >
-                <div className="tile-thumbnail">
-                  {d.thumbnail ? (
-                    <img src={d.thumbnail} alt={d.name} />
-                  ) : (
-                    <div className="thumbnail-placeholder">
-                      <Dashboard size={48} />
-                    </div>
-                  )}
-                </div>
-                <div className="tile-content">
-                  <h3 className="tile-name">{d.name}</h3>
-                  {d.description && <p className="tile-description">{d.description}</p>}
-                  <div className="tile-footer">
-                    <div className="tile-tags">
-                      {d.namespace && <NamespaceChip name={d.namespace} />}
-                      {d.settings?.refresh_interval > 0 && (
-                        <Tag type="green" size="sm">
-                          <Time size={12} />
-                          {d.settings.refresh_interval}s
-                        </Tag>
-                      )}
-                      {d.panels?.length > 0 && (
-                        <Tooltip
-                          label={getComponentNamesLabel(d)}
-                          align="bottom"
-                          enterDelayMs={150}
-                          className="tooltip-multiline"
-                        >
-                          <Tag type="gray" size="sm">
-                            {d.panels.length} panel{d.panels.length !== 1 ? 's' : ''}
-                          </Tag>
-                        </Tooltip>
-                      )}
-                      {getConnectionNames(d).map((dsName) => (
-                        <Tag key={dsName} type="blue" size="sm">
-                          <DataBase size={12} />
-                          {dsName}
-                        </Tag>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                descriptionMode="inline"
+                showRefreshInterval
+              />
             ))}
           </div>
         )}
