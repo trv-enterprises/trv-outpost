@@ -301,9 +301,10 @@ func (r *ToolRegistry) registerConnectionTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"name":        {Type: "string", Description: "Connection name (must be unique)"},
+					"name":        {Type: "string", Description: "Connection name (must be unique within the target namespace)"},
 					"type":        {Type: "string", Description: "Connection type — call list_connection_types for valid values"},
 					"description": {Type: "string", Description: "Optional human-readable description"},
+					"namespace":   {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
 					"config":      {Type: "object", Description: "Type-specific configuration. Shape depends on `type`."},
 					"tags":        {Type: "array", Description: "Optional tags for organization"},
 				},
@@ -314,6 +315,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 			req := &models.CreateConnectionRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
+				Namespace:   getString(args, "namespace"),
 				Type:        models.ConnectionType(getString(args, "type")),
 			}
 			if cfg, ok := args["config"].(map[string]interface{}); ok {
@@ -707,8 +709,9 @@ func (r *ToolRegistry) registerComponentTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"name":            {Type: "string", Description: "Unique component name"},
+					"name":            {Type: "string", Description: "Unique component name (must be unique within the target namespace)"},
 					"description":     {Type: "string", Description: "Description"},
+					"namespace":       {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
 					"component_type":  {Type: "string", Description: "chart | control | display", Enum: []string{"chart", "control", "display"}},
 					"chart_type":      {Type: "string", Description: "Chart subtype (bar, line, pie, etc) — for chart components"},
 					"connection_id":   {Type: "string", Description: "Connection ID for data binding"},
@@ -728,6 +731,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			req := &models.CreateComponentRequest{
 				Name:          getString(args, "name"),
 				Description:   getString(args, "description"),
+				Namespace:     getString(args, "namespace"),
 				ComponentType: getString(args, "component_type"),
 				ChartType:     getString(args, "chart_type"),
 				ConnectionID:  getString(args, "connection_id"),
@@ -970,8 +974,9 @@ func (r *ToolRegistry) registerDashboardTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"name":        {Type: "string", Description: "Unique dashboard name"},
+					"name":        {Type: "string", Description: "Unique dashboard name (must be unique within the target namespace)"},
 					"description": {Type: "string", Description: "Description"},
+					"namespace":   {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
 					"panels":      {Type: "array", Description: "Array of panel objects. Each panel is {id, x, y, w, h, and exactly one of: component_id (reference an existing component), text_config (inline text — see tool description for schema), or neither (empty placeholder)}."},
 					"settings":    {Type: "object", Description: "Dashboard settings (theme, refresh_interval, layout_dimension, etc)"},
 					"tags":        {Type: "array", Description: "Tags"},
@@ -983,6 +988,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 			req := &models.CreateDashboardRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
+				Namespace:   getString(args, "namespace"),
 			}
 			if panelsRaw, ok := args["panels"].([]interface{}); ok {
 				req.Panels = parsePanels(panelsRaw)

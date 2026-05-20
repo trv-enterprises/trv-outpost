@@ -418,6 +418,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     chartStacked: false,
     chartSmooth: true,
     chartShowDataLabels: false,
+    // Zoom slider — renders a draggable range bar under the x-axis
+    // plus inside (wheel/pinch) zoom on the plot itself. Off by
+    // default; the small adopted-from-the-AI-version pattern that
+    // gives users a way to drill into a noisy long time-series.
+    chartShowZoomSlider: false,
   });
 
   // Query mode: 'visual' for SQLQueryBuilder, 'raw' for TextArea
@@ -771,6 +776,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         parserTimestampScale: loadedParser?.timestamp_scale || '',
         bandColumns: chart.data_mapping?.band_columns || { mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' },
         bandedBarStyle: chart.options?.bandedBarStyle || 'time_series',
+        // Capture chartOptions snapshot AS MERGED with defaults so it
+        // matches whatever the state ends up holding after the
+        // setChartOptions spread above. Otherwise dirty fires
+        // immediately because the saved record carries fewer keys
+        // than the state's defaults.
+        chartOptions: { ...chartOptions, ...(chart.options || {}) },
         componentCode: chart.component_code || '',
         showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code),
       }));
@@ -828,6 +839,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         parserTimestampScale: '',
         bandColumns: { mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' },
         bandedBarStyle: 'time_series',
+        // Snapshot current chartOptions state so the diff doesn't read
+        // as dirty before the user touches anything. The lazy load of
+        // numberSize from admin settings may mutate this after mount,
+        // causing a one-time false-dirty on new charts — acceptable
+        // tradeoff for getting toggles to actually enable Save.
+        chartOptions,
         componentCode: '',
         showCustomCode: false,
       }));
@@ -837,8 +854,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Track changes. Every field handleSave reads into the payload must
   // appear in BOTH the snapshot above and this diff, otherwise edits to
-  // it silently won't dirty the form. chartOptions is excluded — see the
-  // note in the new-chart branch.
+  // it silently won't dirty the form. chartOptions is included so the
+  // chart-options toggles (Stacked, Smooth, Show Data Labels, Zoom
+  // Slider, gauge/number/pie tweaks) actually enable Save. Earlier
+  // versions excluded it to avoid false-dirty on chart-type-driven
+  // default shifts — but the initial snapshot now captures chartOptions
+  // at load time, so the diff only fires when the user actually changed
+  // something.
   useEffect(() => {
     if (!initialState) return;
     const currentState = JSON.stringify({
@@ -854,6 +876,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       connectionId: selectedConnectionId,
       queryRaw,
       queryType,
+      chartOptions,
       tsstoreQueryType,
       tsstoreSinceDuration,
       tsstoreLimit,
@@ -887,6 +910,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       parserTimestampScale,
       bandColumns,
       bandedBarStyle,
+      chartOptions,
       componentCode,
       showCustomCode,
     });
@@ -903,7 +927,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
     sortBy, sortOrder, limitRows, columnAliases, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
-    bandColumns, bandedBarStyle,
+    bandColumns, bandedBarStyle, chartOptions,
     componentCode, showCustomCode, initialState, onDirtyChange,
   ]);
 
@@ -1379,6 +1403,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const handleSave = () => {
     if (!name.trim()) {
       alert('Please enter a chart name');
+      return;
+    }
+
+    // Sliding window requires a timestamp column to be meaningful. If
+    // the toggle is on but the column is empty, the save would silently
+    // strip the sliding_window block entirely (see line below where
+    // both flags are required to persist), and the user would see the
+    // toggle flip back off on reload. Block save instead so they pick
+    // a column or turn the toggle off explicitly.
+    if (slidingWindowEnabled && !slidingWindowTimestampCol) {
+      alert('Sliding Window is enabled but no Timestamp Column is selected. Pick a timestamp column or turn off Sliding Window before saving.');
       return;
     }
 
@@ -2780,6 +2815,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           onToggle={(checked) => updateChartOption('chartShowDataLabels', checked)}
                         />
                       </Column>
+                      <Column lg={4} md={4} sm={4}>
+                        <Toggle
+                          id="chart-zoom-slider"
+                          labelText="Zoom Slider"
+                          labelA="Off"
+                          labelB="On"
+                          toggled={!!chartOptions.chartShowZoomSlider}
+                          onToggle={(checked) => updateChartOption('chartShowZoomSlider', checked)}
+                        />
+                      </Column>
                     </Grid>
                   </div>
                 )}
@@ -3075,55 +3120,50 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     />
                   </div>
                   {slidingWindowEnabled && (
-                    availableColumns.length > 0 ? (
-                      <Grid narrow>
-                        <Column lg={6} md={4} sm={4}>
-                          <Select
-                            id="sliding-window-timestamp"
-                            labelText="Timestamp Column"
-                            value={slidingWindowTimestampCol}
-                            onChange={(e) => setSlidingWindowTimestampCol(e.target.value)}
-                          >
-                            <SelectItem value="" text="Select timestamp column..." />
-                            {availableColumns.map(col => (
-                              <SelectItem key={col} value={col} text={col} />
-                            ))}
-                          </Select>
-                        </Column>
-                        <Column lg={6} md={4} sm={4}>
-                          <NumberInput
-                            id="sliding-window-duration"
-                            label="Window Duration (seconds)"
-                            value={slidingWindowDuration}
-                            onChange={(e, { value }) => setSlidingWindowDuration(value)}
-                            min={10}
-                            max={86400}
-                            step={10}
-                            helperText="e.g., 300 = 5 min, 3600 = 1 hour"
-                          />
-                        </Column>
-                      </Grid>
-                    ) : slidingWindowTimestampCol ? (
-                      <div className="saved-values-display">
-                        <Grid narrow>
-                          <Column lg={6} md={4} sm={4}>
-                            <div className="saved-value-field">
-                              <label className="cds--label">Timestamp Column</label>
-                              <Tag type="blue">{slidingWindowTimestampCol}</Tag>
-                            </div>
-                          </Column>
-                          <Column lg={6} md={4} sm={4}>
-                            <div className="saved-value-field">
-                              <label className="cds--label">Window Duration</label>
-                              <Tag type="teal">{slidingWindowDuration}s ({Math.round(slidingWindowDuration / 60)} min)</Tag>
-                            </div>
-                          </Column>
-                        </Grid>
-                        <p className="run-query-hint" style={{ marginTop: '0.5rem' }}>Run query to modify sliding window settings</p>
-                      </div>
-                    ) : (
-                      <p className="run-query-hint">Run query to select timestamp column for sliding window</p>
-                    )
+                    <Grid narrow>
+                      <Column lg={6} md={4} sm={4}>
+                        <Select
+                          id="sliding-window-timestamp"
+                          labelText="Timestamp Column"
+                          value={slidingWindowTimestampCol}
+                          onChange={(e) => setSlidingWindowTimestampCol(e.target.value)}
+                          disabled={availableColumns.length === 0}
+                          helperText={
+                            availableColumns.length === 0
+                              ? (slidingWindowTimestampCol
+                                  ? `Saved: ${slidingWindowTimestampCol}. Run a query to change it.`
+                                  : 'Run a query to populate column choices.')
+                              : undefined
+                          }
+                        >
+                          <SelectItem value="" text="Select timestamp column..." />
+                          {/* Include the saved column even when availableColumns
+                              is empty, so the Select shows the value the user
+                              previously chose. */}
+                          {availableColumns.length === 0 && slidingWindowTimestampCol && (
+                            <SelectItem
+                              value={slidingWindowTimestampCol}
+                              text={slidingWindowTimestampCol}
+                            />
+                          )}
+                          {availableColumns.map(col => (
+                            <SelectItem key={col} value={col} text={col} />
+                          ))}
+                        </Select>
+                      </Column>
+                      <Column lg={6} md={4} sm={4}>
+                        <NumberInput
+                          id="sliding-window-duration"
+                          label="Window Duration (seconds)"
+                          value={slidingWindowDuration}
+                          onChange={(e, { value }) => setSlidingWindowDuration(value)}
+                          min={10}
+                          max={86400}
+                          step={10}
+                          helperText="e.g., 300 = 5 min, 3600 = 1 hour"
+                        />
+                      </Column>
+                    </Grid>
                   )}
                   {!slidingWindowEnabled && (
                     <p className="no-filters-message">
@@ -4516,6 +4556,36 @@ ${transformsConfig}
     ? `<div style={{ display: 'block', height: '2.5rem', lineHeight: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: '600', color: 'var(--cds-text-primary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>${chartName.replace(/'/g, "\\'")}</div>`
     : '';
 
+  // Zoom slider: a draggable range bar under the x-axis + an `inside`
+  // zoom so the user can wheel/pinch on the plot too. Slider takes
+  // vertical space and the chart uses containLabel:false (grid.bottom
+  // is the distance from canvas-bottom to plot-bottom — not including
+  // labels), so we need to budget enough space below the plot for
+  // BOTH the x-axis labels and the slider stack: ~28px labels +
+  // ~10px gap + ~30px slider + ~8px from canvas floor. Pinning the
+  // slider with an explicit `bottom: 8` keeps it off the canvas edge
+  // and prevents ECharts' auto-position from pushing it under the
+  // x-axis labels.
+  const showZoomSlider = !!chartOptions.chartShowZoomSlider && ['line', 'area', 'bar'].includes(chartType);
+  const gridBottom = showZoomSlider
+    ? (showXAxisName ? 95 : 75)
+    : (showXAxisName ? 50 : 30);
+  const dataZoomCode = showZoomSlider
+    ? `
+    dataZoom: [
+      {
+        type: 'slider', show: true, xAxisIndex: [0], start: 70, end: 100,
+        bottom: 8, height: 24,
+        backgroundColor: '#262626',
+        dataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.3 } },
+        selectedDataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.6 } },
+        handleStyle: { color: '#0f62fe' },
+        textStyle: { color: '#c6c6c6' }
+      },
+      { type: 'inside', xAxisIndex: [0], start: 70, end: 100 }
+    ],`
+    : '';
+
   return `const Component = () => {
   const ${useDataFields} = useData({
     connectionId: '${connectionId}',
@@ -4539,7 +4609,7 @@ ${categoriesCode}
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis' },
     ${legendCode}
-    grid: { top: ${showLegend ? 35 : 10}, left: ${showSingleYName ? 70 : 50}, right: 20, bottom: ${showXAxisName ? 50 : 30}, containLabel: false },
+    grid: { top: ${showLegend ? 35 : 10}, left: ${showSingleYName ? 70 : 50}, right: 20, bottom: ${gridBottom}, containLabel: false },${dataZoomCode}
     xAxis: { type: 'category', data: categories${chartType === 'area' ? ', boundaryGap: false' : ''}${showXAxisName ? `, name: '${xAxisLabel.replace(/'/g, "\\'")}', nameLocation: 'middle', nameGap: 30` : ''} },
     ${yAxisCols.length === 2 ? `yAxis: [
       { type: 'value', axisLabel: { color: '#0f62fe' }, axisLine: { show: true, lineStyle: { color: '#0f62fe' } } },

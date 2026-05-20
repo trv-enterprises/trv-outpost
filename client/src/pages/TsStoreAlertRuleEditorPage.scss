@@ -150,6 +150,37 @@
     }
   }
 
+  .field-pills {
+    margin: spacing.$spacing-04 0 spacing.$spacing-03;
+
+    .field-pills-label {
+      font-size: 0.75rem;
+      color: var(--cds-text-helper);
+      margin-bottom: spacing.$spacing-02;
+    }
+
+    .field-pills-empty {
+      font-size: 0.75rem;
+      color: var(--cds-text-helper);
+      font-style: italic;
+    }
+
+    .field-pills-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: spacing.$spacing-02;
+    }
+
+    .field-pill {
+      cursor: grab;
+      user-select: none;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+  }
+
   .editor-footer {
     flex-shrink: 0;
     display: flex;

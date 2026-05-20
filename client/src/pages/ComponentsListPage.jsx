@@ -293,10 +293,13 @@ function ComponentsListPage() {
   const filteredAndSortedCharts = useMemo(() => {
     let result = [...charts];
 
-    // Multi-select namespace filter; empty = no filter.
+    // Multi-select namespace filter; empty filter = show everything.
+    // Components with an empty/missing namespace value are treated as
+    // "default" — same fallback the table cell uses for display, so
+    // filtering and the visible namespace tag stay in lockstep.
     if (namespaceFilter.length > 0) {
       const wanted = new Set(namespaceFilter);
-      result = result.filter((c) => !c.namespace || wanted.has(c.namespace));
+      result = result.filter((c) => wanted.has(c.namespace || 'default'));
     }
 
     // Filter by hierarchical type selection

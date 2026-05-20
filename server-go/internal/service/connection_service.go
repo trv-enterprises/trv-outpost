@@ -1301,6 +1301,17 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 		return s.getPrometheusSchema(ctx, ds)
 	}
 
+	// Handle TSStore schema separately. ts-store has three flavours of
+	// store (json / schema / text); only `schema` stores have a formal
+	// schema endpoint. For `json` and unset, fall back to sampling the
+	// most recent records and unioning their keys — the same pattern the
+	// dashboard-agent had to do manually before this path existed. Works
+	// for both WS-transport and REST-transport tsstore connections since
+	// the schema fetch hits the same REST endpoint either way.
+	if ds.Type == models.ConnectionTypeTSStore {
+		return s.getTSStoreSchema(ctx, ds)
+	}
+
 	// Only SQL connections support schema discovery
 	if ds.Type != models.ConnectionTypeSQL {
 		return &models.SchemaResponse{
@@ -1396,6 +1407,118 @@ func (s *ConnectionService) getPrometheusSchema(ctx context.Context, ds *models.
 		PrometheusSchema: &models.PrometheusSchemaInfo{
 			Metrics: metricInfos,
 			Labels:  labels,
+		},
+		Duration: time.Since(startTime).Milliseconds(),
+	}, nil
+}
+
+// getTSStoreSchema retrieves schema information from a TSStore connection.
+// Strategy depends on the store's data_type:
+//   - "schema" stores: ts-store has a formal /schema endpoint we can decode.
+//     (Not yet exposed by the dashboard's adapter — fall through to sampling
+//     for now; once we add a typed accessor this branch should call it.)
+//   - "json" / unset: sample the 10 newest records via the existing Query
+//     path; the adapter already unions keys across records to produce the
+//     columns array. We surface that list as a single synthetic table.
+//   - "text" stores: there are no fields. Return success with an empty
+//     column list so the UI can render a friendly "no fields" message
+//     rather than an error.
+//
+// Works identically for streaming-transport and REST-transport tsstore
+// connections because both point at the same ts-store backend (host+port+
+// store_name) and reach the same REST endpoint for the sample fetch.
+func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Connection) (*models.SchemaResponse, error) {
+	startTime := time.Now()
+
+	if ds.Config.TSStore == nil {
+		return &models.SchemaResponse{
+			Success:  false,
+			Error:    "TSStore connection has no tsstore config block",
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+
+	dataType := string(ds.Config.TSStore.DataType)
+
+	// "text" stores have no field structure. Friendlier than returning an
+	// empty-string-equals-json fallthrough.
+	if dataType == "text" {
+		return &models.SchemaResponse{
+			Success: true,
+			Schema: &models.SchemaInfo{
+				Database: ds.Config.TSStore.StoreName,
+				Tables: []models.TableInfo{{
+					Name:    ds.Config.TSStore.StoreName,
+					Columns: []models.ColumnInfo{},
+				}},
+			},
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+
+	// Sample-and-infer path. Works for "json" stores (the common case) and
+	// for "schema" stores (until we wire a dedicated accessor). The adapter's
+	// Query method handles ResultSet construction including the column union
+	// across records — we just lift the columns out and type-tag them.
+	tsDS, err := connection.NewTSStoreDataSource(ds.Config.TSStore)
+	if err != nil {
+		return &models.SchemaResponse{
+			Success:  false,
+			Error:    fmt.Sprintf("Failed to create TSStore connection: %v", err),
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+	defer tsDS.Close()
+
+	rs, err := tsDS.Query(ctx, models.Query{
+		Raw:    "newest",
+		Params: map[string]interface{}{"limit": 10},
+	})
+	if err != nil {
+		return &models.SchemaResponse{
+			Success:  false,
+			Error:    fmt.Sprintf("Failed to sample records: %v", err),
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+
+	// Build columns. Type comes from the first non-null cell we see in
+	// each column across the sample — JSON has limited type info, but
+	// "number" vs "string" vs "bool" is still useful for the UI.
+	columns := make([]models.ColumnInfo, 0, len(rs.Columns))
+	for colIdx, name := range rs.Columns {
+		typ := "unknown"
+		for _, row := range rs.Rows {
+			if colIdx >= len(row) || row[colIdx] == nil {
+				continue
+			}
+			switch row[colIdx].(type) {
+			case bool:
+				typ = "boolean"
+			case float32, float64, int, int32, int64, uint, uint32, uint64:
+				typ = "number"
+			case string:
+				typ = "string"
+			default:
+				typ = "object"
+			}
+			break
+		}
+		columns = append(columns, models.ColumnInfo{
+			Name:     name,
+			Type:     typ,
+			Nullable: true,
+		})
+	}
+
+	return &models.SchemaResponse{
+		Success: true,
+		Schema: &models.SchemaInfo{
+			Database: ds.Config.TSStore.StoreName,
+			Tables: []models.TableInfo{{
+				Name:    ds.Config.TSStore.StoreName,
+				Columns: columns,
+			}},
 		},
 		Duration: time.Since(startTime).Milliseconds(),
 	}, nil

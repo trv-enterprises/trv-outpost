@@ -67,22 +67,40 @@ func clientFor(cfg *models.TSStoreConfig) *http.Client {
 	return c
 }
 
-// TSStoreAggregatedRule is the wire shape returned by ListAll. One row per
-// rule, annotated with the connection it lives on plus the decoded
-// dashboard_id from external_ref (if present).
-type TSStoreAggregatedRule struct {
-	// Identity within ts-store. ts-store owns IDs at the alert level
-	// (one alert = one transport target = one rule list); rule names
-	// are unique within a single alert. The composite (connection_id,
-	// alert_id, rule_name) uniquely identifies a rule in the
-	// dashboard's view.
+// TSStoreConnectionRef is a {connection_id, connection_name, namespace}
+// tuple identifying one dashboard connection that points at a given
+// ts-store backend. A single ts-store store may be reachable via several
+// dashboard connections (e.g. a WS connection and an API connection on
+// the same host) — the aggregator collapses them into a single rule row
+// and lists every connection that resolves to that backend here.
+type TSStoreConnectionRef struct {
 	ConnectionID   string `json:"connection_id"`
 	ConnectionName string `json:"connection_name"`
 	Namespace      string `json:"namespace,omitempty"`
-	StoreName      string `json:"store_name"`
-	AlertID        string `json:"alert_id"`
-	AlertType      string `json:"alert_type"` // webhook | ws | mqtt
-	AlertTarget    string `json:"alert_target,omitempty"`
+}
+
+// TSStoreAggregatedRule is the wire shape returned by ListAll. One row per
+// rule on the underlying ts-store backend (not per dashboard connection).
+type TSStoreAggregatedRule struct {
+	// Identity within ts-store. ts-store owns IDs at the alert level
+	// (one alert = one transport target = one rule list); rule names
+	// are unique within a single alert.
+	//
+	// ConnectionID / ConnectionName identify the *primary* dashboard
+	// connection that points at this backend — preserved for delete
+	// (the DELETE handler needs a connection record to dial through)
+	// and back-compat. The full set of dashboard connections that
+	// resolve to the same backend is in Connections; the count is
+	// duplicated to ConnectionCount for table sort/filter ergonomics.
+	ConnectionID    string                 `json:"connection_id"`
+	ConnectionName  string                 `json:"connection_name"`
+	Connections     []TSStoreConnectionRef `json:"connections,omitempty"`
+	ConnectionCount int                    `json:"connection_count"`
+	Namespace       string                 `json:"namespace,omitempty"`
+	StoreName       string                 `json:"store_name"`
+	AlertID         string                 `json:"alert_id"`
+	AlertType       string                 `json:"alert_type"` // webhook | ws | mqtt
+	AlertTarget     string                 `json:"alert_target,omitempty"`
 
 	// Rule-level fields straight from ts-store.
 	RuleName    string `json:"rule_name"`
@@ -119,10 +137,13 @@ type TSStoreAggregatedRulesResponse struct {
 	Errors []TSStoreFetchError     `json:"errors,omitempty"`
 }
 
-// ListAll walks every tsstore connection on the dashboard, fans out
-// GET /api/stores/<store>/alerts in parallel, and returns the union
-// annotated with connection metadata. Per-connection failures land
-// in Errors; the rest of the result is still returned.
+// ListAll walks every tsstore connection on the dashboard, groups them
+// by underlying ts-store backend (base URL + store name) so each backend
+// is queried once, fans out GET /api/stores/<store>/alerts in parallel,
+// and returns one rule row per backend rule (not per connection). Each
+// row carries the full list of dashboard connections that point at that
+// backend in Connections; ConnectionID/ConnectionName is the primary.
+// Per-backend failures land in Errors against the primary connection.
 func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggregatedRulesResponse, error) {
 	// Pull every tsstore connection. The pagination limit is high
 	// because we want all of them in one call; the realistic upper
@@ -130,6 +151,27 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 	conns, _, err := s.connections.ListConnectionsByType(ctx, models.ConnectionTypeTSStore, 1000, 0)
 	if err != nil {
 		return nil, fmt.Errorf("list tsstore connections: %w", err)
+	}
+
+	// Group connections by ts-store backend identity. Two dashboard
+	// connections that resolve to the same (base URL, store name) share
+	// the same alert resources — they're different views of the same
+	// data, and listing each separately produces phantom duplicates.
+	type backendKey struct {
+		BaseURL   string
+		StoreName string
+	}
+	groups := map[backendKey][]*models.Connection{}
+	groupOrder := []backendKey{}
+	for _, conn := range conns {
+		if conn.Config.TSStore == nil {
+			continue
+		}
+		k := backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: conn.Config.TSStore.StoreName}
+		if _, seen := groups[k]; !seen {
+			groupOrder = append(groupOrder, k)
+		}
+		groups[k] = append(groups[k], conn)
 	}
 
 	resp := &TSStoreAggregatedRulesResponse{
@@ -140,24 +182,46 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	for _, conn := range conns {
-		conn := conn
-		if conn.Config.TSStore == nil {
-			continue
-		}
+	for _, k := range groupOrder {
+		members := groups[k]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rules, ferr := s.fetchRulesForConnection(ctx, conn)
+			primary := members[0]
+			refs := make([]TSStoreConnectionRef, 0, len(members))
+			for _, m := range members {
+				refs = append(refs, TSStoreConnectionRef{
+					ConnectionID:   m.ID,
+					ConnectionName: m.Name,
+					Namespace:      m.Namespace,
+				})
+			}
+
+			rules, ferr := s.fetchRulesForConnection(ctx, primary)
 			mu.Lock()
 			defer mu.Unlock()
 			if ferr != nil {
+				// Annotate the error with the sibling connection names
+				// so the user understands which connections were
+				// affected by the failure of the shared backend.
+				errMsg := ferr.Error()
+				if len(members) > 1 {
+					siblings := make([]string, 0, len(members)-1)
+					for _, m := range members[1:] {
+						siblings = append(siblings, m.Name)
+					}
+					errMsg = fmt.Sprintf("%s (also affects: %s)", errMsg, strings.Join(siblings, ", "))
+				}
 				resp.Errors = append(resp.Errors, TSStoreFetchError{
-					ConnectionID:   conn.ID,
-					ConnectionName: conn.Name,
-					Error:          ferr.Error(),
+					ConnectionID:   primary.ID,
+					ConnectionName: primary.Name,
+					Error:          errMsg,
 				})
 				return
+			}
+			for i := range rules {
+				rules[i].Connections = refs
+				rules[i].ConnectionCount = len(refs)
 			}
 			resp.Rules = append(resp.Rules, rules...)
 		}()

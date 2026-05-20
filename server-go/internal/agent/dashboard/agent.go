@@ -228,6 +228,20 @@ func (a *Agent) Run(ctx context.Context, rc *RequestContext) (*Result, error) {
 					return nil, fmt.Errorf("decode tool_use input for %s: %w", tc.Name, err)
 				}
 			}
+			// Stamp the runtime namespace on create_* calls. The
+			// runtime context is the source of truth — the agent has
+			// historically forgotten to pass it, landing every record
+			// in "default" regardless of --namespace. Force it here so
+			// even a forgetful model still produces records in the
+			// requested namespace.
+			if rc.Namespace != "" && isNamespaceStampedTool(tc.Name) {
+				if args == nil {
+					args = map[string]interface{}{}
+				}
+				if existing, _ := args["namespace"].(string); existing == "" {
+					args["namespace"] = rc.Namespace
+				}
+			}
 			result, err := a.mcp.CallTool(ctx, tc.Name, args)
 			if err != nil {
 				// Feed the error back to the model as a tool result
@@ -465,6 +479,19 @@ func (a *Agent) traceln(format string, args ...interface{}) {
 		return
 	}
 	fmt.Fprintf(a.cfg.TranscriptWriter, format+"\n", args...)
+}
+
+// isNamespaceStampedTool returns true for MCP create tools where the
+// runtime context's namespace should be auto-injected when the model
+// didn't supply one. Update tools deliberately are NOT stamped — moving
+// a record across namespaces is a separate, explicit operation the
+// model must request.
+func isNamespaceStampedTool(name string) bool {
+	switch name {
+	case "create_component", "create_dashboard", "create_connection":
+		return true
+	}
+	return false
 }
 
 func trimForTrace(s string, max int) string {

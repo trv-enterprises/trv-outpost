@@ -96,12 +96,13 @@ function TsStoreAlertsExtensionPage() {
   const filtered = useMemo(() => {
     if (!search) return rules;
     const q = search.toLowerCase();
-    return rules.filter((r) =>
-      r.rule_name?.toLowerCase().includes(q) ||
-      r.condition?.toLowerCase().includes(q) ||
-      r.connection_name?.toLowerCase().includes(q) ||
-      r.store_name?.toLowerCase().includes(q)
-    );
+    return rules.filter((r) => {
+      if (r.rule_name?.toLowerCase().includes(q)) return true;
+      if (r.condition?.toLowerCase().includes(q)) return true;
+      if (r.store_name?.toLowerCase().includes(q)) return true;
+      const conns = r.connections?.length ? r.connections : (r.connection_name ? [{ connection_name: r.connection_name }] : []);
+      return conns.some((c) => c.connection_name?.toLowerCase().includes(q));
+    });
   }, [rules, search]);
 
   const handleDelete = async () => {
@@ -239,6 +240,14 @@ function TsStoreAlertsExtensionPage() {
                           <TableCell>
                             <div className="cell-primary">{r.connection_name}</div>
                             <div className="cell-secondary">{r.store_name}</div>
+                            {r.connections && r.connections.length > 1 && (
+                              <div
+                                className="cell-secondary cell-shared"
+                                title={r.connections.map((c) => c.connection_name).join('\n')}
+                              >
+                                Also via: {r.connections.filter((c) => c.connection_id !== r.connection_id).map((c) => c.connection_name).join(', ')}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="cell-primary">{r.rule_name}</div>
@@ -314,6 +323,15 @@ function TsStoreAlertsExtensionPage() {
               Delete alert <strong>{confirmDelete.alert_id.slice(0, 8)}…</strong> on{' '}
               <strong>{confirmDelete.connection_name}</strong>?
             </p>
+            {confirmDelete.connections && confirmDelete.connections.length > 1 && (
+              <InlineNotification
+                kind="info"
+                title="Shared across multiple connections"
+                subtitle={`This alert lives on a ts-store backend reachable through ${confirmDelete.connections.length} dashboard connections: ${confirmDelete.connections.map((c) => c.connection_name).join(', ')}. Deleting it removes the alert for all of them.`}
+                hideCloseButton
+                lowContrast
+              />
+            )}
             {siblingRuleCount(confirmDelete.alert_id) > 1 && (
               <InlineNotification
                 kind="warning"

@@ -197,7 +197,7 @@
         flex-wrap: wrap;
       }
 
-      .tile-charts {
+      .tile-components {
         display: flex;
         align-items: center;
         gap: spacing.$spacing-02;
@@ -393,9 +393,9 @@
     }
   }
 
-  // Charts column: count is hoverable to reveal a tooltip listing
+  // Components column: count is hoverable to reveal a tooltip listing
   // the components referencing this connection.
-  .charts-cell .charts-count {
+  .components-cell .components-count {
     cursor: help;
   }
 }

@@ -146,7 +146,12 @@ create a dashboard whose panels reference those components.
 - **Namespace rule**: every component, connection, and dashboard
   belongs to exactly one namespace. All records you create must share
   the target namespace from the runtime context. Don't cross
-  namespaces — doing so breaks uniqueness and scoping.
+  namespaces — doing so breaks uniqueness and scoping. Pass
+  ` + "`namespace`" + ` on every ` + "`create_component`" + `, ` + "`create_dashboard`" + `, and
+  ` + "`create_connection`" + ` call. If you omit it, the agent runtime stamps
+  the runtime-context namespace before forwarding to the server — so
+  the right value still lands, but you should pass it explicitly to
+  keep tool calls self-describing.
 - **Naming**: component and dashboard names must be unique within
   their namespace. If your first-choice name collides with an
   existing record, add a short disambiguator (` + "`" + `— CPU Detail` + "`" + `,
@@ -231,6 +236,52 @@ const buildFlowAndGuidelines = `# Build flow
   ` + "`" + `value` + "`" + `; range queries return ` + "`" + `timestamp` + "`" + ` + ` + "`" + `value` + "`" + `; queries
   with ` + "`" + `sum by (label)` + "`" + ` produce a ` + "`" + `label` + "`" + ` column. Pick templates
   and fill in columns accordingly.
+
+# Time-axis charts (line / area / bar over time)
+
+When the x-axis is time, **keep raw epoch values on the axis data and
+let ECharts format the labels**. Do NOT pre-format axis data as strings
+and then try to re-parse them in the tooltip — that's how you get
+` + "`NaN`" + ` in the tooltip header.
+
+The canonical pattern:
+
+` + "```js" + `
+xAxis: {
+  type: 'category',
+  data: chartData.map(d => Number(d.timestamp)),       // raw epoch ms
+  axisLabel: {
+    formatter: (v) => formatTimestamp(Number(v), 'chart_time'),
+    color: '#c6c6c6'
+  }
+},
+tooltip: {
+  trigger: 'axis',
+  formatter: function(params) {
+    if (!params || !params.length) return '';
+    const ts = Number(params[0].axisValue);            // already epoch ms
+    let result = formatTimestamp(ts, 'chart_datetime');
+    params.forEach(p => {
+      const val = Array.isArray(p.value) ? p.value[1] : p.value;
+      result += '<br/>' + p.marker + ' ' + p.seriesName + ': ' + (val != null ? Number(val).toFixed(1) : '-');
+    });
+    return result;
+  }
+}
+` + "```" + `
+
+The anti-pattern (causes ` + "`NaN`" + ` in the tooltip):
+
+` + "```js" + `
+// WRONG: data is already a formatted string, so Number(axisValue) is NaN
+xAxis: { type: 'category', data: chartData.map(d => formatTimestamp(Number(d.timestamp), 'chart_time')) }
+tooltip: { formatter: (params) => formatTimestamp(Number(params[0].axisValue), 'chart_datetime') /* NaN */ }
+` + "```" + `
+
+Alternative: use ` + "`xAxis.type: 'time'`" + ` and pass series data as
+` + "`[[epochMs, value], …]`" + ` pairs. That also works and ECharts handles
+all the label/tooltip formatting on its own — no manual formatter
+needed.
 
 # Things to avoid
 

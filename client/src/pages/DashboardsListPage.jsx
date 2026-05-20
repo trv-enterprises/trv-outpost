@@ -192,17 +192,20 @@ function DashboardsListPage() {
 
   // Build a multi-line label of the named components referenced by a
   // dashboard's panels, for the panel-count tooltip on the list view.
-  // Empty panels (no component_id) and panels referencing deleted
-  // components are surfaced explicitly so the count stays honest.
+  // Panels without a component_id (text labels, spacers, etc.) are
+  // omitted; panels referencing deleted components are surfaced
+  // explicitly so the count stays honest.
   const getComponentNamesLabel = (dashboard) => {
     const panels = dashboard.panels || [];
     if (panels.length === 0) return 'No panels';
-    const lines = panels.map((panel) => {
-      if (!panel.component_id) return '(empty panel)';
-      const c = charts[panel.component_id];
-      if (!c) return '(missing component)';
-      return c.title || c.name || '(unnamed)';
-    });
+    const lines = panels
+      .filter((panel) => panel.component_id)
+      .map((panel) => {
+        const c = charts[panel.component_id];
+        if (!c) return '(missing component)';
+        return c.title || c.name || '(unnamed)';
+      });
+    if (lines.length === 0) return 'No components';
     return lines.join('\n');
   };
 

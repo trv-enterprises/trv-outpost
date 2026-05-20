@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   Button,
@@ -15,6 +15,7 @@ import {
   FilterableMultiSelect,
   InlineNotification,
   Loading,
+  Tag,
 } from '@carbon/react';
 import { ArrowLeft, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -67,6 +68,16 @@ function TsStoreAlertRuleEditorPage() {
   //   { ok: false, http_status?, error? }
   const [probe, setProbe] = useState(null);
 
+  // Field discovery for the chosen connection. Renders as pills above
+  // the Condition textarea; clicking or dragging one inserts the field
+  // name at the cursor. `fields` is one of:
+  //   null      — no connection selected yet
+  //   'pending' — schema fetch in flight
+  //   string[]  — array of field names (may be empty)
+  //   { error }
+  const [fields, setFields] = useState(null);
+  const conditionRef = useRef(null);
+
   // Load tsstore connections once on mount.
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +113,85 @@ function TsStoreAlertRuleEditorPage() {
       .catch((err) => { if (!cancelled) setProbe({ ok: false, error: err.message || String(err) }); });
     return () => { cancelled = true; };
   }, [connectionId]);
+
+  // Discover field names for the chosen connection. The schema endpoint
+  // samples recent records on the ts-store backend; for json stores
+  // there's no formal schema, so we get whatever keys appear in the
+  // 10 newest records.
+  useEffect(() => {
+    if (!connectionId) {
+      setFields(null);
+      return;
+    }
+    let cancelled = false;
+    setFields('pending');
+    apiClient.getConnectionSchema(connectionId)
+      .then((resp) => {
+        if (cancelled) return;
+        if (!resp?.success) {
+          setFields({ error: resp?.error || 'Schema discovery failed' });
+          return;
+        }
+        const cols = resp.schema?.tables?.[0]?.columns || [];
+        setFields(cols.map((c) => c.name));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFields({ error: err.message || String(err) });
+      });
+    return () => { cancelled = true; };
+  }, [connectionId]);
+
+  // Insert a field name into the Condition textarea at the current
+  // selection. If the textarea isn't focused (drop from elsewhere), we
+  // use the stored selection range that the drop handler captured.
+  const insertField = (name, dropRange) => {
+    const el = conditionRef.current;
+    if (!el) {
+      setCondition((c) => (c ? c + ' ' + name : name));
+      return;
+    }
+    const start = dropRange?.start ?? el.selectionStart ?? condition.length;
+    const end = dropRange?.end ?? el.selectionEnd ?? condition.length;
+    const before = condition.slice(0, start);
+    const after = condition.slice(end);
+    // Add a space before/after if the neighbour isn't whitespace and
+    // isn't a comparison operator — small ergonomic so `temp.cpu_max>48`
+    // doesn't fuse into `temp.cpu_max48` after dropping the second
+    // operand.
+    const needsLeadSpace = before.length > 0 && !/[\s(]$/.test(before);
+    const needsTrailSpace = after.length > 0 && !/^[\s)]/.test(after);
+    const insert = (needsLeadSpace ? ' ' : '') + name + (needsTrailSpace ? ' ' : '');
+    const next = before + insert + after;
+    setCondition(next);
+    // Restore caret to the position right after the inserted name.
+    const caret = start + insert.length;
+    requestAnimationFrame(() => {
+      if (conditionRef.current) {
+        conditionRef.current.focus();
+        conditionRef.current.setSelectionRange(caret, caret);
+      }
+    });
+  };
+
+  // Drag-over the textarea: must call preventDefault so the drop event
+  // fires. The browser keeps the textarea's caret responsive to mouse
+  // movement on its own — we don't need to track positions manually.
+  const handleConditionDragOver = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  };
+
+  // Drop: insert the dragged pill at the textarea's current caret. The
+  // browser positions the caret under the mouse cursor during the drag,
+  // so selectionStart at drop time IS where the user dropped.
+  const handleConditionDrop = (e) => {
+    e.preventDefault();
+    const name = e.dataTransfer?.getData('text/plain');
+    if (!name) return;
+    const el = conditionRef.current;
+    insertField(name, el ? { start: el.selectionStart, end: el.selectionEnd } : undefined);
+  };
 
   const visibleConnections = useMemo(() => {
     if (!namespaceFilter || namespaceFilter.length === 0) return connections;
@@ -266,13 +356,57 @@ function TsStoreAlertRuleEditorPage() {
               onChange={(e) => setRuleName(e.target.value)}
               helperText="Unique within this alert; shown on the bell row when the rule fires."
             />
+
+            {/* Field pills above the condition textarea. Drag a pill
+                onto the textarea to insert at the drop point, or click
+                to insert at the current cursor. Only shown once a
+                connection is selected. */}
+            {connectionId && (
+              <div className="field-pills">
+                <div className="field-pills-label">Available fields</div>
+                {fields === 'pending' && (
+                  <div className="field-pills-empty">Loading fields…</div>
+                )}
+                {fields && typeof fields === 'object' && !Array.isArray(fields) && fields.error && (
+                  <div className="field-pills-empty">Couldn't load fields: {fields.error}</div>
+                )}
+                {Array.isArray(fields) && fields.length === 0 && (
+                  <div className="field-pills-empty">No fields discovered. Type the field name manually.</div>
+                )}
+                {Array.isArray(fields) && fields.length > 0 && (
+                  <div className="field-pills-row">
+                    {fields.map((name) => (
+                      <Tag
+                        key={name}
+                        type="blue"
+                        size="sm"
+                        className="field-pill"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'copy';
+                          e.dataTransfer.setData('text/plain', name);
+                        }}
+                        onClick={() => insertField(name)}
+                        title={`Drag onto the condition, or click to insert "${name}" at the cursor`}
+                      >
+                        {name}
+                      </Tag>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <TextArea
               id="rule-condition"
+              ref={conditionRef}
               labelText="Condition"
               placeholder="temperature > 80"
               value={condition}
               onChange={(e) => setCondition(e.target.value)}
-              helperText="ts-store expression evaluated against each new record. Supports field comparisons, AND/OR, and parentheses."
+              onDragOver={handleConditionDragOver}
+              onDrop={handleConditionDrop}
+              helperText="ts-store expression evaluated against each new record. Drag a pill above into the box or click it to insert at the cursor. Supports field comparisons, AND/OR, and parentheses."
               rows={3}
             />
             <TextInput

@@ -56,8 +56,8 @@ function ConnectionsPage() {
   const savedFilters = { ...getListPrefs('connections'), ...getFilters('connections') };
 
   const [connections, setConnections] = useState([]);
-  const [chartCounts, setChartCounts] = useState({}); // Map of connection_id -> chart count
-  const [chartNames, setChartNames] = useState({}); // Map of connection_id -> array of component display names
+  const [componentCounts, setComponentCounts] = useState({}); // Map of connection_id -> component count
+  const [componentNames, setComponentNames] = useState({}); // Map of connection_id -> array of component display names
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
@@ -126,8 +126,8 @@ function ConnectionsPage() {
   const fetchConnections = async () => {
     try {
       setLoading(true);
-      // Fetch connections and charts in parallel
-      const [connectionsData, chartsData] = await Promise.all([
+      // Fetch connections and components in parallel
+      const [connectionsData, componentsData] = await Promise.all([
         apiClient.getConnections(),
         apiClient.getComponents()
       ]);
@@ -142,15 +142,15 @@ function ConnectionsPage() {
 
       // Build component count + name-list maps by connection_id. A single
       // component can reference a connection through multiple fields
-      // (top-level connection_id for charts/controls,
+      // (top-level connection_id for components,
       // display_config.frigate_connection_id and
       // display_config.mqtt_connection_id for Frigate/weather displays).
       // De-dupe per component so referencing the same connection twice
       // still counts once.
-      if (chartsData.components) {
+      if (componentsData.components) {
         const counts = {};
         const names = {};
-        chartsData.components.forEach(component => {
+        componentsData.components.forEach(component => {
           const refs = new Set();
           if (component.connection_id) refs.add(component.connection_id);
           const dc = component.display_config;
@@ -162,8 +162,8 @@ function ConnectionsPage() {
             (names[connId] = names[connId] || []).push(componentLabel);
           });
         });
-        setChartCounts(counts);
-        setChartNames(names);
+        setComponentCounts(counts);
+        setComponentNames(names);
       }
     } catch (err) {
       setError(err.message);
@@ -276,10 +276,10 @@ function ConnectionsPage() {
     result.sort((a, b) => {
       let aVal, bVal;
 
-      // Handle charts count sorting
-      if (sortKey === 'charts') {
-        aVal = chartCounts[a.id] || 0;
-        bVal = chartCounts[b.id] || 0;
+      // Handle component count sorting
+      if (sortKey === 'components') {
+        aVal = componentCounts[a.id] || 0;
+        bVal = componentCounts[b.id] || 0;
       } else {
         aVal = a[sortKey] || '';
         bVal = b[sortKey] || '';
@@ -289,7 +289,7 @@ function ConnectionsPage() {
       if (sortKey === 'updated_at') {
         aVal = new Date(aVal).getTime() || 0;
         bVal = new Date(bVal).getTime() || 0;
-      } else if (sortKey !== 'charts') {
+      } else if (sortKey !== 'components') {
         aVal = String(aVal).toLowerCase();
         bVal = String(bVal).toLowerCase();
       }
@@ -300,7 +300,7 @@ function ConnectionsPage() {
     });
 
     return result;
-  }, [connections, chartCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter, namespaceFilter]);
+  }, [connections, componentCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter, namespaceFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -308,7 +308,7 @@ function ConnectionsPage() {
     { key: 'type', header: 'Type', isSortable: true },
     { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
-    { key: 'charts', header: 'Charts', isSortable: true },
+    { key: 'components', header: 'Components', isSortable: true },
     { key: 'updated_at', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
@@ -318,7 +318,7 @@ function ConnectionsPage() {
     name: connection.name,
     namespace: connection.namespace || 'default',
     type: connection.type,
-    charts: chartCounts[connection.id] || 0,
+    components: componentCounts[connection.id] || 0,
     tags: connection.tags || [],
     description: connection.description || '',
     updated_at: formatDate(connection.updated_at)
@@ -349,7 +349,7 @@ function ConnectionsPage() {
         <h1>Connections</h1>
         <p className="page-description">
           Configure connections to SQL databases, REST APIs, CSV files, and WebSocket streams.
-          Connections provide data for charts and receive commands from controls.
+          Connections provide data for components and receive commands from controls.
           {' '}<Link href="#" onClick={(e) => e.preventDefault()}>Learn more</Link>.
         </p>
       </div>
@@ -498,10 +498,10 @@ function ConnectionsPage() {
                         ))}
                       </div>
 
-                      {chartCounts[connection.id] > 0 && (
-                        <div className="tile-charts">
+                      {componentCounts[connection.id] > 0 && (
+                        <div className="tile-components">
                           <ChartLineSmooth size={14} />
-                          <span>{chartCounts[connection.id]} chart{chartCounts[connection.id] !== 1 ? 's' : ''}</span>
+                          <span>{componentCounts[connection.id]} component{componentCounts[connection.id] !== 1 ? 's' : ''}</span>
                         </div>
                       )}
 
@@ -623,20 +623,20 @@ function ConnectionsPage() {
                                 </TableCell>
                               );
                             }
-                            if (cell.info.header === 'charts') {
-                              const names = chartNames[connection.id] || [];
+                            if (cell.info.header === 'components') {
+                              const names = componentNames[connection.id] || [];
                               const label = names.length === 0
                                 ? 'No components reference this connection'
                                 : names.join('\n');
                               return (
-                                <TableCell key={cell.id} className="charts-cell">
+                                <TableCell key={cell.id} className="components-cell">
                                   <Tooltip
                                     label={label}
                                     align="bottom"
                                     enterDelayMs={150}
                                     className="tooltip-multiline"
                                   >
-                                    <span tabIndex={0} className="charts-count">{cell.value}</span>
+                                    <span tabIndex={0} className="components-count">{cell.value}</span>
                                   </Tooltip>
                                 </TableCell>
                               );
