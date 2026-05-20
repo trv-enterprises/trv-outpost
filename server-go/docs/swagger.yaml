@@ -3054,16 +3054,27 @@ definitions:
         type: integer
       condition:
         type: string
+      connection_count:
+        type: integer
       connection_id:
         description: |-
           Identity within ts-store. ts-store owns IDs at the alert level
           (one alert = one transport target = one rule list); rule names
-          are unique within a single alert. The composite (connection_id,
-          alert_id, rule_name) uniquely identifies a rule in the
-          dashboard's view.
+          are unique within a single alert.
+
+          ConnectionID / ConnectionName identify the *primary* dashboard
+          connection that points at this backend — preserved for delete
+          (the DELETE handler needs a connection record to dial through)
+          and back-compat. The full set of dashboard connections that
+          resolve to the same backend is in Connections; the count is
+          duplicated to ConnectionCount for table sort/filter ergonomics.
         type: string
       connection_name:
         type: string
+      connections:
+        items:
+          $ref: '#/definitions/service.TSStoreConnectionRef'
+        type: array
       cooldown:
         type: string
       dashboard_id:
@@ -3100,6 +3111,15 @@ definitions:
         items:
           $ref: '#/definitions/service.TSStoreAggregatedRule'
         type: array
+    type: object
+  service.TSStoreConnectionRef:
+    properties:
+      connection_id:
+        type: string
+      connection_name:
+        type: string
+      namespace:
+        type: string
     type: object
   service.TSStoreFetchError:
     properties:

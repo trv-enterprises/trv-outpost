@@ -9755,12 +9755,21 @@ const docTemplate = `{
                 "condition": {
                     "type": "string"
                 },
+                "connection_count": {
+                    "type": "integer"
+                },
                 "connection_id": {
-                    "description": "Identity within ts-store. ts-store owns IDs at the alert level\n(one alert = one transport target = one rule list); rule names\nare unique within a single alert. The composite (connection_id,\nalert_id, rule_name) uniquely identifies a rule in the\ndashboard's view.",
+                    "description": "Identity within ts-store. ts-store owns IDs at the alert level\n(one alert = one transport target = one rule list); rule names\nare unique within a single alert.\n\nConnectionID / ConnectionName identify the *primary* dashboard\nconnection that points at this backend — preserved for delete\n(the DELETE handler needs a connection record to dial through)\nand back-compat. The full set of dashboard connections that\nresolve to the same backend is in Connections; the count is\nduplicated to ConnectionCount for table sort/filter ergonomics.",
                     "type": "string"
                 },
                 "connection_name": {
                     "type": "string"
+                },
+                "connections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.TSStoreConnectionRef"
+                    }
                 },
                 "cooldown": {
                     "type": "string"
@@ -9802,6 +9811,20 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/service.TSStoreAggregatedRule"
                     }
+                }
+            }
+        },
+        "service.TSStoreConnectionRef": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "string"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
                 }
             }
         },
