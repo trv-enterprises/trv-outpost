@@ -12,12 +12,14 @@ import {
   TextArea,
   Select,
   SelectItem,
+  RadioButtonGroup,
+  RadioButton,
   FilterableMultiSelect,
   InlineNotification,
   Loading,
   Tag,
 } from '@carbon/react';
-import { ArrowLeft, Save } from '@carbon/icons-react';
+import { ArrowLeft, Close, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
 import DashboardPickerModal from '../components/DashboardPickerModal';
@@ -49,8 +51,36 @@ function TsStoreAlertRuleEditorPage() {
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [connectionId, setConnectionId] = useState('');
   const [ruleName, setRuleName] = useState('');
+  // Alert delivery type. WebSocket sink is intentionally omitted —
+  // WS has no topic mechanism, so ts-store WS alerts would mix with
+  // any telemetry on the same socket. Webhook and MQTT cover every
+  // dashboard use case cleanly.
+  const [alertType, setAlertType] = useState('webhook');
+  // MQTT-sink fields. SinkConnectionID is an MQTT-type connection
+  // (broker creds harvested server-side). Topic lives on the rule,
+  // not on the connection, because ts-store models topic that way
+  // and an MQTT connection record is just the broker.
+  const [mqttConnections, setMqttConnections] = useState([]);
+  const [sinkConnectionId, setSinkConnectionId] = useState('');
+  const [mqttTopic, setMqttTopic] = useState('');
+  // Track whether the user has manually edited the topic so we stop
+  // re-prefilling from the rule name once they take ownership of it.
+  const [mqttTopicDirty, setMqttTopicDirty] = useState(false);
+  const [mqttQos, setMqttQos] = useState('1');
   const [condition, setCondition] = useState('');
   const [cooldown, setCooldown] = useState('5m');
+  // Restart policy: "now" (default — start at wall-clock now, no
+  // cursor I/O, never replays history) or "resume" (read cursor + replay
+  // since last seen, optionally floored by max_replay). Empty value
+  // would be treated as "now" by ts-store, so we just default to "now"
+  // explicitly to keep the UI in sync with what gets sent.
+  const [restartPolicy, setRestartPolicy] = useState('now');
+  // Only meaningful when restartPolicy === 'resume'. ts-store rejects
+  // a non-empty max_replay paired with restart_policy=now (400). We
+  // suggest "1h" as a starting point on resume per the new API doc's
+  // example — empty would mean unbounded replay, which is the doc's
+  // foot-gun case.
+  const [maxReplay, setMaxReplay] = useState('1h');
   const [dashboardId, setDashboardId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -78,15 +108,22 @@ function TsStoreAlertRuleEditorPage() {
   const [fields, setFields] = useState(null);
   const conditionRef = useRef(null);
 
-  // Load tsstore connections once on mount.
+  // Load tsstore + mqtt connections once on mount. tsstore connections
+  // are required (rule owner picker); mqtt connections are only needed
+  // when alertType === 'mqtt' but we fetch eagerly so the picker is
+  // populated the moment the user flips the radio.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setConnectionsLoading(true);
       try {
-        const data = await apiClient.getConnections({ type: 'tsstore', page_size: 200 });
+        const [ts, mq] = await Promise.all([
+          apiClient.getConnections({ type: 'tsstore', page_size: 200 }),
+          apiClient.getConnections({ type: 'mqtt', page_size: 200 }),
+        ]);
         if (cancelled) return;
-        setConnections(data?.connections || []);
+        setConnections(ts?.connections || []);
+        setMqttConnections(mq?.connections || []);
       } catch (err) {
         if (cancelled) return;
         setError(`Failed to load connections: ${err.message || err}`);
@@ -96,6 +133,20 @@ function TsStoreAlertRuleEditorPage() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Prefill the MQTT topic from the rule name (slugified) until the
+  // user manually edits the topic field. Keeps the topic in sync as
+  // they type the name; once they touch the topic, we leave it alone.
+  // Slug rule: lowercase, replace runs of non-alphanumeric chars with
+  // a single hyphen, trim leading/trailing hyphens.
+  useEffect(() => {
+    if (mqttTopicDirty) return;
+    const slug = ruleName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    setMqttTopic(slug ? `trve/alerts/${slug}` : '');
+  }, [ruleName, mqttTopicDirty]);
 
   // Probe the chosen connection's auth posture against ts-store so
   // we can fail fast if the connection's API key won't be accepted.
@@ -210,10 +261,16 @@ function TsStoreAlertRuleEditorPage() {
     return Array.from(set).sort();
   }, [connections]);
 
+  // MQTT-sink fields are required when alertType === 'mqtt'; for
+  // webhook the sink URL is autogenerated server-side from the
+  // tsstore connection's host:port so no extra inputs are needed.
+  const mqttReady = alertType !== 'mqtt' || (sinkConnectionId && mqttTopic.trim());
+
   const canSubmit =
     connectionId &&
     ruleName.trim() &&
     condition.trim() &&
+    mqttReady &&
     !submitting &&
     probe && probe !== 'pending' && probe.ok === true;
 
@@ -222,11 +279,22 @@ function TsStoreAlertRuleEditorPage() {
     setError(null);
     try {
       await apiClient.createTSStoreAlertRule({
+        type: alertType,
         connection_id: connectionId,
         rule_name: ruleName.trim(),
         condition: condition.trim(),
         cooldown: cooldown.trim() || undefined,
         dashboard_id: dashboardId || undefined,
+        // Only send restart_policy when it diverges from ts-store's
+        // implicit default ("now"). max_replay is only valid on
+        // resume; sending it with restart_policy=now would 400.
+        restart_policy: restartPolicy === 'resume' ? 'resume' : undefined,
+        max_replay: restartPolicy === 'resume' && maxReplay.trim() ? maxReplay.trim() : undefined,
+        // MQTT sink fields. Only included when alertType=mqtt; the
+        // server ignores them otherwise.
+        sink_connection_id: alertType === 'mqtt' ? sinkConnectionId : undefined,
+        mqtt_topic: alertType === 'mqtt' ? mqttTopic.trim() : undefined,
+        mqtt_qos: alertType === 'mqtt' ? Number(mqttQos) : undefined,
       });
       navigate('/design/extensions/tsstore-alerts');
     } catch (err) {
@@ -245,20 +313,42 @@ function TsStoreAlertRuleEditorPage() {
 
   return (
     <div className="tsstore-alert-rule-editor">
-      <div className="editor-header">
-        <Button
-          kind="ghost"
-          renderIcon={ArrowLeft}
-          onClick={() => navigate('/design/extensions/tsstore-alerts')}
-        >
-          Back to rules
-        </Button>
-        <h1>New ts-store alert rule</h1>
-        <p>
-          Define a condition that fires alerts back into this dashboard&apos;s bell panel.
-          The dashboard mints a per-connection webhook secret automatically, so no API key
-          ceremony is required.
-        </p>
+      {/* Sticky page-header bar — mirrors ConnectionDetailPage /
+          ComponentDetailPage layout: Back on the left, Cancel +
+          Save (icon-buttons) on the right. The body scrolls under
+          this bar on the page's right edge. */}
+      <div className="page-header-bar">
+        <div className="header-left">
+          <Button
+            kind="ghost"
+            renderIcon={ArrowLeft}
+            size="md"
+            onClick={() => navigate('/design/extensions/tsstore-alerts')}
+          >
+            Back
+          </Button>
+          <h1>New ts-store alert rule</h1>
+        </div>
+        <div className="page-actions">
+          <Button
+            kind="secondary"
+            renderIcon={Close}
+            size="md"
+            onClick={() => navigate('/design/extensions/tsstore-alerts')}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            kind="primary"
+            renderIcon={Save}
+            size="md"
+            onClick={handleCreate}
+            disabled={!canSubmit}
+          >
+            {submitting ? 'Creating…' : 'Save'}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -271,9 +361,38 @@ function TsStoreAlertRuleEditorPage() {
         />
       )}
 
-      <div className="editor-body">
+      <div className="form-content">
         <Form onSubmit={(e) => { e.preventDefault(); if (canSubmit) handleCreate(); }}>
-          <FormGroup legendText="Connection">
+          {/* 1. Name — identity comes first so the user grounds the
+              rule with a label before making any structural choices. */}
+          <TextInput
+            id="rule-name"
+            labelText="Name"
+            placeholder="e.g. warehouse-temp-high"
+            value={ruleName}
+            onChange={(e) => setRuleName(e.target.value)}
+            helperText="Unique label; shown on the bell row when the rule fires. Used to derive the default MQTT topic when MQTT delivery is selected."
+          />
+
+          {/* 2. Type — drives what the sink picker below renders.
+              WebSocket sink is intentionally not exposed; see comment
+              on alertType state above. */}
+          <FormGroup legendText="Type">
+            <RadioButtonGroup
+              name="rule-alert-type"
+              legendText=""
+              orientation="horizontal"
+              valueSelected={alertType}
+              onChange={(value) => setAlertType(value)}
+            >
+              <RadioButton id="type-webhook" value="webhook" labelText="Webhook (dashboard bell)" />
+              <RadioButton id="type-mqtt" value="mqtt" labelText="MQTT (publish to broker)" />
+            </RadioButtonGroup>
+          </FormGroup>
+
+          {/* 3. Store — always a TSStore connection. Defines where
+              the rule is registered (api endpoint + store name). */}
+          <FormGroup legendText="Store">
             {connectionsLoading ? (
               <Loading description="Loading connections" withOverlay={false} small />
             ) : (
@@ -347,16 +466,74 @@ function TsStoreAlertRuleEditorPage() {
             )}
           </FormGroup>
 
-          <FormGroup legendText="Rule">
-            <TextInput
-              id="rule-name"
-              labelText="Name"
-              placeholder="e.g. warehouse-temp-high"
-              value={ruleName}
-              onChange={(e) => setRuleName(e.target.value)}
-              helperText="Unique within this alert; shown on the bell row when the rule fires."
-            />
+          {/* 4. Sink — type-specific. Webhook needs no inputs (the
+              dashboard autogenerates the URL); MQTT needs a broker
+              connection + topic + QoS. */}
+          {alertType === 'webhook' && (
+            <FormGroup legendText="Send alerts to">
+              <p className="sink-help sink-help--webhook">
+                Fires to the dashboard&apos;s bell panel. A per-connection webhook secret is minted automatically; no API-key ceremony required.
+              </p>
+            </FormGroup>
+          )}
+          {alertType === 'mqtt' && (
+            <FormGroup legendText="Send alerts to">
+              {connectionsLoading ? (
+                <Loading description="Loading connections" withOverlay={false} small />
+              ) : mqttConnections.length === 0 ? (
+                <p className="sink-help sink-help--empty">
+                  No MQTT connections defined. <a
+                    href="/design/connections/new"
+                    onClick={(e) => { e.preventDefault(); navigate('/design/connections/new'); }}
+                  >Create one</a> first, then return here.
+                </p>
+              ) : (
+                <>
+                  <Select
+                    id="rule-mqtt-connection"
+                    labelText="MQTT broker connection"
+                    value={sinkConnectionId}
+                    onChange={(e) => setSinkConnectionId(e.target.value)}
+                    helperText="Broker URL and credentials are harvested from this connection. The topic below is part of the rule itself."
+                  >
+                    <SelectItem value="" text="Select an MQTT connection…" />
+                    {mqttConnections.map((c) => (
+                      <SelectItem
+                        key={c.id}
+                        value={c.id}
+                        text={`${c.name} (${c.namespace || 'default'})`}
+                      />
+                    ))}
+                  </Select>
+                  <TextInput
+                    id="rule-mqtt-topic"
+                    labelText="Topic"
+                    placeholder="trve/alerts/<rule-name>"
+                    value={mqttTopic}
+                    onChange={(e) => {
+                      setMqttTopicDirty(true);
+                      setMqttTopic(e.target.value);
+                    }}
+                    helperText="Auto-filled from the rule name under trve/alerts/. The dashboard's bell ingestor (planned) listens to this prefix; topics outside trve/alerts/ won't appear in the bell."
+                  />
+                  <Select
+                    id="rule-mqtt-qos"
+                    labelText="QoS"
+                    value={mqttQos}
+                    onChange={(e) => setMqttQos(e.target.value)}
+                    helperText="MQTT delivery guarantee. 0 = at-most-once, 1 = at-least-once (default), 2 = exactly-once."
+                  >
+                    <SelectItem value="0" text="0 — at most once" />
+                    <SelectItem value="1" text="1 — at least once (default)" />
+                    <SelectItem value="2" text="2 — exactly once" />
+                  </Select>
+                </>
+              )}
+            </FormGroup>
+          )}
 
+          {/* 5. Condition — uses fields from the chosen Store. */}
+          <FormGroup legendText="Condition">
             {/* Field pills above the condition textarea. Drag a pill
                 onto the textarea to insert at the drop point, or click
                 to insert at the current cursor. Only shown once a
@@ -400,7 +577,7 @@ function TsStoreAlertRuleEditorPage() {
             <TextArea
               id="rule-condition"
               ref={conditionRef}
-              labelText="Condition"
+              labelText=""
               placeholder="temperature > 80"
               value={condition}
               onChange={(e) => setCondition(e.target.value)}
@@ -409,6 +586,12 @@ function TsStoreAlertRuleEditorPage() {
               helperText="ts-store expression evaluated against each new record. Drag a pill above into the box or click it to insert at the cursor. Supports field comparisons, AND/OR, and parentheses."
               rows={3}
             />
+          </FormGroup>
+
+          {/* 6. Policy — cooldown + restart behavior + (conditional)
+              max replay window. Cooldown gates spam; restart_policy /
+              max_replay control behavior on ts-store server restarts. */}
+          <FormGroup legendText="Policy">
             <TextInput
               id="rule-cooldown"
               labelText="Cooldown"
@@ -417,6 +600,33 @@ function TsStoreAlertRuleEditorPage() {
               onChange={(e) => setCooldown(e.target.value)}
               helperText="Minimum time between consecutive fires of this rule. Empty = no cooldown. Examples: 30s, 5m, 1h."
             />
+            <div className="restart-policy-row">
+              <RadioButtonGroup
+                name="rule-restart-policy"
+                legendText="Restart behavior"
+                orientation="horizontal"
+                valueSelected={restartPolicy}
+                onChange={(value) => setRestartPolicy(value)}
+              >
+                <RadioButton id="restart-now" value="now" labelText="Start from now (no replay)" />
+                <RadioButton id="restart-resume" value="resume" labelText="Resume from last seen" />
+              </RadioButtonGroup>
+              {restartPolicy === 'resume' && (
+                <TextInput
+                  id="rule-max-replay"
+                  labelText="Max replay window"
+                  placeholder="1h"
+                  value={maxReplay}
+                  onChange={(e) => setMaxReplay(e.target.value)}
+                  helperText="Empty = unbounded. Examples: 5m, 1h, 24h."
+                />
+              )}
+            </div>
+            <p className="restart-policy-help">
+              {restartPolicy === 'resume'
+                ? 'On server restart, replay records since the last seen timestamp. Use this for event streams (e.g. journal logs) where a missed match matters.'
+                : 'On server restart, begin evaluating from now. No replay of past records. Use this for metrics where a brief gap is fine.'}
+            </p>
           </FormGroup>
 
           <FormGroup legendText="Target dashboard (optional)">
@@ -452,20 +662,6 @@ function TsStoreAlertRuleEditorPage() {
             </div>
           </FormGroup>
         </Form>
-      </div>
-
-      <div className="editor-footer">
-        <Button kind="secondary" onClick={() => navigate('/design/extensions/tsstore-alerts')} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button
-          kind="primary"
-          renderIcon={Save}
-          onClick={handleCreate}
-          disabled={!canSubmit}
-        >
-          {submitting ? 'Creating…' : 'Create rule'}
-        </Button>
       </div>
 
       <DashboardPickerModal

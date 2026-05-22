@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { Modal, Loading, InlineNotification, Tag } from '@carbon/react';
 import apiClient from '../../api/client';
+import { useRegisterRefreshable } from '../../context/RefreshableComponentsContext';
 import './FrigateAlertsGrid.scss';
 
 /**
@@ -32,8 +33,13 @@ import './FrigateAlertsGrid.scss';
  *     has_been_reviewed: false,
  *   }
  */
-function FrigateAlertsGrid({ config, dashboardCommand }) {
+function FrigateAlertsGrid({ config, dashboardCommand, canControl = true, refreshTick = 0 }) {
   const connectionId = config?.frigate_connection_id;
+  // This display self-polls Frigate's review endpoint on a timer,
+  // so it benefits from the dashboard's manual refresh button.
+  // Register while a connection is configured; no-op outside a
+  // RefreshableComponentsProvider.
+  useRegisterRefreshable(!!connectionId);
   const maxThumbnails = Math.max(1, Math.min(50, config?.max_thumbnails || 8));
   const cameraFilter = config?.default_camera || '';
   const severity = config?.alert_severity || 'alert';
@@ -87,6 +93,13 @@ function FrigateAlertsGrid({ config, dashboardCommand }) {
     };
   }, [connectionId, fetchReviews, pollIntervalMs]);
 
+  // Honor the dashboard's manual refresh button. Skip the initial
+  // mount (refreshTick=0) since the load above already covers it.
+  useEffect(() => {
+    if (!connectionId || refreshTick === 0) return;
+    fetchReviews();
+  }, [refreshTick, connectionId, fetchReviews]);
+
   const handleThumbClick = (review) => {
     setClipError(false);
     setMarkError(null);
@@ -103,7 +116,7 @@ function FrigateAlertsGrid({ config, dashboardCommand }) {
   // drop it from the local list and close the modal. If the API call fails,
   // leave the review in place and surface the error inside the modal.
   const handleMarkReviewed = async () => {
-    if (!selectedReview || marking) return;
+    if (!selectedReview || marking || !canControl) return;
     const id = selectedReview.id;
     setMarking(true);
     setMarkError(null);
@@ -142,8 +155,11 @@ function FrigateAlertsGrid({ config, dashboardCommand }) {
 
       case 'reviewed':
       case 'dismiss':
-        // Mark the currently displayed alert as reviewed
-        if (selectedReview) {
+        // Mark the currently displayed alert as reviewed. Skip when
+        // the current user lacks the control capability — the server
+        // would 403 the call anyway and the kiosk would see a stale
+        // alert with no feedback. Better to no-op visibly.
+        if (selectedReview && canControl) {
           handleMarkReviewed();
         }
         break;
@@ -293,7 +309,7 @@ function FrigateAlertsGrid({ config, dashboardCommand }) {
           modalHeading={selectedReview ? `${selectedReview.camera} — ${formatTime(selectedReview.start_time)}` : ''}
           primaryButtonText={marking ? 'Marking…' : 'Mark Reviewed'}
           secondaryButtonText="Close"
-          primaryButtonDisabled={marking}
+          primaryButtonDisabled={marking || !canControl}
           size="lg"
           className="frigate-alerts-grid__modal"
         >
@@ -327,6 +343,16 @@ function FrigateAlertsGrid({ config, dashboardCommand }) {
                     ))}
                   </div>
                 )}
+                {!canControl && (
+                  <InlineNotification
+                    kind="info"
+                    title="Read-only"
+                    subtitle="Your user can view alerts but not mark them reviewed. Ask an admin to grant the control capability."
+                    hideCloseButton
+                    lowContrast
+                    className="frigate-alerts-grid__mark-error"
+                  />
+                )}
                 {markError && (
                   <InlineNotification
                     kind="error"
@@ -356,6 +382,8 @@ FrigateAlertsGrid.propTypes = {
     snapshot_interval: PropTypes.number,
   }).isRequired,
   dashboardCommand: PropTypes.object, // { target, action, ... } from MQTT command topic
+  canControl: PropTypes.bool,
+  refreshTick: PropTypes.number,
 };
 
 export default FrigateAlertsGrid;

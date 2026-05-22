@@ -78,3 +78,70 @@
     }
   }
 }
+
+// Carbon Modal portals to <body>, so the rule-details modal cannot
+// be scoped under .tsstore-alerts-extension-page. Style the modal's
+// inner container by its own class instead.
+.rule-details {
+  color: var(--cds-text-primary);
+
+  .rule-details-section {
+    margin: spacing.$spacing-05 0 spacing.$spacing-03;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cds-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+
+    &:first-of-type {
+      margin-top: 0;
+    }
+  }
+
+  .rule-details-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: spacing.$spacing-03 spacing.$spacing-05;
+    margin: 0;
+
+    dt {
+      color: var(--cds-text-helper);
+      font-size: 0.75rem;
+      align-self: center;
+    }
+
+    dd {
+      margin: 0;
+      font-size: 0.875rem;
+      word-break: break-word;
+    }
+  }
+
+  .rule-details-primary {
+    font-weight: 600;
+    font-size: 1rem;
+  }
+
+  .condition {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-layer-01);
+    padding: 2px spacing.$spacing-02;
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8125rem;
+  }
+
+  code {
+    color: var(--cds-text-primary);
+    background-color: var(--cds-layer-01);
+    padding: 2px spacing.$spacing-02;
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8125rem;
+  }
+
+  .muted {
+    color: var(--cds-text-helper);
+    font-style: italic;
+  }
+}

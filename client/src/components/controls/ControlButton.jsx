@@ -15,7 +15,7 @@ import './controls.scss';
  * Sends null as the value (buttons just trigger actions).
  * No state subscription — buttons are fire-and-forget.
  */
-function ControlButton({ control, onSuccess, onError }) {
+function ControlButton({ control, readOnly = false, onSuccess, onError }) {
   const uiConfig = control.control_config?.ui_config || {};
   const label = uiConfig.label || 'Execute';
   const kind = uiConfig.kind || 'primary';
@@ -28,14 +28,20 @@ function ControlButton({ control, onSuccess, onError }) {
     onError
   });
 
-  const handleClick = () => execute(null, `${label} executed`);
+  // Short-circuit clicks defensively when read-only. The button is
+  // already `disabled` below, but a stray programmatic click (test,
+  // a11y tool) shouldn't bypass the gate.
+  const handleClick = () => {
+    if (readOnly) return;
+    execute(null, `${label} executed`);
+  };
 
   return (
     <div className="control-button-container">
       <Button
         kind={kind}
         onClick={handleClick}
-        disabled={loading}
+        disabled={loading || readOnly}
         size="lg"
       >
         {loading ? <InlineLoading description="Executing..." /> : label}
@@ -53,6 +59,7 @@ ControlButton.propTypes = {
       ui_config: PropTypes.object
     })
   }).isRequired,
+  readOnly: PropTypes.bool,
   onSuccess: PropTypes.func,
   onError: PropTypes.func
 };

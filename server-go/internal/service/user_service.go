@@ -334,6 +334,7 @@ func (s *UserService) GetCapabilities(ctx context.Context, user *models.User) *m
 		Capabilities: user.Capabilities,
 		CanDesign:    user.HasDesignAccess(),
 		CanManage:    user.HasManageAccess(),
+		CanControl:   user.HasControlAccess(),
 	}
 }
 

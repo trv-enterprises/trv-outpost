@@ -464,12 +464,14 @@ definitions:
     - design
     - manage
     - webhook
+    - control
     type: string
     x-enum-varnames:
     - CapabilityView
     - CapabilityDesign
     - CapabilityManage
     - CapabilityWebhook
+    - CapabilityControl
   models.ChartDataMapping:
     description: Mapping configuration from data columns to chart axes/series
     properties:
@@ -2718,6 +2720,12 @@ definitions:
     properties:
       active:
         type: boolean
+      can_control:
+        description: |-
+          CanControl mirrors HasControlAccess(); separate from CanDesign /
+          CanManage because control is its own axis and not implied by
+          either elevation.
+        type: boolean
       can_design:
         type: boolean
       can_manage:
@@ -2989,11 +2997,12 @@ definitions:
       type_id:
         type: string
     type: object
-  service.CreateWebhookRuleRequest:
+  service.CreateAlertRequest:
     properties:
       condition:
         type: string
       connection_id:
+        description: TSStore connection (rule owner)
         type: string
       cooldown:
         description: '"5m" etc., ts-store duration'
@@ -3001,29 +3010,52 @@ definitions:
       dashboard_id:
         description: optional bell deep-link target
         type: string
+      max_replay:
+        description: e.g. "1h"; only valid when restart_policy=="resume"
+        type: string
+      mqtt_qos:
+        description: 0/1/2; nil = ts-store default (1)
+        type: integer
+      mqtt_topic:
+        type: string
       poll_interval:
+        type: string
+      restart_policy:
+        description: '"now" (default) or "resume"'
         type: string
       rule_name:
         type: string
+      sink_connection_id:
+        description: |-
+          MQTT-sink fields (type=mqtt):
+          SinkConnectionID is an MQTT-type connection record from which
+          broker_url + username + password are harvested. Topic + QoS
+          come from the rule directly (ts-store models topic as a
+          per-rule field; an MQTT connection record is just the broker).
+        type: string
       timeout:
+        description: |-
+          Webhook-sink fields (type=webhook):
+          Timeout applies only to the webhook block. Optional override is
+          for callers who want to deliver to an external URL instead of
+          the dashboard's bell receiver (no secret minted in that case).
+        type: string
+      type:
+        description: '"webhook" | "mqtt"'
         type: string
       webhook_headers:
         additionalProperties:
           type: string
         type: object
       webhook_url_override:
-        description: |-
-          Optional override. If empty, we use the dashboard's own
-          receiver and embed a fresh per-connection secret. If set, the
-          caller takes responsibility for auth; we DO NOT issue a secret
-          and the rule will deliver to whatever URL was provided.
         type: string
     required:
     - condition
     - connection_id
     - rule_name
+    - type
     type: object
-  service.CreateWebhookRuleResponse:
+  service.CreateAlertResponse:
     properties:
       alert_id:
         type: string
@@ -6593,14 +6625,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/service.CreateWebhookRuleRequest'
+          $ref: '#/definitions/service.CreateAlertRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/service.CreateWebhookRuleResponse'
+            $ref: '#/definitions/service.CreateAlertResponse'
         "400":
           description: Bad Request
           schema:
@@ -6613,7 +6645,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Create a webhook alert rule on a tsstore connection
+      summary: Create an alert rule on a tsstore connection
       tags:
       - TSStoreAlerts
   /tsstore-alerts/rules/{alert_id}:
@@ -6645,6 +6677,41 @@ paths:
               type: string
             type: object
       summary: Delete a ts-store alert (and all its rules) on a tsstore connection
+      tags:
+      - TSStoreAlerts
+    get:
+      parameters:
+      - description: TSStore connection ID
+        in: query
+        name: connection_id
+        required: true
+        type: string
+      - description: Alert ID
+        in: path
+        name: alert_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get the full detail of a single ts-store alert on a tsstore connection
       tags:
       - TSStoreAlerts
   /users:

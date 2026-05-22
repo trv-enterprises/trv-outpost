@@ -73,9 +73,12 @@
   // footer alignment) lives in the shared file — this block only
   // expresses what's different about the picker presentation:
   //   - 96px thumbnail (compact for a modal grid; default is 160px)
-  //   - cover-fit instead of contain-fit (modal preview thumbnails are
-  //     pre-cropped)
   //   - selected state uses link-primary on the name text
+  //
+  // Image fit stays `contain` (inherited from the shared rule). The
+  // thumbnails are full dashboard renders, not pre-cropped previews,
+  // so `cover` plus a squat 96px height would crop chart content out
+  // of frame.
   .dashboard-tile {
     &:focus-visible {
       outline: 2px solid var(--cds-focus);
@@ -92,10 +95,6 @@
 
     .tile-thumbnail {
       height: 96px;
-
-      img {
-        object-fit: cover;
-      }
 
       .thumbnail-placeholder {
         color: var(--cds-text-helper);

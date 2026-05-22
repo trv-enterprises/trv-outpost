@@ -47,20 +47,21 @@ func (h *TSStoreAlertRulesHandler) ProbeAuth(c *gin.Context) {
 	c.JSON(http.StatusOK, h.rules.ProbeConnectionAuth(c.Request.Context(), connectionID))
 }
 
-// Create accepts a webhook-rule wizard payload, mints a secret +
-// receiver URL via the dashboard's own public webhook path, and
-// POSTs the new rule to the underlying tsstore.
-// @Summary Create a webhook alert rule on a tsstore connection
+// Create accepts a rule-wizard payload (type=webhook|mqtt) and
+// registers the rule on the underlying tsstore. For webhook, mints a
+// secret + receiver URL via the dashboard's own public webhook path;
+// for mqtt, harvests broker creds from the chosen MQTT connection.
+// @Summary Create an alert rule on a tsstore connection
 // @Tags TSStoreAlerts
 // @Accept json
 // @Produce json
-// @Param body body service.CreateWebhookRuleRequest true "Rule"
-// @Success 201 {object} service.CreateWebhookRuleResponse
+// @Param body body service.CreateAlertRequest true "Rule"
+// @Success 201 {object} service.CreateAlertResponse
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /tsstore-alerts/rules [post]
 func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
-	var req service.CreateWebhookRuleRequest
+	var req service.CreateAlertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -70,7 +71,7 @@ func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
 	if user != nil {
 		callerGUID = user.GUID
 	}
-	resp, err := h.rules.CreateWebhookRule(c.Request.Context(), &req, callerGUID)
+	resp, err := h.rules.CreateAlert(c.Request.Context(), &req, callerGUID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -96,6 +97,31 @@ func (h *TSStoreAlertRulesHandler) ListAll(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// GetAlertDetail proxies a GET of the full alert record from the
+// owning tsstore. Used by the read-only rule-details page.
+// @Summary Get the full detail of a single ts-store alert on a tsstore connection
+// @Tags TSStoreAlerts
+// @Produce json
+// @Param connection_id query string true "TSStore connection ID"
+// @Param alert_id path string true "Alert ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /tsstore-alerts/rules/{alert_id} [get]
+func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
+	connectionID := c.Query("connection_id")
+	if connectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection_id query param is required"})
+		return
+	}
+	body, err := h.rules.GetAlertDetail(c.Request.Context(), connectionID, c.Param("alert_id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Data(http.StatusOK, "application/json", body)
 }
 
 // DeleteAlert removes an entire alert resource on the tsstore that

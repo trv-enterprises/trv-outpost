@@ -205,6 +205,16 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/ai/sessions", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/ai/sessions", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
 
+		// Control execution — its own capability, independent of
+		// view/design/manage. A view-only kiosk (e.g. a lobby
+		// display) can render dashboards but gets 403 when it tries
+		// to fire a control; an interactive kiosk (e.g. the TV in
+		// the kitchen) holds view+control. Designers and admins are
+		// NOT implicitly granted control — they must hold it
+		// explicitly. The boot migration backfills control on every
+		// existing human user so today's clicks keep working.
+		{PathPrefix: "/api/controls/", Method: "POST", Required: models.CapabilityControl, WriteOnly: true},
+
 		// Manage mode routes - require manage capability
 		{PathPrefix: "/api/config/system", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/users", Method: "POST", Required: models.CapabilityManage, WriteOnly: true},

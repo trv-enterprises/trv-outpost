@@ -183,6 +183,7 @@ func (h *AuthSessionHandler) buildSessionResponse(pair *auth.TokenPair, user *mo
 			Capabilities: user.Capabilities,
 			CanDesign:    user.HasCapability(models.CapabilityDesign),
 			CanManage:    user.HasCapability(models.CapabilityManage),
+			CanControl:   user.HasCapability(models.CapabilityControl),
 		}
 	}
 	return resp

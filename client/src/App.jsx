@@ -49,6 +49,7 @@ import NamespacesPage from './pages/NamespacesPage';
 import ApiKeysListPage from './pages/ApiKeysListPage';
 import TsStoreAlertsExtensionPage from './pages/TsStoreAlertsExtensionPage';
 import TsStoreAlertRuleEditorPage from './pages/TsStoreAlertRuleEditorPage';
+import TsStoreAlertRuleViewPage from './pages/TsStoreAlertRuleViewPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { NamespaceProvider } from './context/NamespaceContext';
@@ -100,7 +101,7 @@ function AppContent({ onDisconnect }) {
   // legacy-bootstrap deployments have nothing to sign out of, so
   // we hide it there to avoid a misleading affordance.
   const [clerkActive, setClerkActive] = useState(false);
-  const [userCapabilities, setUserCapabilities] = useState({ can_view: false, can_design: false, can_manage: false });
+  const [userCapabilities, setUserCapabilities] = useState({ can_view: false, can_design: false, can_manage: false, can_control: false });
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
@@ -363,7 +364,7 @@ function AppContent({ onDisconnect }) {
       }
     } catch (err) {
       console.error('Failed to fetch capabilities:', err);
-      setUserCapabilities({ can_view: false, can_design: false, can_manage: false });
+      setUserCapabilities({ can_view: false, can_design: false, can_manage: false, can_control: false });
     }
   }, [currentUser, currentMode]);
 
@@ -734,10 +735,11 @@ function AppContent({ onDisconnect }) {
           {/* Design Mode — Extensions */}
           <Route path="/design/extensions/tsstore-alerts" element={<TsStoreAlertsExtensionPage />} />
           <Route path="/design/extensions/tsstore-alerts/new" element={<TsStoreAlertRuleEditorPage />} />
+          <Route path="/design/extensions/tsstore-alerts/:connectionId/:alertId" element={<TsStoreAlertRuleViewPage />} />
 
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage />} />
-          <Route path="/view/dashboards/:id" element={<DashboardViewerPage canDesign={userCapabilities.can_design} />} />
+          <Route path="/view/dashboards/:id" element={<DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />} />
 
           {/* Manage Mode Routes */}
           <Route path="/manage" element={<Navigate to="/manage/users" replace />} />

@@ -8,7 +8,7 @@ import { useControlCommand } from './useControlCommand';
 import { registerControl } from './controlRegistry';
 import './controls.scss';
 
-function ControlMqttPublish({ control, onSuccess, onError }) {
+function ControlMqttPublish({ control, readOnly = false, onSuccess, onError }) {
   const uiConfig = control.control_config?.ui_config || {};
   const label = uiConfig.label || 'Publish';
   const kind = uiConfig.kind || 'primary';
@@ -22,14 +22,17 @@ function ControlMqttPublish({ control, onSuccess, onError }) {
     onError
   });
 
-  const handleClick = () => execute(null, `Published to ${target}`);
+  const handleClick = () => {
+    if (readOnly) return;
+    execute(null, `Published to ${target}`);
+  };
 
   return (
     <div className="control-button-container">
       <Button
         kind={kind}
         onClick={handleClick}
-        disabled={loading}
+        disabled={loading || readOnly}
         size="lg"
       >
         {loading ? <InlineLoading description="Publishing..." /> : label}
@@ -47,6 +50,7 @@ ControlMqttPublish.propTypes = {
       ui_config: PropTypes.object
     })
   }).isRequired,
+  readOnly: PropTypes.bool,
   onSuccess: PropTypes.func,
   onError: PropTypes.func
 };

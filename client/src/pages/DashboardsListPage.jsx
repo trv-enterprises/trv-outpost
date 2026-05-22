@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -29,7 +29,7 @@ import {
   Checkbox,
   Dropdown
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View, Reset } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
@@ -37,6 +37,7 @@ import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import DashboardTile from '../components/DashboardTile';
+import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
 import './DashboardsListPage.scss';
@@ -62,8 +63,29 @@ function DashboardsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
+  // Sort state. Authoritative storage is per-user server config
+  // (`dashboard_tile_sort`), shared with the View-mode tile page so a
+  // user sees the same ordering everywhere. listPrefs is a fallback
+  // until the user-config fetch completes — keeps first-paint stable.
   const [sortKey, setSortKey] = useState(savedFilters.sortKey || 'updated');
   const [sortDirection, setSortDirection] = useState(savedFilters.sortDir || 'desc');
+  // Manual drag-reorder state. Same per-user `dashboard_tile_order`
+  // key as View-mode — the order travels with the user, not with the
+  // mode.
+  //   null  → not yet loaded from server (treat like empty)
+  //   []    → user has no manual order yet
+  //   [...] → user's pinned sequence; partial coverage is fine
+  const [tileOrder, setTileOrder] = useState(null);
+  const dragSrcIdRef = useRef(null);
+  // {id, side: 'left'|'right'} — which tile we're hovering over and
+  // which half. Drop inserts the dragged tile before (left) or after
+  // (right) the target. Tracked together so the indicator can render
+  // on the correct edge.
+  const [dragOver, setDragOver] = useState(null);
+  // Suppress the synthetic click some browsers fire on a tile right
+  // after it's been dropped. Same tile-scoped, time-bounded pattern as
+  // DashboardTileViewPage — a bare boolean was too sticky.
+  const droppedRef = useRef({ id: null, expiresAt: 0 });
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   // Multi-select namespace filter. Empty array = show all (the user
@@ -93,18 +115,118 @@ function DashboardsListPage() {
       namespaces: namespaceFilter,
       connection: connectionFilter,
     });
-    // Persist user-level preferences (view mode, sort) to user config — survives reloads
+    // View mode stays in listPrefs (it's UI-local, not shared with
+    // View-mode). Sort moved to per-user server config so the two
+    // pages stay in lockstep — persisted in persistSort below, not here.
     setListPrefs('dashboards', {
       view: viewMode,
-      sortKey,
-      sortDir: sortDirection
     });
   }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, connectionFilter]);
 
   // Fetch dashboards, charts, and connections from API
   useEffect(() => {
     fetchData();
+    fetchUserConfig();
   }, []);
+
+  // Load the shared per-user sort + manual order from server config.
+  // Mirrors DashboardTileViewPage so both pages converge on the same
+  // ordering and the user only sees one source of truth.
+  const fetchUserConfig = async () => {
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) return;
+    try {
+      const config = await apiClient.getUserConfig(userGuid);
+      const settings = config?.settings || {};
+      const stored = settings.dashboard_tile_order;
+      setTileOrder(Array.isArray(stored) ? stored : []);
+      const storedSort = settings.dashboard_tile_sort;
+      if (storedSort && typeof storedSort.key === 'string') {
+        setSortKey(storedSort.key);
+        setSortDirection(storedSort.direction === 'desc' ? 'desc' : 'asc');
+      }
+    } catch {
+      // No user config yet (new user, first load). Treat as empty manual
+      // order; the local `savedFilters` fallback for sort already applied.
+      setTileOrder([]);
+    }
+  };
+
+  // Persist sort preference to user config so both Design and View
+  // see the same setting. Local state updates immediately; server
+  // call is fire-and-forget — UI shouldn't wait on it.
+  const persistSort = useCallback((nextKey, nextDirection) => {
+    setSortKey(nextKey);
+    setSortDirection(nextDirection);
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) return;
+    apiClient.updateUserConfig(userGuid, {
+      dashboard_tile_sort: { key: nextKey, direction: nextDirection },
+    }).catch(() => {});
+  }, []);
+
+  // Persist the manual tile order to user config.
+  const persistTileOrder = useCallback((nextOrder) => {
+    setTileOrder(nextOrder);
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) return;
+    apiClient.updateUserConfig(userGuid, {
+      dashboard_tile_order: nextOrder,
+    }).catch(() => {});
+  }, []);
+
+  const handleResetOrder = () => {
+    persistTileOrder([]);
+  };
+
+  // Native HTML5 drag-and-drop. Same pattern as the View-mode tile
+  // page — whole-tile drag, drop computes left/right half via midpoint
+  // for the indicator, droppedRef suppresses the synthetic click on
+  // the dropped tile.
+  const handleDragStart = (e, dashboardId) => {
+    dragSrcIdRef.current = dashboardId;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dashboardId); } catch { /* no-op */ }
+  };
+
+  const handleDragOver = (e, overId) => {
+    if (!dragSrcIdRef.current) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = (e.clientX - rect.left) < (rect.width / 2) ? 'left' : 'right';
+    if (!dragOver || dragOver.id !== overId || dragOver.side !== side) {
+      setDragOver({ id: overId, side });
+    }
+  };
+
+  const handleDragLeave = () => setDragOver(null);
+
+  const handleDrop = (e, dropTargetId) => {
+    e.preventDefault();
+    const srcId = dragSrcIdRef.current;
+    const side = dragOver?.id === dropTargetId ? dragOver.side : 'left';
+    dragSrcIdRef.current = null;
+    setDragOver(null);
+    if (!srcId || srcId === dropTargetId) return;
+    // Compute the new order from the *currently rendered* sequence,
+    // remove src, re-insert relative to the drop target. The off-by-
+    // one is already handled because targetIdx is computed AFTER
+    // filtering srcId out; only +1 for the right half.
+    const currentOrder = filteredAndSortedDashboards.map(d => d.id);
+    const without = currentOrder.filter(id => id !== srcId);
+    const targetIdx = without.indexOf(dropTargetId);
+    if (targetIdx < 0) return;
+    const insertAt = side === 'left' ? targetIdx : targetIdx + 1;
+    const next = [...without.slice(0, insertAt), srcId, ...without.slice(insertAt)];
+    persistTileOrder(next);
+    droppedRef.current = { id: srcId, expiresAt: Date.now() + 250 };
+  };
+
+  const handleDragEnd = () => {
+    dragSrcIdRef.current = null;
+    setDragOver(null);
+  };
 
   const fetchData = async () => {
     try {
@@ -209,13 +331,13 @@ function DashboardsListPage() {
     return lines.join('\n');
   };
 
-  // Handle column sorting
+  // Handle column sorting. Goes through persistSort so the choice
+  // syncs to user config and surfaces in View-mode too.
   const handleSort = (key) => {
     if (sortKey === key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      persistSort(key, sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortKey(key);
-      setSortDirection('asc');
+      persistSort(key, 'asc');
     }
   };
 
@@ -293,16 +415,31 @@ function DashboardsListPage() {
       });
     }
 
-    // Sort
+    // Order resolution.
+    //
+    // Tile view: delegate to orderDashboardsForViewer so this page and
+    // the View-mode tile page render dashboards in identical order
+    // (including manual drag-reorder).
+    //
+    // List view: doesn't support a meaningful "manual" order in a
+    // table — fall back to name asc when sortKey === 'manual'. The
+    // shared setting itself stays as 'manual' (we don't write back);
+    // switching to tile view restores the manual ordering.
+    if (viewMode === 'tile') {
+      return orderDashboardsForViewer(result, tileOrder, { key: sortKey, direction: sortDirection });
+    }
+
+    const effectiveKey = sortKey === 'manual' ? 'name' : sortKey;
+    const effectiveDir = sortKey === 'manual' ? 'asc' : sortDirection;
     result.sort((a, b) => {
-      let aVal = a[sortKey] || '';
-      let bVal = b[sortKey] || '';
+      let aVal = a[effectiveKey] || '';
+      let bVal = b[effectiveKey] || '';
 
       // Handle date sorting
-      if (sortKey === 'updated') {
+      if (effectiveKey === 'updated') {
         aVal = new Date(aVal).getTime() || 0;
         bVal = new Date(bVal).getTime() || 0;
-      } else if (sortKey === 'panels') {
+      } else if (effectiveKey === 'panels') {
         // Use panels array length directly (full dashboard object)
         aVal = a.panels?.length || 0;
         bVal = b.panels?.length || 0;
@@ -311,13 +448,13 @@ function DashboardsListPage() {
         bVal = String(bVal).toLowerCase();
       }
 
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      if (aVal < bVal) return effectiveDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return effectiveDir === 'asc' ? 1 : -1;
       return 0;
     });
 
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, charts, connections, tagFilter, namespaceFilter, connectionFilter]);
+  }, [dashboards, searchTerm, sortKey, sortDirection, viewMode, tileOrder, charts, connections, tagFilter, namespaceFilter, connectionFilter]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -440,16 +577,30 @@ function DashboardsListPage() {
             }}
           />
           {viewMode === 'tile' && (
-            <SortMenu
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              onChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
-              options={[
-                { key: 'name', label: 'Name', defaultDir: 'asc' },
-                { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
-                { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
-              ]}
-            />
+            <>
+              <SortMenu
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onChange={(k, d) => persistSort(k, d)}
+                options={[
+                  { key: 'manual', label: 'Manual (drag to reorder)' },
+                  { key: 'name', label: 'Name', defaultDir: 'asc' },
+                  { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
+                  { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+                ]}
+              />
+              {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  renderIcon={Reset}
+                  onClick={handleResetOrder}
+                  title="Discard your manual tile order and revert to most-recently-updated first"
+                >
+                  Reset manual order
+                </Button>
+              )}
+            </>
           )}
           <ContentSwitcher
             onChange={(e) => setViewMode(e.name)}
@@ -551,6 +702,25 @@ function DashboardsListPage() {
                     return next;
                   });
                 };
+                // Drag-reorder is only meaningful in manual sort and
+                // out of export mode (export mode owns the click for
+                // checkbox toggling).
+                const isManual = sortKey === 'manual' && !exportMode;
+                const dropSide = dragOver?.id === dashboard.id ? dragOver.side : null;
+                const handleTileClickGuarded = () => {
+                  // Swallow the synthetic click that fires immediately
+                  // after a drop on the source tile. Scope is tight:
+                  // only THIS tile, only for ~250ms after the drop.
+                  if (droppedRef.current.id === dashboard.id && Date.now() < droppedRef.current.expiresAt) {
+                    droppedRef.current = { id: null, expiresAt: 0 };
+                    return;
+                  }
+                  if (exportMode) {
+                    toggleTileSelection();
+                  } else {
+                    handleRowClick(dashboard);
+                  }
+                };
                 return (
                 <DashboardTile
                   key={dashboard.id}
@@ -558,9 +728,16 @@ function DashboardsListPage() {
                   componentMap={charts}
                   connectionMap={connections}
                   selected={isTileSelected}
-                  onClick={() => exportMode ? toggleTileSelection() : handleRowClick(dashboard)}
+                  onClick={handleTileClickGuarded}
+                  draggable={isManual}
+                  onDragStart={isManual ? (e) => handleDragStart(e, dashboard.id) : undefined}
+                  onDragOver={isManual ? (e) => handleDragOver(e, dashboard.id) : undefined}
+                  onDragLeave={isManual ? handleDragLeave : undefined}
+                  onDrop={isManual ? (e) => handleDrop(e, dashboard.id) : undefined}
+                  onDragEnd={isManual ? handleDragEnd : undefined}
+                  dropSide={dropSide}
                   showDate
-                  descriptionMode="tooltip"
+                  descriptionMode="inline"
                   onTagClick={(t) => {
                     if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
                   }}

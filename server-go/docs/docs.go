@@ -5108,7 +5108,7 @@ const docTemplate = `{
                 "tags": [
                     "TSStoreAlerts"
                 ],
-                "summary": "Create a webhook alert rule on a tsstore connection",
+                "summary": "Create an alert rule on a tsstore connection",
                 "parameters": [
                     {
                         "description": "Rule",
@@ -5116,7 +5116,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/service.CreateWebhookRuleRequest"
+                            "$ref": "#/definitions/service.CreateAlertRequest"
                         }
                     }
                 ],
@@ -5124,7 +5124,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/service.CreateWebhookRuleResponse"
+                            "$ref": "#/definitions/service.CreateAlertResponse"
                         }
                     },
                     "400": {
@@ -5149,6 +5149,58 @@ const docTemplate = `{
             }
         },
         "/tsstore-alerts/rules/{alert_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TSStoreAlerts"
+                ],
+                "summary": "Get the full detail of a single ts-store alert on a tsstore connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "TSStore connection ID",
+                        "name": "connection_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Alert ID",
+                        "name": "alert_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
             "delete": {
                 "tags": [
                     "TSStoreAlerts"
@@ -6142,13 +6194,15 @@ const docTemplate = `{
                 "view",
                 "design",
                 "manage",
-                "webhook"
+                "webhook",
+                "control"
             ],
             "x-enum-varnames": [
                 "CapabilityView",
                 "CapabilityDesign",
                 "CapabilityManage",
-                "CapabilityWebhook"
+                "CapabilityWebhook",
+                "CapabilityControl"
             ]
         },
         "models.ChartDataMapping": {
@@ -9281,6 +9335,10 @@ const docTemplate = `{
                 "active": {
                     "type": "boolean"
                 },
+                "can_control": {
+                    "description": "CanControl mirrors HasControlAccess(); separate from CanDesign /\nCanManage because control is its own axis and not implied by\neither elevation.",
+                    "type": "boolean"
+                },
                 "can_design": {
                     "type": "boolean"
                 },
@@ -9665,18 +9723,20 @@ const docTemplate = `{
                 }
             }
         },
-        "service.CreateWebhookRuleRequest": {
+        "service.CreateAlertRequest": {
             "type": "object",
             "required": [
                 "condition",
                 "connection_id",
-                "rule_name"
+                "rule_name",
+                "type"
             ],
             "properties": {
                 "condition": {
                     "type": "string"
                 },
                 "connection_id": {
+                    "description": "TSStore connection (rule owner)",
                     "type": "string"
                 },
                 "cooldown": {
@@ -9687,13 +9747,37 @@ const docTemplate = `{
                     "description": "optional bell deep-link target",
                     "type": "string"
                 },
+                "max_replay": {
+                    "description": "e.g. \"1h\"; only valid when restart_policy==\"resume\"",
+                    "type": "string"
+                },
+                "mqtt_qos": {
+                    "description": "0/1/2; nil = ts-store default (1)",
+                    "type": "integer"
+                },
+                "mqtt_topic": {
+                    "type": "string"
+                },
                 "poll_interval": {
+                    "type": "string"
+                },
+                "restart_policy": {
+                    "description": "\"now\" (default) or \"resume\"",
                     "type": "string"
                 },
                 "rule_name": {
                     "type": "string"
                 },
+                "sink_connection_id": {
+                    "description": "MQTT-sink fields (type=mqtt):\nSinkConnectionID is an MQTT-type connection record from which\nbroker_url + username + password are harvested. Topic + QoS\ncome from the rule directly (ts-store models topic as a\nper-rule field; an MQTT connection record is just the broker).",
+                    "type": "string"
+                },
                 "timeout": {
+                    "description": "Webhook-sink fields (type=webhook):\nTimeout applies only to the webhook block. Optional override is\nfor callers who want to deliver to an external URL instead of\nthe dashboard's bell receiver (no secret minted in that case).",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "\"webhook\" | \"mqtt\"",
                     "type": "string"
                 },
                 "webhook_headers": {
@@ -9703,12 +9787,11 @@ const docTemplate = `{
                     }
                 },
                 "webhook_url_override": {
-                    "description": "Optional override. If empty, we use the dashboard's own\nreceiver and embed a fresh per-connection secret. If set, the\ncaller takes responsibility for auth; we DO NOT issue a secret\nand the rule will deliver to whatever URL was provided.",
                     "type": "string"
                 }
             }
         },
-        "service.CreateWebhookRuleResponse": {
+        "service.CreateAlertResponse": {
             "type": "object",
             "properties": {
                 "alert_id": {

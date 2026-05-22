@@ -2,8 +2,9 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { useState } from 'react';
 import { Tag, Tooltip } from '@carbon/react';
-import { Dashboard, DataBase, Information, Time } from '@carbon/icons-react';
+import { Dashboard, DataBase, Information, Time, Copy } from '@carbon/icons-react';
 import NamespaceChip from './shared/NamespaceChip';
 import './DashboardTile.scss';
 
@@ -164,6 +165,7 @@ function DashboardTile({
       <div className="tile-content">
         <div className="tile-header">
           <h3 className="tile-name">{dashboard.name}</h3>
+          <IdCopyButton id={dashboard.id} />
           {descriptionMode === 'tooltip' && dashboard.description && (
             <Tooltip label={dashboard.description} align="bottom">
               <button
@@ -278,6 +280,60 @@ function DashboardTile({
       </div>
     </div>
   );
+}
+
+// Inline ID button — shows the dashboard's UUID in a tooltip and
+// copies it to the clipboard on click. Sits in the title row of
+// every DashboardTile rendering (Design list, View mode tile grid,
+// picker modal) so the ID is always one hover/click away. A
+// transient "Copied!" tooltip swap confirms the copy; falls back to
+// document.execCommand for browsers / contexts without async
+// clipboard access (insecure HTTP, older Firefox).
+function IdCopyButton({ id }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    copyToClipboard(id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <Tooltip label={copied ? 'Copied!' : id} align="bottom">
+      <button
+        type="button"
+        className="info-button id-copy-button"
+        onClick={handleClick}
+        aria-label="Copy dashboard ID"
+      >
+        <Copy size={16} />
+      </button>
+    </Tooltip>
+  );
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    return;
+  }
+  fallbackCopy(text);
+}
+
+function fallbackCopy(text) {
+  const el = document.createElement('textarea');
+  el.value = text;
+  // Position off-screen so the focus shift isn't visible.
+  el.style.position = 'fixed';
+  el.style.top = '-1000px';
+  el.style.left = '-1000px';
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  try { document.execCommand('copy'); } catch { /* ignore */ }
+  document.body.removeChild(el);
 }
 
 export default DashboardTile;

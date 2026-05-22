@@ -1309,6 +1309,16 @@ class APIClient {
     return this.request(`/api/tsstore-alerts/rules/${alertId}?${q}`, { method: 'DELETE' });
   }
 
+  // Full alert record from the owning tsstore — status + transport
+  // block (webhook/mqtt) with rule fields, restart policy, max
+  // replay, etc. Used by the read-only rule-details page. ts-store
+  // already redacts secret-bearing headers and the MQTT password
+  // before returning.
+  async getTSStoreAlertDetail(connectionId, alertId) {
+    const q = new URLSearchParams({ connection_id: connectionId }).toString();
+    return this.request(`/api/tsstore-alerts/rules/${alertId}?${q}`);
+  }
+
   // Create a webhook alert rule on a tsstore connection. The server
   // mints a per-connection URL secret + builds a webhook URL pointing
   // at this dashboard's own receiver, then POSTs the rule to the

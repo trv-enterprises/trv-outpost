@@ -11,6 +11,7 @@ import {
   OverflowMenuItem,
   Button,
   Dropdown,
+  Tag,
 } from '@carbon/react';
 import { Dashboard, StarFilled, Reset } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -20,6 +21,7 @@ import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
+import { syncKioskFromUrl, getKioskDashboardIds, isKioskActive } from '../utils/kioskMode';
 import './DashboardTileViewPage.scss';
 
 /**
@@ -40,15 +42,27 @@ function DashboardTileViewPage() {
   const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  // Filters persist across navigation within the same browser tab via
+  // sessionStorage. Filters are session-y (not user-config-y) — fresh
+  // tab / new browser = clean slate. Survives clicking into a viewer
+  // and back, and survives a tab reload.
+  const persistedFilters = (() => {
+    try {
+      const raw = sessionStorage.getItem('tile:filters');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  })();
+
+  const [searchTerm, setSearchTerm] = useState(persistedFilters.search || '');
   // Multi-select filters mirroring the design-mode dashboard list
   // (DashboardsListPage). Empty arrays = "show all"; selecting any
-  // value narrows the visible tiles. View mode keeps these in
-  // component state only — no session/user-config persistence yet.
-  const [namespaceFilter, setNamespaceFilter] = useState([]);
-  const [tagFilter, setTagFilter] = useState([]);
+  // value narrows the visible tiles.
+  const [namespaceFilter, setNamespaceFilter] = useState(Array.isArray(persistedFilters.namespaces) ? persistedFilters.namespaces : []);
+  const [tagFilter, setTagFilter] = useState(Array.isArray(persistedFilters.tags) ? persistedFilters.tags : []);
   // Single-select connection filter. 'all' = no filter.
-  const [connectionFilter, setConnectionFilter] = useState('all');
+  const [connectionFilter, setConnectionFilter] = useState(persistedFilters.connection || 'all');
   // Sort mode for the tile grid. 'manual' means honour the user's
   // drag-reorder; any other value disables drag and applies a key+dir
   // sort. Defaults to 'manual' for backwards-compat (existing users with
@@ -83,10 +97,46 @@ function DashboardTileViewPage() {
   // through.
   const droppedRef = useRef({ id: null, expiresAt: 0 });
 
+  // Kiosk mode: if the URL carries `?dashboards=id1,id2,id3`, lock
+  // the tile picker to that set in that order. The util consumes the
+  // query string and caches to sessionStorage so reloads keep the
+  // lock. Read synchronously on the initial render so the first paint
+  // already reflects the kiosk constraint instead of flashing the
+  // unfiltered grid first.
+  const [kioskIds] = useState(() => syncKioskFromUrl() || getKioskDashboardIds());
+  const kiosk = isKioskActive();
+
   useEffect(() => {
     fetchData();
     fetchUserConfig();
   }, []);
+
+  // Persist filter state to sessionStorage so it survives a
+  // round-trip through the viewer (or a tab reload). Clears the
+  // entry entirely when no filter is active — keeps the storage
+  // honest about "no filter" rather than a stale `{}`.
+  useEffect(() => {
+    const hasAny = (
+      searchTerm ||
+      namespaceFilter.length > 0 ||
+      tagFilter.length > 0 ||
+      connectionFilter !== 'all'
+    );
+    try {
+      if (hasAny) {
+        sessionStorage.setItem('tile:filters', JSON.stringify({
+          search: searchTerm,
+          namespaces: namespaceFilter,
+          tags: tagFilter,
+          connection: connectionFilter,
+        }));
+      } else {
+        sessionStorage.removeItem('tile:filters');
+      }
+    } catch {
+      // quota / disabled — non-fatal, filters just don't survive.
+    }
+  }, [searchTerm, namespaceFilter, tagFilter, connectionFilter]);
 
   const fetchUserConfig = async () => {
     const userGuid = apiClient.getCurrentUserGuid();
@@ -198,7 +248,30 @@ function DashboardTileViewPage() {
       droppedRef.current = { id: null, expiresAt: 0 };
       return;
     }
-    navigate(`/view/dashboards/${dashboardId}`);
+    // Carry the currently-filtered dashboard ID list into the viewer so
+    // its prev/next arrows walk the same set the user just saw.
+    // Filters are session-y, not preference-y, so they ride in route
+    // state (cleared on direct URL / new tab) rather than user config.
+    // The viewer also caches into sessionStorage so a tab reload keeps
+    // the filtered list intact.
+    //
+    // We pass the resolved ID list (not the criteria) so the viewer
+    // doesn't have to re-run filter logic that depends on components
+    // + connections data it'd otherwise have no reason to fetch.
+    const filteredIds = filteredDashboards.map(d => d.id);
+    const allIds = dashboards.map(d => d.id);
+    const isFiltered = filteredIds.length !== allIds.length;
+    if (isFiltered) {
+      navigate(`/view/dashboards/${dashboardId}`, {
+        state: { filteredDashboardIds: filteredIds },
+      });
+    } else {
+      // Unfiltered click — clear any stale viewer-side filter cache so
+      // the viewer's prev/next don't accidentally inherit a previous
+      // session's filter via sessionStorage.
+      try { sessionStorage.removeItem('viewer:filter'); } catch { /* no-op */ }
+      navigate(`/view/dashboards/${dashboardId}`);
+    }
   };
 
   // --- Drag-and-drop tile reorder ---
@@ -281,6 +354,16 @@ function DashboardTileViewPage() {
   // selection, tags are OR (any tag matches), search is substring on
   // name or description.
   const filteredDashboards = useMemo(() => {
+    // Kiosk mode short-circuit: lock to the kiosk IDs in the kiosk
+    // order. User filters and saved sort/manual are ignored — the
+    // operator's URL manifest is the source of truth for what this
+    // session is allowed to see and in what order.
+    if (kioskIds && kioskIds.length > 0) {
+      const allowed = new Set(kioskIds);
+      const filtered = dashboards.filter(d => allowed.has(d.id));
+      return orderDashboardsForViewer(filtered, kioskIds, { key: 'manual', direction: 'asc' });
+    }
+
     let result = [...dashboards];
 
     if (namespaceFilter.length > 0) {
@@ -329,7 +412,7 @@ function DashboardTileViewPage() {
     // Mode tile page and the dashboard viewer's prev/next arrows
     // walk dashboards in the same sequence.
     return orderDashboardsForViewer(result, tileOrder, { key: sortKey, direction: sortDirection });
-  }, [dashboards, namespaceFilter, tagFilter, connectionFilter, charts, searchTerm, tileOrder, sortKey, sortDirection]);
+  }, [kioskIds, dashboards, namespaceFilter, tagFilter, connectionFilter, charts, searchTerm, tileOrder, sortKey, sortDirection]);
 
   if (loading) {
     return (
@@ -356,77 +439,88 @@ function DashboardTileViewPage() {
         </div>
       </div>
       <div className="header-toolbar">
-        <div className="header-search">
-          <Search
-            size="lg"
-            placeholder="Search dashboards..."
-            labelText="Search"
-            closeButtonLabelText="Clear search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <NamespaceFilter
-          id="namespace-filter-view-dashboards"
-          selected={namespaceFilter}
-          onChange={setNamespaceFilter}
-        />
-        <TagFilter
-          entityType="dashboards"
-          selected={tagFilter}
-          onChange={setTagFilter}
-        />
-        <Dropdown
-          id="connection-filter-view-dashboards"
-          className="connection-filter-dropdown"
-          label="Filter by connection"
-          titleText=""
-          items={[
-            { id: 'all', text: 'All Connections' },
-            ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
-          ]}
-          itemToString={(item) => item?.text || ''}
-          selectedItem={{ id: connectionFilter, text: connectionFilter === 'all' ? 'All Connections' : (connections[connectionFilter] || 'Unknown') }}
-          onChange={({ selectedItem }) => {
-            setConnectionFilter(selectedItem?.id || 'all');
-          }}
-          size="md"
-        />
-        <ResetFiltersButton
-          active={
-            !!searchTerm ||
-            namespaceFilter.length > 0 ||
-            tagFilter.length > 0 ||
-            connectionFilter !== 'all'
-          }
-          onReset={() => {
-            setSearchTerm('');
-            setNamespaceFilter([]);
-            setTagFilter([]);
-            setConnectionFilter('all');
-          }}
-        />
-        <SortMenu
-          sortKey={sortKey}
-          sortDirection={sortDirection}
-          onChange={(k, d) => persistSort(k, d)}
-          options={[
-            { key: 'manual', label: 'Manual (drag to reorder)' },
-            { key: 'name', label: 'Name', defaultDir: 'asc' },
-            { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
-            { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
-          ]}
-        />
-        {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
-          <Button
-            kind="ghost"
-            size="sm"
-            renderIcon={Reset}
-            onClick={handleResetOrder}
-            title="Discard your manual tile order and revert to most-recently-updated first"
-          >
-            Reset manual order
-          </Button>
+        {kiosk ? (
+          // Kiosk mode: filters + sort are locked by the URL manifest;
+          // hide the controls and surface a single badge so the user
+          // knows why the picker is constrained.
+          <Tag type="purple" size="md" title={`Locked to ${kioskIds.length} dashboard${kioskIds.length === 1 ? '' : 's'} via ?dashboards= URL`}>
+            Kiosk mode — {kioskIds.length} dashboard{kioskIds.length === 1 ? '' : 's'}
+          </Tag>
+        ) : (
+          <>
+            <div className="header-search">
+              <Search
+                size="lg"
+                placeholder="Search dashboards..."
+                labelText="Search"
+                closeButtonLabelText="Clear search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <NamespaceFilter
+              id="namespace-filter-view-dashboards"
+              selected={namespaceFilter}
+              onChange={setNamespaceFilter}
+            />
+            <TagFilter
+              entityType="dashboards"
+              selected={tagFilter}
+              onChange={setTagFilter}
+            />
+            <Dropdown
+              id="connection-filter-view-dashboards"
+              className="connection-filter-dropdown"
+              label="Filter by connection"
+              titleText=""
+              items={[
+                { id: 'all', text: 'All Connections' },
+                ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
+              ]}
+              itemToString={(item) => item?.text || ''}
+              selectedItem={{ id: connectionFilter, text: connectionFilter === 'all' ? 'All Connections' : (connections[connectionFilter] || 'Unknown') }}
+              onChange={({ selectedItem }) => {
+                setConnectionFilter(selectedItem?.id || 'all');
+              }}
+              size="md"
+            />
+            <ResetFiltersButton
+              active={
+                !!searchTerm ||
+                namespaceFilter.length > 0 ||
+                tagFilter.length > 0 ||
+                connectionFilter !== 'all'
+              }
+              onReset={() => {
+                setSearchTerm('');
+                setNamespaceFilter([]);
+                setTagFilter([]);
+                setConnectionFilter('all');
+              }}
+            />
+            <SortMenu
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onChange={(k, d) => persistSort(k, d)}
+              options={[
+                { key: 'manual', label: 'Manual (drag to reorder)' },
+                { key: 'name', label: 'Name', defaultDir: 'asc' },
+                { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
+                { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
+              ]}
+            />
+            {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
+              <Button
+                kind="ghost"
+                size="sm"
+                renderIcon={Reset}
+                onClick={handleResetOrder}
+                title="Discard your manual tile order and revert to most-recently-updated first"
+              >
+                Reset manual order
+              </Button>
+            )}
+          </>
         )}
       </div>
 
@@ -443,7 +537,9 @@ function DashboardTileViewPage() {
           {filteredDashboards.map((dashboard) => {
             const dropSide = dragOver?.id === dashboard.id ? dragOver.side : null;
             const isDefault = defaultDashboardId === dashboard.id;
-            const isManual = sortKey === 'manual';
+            // Drag-reorder is only meaningful in manual sort and
+            // disabled in kiosk mode (URL manifest owns the order).
+            const isManual = sortKey === 'manual' && !kiosk;
             return (
               <DashboardTile
                 key={dashboard.id}

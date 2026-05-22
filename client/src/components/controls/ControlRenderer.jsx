@@ -14,8 +14,15 @@ import './controls.scss';
  * Dispatcher component that renders the appropriate control type
  * based on the control_config.control_type field.
  * Components self-register via controlRegistry — no manual wiring needed.
+ *
+ * `canControl` gates whether the current user is allowed to fire
+ * controls at all (server-side capability `control`). When false,
+ * every rendered control is forced read-only regardless of its
+ * type's intrinsic canWrite — the user can still SEE the dashboard
+ * but can't interact. Defaults true so callers that haven't been
+ * upgraded keep working as before.
  */
-function ControlRenderer({ control, onSuccess, onError }) {
+function ControlRenderer({ control, canControl = true, onSuccess, onError }) {
   const controlType = control.control_config?.control_type;
 
   if (!controlType) {
@@ -44,7 +51,11 @@ function ControlRenderer({ control, onSuccess, onError }) {
   // than showing nothing.
   const title = control.title || control.name;
   const typeInfo = CONTROL_TYPE_INFO[controlType];
-  const readOnly = typeInfo && !typeInfo.canWrite;
+  // A control is read-only when EITHER its type doesn't write (e.g.
+  // sensor/status displays) OR the current user lacks the `control`
+  // capability. Capability gating is the structural gate that lets a
+  // kiosk render dashboards safely without exposing the action surface.
+  const readOnly = (typeInfo && !typeInfo.canWrite) || !canControl;
   const isTile = controlType.startsWith('tile_');
 
   return (
@@ -72,6 +83,7 @@ ControlRenderer.propTypes = {
       ui_config: PropTypes.object
     })
   }).isRequired,
+  canControl: PropTypes.bool,
   onSuccess: PropTypes.func,
   onError: PropTypes.func
 };

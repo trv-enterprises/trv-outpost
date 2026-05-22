@@ -6,8 +6,8 @@
 
 .notification-panel {
   position: fixed;
-  top: 48px; // Below header
-  right: 96px; // Align under bell icon (user menu + bell offset)
+  top: 48px; // Below App header
+  right: 96px; // Align under App-header bell (user menu + bell offset)
   width: 360px;
   max-height: 420px;
   background-color: var(--cds-layer-02, #393939);
@@ -17,6 +17,20 @@
   z-index: 8100;
   display: flex;
   flex-direction: column;
+
+  // Fullscreen variant — the App header is hidden, the dashboard's
+  // own toolbar (.viewer-toolbar, height 56px) is the visible
+  // navigation strip and hosts a bell of its own. The
+  // dashboard-viewer container creates a z-index:9999 stacking
+  // context in fullscreen, so the panel must outrank that AND
+  // anchor under the viewer toolbar rather than the gone App
+  // header. The right-edge offset matches the toolbar's
+  // $spacing-05 padding so the panel sits flush with the bell.
+  &--fullscreen {
+    top: 56px;
+    right: 16px;
+    z-index: 10000;
+  }
 
   &__header {
     display: flex;

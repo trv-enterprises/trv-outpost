@@ -67,6 +67,22 @@ import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
 import { useModeGuard } from '../context/ModeGuardContext';
+import { RefreshableComponentsProvider, useRefreshableComponentsContext } from '../context/RefreshableComponentsContext';
+import { syncKioskFromUrl, getKioskDashboardIds } from '../utils/kioskMode';
+
+// Module-scope helper so the toolbar's RefreshControls subcomponent
+// (also module-scope) can see it. Pure — no closure over component
+// state needed.
+function formatTime(date) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// Platform-aware label for the Alt/Option modifier shown in the
+// prev/next dashboard tooltips. macOS users expect ⌥, everyone else
+// expects "Alt". Resolved once at module load via userAgent — good
+// enough for a tooltip; we're not gating behavior on it.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+const ALT_KEY_LABEL = IS_MAC ? '⌥' : 'Alt';
 import { useNotifications } from '../context/NotificationContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize, MODES } from '../config/layoutConfig';
@@ -116,7 +132,7 @@ const FitModeStretchIcon = ({ size = 20, ...rest }) => (
  * - Real-time component rendering
  * - Edit mode: drag/resize panels over live components
  */
-function DashboardViewerPage({ canDesign = false }) {
+function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -517,15 +533,67 @@ function DashboardViewerPage({ canDesign = false }) {
   // manual drag-and-drop order
   // (app_config.user.<guid>.settings.dashboard_tile_order).
   //
+  // Honor the tile page's active filters: when the user navigates
+  // here from a filtered tile page, the filtered ID list arrives in
+  // route state. We cache it in sessionStorage (keyed `viewer:filter`)
+  // so a tab reload keeps the filter; a fresh tab / direct URL gets
+  // unfiltered (which is the right default for kiosks). Cleared
+  // explicitly when route state explicitly says { clearFilter: true }.
+  //
   // Reruns on tab focus / visibility-change so sort or manual-order
   // changes the user makes on the tile page take effect the next
   // time they return to the viewer (no cross-component event needed).
   useEffect(() => {
     let cancelled = false;
+
+    // Kiosk mode trumps everything: a kiosk URL payload locks the
+    // dashboard set + order. URL is consumed (query string cleaned)
+    // and cached so reloads without the query string keep working.
+    const kioskIds = syncKioskFromUrl() || getKioskDashboardIds();
+
+    // For non-kiosk sessions: read filter from route state first
+    // (this navigation); fall back to sessionStorage (page reload of
+    // an already-filtered view).
+    let filteredIds = null;
+    if (!kioskIds) {
+      const stateIds = location.state?.filteredDashboardIds;
+      if (Array.isArray(stateIds)) {
+        filteredIds = stateIds;
+        try { sessionStorage.setItem('viewer:filter', JSON.stringify(stateIds)); } catch { /* quota / disabled */ }
+      } else {
+        try {
+          const cached = sessionStorage.getItem('viewer:filter');
+          const parsed = cached ? JSON.parse(cached) : null;
+          if (Array.isArray(parsed)) filteredIds = parsed;
+        } catch { /* malformed cache — ignore */ }
+      }
+    }
+
     const fetchDashboardList = async () => {
       try {
         const data = await apiClient.getDashboards();
-        const dashboards = data.dashboards || [];
+        let dashboards = data.dashboards || [];
+
+        if (kioskIds && kioskIds.length > 0) {
+          // Kiosk mode: lock to the kiosk set in the kiosk order.
+          // Both filter AND order come from the URL — the operator's
+          // manifest wins over any saved user preference.
+          const allowed = new Set(kioskIds);
+          const filtered = dashboards.filter(d => allowed.has(d.id));
+          // orderDashboardsForViewer({key:'manual'}) honors the
+          // explicit tileOrder verbatim, which is what we want.
+          if (!cancelled) {
+            setDashboardList(
+              orderDashboardsForViewer(filtered, kioskIds, { key: 'manual', direction: 'asc' }),
+            );
+          }
+          return;
+        }
+
+        if (filteredIds && filteredIds.length > 0) {
+          const allowed = new Set(filteredIds);
+          dashboards = dashboards.filter(d => allowed.has(d.id));
+        }
         let tileOrder = null;
         let tileSort = null;
         const userGuid = apiClient.getCurrentUserGuid();
@@ -560,7 +628,7 @@ function DashboardViewerPage({ canDesign = false }) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', fetchDashboardList);
     };
-  }, []);
+  }, [location.state]);
 
   // Load the deployment-wide dashboard config-refresh cadence on mount.
   // The setting is stored under app_config (system tier) — see
@@ -832,9 +900,6 @@ function DashboardViewerPage({ canDesign = false }) {
     }
   };
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
 
   // Save thumbnail — captures the live grid at native resolution
   const [savingThumbnail, setSavingThumbnail] = useState(false);
@@ -1495,6 +1560,7 @@ function DashboardViewerPage({ canDesign = false }) {
   }
 
   return (
+    <RefreshableComponentsProvider>
     <div className={`dashboard-viewer-page ${isFullscreen ? 'fullscreen' : ''} ${isEditMode ? 'edit-mode-active' : ''}`}>
       {/* Header toolbar */}
       <div className="viewer-toolbar">
@@ -1538,7 +1604,7 @@ function DashboardViewerPage({ canDesign = false }) {
               <IconButton
                 kind="ghost"
                 size="sm"
-                label="Previous dashboard"
+                label={`Previous dashboard  ${ALT_KEY_LABEL} ←`}
                 align="bottom"
                 onClick={goToPrevDashboard}
                 disabled={!canGoPrev}
@@ -1558,7 +1624,7 @@ function DashboardViewerPage({ canDesign = false }) {
               <IconButton
                 kind="ghost"
                 size="sm"
-                label="Next dashboard"
+                label={`Next dashboard  ${ALT_KEY_LABEL} →`}
                 align="bottom"
                 onClick={goToNextDashboard}
                 disabled={!canGoNext}
@@ -1626,10 +1692,7 @@ function DashboardViewerPage({ canDesign = false }) {
 
         <div className="toolbar-right">
           {!isEditMode && dashboard?.settings?.refresh_interval > 0 && (
-            <Tag type="green" size="sm">
-              <Time size={12} />
-              Data refresh: {dashboard.settings.refresh_interval}s
-            </Tag>
+            <RefreshIntervalPill intervalSec={dashboard.settings.refresh_interval} />
           )}
           {isEditMode ? (
             <>
@@ -1662,18 +1725,11 @@ function DashboardViewerPage({ canDesign = false }) {
             </>
           ) : (
             <>
-              <span className="last-refresh">
-                Last refresh: {formatTime(lastRefresh)}
-              </span>
-              <IconButton
-                kind="ghost"
-                label="Refresh"
-                align="bottom"
-                onClick={handleManualRefresh}
-                disabled={loading}
-              >
-                <Renew size={20} className={loading ? 'spinning' : ''} />
-              </IconButton>
+              <RefreshControls
+                lastRefresh={lastRefresh}
+                loading={loading}
+                onRefresh={handleManualRefresh}
+              />
               {canDesign && dashboard?.id && !isNewDashboard && (
                 <IconButton
                   kind="ghost"
@@ -1949,7 +2005,7 @@ function DashboardViewerPage({ canDesign = false }) {
                     <>
                       {chart.component_type === 'control' ? (
                         <div className="component-wrapper control-wrapper" onDoubleClick={(e) => e.stopPropagation()}>
-                          <ControlRenderer control={chart} />
+                          <ControlRenderer control={chart} canControl={canControl} />
                         </div>
                       ) : chart.component_type === 'display' ? (
                         <div className="component-wrapper display-wrapper">
@@ -1958,7 +2014,7 @@ function DashboardViewerPage({ canDesign = false }) {
                           ) : chart.display_config?.display_type === 'frigate_camera' ? (
                             <FrigateCameraViewer config={chart.display_config} dashboardCommand={dashboardCommand} />
                           ) : chart.display_config?.display_type === 'frigate_alerts' ? (
-                            <FrigateAlertsGrid config={chart.display_config} dashboardCommand={dashboardCommand} />
+                            <FrigateAlertsGrid config={chart.display_config} dashboardCommand={dashboardCommand} canControl={canControl} refreshTick={refreshTick} />
                           ) : (
                             <div className="display-empty">Unknown display type</div>
                           )}
@@ -2219,6 +2275,49 @@ function DashboardViewerPage({ canDesign = false }) {
         </Modal>
       )}
     </div>
+    </RefreshableComponentsProvider>
+  );
+}
+
+// "Data refresh: 10s" green pill — surfaces the dashboard's configured
+// polling cadence. Gated on the same context as RefreshControls so a
+// streaming-only dashboard doesn't see a refresh-interval label that
+// applies to nothing currently rendered.
+function RefreshIntervalPill({ intervalSec }) {
+  const { hasRefreshable } = useRefreshableComponentsContext();
+  if (!hasRefreshable) return null;
+  return (
+    <Tag type="green" size="sm">
+      <Time size={12} />
+      Data refresh: {intervalSec}s
+    </Tag>
+  );
+}
+
+// Toolbar refresh controls — extracted so we can read the
+// RefreshableComponents context, which only resolves inside the
+// provider that wraps the rendered viewer. Hides the button (and
+// the "Last refresh" timestamp) when no mounted component on the
+// dashboard would actually do anything with a refresh — streaming-
+// only dashboards see no toolbar noise.
+function RefreshControls({ lastRefresh, loading, onRefresh }) {
+  const { hasRefreshable } = useRefreshableComponentsContext();
+  if (!hasRefreshable) return null;
+  return (
+    <>
+      <span className="last-refresh">
+        Last refresh: {formatTime(lastRefresh)}
+      </span>
+      <IconButton
+        kind="ghost"
+        label="Refresh"
+        align="bottom"
+        onClick={onRefresh}
+        disabled={loading}
+      >
+        <Renew size={20} className={loading ? 'spinning' : ''} />
+      </IconButton>
+    </>
   );
 }
 

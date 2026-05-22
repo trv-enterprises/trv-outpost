@@ -4677,7 +4677,7 @@
     },
     {
       "name": "TSStoreAlerts",
-      "description": "tsstorealerts endpoints (4).",
+      "description": "tsstorealerts endpoints (5).",
       "item": [
         {
           "name": "Aggregated list of every ts-store alert rule across every tsstore connection",
@@ -4707,7 +4707,7 @@
           "response": []
         },
         {
-          "name": "Create a webhook alert rule on a tsstore connection",
+          "name": "Create an alert rule on a tsstore connection",
           "request": {
             "method": "POST",
             "header": [
@@ -4733,10 +4733,10 @@
                 "rules"
               ]
             },
-            "description": "Create a webhook alert rule on a tsstore connection\n\n\nResponses: 201, 400, 500",
+            "description": "Create an alert rule on a tsstore connection\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"poll_interval\": \"\",\n  \"rule_name\": \"\",\n  \"timeout\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
+              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"max_replay\": \"\",\n  \"mqtt_qos\": 0,\n  \"mqtt_topic\": \"\",\n  \"poll_interval\": \"\",\n  \"restart_policy\": \"\",\n  \"rule_name\": \"\",\n  \"sink_connection_id\": \"\",\n  \"timeout\": \"\",\n  \"type\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4786,6 +4786,49 @@
               ]
             },
             "description": "Delete a ts-store alert (and all its rules) on a tsstore connection\n\n\nResponses: 204, 400, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get the full detail of a single ts-store alert on a tsstore connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tsstore-alerts/rules/{alert_id}?connection_id=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tsstore-alerts",
+                "rules",
+                ":alert_id"
+              ],
+              "query": [
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "TSStore connection ID",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "alert_id",
+                  "value": "",
+                  "description": "Alert ID"
+                }
+              ]
+            },
+            "description": "Get the full detail of a single ts-store alert on a tsstore connection\n\n\nResponses: 200, 400, 500"
           },
           "response": []
         },

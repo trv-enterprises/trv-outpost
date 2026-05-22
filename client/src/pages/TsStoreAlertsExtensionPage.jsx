@@ -279,15 +279,13 @@ function TsStoreAlertsExtensionPage() {
                             )}
                           </TableCell>
                           <TableCell className="actions-cell">
-                            {r.dashboard_id && dash && (
-                              <IconButton
-                                kind="ghost"
-                                label="Open dashboard"
-                                onClick={() => navigate(`/view/dashboards/${r.dashboard_id}`)}
-                              >
-                                <View />
-                              </IconButton>
-                            )}
+                            <IconButton
+                              kind="ghost"
+                              label="View rule details"
+                              onClick={() => navigate(`/design/extensions/tsstore-alerts/${r.connection_id}/${r.alert_id}`)}
+                            >
+                              <View />
+                            </IconButton>
                             <IconButton
                               kind="ghost"
                               label="Delete alert"

@@ -130,26 +130,33 @@
     // below the chips.
   }
 
-  // Meta block: 4 chip-rows tall on EVERY tile regardless of how
-  // many descriptive chips a dashboard actually has. The bottom row
-  // is the always-present anchor (comps + conns + actions); rows
-  // above it hold descriptive chips, filled from the top with
-  // whatever the dashboard has. Tiles with no descriptive chips
-  // show empty space above the anchor; tiles with many fill in.
-  // Tile heights stay constant across the grid; chip-count variation
-  // changes how filled the reserve looks, not how tall the tile is.
+  // Meta block: 3 descriptive chip-rows + 1 anchor row, fixed height
+  // on EVERY tile regardless of how many descriptive chips a dashboard
+  // actually has. Anchor row (comps + conns + actions) is always
+  // present so tile bottoms align across the grid; descriptive rows
+  // above it hold namespace + refresh-cadence + user tags, filling
+  // from the top.
   //
-  // Anything that would wrap to a 5th line gets clipped — by design.
+  // Anything that would wrap past row 3 gets clipped — by design.
   // 3 rows is comfortably enough for any reasonable tag count; if a
   // user wants to see all their tags they can open the dashboard
   // detail view.
-  $tile-chip-row-height: 1.75rem; // ~28px = Carbon sm tag (~24px) + ~2px gap on each side
+  //
+  // Layout: descriptive container is exactly 3 rows tall (clips
+  // overflow); anchor row sits directly below it with a $spacing-02
+  // gap so spacing between row 3 and the anchor matches the natural
+  // wrap-gap between rows 1/2 inside the descriptive container.
+  // Carbon sm tag renders shorter than its declared 18px height in
+  // practice — the visible row pitch (tag + wrap gap) is ~26px and a
+  // bare bottom row only adds about 10px of visible body, so three
+  // rows fit in (26 * 2) + 10 = 62px. Tuned against the live tile;
+  // a value derived purely from tag-height + gap leaves slack that
+  // lets a fourth row peek through.
+  $tile-chip-3-rows: calc((26px * 2) + 10px); // 62px
   .tile-meta-block {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    height: calc(#{$tile-chip-row-height} * 4);
-    overflow: hidden;
+    gap: spacing.$spacing-02;
   }
 
   .tile-header {
@@ -234,12 +241,16 @@
     }
 
     // Descriptive chips (namespace, refresh-interval, user tags).
-    // Sits at the top of the reserved 4-row meta-area; the meta-block's
-    // space-between justification handles the gap to the anchor row
-    // without a fixed margin (which would have stacked on top of the
-    // reserved height and made tiles taller than intended).
+    // Pinned to exactly 3 rows tall: tiles with 0–3 rows of tags
+    // reserve the same vertical space (so tile bottoms align across
+    // the grid), and tiles with more tags clip the overflow. The
+    // wrap-row gap inside this container ($spacing-02) is matched by
+    // the meta-block's gap below, so the visual rhythm between rows
+    // 1↔2, 2↔3, and 3↔anchor is identical.
     &--descriptive {
-      // No margin-bottom — meta-block handles spacing.
+      height: #{$tile-chip-3-rows};
+      align-content: flex-start;
+      overflow: hidden;
     }
 
     // Anchor row chips (comps, conns) — always-present so tile
@@ -252,7 +263,7 @@
   .tile-footer {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: spacing.$spacing-03;
   }
 

@@ -241,23 +241,20 @@ type tsStoreAlertStatus struct {
 	State         string `json:"state"`
 }
 
-// tsStoreAlertDetail mirrors GET /api/stores/:store/alerts/:id —
-// status plus per-transport config. We only need the rule list,
-// which is on every transport variant.
+// tsStoreAlertDetail mirrors GET /api/stores/:store/alerts/:id under
+// ts-store's v2 API: one rule per alert, with the rule fields living
+// inside the transport block (webhook/ws/mqtt). The top-level
+// `rule_name` is also exposed as a Status convenience but we read
+// condition/cooldown/external_ref from the transport block since
+// that's where they're authoritative.
 type tsStoreAlertDetail struct {
-	Status  tsStoreAlertStatus `json:"-"` // populated from the parent list call
-	Webhook *struct {
-		Rules []tsStoreRule `json:"rules"`
-	} `json:"webhook,omitempty"`
-	WS *struct {
-		Rules []tsStoreRule `json:"rules"`
-	} `json:"ws,omitempty"`
-	MQTT *struct {
-		Rules []tsStoreRule `json:"rules"`
-	} `json:"mqtt,omitempty"`
+	RuleName string             `json:"rule_name"`
+	Webhook  *tsStoreRuleConfig `json:"webhook,omitempty"`
+	WS       *tsStoreRuleConfig `json:"ws,omitempty"`
+	MQTT     *tsStoreRuleConfig `json:"mqtt,omitempty"`
 }
 
-type tsStoreRule struct {
+type tsStoreRuleConfig struct {
 	Name        string `json:"name"`
 	Condition   string `json:"condition"`
 	Cooldown    string `json:"cooldown,omitempty"`
@@ -292,36 +289,83 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 			continue
 		}
 
-		var rules []tsStoreRule
+		var rule *tsStoreRuleConfig
 		switch {
 		case detail.Webhook != nil:
-			rules = detail.Webhook.Rules
+			rule = detail.Webhook
 		case detail.WS != nil:
-			rules = detail.WS.Rules
+			rule = detail.WS
 		case detail.MQTT != nil:
-			rules = detail.MQTT.Rules
+			rule = detail.MQTT
+		}
+		if rule == nil {
+			// Alert resource with no transport block — shouldn't
+			// happen, but skip rather than emit an empty row.
+			continue
 		}
 
-		for _, r := range rules {
-			out = append(out, TSStoreAggregatedRule{
-				ConnectionID:   conn.ID,
-				ConnectionName: conn.Name,
-				Namespace:      conn.Namespace,
-				StoreName:      cfg.StoreName,
-				AlertID:        st.ID,
-				AlertType:      st.Type,
-				AlertTarget:    st.Target,
-				RuleName:       r.Name,
-				Condition:      r.Condition,
-				Cooldown:       r.Cooldown,
-				ExternalRef:    r.ExternalRef,
-				DashboardID:    decodeDashboardID(r.ExternalRef),
-				State:          st.State,
-				AlertsFired:    st.AlertsFired,
-			})
+		name := rule.Name
+		if name == "" {
+			name = detail.RuleName
 		}
+		out = append(out, TSStoreAggregatedRule{
+			ConnectionID:   conn.ID,
+			ConnectionName: conn.Name,
+			Namespace:      conn.Namespace,
+			StoreName:      cfg.StoreName,
+			AlertID:        st.ID,
+			AlertType:      st.Type,
+			AlertTarget:    st.Target,
+			RuleName:       name,
+			Condition:      rule.Condition,
+			Cooldown:       rule.Cooldown,
+			ExternalRef:    rule.ExternalRef,
+			DashboardID:    decodeDashboardID(rule.ExternalRef),
+			State:          st.State,
+			AlertsFired:    st.AlertsFired,
+		})
 	}
 	return out, nil
+}
+
+// GetAlertDetail fetches the full alert record from the owning
+// tsstore (status + transport block with rule fields). The
+// response is passed through verbatim — ts-store already redacts
+// secret-bearing headers and the MQTT password — so the dashboard
+// doesn't have to mirror the full schema. Used by the read-only
+// rule-details page.
+func (s *TSStoreAlertRulesService) GetAlertDetail(ctx context.Context, connectionID, alertID string) (json.RawMessage, error) {
+	conn, err := s.connections.GetConnection(ctx, connectionID)
+	if err != nil {
+		return nil, fmt.Errorf("get connection: %w", err)
+	}
+	if conn.Type != models.ConnectionTypeTSStore || conn.Config.TSStore == nil {
+		return nil, fmt.Errorf("connection %s is not a tsstore connection", connectionID)
+	}
+	cfg := conn.Config.TSStore
+	client := clientFor(cfg)
+	url := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), cfg.StoreName, alertID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.APIKey != "" {
+		req.Header.Set("X-API-Key", cfg.APIKey)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("ts-store returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return body, nil
 }
 
 // DeleteAlert deletes an entire alert resource on the underlying
@@ -415,7 +459,7 @@ type ProbeConnectionResult struct {
 // connection's stored API key won't authenticate. Uses the same
 // /api/stores/:store/alerts endpoint the aggregator uses (one
 // round-trip, no per-alert detail), so a success here is a strong
-// signal that the CreateWebhookRule POST will also be authorised.
+// signal that the CreateAlert POST will also be authorised.
 // Never returns an error itself — every failure surfaces as
 // ProbeConnectionResult fields so the handler can return 200 with
 // a structured result.
@@ -449,45 +493,65 @@ func (s *TSStoreAlertRulesService) ProbeConnectionAuth(ctx context.Context, conn
 	return ProbeConnectionResult{OK: false, HTTPStatus: resp.StatusCode}
 }
 
-// CreateWebhookRuleRequest is the inbound wire shape for the rule
-// wizard. ts-store has three transports (webhook/ws/mqtt); v1 of
-// the wizard only handles webhook because that's the path the
-// dashboard's own receiver consumes. WS and MQTT can be added when
-// there's a concrete use case.
-type CreateWebhookRuleRequest struct {
-	ConnectionID string `json:"connection_id" binding:"required"`
-	RuleName     string `json:"rule_name" binding:"required"`
-	Condition    string `json:"condition" binding:"required"`
-	Cooldown     string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
-	DashboardID  string `json:"dashboard_id,omitempty"` // optional bell deep-link target
-	PollInterval string `json:"poll_interval,omitempty"`
-	Timeout      string `json:"timeout,omitempty"`
-	// Optional override. If empty, we use the dashboard's own
-	// receiver and embed a fresh per-connection secret. If set, the
-	// caller takes responsibility for auth; we DO NOT issue a secret
-	// and the rule will deliver to whatever URL was provided.
+// CreateAlertRequest is the inbound wire shape for the rule wizard.
+// ts-store has three sink transports (webhook/ws/mqtt); the dashboard
+// exposes webhook and mqtt. WebSocket sink is intentionally omitted:
+// it has no topic mechanism so ts-store alerts would mix with any
+// telemetry on the same WS, and the dashboard already has cleaner
+// paths (webhook for bell, MQTT for fan-out to brokers). Revisit if
+// a concrete use case appears.
+//
+// Two connection IDs in play, decoupling rule ownership from sink:
+//   - ConnectionID — REQUIRED. Always a TSStore connection. Defines
+//     where the rule is registered (api endpoint + store).
+//   - SinkConnectionID — REQUIRED for type=mqtt. Always an MQTT
+//     connection. Provides broker creds; the topic lives on the rule
+//     (per ts-store's API), not on the connection.
+type CreateAlertRequest struct {
+	Type          string `json:"type" binding:"required"`          // "webhook" | "mqtt"
+	ConnectionID  string `json:"connection_id" binding:"required"` // TSStore connection (rule owner)
+	RuleName      string `json:"rule_name" binding:"required"`
+	Condition     string `json:"condition" binding:"required"`
+	Cooldown      string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
+	DashboardID   string `json:"dashboard_id,omitempty"` // optional bell deep-link target
+	PollInterval  string `json:"poll_interval,omitempty"`
+	RestartPolicy string `json:"restart_policy,omitempty"` // "now" (default) or "resume"
+	MaxReplay     string `json:"max_replay,omitempty"`     // e.g. "1h"; only valid when restart_policy=="resume"
+
+	// Webhook-sink fields (type=webhook):
+	// Timeout applies only to the webhook block. Optional override is
+	// for callers who want to deliver to an external URL instead of
+	// the dashboard's bell receiver (no secret minted in that case).
+	Timeout            string            `json:"timeout,omitempty"`
 	WebhookURLOverride string            `json:"webhook_url_override,omitempty"`
 	WebhookHeaders     map[string]string `json:"webhook_headers,omitempty"`
+
+	// MQTT-sink fields (type=mqtt):
+	// SinkConnectionID is an MQTT-type connection record from which
+	// broker_url + username + password are harvested. Topic + QoS
+	// come from the rule directly (ts-store models topic as a
+	// per-rule field; an MQTT connection record is just the broker).
+	SinkConnectionID string `json:"sink_connection_id,omitempty"`
+	MQTTTopic        string `json:"mqtt_topic,omitempty"`
+	MQTTQoS          *byte  `json:"mqtt_qos,omitempty"` // 0/1/2; nil = ts-store default (1)
 }
 
-// CreateWebhookRuleResponse echoes what ts-store returned plus the
-// generated webhook URL so the wizard can show what was registered.
-type CreateWebhookRuleResponse struct {
+// CreateAlertResponse echoes what ts-store returned plus any
+// dashboard-side artifacts the wizard wants to display (webhook URL
+// + secret id for the webhook type; empty for mqtt).
+type CreateAlertResponse struct {
 	AlertID    string `json:"alert_id"`
-	WebhookURL string `json:"webhook_url"`
+	WebhookURL string `json:"webhook_url,omitempty"`
 	SecretID   string `json:"secret_id,omitempty"`
 }
 
-// CreateWebhookRule mints a webhook receiver secret (unless the
-// caller supplied an override URL), POSTs a new webhook alert to
-// the underlying tsstore, and returns the resulting alert id. On
-// any failure after the secret is minted we DON'T roll back the
-// secret record — it's just a stale row, harmless until cleaned up
-// (the receiver path checks connection binding anyway).
-func (s *TSStoreAlertRulesService) CreateWebhookRule(ctx context.Context, req *CreateWebhookRuleRequest, callerGUID string) (*CreateWebhookRuleResponse, error) {
-	if s.webhookSecrets == nil {
-		return nil, fmt.Errorf("webhook secrets repository not configured")
-	}
+// CreateAlert registers an alert rule on the underlying tsstore. The
+// rule's owning store is always a TSStore connection (req.ConnectionID);
+// the delivery sink depends on req.Type — webhook posts to the
+// dashboard's own bell receiver (default) or to an override URL, mqtt
+// publishes to a broker derived from req.SinkConnectionID. WebSocket
+// sink is intentionally not exposed (see CreateAlertRequest godoc).
+func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateAlertRequest, callerGUID string) (*CreateAlertResponse, error) {
 	conn, err := s.connections.GetConnection(ctx, req.ConnectionID)
 	if err != nil {
 		return nil, fmt.Errorf("connection lookup: %w", err)
@@ -496,70 +560,108 @@ func (s *TSStoreAlertRulesService) CreateWebhookRule(ctx context.Context, req *C
 		return nil, fmt.Errorf("connection %s is not a tsstore connection", req.ConnectionID)
 	}
 
-	// 1) Resolve the webhook URL the rule should fire to.
-	webhookURL := strings.TrimSpace(req.WebhookURLOverride)
-	var secretID string
-	if webhookURL == "" {
-		// Default flow: mint a fresh secret + build a URL pointing
-		// at the dashboard's own public receiver.
-		secret, err := mintWebhookSecret()
-		if err != nil {
-			return nil, fmt.Errorf("mint secret: %w", err)
-		}
-		ws := &models.WebhookSecret{
-			ID:           uuid.NewString(),
-			Secret:       secret,
-			ConnectionID: conn.ID,
-			Label:        fmt.Sprintf("rule %q", req.RuleName),
-			CreatedAt:    time.Now().UTC(),
-			CreatedBy:    callerGUID,
-		}
-		if err := s.webhookSecrets.Create(ctx, ws); err != nil {
-			return nil, fmt.Errorf("persist secret: %w", err)
-		}
-		secretID = ws.ID
-		webhookURL = fmt.Sprintf("http://%s/api/webhooks/tsstore/%s/%s",
-			streaming.DashboardHostPort(), conn.ID, secret)
-	}
-
-	// 2) Build the external_ref payload. Empty when no dashboard
-	// chosen — leaving it off so ts-store doesn't store an empty
-	// JSON object.
-	externalRef := ""
-	if req.DashboardID != "" {
-		buf, _ := json.Marshal(struct {
-			DashboardID string `json:"dashboard_id"`
-		}{DashboardID: req.DashboardID})
-		externalRef = string(buf)
-	}
-
-	// 3) POST to ts-store. ts-store accepts one webhook target with
-	// one or more rules; v1 ships one rule per alert resource —
-	// multi-rule is a power-user path that needs an edit flow we
-	// haven't built yet.
+	// Common top-level fields shared across every sink type.
 	tsBody := map[string]interface{}{
-		"url": webhookURL,
-		"rules": []map[string]interface{}{
-			{
-				"name":         req.RuleName,
-				"condition":    req.Condition,
-				"cooldown":     req.Cooldown,
-				"external_ref": externalRef,
-			},
-		},
+		"type":      req.Type,
+		"name":      req.RuleName,
+		"condition": req.Condition,
 	}
-	if len(req.WebhookHeaders) > 0 {
-		tsBody["headers"] = req.WebhookHeaders
+	if req.Cooldown != "" {
+		tsBody["cooldown"] = req.Cooldown
+	}
+	if ref := encodeExternalRef(req.DashboardID); ref != "" {
+		tsBody["external_ref"] = ref
 	}
 	if req.PollInterval != "" {
 		tsBody["poll_interval"] = req.PollInterval
 	}
-	if req.Timeout != "" {
-		tsBody["timeout"] = req.Timeout
+	if req.RestartPolicy != "" {
+		tsBody["restart_policy"] = req.RestartPolicy
+	}
+	if req.MaxReplay != "" {
+		tsBody["max_replay"] = req.MaxReplay
+	}
+
+	// Sink-specific assembly. Each branch fills in the transport
+	// block and any dashboard-side artifacts (e.g. minted webhook
+	// secret) the wizard wants surfaced in the response.
+	var responseURL, secretID string
+	switch req.Type {
+	case "webhook":
+		if s.webhookSecrets == nil {
+			return nil, fmt.Errorf("webhook secrets repository not configured")
+		}
+		webhookURL := strings.TrimSpace(req.WebhookURLOverride)
+		if webhookURL == "" {
+			// Default: mint a fresh secret + build a URL pointing at
+			// the dashboard's own bell receiver. Stale secrets after
+			// downstream errors are harmless (receiver checks
+			// connection binding).
+			secret, err := mintWebhookSecret()
+			if err != nil {
+				return nil, fmt.Errorf("mint secret: %w", err)
+			}
+			ws := &models.WebhookSecret{
+				ID:           uuid.NewString(),
+				Secret:       secret,
+				ConnectionID: conn.ID,
+				Label:        fmt.Sprintf("rule %q", req.RuleName),
+				CreatedAt:    time.Now().UTC(),
+				CreatedBy:    callerGUID,
+			}
+			if err := s.webhookSecrets.Create(ctx, ws); err != nil {
+				return nil, fmt.Errorf("persist secret: %w", err)
+			}
+			secretID = ws.ID
+			webhookURL = fmt.Sprintf("http://%s/api/webhooks/tsstore/%s/%s",
+				streaming.DashboardHostPort(), conn.ID, secret)
+		}
+		responseURL = webhookURL
+		block := map[string]interface{}{"url": webhookURL}
+		if len(req.WebhookHeaders) > 0 {
+			block["headers"] = req.WebhookHeaders
+		}
+		if req.Timeout != "" {
+			block["timeout"] = req.Timeout
+		}
+		tsBody["webhook"] = block
+
+	case "mqtt":
+		if req.SinkConnectionID == "" {
+			return nil, fmt.Errorf("mqtt alert requires sink_connection_id (an MQTT connection)")
+		}
+		if strings.TrimSpace(req.MQTTTopic) == "" {
+			return nil, fmt.Errorf("mqtt alert requires mqtt_topic")
+		}
+		sinkConn, err := s.connections.GetConnection(ctx, req.SinkConnectionID)
+		if err != nil {
+			return nil, fmt.Errorf("sink connection lookup: %w", err)
+		}
+		if sinkConn.Type != models.ConnectionTypeMQTT || sinkConn.Config.MQTT == nil {
+			return nil, fmt.Errorf("sink connection %s is not an mqtt connection", req.SinkConnectionID)
+		}
+		mqttCfg := sinkConn.Config.MQTT
+		block := map[string]interface{}{
+			"broker_url": mqttCfg.BrokerURL,
+			"topic":      strings.TrimSpace(req.MQTTTopic),
+		}
+		if mqttCfg.Username != "" {
+			block["username"] = mqttCfg.Username
+		}
+		if mqttCfg.Password != "" {
+			block["password"] = mqttCfg.Password
+		}
+		if req.MQTTQoS != nil {
+			block["qos"] = *req.MQTTQoS
+		}
+		tsBody["mqtt"] = block
+
+	default:
+		return nil, fmt.Errorf("unsupported alert type %q (allowed: webhook, mqtt)", req.Type)
 	}
 
 	cfg := conn.Config.TSStore
-	createURL := fmt.Sprintf("%s/api/stores/%s/alerts/webhook", cfg.BaseURL(), cfg.StoreName)
+	createURL := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), cfg.StoreName)
 	bodyBytes, err := json.Marshal(tsBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal ts-store body: %w", err)
@@ -585,7 +687,6 @@ func (s *TSStoreAlertRulesService) CreateWebhookRule(ctx context.Context, req *C
 		return nil, fmt.Errorf("ts-store returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 
-	// ts-store returns the worker Status — id is what we care about.
 	var tsResp struct {
 		ID string `json:"id"`
 	}
@@ -593,11 +694,25 @@ func (s *TSStoreAlertRulesService) CreateWebhookRule(ctx context.Context, req *C
 		return nil, fmt.Errorf("decode ts-store response: %w", err)
 	}
 
-	return &CreateWebhookRuleResponse{
+	return &CreateAlertResponse{
 		AlertID:    tsResp.ID,
-		WebhookURL: webhookURL,
+		WebhookURL: responseURL,
 		SecretID:   secretID,
 	}, nil
+}
+
+// encodeExternalRef returns a JSON-encoded {dashboard_id:...} payload
+// for ts-store's external_ref field, or "" when no dashboard was
+// chosen. Empty stays empty so ts-store doesn't store an empty JSON
+// object.
+func encodeExternalRef(dashboardID string) string {
+	if dashboardID == "" {
+		return ""
+	}
+	buf, _ := json.Marshal(struct {
+		DashboardID string `json:"dashboard_id"`
+	}{DashboardID: dashboardID})
+	return string(buf)
 }
 
 // mintWebhookSecret returns a high-entropy URL-safe token suitable

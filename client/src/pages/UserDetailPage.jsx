@@ -35,7 +35,8 @@ function UserDetailPage() {
   const [capabilities, setCapabilities] = useState({
     view: true,
     design: false,
-    manage: false
+    manage: false,
+    control: false
   });
   const [loading, setLoading] = useState(!isCreateMode);
   const [error, setError] = useState(null);
@@ -65,7 +66,8 @@ function UserDetailPage() {
       const caps = {
         view: false,
         design: false,
-        manage: false
+        manage: false,
+        control: false
       };
       (data.capabilities || []).forEach(cap => {
         caps[cap] = true;
@@ -327,6 +329,18 @@ function UserDetailPage() {
               />
               <span className="capability-description">
                 Access Manage mode for system administration and user management
+              </span>
+            </div>
+
+            <div className="capability-item">
+              <Checkbox
+                id="cap-control"
+                labelText="Control"
+                checked={capabilities.control}
+                onChange={(e) => handleCapabilityChange('control', e.target.checked)}
+              />
+              <span className="capability-description">
+                Fire control commands (buttons, toggles, sliders) and mark Frigate alerts as reviewed. Independent of design/manage.
               </span>
             </div>
           </div>

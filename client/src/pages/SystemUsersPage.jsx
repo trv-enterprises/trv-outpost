@@ -112,10 +112,11 @@ function SystemUsersPage() {
         <div>
           <h1>System Users</h1>
           <p className="system-users-page__subtitle">
-            Non-interactive service principals for inbound integrations (ts-store
-            webhook receiver, etc.). System users cannot sign in — they only own
-            API keys that external services use to authenticate calls to the
-            dashboard.
+            Service principals authenticated by API key, not interactive sign-in.
+            Two main shapes: <strong>inbound integrations</strong> (e.g. the ts-store
+            webhook receiver) and <strong>kiosks</strong> (a TV or panel that loads a
+            dashboard with the API key baked into the URL). The capability set on
+            each user controls what its keys can do.
           </p>
         </div>
         <Button
@@ -254,9 +255,13 @@ function CreateSystemUserModal({ onClose, onCreated }) {
   // user can't even call /auth/me, which makes the account useless;
   // the server enforces this too via normalizeCapabilities. `webhook`
   // is the canonical privilege for inbound integrations and defaults
-  // to on. design / manage aren't surfaced here — broaden via the
-  // regular users API if a future integration genuinely needs them.
+  // to on. `control` lets a kiosk fire controls (button presses,
+  // toggles, sliders) — opt-in because the most common system user
+  // shape is an inbound webhook receiver where control would be
+  // overreach. design / manage aren't surfaced here — broaden via
+  // the regular users API if a future integration genuinely needs them.
   const [webhook, setWebhook] = useState(true);
+  const [control, setControl] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -271,6 +276,7 @@ function CreateSystemUserModal({ onClose, onCreated }) {
       setErr(null);
       const capabilities = ['view'];
       if (webhook) capabilities.push('webhook');
+      if (control) capabilities.push('control');
       await apiClient.createSystemUser({ name: trimmed, capabilities });
       onCreated();
     } catch (e) {
@@ -320,6 +326,12 @@ function CreateSystemUserModal({ onClose, onCreated }) {
           labelText="Webhook (POST to /api/webhooks/*)"
           checked={webhook}
           onChange={(_, { checked }) => setWebhook(checked)}
+        />
+        <Checkbox
+          id="cap-control"
+          labelText="Control (fire button/toggle/slider commands — for interactive kiosks)"
+          checked={control}
+          onChange={(_, { checked }) => setControl(checked)}
         />
         <div style={{ marginTop: 'var(--cds-spacing-03)', color: 'var(--cds-text-helper)', fontSize: '0.75rem' }}>
           Only the capabilities an integration actually needs — a leaked key

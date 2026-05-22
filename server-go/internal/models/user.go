@@ -26,6 +26,16 @@ const (
 	// future operator can revoke an integration's ability to surface
 	// alerts without disturbing anything else.
 	CapabilityWebhook Capability = "webhook"
+	// CapabilityControl allows the caller to execute control commands
+	// (button presses, slider changes, toggle flips). Independent of
+	// view/design/manage: a kiosk-system-user with view+control can
+	// interact with controls without elevation; a public-display
+	// kiosk with view alone can render dashboards but the server
+	// 403s every /api/controls/:id/execute call. Designers and
+	// admins are NOT implicitly granted control — they must hold it
+	// explicitly. The boot-time migration backfills control on every
+	// existing human user so today's behaviour is preserved.
+	CapabilityControl Capability = "control"
 )
 
 // UserKind discriminates real humans from non-interactive service
@@ -96,6 +106,13 @@ func (u *User) HasManageAccess() bool {
 	return u.HasCapability(CapabilityManage)
 }
 
+// HasControlAccess checks if user can execute control commands.
+// Independent from view/design/manage by design — see
+// CapabilityControl godoc.
+func (u *User) HasControlAccess() bool {
+	return u.HasCapability(CapabilityControl)
+}
+
 // UserCapabilitiesResponse is returned by /api/auth/me endpoint.
 // This is the SPA bootstrap's primary "who am I" payload — adding
 // fields here is preferable to introducing a parallel self-info
@@ -111,6 +128,10 @@ type UserCapabilitiesResponse struct {
 	Capabilities []Capability `json:"capabilities"`
 	CanDesign    bool         `json:"can_design"`
 	CanManage    bool         `json:"can_manage"`
+	// CanControl mirrors HasControlAccess(); separate from CanDesign /
+	// CanManage because control is its own axis and not implied by
+	// either elevation.
+	CanControl   bool         `json:"can_control"`
 }
 
 // CreateUserRequest represents a request to create a user
@@ -154,16 +175,16 @@ var PseudoUsers = []struct {
 	{
 		Name:         "Admin",
 		GUID:         "admin-00000000-0000-0000-0000-000000000001",
-		Capabilities: []Capability{CapabilityView, CapabilityDesign, CapabilityManage},
+		Capabilities: []Capability{CapabilityView, CapabilityDesign, CapabilityManage, CapabilityControl},
 	},
 	{
 		Name:         "Designer",
 		GUID:         "designer-00000000-0000-0000-0000-000000000002",
-		Capabilities: []Capability{CapabilityView, CapabilityDesign},
+		Capabilities: []Capability{CapabilityView, CapabilityDesign, CapabilityControl},
 	},
 	{
 		Name:         "Support",
 		GUID:         "support-00000000-0000-0000-0000-000000000003",
-		Capabilities: []Capability{CapabilityView},
+		Capabilities: []Capability{CapabilityView, CapabilityControl},
 	},
 }

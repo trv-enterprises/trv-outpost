@@ -32,6 +32,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { queryData } from '../api/dataClient';
 import apiClient, { API_BASE } from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
+import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
 
 /**
  * Extract a nested value from an object using dot-notation path.
@@ -166,6 +167,14 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
   // TSStore only streams when transport is explicitly set to "streaming"
   const isStreamingType = datasourceType === 'socket' || datasourceType === 'mqtt'
     || (datasourceType === 'tsstore' && datasourceTransport === 'streaming');
+
+  // Register this useData consumer with the RefreshableComponents
+  // context once we KNOW it's polling (not streaming). The dashboard
+  // toolbar reads the count and shows/hides the manual refresh
+  // button — there's nothing useful for the user to click if the
+  // dashboard has only streaming components. No-ops outside a
+  // provider (e.g. Design preview, AI builder).
+  useRegisterRefreshable(!!connectionId && !typeLoading && !isStreamingType);
 
   // === STREAMING LOGIC (for streaming datasources) ===
   // Batch incoming records and flush once per animation frame to avoid

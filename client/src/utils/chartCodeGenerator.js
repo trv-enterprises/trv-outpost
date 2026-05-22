@@ -655,9 +655,14 @@ function generateDataViewCode(connectionId, queryRaw, queryType, dataMapping, tr
   // Determine which columns to display
   ${hasVisibleColumns ? `const displayColumns = ${JSON.stringify(visibleColumns)}.filter(c => sourceColumns.includes(c));` : `const displayColumns = sourceColumns;`}
 
-  // Convert columnar data to row objects for DataTable
+  // Convert columnar data to row objects for DataTable. Connections
+  // return rows in chronological-ascending order (oldest first);
+  // dataview-on-a-dashboard users almost always want newest at the
+  // top (most recent reading or event sits in the visible viewport
+  // without scrolling). Reverse before mapping so the default render
+  // is newest-first. Carbon's column-sort still works on top of this.
   const headers = displayColumns.map(col => ({ key: col, header: col }));
-  const rows = sourceRows.map((row, idx) => {
+  const rows = sourceRows.slice().reverse().map((row, idx) => {
     const rowObj = { id: String(idx) };
     displayColumns.forEach((col) => {
       const colIdx = sourceColumns.indexOf(col);

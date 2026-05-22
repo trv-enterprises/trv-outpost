@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Close, Pin, PinFilled, Launch } from '@carbon/icons-react';
 import {
@@ -36,6 +36,20 @@ function NotificationPanel({ open, onClose }) {
   const { notifications, removeNotification, setPinned, clearAll } = useNotifications();
   const navigate = useNavigate();
   const panelRef = useRef(null);
+  // Track browser-fullscreen state so the panel can re-anchor + raise
+  // its z-index when the App header is hidden and the dashboard's own
+  // header (with its in-toolbar bell) is the trigger instead. The
+  // dashboard-viewer page creates a z-index:9999 stacking context in
+  // fullscreen; the panel needs to sit above that AND under the
+  // dashboard toolbar (56px) rather than the App header (48px).
+  const [isFullscreen, setIsFullscreen] = useState(
+    typeof document !== 'undefined' && !!document.fullscreenElement
+  );
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
 
   // Open the dashboard the alert deep-links to. Closes the panel
   // (the dashboard is the user's new context), but does NOT mark
@@ -67,7 +81,7 @@ function NotificationPanel({ open, onClose }) {
   if (!open) return null;
 
   return (
-    <div className="notification-panel" ref={panelRef}>
+    <div className={`notification-panel ${isFullscreen ? 'notification-panel--fullscreen' : ''}`} ref={panelRef}>
       <div className="notification-panel__header">
         <span className="notification-panel__title">Notifications</span>
         {notifications.length > 0 && (

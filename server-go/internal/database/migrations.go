@@ -33,6 +33,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"drop_mask_secrets_v1", migrateDropMaskSecrets},
 		{"users_kind_human_default_v1", migrateUsersKindHumanDefault},
 		{"strip_literal_secret_sentinels_v1", migrateStripLiteralSecretSentinels},
+		{"users_backfill_control_capability_v1", migrateBackfillControlCapability},
 	}
 
 	coll := db.Collection("migrations")
@@ -513,6 +514,40 @@ func migrateUsersKindHumanDefault(ctx context.Context, db *mongo.Database) error
 		return fmt.Errorf("set users.kind=human: %w", err)
 	}
 	log.Printf("  users: set kind=human on %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateBackfillControlCapability adds `control` to every existing
+// human user's capabilities array. Before v0.18.x, control execution
+// was gated on the view-floor (anything with view could fire any
+// control). v0.18.x introduces a dedicated `control` capability that
+// gates POST /api/controls/:id/execute. To preserve today's effective
+// behaviour — every existing human user can still fire controls —
+// we backfill it here. System users are untouched because their
+// default shape is read-only / inbound-only; admins explicitly add
+// control to a kiosk system user via the System Users page when they
+// want it interactive.
+//
+// Uses $addToSet so the migration is idempotent and safe if it runs
+// against a record that already has control (e.g. a record seeded
+// fresh under the new defaults).
+func migrateBackfillControlCapability(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("users").UpdateMany(
+		ctx,
+		bson.M{
+			// Treat missing kind as human (matches IsSystem semantics).
+			"$or": []bson.M{
+				{"kind": "human"},
+				{"kind": bson.M{"$exists": false}},
+				{"kind": ""},
+			},
+		},
+		bson.M{"$addToSet": bson.M{"capabilities": "control"}},
+	)
+	if err != nil {
+		return fmt.Errorf("backfill users.capabilities += control: %w", err)
+	}
+	log.Printf("  users: ensured control capability on %d human records", res.ModifiedCount)
 	return nil
 }
 
