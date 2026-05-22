@@ -1,40 +1,40 @@
 # Dashboard End-to-End Test Plan
 
 ## Overview
-Comprehensive test plan for all dashboard features, datasource types, and aggregation capabilities.
+Comprehensive test plan for all dashboard features, connection types, and aggregation capabilities.
 
-**Version**: v0.3.1
-**Date**: 2026-02-10
+**Version**: v0.3.2
+**Date**: 2026-05-22 (synced to dashboard v0.18.2 terminology)
 **Excludes**: Rules Engine (not in scope)
 
 ---
 
-## 1. Datasource Types
+## 1. Connection Types
 
 ### 1.1 SQL (PostgreSQL)
-- [ ] Create PostgreSQL datasource with host/port/database/user/password
+- [ ] Create PostgreSQL connection with host/port/database/user/password
 - [ ] Test connection succeeds
 - [ ] Schema discovery returns tables and columns with types
 - [ ] Execute SELECT query returns data
 - [ ] Execute query with parameters works
 - [ ] Health check shows healthy status
-- [ ] Update datasource configuration
-- [ ] Delete datasource
+- [ ] Update connection configuration
+- [ ] Delete connection
 
 ### 1.2 SQL (MySQL)
-- [ ] Create MySQL datasource
+- [ ] Create MySQL connection
 - [ ] Test connection succeeds
 - [ ] Schema discovery returns tables and columns
 - [ ] Execute query returns data
 
 ### 1.3 SQL (SQLite)
-- [ ] Create SQLite datasource with file path
+- [ ] Create SQLite connection with file path
 - [ ] Test connection succeeds
 - [ ] Schema discovery works
 - [ ] Execute query returns data
 
 ### 1.4 REST API
-- [ ] Create API datasource with URL
+- [ ] Create API connection with URL
 - [ ] Configure Bearer token authentication
 - [ ] Configure Basic authentication
 - [ ] Configure API-Key authentication
@@ -45,14 +45,14 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] Query parameters are applied
 
 ### 1.5 CSV
-- [ ] Create CSV datasource with file path
+- [ ] Create CSV connection with file path
 - [ ] Configure custom delimiter
 - [ ] Header detection works correctly
 - [ ] Schema inference from file works
 - [ ] Query with filter expression returns filtered data
 
 ### 1.6 WebSocket/Socket
-- [ ] Create WebSocket datasource with URL
+- [ ] Create WebSocket connection with URL
 - [ ] Configure message parser (JSON path, field mapping)
 - [ ] Test connection succeeds
 - [ ] Stream endpoint receives real-time data
@@ -60,7 +60,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] Buffer configuration works (initial records sent on connect)
 
 ### 1.7 TSStore
-- [ ] Create TSStore datasource with URL and API key
+- [ ] Create TSStore connection with URL and API key
 - [ ] Test connection succeeds
 - [ ] Schema discovery returns store fields
 - [ ] Query with time range returns data
@@ -69,7 +69,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] Format options (full/compact) work correctly
 
 ### 1.8 Prometheus
-- [ ] Create Prometheus datasource with URL
+- [ ] Create Prometheus connection with URL
 - [ ] Configure basic auth if required
 - [ ] Test connection succeeds
 - [ ] Schema discovery returns metrics list
@@ -80,7 +80,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] Relative time expressions work (now-1h, now-5m)
 
 ### 1.9 EdgeLake
-- [ ] Create EdgeLake datasource with URL
+- [ ] Create EdgeLake connection with URL
 - [ ] Test connection succeeds
 - [ ] Schema discovery: list databases
 - [ ] Schema discovery: list tables for database
@@ -228,7 +228,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 ### 5.5 Dashboard Tiles
 - [ ] Tile view shows all dashboards
 - [ ] Thumbnails display correctly
-- [ ] Datasource names shown
+- [ ] Connection names shown
 - [ ] Click tile opens dashboard
 - [ ] First dashboard auto-loads on app start
 
@@ -252,7 +252,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] WebSocket connection works as alternative
 
 ### 6.3 AI Tool Usage
-- [ ] AI calls `list_datasources` to find sources
+- [ ] AI calls `list_connections` to find sources
 - [ ] AI calls `get_schema` to discover columns
 - [ ] AI calls `update_chart_config` to set type
 - [ ] AI calls `get_chart_template` for starter code
@@ -260,16 +260,16 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] AI calls `update_filters` when needed
 - [ ] AI calls `update_aggregation` when needed
 - [ ] AI calls `set_custom_code` for complex charts
-- [ ] AI calls `query_datasource` to test queries
+- [ ] AI calls `query_connection` to test queries
 - [ ] AI calls `preview_data` to see results
 
-### 6.4 AI with Different Datasources
-- [ ] AI creates chart from SQL datasource
-- [ ] AI creates chart from Prometheus datasource
-- [ ] AI creates chart from EdgeLake datasource
-- [ ] AI creates chart from API datasource
-- [ ] AI creates chart from WebSocket datasource
-- [ ] AI creates chart from TSStore datasource
+### 6.4 AI with Different Connections
+- [ ] AI creates chart from SQL connection
+- [ ] AI creates chart from Prometheus connection
+- [ ] AI creates chart from EdgeLake connection
+- [ ] AI creates chart from API connection
+- [ ] AI creates chart from WebSocket connection
+- [ ] AI creates chart from TSStore connection
 
 ### 6.5 AI Chart Types
 - [ ] AI creates line chart on request
@@ -320,12 +320,12 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] `GET /api/auth/me` returns current user
 - [ ] X-User-ID header sets user context
 
-### 8.3 Datasource Endpoints
-- [ ] `POST /api/connections` creates datasource
+### 8.3 Connection Endpoints
+- [ ] `POST /api/connections` creates connection
 - [ ] `GET /api/connections` lists with pagination
-- [ ] `GET /api/connections/:id` returns datasource
-- [ ] `PUT /api/connections/:id` updates datasource
-- [ ] `DELETE /api/connections/:id` deletes datasource
+- [ ] `GET /api/connections/:id` returns connection
+- [ ] `PUT /api/connections/:id` updates connection
+- [ ] `DELETE /api/connections/:id` deletes connection
 - [ ] `POST /api/connections/test` tests connection
 - [ ] `POST /api/connections/:id/health` checks health
 - [ ] `POST /api/connections/:id/query` executes query
@@ -359,7 +359,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 
 ## 9. Error Handling
 
-### 9.1 Datasource Errors
+### 9.1 Connection Errors
 - [ ] Invalid connection string shows clear error
 - [ ] Connection timeout handled gracefully
 - [ ] Authentication failure shows clear message
@@ -367,7 +367,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] Missing database/table shows not found
 
 ### 9.2 Chart Errors
-- [ ] Invalid datasource reference caught
+- [ ] Invalid connection reference caught
 - [ ] Missing required fields show validation error
 - [ ] Invalid chart type rejected
 - [ ] Malformed custom code shows error
@@ -388,7 +388,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 ## 10. UI/UX Verification
 
 ### 10.1 Design Mode Navigation
-- [ ] Datasources list page loads
+- [ ] Connections list page loads
 - [ ] Charts list page loads
 - [ ] Dashboards list page loads
 - [ ] Create buttons work
@@ -422,7 +422,7 @@ Comprehensive test plan for all dashboard features, datasource types, and aggreg
 - [ ] Go server running on port 3001
 - [ ] Client running on port 5173 (dev) or served by Caddy
 
-### Test Datasources Available
+### Test Connections Available
 - [ ] PostgreSQL with test data (simulators)
 - [ ] WebSocket simulator running
 - [ ] REST API simulator running

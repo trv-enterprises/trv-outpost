@@ -71,7 +71,7 @@ ECharts-specific tools like `update_chart_options`.
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                           ANTHROPIC CLAUDE API                                      │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│  Model: claude-sonnet-4-20250514                                                    │
+│  Model: configurable via `ai.model` (config.yaml — current default `claude-sonnet-4-5`) │
 │  Max Tokens: 4096 per response                                                      │
 │  Tool Choice: Forced on first turn (ToolChoiceAny)                                  │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -535,4 +535,4 @@ The AI has access to 17 tools for component manipulation and data discovery:
 
 ---
 
-*Last Updated: 2026-02-08*
+*Last Updated: 2026-05-22*

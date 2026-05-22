@@ -268,23 +268,31 @@ MongoDB.
 ```json
 {
   "id": "sess-7f...",
-  "chart_id": "b2c9...c0",
+  "component_id": "b2c9...c0",
+  "chart_version": 3,
   "status": "active",
-  "context": { "panel_id": "panel-1", "dashboard_id": "9f8b...e4" },
+  "dashboard_id": "9f8b...e4",
+  "panel_id": "panel-1",
   "messages": [
     { "role": "user", "content": "Show me temp by location" },
     { "role": "assistant", "content": "..." }
   ],
-  "draft_chart": { "... chart being built ..." },
-  "created_at": "2026-04-11T09:00:00Z",
+  "created": "2026-04-11T09:00:00Z",
+  "updated": "2026-04-11T09:05:12Z",
   "expires_at": "2026-04-11T10:00:00Z"
 }
 ```
 
 - **Collection**: `ai_sessions`
+- The session edits a specific component version
+  (`component_id` + `chart_version`). The draft component itself
+  lives in the `components` collection as a draft version (`status:
+  "draft"`), keyed by `(component_id, chart_version)` — not embedded
+  on the session record. When the user saves, the draft promotes to
+  `final`; when they discard, the draft is deleted.
 - **TTL**: `expires_at` field indexed with `ExpireAfterSeconds: 0`,
   so MongoDB sweeps expired sessions automatically.
-- `status` transitions: `active → saved | cancelled`.
+- `status` transitions: `active → completed | cancelled`.
 
 ## Device and device type
 

@@ -637,50 +637,134 @@ stored as `{x, y, w, h}` in cell units. See
 [docs/architecture/grid-system.md](docs/architecture/grid-system.md)
 for fit-mode behavior and layout-dimension presets.
 
-## Current Status (2026-04-17)
+## Planned Work
 
-### ✅ Completed
-- Go backend with MongoDB (layouts, connections, components, dashboards, charts)
-- React frontend with three modes (Design, View, Manage placeholder)
-- Design Mode: All CRUD pages for layouts, connections, charts, dashboards
-- View Mode: Dashboard viewer with real-time refresh, sidebar tiles, reduce-to-fit mode
-- Carbon Design System theming throughout (g100 dark theme)
-- Auto-redirect to first dashboard on app load
-- **Chart Editor**: Full chart builder with live preview, data mapping, filters, aggregation
-- **Control Components**: Button, toggle, slider, text input controls that send commands to bidirectional connections
-- **Socket Connections**: WebSocket connections with parser config (data_path extraction, JSON/regex parsing)
-- **Axis Labels**: Configurable X/Y axis labels for charts (e.g., "Temperature (°F)")
-- **Timestamp Formatting**: Utility functions for consistent date/time display in charts
-- **Chart Versioning**: Version tracking with increment on save, status (draft/final)
-- **AI Builder (Phases 1-7)**: Full-page AI chat with SSE streaming, MCP tools, session management
-- **AI Session API**: Start, message, save, cancel endpoints with `/api/ai/session`
-- **Custom AI Icon**: Replaced WatsonxAi with custom sparkle icon component
-- **SQL Connection Refactor**: Removed connection_string field; connection strings now built from individual fields (host, port, database, username, password, ssl, options)
-- **Prometheus Connection**: Full Prometheus integration with schema discovery, visual PromQL builder, and AI tool support
-- **EdgeLake Connection**: Full EdgeLake integration with distributed query support, cascading schema discovery (database → table → columns), visual query builder, and AI tool support
-- **Terminology Rename**: "Data Sources" renamed to "Connections" throughout UI and API (`/api/connections`)
-- **Terminology Rename**: "Chart" entity renamed to "Component" (umbrella for chart/display/control sub-types). Routes, files, types, and the MongoDB collection (`charts` → `components`) all moved. The word "chart" is now reserved for `component_type=chart` (ECharts visualizations).
-- **MQTT Connection**: Full MQTT broker integration with Eclipse Paho v2, bidirectional pub/sub, visual topic selector with broker discovery, multi-topic subscription, and streaming support via SSE
-- **Type Availability Gating** (v0.6.0): Admin-managed `enabled_types` setting toggles connection / chart / control / display types and integrations per deployment. Frigate and Weather are integrations; admins can enable/disable a whole bundle from Manage → Settings → Type Availability. Filter applies to picker UIs, AI agent prompt + tool enums, and MCP catalog. Existing dashboard components keep rendering even when their type is disabled.
-- **WebSocket Bidirectional UI** (v0.6.0): Connection editor exposes a Bidirectional checkbox for WebSocket connections. When set, resolves to `stream.websocket-bidir` so the connection gains write capability for control commands.
-- **Connection-Level Parser** (v0.6.0): WebSocket and TCP connections now expose a parser config (`data_path`, `timestamp_field`, `timestamp_scale`) at the connection layer with a ts-store preset and live test panel. MQTT connections keep per-component parsers because broker multiplexing means each topic may carry a different shape.
-- **UDP and binary WebSocket removed** (v0.6.0): UDP wasn't used by realistic dashboard telemetry (MQTT/WebSocket/REST cover ~99% of cases) and the legacy adapter couldn't receive unsolicited packets. Binary message_format on WebSocket was dropped — binary frames carrying JSON still work transparently because the adapter ignores the frame type.
+For shipped features and release history, see [`CHANGELOG.md`](CHANGELOG.md).
+The list below is curated from the maintainer's working memory — not
+exhaustive, not prioritized except where noted.
 
-### 🚧 In Progress
-- AI Builder Phase 8: Polish & Testing
-- Error handling improvements
-- Performance optimization
+### Higher priority
+- **Allow N y-axis series when they share a range + rename "Series Column"**
+  — current 2-column cap is "≤2 axes" misimplemented as "≤2 columns
+  total"; should be N columns mapped to ≤2 axes. UI shape sketched.
+  The misleading "Series Column" pivot field rename lands together.
+- **AI surface must respect `enabled_types`** — preflight modal +
+  agent catalog already filter, but sample prompts (if/when they
+  land), MCP tool descriptions, legacy fallback prompt, and
+  `get_component_template` need the same audit. Don't promote
+  disabled types to the user or the agent.
+- **Chart-options storage cleanup + AI configure-first hallucination
+  audit** — strip chart-type-irrelevant fields from component
+  records AND extend structured tools (y-axis range, x-axis range,
+  log scale, tooltip formatter) so the agent stops calling
+  wrong-tool-then-claiming-success. Prompt-side guard landed
+  2026-05-19; tool/codegen/storage audit still open and pairs as one
+  effort.
+- **ComponentEditor stale-codegen cliff** — older charts with
+  `use_custom_code: undefined` open as custom-code by default (the
+  `!!chart.component_code` fallback). Codegen still runs but is
+  ignored. Fix is flipping the fallback polarity + a migration to
+  stamp explicit `true` on records whose code differs from current
+  codegen.
+- **Aggregation SSE-stream sharing** — server `BucketAggregator`
+  already dedups math by `configKey` but each browser still gets
+  its own SSE stream. Mirror `StreamConnectionManager`'s broker
+  pattern for aggregated streams. Full design in
+  `docs/design-notes/aggregation-sharing.md`.
+- **Server metrics + telemetry publishing** — internal metrics
+  buckets with current+peak gauges + `GET /api/stats` /
+  `POST /api/stats/reset`, plus periodic publish of the same data
+  to log or a configurable MQTT topic via Manage Settings.
+  Tenant-agnostic.
 
-### 📋 Planned
-- **Fix Component Tile View Thumbnails**: The component list page tile view shows placeholder icons instead of actual component preview images. Need to generate/capture chart thumbnails when saving components.
-- **Fix AI Chart Builder 429 Rate Limit Error**: Hitting Anthropic's 30k input tokens/minute limit after just a few messages. Options: implement retry-with-backoff on 429 errors, trim conversation history to last N messages, or summarize older context to reduce token usage.
-- **Tabbed Panel Layout**: Allow panels to contain multiple charts with tabs to switch between
-- **Connection Testing in Editor**: Add connection test capability to connection editor UI (backend API already exists at `/api/connections/test`)
-- **Fix `include_connections` Aggregation**: The `ListWithConnections` MongoDB aggregation in `dashboard_repository.go` has a bug where `panel_count` returns 0. Currently worked around by fetching dashboards, components, and connections separately client-side. Fix the aggregation to reduce API calls as dashboard count grows.
-- User authentication
-- ModeContext for shared state (replace localStorage-based mode switching)
-- ErrorBoundary component for crash recovery
-- Entity-specific hooks (useDashboard, useCharts, etc.)
+### Streaming + connections
+- **StreamConnectionManager connection pooling** — dashboard
+  switching causes ~30s reconnection delay.
+- **ts-store push cursor ignores `from=-1`** (upstream ts-store fix)
+  — push connections resume from the persisted cursor, ignoring
+  `from=-1`.
+- **MQTT multi-topic support** — allow a single component to read
+  from multiple topics.
+- **MQTT publish (Write) UI** for control components.
+- **Parser layer expansion** — extend `StreamParserConfig` beyond
+  `data_path` / `timestamp_field`. CSV parser (line-delimited CSV
+  streams from instruments / SCADA exports), regex parser (named
+  capture groups for unstructured `[2026-04-16] temp=22.5` logs),
+  formalize multi-message JSON arrays. Pairs with TCP/WebSocket
+  "text" mode. Investigate moving parser config from per-component
+  to per-connection.
+- **WebSocket connection test**: grab a live message (if available)
+  and show it instead of the static example message.
+
+### Components + UI
+- **Components list — custom-code indicator + column** — surface
+  `use_custom_code` on each row + a way to spot empty
+  `component_code` records. The picker silently drops chart
+  components with empty code.
+- **DataTable header tooltip for truncated field names** — Carbon
+  `TableHeader` truncates without exposing full text on hover; add
+  tooltip/title across list pages (dashboards, components,
+  connections, alerts).
+- **Tabbed panel layout** — allow panels to contain multiple
+  components with tabs to switch between.
+- **Connection testing in editor** — add connection-test capability
+  to the connection editor UI (backend API already exists at
+  `/api/connections/test`).
+- **Component tile-view thumbnails** — component-list tile view
+  shows placeholder icons instead of actual previews; need to
+  generate/capture thumbnails when saving components.
+- **Fix `include_connections` aggregation** —
+  `ListWithConnections` in `dashboard_repository.go` has had
+  panel-count drift in the past; verify and lock down.
+
+### Controls
+- **Control widgets expansion** — MDI icons, indicator tiles,
+  widget selector redesign. Includes compact indicator tiles
+  (state buttons with popup controls), text/label components for
+  section headers, and spacer components for layout.
+- **Control type selector redesign** — categorized dropdown with
+  MDI icons as control types grow.
+- **Control design licensing** — HAKit is proprietary; original
+  Carbon-styled control designs needed.
+
+### AI builder
+- **AI MQTT dashboard auto-builder** — AI creates a tile dashboard
+  from all topics on a broker.
+
+### Alerts
+- **ts-store alerts — phase 2** — design locked: central `/alerts`
+  management page (one table across every ts-store connection) +
+  status-only dashboard component for ambient awareness. ts-store
+  is authoritative for rules; dashboard is editor over its API.
+  Phase 1 shipped v0.16.1–v0.16.4; ts-store v0.6.3 added
+  `external_ref`.
+
+### Auth + multitenancy
+- **Kiosk auth strategy when Clerk is enabled** — kiosk has no
+  human at the keyboard. **DO NOT enable Clerk on homelab without
+  first sorting kiosk auth**. Recommended path is a
+  `KIOSK_BYPASS_TOKEN` env var.
+- **Remove webhook purpose from system users** — after the
+  secret-URL path lands, system users become strictly
+  read-only/kiosk; deprecate the old authenticated ts-store webhook
+  receiver.
+- **Multitenant capabilities** (multi-month scope) — make one
+  server host many tenants without Grafana-style "one stack per
+  tenant." Per-tenant database isolation, tenant management CLI,
+  tenant-pinned-to-instance routing, tenant-scoped namespaces /
+  settings / users / connections / components / dashboards.
+
+### Packaging + docs
+- **Local docker-compose quickstart** (low priority) — evaluators
+  with Docker but not Go/Node would benefit from a `docker compose up`
+  quickstart pulling published images.
+- **README bio + portfolio framing** — repo is Apache 2.0 as a
+  deliberate portfolio bet; README still reads as docs-only and
+  needs author bio, "why this exists," contact/availability line
+  to actually generate leads.
+- **Bundled weather icons refresh** — Meteocons SVGs under
+  `client/public/weather-icons/` last synced 2026-04-10; check
+  upstream ~annually for new icons/fixes (next ~2027-04-10).
 
 ---
 
@@ -704,8 +788,9 @@ for fit-mode behavior and layout-dimension presets.
 
 ---
 
-**Last Updated**: 2026-03-06
-**Build**: 578
+**Last Updated**: 2026-05-22
+**Build**: 1330
+**Version**: 0.18.2
 
 ## Simulator Services
 

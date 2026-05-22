@@ -6,6 +6,1409 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.18.2] — 2026-05-22
+
+### Added
+
+- **ts-store alert rule wizard reorganized**: Name → Type → Store →
+  Send-to → Condition → Policy → Target, with Cancel / Save in the page
+  header to match the Connection and Component editors.
+- **MQTT alert sink**. New "Type" radio (Webhook or MQTT). MQTT sink
+  picks an MQTT-type connection for broker credentials; topic
+  auto-prefills to `trve/alerts/<rule-name-slug>` and is overridable;
+  QoS 0/1/2 selectable. WebSocket sink intentionally omitted (alerts
+  and telemetry would mix on the same socket).
+- **Restart-policy radios** on alert rules with an optional max-replay
+  window. Defaults preserve old behavior ("start from now, no replay").
+- **View-only alert-rule details page** (eye icon on the list) renders
+  the editor layout with every field read-only — replaces the previous
+  in-place modal.
+- **`control` capability**. Independent of `view`; gates the
+  control-execution endpoints (button presses, toggles, sliders,
+  Frigate "Mark Reviewed"). Existing humans are backfilled to preserve
+  behavior; system users default to read-only with an opt-in "Control"
+  checkbox for interactive kiosks. View-mode controls render disabled
+  with a tooltip when the user lacks `control`; the server enforces
+  with a route rule on `POST /api/controls/:id/execute`.
+- **Kiosk mode via URL payload**. `?dashboards=id1,id2,id3` locks a
+  session to a specific dashboard set in a specific order. URL is
+  cleaned after read; cached in sessionStorage so reloads keep the
+  lock. Tile picker shows only the locked set with a purple
+  "Kiosk mode" badge; the viewer's prev/next arrows walk only the
+  locked set. `?clearKiosk=1` resets.
+- **Dashboard ID copy** icon next to the dashboard name on every tile
+  (Design list, View tile grid, picker modal). Tooltip shows the full
+  UUID; click copies to clipboard.
+- **Shared `<DashboardTile>` component** with `badge` and `actions`
+  slots, drag-and-drop props, descriptionMode, and onClick /
+  onDoubleClick. Replaces three separate tile implementations across
+  the View grid, Design grid, and the alert-rule dashboard picker
+  modal. Uniform tile height regardless of description or tag count;
+  reserved meta-row area with anchored bottom row for the comps + conns
+  chips.
+
+### Changed
+
+- **Manual sort on the Design dashboards page** ("Manual (drag to
+  reorder)") shares the per-user order keys with View mode — change
+  order in one place, the other sees it.
+- **Tile-page filters persist across navigation** (namespace, tags,
+  connection, search) via sessionStorage. The viewer's prev/next
+  arrows honor the filtered set.
+- **DataView (table chart)** components render newest rows first by
+  default.
+- **Refresh affordance only when refreshable**: the toolbar Refresh
+  button and "Data refresh: Ns" pill hide on streaming-only
+  dashboards.
+- **Prev / Next dashboard tooltips** show the keyboard shortcut
+  (`⌥←` / `⌥→` on macOS, `Alt←` / `Alt→` elsewhere).
+- **Connection-list display** collapsed from inline connection names
+  to a "N conns" chip with a tooltip listing names (matches the
+  alert-rules dedupe pattern). Component count on tiles only counts
+  panels with a `component_id`, not total panel slots.
+
+### Fixed
+
+- Notification panel rendering in fullscreen, and several System Users
+  page copy fixes.
+
+## [0.18.1] — 2026-05-20
+
+### Added
+
+- **ts-store schema discovery from any tsstore connection** (WS or
+  API, json or schema data type). Server samples the 10 newest records
+  and unions their keys so the alert-rule editor can render field
+  pills with drag-and-drop and click-to-insert above the condition
+  textarea.
+- **Zoom Slider toggle** on the line/area/bar component editor, with
+  reserved `grid.bottom` room for axis labels and the slider stack.
+
+### Changed
+
+- **Alert-rule list collapses by backend**, so WS+API connections
+  pointing at the same ts-store backend no longer show duplicate rows.
+  Aggregated rule type carries a `tsstore_connection_ref` for the deep
+  link.
+- **`chartOptions` participates in dirty tracking** so chart-option
+  toggles enable Save.
+- **Sliding-window**: always renders the duration + timestamp Select
+  when enabled; non-empty timestamp column is validated on save.
+- **Dashboard-agent stamps the runtime namespace** on
+  `create_component` / `create_dashboard` / `create_connection`, so
+  `--namespace` is honored.
+- **Agent prompt** adds the canonical time-axis pattern (prevents
+  `formatTimestamp(NaN)` tooltips).
+- **Connections list "Charts" column renamed to "Components"** to
+  match the v0.11 rename.
+
+### Fixed
+
+- Duplicate `chartOptions` key in the dirty-state diff snapshot (lint
+  caught a no-dupe-keys violation).
+- Dashboards-list panel-count tooltip omits empty panels.
+- Components-list namespace filter no longer treats an empty namespace
+  selection as "matches every namespace."
+
+## [0.18.0] — 2026-05-19
+
+### Added
+
+- **TLS skip-verify extended to every TLS-capable connection type**
+  (was REST-only in v0.16.0). Same two-gate model: per-connection
+  `insecure_skip_verify` flag AND server-level
+  `api.allow_insecure_tls`. Now applies to MQTT, WebSocket, Socket,
+  Prometheus, EdgeLake, and ts-store. Both gates must be true for
+  verification to be skipped.
+- **Generic primitive setting editor**. Settings without a bespoke
+  modal (e.g. `auth.access_token_ttl_seconds`,
+  `extensions.tsstore_alerts.enabled`) now auto-detect
+  boolean/number/string from `typeof setting.value` and render the
+  appropriate Carbon input. Future primitive settings added to
+  `user-configurable.yaml` become editable without UI follow-up.
+
+### Changed
+
+- **Manage → Settings table-body scroll**. TableContainer is height-
+  bounded with a sticky `thead`; the body scrolls inside the page
+  shell instead of pushing the page past the viewport.
+- **AI agent prompt rendering rules tightened**: titles render as an
+  HTML div outside `<ReactECharts>` (not via `option.title`), and the
+  canonical `grid.top` guidance tightens from 60 to
+  `${legend ? 35 : 10}`. AI codegen also restored — `title` was
+  missing from the chart-code useMemo deps, so title edits weren't
+  regenerating the component code.
+- **AI configure-first hallucination guard**. Configure-first rule
+  now names its limits explicitly ("no tool for y-axis min/max, no
+  tool for log scale, no tool for custom tooltip formatters"). New
+  tool-call self-check requires the agent to verify each call's
+  params actually addressed the user's request, with three PASS/FAIL
+  examples. `set_custom_code` rule loosened for the no-tool-exists
+  case.
+
+### Fixed
+
+- **AI draft create dropped fields**. `AISessionService.CreateSession`
+  built a new draft from the latest final but only copied a hand-listed
+  subset, so Title, Namespace, ComponentType, ControlConfig, and
+  DisplayConfig all landed as zero values. Now copies every
+  user-visible field.
+- **AI editor 409-loop**. When an orphan draft existed,
+  `POST /api/ai/sessions` returned 409 and the page's start-on-mount
+  effect kept retrying forever. `useAISession` now keeps `startingRef`
+  set on 409 specifically so the effect can't redrive.
+
+## [0.17.8] — 2026-05-16
+
+### Security
+
+- **docker-compose.prod.yml / docker-compose.deploy.yml** now set
+  `ENV=production` and `DASHBOARD_AUTH_ALLOW_LEGACY_GUID=false` on the
+  server service. Previously they inherited the dev config-merge
+  fallback because neither set those vars — anyone running them from a
+  fresh clone got a server that accepted `X-User-ID` auth at
+  `/api/auth/session`. `docker-compose.yml` (local dev) is unchanged.
+
+### Added
+
+- **`BUILDING.md`** at repo root: source-build instructions for
+  evaluators / customers / contributors. Covers prereqs, one-shot
+  local-platform build, multi-arch build matching the published
+  images, image contents, sha256 verification against the published
+  image, building only the Go binary without Docker, reproducible-
+  build notes, and troubleshooting.
+
+## [0.17.7] — 2026-05-16
+
+### Changed
+
+- **Favicon swapped to Carbon `ChartMultitype` glyph** (Apache 2.0)
+  from `@carbon/icons-react`. The previous `brain.svg` was purchased
+  with personal-use rights only — not redistributable under Apache
+  2.0. Same icon Carbon already uses in the in-app header logo, so the
+  favicon and header now match. Unused sourced SVGs removed from
+  `images/`.
+
+### Fixed
+
+- **ComponentEditor Connection dropdown empty on hard refresh.**
+  `fetchDatasources` and the preview-query path used raw `fetch()`
+  without auth headers; under session-token middleware those 401'd.
+  Swapped to `apiClient.getConnections()` and
+  `apiClient.queryConnection()` so the access JWT (or API key)
+  attaches automatically.
+
+## [0.17.6] — 2026-05-16
+
+### Security
+
+- **`LegacyGUIDIdP` gated behind `auth.allow_legacy_guid`** (default
+  `false`). Previously the X-User-ID / `?user_id=` IdP was registered
+  unconditionally. Override channels: base `config.yaml` is false (the
+  secure default); `config.development.yaml` sets true for local dev;
+  `DASHBOARD_AUTH_ALLOW_LEGACY_GUID` env var overrides per-deployment.
+  Server logs the posture on boot.
+
+## [0.17.5] — 2026-05-16
+
+### Fixed
+
+- **Bootstrap race on hard refresh of design pages**. `App.jsx` did
+  `getUsers()` BEFORE `createSession()`, so the directory call 401'd
+  during the brief window before the access token was minted. Moved
+  `getUsers()` to AFTER `createSession()`. Also fixed
+  `EnabledTypesProvider`'s initial `getRegistryCatalog()` firing above
+  the route tree — it now skips when no credential is set and listens
+  for `apiclient-authenticated` (dispatched by `apiClient.setAccessToken`
+  / `setApiKey` on no-cred → has-cred transitions).
+
+### Changed
+
+- **`docs/architecture/auth-modes.md` fully rewritten** for the
+  v0.17.x model: two-layer architecture diagram, bootstrap funnel +
+  IdP registry, session service (issue / refresh / revoke / admin
+  TTLs), authentication middleware shape-dispatch, authorization with
+  `DoesUserHavePriv` + view-as-floor + route-rules table + path-param
+  authz pattern, client-side credential precedence, Adding-a-new-IdP
+  template against the new `IdentityProvider` interface.
+
+## [0.17.4] — 2026-05-15
+
+### Security
+
+- **Bundle export and editor GET now use distinct sanitizers.**
+  `SanitizeForAPI` passes the `SecretMaskedValue` sentinel (editor
+  round-trip: empty=no secret, `********`=keep, anything else=replace).
+  `SanitizeForExport` passes `""` — bundles never carry secrets in any
+  form.
+- **Import-create path now strips placeholder secrets**
+  (`stripPlaceholderSecrets()`) before insert, so leftover `********`
+  literals from old bundles don't land in the DB and produce confusing
+  upstream errors like ts-store's "invalid API key format."
+- **Import-update path now preserves every secret from the existing
+  record** (`preserveAllSecretsFromExisting()` instead of
+  `preserveSecrets()`) — bundles can never clobber existing credentials,
+  even when an explicit `""` is in the bundle.
+- **New migration `strip_literal_secret_sentinels_v1`** walks every
+  connection record and clears any secret field that literally equals
+  `********`. Cleans up wreckage from prior buggy imports on next boot.
+
+## [0.17.3] — 2026-05-15
+
+### Fixed
+
+- **Clerk Sign-Out menu item restored.** After the v0.17.0 bootstrap
+  collapse, `ClerkLegacyIDBridge` stopped firing the
+  `clerk-user-resolved` event because it tried to call `/api/auth/me`
+  BEFORE the access token existed → 401 → `synced=true` → no event →
+  `clerkActive` stayed false → `AccountMenu` received
+  `onSignOut=undefined`. The bridge was redundant after the refactor
+  and now broken — dropped. `App.jsx` snapshots `tokenProvider` before
+  `createSession` runs and flips `clerkActive=true` after success.
+
+## [0.17.2] — 2026-05-15
+
+### Changed
+
+- **API key takes precedence over JWT on every request.** Kiosks
+  authenticate with an API key in localStorage; the v0.17.0 JWT-pair
+  lifecycle (15-min access, 7-day refresh) was the wrong mechanism for
+  a never-die display — a >7-day network outage would expire the
+  refresh and kill the kiosk. Now `apiClient.request()`,
+  `streamAuthQuery()`, and the 401-retry-with-refresh path all prefer
+  `this.apiKey` over `this.accessToken` when set. Browser users
+  without a personal API key are unchanged.
+
+## [0.17.1] — 2026-05-15
+
+### Fixed
+
+- **API-key bearers no longer rejected.** The v0.17.0 middleware only
+  accepted access JWTs, so ts-store webhooks, dashboard-agent, and any
+  caller using a `trve_…` API key as a Bearer were rejected.
+  Middleware now shape-dispatches on the bearer: `trve_…` validates
+  against `api_keys`, anything else verifies as our access JWT. Both
+  human-minted keys and admin-minted system-user keys take this path
+  identically.
+- **Malformed bearer no longer panics.** `jwt.VerifyToken` was
+  unconditionally dereferencing `parsed.Claims` and panicked on garbage
+  input. Guarded both that site and the `parsed.Valid` check below;
+  failures return 401 instead of 500.
+
+## [0.17.0] — 2026-05-15
+
+### Added
+
+- **Session-token unification.** Replaces the four-channel credential
+  zoo (Bearer API key, Bearer JWT, X-User-ID, `?user_id=`) with a
+  signed access+refresh JWT pair, issued at bootstrap and accepted by
+  every transport (REST, SSE, WS). Every authz check is a synchronous
+  claim check via `DoesUserHavePriv(claims, needed)` — no DB roundtrip
+  on the hot path.
+- **Pluggable `IdentityProvider` registry** at the bootstrap endpoint
+  (`apikey`, `clerk`, `legacy-guid`). New IdPs are one-file additions.
+- **New auth endpoints**: `/api/auth/session` (bootstrap),
+  `/api/auth/refresh` (rotation with family-replay detection),
+  `/api/auth/logout` (revoke family). Refresh tokens ride an httpOnly
+  cookie scoped to `/api/auth`.
+- **Admin-settable TTLs**: `auth.access_token_ttl_seconds` (default
+  900 / 15min) and `auth.refresh_token_ttl_seconds` (default 604800 /
+  7days).
+- **SSE / WebSocket transports carry `?st=<accessToken>`** since
+  EventSource and WebSocket can't set headers. Single helper formats
+  the fragment.
+
+### Changed
+
+- **`view`-as-floor authz default.** Routes without an explicit
+  capability rule now require `CapabilityView`. Webhook-only system
+  users (`capabilities=[webhook]`) cannot snoop the read surface; they
+  hit `/api/webhooks/*` only. `CreateSystemUser` no longer force-injects
+  `view`.
+- **View mode in the ModeToggle gated on `can_view`** (previously
+  hidden for view-only users on the theory they couldn't switch
+  anywhere — wrong).
+- **`/` default route cascades by permitted capability**: view first,
+  then manage, then design.
+
+## [0.16.10] — 2026-05-15
+
+### Fixed
+
+- **Bell panel "Clear all" now clears connection/server notifications.**
+  `clearAll` was routing through `HYDRATE` with only pinned rows in the
+  payload, which intentionally preserves local-only rows
+  (those without `alertId`). Connection-unreachable and server-
+  unreachable notifications never acquire an `alertId` — so they stuck
+  forever. New `CLEAR_UNPINNED` reducer action drops every unpinned
+  row regardless of origin.
+
+## [0.16.9] — 2026-05-14
+
+### Added
+
+- **Bell-row alert deep link.** When an alert carries a `dashboard_id`
+  (decoded server-side from the rule's `external_ref` in v0.16.5's
+  Phase 2 step 1), the bell row renders an "Open dashboard" button
+  (Launch icon) that closes the panel and navigates to
+  `/view/dashboards/<id>`. Does NOT auto-mark the alert seen — dismiss
+  stays explicit.
+
+### Changed
+
+- **"Connection unreachable" notifications identify the connection.**
+  When the name cache misses, the subtitle now reads
+  "Connection abc12345 did not respond..." (UUID prefix) instead of the
+  generic copy, and fires `getConnection()` in the background to
+  populate the cache.
+
+## [0.16.8] — 2026-05-14
+
+### Fixed
+
+- **Kiosk SSE auth.** API-key-only kiosks (no GUID in URL, no Clerk
+  session) lost their default-dashboard redirect, star, and weather /
+  garage tiles after v0.16.5's auth-required default. Two fixes:
+  `App.jsx` Tier-0 bootstrap now calls `apiClient.setCurrentUser`
+  after `/auth/me` resolves; `streamConnectionManager` and
+  `ComponentEditor` (MQTT capture) prefer `?token=<apiKey>` over
+  `?user_id=<guid>` when building SSE URLs. Pattern points at the
+  session-token unification work that landed in v0.17.0.
+
+## [0.16.7] — 2026-05-14
+
+### Security
+
+- **`/api/config/user/:user_id` now self-only.** New `requireSelf`
+  guard at the handler enforces `caller.GUID == path user_id` for GET
+  and PUT. Admin cleanup on user delete flows through
+  `UserService.DeleteUser`, which cascades to
+  `ConfigRepository.DeleteUserConfig` directly (not via this HTTP
+  surface).
+
+### Fixed
+
+- **`ViewDashboardsPage` and `ViewModeNav` raw fetches**. Both pages
+  called `fetch()` directly against `/api/dashboards`; raw fetch sends
+  no `Authorization` / `X-User-ID`, so under the auth-required default
+  the kiosk silently got 401 → empty list → no tiles → no place to
+  render the star. Swapped both to `apiClient.getDashboards()`.
+
+## [0.16.6] — 2026-05-14
+
+### Fixed
+
+- **Bootstrap Tier-3 lookup**. The SPA reads
+  `/api/settings/default_browser_user_guid` before identity is
+  resolved, so kiosk-style `?key=trve_…` deployments could
+  auto-identify as the admin-configured default. Per-key settings
+  GETs are now explicitly `Public:true`. Bonus: closed a latent
+  write-escalation — `PUT /api/settings/<key>` was passing the
+  auth-required default with no capability check. Now Manage-only.
+- **Frigate camera widgets**. `<img src=…>` and `<video src=…>` fetch
+  without an `Authorization` header, so the auth-required default
+  returned 401 every second in the widget retry loop. Explicit
+  `Public:true` for the whole `/api/frigate/` GET surface. POST stays
+  gated. Trade-off: knowing a `connection_id` UUID is sufficient to
+  read media, so deployments must rely on perimeter access control
+  (tailnet, LAN, VPN).
+
+## [0.16.5] — 2026-05-13
+
+### Security
+
+- **`/api` routes now require authentication by default.** Routes
+  without an explicit `RouteCapability` rule were allowing
+  unauthenticated callers — `/api/dashboards`, `/api/connections`,
+  `/api/alerts`, `/api/components`, `/api/devices`, `/api/namespaces`,
+  `/api/registry`, `/api/tags`, `/api/events/stream` and ~10 more
+  reads were open to anyone who could reach the port. `Authorize` now
+  treats "no rule" as "authenticated user required, no specific
+  capability." Public exemptions are explicit and limited to the
+  bootstrap chain (`/api/health`, `/api/auth/me`,
+  `GET /api/config/system`).
+
+### Fixed
+
+- **Bootstrap default-dashboard redirect** now waits for identity to
+  resolve, so kiosk-style `?key=trve_…` auth loads the user's own
+  configured default rather than racing to the alphabetical-first
+  dashboard.
+
+### Added
+
+- **`external_ref` pass-through on ts-store alerts** (Phase 2 step 1).
+  Dashboard ingests the field verbatim and opportunistically decodes
+  the JSON dashboard convention (`{"dashboard_id":"<uuid>"}`) so
+  future bell-row deep links have the data ready.
+
+## [0.16.4] — 2026-05-13
+
+### Added
+
+- **Alert persistence.** ts-store webhook alerts now persist to a new
+  `alerts` collection. The bell hydrates from there on app load so
+  alerts fired while nobody was watching aren't lost. Visibility is
+  "first reader clears it for everyone" with a per-record pin
+  override — anyone can pin to keep an alert visible for other users,
+  anyone can unpin. Records expire 30 days after receipt via a
+  MongoDB TTL index. New routes: `GET /api/alerts`,
+  `POST /api/alerts/:id/seen`, `POST + DELETE /api/alerts/:id/pin`.
+- **Notification bell in fullscreen.** The App-level header is hidden
+  in fullscreen, which used to hide the bell too. The bell now also
+  renders in the viewer toolbar when fullscreen is on (and only then).
+
+### Fixed
+
+- **Copy-to-clipboard fallback** (`utils/clipboard.js`).
+  `navigator.clipboard.writeText` is only available on secure contexts
+  (HTTPS / localhost); the homelab runs over plain HTTP so the system-
+  user API-key copy button (and the Prometheus / SQL query-builder
+  copy buttons) silently failed in deployed use. New helper wraps the
+  modern API with a hidden-textarea + `execCommand` fallback.
+
+## [0.16.3] — 2026-05-12
+
+### Changed
+
+- **`Mint` renamed to `Generate`** in the system-user key flow to
+  match the rest of the dashboard's API-key UI surface. UI copy,
+  doc-comments, and Swagger summaries.
+
+## [0.16.2] — 2026-05-12
+
+### Added
+
+- **Capability selector on the New System User modal.** Operators can
+  mint a tighter-scoped key when an integration doesn't need to
+  receive inbound webhooks. `view` is locked on; `webhook` is a
+  checkbox defaulting on; `design` and `manage` stay hidden in the
+  modal but are accepted on `POST /api/system-users` for the rare
+  legitimate case. System-user cards now show capability chips (the
+  webhook chip is blue).
+
+## [0.16.1] — 2026-05-12
+
+### Added
+
+- **ts-store alert webhook receiver (Phase 1).** External services
+  `POST /api/webhooks/tsstore/:connection_id` with a Bearer token
+  issued to a system user; the dashboard validates routing, publishes
+  to an in-process event hub, and fans the event out to every logged-
+  in browser via SSE for surfacing in the notification bell.
+- **System users** — new non-interactive `User.Kind`. Admins create
+  them to own API keys for inbound integrations. No interactive
+  sign-in path; IdP/Clerk and X-User-ID both reject. Manage → System
+  Users page exposes the full lifecycle (create, delete, mint key,
+  revoke key) with a one-time-reveal token modal.
+- **Explicit `webhook` capability.** Humans don't get it by default;
+  system users do at creation time. `/api/webhooks/*` is gated on it
+  so the contract is self-documenting.
+- **Event hub + SSE** — in-process pub/sub; each browser opens
+  `/api/events/stream` once and dispatches `alert` events onto the
+  existing `NotificationContext.addNotification` (bell panel only —
+  no corner toast in Phase 1).
+
+## [0.16.0] — 2026-05-11
+
+### Added
+
+- **REST API adapter TLS skip-verify** with a strict two-gate opt-in.
+  Deployment-wide kill switch (`api.allow_insecure_tls` in
+  `config.yaml` or `DASHBOARD_API_ALLOW_INSECURE_TLS` env, default
+  false), AND a per-connection `insecure_skip_verify` toggle on the
+  api.rest config (default false, surfaced in the UI only when the URL
+  begins with `https://`). Both gates must be true. Single
+  `BuildAPIHTTPClient` helper centralizes `http.Client` construction
+  so the registry-path adapter, the legacy `APIDataSource`, and the
+  connection-test service all honor the same TLS posture.
+
+## [0.15.2] — 2026-05-11
+
+### Security
+
+- **`/api/users/*` Manage-only.** Every method on `/api/users/*` now
+  requires the Manage capability. There is no self-management UI
+  today, so no reason for non-admin callers to ever hit those routes.
+  Knowing a GUID or Mongo `_id` is not a permission to read another
+  user's record.
+
+### Changed
+
+- **`/api/auth/me` carries self-identity.** Response gains `id`, `guid`,
+  and `active` alongside capabilities — a single call, no follow-up
+  directory lookup. App bootstrap refactored to `resolveSelf()` on
+  every identity tier. Stale admin-default GUIDs that no longer
+  resolve are cleared from localStorage instead of being persisted as
+  dead `X-User-ID` headers.
+
+## [0.15.1] — 2026-05-11
+
+### Security
+
+- **`/api/config/system` returns only whitelisted public keys** (today:
+  `current_layout_dimension`). Other keys, including any future
+  admin-set values, are dropped from the response.
+- **`/api/users` (list-all) requires Manage.** Single-user reads
+  (`/:id` and `/by-guid/:guid`) stay open to any authenticated caller
+  but redact email / Clerk linkage / capabilities for non-Manage.
+- **New `GET /api/users/by-guid/:guid`** lets the SPA bootstrap resolve
+  a localStorage or admin-default GUID claim into a User record
+  without going through the Manage-only list endpoint.
+- **`/api/settings` (list-all) requires Manage.** Per-key reads
+  (`/api/settings/:key`) stay open because View/Design code reads
+  individual runtime values on every page load.
+
+## [0.15.0] — 2026-05-11
+
+### Added
+
+- **AI builder configure-first rendering.** When the agent finishes a
+  session without calling `set_custom_code`, the preview pane and save
+  handler now materialize the same React component code that the
+  manual `ComponentEditor` would emit. AI-built and human-built
+  components render identically.
+  `generateComponentCodeFromConfig` builds runnable component code
+  from `query_config`, `data_mapping`, `options`, `parser`, and the
+  sliding window — including ts-store streaming variants — and
+  persists it on save.
+
+### Changed
+
+- **`ComponentEditor` custom-code mode keeps the Connection tab
+  visible** (connection still governs runtime data shape), with the
+  no-longer-load-bearing data-mapping and chart-options subsections
+  hidden inside that tab.
+- **App shell handles off-mode routes** (`/account/*`) correctly: the
+  mode pill is unlit and the side-nav is hidden.
+
+## [0.14.9] — 2026-05-10
+
+### Added
+
+- **Connection filter on the Select Component modal** — mirrors the
+  Design-mode component-list page's filter so picking a component for
+  a dashboard panel can scope by data source. Fans out across
+  `connection_id` / `display_config.frigate_connection_id` /
+  `mqtt_connection_id`.
+
+## [0.14.8] — 2026-05-09
+
+### Added
+
+- **Tile views show a `NamespaceChip` on every entity card.** Added
+  to Design-mode dashboards / connections / components tile views,
+  the View-mode dashboard tile grid, and the Select Component modal.
+- **Type-filter dedup**: `ComponentsListPage` now consumes the shared
+  `TypeHierarchyFilter` widget instead of reimplementing it inline
+  (~250 lines removed). `frigate_alerts` and `banded_bar` were
+  missing from the inline copy — both now flow through automatically
+  since the catalog lives in one place.
+
+### Changed
+
+- **`UserService.DeleteUser` cascades to API keys and per-user
+  `app_config` rows**, so deleted users can't leave live API tokens
+  resolving to a missing `user_id`. Admin UI confirmation spells out
+  the consequences up front.
+- MCP `create_dashboard` / `update_dashboard` tool descriptions now
+  document the native `text_config` panel schema (content,
+  display_content, size, align).
+
+### Fixed
+
+- Type-filter trigger styled to match Carbon MultiSelect neighbors
+  (`--cds-field` fill + 1px border).
+- Dashboard rename inline input grows up to 720px wide on the viewer
+  toolbar.
+- `ComponentEditorModal` pins `scrollTop` on `focusin` so Carbon's
+  implicit focus-scroll doesn't re-center buttons under the cursor.
+
+## [0.14.7] — 2026-05-07
+
+### Added
+
+- **Banded bar (Levey-Jennings) chart type** with four visual styles
+  (`time_series` + three column variants) and a per-row mean / ±1/±2
+  SD data contract.
+- **AI agent shifted to configure-first**; `set_custom_code` is
+  last-resort. Guardrails: `chart_type` validation,
+  `update_component_type` refuses changes on populated components,
+  `formatTimestamp` enum validated. `update_data_mapping` accepts
+  `band_columns`. Y-axis cap exempted for `banded_bar` / `dataview`.
+- **ts-store streaming default backfill = newest 100 records.**
+- **New aggregation-and-filtering architecture doc.**
+
+### Fixed
+
+- **PNG export composites ECharts canvas with native Canvas 2D
+  `fillText` for the title** — html2canvas's text shaper was
+  stretching titles.
+- **Data-table modal**: AG Grid `valueGetter` for dot-key columns,
+  timestamp hoisted to first column, time format honors chart's
+  `x_axis_format`, gauges now get the data-table action.
+- **`useData` column-union**: streaming records can grow the column
+  set without dropping prior rows.
+- **`DynamicComponentLoader` translates parser keys** snake_case →
+  camelCase.
+
+## [0.14.6] — 2026-05-05
+
+### Changed
+
+- **AI guardrails.** Refuse `update_component_type` changes on
+  already-populated components (the most common failure mode is the AI
+  silently converting the user's chart into a control or display on an
+  ambiguous prompt). Refuse `chart_type` writes when the value isn't a
+  known chart subtype, or when the component isn't a chart. New enum
+  on `update_data_mapping.x_axis_format` so the AI can't ship invented
+  presets through the API. System prompt expanded with
+  "Refining vs. converting existing components" and explicit
+  callouts that the three component-type subtype namespaces don't
+  cross over.
+- **`useData` injects a default backfill** (`{raw:'newest', limit:100}`)
+  for ts-store streaming connections when the caller doesn't pass one.
+  Fills the chart immediately instead of leaving it blank until the
+  next push arrives. Caller can opt out with `backfill: false` or
+  override with explicit value.
+- **Removed the dashboard switch-indicator overlay popup.** Predates
+  the toolbar prev/next/home arrows.
+
+### Fixed
+
+- **`formatTimestamp` default branch falls back to `chart_time`** (time
+  only) instead of `toLocaleString` (date + time), and emits a one-time
+  `console.warn` naming the bad preset.
+
+## [0.14.5] — 2026-05-04
+
+### Added
+
+- **Hoverable list-page counts.** Panels column on dashboards / Charts
+  column on connections / Dashboards column on components all show
+  named-item lists in their tooltips (with `(empty panel)` /
+  `(missing component)` placeholders so the count stays honest). New
+  global `.tooltip-multiline` class preserves embedded `\n` line breaks
+  via `white-space: pre-line`.
+
+### Changed
+
+- **Column reorder for at-a-glance scanning.** Dashboards: Tags before
+  Description. Components: Description after Type; Dashboards before
+  Connection. Connections: Charts after Description.
+
+## [0.14.4] — 2026-05-04
+
+### Changed
+
+- **`drop_mask_secrets` migration moved to the in-process framework.**
+  v0.14.3 shipped it as a standalone `cmd/migrate-*` binary which
+  forced an out-of-band `scp + ssh + exec` on prod — wrong choice for
+  a simple `$unset` against one collection. New `Database Migrations`
+  section in CLAUDE.md establishes the in-process framework as the
+  default and documents when a standalone binary is justified
+  (structural rewrites, pre-boot data conversion, multi-hour sweeps).
+
+## [0.14.3] — 2026-05-03
+
+### Security
+
+- **Removed the `mask_secrets` per-connection flag.** API never returns
+  unmasked credentials; secrets remain write-only over POST/PUT with
+  the existing `preserveSecrets` round-trip semantics. One-shot
+  migration `cmd/migrate-drop-mask-secrets` `$unset`s the legacy field
+  from existing connection documents (idempotent; recorded as
+  `drop_mask_secrets_v1`). (See v0.14.4 for the move into the in-process
+  framework.)
+- **Go toolchain bumped 1.24 → 1.26**, closing 10 reachable Go stdlib
+  vulnerabilities reported by govulncheck. Dockerfile + CLAUDE.md
+  prereqs updated.
+- **Frontend deps**: removed unused `@antv/g2plot` + `@antv/g2`, ran
+  `npm audit fix` — 15 vulns (10 high, 5 moderate) → 0.
+
+### Added
+
+- **`SECURITY.md` at repo root** with vulnerability reporting,
+  scanning tools (`npm audit`, `govulncheck`, `gitleaks`), the
+  2026-05-03 scan result, and the 3 acknowledged-unreachable Go
+  advisories.
+
+### Fixed
+
+- **Viewer prev/next list now respects the saved sort key + direction**
+  from the View Mode tile page (not just the manual drag order).
+  Reloads on visibility/focus change so a sort change on the tile page
+  propagates back to an already-open viewer.
+
+## [0.14.2] — 2026-05-03
+
+### Added
+
+- **Referential-integrity guards on delete.**
+  `DELETE /api/connections/:id` returns 409 Conflict if any components
+  or devices still reference the connection. `DELETE /api/components/:id`
+  returns 409 Conflict if any dashboards have a panel pointing at the
+  component. Both 409 bodies include a `usage` object enumerating
+  blockers so the UI can show "cannot delete — still used by N items"
+  inline.
+
+## [0.14.1] — 2026-05-03
+
+### Changed
+
+- **`panel.chart_id` renamed to `panel.component_id`**, completing the
+  v0.11.x charts → components rename. Same data, more honest name.
+  Standalone migration `cmd/migrate-panel-component-id` rewrites
+  existing data; must run BEFORE deploying the new server because the
+  binary won't find anything under the old field name. Also drops the
+  unused `chart_id` indexes on the `ai_sessions` collection.
+
+## [0.14.0] — 2026-05-03
+
+### Changed
+
+- **Connections now use UUID `_id`** instead of MongoDB ObjectID-hex,
+  matching the convention used by dashboards / namespaces / users.
+  Component → connection references are rewritten to UUIDs. Orphan
+  refs (connection deleted) are nulled out. Bundle export/import works
+  on UUIDs going forward; v0.13.x bundles do not round-trip into
+  v0.14.x. Migration: standalone
+  `server-go/cmd/migrate-uuid-ids/main.go` runs BEFORE the new server
+  can start cleanly. Local + prod migrated 26 connections + 142
+  component references.
+
+## [0.13.3] — 2026-05-03
+
+### Fixed
+
+- **Refetch-without-remount for streaming-safe dashboard refresh.**
+  The toolbar Refresh button and dashboard-to-dashboard navigation no
+  longer force a full panel remount. Streaming charts keep their
+  rolling buffer through navigation (`StreamConnectionManager`
+  grace-period reconnect now works as intended), polling charts do an
+  out-of-band refetch via `useData`.
+- **Component expand modal**: download dropdown items no longer
+  clipped; oversized charts still can't blow out the modal (overflow
+  moved off the modal body onto inner panel/display wrappers).
+
+## [0.13.2] — 2026-05-02
+
+### Added
+
+- **Double-click expand modal in view mode.** Double-click any chart,
+  weather display, or frigate camera to open it in a large expand
+  modal. The modal renders an independent live instance (streaming
+  keeps streaming, polling keeps polling) and carries the panel's
+  data-table + download (PNG/CSV/JSON) actions. Scales with the
+  viewport on large displays.
+
+### Fixed
+
+- **View-mode toolbar**: refresh icon moved before the download icon
+  so it groups with the refresh-pill + last-refresh text.
+- **Mode toggle**: switching to View from a design-origin preview no
+  longer flickers and snaps back to Design.
+- **30 legacy components with empty `component_type`** backfilled to
+  `chart` on local + prod databases; defensive fallback added in the
+  viewer.
+
+## [0.13.1] — 2026-05-01
+
+### Added
+
+- **AI builder `config` prop.** Components now receive a `config`
+  prop with `{ title, name, description }`. AI-generated code reads
+  `config.title` so charts track user renames automatically. `useData`
+  also returns `config` as a fallback so existing AI charts that
+  destructured `config` keep working without per-chart fixes. System
+  prompt + tool descriptions updated to require `config`-prop usage
+  and `tooltip.appendToBody` on every chart.
+
+### Fixed
+
+- **Frigate connection count on the Connections list** (display
+  components reference connections via
+  `display_config.frigate_connection_id` and `mqtt_connection_id`,
+  which the previous count missed).
+- **Saving a new component after picking a connection / editing data
+  mapping no longer drops those edits** — fixed a stale-closure bug in
+  `useImperativeHandle`'s deps array.
+- **Dirty tracking covers every field `handleSave` writes** (title,
+  namespace, componentType, controlConfig, displayConfig, queryType,
+  tsstore/edgelake, sliding window, time bucket, parser config,
+  columnAliases, visibleColumns, componentCode).
+- **ECharts tooltips no longer clip at panel borders** (theme +
+  template changes set `tooltip.appendToBody`).
+- **Background "connection unreachable" alerts now go to the bell
+  only**, not toast + bell.
+
+### Changed
+
+- Connection-picker double-click commits the selection.
+- View-mode tile list: Reset Order button repositioned next to the
+  sort dropdown.
+- Dashboards list page renamed "Data Sources" header column to
+  "Connections" and added a connection filter on both Design-mode
+  list and View-mode tile pages.
+- `ComponentEditor` "Display Title" field renamed to "Title" so the
+  UI label matches the backing field name.
+
+## [0.13.0] — 2026-05-01
+
+### Added
+
+- **Reset Filters icon** on all list pages + dashboard tile view +
+  Select Existing Component modal.
+- **Tile-mode SortMenu** (Name / Last modified / Namespace) on three
+  Design list pages + the View-mode dashboard tile page (with a
+  Manual option that toggles drag-reorder back on).
+- **`ComponentPickerModal`** gains namespace filter, sort menu, and a
+  toolbar that wraps on narrow widths.
+- **Custom-code editor mode polish.** Connection tab and Chart Type
+  card hidden; Code tab pre-selected; component-type selector locks
+  Display/Control as disabled; banner with "Switch to Generated Code"
+  action button replaces the on-entry warning modal.
+
+### Changed
+
+- **`TypeHierarchyFilter` groups start collapsed** — Chart's subtype
+  list was long enough to push the others off-screen.
+- **Save button gated on `hasChanges`** in `ComponentEditor`,
+  `ComponentEditorModal`, `ComponentDetailPage`, and
+  `ConnectionDetailPage` (was active on first load).
+- **Embedded-component edits no longer mark the parent dashboard
+  dirty** — only panel-level changes (chart_id swap, w/h growth) flip
+  `editHasChanges`.
+
+### Fixed
+
+- **Rename-sweep stragglers cleaned up.** `ListConnections` JSON key
+  `datasources` → `connections`. `TagHandler` aggregations:
+  collection names `datasources` / `charts` → `connections` /
+  `components` (these were nonexistent collections, so tag counts
+  were always 0). `DashboardRepository` `$lookup` from `datasources`
+  → `connections` (incidentally fixes the `include_connections`
+  `panel_count = 0` bug).
+
+## [0.12.0] — 2026-04-30
+
+### Changed
+
+- **`datasource` → `connection` rename completed across the stack.**
+  The umbrella entity for an external data/device endpoint is
+  **Connection** everywhere — collection, BSON field, Go identifier,
+  JSON wire format, route, runtime adapter interface. The dual-tag
+  hack (`bson:"datasource_id" json:"connection_id"`) that bridged
+  old storage to new wire is gone. Renames span: `models.Datasource`
+  → `models.Connection`; `DatasourceID` → `ConnectionID`;
+  `DataSource` runtime adapter interface → `ConnectionAdapter`;
+  repository, service, handler, factory, directory
+  (`internal/datasource/` → `internal/connection/`),
+  `IncludeDatasources` → `IncludeConnections`,
+  `/api/streams/inbound/:datasourceId` → `:connectionId`,
+  `BucketConfig.DatasourceID` → `ConnectionID`, etc.
+- **Collection `datasources` → `connections`.** Field
+  `datasource_id` → `connection_id` on every component document.
+  Stored chart code (`component_code`) rewritten to use
+  `connectionId:` instead of `datasourceId:` in the `useData` hook
+  prop.
+- **`POST/GET/PUT/DELETE /api/datasources/*` removed.**
+  `/api/connections/*` is the only path. The deprecated alias was
+  removed in this release.
+
+### Migrations
+
+- `rename_datasources_to_connections_v1` (collection rename via admin
+  `renameCollection`).
+- `rename_datasource_id_field_v1` (aggregation-pipeline `UpdateMany`
+  copies `datasource_id` → `connection_id` and unsets the old key).
+- `rename_datasourceId_in_component_code_v1` (regex-narrow scan over
+  stored component code, replaces `datasourceId:` with
+  `connectionId:`).
+
+## [0.11.0] — 2026-04-29
+
+### Changed
+
+- **`Chart` → `Component` umbrella rename across the entire stack.**
+  Component is now the generic term; chart, control, and display are
+  the three sub-types via `component_type`. The word "chart" is
+  reserved for ECharts visualizations going forward.
+  - `models.Chart` → `models.Component` (and every `Create*` /
+    `Update*` / `*ListResponse` / `*QueryParams` / `*Summary` /
+    `*VersionInfo` companion type).
+  - `repository.ChartRepository` → `ComponentRepository`,
+    `service.ChartService` → `ComponentService`,
+    `handlers.ChartHandler` → `ComponentHandler`,
+    `hub.ChartHub` → `ComponentHub`.
+  - `AISessionResponse.Chart` → `.Component`;
+    `AIChartUpdateEvent` → `AIComponentUpdateEvent`.
+  - HTTP routes `/api/charts/*` → `/api/components/*` (no alias).
+  - MongoDB collection `charts` → `components`, via the new
+    `rename_charts_to_components_v1` migration.
+  - Frontend file/component renames mirror the server (file by file,
+    api method by api method, CSS class by CSS class). Route
+    `/design/charts` → `/design/components`.
+
+### Added
+
+- **Connection-failure notifications.** When a request fails in any
+  of these shapes (TypeError from `fetch`, 15s timeout, HTTP 502 /
+  503 / 504, HTTP 500 with body matching connection-failure hints),
+  the user gets a toast + a persistent bell-panel notification,
+  debounced per-connection to 30s so a 12-panel dashboard fires once,
+  not 12 times. SSE/EventSource onerror routes through the same
+  helper. Connection-aware: the toast renders the connection's human
+  name when known.
+- **`apiClient.request()` wraps `fetch()` in an `AbortController` with
+  a 15s default timeout.**
+- **`TagInput` suggestions list now portals to `document.body`** so
+  the dropdown escapes modal-body overflow and stacking context. The
+  silent backspace-deletes-last-chip shortcut is gone.
+- **`ComponentDetailPage` gates Cancel on `hasUnsavedChanges`** and
+  shows a Discard-changes confirmation modal when dirty.
+
+## [0.10.1] — 2026-04-28
+
+### Fixed
+
+- **Viewer prev/next arrows** now walk dashboards in the same
+  sequence the user arranged via drag-and-drop on the View Mode tile
+  page. Previously used name-alphabetical, ignoring the user's
+  reordering. Both surfaces share one ordering implementation in
+  `utils/dashboardOrder.js`.
+
+### Removed
+
+- **Dead "Preview" placeholder section** from the control editor.
+  Never populated; added visual noise to the form.
+
+## [0.10.0] — 2026-04-27
+
+### Added
+
+- **Optional Clerk-backed browser sign-in.** Soft switch via
+  `CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY`: when both are set, the
+  SPA renders Clerk's hosted sign-in widget (email + Google + Apple)
+  and the server validates Clerk's session JWTs on every request.
+  When unset, the v0.9.x bootstrap chain is in effect — zero behavior
+  change for existing deployments.
+- **`IdentityVerifier` interface** (`internal/auth/`) that decouples
+  the auth middleware from any specific IdP. Clerk is the first
+  implementation; future generic OIDC and trusted reverse-proxy
+  become drop-in additions.
+- **Bearer dispatch by shape**: `trve_…` → API key (v0.9 path);
+  anything else → `IdentityVerifier` (Clerk JWT today). Both paths
+  coexist; API keys keep working unchanged.
+- **Hybrid user resolution**: try `ClerkUserID` lookup first; on
+  miss, match by verified email and JIT-persist the Clerk subject
+  onto the user record. No auto-create — admins pre-provision users.
+- **New Clerk user-ID field on the user edit page** lets admins
+  manually re-link or break a stale link.
+- **Sign-out item in the account menu** (only when Clerk is the
+  active auth path).
+
+## [0.9.1] — 2026-04-27
+
+### Fixed
+
+- **Component-list `name=` filter** now uses `regexp.QuoteMeta` + a
+  `\b` word-prefix anchor. Searching "ts" matches "TS-Store…" but no
+  longer "Lights" / "Alerts"; searching "." returns nothing instead
+  of everything; case-insensitive behavior preserved.
+
+### Added
+
+- **"Versions and drafts" section** in user-guide AI builder docs
+  explains how AI sessions checkpoint as draft versions and promote
+  to final on Save / discard on Discard. Manual-edit vs AI-builder
+  versioning contrast in `creating-components.md`. Corrected
+  `data-model.md` — manual PUT updates the latest version in place;
+  only AI sessions create new draft versions.
+
+## [0.9.0] — 2026-04-27
+
+### Added
+
+- **API keys.** New `/api/api-keys` (bcrypt-hashed `trve_…` tokens
+  with prefix-indexed lookup). Per-user CRUD plus admin list-all.
+  Auth middleware now accepts `Authorization: Bearer trve_…`;
+  precedence is Bearer → X-User-ID → `?user_id=` → unauthenticated.
+- **`/mcp/sse` and `/mcp/message` now require authentication**,
+  matching the rest of `/api`. mcp-proxy / Claude Desktop must pass
+  the Bearer header.
+- **Account menu** (avatar dropdown) shows name + email + API Keys
+  link. API Keys page moved out of Manage Mode → `/account/api-keys`.
+  Dev-only `DevUserSwitcher` pill replaces the impersonation
+  dropdown that previously lived in the avatar.
+- **`dashboard-agent --api-key` flag** (or `DASHBOARD_API_KEY` env
+  var). MCP client + prompt builder send Bearer auth when set.
+  `--user` is now legacy.
+- **`docs/postman/` tooling**: Swagger→Postman v2.1 converter with
+  collection-level Bearer auth. `make api-docs` (`swag init` +
+  builder) is wired into `make release`.
+
+### Changed
+
+- **Chart thumbnail field removed** (captured on every save but never
+  read). Idempotent migration strips it from existing rows on first
+  boot.
+- **Production header shows the user's name inline** next to the
+  avatar (was tooltip-only).
+
+## [0.8.5] — 2026-04-26
+
+### Added
+
+- **Browser-mode identity bootstrap.** Production browsers resolve
+  identity via a four-tier chain: `?user_id=<guid>` in URL →
+  localStorage → admin setting `default_browser_user_guid` →
+  "Sign-in not configured" stub. URL parameter is consumed and
+  stripped after first read. Admin setting + editor modal for the
+  deployment-wide default identity, with an explicit "identity
+  assertion, not authentication" warning.
+- **Dashboard config refresh.** New deployment-wide
+  `dashboard_config_refresh_interval` (default 300s) drives a
+  slow-poll re-fetch of the dashboard record so kiosks pick up edits
+  made by another author without a manual reload. Visibility-gated;
+  paused while editing; only triggers re-render on real diffs.
+
+### Changed
+
+- **Dev-time user-switching dropdown hidden in production bundles**
+  (gated on `import.meta.env.DEV`).
+- **Orphan cleanup**: removed the dead
+  `dashboard.config_refresh_interval` base-config key.
+
+## [0.8.4] — 2026-04-25
+
+### Removed
+
+- **Four fields from the Dashboard Settings modal** that didn't do
+  anything at runtime (Theme — app hardcoded to g100 dark; Make
+  dashboard public — no access-control consumer; Allow export — no
+  export-permission consumer; Title Scale — only affected a legacy
+  chart type the editor no longer creates). Fields persist on the
+  model as no-ops so existing records round-trip without data loss.
+
+### Fixed
+
+- **Auto Refresh actually works.** Chart code generator no longer
+  hardcodes `refreshInterval=30000`; the dashboard's
+  `settings.refresh_interval` now drives every chart's polling cadence
+  via `DynamicComponentLoader`. `useData` polling pauses on
+  `document.visibilitychange` and refetches immediately when the tab
+  returns to visible. Toolbar's Refresh button now forces a real
+  chart-data refetch (was reloading the dashboard record itself).
+  New dashboards default to a 30s refresh; legacy dashboards with no
+  value default to 30s on load. Set to 0 to disable entirely.
+  Streaming sources (MQTT, ts-store push, bidirectional WebSocket)
+  are unaffected.
+
+## [0.8.3] — 2026-04-25
+
+### Fixed
+
+- **Tile-view click-after-drop.** After drag-and-drop, the source
+  tile became un-clickable until the user clicked some other tile
+  first. Scoped suppression to source tile + 250ms window.
+- **Mode pill on VIEW switch.** Clicking VIEW from a clean design
+  preview used to leave the header pill on DESIGN until a second
+  click forced a remount. Viewer's mode guard now clears `fromDesign`
+  when accepting a switch into view mode.
+
+### Changed
+
+- **User-facing documentation sync.** The udoc/ Docusaurus site had
+  drifted from running app behavior across several v0.7 / v0.8
+  releases. Full rewrites of `viewing-dashboards.md`,
+  `viewer-controls.md`, `grid-layout.md`, `system-settings.md`,
+  `modes.md`, `getting-started.md`, `keyboard-shortcuts.md`, and the
+  user-guide landing README. Added new `mcp.md` and
+  `dashboard-agent.md` user-facing pages.
+
+## [0.8.2] — 2026-04-25
+
+> Tagged as a planned interim cut for the v0.8.1 follow-up fixes; no
+> images were published. Rolled forward into v0.8.3 along with the
+> user-guide sync.
+
+## [0.8.1] — 2026-04-25
+
+### Added
+
+- **View-mode tile drag-and-drop reorder.** Whole-tile drag with
+  native HTML5 DnD (no library). Drop target's left or right half
+  decides insertion side; a 4px blue bar previews insertion. Order
+  persists per-user at `app_config.settings.dashboard_tile_order`.
+  Partial coverage — only explicitly-placed tiles are pinned; the
+  rest fall through to the default sort. New dashboards prepend to
+  the front so unseen tiles surface naturally. "Reset order" header
+  button wipes the manual sequence. Touch reorder intentionally
+  unsupported for now.
+- **`/view/dashboards` default tile order** matches design-mode
+  (most-recently-updated first).
+
+## [0.8.0] — 2026-04-24
+
+### Added
+
+- **`cmd/dashboard-agent` CLI.** A reference MCP client (shipped in
+  the repo) that drives the same `/mcp/sse` surface external clients
+  use, producing complete dashboards from natural-language prompts.
+  See `examples/dashboard-agent/` for an end-to-end walkthrough of a
+  14-panel Prometheus monitoring dashboard built in 12 turns.
+- **Dashboard tile-view filters.** Namespace + tag dropdowns on
+  `/view/dashboards` matching the design-mode list, while keeping
+  view-mode-only tile UI (default-star, "Set as Default" overflow,
+  no edit/delete).
+- **`default_dashboard_fit_mode` admin setting** controls the
+  deployment-wide default for any dashboard a user has not
+  explicitly set. Per-user, per-dashboard preferences are now
+  strictly scoped — fit-mode picks no longer bleed across users or
+  untouched dashboards.
+
+### Changed
+
+- **MCP "Grid contract" preamble corrected** to match what the
+  viewer actually does (32×32 px cells, 4px gaps, fixed chrome
+  budget; `cols = floor(w / 36)`, `rows = floor((h - 105) / 36)`).
+  A 2560×1440 canvas is 71×37 cells, not the 12×45 some docs
+  implied.
+- **Prometheus adapter accepts bare durations** (`-1h`, `-30m`, `1h`)
+  for `start`/`end` values, in addition to the existing `now-1h`
+  form.
+- **Compact ack envelope on `create_component` / `update_component`**
+  removes ~85% of bytes the LLM was re-shipping in subsequent turns.
+  `get_connection_schema` gains `metric_prefix` / `metric_contains` /
+  `max_metrics` filters so a schema fetch on a busy Prometheus
+  doesn't return 2000+ metrics.
+- **Agent retry logic** treats transient network errors (DNS
+  failure, connection reset) the same way it treats 429s.
+
+## [0.7.9] — 2026-04-22
+
+### Fixed
+
+- **Dashboard tile-view selection page** (`/view/dashboards`) now
+  scrolls on mobile and narrow viewports. Previously tiles past the
+  fold were clipped with no scroll capability.
+
+### Security
+
+- **Hardened datasource sanitizer rollout** (from v0.7.8 — see below
+  for full detail).
+
+## [0.7.8] — 2026-04-22
+
+### Security
+
+- **Closed seven credential-leak gaps in the export path.** The
+  export bundle was honoring a per-connection `MaskSecrets` flag —
+  connections created with `MaskSecrets=false` (allowed for any
+  Designer role) would ship credentials in cleartext inside the
+  exported bundle. The sanitizer also had type-specific holes that
+  leaked even with `MaskSecrets=true`. Fixed:
+  - `PrometheusConfig.Password` had no sanitize branch.
+  - `TSStoreConfig.Headers` were never masked.
+  - Auth-header allowlist expanded and made case-insensitive
+    (`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`,
+    `X-API-Key`, `X-Auth-Token`, `X-Access-Token`).
+  - URL userinfo (`user:pass@`) stripped from API, Socket,
+    Prometheus, and MQTT URL fields.
+  - `SQLConfig.Options` now redacts `password=` / `sslpassword=`
+    segments.
+  - `APIConfig.Body` and `APIConfig.QueryParams` masked whole on
+    non-empty values.
+- **New `SanitizeForExport()` method** always masks regardless of the
+  `MaskSecrets` flag. (`SanitizeForAPI` unchanged for the edit-form
+  round-trip path.)
+
+## [0.7.7] — 2026-04-21
+
+### Changed
+
+- **Documentation and diagrams only — no code changes.** New layered
+  architecture diagram at
+  `docs/architecture/dashboard-architecture-layered.drawio`. README
+  and `ARCHITECTURE.md` now show the MCP surface as a first-class
+  external-client channel (Claude Desktop via mcp-proxy →
+  `/mcp/sse`). Reconciled stale references to a removed stdio binary
+  (`cmd/mcp-server`) — the backend exposes a single MCP surface over
+  SSE at `/mcp/sse` + `/mcp/message`. Linked `docs/mcp.md` from the
+  README. Internal LAN/Tailscale IPs and hostnames scrubbed from
+  CLAUDE.md per the "no IPs in artifacts" rule.
+
+## [0.7.6] — 2026-04-21
+
+### Fixed
+
+- **Caddy directive ordering for `/docs`.** v0.7.5's `handle /docs`
+  blocks were defeated by Caddy's directive ordering: when `root`,
+  `file_server`, and `try_files` sit at the server level next to
+  sibling `handle` blocks, `try_files` is hoisted ahead of the
+  `handle` evaluation, so the SPA rewrite fired first. Fix: wrap the
+  SPA fallback (root + try_files + file_server + asset-header
+  matchers) in its own terminal `handle {}` block.
+
+## [0.7.5] — 2026-04-20
+
+### Fixed
+
+- **Wire `/docs` through Caddy.** v0.7.4 bundled the Docusaurus docs
+  into the server image, but the `/docs` route was still unreachable
+  in deployed environments because the client Caddy config had no
+  handler for it. Added `handle /docs` and `handle /docs/*` blocks
+  that reverse-proxy to `server:3001`.
+
+## [0.7.4] — 2026-04-20
+
+### Added
+
+- **Bundled docs.** The `/docs` site is now built into the server
+  container image, so the Help button in the header resolves on
+  homelab deploys (previously 404'd outside of local dev). Server
+  Dockerfile gains a Node 20 docs-build stage that runs the
+  Docusaurus build and copies the output next to the binary.
+
+### Changed
+
+- **Namespace picker in the app header is hidden for users without
+  Design or Admin privileges** — it's an authoring-only control and
+  has no meaning for view-only users.
+
+## [0.7.3] — 2026-04-20
+
+### Added
+
+- **Dataview chart defaults + per-user overrides.** Column order and
+  widths are first-class on dataview charts. Authors pick the order /
+  default widths in the editor; each user's resize + reorder actions
+  persist per-chart under `app_config`.
+- **Long-mask placeholder for populated secret fields.** Password /
+  API-key / token fields on every connection type render a long mask
+  when the backend returned "a secret is set." Click to edit clears
+  for fresh input; leave without typing to preserve.
+- **Component picker hierarchical type filter** extracted to shared
+  `TypeHierarchyFilter` component.
+- **Stream connection debounce.** MQTT / streaming connections now
+  coalesce a burst of topic-change reconnects (dashboard mount wiring
+  N controls) into one reconnect. Eliminates `N-1` canceled-SSE
+  "CORS request did not succeed" noise in dev consoles.
+- **Safe-subnet `DASHBOARD_HOST` autodiscovery** for ts-store push
+  connections. Server autodiscovers a reachable IP from a safe
+  subnet allowlist (Tailscale overlay + LAN, excluding Docker
+  ranges); an explicit env still wins.
+
+### Changed
+
+- **Chart title + plot alignment**: line / area / bar titles now
+  render in React above the ECharts canvas, and the plot area uses a
+  fixed left gutter so different charts on the same dashboard line
+  up regardless of y-axis label width. **Re-save existing charts to
+  pick up the new alignment.**
+- **Mode toggle no longer jumps.** Clicking a row or eye icon in the
+  Design-mode dashboard list opens the editor / preview at
+  `/view/...` but keeps the header pill on DESIGN via a new
+  `ModeGuardContext` signal. Cancelling routes back to the design
+  list; saving flips to VIEW.
+
+### Fixed
+
+- **`FrigateCameraViewer` no longer throws
+  `streamConnectionManager is undefined`** when subscribing to MQTT
+  alerts.
+- List-page toolbar order now mirrors column order:
+  `Search → Namespace → Type → Tags → Connection → View switcher`.
+
+## [0.7.2] — 2026-04-19
+
+### Added
+
+- **Full user-facing docs coverage for namespaces + export/import.**
+  New Namespaces and Export & Import pages in the user guide; new
+  "Sharing & Organization" sidebar category.
+- **Persistent toast system.** Errors stay until dismissed;
+  success/info/warning auto-dismiss after 5s. Separate from the
+  bell-panel queue.
+
+### Changed
+
+- **Header namespace pill** gains chevron caret + tooltip so it
+  reads as a dropdown.
+- **Boolean "Current/All namespaces" toggle on list pages becomes a
+  multi-select `NamespaceFilter`** (mirrors `TagFilter` shape).
+- **Default namespace's slug is locked in the management UI** with
+  helper text explaining why.
+- **Import target namespace defaults to active namespace**; inline
+  notices offer one-click "Use" or "Create" actions for the source
+  namespace.
+- **Switching to View while editing dashboard X lands on X
+  specifically** (not the user's default).
+- **Save+switch failure** (e.g., duplicate name) now blocks the mode
+  switch instead of silently swallowing.
+
+### Fixed
+
+- **Inline name-error badge on dashboard editor** with a custom red-
+  on-dark tooltip, portaled to escape the toolbar's clipping.
+
+## [0.7.1] — 2026-04-19
+
+### Added
+
+- **View icon (eye)** on both tile actions and list actions column.
+  Clicking jumps straight to `/view/dashboards/:id`.
+
+### Changed
+
+- **Tile clicks in export mode now toggle selection** instead of
+  opening the editor — matches the list view's existing behavior.
+  Selected tiles get a blue border + shadow and a visible checkbox
+  overlay. Action row hides in export mode.
+- **Tile grid viewport gains a small top padding** so the tile hover
+  lift doesn't clip under the toolbar / export-mode bar.
+
+## [0.7.0] — 2026-04-19
+
+### Added
+
+- **First-class `Namespace` entity.** Every connection, component,
+  and dashboard belongs to a namespace; uniqueness becomes
+  `(namespace, name)` instead of bare name, so two namespaces can
+  each have a dashboard called "Home" without colliding. CRUD at
+  `/api/namespaces`; delete guard returns 409 with per-type usage
+  counts when records still reference the namespace. Rename cascades
+  into every connection / component / dashboard row.
+- **Active namespace is per-user preference** (`active_namespace` in
+  `app_config`). Header picker shows the current namespace as a
+  colored chip; picking another namespace swaps context for create
+  forms and list-page filters.
+- **List pages (dashboards, components, connections) gain a
+  namespace column** with a colored chip and a "Current / All
+  namespaces" toggle.
+- **Namespaces management page** at `/manage/namespaces` with a
+  swatch-palette color picker.
+- **Dashboard export/import.**
+  `POST /api/dashboards/export` builds a portable JSON bundle that
+  walks the dashboard → component → connection dependency graph.
+  Latest final chart version only; secrets ride out masked.
+  `POST /api/dashboards/import/preflight` classifies every object
+  as identical / conflict / new / blocked so the UI can narrate what
+  would change before the user commits. Apply endpoint rewrites
+  conflicting records in dependency order (connections first),
+  refuses to apply when blocked items remain. Import UI:
+  drop-to-upload, target-namespace cascade with inline "create this
+  namespace" for non-local source namespaces, unified-diff review
+  modal via jsdiff, per-conflict overwrite decisions.
+
+### Migrations
+
+- `namespacing_v1` backfills existing records into the new
+  `default` namespace, resolves name collisions within the default
+  bucket by auto-renaming younger duplicates, and swaps the legacy
+  name-only unique indexes for compound `(namespace, name)` uniques.
+
 ## [0.6.3] — 2026-04-17
 
 ### Added

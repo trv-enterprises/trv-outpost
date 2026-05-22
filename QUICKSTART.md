@@ -1,157 +1,49 @@
-# Quick Start Guide
+# Quick Start
 
-## Get Started in 3 Steps
+The fastest path to a running dashboard depends on what you want to do.
 
-### 1. Install Dependencies
+## Just try it out (Docker)
+
+Pull the published container images and run a complete stack
+(MongoDB + Go backend + React UI) with one compose command. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full procedure —
+including which compose file to use, env vars, and how to wire the
+Caddy reverse proxy.
+
+## Develop locally
+
+Run the Go backend and the Vite dev server side by side. See the
+**Development Setup** section in [`CLAUDE.md`](CLAUDE.md#development-setup)
+for prerequisites (Go 1.26+, Node 18+, Docker for MongoDB) and the
+exact commands.
+
+The short version:
 
 ```bash
-npm run install:all
+# Terminal 1 — MongoDB
+docker compose up -d mongodb
+
+# Terminal 2 — Go backend (port 3001)
+cd server-go && go build -o bin/server cmd/server/main.go && ./bin/server
+
+# Terminal 3 — React frontend (port 5173)
+cd client && npm install && npm run dev
 ```
 
-This will install dependencies for both the server and client.
+Then visit <http://localhost:5173>.
 
-### 2. Start the Application
+## Build from source (Docker images)
 
-**Option A: Manual (2 terminals)**
+If you want to reproduce the published images yourself —
+[`BUILDING.md`](BUILDING.md) walks through prereqs, single-platform
+and multi-arch builds, and how to verify a local build matches a
+published image by SHA.
 
-Terminal 1 - Server:
-```bash
-npm run server
-```
+## What's next
 
-Terminal 2 - Client:
-```bash
-npm run client
-```
-
-**Option B: Auto (macOS only)**
-```bash
-./start.sh
-```
-
-### 3. Open in Browser
-
-Navigate to: http://localhost:5173
-
-## First Steps
-
-1. **View the Sample Components**
-   - **Counter Widget** - "counter" under "example/demo" - Interactive counter
-   - **Line Chart** - "line-chart" under "visualization/charts" - Sales trend with AntV
-   - **Column Chart** - "column-chart" under "visualization/charts" - Revenue performance
-   - Click any component to view it
-   - Click "Show Code" to see how it's built
-
-2. **Create Your First Component**
-   - Click "+ New Component"
-   - Fill in:
-     - System: `my-app`
-     - Source: `widgets`
-     - Name: `hello-world`
-     - Component Code:
-       ```javascript
-       const Component = () => {
-         return <h1>Hello, World!</h1>;
-       };
-       ```
-   - Click "Create Component"
-
-3. **Explore the Features**
-   - Edit components with live preview
-   - Filter by system/source
-   - View component metadata
-   - Delete components you don't need
-
-## Examples
-
-### Creating a Clock Widget
-
-```javascript
-const Component = () => {
-  const [time, setTime] = useState(new Date().toLocaleTimeString());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date().toLocaleTimeString());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <div style={{
-      padding: '40px',
-      textAlign: 'center',
-      fontSize: '48px',
-      fontWeight: 'bold',
-      color: '#3b82f6'
-    }}>
-      {time}
-    </div>
-  );
-};
-```
-
-### Creating a Data Visualization
-
-Use AntV G2Plot to create professional charts:
-
-```javascript
-const Component = () => {
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const data = [
-      { category: 'Product A', sales: 120 },
-      { category: 'Product B', sales: 95 },
-      { category: 'Product C', sales: 150 },
-    ];
-
-    const chart = new G2Plot.Column(containerRef.current, {
-      data,
-      xField: 'category',
-      yField: 'sales',
-      color: '#1890ff',
-    });
-
-    chart.render();
-
-    return () => chart.destroy();
-  }, []);
-
-  return <div ref={containerRef} style={{ height: '400px' }} />;
-};
-```
-
-**Available Chart Types:** Line, Column, Pie, Bar, Area, Scatter, Heatmap, and 15+ more from G2Plot!
-
-## Troubleshooting
-
-**Can't connect to server?**
-- Make sure server is running on port 3001
-- Check the server terminal for errors
-
-**Component not loading?**
-- Check browser console for errors
-- Verify component code exports `Component` or `Widget`
-- Make sure you're using available React hooks: `useState`, `useEffect`, etc.
-
-## Next Steps
-
-- Read the full [README.md](README.md) for detailed documentation
-- Explore the API endpoints at http://localhost:3001
-- Build components for your own data sources
-- Customize the UI in `client/src/`
-
-## Project Structure
-
-```
-dashboard/
-├── server/          # Node.js API server
-├── client/          # React UI
-├── data/            # Component storage
-│   ├── example/     # Example system
-│   │   └── demo/    # Demo source
-│   └── index.json   # Component index
-└── README.md        # Full documentation
-```
+- Read the architecture landing page at
+  [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
+- Explore the API at <http://localhost:3001/swagger/index.html> once
+  the server is running.
+- The test plan at [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) is a good
+  feature tour even if you don't intend to run every checklist item.

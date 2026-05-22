@@ -46,7 +46,7 @@ The simplest path. Produces two images you can `docker run` immediately.
 ```bash
 git clone https://github.com/trv-enterprises/trve-dashboard.git
 cd trve-dashboard
-git checkout v0.17.7                   # or whichever tag you want
+git checkout v0.18.2                   # or whichever tag you want
 
 # Server image — context is the repo root because the server's
 # Dockerfile pulls files from both ./server-go and ./udoc.
@@ -129,7 +129,7 @@ the source produces by comparing image digests:
 docker pull ghcr.io/trv-enterprises/dashboard-server:0.17.7
 
 # Build locally from the matching tag
-git checkout v0.17.7
+git checkout v0.18.2
 docker buildx build \
   --platform linux/amd64 \
   -f server-go/Dockerfile \
@@ -147,7 +147,7 @@ docker run --rm --entrypoint sha256sum dashboard-server:from-source /server
 
 If those two sha256 values match, the binary is bit-identical. This
 is the same property a third party can verify: nothing about the
-published image requires trust beyond "the v0.17.7 git tag is what
+published image requires trust beyond "the v0.18.2 git tag is what
 went in."
 
 ---
