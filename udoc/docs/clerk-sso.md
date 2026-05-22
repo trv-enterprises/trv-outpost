@@ -7,10 +7,13 @@ sidebar_position: 20
 The dashboard supports browser sign-in via [Clerk](https://clerk.com)
 as an optional auth backend. When enabled, users sign in through
 Clerk's hosted UI (email + password, "Sign in with Google", "Sign in
-with Apple", magic links, etc.) and the dashboard validates Clerk's
-session JWTs on every request. When disabled, the v0.9.x bootstrap
-chain (URL `?user_id=…`, browser local storage, deployment-default
-user) is in effect — no behavior change for existing deployments.
+with Apple", magic links, etc.); the bootstrap endpoint validates
+Clerk's JWT, mints a dashboard session token (see
+[Logging In](getting-started.md#under-the-hood-session-tokens-v0170)),
+and the SPA carries that token thereafter. When disabled, the
+bootstrap chain (URL `?user_id=…` when legacy GUID is allowed,
+browser local storage, deployment-default user) is in effect — no
+behavior change for existing deployments.
 
 This page covers admin setup, the user experience, and how Clerk
 identities map to dashboard users.
@@ -30,11 +33,14 @@ Skip Clerk when:
 - You're running a single-user homelab and the
   `default_browser_user_guid` setting is enough.
 - Your deployment is behind a VPN / zero-trust gateway that already
-  authenticates users (in v0.12+ this becomes a first-class auth
-  mode; for now use `X-User-ID`).
+  authenticates users. The session-token system has a pluggable
+  IdP registry (v0.17.0), so an additional verifier — generic OIDC,
+  a trusted reverse-proxy header, etc. — can be added as a one-file
+  addition without middleware changes.
 - Your environment requires that credentials never flow through a
-  third-party domain — use the planned generic OIDC mode (v0.11) or
-  reverse-proxy mode (v0.12) when those land.
+  third-party domain. Same answer: stay on API keys or the legacy
+  GUID channel (gated by `auth.allow_legacy_guid`) until a
+  non-Clerk IdP is wired up.
 
 API keys are unaffected by Clerk. Whether Clerk is enabled or not,
 the [dashboard-agent](dashboard-agent.md) CLI, [MCP](mcp.md) clients,
@@ -295,11 +301,14 @@ and is editable.
   with `Authorization: Bearer trve_…` is dispatched to the API-key
   validator; anything else with a `Bearer` prefix is dispatched to
   the Clerk verifier. Both can coexist on the same deployment.
-- The legacy `X-User-ID` header still works under Clerk mode for
-  the dev-mode user switcher — it's gated to `import.meta.env.DEV`
-  bundles so production never honors it via the SPA. Server-side
-  it's still accepted as a fallback path for migration; admins can
-  disable it once everyone has migrated.
+- The legacy `X-User-ID` header is **off by default** on new
+  deployments (v0.17.6+). It is only accepted server-side when
+  `auth.allow_legacy_guid` is true (set via `config.yaml` or the
+  `DASHBOARD_AUTH_ALLOW_LEGACY_GUID` env var). The dev-mode user
+  switcher is also gated to `import.meta.env.DEV` bundles, so
+  production SPAs never send it regardless. Keep it off in prod;
+  enable only for migration, dev, or single-user homelabs that
+  understand the trade-off.
 
 ## Troubleshooting
 
@@ -324,6 +333,7 @@ reason when the `LOG_LEVEL` is set to `debug`.
 
 - [API Keys](api-keys.md) — per-user tokens for non-browser callers,
   unaffected by Clerk.
-- [Logging In & User Selection](getting-started.md) — the v0.9.x
-  bootstrap chain that's still active when Clerk is disabled.
+- [Logging In & User Selection](getting-started.md) — the
+  bootstrap chain that's still active when Clerk is disabled, plus
+  the session-token model that sits underneath every auth path.
 - [User Management](user-management.md) — Manage Mode user CRUD.

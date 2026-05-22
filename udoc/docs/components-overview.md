@@ -10,7 +10,7 @@ Components are the visual elements placed inside dashboard panels. There are thr
 
 Data visualization components that render using ECharts. They query a data connection and display results as interactive charts.
 
-Types: Bar, Line, Area, Pie, Scatter, Gauge, Data Table, Number, Custom
+Types: Bar, Line, Area, Banded Bar, Pie, Scatter, Gauge, Data Table, Number, Custom
 
 See [Chart Types](chart-types.md) for details.
 
@@ -18,15 +18,18 @@ See [Chart Types](chart-types.md) for details.
 
 Interactive UI elements that send commands to devices via MQTT or WebSocket connections. Controls can read device state and send commands.
 
-Types: Button, Toggle, Slider, Text Input, Plug, Dimmer, Tile Plug, Tile Dimmer, Text Label
+Types: Button, Toggle, Slider, Text Input, MQTT Publish, Switch, Dimmer, Garage Door, Tile Switch, Tile Dimmer, Tile Garage Door
 
-See [Control Types](control-types.md) for details.
+Executing a control requires the **Control** capability. See
+[Control Types](control-types.md) for details and for the legacy
+type names (Plug → Switch, Tile Plug → Tile Switch, Text Label →
+native Text panel).
 
 ## Displays
 
 Specialized visual components for specific integrations that don't use the standard chart rendering.
 
-Types: Frigate Camera, Weather
+Types: Frigate Camera, Frigate Alerts, Weather
 
 See [Display Types](display-types.md) for details.
 

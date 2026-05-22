@@ -46,3 +46,29 @@ Across every mode, the application header shows your **active namespace** as a c
 ## Switching Modes
 
 Click the mode toggle buttons in the header bar. Your current mode is highlighted. The selected mode persists across browser sessions.
+
+## Kiosk Mode
+
+For dedicated displays (lobby screens, wall-mounted iPads, NUC + TV),
+the viewer supports a **URL-payload kiosk mode** that locks a
+session to a specific dashboard set in a specific order:
+
+```
+https://your-dashboard/?dashboards=<id1>,<id2>,<id3>
+```
+
+The URL is consumed and cleaned after first read (so the kiosk
+doesn't keep flashing the payload) and cached in `sessionStorage`
+so reloads keep the lock. While kiosk mode is active:
+
+- The View-mode tile grid only shows the locked dashboards, with a
+  purple **"Kiosk mode"** badge above the grid.
+- The viewer's prev/next arrows walk only the locked set.
+- Manual reorder and "Set as Default" are disabled — the URL is
+  the source of truth.
+
+To exit kiosk mode, visit any dashboard URL with `?clearKiosk=1`.
+To deliver the URL safely without exposing a personal launch URL,
+pair kiosk mode with an API key on a system user — see
+[API Keys](api-keys.md) and the Control-capability notes in
+[User Management](user-management.md).

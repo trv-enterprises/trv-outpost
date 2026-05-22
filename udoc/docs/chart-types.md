@@ -13,6 +13,7 @@ Charts are data visualization components that query a connection and render resu
 | **Bar** | Vertical or horizontal bar chart for comparing categories |
 | **Line** | Line chart for trends over time, supports smooth curves |
 | **Area** | Filled area chart, supports stacking |
+| **Banded Bar** | Levey-Jennings-style control chart with mean ± 1/2 SD bands. Time-series or column variants. |
 | **Pie** | Pie or donut chart for proportions |
 | **Scatter** | Scatter plot for correlation between two variables |
 | **Gauge** | Gauge dial for single values with thresholds (warning, danger) |

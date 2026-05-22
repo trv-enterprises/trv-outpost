@@ -30,6 +30,37 @@ The bootstrap chain is **identity assertion**, not authentication. Anyone who kn
 
 To act as a different user in browser mode, visit the dashboard with `?user_id=<their-guid>` in the URL. The new identity replaces the previous one and persists in this browser until explicitly changed (or until local storage is cleared).
 
+:::note Legacy GUID is off by default
+The `?user_id=` / `X-User-ID` channel is the **legacy GUID
+identity-assertion** path. Since v0.17.6 it is **off by default** on
+new deployments and must be explicitly enabled via
+`auth.allow_legacy_guid` in `config.yaml` (or
+`DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true`). The compose files used by
+`docker-compose.prod.yml` / `docker-compose.deploy.yml` set
+`ENV=production` and keep this off. Enable it only for development,
+single-user homelabs, or kiosks where you understand the trade-off.
+:::
+
+### Under the hood: session tokens (v0.17.0+)
+
+The bootstrap channels above describe how *identity* is asserted on
+first load. Once identity is resolved, the SPA calls
+`POST /api/auth/session` to mint a signed **access JWT**
+(short-lived, default 15 min) plus an **httpOnly refresh cookie**
+(default 7 days). Every subsequent API / SSE / WebSocket call rides
+the access token; expiry triggers a silent refresh.
+
+API keys (`trve_…`) take a different path — they are validated
+directly on every request and don't go through the session-token
+lifecycle, so kiosks running on an API key survive arbitrary network
+outages. The server accepts API keys, session JWTs, and Clerk JWTs
+all on the same `Authorization: Bearer` header; the middleware
+shape-dispatches based on the prefix.
+
+You don't normally interact with any of this — it's the transport
+layer. The user-visible piece is sign-out (clears the session) and
+the periodic silent refresh.
+
 ### Dev mode
 
 When the client is running under `npm run dev` (Vite dev server), the legacy user-switching dropdown is still visible in the header. Production bundles (built with `npm run build`) drop it entirely.
@@ -55,9 +86,11 @@ Each user has a set of capabilities that control access:
 
 | Capability | Access |
 |------------|--------|
-| **View** | View dashboards and interact with controls (always available) |
+| **View** | View dashboards (always available) |
+| **Control** | Execute control commands — button presses, toggles, sliders, "Mark Reviewed" on Frigate alerts, etc. Without it, controls render their current state but the interactive affordance is disabled. Existing humans are backfilled with Control; new users explicitly opt in. |
 | **Design** | Create and edit components, connections, and dashboards |
 | **Manage** | Administer users, device types, and system settings |
+| **Webhook** | (System users only) Receive inbound webhooks at `/api/webhooks/*` |
 
 The mode toggle in the header only shows modes you have access to.
 

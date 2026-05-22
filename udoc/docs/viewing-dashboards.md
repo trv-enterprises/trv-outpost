@@ -10,11 +10,16 @@ Navigate to **View Mode** to see the dashboard tile grid. Each tile shows:
 
 - Thumbnail preview of the dashboard layout (or a placeholder icon)
 - Dashboard name and description
+- A small **copy icon** next to the name — click to copy the dashboard's UUID to the clipboard. Useful for [Kiosk Mode](modes.md#kiosk-mode) URLs and deep-link sharing.
 - Tags indicating auto-refresh interval, panel count, and the data sources the dashboard pulls from
 - A **star icon** if it's your default dashboard
 - A **three-dot overflow menu** with the **Set as Default** action when the dashboard isn't already your default
 
 Click a tile to open the dashboard in the viewer. The page header shows a `Dashboards` title and, when applicable, a **Reset order** button (see Reordering below).
+
+If you arrived with a **`?dashboards=…` URL**, the grid is locked to
+that dashboard set with a purple **"Kiosk mode"** badge — see
+[Kiosk Mode](modes.md#kiosk-mode) for what's different.
 
 ### Search and Filters
 
@@ -29,6 +34,8 @@ The three filters AND together — a tile is shown only if it passes the search,
 ### Tile Order
 
 By default, tiles appear in **most-recently-updated order** — the same as the design-mode dashboard list. New dashboards land at the top.
+
+Your manual drag-and-drop order is shared with the **Design-mode dashboards list** when its sort is also set to "Manual (drag to reorder)" — change the order in one place, the other sees it on next load.
 
 You can drag tiles to rearrange them:
 
