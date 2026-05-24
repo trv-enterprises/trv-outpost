@@ -300,8 +300,16 @@ function IdCopyButton({ id }) {
     setTimeout(() => setCopied(false), 1200);
   };
 
+  // When `copied` is true we force the tooltip open with the "Copied!"
+  // label so the click feedback is visible regardless of Carbon's
+  // hover/focus state at click time. Otherwise we leave `defaultOpen`
+  // unset so the tooltip behaves normally on hover/focus showing the id.
   return (
-    <Tooltip label={copied ? 'Copied!' : id} align="bottom">
+    <Tooltip
+      label={copied ? 'Copied!' : id}
+      align="bottom"
+      {...(copied ? { open: true } : {})}
+    >
       <button
         type="button"
         className="info-button id-copy-button"

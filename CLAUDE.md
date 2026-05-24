@@ -452,7 +452,7 @@ Global settings managed by administrators through the Settings page in Manage mo
 | `default_layout_dimension` | layout | Default dimension preset for new dashboards |
 | `layout_dimensions` | layout | Array of available dashboard dimension presets |
 | `tile_font_size` | appearance | Font size for compact tile controls (xs/sm/md/lg) |
-| `dashboard_command_topic` | dashboard | MQTT topic the dashboard subscribes to for voice/kiosk commands |
+| `dashboard_command_topic` | dashboard | MQTT topic the dashboard subscribes to for voice/kiosk commands. Messages are JSON `{target, action, ...}`. Only `target: "frigate-alert"` is wired up today (see `docs/architecture/frontend.md`). Single global topic — every open viewer receives every command. |
 | `dashboard_command_connection` | dashboard | MQTT connection ID used for dashboard commands |
 | `enabled_types` | availability | Allowlist of integrations + connection / chart / control / display types available in this deployment. Edited via the hierarchical Type Availability modal; see the type-availability gating section. |
 | `known_types` | availability | Server-maintained ledger of every type/integration the system has seen across upgrades. Hidden from the settings UI. New types in upgrades auto-enable on first boot; admin disables persist. |

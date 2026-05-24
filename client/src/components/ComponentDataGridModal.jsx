@@ -124,9 +124,15 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
       // literal name + an explicit colId so reorder / resize state
       // still persists by column name.
       const colKey = col;
+      const headerLabel = columnAliases[col] || col;
       return {
         colId: colKey,
-        headerName: columnAliases[col] || col,
+        headerName: headerLabel,
+        // Wrap long header text onto multiple lines instead of
+        // truncating. autoHeaderHeight (set on the grid) grows the
+        // header row to match the tallest wrapped header.
+        wrapHeaderText: true,
+        autoHeaderHeight: true,
         valueGetter: (params) => params.data?.[colKey],
         sortable: true,
         resizable: true,
@@ -137,6 +143,14 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
             : 'agTextColumnFilter',
         floatingFilter: false,
         valueFormatter: (params) => {
+          const v = params.value;
+          if (v == null) return '';
+          const f = formatCellValue(v, col, { timestampFormat });
+          return f == null ? '' : String(f);
+        },
+        // Cell tooltip — uses the formatted display value so the tooltip
+        // matches what the user is looking at.
+        tooltipValueGetter: (params) => {
           const v = params.value;
           if (v == null) return '';
           const f = formatCellValue(v, col, { timestampFormat });
@@ -209,6 +223,7 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
               suppressCellFocus={true}
               getRowId={(params) => String(params.data.__id)}
               maintainColumnOrder={true}
+              tooltipShowMode="whenTruncated"
             />
           </div>
         )}

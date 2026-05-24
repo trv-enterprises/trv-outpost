@@ -212,6 +212,44 @@ chart                                 → <DynamicComponentLoader />
 panel.text_config                    → <PanelText />
 ```
 
+## Dashboard commands (MQTT)
+
+The viewer subscribes to a single MQTT topic for "dashboard
+commands" — JSON messages that drive UI actions (advance an alert,
+dismiss a modal, etc.) from a voice assistant or kiosk controller.
+The connection and topic are admin settings
+(`dashboard_command_connection`, `dashboard_command_topic`); when
+either is unset the subscription is skipped.
+
+Message shape:
+
+```json
+{ "target": "frigate-alert", "action": "next" }
+```
+
+The viewer stores the latest command in state and passes it as a
+prop to panel components. Each component compares
+`dashboardCommand.target` to its own target string and switches on
+`action`. Unknown targets and actions are ignored.
+
+**Current scope — frigate-alert only.** As of v0.18.2 the only
+component that consumes dashboard commands is `FrigateAlertsGrid`
+(`target: "frigate-alert"`). Supported actions: `show` /
+`show_alert`, `reviewed` / `dismiss`, `next`, `previous`, `close`.
+No other component (charts, weather, controls, other displays) acts
+on these messages today.
+
+**No per-instance routing.** The topic is a single global setting,
+so every connected viewer subscribes to the same topic and acts on
+every command whose `target` matches a component it happens to be
+rendering. In practice this is fine because the feature is only
+used on the home kiosk, but if multiple viewer sessions are open
+with a Frigate alerts panel loaded, a single command will fire on
+all of them. A future per-instance scheme (treating the configured
+topic as a prefix and appending a client id, e.g.
+`dashboard/cmd/<client_id>`, so each viewer subscribes only to its
+own subtopic) is possible but unimplemented.
+
 ## Styling
 
 SCSS co-located with components (`Foo.jsx` + `Foo.scss`). The g100
