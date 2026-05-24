@@ -18,8 +18,35 @@
   "item": [
     {
       "name": "AI",
-      "description": "ai endpoints (6).",
+      "description": "ai endpoints (7).",
       "item": [
+        {
+          "name": "AI availability",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "availability"
+              ]
+            },
+            "description": "AI availability\n\nReturns whether the AI agent is enabled in this deployment. Enabled iff ANTHROPIC_API_KEY was set at server start.\n\n\nResponses: 200"
+          },
+          "response": []
+        },
         {
           "name": "Cancel AI session",
           "request": {

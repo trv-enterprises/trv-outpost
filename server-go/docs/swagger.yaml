@@ -3454,6 +3454,22 @@ paths:
       summary: Mark an alert seen (dismiss)
       tags:
       - Alerts
+  /api/ai/availability:
+    get:
+      description: Returns whether the AI agent is enabled in this deployment. Enabled
+        iff ANTHROPIC_API_KEY was set at server start.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: AI availability
+      tags:
+      - ai
   /api/ai/debug:
     get:
       description: Stream real-time debug events from the AI agent including LLM requests,

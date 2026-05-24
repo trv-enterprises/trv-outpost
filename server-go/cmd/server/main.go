@@ -319,6 +319,7 @@ func main() {
 	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chartHub)
+	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent)
 	debugHandler := handlers.NewDebugHandler()
 	streamHandler := handlers.NewStreamHandler(streamManager)
 	configHandler := handlers.NewConfigHandler(configService)
@@ -708,6 +709,10 @@ func main() {
 			aiSessions.POST("/:id/save", aiSessionHandler.SaveSession)
 			aiSessions.DELETE("/:id", aiSessionHandler.CancelSession)
 		}
+
+		// AI availability — public so the app shell can gate AI
+		// menu items pre-login. Returns { enabled: bool }.
+		api.GET("/ai/availability", aiAvailabilityHandler.GetAvailability)
 
 		// AI Debug routes
 		aiDebug := api.Group("/ai/debug")

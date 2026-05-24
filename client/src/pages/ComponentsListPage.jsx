@@ -34,6 +34,7 @@ import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableS
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import apiClient from '../api/client';
 import ComponentDeleteDialog from '../components/ComponentDeleteDialog';
 import CreateMenu from '../components/CreateMenu';
@@ -58,6 +59,10 @@ import './ComponentsListPage.scss';
  */
 function ComponentsListPage() {
   const navigate = useNavigate();
+  // Hide the "Edit with AI" wand (row action) when the deployment
+  // has no Anthropic key. Same hide-while-loading semantics as the
+  // menus — see AIAvailabilityContext.
+  const { enabled: aiEnabled } = useAIAvailability();
 
   // Merge persisted per-user prefs (survives reload) with session filters (takes precedence)
   const savedFilters = { ...getListPrefs('charts'), ...getFilters('charts') };
@@ -643,14 +648,16 @@ function ComponentsListPage() {
                       >
                         <Edit size={16} />
                       </IconButton>
-                      <IconButton
-                        kind="ghost"
-                        label="Edit with AI"
-                        onClick={(e) => handleAIEdit(e, chart)}
-                        size="sm"
-                      >
-                        <AiIcon size={16} />
-                      </IconButton>
+                      {aiEnabled && (
+                        <IconButton
+                          kind="ghost"
+                          label="Edit with AI"
+                          onClick={(e) => handleAIEdit(e, chart)}
+                          size="sm"
+                        >
+                          <AiIcon size={16} />
+                        </IconButton>
+                      )}
                       <IconButton
                         kind="ghost"
                         label="Delete"
@@ -808,14 +815,16 @@ function ComponentsListPage() {
                               return (
                                 <TableCell key={cell.id} className="actions-cell">
                                   <div className="actions-wrapper">
-                                    <IconButton
-                                      kind="ghost"
-                                      label="Edit with AI"
-                                      onClick={(e) => handleAIEdit(e, chart)}
-                                      size="sm"
-                                    >
-                                      <AiIcon size={16} />
-                                    </IconButton>
+                                    {aiEnabled && (
+                                      <IconButton
+                                        kind="ghost"
+                                        label="Edit with AI"
+                                        onClick={(e) => handleAIEdit(e, chart)}
+                                        size="sm"
+                                      >
+                                        <AiIcon size={16} />
+                                      </IconButton>
+                                    )}
                                     <IconButton
                                       kind="ghost"
                                       label="Delete"

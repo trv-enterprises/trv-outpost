@@ -955,6 +955,15 @@ class APIClient {
     return this.request(`/api/frigate/${connectionId}/info`);
   }
 
+  // AI availability — single boolean ("enabled") derived from
+  // whether the server was started with an ANTHROPIC_API_KEY.
+  // Public endpoint (no auth required) so the app shell can read
+  // it before the user signs in. The shell uses it to hide AI
+  // menu items entirely when the deployment has no key configured.
+  async getAIAvailability() {
+    return this.request('/api/ai/availability');
+  }
+
   // AI Session endpoints
   async createAISession(componentId = null, context = {}) {
     const payload = componentId ? { component_id: componentId } : {};

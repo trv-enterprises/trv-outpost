@@ -6,6 +6,44 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.18.3] — 2026-05-23
+
+### Added
+
+- **AI agent availability gating.** New unauthenticated endpoint
+  `GET /api/ai/availability` returns `{ enabled: bool }` derived
+  from whether the server was started with `ANTHROPIC_API_KEY`.
+  A new client-side `AIAvailabilityContext` reads it once at app
+  boot. When AI is disabled, the "Edit with AI" / "New with AI"
+  items in the dashboard panel edit menu, the "Create with AI"
+  item in the Components-page create menu, and the per-row "Edit
+  with AI" wand icon in the Components list (both list and tile
+  views) are hidden entirely. The `/design/components/ai/:chartId`
+  route redirects to `/design/components` so stale bookmarks
+  short-circuit cleanly.
+- **`AIBuilderPage` code-split via `React.lazy`.** The AI builder
+  is no longer in the initial JS bundle — deployments without an
+  API key never download it.
+
+### Changed
+
+- **Copy-id button on dashboard tiles.** Forced the Carbon Tooltip
+  open while the "Copied!" label is visible so the click feedback
+  is actually seen (the tooltip was closing on click before the
+  swap could land).
+- **Chart-data modal (AG Grid)**: long column headers wrap onto
+  multiple lines instead of truncating, and the header row grows
+  to fit. Cell tooltips remain truncation-only via
+  `tooltipShowMode="whenTruncated"`.
+
+### Docs
+
+- New "Dashboard commands (MQTT)" section in
+  `docs/architecture/frontend.md` covering message shape, current
+  frigate-alert-only scope, and the global-topic / multi-instance
+  broadcast caveat. The `CLAUDE.md` admin-settings table
+  cross-references it.
+
 ## [0.18.2] — 2026-05-22
 
 ### Added

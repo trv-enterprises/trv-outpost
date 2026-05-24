@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Header,
@@ -31,7 +31,9 @@ import ConnectionsPage from './pages/ConnectionsPage';
 import ConnectionDetailPage from './pages/ConnectionDetailPage';
 import ComponentsListPage from './pages/ComponentsListPage';
 import ComponentDetailPage from './pages/ComponentDetailPage';
-import AIBuilderPage from './pages/AIBuilderPage';
+// AIBuilderPage is code-split: it's only reachable when the deployment has
+// an Anthropic API key configured, so users without one never download it.
+const AIBuilderPage = lazy(() => import('./pages/AIBuilderPage'));
 import DashboardsListPage from './pages/DashboardsListPage';
 // Dashboard design/edit lives in DashboardViewerPage edit mode
 import DashboardViewerPage from './pages/DashboardViewerPage';
@@ -52,6 +54,7 @@ import TsStoreAlertRuleEditorPage from './pages/TsStoreAlertRuleEditorPage';
 import TsStoreAlertRuleViewPage from './pages/TsStoreAlertRuleViewPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
+import { AIAvailabilityProvider, useAIAvailability } from './context/AIAvailabilityContext';
 import { NamespaceProvider } from './context/NamespaceContext';
 import NamespacePicker from './components/NamespacePicker';
 import AccountMenu from './components/AccountMenu';
@@ -74,6 +77,23 @@ function DashboardEditRedirect() {
     return <Navigate to="/view/dashboards/new" state={{ autoEdit: true, isNew: true, fromDesign: true }} replace />;
   }
   return <Navigate to={`/view/dashboards/${id}`} state={{ autoEdit: true, fromDesign: true }} replace />;
+}
+
+// Route guard for /design/components/ai/:chartId. When the deployment has
+// no Anthropic API key configured, AI menu items are hidden but a stale
+// bookmark / pasted link could still hit this route — send users back to
+// the components list rather than loading a page that can never succeed.
+// While availability is still loading we render nothing (Suspense fallback
+// already shows for the lazy chunk on the success path).
+function AIBuilderGate() {
+  const { enabled, loading } = useAIAvailability();
+  if (loading) return null;
+  if (!enabled) return <Navigate to="/design/components" replace />;
+  return (
+    <Suspense fallback={null}>
+      <AIBuilderPage />
+    </Suspense>
+  );
 }
 
 function AppContent({ onDisconnect }) {
@@ -727,7 +747,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/design/connections" element={<ConnectionsPage />} />
           <Route path="/design/connections/:id" element={<ConnectionDetailPage />} />
           <Route path="/design/components" element={<ComponentsListPage />} />
-          <Route path="/design/components/ai/:chartId" element={<AIBuilderPage />} />
+          <Route path="/design/components/ai/:chartId" element={<AIBuilderGate />} />
           <Route path="/design/components/:id" element={<ComponentDetailPage />} />
           <Route path="/design/dashboards" element={<DashboardsListPage />} />
           <Route path="/design/dashboards/:id" element={<DashboardEditRedirect />} />
@@ -849,13 +869,15 @@ function App() {
   // Show main app
   return (
     <NotificationProvider>
-      <EnabledTypesProvider>
-        <ModeGuardProvider>
-          <Router>
-            <AppContent onDisconnect={handleDisconnect} />
-          </Router>
-        </ModeGuardProvider>
-      </EnabledTypesProvider>
+      <AIAvailabilityProvider>
+        <EnabledTypesProvider>
+          <ModeGuardProvider>
+            <Router>
+              <AppContent onDisconnect={handleDisconnect} />
+            </Router>
+          </ModeGuardProvider>
+        </EnabledTypesProvider>
+      </AIAvailabilityProvider>
     </NotificationProvider>
   );
 }

@@ -6,6 +6,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Button } from '@carbon/react';
 import { ChevronDown, Edit, Add, Catalog } from '@carbon/icons-react';
 import AiIcon from './icons/AiIcon';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './CreateMenu.scss';
 
 /**
@@ -27,6 +28,9 @@ function CreateMenu({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
+  // Hide "Create with AI" when the deployment has no Anthropic key.
+  // Hide-while-loading (the default) avoids a flash of the item.
+  const { enabled: aiEnabled } = useAIAvailability();
 
   // Close on outside click
   useEffect(() => {
@@ -75,13 +79,15 @@ function CreateMenu({
             <Edit size={16} />
             <span>Create</span>
           </button>
-          <button
-            className="create-menu-item"
-            onClick={() => handleAction(onCreateWithAI)}
-          >
-            <AiIcon size={16} />
-            <span>Create with AI</span>
-          </button>
+          {aiEnabled && (
+            <button
+              className="create-menu-item"
+              onClick={() => handleAction(onCreateWithAI)}
+            >
+              <AiIcon size={16} />
+              <span>Create with AI</span>
+            </button>
+          )}
           <button
             className="create-menu-item"
             onClick={() => handleAction(onSelectExisting)}

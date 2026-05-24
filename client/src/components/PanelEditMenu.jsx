@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@carbon/react';
 import { ChevronDown, Edit, Add, Catalog, TextFont } from '@carbon/icons-react';
 import AiIcon from './icons/AiIcon';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './PanelEditMenu.scss';
 
 /**
@@ -49,6 +50,11 @@ function PanelEditMenu({
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
+  // AI menu items only render when the server reports the agent is
+  // available (i.e. ANTHROPIC_API_KEY is set). Hide-while-loading
+  // (the useAIAvailability default) avoids a flash of AI items
+  // before the boot fetch resolves.
+  const { enabled: aiEnabled } = useAIAvailability();
 
   // Calculate dropdown position when opened
   // Use requestAnimationFrame to ensure we get the correct position after render
@@ -57,7 +63,12 @@ function PanelEditMenu({
       const updatePosition = () => {
         const buttonRect = buttonRef.current.getBoundingClientRect();
         const dropdownWidth = 200; // min-width from CSS
-        const dropdownHeight = hasExisting ? 220 : 140; // estimated height based on items
+        // Rough item heights for the "would the dropdown overflow
+        // below the viewport?" check. Each visible item ≈ 36px.
+        // The "Edit with AI" and "New with AI" items disappear when
+        // AI is disabled, so trim the estimate accordingly.
+        const hiddenAiItems = aiEnabled ? 0 : (hasExisting ? 2 : 1);
+        const dropdownHeight = (hasExisting ? 220 : 140) - hiddenAiItems * 36;
 
         // Position below the button, centered horizontally
         // getBoundingClientRect() returns visual (screen) coordinates, which is what we want for fixed positioning
@@ -104,7 +115,7 @@ function PanelEditMenu({
         window.removeEventListener('resize', handleScroll);
       };
     }
-  }, [isOpen, hasExisting]);
+  }, [isOpen, hasExisting, aiEnabled]);
 
   // Close on outside click
   useEffect(() => {
@@ -147,7 +158,7 @@ function PanelEditMenu({
           <span>Edit Component</span>
         </button>
       )}
-      {hasExisting && onEditWithAI && (
+      {aiEnabled && hasExisting && onEditWithAI && (
         <button
           className="panel-edit-menu-item"
           onClick={() => handleAction(onEditWithAI)}
@@ -168,13 +179,15 @@ function PanelEditMenu({
         <Add size={16} />
         <span>New Component</span>
       </button>
-      <button
-        className="panel-edit-menu-item"
-        onClick={() => handleAction(onNewWithAI)}
-      >
-        <AiIcon size={16} />
-        <span>New with AI</span>
-      </button>
+      {aiEnabled && (
+        <button
+          className="panel-edit-menu-item"
+          onClick={() => handleAction(onNewWithAI)}
+        >
+          <AiIcon size={16} />
+          <span>New with AI</span>
+        </button>
+      )}
       <button
         className="panel-edit-menu-item"
         onClick={() => handleAction(onSelectExisting)}

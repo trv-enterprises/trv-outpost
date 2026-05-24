@@ -415,6 +415,29 @@
                 }
             }
         },
+        "/api/ai/availability": {
+            "get": {
+                "description": "Returns whether the AI agent is enabled in this deployment. Enabled iff ANTHROPIC_API_KEY was set at server start.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "AI availability",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/ai/debug": {
             "get": {
                 "description": "Stream real-time debug events from the AI agent including LLM requests, responses, and tool calls",

@@ -140,6 +140,11 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/config/system", Method: "GET", Public: true, Exact: true},
 		{PathPrefix: "/api/health", Method: "GET", Public: true, Exact: true},
 
+		// /api/ai/availability: app shell reads this pre-login to
+		// decide whether to render AI menu items. Leaks only a single
+		// boolean ("AI on/off"), not the key itself.
+		{PathPrefix: "/api/ai/availability", Method: "GET", Public: true, Exact: true},
+
 		// Frigate proxy reads. Snapshot / thumbnail / clip / HLS
 		// endpoints are loaded via `<img src=...>` / `<video src=...>`
 		// in dashboard widgets — the browser fetches them as plain
