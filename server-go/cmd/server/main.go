@@ -524,7 +524,14 @@ func main() {
 		// Powers the central /design/extensions/tsstore-alerts page.
 		// Distinct from the bell surface (/api/alerts above), which
 		// shows the dashboard's own persisted alert records.
+		// Gated by the `extensions.tsstore_alerts.enabled` admin
+		// setting: when off the entire group 403s.
 		tsstoreAlerts := api.Group("/tsstore-alerts")
+		tsstoreAlerts.Use(middleware.RequireExtensionEnabled(
+			settingsService,
+			"extensions.tsstore_alerts.enabled",
+			"ts-store Alerts",
+		))
 		{
 			tsstoreAlerts.GET("/rules", tsstoreAlertRulesHandler.ListAll)
 			tsstoreAlerts.GET("/rules/:alert_id", tsstoreAlertRulesHandler.GetAlertDetail)

@@ -32,11 +32,13 @@ func NewTSStoreAlertRulesHandler(rules *service.TSStoreAlertRulesService) *TSSto
 // (/api/stores/<store>/alerts); a 200 here is a strong signal that
 // the subsequent rule-create POST will succeed too.
 // @Summary Probe a tsstore connection's auth before submitting a new rule
+// @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
 // @Tags TSStoreAlerts
 // @Produce json
 // @Param connection_id query string true "Connection ID"
 // @Success 200 {object} service.ProbeConnectionResult
 // @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string "Extension disabled"
 // @Router /tsstore-alerts/probe [get]
 func (h *TSStoreAlertRulesHandler) ProbeAuth(c *gin.Context) {
 	connectionID := c.Query("connection_id")
@@ -52,12 +54,14 @@ func (h *TSStoreAlertRulesHandler) ProbeAuth(c *gin.Context) {
 // secret + receiver URL via the dashboard's own public webhook path;
 // for mqtt, harvests broker creds from the chosen MQTT connection.
 // @Summary Create an alert rule on a tsstore connection
+// @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
 // @Tags TSStoreAlerts
 // @Accept json
 // @Produce json
 // @Param body body service.CreateAlertRequest true "Rule"
 // @Success 201 {object} service.CreateAlertResponse
 // @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string "Extension disabled"
 // @Failure 500 {object} map[string]string
 // @Router /tsstore-alerts/rules [post]
 func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
@@ -85,9 +89,11 @@ func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
 // in the response's `errors` array; the rest of the payload still
 // renders so a single unreachable host doesn't blank the page.
 // @Summary Aggregated list of every ts-store alert rule across every tsstore connection
+// @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
 // @Tags TSStoreAlerts
 // @Produce json
 // @Success 200 {object} service.TSStoreAggregatedRulesResponse
+// @Failure 403 {object} map[string]string "Extension disabled"
 // @Failure 500 {object} map[string]string
 // @Router /tsstore-alerts/rules [get]
 func (h *TSStoreAlertRulesHandler) ListAll(c *gin.Context) {
@@ -102,12 +108,14 @@ func (h *TSStoreAlertRulesHandler) ListAll(c *gin.Context) {
 // GetAlertDetail proxies a GET of the full alert record from the
 // owning tsstore. Used by the read-only rule-details page.
 // @Summary Get the full detail of a single ts-store alert on a tsstore connection
+// @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
 // @Tags TSStoreAlerts
 // @Produce json
 // @Param connection_id query string true "TSStore connection ID"
 // @Param alert_id path string true "Alert ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string "Extension disabled"
 // @Failure 500 {object} map[string]string
 // @Router /tsstore-alerts/rules/{alert_id} [get]
 func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
@@ -130,11 +138,13 @@ func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
 // The UI should call this out when the deleted alert had more than
 // one rule.
 // @Summary Delete a ts-store alert (and all its rules) on a tsstore connection
+// @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
 // @Tags TSStoreAlerts
 // @Param connection_id query string true "TSStore connection ID"
 // @Param alert_id path string true "Alert ID"
 // @Success 204 "No Content"
 // @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string "Extension disabled"
 // @Failure 500 {object} map[string]string
 // @Router /tsstore-alerts/rules/{alert_id} [delete]
 func (h *TSStoreAlertRulesHandler) DeleteAlert(c *gin.Context) {

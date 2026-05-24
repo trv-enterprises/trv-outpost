@@ -4729,7 +4729,7 @@
                 "rules"
               ]
             },
-            "description": "Aggregated list of every ts-store alert rule across every tsstore connection\n\n\nResponses: 200, 500"
+            "description": "Aggregated list of every ts-store alert rule across every tsstore connection\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 200, 403, 500"
           },
           "response": []
         },
@@ -4760,7 +4760,7 @@
                 "rules"
               ]
             },
-            "description": "Create an alert rule on a tsstore connection\n\n\nResponses: 201, 400, 500",
+            "description": "Create an alert rule on a tsstore connection\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 201, 400, 403, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"max_replay\": \"\",\n  \"mqtt_qos\": 0,\n  \"mqtt_topic\": \"\",\n  \"poll_interval\": \"\",\n  \"restart_policy\": \"\",\n  \"rule_name\": \"\",\n  \"sink_connection_id\": \"\",\n  \"timeout\": \"\",\n  \"type\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
@@ -4812,7 +4812,7 @@
                 }
               ]
             },
-            "description": "Delete a ts-store alert (and all its rules) on a tsstore connection\n\n\nResponses: 204, 400, 500"
+            "description": "Delete a ts-store alert (and all its rules) on a tsstore connection\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 204, 400, 403, 500"
           },
           "response": []
         },
@@ -4855,7 +4855,7 @@
                 }
               ]
             },
-            "description": "Get the full detail of a single ts-store alert on a tsstore connection\n\n\nResponses: 200, 400, 500"
+            "description": "Get the full detail of a single ts-store alert on a tsstore connection\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 200, 400, 403, 500"
           },
           "response": []
         },
@@ -4890,7 +4890,7 @@
                 }
               ]
             },
-            "description": "Probe a tsstore connection's auth before submitting a new rule\n\n\nResponses: 200, 400"
+            "description": "Probe a tsstore connection's auth before submitting a new rule\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 200, 400, 403"
           },
           "response": []
         }

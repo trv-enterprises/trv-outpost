@@ -5059,6 +5059,7 @@ const docTemplate = `{
         },
         "/tsstore-alerts/probe": {
             "get": {
+                "description": "Optional extension endpoint — only mounted when the admin setting ` + "`" + `extensions.tsstore_alerts.enabled` + "`" + ` is true. Returns 403 when the extension is disabled.",
                 "produces": [
                     "application/json"
                 ],
@@ -5090,12 +5091,22 @@ const docTemplate = `{
                                 "type": "string"
                             }
                         }
+                    },
+                    "403": {
+                        "description": "Extension disabled",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
                     }
                 }
             }
         },
         "/tsstore-alerts/rules": {
             "get": {
+                "description": "Optional extension endpoint — only mounted when the admin setting ` + "`" + `extensions.tsstore_alerts.enabled` + "`" + ` is true. Returns 403 when the extension is disabled.",
                 "produces": [
                     "application/json"
                 ],
@@ -5110,6 +5121,15 @@ const docTemplate = `{
                             "$ref": "#/definitions/service.TSStoreAggregatedRulesResponse"
                         }
                     },
+                    "403": {
+                        "description": "Extension disabled",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -5122,6 +5142,7 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "Optional extension endpoint — only mounted when the admin setting ` + "`" + `extensions.tsstore_alerts.enabled` + "`" + ` is true. Returns 403 when the extension is disabled.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5159,6 +5180,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "403": {
+                        "description": "Extension disabled",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -5173,6 +5203,7 @@ const docTemplate = `{
         },
         "/tsstore-alerts/rules/{alert_id}": {
             "get": {
+                "description": "Optional extension endpoint — only mounted when the admin setting ` + "`" + `extensions.tsstore_alerts.enabled` + "`" + ` is true. Returns 403 when the extension is disabled.",
                 "produces": [
                     "application/json"
                 ],
@@ -5213,6 +5244,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "403": {
+                        "description": "Extension disabled",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -5225,6 +5265,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "description": "Optional extension endpoint — only mounted when the admin setting ` + "`" + `extensions.tsstore_alerts.enabled` + "`" + ` is true. Returns 403 when the extension is disabled.",
                 "tags": [
                     "TSStoreAlerts"
                 ],
@@ -5251,6 +5292,15 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Extension disabled",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {

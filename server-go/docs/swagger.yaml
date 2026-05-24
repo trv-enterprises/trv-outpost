@@ -6592,6 +6592,9 @@ paths:
       - tags
   /tsstore-alerts/probe:
     get:
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension
+        is disabled.
       parameters:
       - description: Connection ID
         in: query
@@ -6611,11 +6614,20 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "403":
+          description: Extension disabled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       summary: Probe a tsstore connection's auth before submitting a new rule
       tags:
       - TSStoreAlerts
   /tsstore-alerts/rules:
     get:
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension
+        is disabled.
       produces:
       - application/json
       responses:
@@ -6623,6 +6635,12 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/service.TSStoreAggregatedRulesResponse'
+        "403":
+          description: Extension disabled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -6635,6 +6653,9 @@ paths:
     post:
       consumes:
       - application/json
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension
+        is disabled.
       parameters:
       - description: Rule
         in: body
@@ -6655,6 +6676,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "403":
+          description: Extension disabled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -6666,6 +6693,9 @@ paths:
       - TSStoreAlerts
   /tsstore-alerts/rules/{alert_id}:
     delete:
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension
+        is disabled.
       parameters:
       - description: TSStore connection ID
         in: query
@@ -6686,6 +6716,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "403":
+          description: Extension disabled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -6696,6 +6732,9 @@ paths:
       tags:
       - TSStoreAlerts
     get:
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension
+        is disabled.
       parameters:
       - description: TSStore connection ID
         in: query
@@ -6717,6 +6756,12 @@ paths:
             type: object
         "400":
           description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Extension disabled
           schema:
             additionalProperties:
               type: string
