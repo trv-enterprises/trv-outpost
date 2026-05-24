@@ -61,19 +61,28 @@ const BUILTIN_DESTINATIONS = [
   { id: '<ip>:<port>, <ip>:<port>', label: 'peer list… (edit to your nodes)', isTemplate: true },
 ];
 
+// Builtin destination IDs that should never appear in the "recent"
+// list — they already have their own row in the dropdown. Keep this
+// in sync with BUILTIN_DESTINATIONS (templates are excluded since
+// their id is placeholder text the user replaces anyway).
+const BUILTIN_DESTINATION_IDS = new Set(['', 'network', 'master']);
+
 function loadRecentDestinations() {
   try {
     const raw = window.localStorage.getItem(RECENT_DESTINATIONS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+    if (!Array.isArray(parsed)) return [];
+    // Filter to strings, drop anything that's now a builtin (handles
+    // the case where a value was saved before it became a builtin).
+    return parsed.filter((x) => typeof x === 'string' && !BUILTIN_DESTINATION_IDS.has(x));
   } catch {
     return [];
   }
 }
 
 function saveRecentDestination(value) {
-  if (!value || value === 'network') return;
+  if (!value || BUILTIN_DESTINATION_IDS.has(value)) return;
   try {
     const current = loadRecentDestinations().filter((x) => x !== value);
     const next = [value, ...current].slice(0, MAX_RECENT_DESTINATIONS);
