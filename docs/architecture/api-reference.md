@@ -256,6 +256,66 @@ dashboard rather than the usual pull/subscribe direction.
 | ------ | ------------------------------------------- | --------------------------------------- |
 | GET    | `/api/streams/inbound/:datasourceId`        | Inbound WebSocket (auth not required)   |
 
+## Extensions
+
+Optional add-on features behind admin toggles. Each extension's
+route group sits behind a `RequireExtensionEnabled` middleware that
+returns **403 `extension_disabled`** when the matching
+`extensions.<name>.enabled` admin setting is `false`. The gate is
+independent of the auth middleware — unauthenticated requests still
+401 first; the 403 only fires for authenticated callers hitting a
+disabled extension.
+
+### ts-store Alerts — `extensions.tsstore_alerts.enabled`
+
+Powers the central [ts-store Alerts page](../../udoc/docs/tsstore-alerts.md)
+at `/design/extensions/tsstore-alerts`. ts-store is the source of
+truth for alert rules; this surface is an editor over its API. The
+gate covers rule management only — chart queries against ts-store
+connections and the inbound webhook receiver (`/api/webhooks/tsstore/*`)
+are NOT affected by this toggle.
+
+| Method | Endpoint                                       | Description                                           |
+| ------ | ---------------------------------------------- | ----------------------------------------------------- |
+| GET    | `/api/tsstore-alerts/rules`                    | Aggregated rules across every ts-store connection     |
+| GET    | `/api/tsstore-alerts/rules/:alert_id`          | Full detail for a single alert (needs `connection_id`) |
+| POST   | `/api/tsstore-alerts/rules`                    | Create a new alert rule (webhook or MQTT)             |
+| DELETE | `/api/tsstore-alerts/rules/:alert_id`          | Delete the alert and ALL its rules                    |
+| GET    | `/api/tsstore-alerts/probe`                    | Pre-submit auth probe used by the rule-create wizard  |
+
+### EdgeLake Terminal — `extensions.edgelake_terminal.enabled`
+
+Powers the [EdgeLake Terminal page](../../udoc/docs/edgelake-terminal.md)
+at `/design/extensions/edgelake-terminal` — an interactive
+AnyLog/EdgeLake command shell. The gate covers the terminal API
+only — chart queries against EdgeLake connections (`POST
+/api/connections/:id/query` → `EdgeLakeAdapter.Query`) and the
+schema-discovery endpoints under `/api/connections/:id/edgelake/*`
+are NOT affected by this toggle. To disable EdgeLake entirely, use
+the `enabled_types` admin setting instead.
+
+| Method | Endpoint                              | Description                                                  |
+| ------ | ------------------------------------- | ------------------------------------------------------------ |
+| POST   | `/api/edgelake-terminal/execute`      | Send a raw AnyLog command to an EdgeLake connection          |
+
+Request body fields:
+
+- `connection_id` (required) — must reference an EdgeLake connection.
+- `command` (required) — the raw AnyLog command (e.g. `get status`).
+- `destination` — maps to AnyLog's `destination` header.
+  Empty = connection node, `network` = fan-out, `master` = blockchain
+  node, `<ip>:<port>` (or comma list) = specific peer(s).
+- `method` — `""` (auto-detect), `"GET"`, or `"POST"`. Auto handles
+  `run`/`set`/`create`/`drop`/SQL-writes/etc. correctly.
+- `timeout_seconds` — per-call timeout, clamped server-side to
+  [1, 300]. Zero falls back to the adapter's configured default.
+
+Response includes the raw response body as a string plus the
+resolved method and duration. Deadline-exceeded errors return
+**504 Gateway Timeout** with a clear "node didn't respond within
+Ns" message; user-cancelled requests return **499 Client Closed
+Request**.
+
 ## Related docs
 
 - [Swagger UI](http://localhost:3001/swagger/index.html) — payload

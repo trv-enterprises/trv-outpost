@@ -191,6 +191,36 @@ both surfaces at once.
 See [docs/mcp.md](../mcp.md) for the full tool inventory, the typical
 agent flow, and Claude Desktop setup.
 
+## Extensions
+
+Optional add-on features live under `/api/<name>/*` route groups and
+mirror in the UI at `/design/extensions/<name>`. They're independently
+admin-gated by `extensions.<name>.enabled` booleans in the settings
+collection — when off, both the sidebar entry (client-side) and the
+API surface (server-side `RequireExtensionEnabled` middleware) go away.
+
+The middleware lives in `internal/middleware/extension_gate.go`. It's
+applied per-group in `cmd/server/main.go` immediately after the
+auth middleware, so:
+
+- Unauthenticated requests still 401 first.
+- Authenticated requests to a disabled extension get **403
+  `extension_disabled`** with a message pointing back to Manage →
+  Settings.
+
+The settings are seeded from `config/user-configurable.yaml` on first
+boot, default to `true` (new extensions light up automatically on
+upgrade), and surface in the admin UI under the **Extensions**
+category in Settings.
+
+Extensions are deliberately narrow — they gate their **own** surface
+only. The EdgeLake Terminal toggle does not disable EdgeLake chart
+queries; the ts-store Alerts toggle does not disable inbound alert
+webhooks. To disable a whole connection type, use the broader
+`enabled_types` admin setting instead. See the
+[Extensions overview in udoc](../../udoc/docs/extensions-overview.md)
+for the user-facing contract.
+
 ## Related docs
 
 - [Data model](data-model.md) — entity schemas the repositories

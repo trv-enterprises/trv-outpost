@@ -428,6 +428,13 @@ dashboard/
 | GET | `/api/registry/components/:typeId` | Get a single component subtype |
 | GET | `/api/registry/catalog` | Unified catalog: connections + components + device types |
 | GET | `/api/registry/catalog.md` | Same catalog rendered as markdown for LLM prompts |
+| **Extensions** — optional, admin-gated. Each route group sits behind `RequireExtensionEnabled` middleware that 403s when the matching `extensions.<name>.enabled` setting is off. |||
+| GET | `/api/tsstore-alerts/rules` | Aggregated alert-rule list across every tsstore connection |
+| GET | `/api/tsstore-alerts/rules/:alert_id` | Single alert detail (requires `connection_id` query param) |
+| POST | `/api/tsstore-alerts/rules` | Create a new alert rule (webhook or MQTT transport) |
+| DELETE | `/api/tsstore-alerts/rules/:alert_id` | Delete an alert (and ALL its rules — ts-store has no per-rule delete) |
+| GET | `/api/tsstore-alerts/probe` | Auth probe used by the rule-create wizard |
+| POST | `/api/edgelake-terminal/execute` | Send a raw AnyLog command to an EdgeLake connection; honors `destination`, `method` (auto/GET/POST), `timeout_seconds` |
 | **MCP (external agent SSE bridge)** |||
 | GET | `/mcp/sse` | SSE connection for MCP — used with [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy) by Claude Desktop |
 | POST | `/mcp/message` | JSON-RPC message endpoint |
@@ -790,9 +797,9 @@ exhaustive, not prioritized except where noted.
 
 ---
 
-**Last Updated**: 2026-05-22
-**Build**: 1330
-**Version**: 0.18.2
+**Last Updated**: 2026-05-24
+**Build**: 1342
+**Version**: 0.19.0
 
 ## Simulator Services
 

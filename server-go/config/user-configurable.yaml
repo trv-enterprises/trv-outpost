@@ -96,10 +96,10 @@ settings:
   # the "Extensions" group in the Design sidebar hides entirely.
   - key: extensions.tsstore_alerts.enabled
     category: extensions
-    description: "ts-store Alerts extension — central /design/extensions/tsstore-alerts page for managing ts-store alert rules across every tsstore connection. Disable to hide the sidebar link and redirect the route."
+    description: "ts-store Alerts extension — central /design/extensions/tsstore-alerts page for managing ts-store alert rules across every tsstore connection. Disable to hide the sidebar link, redirect the route, and 403 the backing API. Chart queries against ts-store connections and inbound alert webhooks are NOT affected — this gates the rule-management page only."
     value: true
 
   - key: extensions.edgelake_terminal.enabled
     category: extensions
-    description: "EdgeLake Terminal extension — interactive AnyLog/EdgeLake command shell at /design/extensions/edgelake-terminal. Sends raw commands to any EdgeLake connection and prints the response. Disable to hide the sidebar link, redirect the route, and 403 the backing API."
+    description: "EdgeLake Terminal extension — interactive AnyLog/EdgeLake command shell at /design/extensions/edgelake-terminal. Sends raw commands to any EdgeLake connection and prints the response. Disable to hide the sidebar link, redirect the route, and 403 the backing API. Chart queries against EdgeLake connections are NOT affected — this gates the terminal page only. To disable EdgeLake support entirely, use the Type Availability setting (enabled_types)."
     value: true

@@ -46,6 +46,11 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Extensions',
+      items: ['extensions-overview', 'tsstore-alerts', 'edgelake-terminal'],
+    },
+    {
+      type: 'category',
       label: 'Administration',
       items: ['user-management', 'system-settings', 'device-types'],
     },
