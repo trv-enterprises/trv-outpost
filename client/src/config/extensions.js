@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { Notification } from '@carbon/icons-react';
+import { Notification, Terminal } from '@carbon/icons-react';
 
 /**
  * Registry of Design-mode extensions.
@@ -26,5 +26,13 @@ export const EXTENSIONS = [
     description: 'Manage ts-store alert rules across every tsstore connection',
     icon: Notification,
     path: '/design/extensions/tsstore-alerts',
+  },
+  {
+    id: 'edgelake_terminal',
+    settingsKey: 'extensions.edgelake_terminal.enabled',
+    label: 'EdgeLake Terminal',
+    description: 'Interactive AnyLog/EdgeLake command shell against any EdgeLake connection',
+    icon: Terminal,
+    path: '/design/extensions/edgelake-terminal',
   },
 ];

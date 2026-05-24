@@ -52,6 +52,7 @@ import ApiKeysListPage from './pages/ApiKeysListPage';
 import TsStoreAlertsExtensionPage from './pages/TsStoreAlertsExtensionPage';
 import TsStoreAlertRuleEditorPage from './pages/TsStoreAlertRuleEditorPage';
 import TsStoreAlertRuleViewPage from './pages/TsStoreAlertRuleViewPage';
+import EdgeLakeTerminalPage from './pages/EdgeLakeTerminalPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { AIAvailabilityProvider, useAIAvailability } from './context/AIAvailabilityContext';
@@ -756,6 +757,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/design/extensions/tsstore-alerts" element={<TsStoreAlertsExtensionPage />} />
           <Route path="/design/extensions/tsstore-alerts/new" element={<TsStoreAlertRuleEditorPage />} />
           <Route path="/design/extensions/tsstore-alerts/:connectionId/:alertId" element={<TsStoreAlertRuleViewPage />} />
+          <Route path="/design/extensions/edgelake-terminal" element={<EdgeLakeTerminalPage />} />
 
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage />} />

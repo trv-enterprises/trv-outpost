@@ -20,6 +20,35 @@ definitions:
     required:
     - name
     type: object
+  handlers.EdgeLakeTerminalExecuteRequest:
+    properties:
+      command:
+        type: string
+      connection_id:
+        type: string
+      destination:
+        type: string
+      method:
+        type: string
+      timeout_seconds:
+        type: integer
+    required:
+    - command
+    - connection_id
+    type: object
+  handlers.EdgeLakeTerminalExecuteResponse:
+    properties:
+      command:
+        type: string
+      destination:
+        type: string
+      duration_ms:
+        type: integer
+      method:
+        type: string
+      response:
+        type: string
+    type: object
   handlers.ExecuteCommandRequest:
     properties:
       action:
@@ -6338,6 +6367,64 @@ paths:
       summary: Test a datasource connection
       tags:
       - datasources
+  /edgelake-terminal/execute:
+    post:
+      consumes:
+      - application/json
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.edgelake_terminal.enabled` is true. Returns 403 when the extension
+        is disabled. The command is forwarded verbatim to the EdgeLake node via the
+        `command` HTTP header (AnyLog REST contract); the response body is returned
+        as a UTF-8 string for the terminal page to render. Per-call `timeout_seconds`
+        (clamped to [1, 300]) overrides the connection's default; on deadline expiry
+        the handler returns 504 with a clarified message.
+      parameters:
+      - description: Command payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.EdgeLakeTerminalExecuteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.EdgeLakeTerminalExecuteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Extension disabled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Connection not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: EdgeLake node returned an error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "504":
+          description: Per-call timeout exceeded
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Send a raw AnyLog/EdgeLake command to an EdgeLake connection
+      tags:
+      - EdgeLakeTerminal
   /events/stream:
     get:
       description: Open a Server-Sent-Events stream of dashboard events (alerts, etc.).

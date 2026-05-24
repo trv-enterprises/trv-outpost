@@ -541,6 +541,21 @@ func main() {
 			tsstoreAlerts.GET("/probe", tsstoreAlertRulesHandler.ProbeAuth)
 		}
 
+		// EdgeLake Terminal extension — interactive AnyLog/EdgeLake
+		// command shell. Powers /design/extensions/edgelake-terminal.
+		// Gated by the `extensions.edgelake_terminal.enabled` admin
+		// setting; when off the entire group 403s.
+		edgelakeTerminalHandler := handlers.NewEdgeLakeTerminalHandler(connectionService)
+		edgelakeTerminal := api.Group("/edgelake-terminal")
+		edgelakeTerminal.Use(middleware.RequireExtensionEnabled(
+			settingsService,
+			"extensions.edgelake_terminal.enabled",
+			"EdgeLake Terminal",
+		))
+		{
+			edgelakeTerminal.POST("/execute", edgelakeTerminalHandler.Execute)
+		}
+
 		// Inbound webhooks — external integrations POST alert
 		// payloads here. Two variants live side by side:
 		//

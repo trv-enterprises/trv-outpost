@@ -1348,6 +1348,42 @@ class APIClient {
     return this.request(`/api/tsstore-alerts/probe?${q}`);
   }
 
+  // EdgeLake Terminal extension — send a raw AnyLog/EdgeLake command
+  // to an EdgeLake connection and get the response body back as a
+  // string. Used by /design/extensions/edgelake-terminal.
+  //
+  // `destination` maps to the AnyLog REST `destination` header.
+  // Empty string = local node, "network" = fan out, "<ip>:<port>" (or
+  // comma-separated list) = redirect to specific peer node(s).
+  //
+  // `timeoutSeconds` overrides the connection's default timeout for
+  // this one call (clamped server-side to [1, 300]). Zero = use the
+  // connection default.
+  //
+  // `signal` is an AbortSignal so the terminal page can cancel an
+  // in-flight command. Also bypasses the apiClient's own default
+  // timeout — the caller owns the deadline.
+  async executeEdgeLakeCommand({
+    connectionId,
+    command,
+    destination = '',
+    method = '',
+    timeoutSeconds = 0,
+    signal,
+  }) {
+    return this.request('/api/edgelake-terminal/execute', {
+      method: 'POST',
+      body: JSON.stringify({
+        connection_id: connectionId,
+        command,
+        destination,
+        method,
+        timeout_seconds: timeoutSeconds,
+      }),
+      signal,
+    });
+  }
+
   // ── Dashboard export / import ─────────────────────────────────────
   async previewExportDashboards(dashboardIds) {
     return this.request('/api/dashboards/export/preview', {

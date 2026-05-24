@@ -106,7 +106,7 @@ func (a *EdgeLakeAdapter) Connect(ctx context.Context) error {
 
 // TestConnection tests the connection to EdgeLake
 func (a *EdgeLakeAdapter) TestConnection(ctx context.Context) error {
-	_, err := a.executeCommandInternal(ctx, "get status", false)
+	_, err := a.executeCommandInternal(ctx, "get status", "", "GET", nil)
 	return err
 }
 
@@ -140,7 +140,15 @@ func (a *EdgeLakeAdapter) Query(ctx context.Context, query registry.Query) (*reg
 		}
 	}
 
-	body, err := a.executeCommandInternal(ctx, command, distributed)
+	destination := ""
+	if distributed {
+		destination = "network"
+	}
+
+	// `sql … "select …"` is a read; auto-detect handles
+	// `sql … "insert/update/…"` correctly if charts ever issue writes.
+	method := ResolveHTTPMethod(command)
+	body, err := a.executeCommandInternal(ctx, command, destination, method, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -163,9 +171,151 @@ func (a *EdgeLakeAdapter) baseURLInternal() string {
 	return fmt.Sprintf("http://%s:%d", a.config.Host, a.config.Port)
 }
 
-// executeCommandInternal sends a command to EdgeLake
-func (a *EdgeLakeAdapter) executeCommandInternal(ctx context.Context, command string, distributed bool) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", a.baseURLInternal(), nil)
+// HTTPTimeout returns the adapter's default per-call timeout (the
+// connection's `timeout` config, or 20s when unset). Used by the
+// EdgeLake Terminal to describe the effective deadline when an
+// `ExecuteCommand` call expires without an explicit per-call timeout.
+func (a *EdgeLakeAdapter) HTTPTimeout() time.Duration {
+	return a.client.Timeout
+}
+
+// edgelakeWriteVerbs is the set of AnyLog command prefixes that mutate
+// state on the node — they must be sent as POST, not GET. List drawn
+// from the AnyLog REST source's verb dispatch and the AnyLog command
+// docs. New verbs added upstream may need to be added here; missing
+// one yields a silent no-op or 405 from the node, depending on
+// EdgeLake version.
+var edgelakeWriteVerbs = []string{
+	"run",
+	"set",
+	"create",
+	"drop",
+	"delete",
+	"update",
+	"insert",
+	"reset",
+	"connect",
+	"disconnect",
+	"add",
+	"enable",
+	"disable",
+	"schedule",
+	"unschedule",
+	"deploy",
+	"exit",
+	"kill",
+	"thread",
+}
+
+// ResolveHTTPMethod picks GET vs POST for a raw AnyLog command. Used
+// by the EdgeLake Terminal extension to auto-detect intent when the
+// caller doesn't supply an explicit method. Exported so the handler
+// can echo the resolved method back to the client for transcript
+// labelling.
+func ResolveHTTPMethod(command string) string {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return "GET"
+	}
+	lower := strings.ToLower(trimmed)
+	// First word — AnyLog dispatches on the leading verb.
+	first := lower
+	if sp := strings.IndexAny(lower, " \t"); sp >= 0 {
+		first = lower[:sp]
+	}
+	for _, v := range edgelakeWriteVerbs {
+		if first == v {
+			return "POST"
+		}
+	}
+	// `sql … "insert/update/delete …"` is a write too. `sql … "select …"`
+	// stays a GET. Quick scan inside the quoted query.
+	if first == "sql" {
+		// Look at the verb inside the SQL string. AnyLog's sql command
+		// wraps the statement in double quotes; we don't need to be
+		// strict, just spot the leading SQL verb.
+		if q := strings.Index(lower, `"`); q >= 0 {
+			tail := strings.TrimSpace(lower[q+1:])
+			for _, mut := range []string{"insert", "update", "delete", "drop", "create", "alter", "truncate"} {
+				if strings.HasPrefix(tail, mut+" ") {
+					return "POST"
+				}
+			}
+		}
+	}
+	return "GET"
+}
+
+// ExecuteCommand sends a raw AnyLog/EdgeLake command and returns the
+// decoded response bytes plus the HTTP method that was actually used.
+// Public surface for the EdgeLake Terminal extension.
+//
+// destination controls the AnyLog REST `destination` header:
+//   - ""         → no header, command runs on the connected node
+//   - "network"  → fan out across the EdgeLake cluster
+//   - "<ip:port>" (or comma-separated list) → forward to specific peer(s)
+//
+// method selects the HTTP verb. AnyLog uses GET for reads and POST for
+// state-changing commands (`run …`, `set …`, `create …`, etc.):
+//   - ""     → auto-detect via ResolveHTTPMethod(command)
+//   - "GET"  → force GET (typical for reads)
+//   - "POST" → force POST (for writes the auto-detect didn't catch)
+//
+// timeout is the upper bound for the whole roundtrip. Zero means "use
+// the adapter's configured default" (the connection's `timeout` field,
+// or 20s when unset). When timeout exceeds the default, a one-off
+// http.Client with the larger deadline is used so callers can run
+// long-running diagnostics (`test network`, `test cluster setup`,
+// distributed-fan-out SQL) without globally widening the default. The
+// per-config `use_distributed_query` flag still applies to SQL
+// queries via Query — it's translated to destination="network" before
+// it reaches executeCommandInternal.
+func (a *EdgeLakeAdapter) ExecuteCommand(ctx context.Context, command, destination, method string, timeout time.Duration) ([]byte, string, error) {
+	resolvedMethod := strings.ToUpper(strings.TrimSpace(method))
+	if resolvedMethod == "" {
+		resolvedMethod = ResolveHTTPMethod(command)
+	}
+
+	client := a.client
+	if timeout > 0 {
+		// Apply timeout to the context so the AnyLog node sees the
+		// deadline and we can distinguish "context.DeadlineExceeded"
+		// from a node-level error upstream.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+		// If the requested timeout is larger than the adapter's
+		// default http.Client timeout, the client would chop us off
+		// early — make a one-off client just for this call.
+		if a.client.Timeout > 0 && timeout > a.client.Timeout {
+			client = &http.Client{Timeout: timeout}
+		}
+	}
+	body, err := a.executeCommandInternal(ctx, command, destination, resolvedMethod, client)
+	return body, resolvedMethod, err
+}
+
+// executeCommandInternal sends a command to EdgeLake. destination is
+// forwarded verbatim as the AnyLog REST `destination` header when
+// non-empty (e.g. "network" for fan-out, or "<ip>:<port>" to redirect
+// to a specific peer node). Empty string omits the header, so the
+// command runs locally on the connected node. client overrides the
+// adapter's default http.Client (used by ExecuteCommand to apply a
+// larger per-call ceiling); pass nil to use the default. method is
+// the HTTP verb; defaults to GET when empty. AnyLog's REST contract
+// keeps the command in the `command:` header for both GET and POST —
+// POST is purely a state-changing signal, no body involved unless a
+// payload command is being run (none of the current terminal use
+// cases need a body).
+func (a *EdgeLakeAdapter) executeCommandInternal(ctx context.Context, command, destination, method string, client *http.Client) ([]byte, error) {
+	if client == nil {
+		client = a.client
+	}
+	if method == "" {
+		method = "GET"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, a.baseURLInternal(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -173,12 +323,20 @@ func (a *EdgeLakeAdapter) executeCommandInternal(ctx context.Context, command st
 	req.Header.Set("User-Agent", "anylog")
 	req.Header.Set("command", command)
 
-	if distributed {
-		req.Header.Set("destination", "network")
+	if destination != "" {
+		req.Header.Set("destination", destination)
 	}
 
-	resp, err := a.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
+		// Preserve context errors so callers can distinguish
+		// "deadline exceeded" from a network-level failure. http.Client
+		// wraps context errors in *url.Error, which makes errors.Is
+		// the right tool — but only when the underlying error is
+		// retained. Use %w to do that.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("connection failed: %w", ctxErr)
+		}
 		return nil, fmt.Errorf("connection failed: %w", err)
 	}
 	defer resp.Body.Close()
@@ -290,7 +448,7 @@ func (a *EdgeLakeAdapter) recordsToRegistryResultSet(records []map[string]interf
 
 // ListDatabasesAdapter returns all databases
 func (a *EdgeLakeAdapter) ListDatabasesAdapter(ctx context.Context) ([]string, error) {
-	body, err := a.executeCommandInternal(ctx, "blockchain get table", false)
+	body, err := a.executeCommandInternal(ctx, "blockchain get table", "", "GET", nil)
 	if err != nil {
 		return nil, err
 	}

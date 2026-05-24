@@ -98,3 +98,8 @@ settings:
     category: extensions
     description: "ts-store Alerts extension — central /design/extensions/tsstore-alerts page for managing ts-store alert rules across every tsstore connection. Disable to hide the sidebar link and redirect the route."
     value: true
+
+  - key: extensions.edgelake_terminal.enabled
+    category: extensions
+    description: "EdgeLake Terminal extension — interactive AnyLog/EdgeLake command shell at /design/extensions/edgelake-terminal. Sends raw commands to any EdgeLake connection and prints the response. Disable to hide the sidebar link, redirect the route, and 403 the backing API."
+    value: true
