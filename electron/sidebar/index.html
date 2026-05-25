@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 TRV Enterprises LLC
+  Licensed under Apache 2.0
+  See LICENSE file for details.
+-->
+<html>
+<head>
+  <meta charset="utf-8" />
+  <!--
+    Tight CSP for the sidebar renderer. xterm.js + the fit addon are
+    loaded as plain UMD scripts from node_modules; nothing else is.
+    No external network, no inline eval.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;" />
+  <title>Claude Code</title>
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+  <link rel="stylesheet" href="./sidebar.css" />
+</head>
+<body>
+  <!--
+    Drag handle on the LEFT edge of the sidebar. 6px wide, ew-resize
+    cursor. Mousedown starts a drag (main polls cursor); mouseup ends
+    it. The handle sits inside the sidebar webContents because that's
+    the only way to capture pointer events at the boundary — the
+    dashboard webContents stops just to the left.
+  -->
+  <div id="drag-handle" aria-label="Resize sidebar"></div>
+
+  <!-- xterm.js mounts here -->
+  <div id="terminal"></div>
+
+  <!--
+    xterm + addon-fit are UMD bundles (no ES module variant). Loaded
+    as classic scripts so they register `Terminal` and `FitAddon` as
+    globals on `window`. sidebar.js reads them from there.
+  -->
+  <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="./sidebar.js"></script>
+</body>
+</html>

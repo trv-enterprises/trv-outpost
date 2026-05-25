@@ -8,13 +8,17 @@
   "scripts": {
     "start": "electron .",
     "dev": "ELECTRON_DEV=true electron .",
+    "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper node_modules/node-pty/prebuilds/darwin-x64/spawn-helper || true",
     "build": "npm run build:client && electron-builder",
     "build:client": "cd ../client && npm run build",
     "package": "electron-builder --mac",
     "package:dir": "electron-builder --mac --dir"
   },
   "dependencies": {
-    "electron-store": "^8.1.0"
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "electron-store": "^8.1.0",
+    "node-pty": "^1.0.0"
   },
   "devDependencies": {
     "electron": "^28.0.0",
@@ -30,6 +34,8 @@
     "files": [
       "main.js",
       "preload.js",
+      "sidebar-preload.js",
+      "sidebar/**/*",
       "node_modules/**/*"
     ],
     "extraResources": [
@@ -47,7 +53,11 @@
           "arch": ["universal"]
         }
       ],
-      "icon": "resources/icon.icns"
+      "icon": "resources/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist"
     },
     "dmg": {
       "title": "TRVE Dashboards",

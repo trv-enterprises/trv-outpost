@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2026 TRV Enterprises LLC
+ * Licensed under Apache 2.0
+ * See LICENSE file for details.
+ *
+ * Sidebar styles — Carbon g100 dark background to match the dashboard
+ * pane, xterm.js terminal fills the remaining space minus the drag
+ * handle.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: #161616; /* Carbon g100 background */
+  color: #f4f4f4;
+  font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', monospace;
+}
+
+#drag-handle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100vh;
+  cursor: ew-resize;
+  /* Almost invisible — Carbon border subtle on hover. Pure visual cue;
+     functional area is the full 6px. */
+  background: transparent;
+  z-index: 100;
+  transition: background-color 120ms;
+}
+
+#drag-handle:hover {
+  background: #393939; /* Carbon border-strong */
+}
+
+#terminal {
+  position: fixed;
+  top: 0;
+  left: 6px; /* leave the drag handle's column free */
+  right: 0;
+  bottom: 0;
+  padding: 8px 8px 8px 4px;
+}
+
+/* xterm.js overrides — match Carbon dark */
+.xterm .xterm-viewport {
+  background: transparent !important;
+}
+
+/* Restyle xterm's scrollbar to match Carbon dark instead of macOS default
+   white. Webkit-only is fine — Electron's renderer is Chromium. */
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #393939;
+  border-radius: 4px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+}
+
+/* Hide the inline error pane until JS toggles it on. */
+#error-banner {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 6px;
+  right: 0;
+  padding: 12px 16px;
+  background: #2d0709; /* Carbon red dark */
+  color: #ff8389;
+  border-bottom: 1px solid #6f1f1c;
+  font-size: 13px;
+  z-index: 50;
+}
+
+#error-banner.visible {
+  display: block;
+}

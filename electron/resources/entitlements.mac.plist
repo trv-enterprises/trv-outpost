@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Entitlements for the hardened-runtime macOS build. Required by
+    electron-builder when hardenedRuntime: true. The two
+    com.apple.security.cs.* entries below cover the most common needs
+    of an Electron app with a native module (node-pty, in our case):
+
+    - allow-jit: V8 needs to mark JIT memory as executable.
+    - allow-unsigned-executable-memory: V8 needs to allocate writable
+      executable memory pages.
+    - allow-dyld-environment-variables: lets us pass DYLD_* env vars
+      to child processes when needed.
+    - disable-library-validation: lets the app load native modules
+      (.node files) that aren't signed with the same Team ID. Without
+      this, node-pty fails to load in the packaged app.
+
+    These four are the Electron-app entitlements set; they match what
+    electron-builder's documentation recommends for apps that bundle
+    native modules.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
