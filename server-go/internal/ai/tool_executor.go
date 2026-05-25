@@ -123,6 +123,8 @@ func (e *ToolExecutor) ExecuteTool(ctx context.Context, chartID string, chartVer
 		return e.executeGetComponentState(ctx, chartID, chartVersion)
 	case ToolGetComponentTemplate:
 		return e.executeGetComponentTemplate(input)
+	case ToolGetConnectionTypeGuidance:
+		return e.executeGetConnectionTypeGuidance(input)
 	case ToolListDeviceTypes:
 		return e.executeListDeviceTypes(ctx)
 	case ToolSuggestMissing:

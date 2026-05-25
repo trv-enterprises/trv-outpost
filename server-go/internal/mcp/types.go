@@ -69,7 +69,57 @@ type ServerInfo struct {
 
 // Capabilities represents MCP server capabilities
 type Capabilities struct {
-	Tools map[string]interface{} `json:"tools,omitempty"`
+	Tools   map[string]interface{} `json:"tools,omitempty"`
+	Prompts map[string]interface{} `json:"prompts,omitempty"`
+}
+
+// Prompt represents an MCP prompt definition. Prompts are pre-baked
+// templates the client (Claude Desktop, etc.) surfaces to the user as
+// opt-in slash commands. Picking a prompt injects its content as the
+// system/role framing for the conversation. We use this for the
+// `dashboard-builder` persona — Claude Desktop users who want the
+// in-app dashboard-agent behavior can opt into it explicitly without
+// the framing polluting other MCP consumers' base experience.
+type Prompt struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
+}
+
+// PromptArgument is a per-prompt placeholder the client can fill in
+// before injecting. We don't use arguments today — the dashboard-
+// builder prompt is parameterless.
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+// PromptMessage is a single message inside a prompt's content. Per
+// the MCP spec, prompts return an array of messages; the simplest
+// useful shape is a single user-role message containing the prompt
+// text. Claude Desktop renders this as system/role framing.
+type PromptMessage struct {
+	Role    string         `json:"role"`
+	Content PromptContent  `json:"content"`
+}
+
+// PromptContent wraps the actual prompt text in a typed envelope per
+// the MCP spec. Only "text" content is implemented today.
+type PromptContent struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+// PromptsListResult is the response shape for `prompts/list`.
+type PromptsListResult struct {
+	Prompts []Prompt `json:"prompts"`
+}
+
+// PromptsGetResult is the response shape for `prompts/get`.
+type PromptsGetResult struct {
+	Description string          `json:"description,omitempty"`
+	Messages    []PromptMessage `json:"messages"`
 }
 
 // InitializeResult represents the result of initialize method. The

@@ -29,6 +29,7 @@ type ToolRegistry struct {
 	dashboardService  *service.DashboardService
 	componentService      *service.ComponentService
 	deviceTypeService *service.DeviceTypeService
+	settingsService   *service.SettingsService
 	typeFilter        registry.TypeFilter
 }
 
@@ -39,6 +40,7 @@ func NewToolRegistry(
 	dashboardSvc *service.DashboardService,
 	chartSvc *service.ComponentService,
 	deviceTypeSvc *service.DeviceTypeService,
+	settingsSvc *service.SettingsService,
 	typeFilter registry.TypeFilter,
 ) *ToolRegistry {
 	r := &ToolRegistry{
@@ -48,6 +50,7 @@ func NewToolRegistry(
 		dashboardService:  dashboardSvc,
 		componentService:      chartSvc,
 		deviceTypeService: deviceTypeSvc,
+		settingsService:   settingsSvc,
 		typeFilter:        typeFilter,
 	}
 
@@ -56,6 +59,7 @@ func NewToolRegistry(
 	r.registerDiscoveryTools()
 	r.registerComponentTools()
 	r.registerDashboardTools()
+	r.registerGuidanceTools()
 
 	return r
 }
@@ -393,12 +397,13 @@ func (r *ToolRegistry) registerConnectionTools() {
 	r.registerTool(
 		Tool{
 			Name:        "query_connection",
-			Description: "Execute an ad-hoc query against a connection. The `query` object takes `raw` (the query string), `type` (sql / api / csv_filter / stream_filter), and optional `params`. Returns columns and rows.",
+			Description: "Execute an ad-hoc query against a connection. The `query` object takes `raw` (the query string), `type` (sql / api / csv_filter / stream_filter), and optional `params`. Returns columns and rows. Pass `limit` to cap how many rows come back — useful when you just want to verify the result shape (column names + types) before committing to a chart_type. `limit: 1` is the common probe pattern.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"connection_id": {Type: "string", Description: "Connection ID to query"},
 					"query":         {Type: "object", Description: "Query object with `raw`, `type`, and optional `params`"},
+					"limit":         {Type: "integer", Description: "Optional cap on the number of rows returned. The query still executes against the data source; this trims the rows before serializing back to you. Use a small number (1-5) for shape probes, omit for full results."},
 				},
 				Required: []string{"connection_id", "query"},
 			},
@@ -413,7 +418,24 @@ func (r *ToolRegistry) registerConnectionTools() {
 					Params: getMap(queryMap, "params"),
 				},
 			}
-			return r.connectionService.QueryConnection(context.Background(), id, req)
+			resp, err := r.connectionService.QueryConnection(context.Background(), id, req)
+			if err != nil || resp == nil || resp.ResultSet == nil {
+				return resp, err
+			}
+			// Apply the optional row cap after the adapter has returned —
+			// we don't push limit into adapters (would require changes
+			// in every one). For probe-style usage the caller has
+			// usually baked LIMIT into the SQL anyway; this is the
+			// safety net + token-saving trim.
+			limit := getInt(args, "limit")
+			if limit > 0 && len(resp.ResultSet.Rows) > limit {
+				resp.ResultSet.Rows = resp.ResultSet.Rows[:limit]
+				if resp.ResultSet.Metadata == nil {
+					resp.ResultSet.Metadata = map[string]interface{}{}
+				}
+				resp.ResultSet.Metadata["truncated_to"] = limit
+			}
+			return resp, nil
 		},
 	)
 }

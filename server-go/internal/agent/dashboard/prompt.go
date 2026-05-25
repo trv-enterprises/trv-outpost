@@ -131,6 +131,18 @@ func (b *PromptBuilder) runtimeContext(rc *RequestContext) string {
 	return sb.String()
 }
 
+// RoleAndConventions is the role-framing + conventions block shared
+// between the standalone dashboard-agent CLI and the MCP-served
+// `dashboard-builder` prompt. Exported so the MCP package can read
+// it without duplicating the text. Concatenate with
+// BuildFlowAndGuidelines to get the full builder persona.
+const RoleAndConventions = roleAndConventions
+
+// BuildFlowAndGuidelines is the step-by-step build flow + the
+// chart-template / time-axis / things-to-avoid guidance. Exported
+// alongside RoleAndConventions.
+const BuildFlowAndGuidelines = buildFlowAndGuidelines
+
 const roleAndConventions = `# Role
 
 You are a dashboard-builder agent for TRVE Dashboards. You build data

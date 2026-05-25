@@ -363,6 +363,23 @@ code, fetch the target style's template here and re-implement from it.`),
 			},
 		},
 		{
+			Name: "get_connection_type_guidance",
+			Description: anthropic.String(`Get the query_config envelope shape and return-column conventions for a specific connection adapter type.
+
+Call this AFTER you've picked which connection to use — it tells you how to build query_config for that adapter type (Prometheus's query_type/start/step, SQL's positional binding, EdgeLake's database param, MQTT's data_path, etc.). The string returned is the canonical, system-of-record guidance for that adapter; it stays in sync with what the adapter actually accepts. Skip if you've already worked with this type in this session.
+
+What chart_type fits which data is YOUR judgment call (general visualization knowledge); this tool only covers TRVE-dashboard-specific envelope wrapping.`),
+			InputSchema: anthropic.ToolInputSchemaParam{
+				Properties: map[string]interface{}{
+					"type": map[string]interface{}{
+						"type":        "string",
+						"description": "Connection type id — e.g. sql.postgres, api.prometheus, stream.mqtt, api.edgelake. Match the values returned by list_connections (the type_id field).",
+					},
+				},
+				Required: []string{"type"},
+			},
+		},
+		{
 			Name:        "suggest_missing_tools",
 			Description: anthropic.String("DEPRECATED: Use set_custom_code to implement custom visualizations instead."),
 			InputSchema: anthropic.ToolInputSchemaParam{
@@ -407,6 +424,7 @@ const (
 	ToolPreviewData           = "preview_data"
 	ToolGetComponentState     = "get_component_state"
 	ToolGetComponentTemplate  = "get_component_template"
+	ToolGetConnectionTypeGuidance = "get_connection_type_guidance"
 	ToolSuggestMissing        = "suggest_missing_tools" // Deprecated
 )
 

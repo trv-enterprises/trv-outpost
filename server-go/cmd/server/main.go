@@ -431,7 +431,7 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService)
 
 	// Initialize MCP
-	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, typeFilter)
+	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
 	// PUBLIC bootstrap routes — must be reachable BEFORE the auth

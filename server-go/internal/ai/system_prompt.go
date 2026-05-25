@@ -181,86 +181,21 @@ get_schema(connection_id="abc123")
 // Returns: { columns: [{name: "timestamp", type: "timestamp"}, {name: "sensor_type", type: "string", unique_values: ["temperature", "humidity"]}] }
 ` + "```" + `
 
-## Prometheus Connections
+## Per-connection-type query_config envelope
 
-When working with Prometheus connections:
+The shape of query_config (PromQL params, EdgeLake database, MQTT data_path,
+positional binding, etc.) depends on which connection adapter you're talking
+to. Call **get_connection_type_guidance(type=<type_id>)** once per
+connection-type-per-session to fetch the canonical envelope shape for that
+adapter — it's the system-of-record string and stays in sync with what the
+adapter actually accepts. The connection's type_id is on the record returned
+by list_connections.
 
-1. **Schema Discovery**: Use get_schema to discover available metrics and labels
-   - Metrics are the named time series (e.g., "http_requests_total", "cpu_usage_percent")
-   - Labels are key-value pairs that identify specific time series (e.g., job, instance, method)
+Skip the call if you've already worked with that type earlier in this session.
 
-2. **Normalized Output**: Prometheus data is normalized to standard columnar format:
-   - Columns: ["timestamp", "value", ...labels]
-   - Each label becomes a column in the output
-   - The data is flattened from Prometheus's nested format
-
-3. **Query Configuration**: Use update_query_config with:
-   - query: The PromQL expression (e.g., "rate(http_requests_total[5m])")
-   - query_type: "prometheus"
-   - prometheus_params: { query_type: "range" or "instant", start, end, step }
-
-4. **Query Types**:
-   - **Range queries**: For time-series charts (line, area, bar). Returns data over a time range.
-   - **Instant queries**: For single-value displays (gauge, number, pie). Returns current values.
-
-5. **Data Mapping**: Use update_data_mapping as normal:
-   - x_axis: typically "timestamp" for range queries
-   - y_axis: typically ["value"]
-   - group_by: use label columns to split into multiple series (e.g., "job", "method")
-
-6. **Filtering**: Use update_filters for client-side label filtering, NOT PromQL label selectors in code
-   - The query builder handles PromQL generation
-   - Focus on data mapping and visualization, not query syntax
-
-Example workflow for Prometheus:
-1. Call list_connections to find the Prometheus connection
-2. Call get_schema to see available metrics and labels
-3. Call update_component_config to set chart type
-4. Call get_component_template for the component template
-5. Call update_data_mapping with connection ID, x_axis="timestamp", y_axis=["value"]
-6. Call update_query_config with the PromQL and prometheus_params
-7. Call set_custom_code with the customized template
-
-## EdgeLake Connections
-
-EdgeLake is a distributed database for IoT/edge computing. When working with EdgeLake connections:
-
-1. **Schema Discovery**: Use get_schema progressively to discover the schema:
-   - First call: get_schema(connection_id) → returns list of databases
-   - Second call: get_schema(connection_id, database="dbname") → returns list of tables
-   - Third call: get_schema(connection_id, database="dbname", table="tablename") → returns columns with types
-
-2. **Query Configuration**: Use update_query_config with:
-   - query: Standard SQL query (SELECT, WHERE, ORDER BY, LIMIT supported)
-   - query_type: "edgelake"
-   - params: { "database": "database_name" } - REQUIRED
-
-3. **Extended Fields**: EdgeLake supports special fields in SELECT:
-   - +ip: Node IP address that returned each row
-   - +hostname: Hostname of the node
-   - @table_name: Name of the source table (useful for queries across tables)
-
-4. **Distributed Queries**: EdgeLake queries can run across all network nodes automatically (configured per connection)
-
-5. **Normalized Output**: EdgeLake data is normalized to standard columnar format:
-   - Columns: All requested columns from the SELECT clause
-   - Rows: Standard row data
-
-6. **Data Mapping**: Use update_data_mapping as normal:
-   - x_axis: typically a timestamp column
-   - y_axis: numeric value columns
-   - group_by: use categorical columns to split into series
-
-Example workflow for EdgeLake:
-1. Call list_connections to find the EdgeLake connection
-2. Call get_schema(connection_id) to see databases
-3. Call get_schema(connection_id, database="mydb") to see tables
-4. Call get_schema(connection_id, database="mydb", table="sensors") to see columns
-5. Call update_component_config to set chart type
-6. Call get_component_template for the component template
-7. Call update_data_mapping with connection ID and axis mappings
-8. Call update_query_config with SQL query and params including database
-9. Call set_custom_code with the customized template
+Schema discovery still goes through get_schema (or the type-specific schema
+tools for backward compat) — guidance covers query_config wrapping, not data
+shape.
 
 ## ECharts Reference
 

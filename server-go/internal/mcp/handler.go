@@ -147,6 +147,10 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 		result = h.handleToolsList()
 	case "tools/call":
 		result, err = h.handleToolsCall(req.Params)
+	case "prompts/list":
+		result = h.handlePromptsList()
+	case "prompts/get":
+		result, err = h.handlePromptsGet(req.Params)
 	default:
 		c.JSON(http.StatusBadRequest, JSONRPCResponse{
 			JSONRPC: "2.0",
@@ -194,7 +198,8 @@ func (h *Handler) handleInitialize(params map[string]interface{}) InitializeResu
 			Version: "1.0.0",
 		},
 		Capabilities: Capabilities{
-			Tools: map[string]interface{}{},
+			Tools:   map[string]interface{}{},
+			Prompts: map[string]interface{}{},
 		},
 		Instructions: h.buildInstructions(),
 	}
@@ -214,26 +219,56 @@ and displays — all stored in one collection, discriminated by component_type),
 and **dashboards** (a name plus a 32x32-px cell panel grid where each panel
 references a component or carries inline text).
 
-# Workflow hints
+# Terminology
 
-When the user asks you to build a dashboard:
+The system's umbrella term for an external data source is **connection**.
+Older code and docs occasionally say "datasource" — that's a retired name;
+the BSON field is ` + "`connection_id`" + ` and the route family is
+` + "`/api/connections`" + `. Don't introduce ` + "`datasource_id`" + `.
 
-1. Start by reading the type catalog below to understand what's available.
-2. Call ` + "`list_connections`" + ` to see what data sources already exist.
-3. For each connection you plan to use, call ` + "`get_connection_schema`" + ` (for SQL
-   or Prometheus) or ` + "`list_mqtt_topics`" + ` / ` + "`sample_mqtt_topic`" + ` (for MQTT) /
-   ` + "`list_edgelake_databases`" + ` → ` + "`list_edgelake_tables`" + ` →
-   ` + "`get_edgelake_table_schema`" + ` (for EdgeLake) to learn the data shape.
-4. Create components with ` + "`create_component`" + ` — pass component_type=chart,
-   control, or display and the matching sub-config (query_config+data_mapping
-   for charts, control_config for controls, display_config for displays).
-5. Create the dashboard with ` + "`create_dashboard`" + ` passing a panels array
-   that references the component IDs via chart_id. See the Grid contract
-   section below for how panel x/y/w/h map to the viewer's 32x32 cell grid.
+# Conventions
 
-The ` + "`chart.custom`" + ` subtype is the escape hatch for anything outside the
-canonical chart types: pass use_custom_code=true and provide component_code
-with React source that renders your visualization.
+- Every component, connection, and dashboard belongs to exactly one
+  **namespace**. Names are unique within a namespace, not globally — two
+  namespaces can each have a dashboard called "Home." When creating a
+  record, pass ` + "`namespace`" + ` explicitly. Don't cross namespaces.
+- **Versioning**: ` + "`update_component`" + ` creates a new version; older
+  versions remain queryable. Names must stay consistent across versions of
+  the same component, so collisions on update are usually intent
+  (renaming) rather than mistake.
+- **Component sub-types**: charts (ECharts visualizations), controls
+  (buttons/toggles/sliders that send commands), displays (cameras, weather,
+  alerts). The ` + "`chart.custom`" + ` subtype is the escape hatch — pass
+  ` + "`use_custom_code=true`" + ` plus ` + "`component_code`" + ` (React source) for
+  anything outside the canonical chart types.
+- **Streaming vs polling**: a chart's ` + "`query_config.type`" + ` decides this.
+  ` + "`stream_filter`" + ` subscribes to a live stream (MQTT, ts-store push, etc.)
+  and re-renders on each record. Other types poll at the component's
+  ` + "`refresh_interval`" + ` (milliseconds). Pick stream for true real-time
+  sources, polling for SQL/Prometheus/REST.
+
+# Discovery flow (call these AFTER picking a connection)
+
+When you've identified which connection a component should read from but
+haven't built ` + "`query_config`" + ` yet:
+
+1. ` + "`get_connection_type_guidance(type)`" + ` — TRVE-dashboard-specific
+   ` + "`query_config`" + ` envelope shape for that adapter type (Prometheus's
+   ` + "`query_type`" + `/` + "`start`" + `/` + "`step`" + `, SQL's positional binding,
+   EdgeLake's ` + "`database`" + ` param, MQTT's ` + "`data_path`" + `, …). Skip if
+   you've already worked with that type this session.
+2. The discovery tool for that connection type:
+   - SQL / Prometheus → ` + "`get_connection_schema`" + `
+   - MQTT → ` + "`list_mqtt_topics`" + `, ` + "`sample_mqtt_topic`" + `
+   - EdgeLake → ` + "`list_edgelake_databases`" + ` → ` + "`list_edgelake_tables`" + ` →
+     ` + "`get_edgelake_table_schema`" + `
+3. (Optional) ` + "`query_connection`" + ` with ` + "`limit: 1`" + ` to verify the
+   real return-column shape before committing — cheap probe.
+4. ` + "`get_component_template(chart_type)`" + ` for the ECharts skeleton.
+5. ` + "`create_component`" + ` with the resolved ` + "`query_config`" + ` + ` + "`data_mapping`" + `.
+
+Which chart_type fits which data is your own judgment call — that's
+general visualization knowledge, not TRVE-dashboard knowledge.
 
 # Grid contract
 
@@ -259,45 +294,9 @@ an A x B grid, compute panel_w = floor(cols / A) and
 panel_h = floor(rows / B).
 
 Don't hardcode "12 columns" — that's a Carbon responsive-breakpoint
-convention, not this app's runtime grid.
-
-# Connection-specific query hints
-
-## Prometheus
-
-When building components against a Prometheus connection, the
-` + "`query_config`" + ` field you pass to ` + "`create_component`" + ` has the form:
-
-    {
-      "raw":    "<PromQL expression>",
-      "type":   "prometheus",           // required — this is the adapter routing key
-      "params": { ... }                 // optional; shape below
-    }
-
-Parameters the Prometheus adapter reads out of ` + "`params`" + `:
-
-- ` + "`query_type`" + ` — ` + "`\"instant\"`" + ` for a single current-value query (gauges,
-  number/stat panels, pie charts), ` + "`\"range\"`" + ` for a time-series query
-  (line/area/bar over time). Default is ` + "`\"range\"`" + `.
-- ` + "`start`" + `, ` + "`end`" + ` — range queries only. Accept:
-    ` + "`\"now\"`" + `, ` + "`\"now-1h\"`" + `, ` + "`\"now-30m\"`" + `
-    ` + "`\"-1h\"`" + `, ` + "`\"+5m\"`" + `, ` + "`\"1h\"`" + ` (all read as offsets from now)
-    Unix seconds as an integer
-    RFC3339 timestamps
-  Default is ` + "`start=\"now-1h\"`" + `, ` + "`end=\"now\"`" + `.
-- ` + "`step`" + ` — range queries only. Go duration string (` + "`\"60s\"`" + `,
-  ` + "`\"1m\"`" + `, ` + "`\"30s\"`" + `). Default ` + "`\"1m\"`" + `.
-
-Omitting ` + "`params`" + ` entirely is fine and gives sensible defaults.
-
-Returned columns for range queries: ` + "`timestamp`" + ` (unix seconds),
-` + "`value`" + ` (number), plus one column per PromQL label (e.g. ` + "`mode`" + `,
-` + "`instance`" + `) when the query produces multiple series. When filling the
-line/area/bar templates, map ` + "`d.value`" + ` → the ` + "`value`" + ` column and
-` + "`d.timestamp`" + ` → the ` + "`timestamp`" + ` column — they already match.
-
-Returned columns for instant queries: same shape but one row only.
-The gauge template reads ` + "`getValue(data, 'value')`" + ` which lines up.
+convention, not this app's runtime grid. If the user hasn't stated a
+canvas size, call ` + "`list_dashboard_dimensions`" + ` to see the deployment's
+presets and the configured default.
 
 # Staleness
 
