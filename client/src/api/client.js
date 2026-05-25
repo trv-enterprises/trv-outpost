@@ -336,21 +336,39 @@ class APIClient {
 
     let title;
     let subtitle;
+    let linkText;
+    let linkTo;
+    let subtitleSuffix;
     if (connectionId) {
-      const name = this.connectionNameCache.get(connectionId);
       title = 'Connection unreachable';
+      // Build the subtitle as three parts so the renderer can wrap
+      // the connection name in a Link without us needing to ship
+      // React nodes through the notification context:
+      //   subtitle  → prefix text rendered before the link
+      //   linkText  → the visible link label (the connection name)
+      //   linkTo    → the route the link navigates to
+      //   subtitleSuffix → the rest of the sentence after the link
+      // If linkText/linkTo are absent the renderer falls back to
+      // plain `subtitle` only — preserves the legacy shape for any
+      // future caller that doesn't need a link.
+      const name = this.connectionNameCache.get(connectionId);
+      const trailer = ' did not respond. Check the connection or its endpoint.';
       if (name) {
-        subtitle = `${name} did not respond. Check the connection or its endpoint.`;
+        subtitle = '';
+        linkText = name;
+        linkTo = `/design/connections/${connectionId}`;
+        subtitleSuffix = trailer;
       } else {
         // Cache miss — the user still needs to know *which* connection
         // broke. A bare "A connection did not respond" gives them no
-        // way to act. The UUID prefix is enough to disambiguate even
-        // on deployments with many connections, and is recoverable
-        // (they can match it against the connections list).
-        // Eager name fetch below populates the cache so subsequent
-        // failures render the friendly name.
+        // way to act. Eight chars of UUID disambiguates even on
+        // deployments with many connections, and is recoverable (they
+        // can match it against the connections list).
         const idHint = connectionId.slice(0, 8);
-        subtitle = `Connection ${idHint} did not respond. Check the connection or its endpoint.`;
+        subtitle = 'Connection ';
+        linkText = idHint;
+        linkTo = `/design/connections/${connectionId}`;
+        subtitleSuffix = trailer;
         // Fire-and-forget — fills the cache for next time. We don't
         // await; the current notification ships with the UUID-hint
         // copy, and the next failure (or page refresh) picks up the
@@ -370,7 +388,7 @@ class APIClient {
     // so a corner toast is too loud (and stacks per-connection on busy
     // dashboards). The bell badge is the right surface; users open it when
     // they care.
-    const payload = { kind: 'error', title, subtitle };
+    const payload = { kind: 'error', title, subtitle, linkText, linkTo, subtitleSuffix };
     try {
       this.notificationHandlers.addNotification(payload);
     } catch (err) {

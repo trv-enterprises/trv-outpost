@@ -155,6 +155,21 @@
     word-break: break-word;
   }
 
+  &__item-link {
+    // Inline link inside a subtitle (e.g. connection name in a
+    // "Connection unreachable" notification). Inherits the subtitle's
+    // size; styled like a regular text link so it reads as
+    // "clickable" without being visually heavier than the
+    // surrounding copy.
+    color: var(--cds-link-primary);
+    text-decoration: underline;
+    cursor: pointer;
+    &:hover {
+      color: var(--cds-link-primary-hover);
+      text-decoration: underline;
+    }
+  }
+
   &__item-time {
     color: var(--cds-text-helper);
     font-size: 0.6875rem;

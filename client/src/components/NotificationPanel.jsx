@@ -62,6 +62,18 @@ function NotificationPanel({ open, onClose }) {
     navigate(`/view/dashboards/${dashboardId}`);
   };
 
+  // Inline link inside a notification subtitle (e.g. the connection
+  // name in a "Connection unreachable" message links to that
+  // connection's edit page). Closes the panel before navigating so
+  // the destination page is what the user sees, not a stale
+  // overlay.
+  const handleInlineLink = (to) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClose();
+    navigate(to);
+  };
+
   // Close on outside click
   useEffect(() => {
     if (!open) return;
@@ -105,8 +117,20 @@ function NotificationPanel({ open, onClose }) {
                 <Icon size={16} className="notification-panel__item-icon" />
                 <div className="notification-panel__item-content">
                   <span className="notification-panel__item-title">{n.title}</span>
-                  {n.subtitle && (
-                    <span className="notification-panel__item-subtitle">{n.subtitle}</span>
+                  {(n.subtitle || n.linkText) && (
+                    <span className="notification-panel__item-subtitle">
+                      {n.subtitle}
+                      {n.linkText && n.linkTo && (
+                        <a
+                          href={n.linkTo}
+                          className="notification-panel__item-link"
+                          onClick={handleInlineLink(n.linkTo)}
+                        >
+                          {n.linkText}
+                        </a>
+                      )}
+                      {n.subtitleSuffix}
+                    </span>
                   )}
                   <span className="notification-panel__item-time">{formatTime(n.timestamp)}</span>
                 </div>
