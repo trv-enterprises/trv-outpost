@@ -114,7 +114,10 @@ func main() {
 	cfg := dashboard.Config{
 		AnthropicAPIKey:  apiKey,
 		Model:            model,
-		MessageURL:       serverURL + "/mcp/message",
+		// Modern Streamable HTTP endpoint. The legacy /mcp/message
+		// URL still works (logs a deprecation warning server-side)
+		// but new code should target the canonical /mcp path.
+		MessageURL:       serverURL + "/mcp",
 		CatalogURL:       serverURL + "/api/registry/catalog.md",
 		MaxTurns:         maxTurns,
 		TranscriptWriter: transcriptWriter,

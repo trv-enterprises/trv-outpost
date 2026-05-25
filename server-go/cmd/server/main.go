@@ -784,7 +784,8 @@ func main() {
 		fmt.Println("✓ Swagger UI enabled at http://localhost:3001/swagger/index.html")
 	}
 
-	fmt.Println("✓ MCP SSE endpoint enabled at http://localhost:3001/mcp/sse")
+	fmt.Println("✓ MCP Streamable HTTP endpoint enabled at http://localhost:3001/mcp")
+	fmt.Println("  (legacy paths /mcp/sse and /mcp/message remain available with deprecation warnings)")
 	fmt.Println("✓ AI Debug WebSocket enabled at ws://localhost:3001/api/ai/debug")
 	fmt.Println("✓ TSStore inbound WebSocket at ws://localhost:3001/api/streams/inbound/:connectionId")
 	fmt.Println("✓ Status WebSocket at ws://localhost:3001/api/ws/status?interval=5s")

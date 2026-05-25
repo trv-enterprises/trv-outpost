@@ -98,7 +98,17 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 	<-c.Request.Context().Done()
 }
 
-// HandleMessage handles JSON-RPC messages from clients
+// HandleMessage handles JSON-RPC messages from clients. Serves both
+// the legacy `POST /mcp/message` path (the SSE-era two-endpoint shape)
+// and the new `POST /mcp` Streamable HTTP path. The dispatch logic is
+// identical; the two routes exist only so we can deprecate the
+// legacy URL without breaking existing clients (dashboard-agent CLI,
+// older Claude Desktop bridges).
+//
+// Notifications (JSON-RPC requests with no `id`, e.g.
+// `notifications/initialized`) are dispatched silently and answered
+// with `202 Accepted` per the streamable-HTTP spec. Anything with an
+// `id` gets a JSON-RPC response body.
 // @Summary Handle MCP Message
 // @Description Process a JSON-RPC message for MCP protocol
 // @Tags MCP
@@ -123,9 +133,23 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[MCP] Received request: method=%s, id=%v", req.Method, req.ID)
+	// A JSON-RPC notification has no `id`. We must not return a
+	// response body, only an HTTP status. The streamable-HTTP spec
+	// asks for 202 Accepted. We still need to dispatch the method —
+	// `notifications/initialized` is the canonical case, but the
+	// switch falls through unknown notifications quietly rather than
+	// 400'ing them.
+	isNotification := req.ID == nil
+
+	log.Printf("[MCP] Received %s: method=%s, id=%v",
+		map[bool]string{true: "notification", false: "request"}[isNotification],
+		req.Method, req.ID)
 
 	if req.JSONRPC != "2.0" {
+		if isNotification {
+			c.Status(http.StatusBadRequest)
+			return
+		}
 		c.JSON(http.StatusBadRequest, JSONRPCResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
@@ -143,6 +167,10 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 	switch req.Method {
 	case "initialize":
 		result = h.handleInitialize(req.Params)
+	case "notifications/initialized":
+		// MCP handshake completion signal — the client is telling us
+		// "initialize round-trip done." No work to do server-side
+		// (we're stateless per-request); just ack with 202 below.
 	case "tools/list":
 		result = h.handleToolsList()
 	case "tools/call":
@@ -152,6 +180,14 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 	case "prompts/get":
 		result, err = h.handlePromptsGet(req.Params)
 	default:
+		// Notifications we don't recognize get dropped silently —
+		// the spec allows servers to ignore unknown notifications
+		// rather than error. Unknown requests still 400.
+		if isNotification {
+			log.Printf("[MCP] Dropping unknown notification: %s", req.Method)
+			c.Status(http.StatusAccepted)
+			return
+		}
 		c.JSON(http.StatusBadRequest, JSONRPCResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
@@ -160,6 +196,13 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 				Message: fmt.Sprintf("Method not found: %s", req.Method),
 			},
 		})
+		return
+	}
+
+	// Notifications never get a response body, regardless of whether
+	// the dispatch above produced one.
+	if isNotification {
+		c.Status(http.StatusAccepted)
 		return
 	}
 
@@ -191,15 +234,30 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 // The catalog is a snapshot taken at initialize time — the preamble tells
 // the agent to re-fetch via get_type_catalog if it suspects staleness.
 func (h *Handler) handleInitialize(params map[string]interface{}) InitializeResult {
+	// 2025-03-26 is the spec revision that replaced HTTP+SSE with
+	// Streamable HTTP. We advertise this version because the new
+	// POST /mcp endpoint speaks the streamable contract. Clients
+	// that prefer the older revision and connect via the legacy
+	// /mcp/sse or /mcp/message paths still work — the dispatch
+	// logic is the same — but we advertise the modern version so
+	// modern clients negotiate it.
 	return InitializeResult{
-		ProtocolVersion: "2024-11-05",
+		ProtocolVersion: "2025-03-26",
 		ServerInfo: ServerInfo{
 			Name:    "trve-dashboard-mcp",
 			Version: "1.0.0",
 		},
 		Capabilities: Capabilities{
-			Tools:   map[string]interface{}{},
-			Prompts: map[string]interface{}{},
+			// Per the spec, the presence of these maps signals the
+			// capability. The `listChanged: false` field declares
+			// that we do not push list-change notifications — clients
+			// should re-call tools/list and prompts/list to pick up
+			// changes. (We rebuild the registry at startup, so the
+			// list is effectively static within a session.) An empty
+			// map would be elided by JSON `omitempty` and read as
+			// "capability absent" by some clients.
+			Tools:   map[string]interface{}{"listChanged": false},
+			Prompts: map[string]interface{}{"listChanged": false},
 		},
 		Instructions: h.buildInstructions(),
 	}
@@ -400,11 +458,41 @@ func toJSON(v interface{}) string {
 	return string(data)
 }
 
-// SetupRoutes configures MCP routes on the given router group
+// SetupRoutes configures MCP routes on the given router group.
+//
+// Three URLs are exposed:
+//
+//   - POST /mcp           Streamable HTTP endpoint. The modern,
+//                         spec-compliant entry point. New clients
+//                         (Claude Code direct via .mcp.json, Claude
+//                         Desktop via mcp-remote, etc.) should use
+//                         this URL exclusively.
+//   - POST /mcp/message   Legacy JSON-RPC ingress from the SSE-era
+//                         two-endpoint shape. Identical behavior to
+//                         POST /mcp; kept for back-compat with the
+//                         dashboard-agent CLI and any older clients
+//                         until they're updated. Logs a one-time
+//                         deprecation notice on first call.
+//   - GET /mcp/sse        Legacy SSE event stream. Deprecated by
+//                         the 2025-03-26 spec; SSE-only clients have
+//                         been refused since ~April 2026. Kept as a
+//                         soft-landing surface that logs a warning
+//                         and keeps the connection open, but new
+//                         clients must not depend on it.
 func (h *Handler) SetupRoutes(router *gin.RouterGroup) {
+	// New canonical streamable-HTTP endpoint.
+	router.POST("/mcp", h.HandleMessage)
+
+	// Legacy URLs — kept functional for in-flight clients.
 	mcp := router.Group("/mcp")
 	{
-		mcp.GET("/sse", h.SSEConnect)
-		mcp.POST("/message", h.HandleMessage)
+		mcp.GET("/sse", func(c *gin.Context) {
+			log.Printf("[MCP] DEPRECATED: client connected to /mcp/sse (legacy SSE transport). New clients should use POST /mcp.")
+			h.SSEConnect(c)
+		})
+		mcp.POST("/message", func(c *gin.Context) {
+			log.Printf("[MCP] DEPRECATED: client posted to /mcp/message (legacy JSON-RPC URL). New clients should use POST /mcp.")
+			h.HandleMessage(c)
+		})
 	}
 }
