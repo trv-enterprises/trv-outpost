@@ -5,6 +5,11 @@
       "command": "bash",
       "args": ["-c", "cd /Users/tviviano/Documents/GitHub/homelab-deploy/tools/mcp-deploy && node index.js"],
       "env": {}
+    },
+    "dashboard": {
+      "type": "http",
+      "url": "http://127.0.0.1:3001/mcp",
+      "headers": { "Authorization": "Bearer ${TRVE_DASHBOARD_KEY}" }
     }
   }
 }

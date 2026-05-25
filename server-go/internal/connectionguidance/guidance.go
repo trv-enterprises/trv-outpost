@@ -117,6 +117,41 @@ query_config shape for EdgeLake:
 Return columns: whatever your SELECT projects. To browse what's available before querying, use list_edgelake_databases → list_edgelake_tables → get_edgelake_table_schema.
 
 Note: distributed=true is for read-time fan-out only. For raw AnyLog commands (run blockchain sync, get status, etc.) use the EdgeLake Terminal extension's /api/edgelake-terminal/execute endpoint — that's a separate surface from query_connection.
+
+# SQL dialect restrictions
+
+EdgeLake's operator-side parser accepts a NARROWER Postgres subset than
+the SQL driver type suggests. The connector accepts the query but the
+remote AnyLog node parses it, so common Postgres-isms fail late with
+"Failed to parse SQL statement" or "Non supported SQL". Probed against
+EdgeLake 0.x as of 2026-05-25:
+
+What works:
+- Standard projection + aggregation: SELECT col, AVG(col), COUNT(*) … GROUP BY col ORDER BY col
+- WHERE col = literal — with int, float, 'string', or 'YYYY-MM-DD HH:MM:SS' literals
+- date(timestamp) — day-truncation, returns 'YYYY-MM-DD' text
+- trunc(numeric), round(numeric) — integer-coercing scalars
+- numeric % integer — but ONLY in the SELECT projection (returns the modulo as a column)
+- Plain LIMIT N and ORDER BY
+
+What FAILS (don't write these):
+- EXTRACT(MONTH FROM ts) / EXTRACT(YEAR FROM ts) — "Error in SQL Select statement"
+- DATE_TRUNC('day', ts) and friends
+- CAST(expr AS int), expr::int — "Non supported SQL"
+- FLOOR(numeric / N) * N — the standard bucketing idiom is not supported
+- mod(col, N) — parse error
+- col % N = 0 in a WHERE clause — parse error (modulo works ONLY in projection)
+- IN (a, b, c) — parse error; use OR chain instead
+- Referencing a projection alias from a WHERE clause — aliases are projection-only
+- Scalar subqueries with INTERVAL math (e.g. WHERE ts >= (SELECT MAX(ts)…) - INTERVAL '1 day')
+
+Working substitutions:
+- DATE_TRUNC('day', ts) → date(ts)
+- FLOOR(x / 2) * 2 (2-unit bins) → round(x) for 1-unit bins, or pre-compute the bin width client-side
+- x::int / CAST(x AS int) → trunc(x) or round(x)
+- col % N = 0 in WHERE → drop the predicate (over-fetch and trim client-side), or use ORDER BY col LIMIT N to bound the result
+- IN (a, b, c) → col = a OR col = b OR col = c
+- "last N days" via subquery → call list_edgelake_tables or query MAX(timestamp) first, compute the cutoff client-side, then pass it as a literal in the actual query
 `,
 
 	"stream.mqtt": `
