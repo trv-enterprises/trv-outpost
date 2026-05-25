@@ -2,6 +2,41 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+// Wrapper that pairs the (i) Toggletip with the namespace picker
+// itself. Lives inside HeaderGlobalBar; needs to fill the 3rem
+// header height and align the icon button with the picker pill.
+.namespace-picker-wrap {
+  display: inline-flex;
+  align-items: center;
+  height: 3rem;
+
+  // Carbon's ToggletipButton is just a plain unstyled <button>. Make
+  // it match the surrounding header-icon style — square hover area,
+  // muted icon color, brightens on hover/focus.
+  .namespace-picker__info-toggletip {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .cds--toggletip-button {
+    width: 2.5rem;
+    height: 3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--cds-icon-secondary, #c6c6c6);
+
+    &:hover,
+    &:focus {
+      background-color: var(--cds-header-hover, #333333);
+      color: var(--cds-icon-primary, #f4f4f4);
+    }
+  }
+}
+
 // The Carbon header's HeaderGlobalAction slots are square icon buttons
 // sized to match the 3rem header height. The namespace picker needs
 // to show the namespace name as well, so we override the width and

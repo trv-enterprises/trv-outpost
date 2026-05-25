@@ -2,8 +2,14 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { OverflowMenu, OverflowMenuItem } from '@carbon/react';
-import { Checkmark, Settings, ChevronDown } from '@carbon/icons-react';
+import {
+  OverflowMenu,
+  OverflowMenuItem,
+  Toggletip,
+  ToggletipButton,
+  ToggletipContent,
+} from '@carbon/react';
+import { Checkmark, Settings, ChevronDown, Information } from '@carbon/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useNamespaces } from '../context/NamespaceContext';
 import { namespaceChipStyle, NAMESPACE_DEFAULT_COLOR } from '../utils/namespaceColor';
@@ -28,7 +34,27 @@ export default function NamespacePicker() {
   const activeColor = activeRecord?.color || NAMESPACE_DEFAULT_COLOR;
 
   return (
-    <OverflowMenu
+    <div className="namespace-picker-wrap">
+      <Toggletip align="bottom" className="namespace-picker__info-toggletip">
+        <ToggletipButton label="What is this namespace picker?">
+          <Information size={16} className="namespace-picker__info-icon" />
+        </ToggletipButton>
+        <ToggletipContent>
+          <p>
+            The active namespace is the default namespace assigned to{' '}
+            <strong>newly created</strong> dashboards, components, and
+            connections. You can still pick a different namespace per record
+            when you create or edit one.
+          </p>
+          <p>
+            Switching here only affects what shows up as the default in
+            create/edit forms — it doesn't filter what you can see on the
+            list pages.
+          </p>
+        </ToggletipContent>
+      </Toggletip>
+
+      <OverflowMenu
       aria-label="Active namespace"
       iconDescription="Default namespace for new dashboards, components, and connections"
       className="namespace-picker"
@@ -72,5 +98,6 @@ export default function NamespacePicker() {
         onClick={() => navigate('/manage/namespaces')}
       />
     </OverflowMenu>
+    </div>
   );
 }
