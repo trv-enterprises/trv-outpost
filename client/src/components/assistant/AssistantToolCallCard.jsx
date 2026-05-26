@@ -15,8 +15,8 @@ import TerminalResponseBody from '../terminal/TerminalResponseBody';
  * EdgeLake-terminal work. The chat agent's tool args and results
  * are JSON-stringified, so the same renderer applies.
  */
-export default function AssistantToolCallCard({ toolCall }) {
-  const [open, setOpen] = useState(false);
+export default function AssistantToolCallCard({ toolCall, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   if (!toolCall) return null;
 
   const argSummary = oneLineArgSummary(toolCall.input);

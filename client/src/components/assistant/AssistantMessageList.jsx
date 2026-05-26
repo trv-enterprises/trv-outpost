@@ -31,6 +31,7 @@ export default function AssistantMessageList({
   sending,
   thinking,
   streamingContent,
+  expandToolCalls = false,
 }) {
   const scrollerRef = useRef(null);
 
@@ -56,7 +57,11 @@ export default function AssistantMessageList({
   return (
     <div className="assistant-messagelist" ref={scrollerRef}>
       {messages.map((msg, idx) => (
-        <AssistantMessage key={msg.id || `m-${idx}`} message={msg} />
+        <AssistantMessage
+          key={msg.id || `m-${idx}`}
+          message={msg}
+          expandToolCalls={expandToolCalls}
+        />
       ))}
       {streamingContent && (
         <AssistantMessage
@@ -65,6 +70,7 @@ export default function AssistantMessageList({
             role: 'assistant',
             content: streamingContent,
           }}
+          expandToolCalls={expandToolCalls}
         />
       )}
       {(sending || thinking) && (
@@ -76,7 +82,7 @@ export default function AssistantMessageList({
   );
 }
 
-function AssistantMessage({ message }) {
+function AssistantMessage({ message, expandToolCalls }) {
   const isUser = message.role === 'user';
   const hasTools = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
   return (
@@ -84,7 +90,11 @@ function AssistantMessage({ message }) {
       {!isUser && hasTools && (
         <div className="assistant-message__tool-calls">
           {message.tool_calls.map((tc) => (
-            <AssistantToolCallCard key={tc.id} toolCall={tc} />
+            <AssistantToolCallCard
+              key={tc.id}
+              toolCall={tc}
+              defaultOpen={expandToolCalls}
+            />
           ))}
         </div>
       )}

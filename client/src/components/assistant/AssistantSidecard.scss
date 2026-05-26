@@ -259,3 +259,38 @@
     margin-bottom: spacing.$spacing-02;
   }
 }
+
+// ── Settings menu (cog popover, step 12) ────────────────────────
+
+.assistant-settings-menu {
+  // Carbon's OverflowMenu uses a portal — these styles target the
+  // items inside the menu options list, not the trigger.
+  .assistant-settings-menu__row {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+    width: 100%;
+  }
+
+  // The toggle rows lead with a checkmark column so the user can
+  // see which prefs are currently on at a glance. Empty space when
+  // the value is off keeps every row's icon column aligned.
+  .assistant-settings-menu__row--toggle {
+    .assistant-settings-menu__check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      color: var(--cds-icon-primary);
+    }
+  }
+}
+
+.assistant-sidecard__token-usage {
+  margin-top: spacing.$spacing-03;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper);
+  font-style: italic;
+  line-height: 1.4;
+}

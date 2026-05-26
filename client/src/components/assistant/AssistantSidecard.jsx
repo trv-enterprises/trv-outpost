@@ -4,9 +4,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconButton, Button, TextArea, InlineNotification } from '@carbon/react';
-import { Close, Settings, Send } from '@carbon/icons-react';
+import { Close, Send } from '@carbon/icons-react';
 import useAssistantSession from '../../hooks/useAssistantSession';
+import useAssistantPreferences from '../../hooks/useAssistantPreferences';
 import AssistantMessageList from './AssistantMessageList';
+import AssistantSettingsMenu from './AssistantSettingsMenu';
 import './AssistantSidecard.scss';
 
 /**
@@ -25,8 +27,10 @@ import './AssistantSidecard.scss';
  *   - onRequestClose(): called when the user clicks the X
  *   - namespace: string — shown in the header line, informational
  *   - modelLabel: string — e.g. "sonnet" / "opus", shown in header
- *   - onSettingsClick(): step 12 wires the cog popover; until then
- *     the cog can be passed undefined to hide.
+ *
+ * The cog popover is owned here (step 12) — settings are
+ * browser-local prefs via useAssistantPreferences, so the sidecard
+ * doesn't need a prop for the menu.
  */
 export default function AssistantSidecard({
   open,
@@ -36,13 +40,13 @@ export default function AssistantSidecard({
   onRequestClose,
   namespace = 'default',
   modelLabel = 'sonnet',
-  onSettingsClick,
 }) {
   const draggingRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(width);
 
   const session = useAssistantSession();
+  const prefs = useAssistantPreferences();
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
 
@@ -125,17 +129,18 @@ export default function AssistantSidecard({
         <div className="assistant-sidecard__title-row">
           <h2 className="assistant-sidecard__title">Assistant</h2>
           <div className="assistant-sidecard__header-actions">
-            {onSettingsClick && (
-              <IconButton
-                kind="ghost"
-                size="sm"
-                label="Assistant settings"
-                align="bottom-right"
-                onClick={onSettingsClick}
-              >
-                <Settings />
-              </IconButton>
-            )}
+            <AssistantSettingsMenu
+              onClearChat={session.clearChat}
+              // Export handlers land in step 13. Passing undefined
+              // keeps the menu items rendered but disabled so users
+              // see what's coming without ghost-functionality.
+              onExportMarkdown={undefined}
+              onExportJson={undefined}
+              expandToolCalls={prefs.expandToolCalls}
+              onToggleExpandToolCalls={prefs.toggleExpandToolCalls}
+              showTokenUsage={prefs.showTokenUsage}
+              onToggleShowTokenUsage={prefs.toggleShowTokenUsage}
+            />
             <IconButton
               kind="ghost"
               size="sm"
@@ -178,6 +183,7 @@ export default function AssistantSidecard({
           sending={session.sending}
           thinking={session.thinking}
           streamingContent={session.streamingContent}
+          expandToolCalls={prefs.expandToolCalls}
         />
       </div>
 
@@ -206,6 +212,14 @@ export default function AssistantSidecard({
             Send
           </Button>
         </div>
+        {prefs.showTokenUsage && (
+          <div className="assistant-sidecard__token-usage">
+            Token usage counters will appear here once per-turn
+            usage events are broadcast over the session WebSocket
+            (small follow-up commit; server already tracks the
+            exact counts via response.Usage).
+          </div>
+        )}
       </footer>
     </aside>
   );
