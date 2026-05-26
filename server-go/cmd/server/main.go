@@ -23,6 +23,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth/idp"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
@@ -312,6 +313,14 @@ func main() {
 	toolExecutor := ai.NewToolExecutor(componentRepo, connectionRepo, connectionService, deviceTypeRepo, chartHub)
 	deviceTypeLister := &service.DeviceTypeListerAdapter{Service: deviceTypeService}
 	catalogProvider := service.NewCatalogProvider(deviceTypeLister, typeFilter)
+
+	// Shared toolops layer — both MCP and the Dashboard Assistant
+	// chat agent wrap these pure Go function bodies. See
+	// docs/design-notes/dashboard-chat-agent.md for the rationale.
+	// Constructed once here; the MCP registry and chat agent each
+	// receive a pointer.
+	opsToolset := toolops.New(connectionService, componentService, dashboardService, namespaceService, userRepo, catalogProvider)
+
 	var aiAgent *ai.Agent
 	agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
 	if err != nil {
@@ -335,11 +344,11 @@ func main() {
 		if errAss != nil {
 			log.Printf("⚠️  assistant.enabled setting not found — Dashboard Assistant disabled: %v", errAss)
 		} else if v, ok := assistantEnabled.Value.(bool); ok && v {
-			// Wire the chat-agent tool registry. Step 2 ships one
-			// Tier-A tool (get_current_user) as the smoke test; step
-			// 3 expands this via the shared toolops layer.
+			// Wire the chat-agent tool registry. Tier-A tools wrap
+			// the shared toolops layer so MCP and the chat agent
+			// share one truth about what each operation does.
 			chatTools := chat.NewToolRegistry()
-			chat.RegisterBuiltinTools(chatTools, userRepo)
+			chat.RegisterBuiltinTools(chatTools, opsToolset)
 
 			ca, errCa := chat.NewAgent(aiSessionService, chatTools, nil)
 			if errCa != nil {
@@ -474,7 +483,7 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService)
 
 	// Initialize MCP
-	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter)
+	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter, opsToolset)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
 	// PUBLIC bootstrap routes — must be reachable BEFORE the auth
