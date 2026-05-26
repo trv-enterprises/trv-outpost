@@ -228,6 +228,7 @@ export default function SnippetsPanel({
             kind="ghost"
             size="sm"
             label="Hide snippets"
+            align="bottom-right"
             onClick={onRequestClose}
           >
             <Close />
@@ -250,6 +251,7 @@ export default function SnippetsPanel({
             kind="ghost"
             size="sm"
             label="Search help"
+            align="bottom-right"
             onClick={() => setHelpOpen((o) => !o)}
           >
             <Help />
