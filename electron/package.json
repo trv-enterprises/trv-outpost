@@ -40,6 +40,9 @@
       "resources/entitlements.mac.plist",
       "node_modules/**/*"
     ],
+    "asarUnpack": [
+      "resources/sidebar-workspace-template/**/*"
+    ],
     "extraResources": [
       {
         "from": "../client/dist",

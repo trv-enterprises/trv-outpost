@@ -68,14 +68,30 @@ function sidebarWorkspaceDir() {
 }
 
 /**
- * Path to the packaged template dir. In dev (`npm run dev`) this is
- * just the resources subdir relative to main.js. In a packaged build
- * the file resolves via process.resourcesPath if electron-builder put
- * it under `extraResources`; otherwise it remains __dirname-relative
- * since the files array in package.json includes the resources dir.
+ * Path to the packaged template dir.
+ *
+ * In dev (`npm run dev`), __dirname is `<repo>/electron/`, so we
+ * resolve normally to `electron/resources/sidebar-workspace-template/`.
+ *
+ * In a packaged production build, electron-builder packs the source
+ * tree into `Contents/Resources/app.asar`, but our `asarUnpack`
+ * setting in package.json extracts the template dir loose to
+ * `Contents/Resources/app.asar.unpacked/resources/sidebar-workspace-template/`.
+ * fs.cpSync's recursive copy doesn't read across the asar virtual
+ * filesystem cleanly, so we explicitly redirect to the unpacked path
+ * when running inside a packaged app.
  */
 function sidebarWorkspaceTemplateDir() {
-  return path.join(__dirname, 'resources', 'sidebar-workspace-template');
+  const fromDirname = path.join(__dirname, 'resources', 'sidebar-workspace-template');
+  // In a packaged build, __dirname includes "app.asar"; the unpacked
+  // sibling is the dir we actually want for recursive fs.cpSync.
+  if (fromDirname.includes(`${path.sep}app.asar${path.sep}`)) {
+    return fromDirname.replace(
+      `${path.sep}app.asar${path.sep}`,
+      `${path.sep}app.asar.unpacked${path.sep}`
+    );
+  }
+  return fromDirname;
 }
 
 /**
