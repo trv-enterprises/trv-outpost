@@ -140,15 +140,25 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 	a.sessionSvc.SendThinkingEvent(session.ID, true)
 	defer a.sessionSvc.SendThinkingEvent(session.ID, false)
 
-	// Build conversation history. Step 5 replaces this with layered
-	// prompt assembly; for the smoke test we just replay history
-	// verbatim.
+	// Build conversation history. Step 5 replaces buildMessages with
+	// fuller history replay; for now we just walk the persisted
+	// turns and append the new user content.
 	messages := buildMessages(session.Messages, userContent)
 
-	systemPrompt := defaultSystemPrompt()
-	anthropicTools := a.tools.AnthropicToolParams()
+	// System prompt is assembled per-turn from layers (role text +
+	// caller context + Tier-B catalog). Tier-A schemas land in the
+	// API request's Tools field via AnthropicToolParams.
+	systemPrompt := buildSystemPrompt(a.tools)
+
+	// revealedTierB tracks which Tier-B tools the model has asked
+	// describe_tool to load this conversation. Once a Tier-B tool's
+	// schema is in here, AnthropicToolParams includes it on every
+	// subsequent turn so the model can invoke it directly without
+	// describe_tool round-trips.
+	revealedTierB := map[string]bool{}
 
 	for turn := 0; turn < a.maxTurns; turn++ {
+		anthropicTools := a.tools.AnthropicToolParams(revealedTierB)
 		params := anthropic.MessageNewParams{
 			Model:     anthropic.Model(a.modelName),
 			MaxTokens: 4096,
@@ -200,12 +210,17 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		for _, tu := range toolUseBlocks {
 			assistantBlocks = append(assistantBlocks, anthropic.NewToolUseBlock(tu.ID, tu.Input, tu.Name))
 
-			// Inject the agent's result store into the dispatch env
-			// so the get_full_result meta-tool can fetch stored
-			// payloads. Tools that don't need it just ignore the field.
+			// Build the per-call dispatch env. The result store
+			// gives get_full_result something to fetch from; the
+			// RevealTierB callback lets describe_tool flip a flag
+			// in our local revealedTierB map so the next turn's
+			// AnthropicToolParams will include the schema.
 			result, dispatchErr := a.tools.Dispatch(ctx, &DispatchEnv{
 				Session:     session,
 				ResultStore: a.resultStore,
+				RevealTierB: func(name string) {
+					revealedTierB[name] = true
+				},
 			}, tu.Name, tu.Input)
 
 			var rawResultStr string

@@ -47,10 +47,13 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler:     wrapListConnections(ops),
 	})
 
+	// Tier B: schema only loaded after describe_tool. Each
+	// connection's full config can be large and is only needed when
+	// the model is doing something specific to a single connection.
 	reg.Register(Tool{
 		Name:        "get_connection",
 		Description: "Get the full configuration for a single connection by ID.",
-		Tier:        TierA,
+		Tier:        TierB,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -107,11 +110,12 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler:     wrapListDashboards(ops),
 	})
 
-	// ─── Type catalog ───
+	// Tier B: the catalog is big (every type with config + metadata)
+	// and isn't relevant to most conversations. Load it on demand.
 	reg.Register(Tool{
 		Name:        "get_type_catalog",
 		Description: "Returns the unified catalog of every type the dashboard knows about: connection types, chart subtypes, control subtypes, display subtypes, device types. Call this when planning to build something so you know what's available.",
-		Tier:        TierA,
+		Tier:        TierB,
 		InputSchema: emptyObjectSchema(),
 		Handler:     wrapGetCatalog(ops),
 	})
@@ -139,6 +143,34 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 			"required": []string{"result_id"},
 		},
 		Handler: wrapGetFullResult(),
+	})
+
+	// ─── Meta: tier-B schema loader ───
+	// describe_tool fetches the input schema for a Tier-B tool. The
+	// agent then keeps that schema in context for subsequent turns
+	// in the same conversation, so describe_tool only costs one
+	// round-trip per Tier-B tool the model uses.
+	//
+	// The result is returned via the tool result, AND the agent
+	// marks the requested tools as "revealed" so the next turn's
+	// Tools list includes their schemas (the dispatcher does this
+	// via DispatchEnv.RevealTierB — wired in agent.go).
+	reg.Register(Tool{
+		Name:        "describe_tool",
+		Description: "Fetch the input schema for one or more Tier-B tools listed in the system prompt's 'Additional tools' section. Pass a single name or a list of names. After this call, the named tools become directly invocable in this conversation. Don't describe a tool you don't intend to use — it costs context to load schemas.",
+		Tier:        TierA,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"names": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Names of Tier-B tools to load. Accept a list even for a single tool.",
+				},
+			},
+			"required": []string{"names"},
+		},
+		Handler: wrapDescribeTool(reg),
 	})
 }
 
@@ -255,6 +287,57 @@ func wrapListDashboards(ops *toolops.Toolset) ToolHandler {
 		out, err := ops.ListDashboards(ctx)
 		if err != nil {
 			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapDescribeTool(reg *ToolRegistry) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in struct {
+			Names []string `json:"names"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if len(in.Names) == 0 {
+			return "", fmt.Errorf("names must include at least one tool name")
+		}
+
+		// Build the per-tool response: { <name>: { description, schema } }
+		// for every requested name. Unknown names are reported with
+		// an error in the same map so the model sees the full picture.
+		out := make(map[string]interface{}, len(in.Names))
+		for _, name := range in.Names {
+			tool := reg.findTool(name)
+			if tool == nil {
+				out[name] = map[string]interface{}{
+					"error": "unknown tool",
+				}
+				continue
+			}
+			if tool.Tier != TierB {
+				// Calling describe_tool on a Tier-A tool isn't an
+				// error — the model just doesn't need to. Echo the
+				// schema anyway in case it's useful.
+				out[name] = map[string]interface{}{
+					"description": tool.Description,
+					"schema":      tool.InputSchema,
+					"tier":        "A",
+					"note":        "Tier-A tools are already loaded — you don't need to describe_tool them.",
+				}
+				continue
+			}
+			out[name] = map[string]interface{}{
+				"description": tool.Description,
+				"schema":      tool.InputSchema,
+				"tier":        "B",
+			}
+			// Signal the agent: load this tool's schema in
+			// subsequent turns.
+			if env != nil && env.RevealTierB != nil {
+				env.RevealTierB(name)
+			}
 		}
 		return jsonResult(out)
 	}

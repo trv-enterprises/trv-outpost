@@ -49,12 +49,21 @@ type Tool struct {
 
 // DispatchEnv carries per-call context the handler needs: the
 // session the call originated from, the agent's result store (for
-// the get_full_result meta-tool), and eventually the resolved
-// caller + active namespace. Each step fleshes this out further.
+// the get_full_result meta-tool), and a hook the describe_tool
+// meta-tool uses to signal that a Tier-B tool should be revealed
+// (i.e. its schema added to subsequent turns).
+//
+// Caller + Namespace land in step 11 alongside SSE auth wiring.
 type DispatchEnv struct {
 	Session     *models.AISession
 	ResultStore *ResultStore
-	// Caller and Namespace land in step 11 alongside SSE auth wiring.
+
+	// RevealTierB is set by the agent. The describe_tool handler
+	// calls it with each tool name it's loading; the agent records
+	// the name in its per-call revealedTierB map so subsequent
+	// turns include that tool's schema. May be nil for handlers
+	// that don't need it.
+	RevealTierB func(name string)
 }
 
 // ToolHandler is the in-process dispatcher signature. Returns the
@@ -81,29 +90,72 @@ func (r *ToolRegistry) Register(t Tool) {
 }
 
 // AnthropicToolParams returns the Anthropic SDK ToolUnionParam slice
-// for every Tier-A tool — these are what go in the per-turn prompt.
-// Tier-B tools land in step 5 via the describe_tool meta-tool flow.
-func (r *ToolRegistry) AnthropicToolParams() []anthropic.ToolUnionParam {
+// for the per-turn prompt: every Tier-A tool unconditionally, plus
+// any Tier-B tools that the model has previously asked about via
+// describe_tool (the agent tracks this set per-call in
+// `revealedTierB`). Pass nil for revealedTierB on the first turn.
+//
+// The schemas land in the API request's Tools field; the textual
+// catalog of "what Tier-B tools exist" goes through buildSystemPrompt
+// instead.
+func (r *ToolRegistry) AnthropicToolParams(revealedTierB map[string]bool) []anthropic.ToolUnionParam {
 	out := make([]anthropic.ToolUnionParam, 0, len(r.tools))
 	for _, t := range r.tools {
-		if t.Tier != TierA {
+		if t.Tier == TierB && !revealedTierB[t.Name] {
 			continue
 		}
-		schema := t.InputSchema
-		if schema == nil {
-			schema = map[string]interface{}{"type": "object"}
-		}
-		out = append(out, anthropic.ToolUnionParam{
-			OfTool: &anthropic.ToolParam{
-				Name:        t.Name,
-				Description: anthropic.String(t.Description),
-				InputSchema: anthropic.ToolInputSchemaParam{
-					Properties: schema["properties"],
-				},
-			},
-		})
+		out = append(out, anthropicToolParamFor(t))
 	}
 	return out
+}
+
+func anthropicToolParamFor(t Tool) anthropic.ToolUnionParam {
+	schema := t.InputSchema
+	if schema == nil {
+		schema = map[string]interface{}{"type": "object"}
+	}
+	return anthropic.ToolUnionParam{
+		OfTool: &anthropic.ToolParam{
+			Name:        t.Name,
+			Description: anthropic.String(t.Description),
+			InputSchema: anthropic.ToolInputSchemaParam{
+				Properties: schema["properties"],
+			},
+		},
+	}
+}
+
+// CatalogEntry is the lightweight (name, description) shape the
+// Tier-B catalog uses in the system prompt — schema-free, so the
+// per-turn cost stays bounded as the Tier-B set grows.
+type CatalogEntry struct {
+	Name        string
+	Description string
+}
+
+// tierBCatalog returns the names + descriptions of every Tier-B tool,
+// in registration order. Used by buildSystemPrompt to surface the
+// catalog to the model.
+func (r *ToolRegistry) tierBCatalog() []CatalogEntry {
+	out := make([]CatalogEntry, 0)
+	for _, t := range r.tools {
+		if t.Tier != TierB {
+			continue
+		}
+		out = append(out, CatalogEntry{Name: t.Name, Description: t.Description})
+	}
+	return out
+}
+
+// findTool returns the registered tool with the given name, or nil
+// if it isn't registered. Used by the describe_tool meta-tool.
+func (r *ToolRegistry) findTool(name string) *Tool {
+	for i := range r.tools {
+		if r.tools[i].Name == name {
+			return &r.tools[i]
+		}
+	}
+	return nil
 }
 
 // Dispatch invokes a registered tool by name. Returns the tool's
