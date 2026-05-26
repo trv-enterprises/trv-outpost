@@ -112,7 +112,7 @@
             "description": "Create a new AI session\n\nCreate a new AI session for chart creation or editing. Creates a chart draft.\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"\",\n  \"component_id\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_type\": \"\",\n  \"dashboard_id\": \"\",\n  \"initial_message\": \"\",\n  \"panel_id\": \"\"\n}",
+              "raw": "{\n  \"chart_type\": \"\",\n  \"component_id\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_type\": \"\",\n  \"dashboard_id\": \"\",\n  \"initial_message\": \"\",\n  \"kind\": \"\",\n  \"panel_id\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

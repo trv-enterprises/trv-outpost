@@ -6299,22 +6299,22 @@ const docTemplate = `{
             }
         },
         "models.AISession": {
-            "description": "AI session for component creation/editing",
+            "description": "AI session for component editing (kind=component) or general chat (kind=chat)",
             "type": "object",
             "properties": {
                 "chart_version": {
-                    "description": "Version being edited (always a draft)",
+                    "description": "Version being edited (component sessions only)",
                     "type": "integer"
                 },
                 "component_id": {
-                    "description": "Component UUID being edited",
+                    "description": "Component UUID being edited (component sessions only)",
                     "type": "string"
                 },
                 "created": {
                     "type": "string"
                 },
                 "dashboard_id": {
-                    "description": "Auto-attach to this dashboard on save",
+                    "description": "Auto-attach to this dashboard on save (component sessions only)",
                     "type": "string"
                 },
                 "expires_at": {
@@ -6322,6 +6322,10 @@ const docTemplate = `{
                 },
                 "id": {
                     "description": "UUID",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "\"component\" (default) | \"chat\"",
                     "type": "string"
                 },
                 "messages": {
@@ -6332,7 +6336,7 @@ const docTemplate = `{
                     }
                 },
                 "panel_id": {
-                    "description": "Auto-attach to this panel on save",
+                    "description": "Auto-attach to this panel on save (component sessions only)",
                     "type": "string"
                 },
                 "status": {
@@ -7261,6 +7265,10 @@ const docTemplate = `{
                 },
                 "initial_message": {
                     "description": "First user message (optional)",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "Kind selects which agent surface owns the session. \"component\"\n(or empty) targets the Component AI agent and requires a\nComponentID; \"chat\" targets the Dashboard Assistant and\nignores the component-scoped fields.",
                     "type": "string"
                 },
                 "panel_id": {
