@@ -88,11 +88,12 @@ body {
   z-index: 8000;
   background-color: var(--cds-layer-01);
 
-  // Electron mode: Add padding for macOS traffic lights (close/min/max buttons)
-  // The hiddenInset titleBarStyle keeps traffic lights in content area
-  .electron-mode & {
-    padding-left: 78px; // Space for traffic lights (~70px) + small gap
-  }
+  // Electron mode used to reserve space for the macOS traffic lights
+  // here, when titleBarStyle: 'hiddenInset' kept them inside the page
+  // content area. The desktop build switched to the standard macOS
+  // title bar (BrowserViews occluded the inset's drag region, making
+  // the window un-movable), which moves the traffic lights into the
+  // OS chrome above the page — so no content-area padding is needed.
 }
 
 .cds--header__name {

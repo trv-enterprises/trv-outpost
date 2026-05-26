@@ -10,7 +10,7 @@
     "dev": "ELECTRON_DEV=true electron .",
     "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper node_modules/node-pty/prebuilds/darwin-x64/spawn-helper || true",
     "build": "npm run build:client && electron-builder",
-    "build:client": "cd ../client && npm run build",
+    "build:client": "cd ../client && ELECTRON_BUILD=true npm run build",
     "package": "electron-builder --mac",
     "package:dir": "electron-builder --mac --dir"
   },

@@ -12,7 +12,16 @@ const { contextBridge, ipcRenderer } = require('electron');
  */
 contextBridge.exposeInMainWorld('electron', {
   isElectron: true,
-  version: process.env.npm_package_version || '1.0.0',
+  // Two distinct version strings — both useful for diagnostics:
+  //   appVersion: the trve-dashboards Electron app version (from
+  //               the electron/ package.json). Tracks our own
+  //               release cadence.
+  //   electronVersion: the Electron *runtime* version we're using
+  //               (e.g. "28.3.3"). Useful when debugging Chromium /
+  //               native-module compatibility issues.
+  version: process.env.npm_package_version || '1.0.0', // alias kept for backcompat
+  appVersion: process.env.npm_package_version || '1.0.0',
+  electronVersion: process.versions.electron,
   platform: process.platform,
 
   // Secure credential storage (unchanged from pre-sidebar build).

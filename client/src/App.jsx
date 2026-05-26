@@ -3,7 +3,15 @@
 // See LICENSE file for details.
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+// BrowserRouter derives routes from window.location.pathname, which
+// is "/" on a webserver-hosted install but "/Applications/.../app/
+// index.html" (the literal file path) when Electron loads the bundle
+// from a file:// URL — no route matches and the app renders nothing.
+// HashRouter uses the URL fragment (#/path) for routing, which works
+// identically regardless of how the page was loaded. Pick at runtime
+// so dev (Vite at http://localhost:5173) keeps the clean BrowserRouter
+// behavior while packaged Electron uses HashRouter.
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Header,
   HeaderContainer,
@@ -34,6 +42,10 @@ import ComponentDetailPage from './pages/ComponentDetailPage';
 // AIBuilderPage is code-split: it's only reachable when the deployment has
 // an Anthropic API key configured, so users without one never download it.
 const AIBuilderPage = lazy(() => import('./pages/AIBuilderPage'));
+
+// See the BrowserRouter/HashRouter import comment above: pick the router
+// at runtime based on where the bundle was loaded from.
+const Router = isElectron() ? HashRouter : BrowserRouter;
 import DashboardsListPage from './pages/DashboardsListPage';
 // Dashboard design/edit lives in DashboardViewerPage edit mode
 import DashboardViewerPage from './pages/DashboardViewerPage';
@@ -59,6 +71,7 @@ import { AIAvailabilityProvider, useAIAvailability } from './context/AIAvailabil
 import { NamespaceProvider } from './context/NamespaceContext';
 import NamespacePicker from './components/NamespacePicker';
 import AccountMenu from './components/AccountMenu';
+import AboutDialog from './components/AboutDialog';
 import DevUserSwitcher from './components/DevUserSwitcher';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
@@ -123,6 +136,7 @@ function AppContent({ onDisconnect }) {
   // we hide it there to avoid a misleading affordance.
   const [clerkActive, setClerkActive] = useState(false);
   const [userCapabilities, setUserCapabilities] = useState({ can_view: false, can_design: false, can_manage: false, can_control: false });
+  const [aboutOpen, setAboutOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
@@ -631,7 +645,19 @@ function AppContent({ onDisconnect }) {
                 {isSideNavExpanded ? <Close size={20} /> : <Menu size={20} />}
               </button>
             )}
-            <HeaderName href="/" prefix="" className={currentMode === MODES.VIEW ? 'header-name--no-toggle' : ''}>
+            {/*
+              HeaderName's default `href="/"` produces a real navigation
+              that escapes React Router. On Electron's HashRouter that
+              resolves to the file:// root and bricks the app. Use a
+              click handler + navigate() so the link stays inside the
+              router regardless of which router is active.
+            */}
+            <HeaderName
+              href="#"
+              prefix=""
+              className={currentMode === MODES.VIEW ? 'header-name--no-toggle' : ''}
+              onClick={(e) => { e.preventDefault(); navigate('/'); }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
                 <ChartMultitype size={20} />
                 <span>TRVE Dashboards</span>
@@ -691,6 +717,7 @@ function AppContent({ onDisconnect }) {
                 electronMode={electronMode}
                 onDisconnect={onDisconnect}
                 onSignOut={clerkActive ? handleClerkSignOut : undefined}
+                onAbout={() => setAboutOpen(true)}
               />
             </HeaderGlobalBar>
           </Header>
@@ -702,6 +729,13 @@ function AppContent({ onDisconnect }) {
         onClose={closeNotificationPanel}
       />
       <ToastStack />
+
+      <AboutDialog
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        currentUser={currentUser}
+        clerkActive={clerkActive}
+      />
 
       {/* Hide sidebar in View mode (uses tile view instead) and on
           off-mode routes like /account/* where currentMode is null —

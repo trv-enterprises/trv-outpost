@@ -102,13 +102,28 @@ export const clearElectronConfig = async () => {
 };
 
 /**
- * Get the app version (Electron only)
+ * Get the app version — the trve-dashboards Electron wrapper's
+ * package.json version (e.g. "1.0.0"). Tracks our release cadence.
  * @returns {string|null} App version or null
  */
 export const getAppVersion = () => {
   const api = getElectronAPI();
-  if (api && api.version) {
-    return api.version;
+  if (api && (api.appVersion || api.version)) {
+    return api.appVersion || api.version;
+  }
+  return null;
+};
+
+/**
+ * Get the Electron *runtime* version (e.g. "28.3.3") — the Chromium /
+ * Node embedded in the desktop shell. Useful when debugging native-
+ * module compatibility or renderer behavior.
+ * @returns {string|null} Electron runtime version or null
+ */
+export const getElectronVersion = () => {
+  const api = getElectronAPI();
+  if (api && api.electronVersion) {
+    return api.electronVersion;
   }
   return null;
 };

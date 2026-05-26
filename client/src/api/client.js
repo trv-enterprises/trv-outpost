@@ -2,14 +2,25 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-// Use current hostname for API calls (allows Tailscale/network access)
-// Falls back to localhost for SSR or when window is not available
+// Use current hostname for API calls (allows Tailscale/network access).
+// Falls back to localhost for SSR or when window is not available.
+//
+// Electron-mode caveat: when the app is loaded via file:// from a
+// packaged build, window.location.hostname is the empty string, which
+// would produce the invalid URL "http://:3001". Detect that case and
+// fall back to localhost — App.jsx's checkCredentials() will call
+// apiClient.setServerUrl() with the user-entered URL once stored
+// credentials load, so this default only matters for the brief window
+// between module load and credential restore.
 const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
   if (typeof window !== 'undefined') {
-    return `http://${window.location.hostname}:3001`;
+    const host = window.location.hostname;
+    if (host) {
+      return `http://${host}:3001`;
+    }
   }
   return 'http://localhost:3001';
 };

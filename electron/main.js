@@ -447,12 +447,23 @@ function createWindow() {
 
   // Dashboard view — the existing webapp. Loaded the same way the
   // pre-sidebar build did (dev = vite, prod = packaged HTML).
+  //
+  // sandbox: false here is deliberate. With sandbox=true, the
+  // preload script's contextBridge calls would still work in dev
+  // (loading from http://localhost:5173), but in a packaged build
+  // the file://-loaded renderer ended up with `window.electron`
+  // undefined — App.jsx then took the browser-mode branch, skipped
+  // the LoginPage, and rendered blank because there were no
+  // credentials. contextIsolation: true is still on, so the
+  // renderer is isolated from the preload's full Node context; the
+  // sandbox flag only removes the extra OS-process-sandbox layer
+  // (which isn't load-bearing for our own first-party content).
   dashboardView = new BrowserView({
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
     },
   });
   mainWindow.addBrowserView(dashboardView);

@@ -7,7 +7,7 @@ import {
   OverflowMenu,
   OverflowMenuItem,
 } from '@carbon/react';
-import { Logout, Password, UserAvatar } from '@carbon/icons-react';
+import { Logout, Password, UserAvatar, Information } from '@carbon/icons-react';
 import './AccountMenu.scss';
 
 /**
@@ -32,8 +32,11 @@ import './AccountMenu.scss';
  *                     auth path; legacy-bootstrap deployments don't
  *                     show sign-out because there's nothing to sign
  *                     out of (the default user just rebootstraps).
+ *   onAbout         — handler invoked from the "About" item. App.jsx
+ *                     mounts AboutDialog at the top level and toggles
+ *                     it via this callback.
  */
-function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOut }) {
+function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOut, onAbout }) {
   const navigate = useNavigate();
 
   const displayName = currentUser?.name || (electronMode ? 'Connected' : 'No user');
@@ -73,6 +76,18 @@ function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOu
         onClick={() => navigate('/account/api-keys')}
         hasDivider
       />
+
+      {onAbout && (
+        <OverflowMenuItem
+          itemText={
+            <span className="account-menu-action">
+              <Information size={16} />
+              <span>About</span>
+            </span>
+          }
+          onClick={onAbout}
+        />
+      )}
 
       {electronMode && (
         <OverflowMenuItem
