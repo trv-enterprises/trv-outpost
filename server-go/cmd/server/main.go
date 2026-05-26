@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth/idp"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
@@ -328,13 +329,26 @@ func main() {
 	// the setting takes effect on next server restart, same posture as
 	// the enabled_types ledger.
 	chatAgentReady := false
+	var chatAgent *chat.Agent
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		assistantEnabled, errAss := settingsService.GetSetting(ctx, "assistant.enabled")
 		if errAss != nil {
 			log.Printf("⚠️  assistant.enabled setting not found — Dashboard Assistant disabled: %v", errAss)
 		} else if v, ok := assistantEnabled.Value.(bool); ok && v {
-			chatAgentReady = true
-			fmt.Println("✓ Dashboard Assistant enabled")
+			// Wire the chat-agent tool registry. Step 2 ships one
+			// Tier-A tool (get_current_user) as the smoke test; step
+			// 3 expands this via the shared toolops layer.
+			chatTools := chat.NewToolRegistry()
+			chat.RegisterBuiltinTools(chatTools, userRepo)
+
+			ca, errCa := chat.NewAgent(aiSessionService, chatTools, nil)
+			if errCa != nil {
+				log.Printf("⚠️  Failed to construct Dashboard Assistant: %v", errCa)
+			} else {
+				chatAgent = ca
+				chatAgentReady = true
+				fmt.Println("✓ Dashboard Assistant enabled")
+			}
 		} else {
 			fmt.Println("· Dashboard Assistant disabled by admin setting (assistant.enabled=false)")
 		}
@@ -346,7 +360,7 @@ func main() {
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
-	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chartHub)
+	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chatAgent, chartHub)
 	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
 	debugHandler := handlers.NewDebugHandler()
 	streamHandler := handlers.NewStreamHandler(streamManager)

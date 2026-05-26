@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
@@ -30,19 +31,34 @@ var wsUpgrader = websocket.Upgrader{
 	},
 }
 
-// AISessionHandler handles AI session-related HTTP requests
+// AISessionHandler handles AI session-related HTTP requests. Two
+// agents share this handler today (post-step-1):
+//
+//   - agent (the Component AI agent) handles sessions with
+//     Kind="component" or empty.
+//   - chatAgent (the Dashboard Assistant) handles sessions with
+//     Kind="chat".
+//
+// Either may be nil (when ANTHROPIC_API_KEY isn't set, or for
+// chatAgent when assistant.enabled=false). The session-dispatch
+// logic falls back gracefully when its agent is nil.
 type AISessionHandler struct {
-	service  *service.AISessionService
-	agent    *ai.Agent
-	chartHub *hub.ComponentHub
+	service   *service.AISessionService
+	agent     *ai.Agent
+	chatAgent *chat.Agent
+	chartHub  *hub.ComponentHub
 }
 
-// NewAISessionHandler creates a new AI session handler
-func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chartHub *hub.ComponentHub) *AISessionHandler {
+// NewAISessionHandler creates a new AI session handler. `chatAgent`
+// may be nil when the Dashboard Assistant is disabled — in that case
+// the handler simply refuses to process chat-kind messages, same
+// posture as a nil Component agent.
+func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chatAgent *chat.Agent, chartHub *hub.ComponentHub) *AISessionHandler {
 	return &AISessionHandler{
-		service:  service,
-		agent:    agent,
-		chartHub: chartHub,
+		service:   service,
+		agent:     agent,
+		chatAgent: chatAgent,
+		chartHub:  chartHub,
 	}
 }
 
@@ -140,35 +156,49 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// Process message with AI agent asynchronously
-	// Use background context since HTTP request context will be cancelled after response
-	if h.agent != nil {
-		go func() {
-			ctx := context.Background()
+	// Process the message asynchronously. We dispatch on the
+	// session's Kind: chat-kind sessions route to the Dashboard
+	// Assistant; everything else (component-kind or legacy
+	// empty-kind) goes to the Component AI agent. Either agent can
+	// be nil when its required env (API key + admin setting) isn't
+	// in place — we fail loudly in that case rather than silently
+	// dropping the message.
+	go func() {
+		ctx := context.Background()
 
-			fmt.Printf("[AI Agent] Starting to process message for session %s\n", id)
+		sessionResp, err := h.service.GetSession(ctx, id)
+		if err != nil {
+			fmt.Printf("[AI] Error getting session %s: %v\n", id, err)
+			h.service.SendErrorEvent(id, err, "session_error")
+			return
+		}
 
-			// Get session for processing
-			sessionResp, err := h.service.GetSession(ctx, id)
-			if err != nil {
-				fmt.Printf("[AI Agent] Error getting session: %v\n", err)
-				h.service.SendErrorEvent(id, err, "session_error")
+		kind := sessionResp.Session.KindOrDefault()
+		switch kind {
+		case models.AISessionKindChat:
+			if h.chatAgent == nil {
+				err := fmt.Errorf("Dashboard Assistant is not enabled in this deployment")
+				h.service.SendErrorEvent(id, err, "assistant_disabled")
 				return
 			}
-
-			fmt.Printf("[AI Agent] Got session, calling ProcessMessage\n")
-
-			// Process the message with the AI agent
+			fmt.Printf("[Chat] Processing message for session %s\n", id)
+			if err := h.chatAgent.ProcessMessage(ctx, sessionResp.Session, req.Content); err != nil {
+				fmt.Printf("[Chat] Error processing message: %v\n", err)
+				h.service.SendErrorEvent(id, err, "ai_error")
+			}
+		default:
+			if h.agent == nil {
+				err := fmt.Errorf("AI agent not available")
+				h.service.SendErrorEvent(id, err, "ai_disabled")
+				return
+			}
+			fmt.Printf("[AI Agent] Processing message for session %s\n", id)
 			if err := h.agent.ProcessMessage(ctx, sessionResp.Session, req.Content); err != nil {
 				fmt.Printf("[AI Agent] Error processing message: %v\n", err)
 				h.service.SendErrorEvent(id, err, "ai_error")
-			} else {
-				fmt.Printf("[AI Agent] ProcessMessage completed successfully\n")
 			}
-		}()
-	} else {
-		fmt.Printf("[AI Agent] Agent is nil, skipping AI processing\n")
-	}
+		}
+	}()
 
 	// Return immediately with accepted status
 	c.JSON(http.StatusAccepted, gin.H{
