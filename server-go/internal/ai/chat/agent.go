@@ -65,15 +65,17 @@ type Agent struct {
 	client      anthropic.Client
 	sessionSvc  SessionService
 	tools       *ToolRegistry
+	resultStore *ResultStore
 	modelName   string
 	maxTurns    int
 }
 
 // Config holds optional overrides for the chat agent. nil → defaults.
 type Config struct {
-	APIKey   string
-	Model    string
-	MaxTurns int
+	APIKey      string
+	Model       string
+	MaxTurns    int
+	ResultStore *ResultStore // optional; when nil, no result-store summarization
 }
 
 // NewAgent constructs a Dashboard Assistant agent. Returns an error
@@ -102,12 +104,24 @@ func NewAgent(sessionSvc SessionService, tools *ToolRegistry, config *Config) (*
 	}
 
 	return &Agent{
-		client:     anthropic.NewClient(option.WithAPIKey(apiKey)),
-		sessionSvc: sessionSvc,
-		tools:      tools,
-		modelName:  model,
-		maxTurns:   maxTurns,
+		client:      anthropic.NewClient(option.WithAPIKey(apiKey)),
+		sessionSvc:  sessionSvc,
+		tools:       tools,
+		resultStore: config.ResultStore,
+		modelName:   model,
+		maxTurns:    maxTurns,
 	}, nil
+}
+
+// ResultStore exposes the result store for callers that need to
+// dispatch the get_full_result meta-tool. The result store is a
+// per-Agent dependency; the meta-tool handler retrieves it through
+// this accessor rather than getting a parallel reference.
+func (a *Agent) ResultStore() *ResultStore {
+	if a == nil {
+		return nil
+	}
+	return a.resultStore
 }
 
 // ProcessMessage runs one round of the Dashboard Assistant's
@@ -186,25 +200,48 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		for _, tu := range toolUseBlocks {
 			assistantBlocks = append(assistantBlocks, anthropic.NewToolUseBlock(tu.ID, tu.Input, tu.Name))
 
+			// Inject the agent's result store into the dispatch env
+			// so the get_full_result meta-tool can fetch stored
+			// payloads. Tools that don't need it just ignore the field.
 			result, dispatchErr := a.tools.Dispatch(ctx, &DispatchEnv{
-				Session: session,
+				Session:     session,
+				ResultStore: a.resultStore,
 			}, tu.Name, tu.Input)
 
-			var resultStr string
+			var rawResultStr string
 			var isError bool
 			if dispatchErr != nil {
-				resultStr = fmt.Sprintf("error: %v", dispatchErr)
+				rawResultStr = fmt.Sprintf("error: %v", dispatchErr)
 				isError = true
 			} else {
-				resultStr = result
+				rawResultStr = result
 			}
 
-			toolResults = append(toolResults, anthropic.NewToolResultBlock(tu.ID, resultStr, isError))
+			// Route through the result store: large results are
+			// persisted server-side and replaced with a one-line
+			// summary + result_id; small results pass through
+			// unchanged. The get_full_result meta-tool can fetch
+			// the full content if the model decides it needs it.
+			modelFacing := rawResultStr
+			if !isError && a.resultStore != nil {
+				if summarized, err := a.resultStore.Summarize(ctx, session.ID, tu.Name, rawResultStr); err == nil {
+					modelFacing = summarized
+				}
+				// Summarize() returning err already produced a
+				// graceful "store failed" string; modelFacing keeps
+				// the raw value as fallback if Summarize is nil.
+			}
+
+			toolResults = append(toolResults, anthropic.NewToolResultBlock(tu.ID, modelFacing, isError))
 			modelToolCalls = append(modelToolCalls, models.ToolCall{
-				ID:     tu.ID,
-				Name:   tu.Name,
-				Input:  string(tu.Input),
-				Output: resultStr,
+				ID:    tu.ID,
+				Name:  tu.Name,
+				Input: string(tu.Input),
+				// Persist the raw output to Mongo, NOT the
+				// summary. The transcript export should show what
+				// the tool actually returned; the summary is only
+				// what the model saw.
+				Output: rawResultStr,
 			})
 		}
 

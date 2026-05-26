@@ -147,6 +147,7 @@ func main() {
 	alertRepo := repository.NewAlertRepository(mongodb.Database)
 	webhookSecretRepo := repository.NewWebhookSecretRepository(mongodb.Database)
 	snippetRepo := repository.NewSnippetRepository(mongodb.Database)
+	chatToolResultRepo := repository.NewChatToolResultRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := componentRepo.CreateIndexes(ctx); err != nil {
@@ -196,6 +197,11 @@ func main() {
 	// Create snippet indexes
 	if err := snippetRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create snippet indexes: %v", err)
+	}
+
+	// Create chat tool result indexes (includes TTL for 24h sweep)
+	if err := chatToolResultRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create chat_tool_results indexes: %v", err)
 	}
 
 	// Create alert indexes (incl. TTL for retention sweep)
@@ -350,7 +356,18 @@ func main() {
 			chatTools := chat.NewToolRegistry()
 			chat.RegisterBuiltinTools(chatTools, opsToolset)
 
-			ca, errCa := chat.NewAgent(aiSessionService, chatTools, nil)
+			// Server-side store for oversize tool results. The
+			// chat agent's ProcessMessage loop runs every tool
+			// output through this — small results pass through,
+			// large results get persisted server-side and
+			// summarized for the model. The get_full_result
+			// meta-tool retrieves the verbatim content when the
+			// model needs it.
+			chatResultStore := chat.NewResultStore(chatToolResultRepo)
+
+			ca, errCa := chat.NewAgent(aiSessionService, chatTools, &chat.Config{
+				ResultStore: chatResultStore,
+			})
 			if errCa != nil {
 				log.Printf("⚠️  Failed to construct Dashboard Assistant: %v", errCa)
 			} else {

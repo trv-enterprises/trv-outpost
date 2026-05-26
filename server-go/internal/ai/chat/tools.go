@@ -47,13 +47,14 @@ type Tool struct {
 	Handler ToolHandler
 }
 
-// DispatchEnv carries per-call context the handler needs: the session
-// the call originated from, plus eventually the resolved caller and
-// active namespace. Step 3 fleshes this out; step 2 only needs the
-// session.
+// DispatchEnv carries per-call context the handler needs: the
+// session the call originated from, the agent's result store (for
+// the get_full_result meta-tool), and eventually the resolved
+// caller + active namespace. Each step fleshes this out further.
 type DispatchEnv struct {
-	Session *models.AISession
-	// Caller and Namespace land in step 3.
+	Session     *models.AISession
+	ResultStore *ResultStore
+	// Caller and Namespace land in step 11 alongside SSE auth wiring.
 }
 
 // ToolHandler is the in-process dispatcher signature. Returns the

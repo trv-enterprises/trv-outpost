@@ -115,6 +115,31 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		InputSchema: emptyObjectSchema(),
 		Handler:     wrapGetCatalog(ops),
 	})
+
+	// ─── Meta: result store ───
+	// get_full_result fetches the verbatim content of a tool result
+	// that was stored server-side because it was too large to inline
+	// (the result-store layer; see internal/ai/chat/result_store.go).
+	// Most of the time the inline summary already answers the
+	// question — only call this when you genuinely need the full
+	// payload, because retrieving it can consume significant
+	// context.
+	reg.Register(Tool{
+		Name:        "get_full_result",
+		Description: "Retrieve the verbatim content of a previously-stored large tool result by its result_id. Only call this when the inline summary doesn't have what you need — fetching the full payload can consume significant context. result_id looks like `r_abc12345` and is returned in the summary of any large tool call.",
+		Tier:        TierA,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"result_id": map[string]interface{}{
+					"type":        "string",
+					"description": "The result ID returned in the summary of a large tool call (e.g. r_abc12345).",
+				},
+			},
+			"required": []string{"result_id"},
+		},
+		Handler: wrapGetFullResult(),
+	})
 }
 
 // emptyObjectSchema is the JSON-schema for tools that take no input.
@@ -232,6 +257,25 @@ func wrapListDashboards(ops *toolops.Toolset) ToolHandler {
 			return "", err
 		}
 		return jsonResult(out)
+	}
+}
+
+func wrapGetFullResult() ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in struct {
+			ResultID string `json:"result_id"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if env == nil || env.ResultStore == nil {
+			return "", fmt.Errorf("result store not wired — get_full_result cannot run")
+		}
+		full, err := env.ResultStore.FetchFull(ctx, in.ResultID)
+		if err != nil {
+			return "", err
+		}
+		return full, nil
 	}
 }
 
