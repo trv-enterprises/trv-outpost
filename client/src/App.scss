@@ -636,3 +636,36 @@ button.cds--overflow-menu {
   flex: 0 0 auto;
   width: max-content;
 }
+
+// ───────────────────────────────────────────────────────────────────
+// SideNav rail-mode section dividers
+// ───────────────────────────────────────────────────────────────────
+//
+// DesignModeNav and ManageModeNav render section headers (RESOURCES,
+// EXTENSIONS, ...) as `.nav-header` divs whose role at narrow widths
+// is just to provide a visual divider between adjacent groups of
+// icons. In rail mode (~48px wide) the label text is clipped by
+// overflow:hidden so only the 1px border-bottom remains. Against
+// the dark layer background, that thin gray line is hard to see —
+// the section grouping reads as one long undifferentiated list.
+//
+// Bump the divider line to a stronger contrast token and shrink
+// the header height so the rail's section breaks read as deliberate
+// gaps rather than wasted empty space. Carbon sets
+// `.cds--side-nav--collapsed` on the rail element when collapsed;
+// the rule is scoped under that so expanded-mode rendering is
+// unaffected.
+.cds--side-nav--collapsed,
+.cds--side-nav--rail:not(.cds--side-nav--expanded) {
+  .design-mode-nav .nav-header,
+  .manage-mode-nav .nav-header {
+    height: spacing.$spacing-05;
+    padding: 0;
+    border-bottom-color: var(--cds-border-strong-01);
+  }
+
+  .design-mode-nav .nav-header--subsection,
+  .manage-mode-nav .nav-header--subsection {
+    border-top-color: var(--cds-border-strong-01);
+  }
+}

@@ -54,3 +54,7 @@
     }
   }
 }
+
+// Rail-mode (collapsed SideNav) divider styles live in App.scss so
+// they apply to both DesignModeNav and ManageModeNav without
+// depending on which component file is currently loaded.
