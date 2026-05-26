@@ -1,0 +1,101 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Plain-text rendering (non-JSON responses, errors, placeholders).
+.trb-plain {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--cds-text-secondary);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  &--placeholder {
+    color: var(--cds-text-helper);
+    font-style: italic;
+  }
+
+  &--error {
+    color: var(--cds-text-error);
+  }
+}
+
+// Wrapper around the JSON tree + action bar. Holds them stacked
+// vertically with the bar overhanging slightly above the tree on
+// hover. The actions are always rendered (no visibility flicker
+// when hovering); we just keep them visually quiet.
+.trb-json-wrap {
+  position: relative;
+}
+
+.trb-json-actions {
+  position: absolute;
+  top: -0.25rem;
+  right: 0;
+  display: flex;
+  gap: 0.125rem;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+  z-index: 1;
+
+  &:hover,
+  .trb-json-wrap:hover & {
+    opacity: 1;
+  }
+}
+
+// Structured JSON rendering. Inherits font from the surrounding
+// transcript entry; only colors and click affordance change.
+.trb-json {
+  margin: 0;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--cds-text-primary);
+  white-space: normal; // lines manage their own breaks
+  line-height: 1.45;
+
+  .trb-line {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &--clickable {
+      cursor: pointer;
+      user-select: none;
+
+      &:hover {
+        background: var(--cds-layer-hover-01);
+      }
+    }
+  }
+
+  .trb-indent {
+    white-space: pre;
+    color: transparent;
+    flex: 0 0 auto;
+  }
+
+  .trb-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    width: 1rem;
+    margin-left: -1rem; // sit in the indent gutter so keys still align
+    color: var(--cds-icon-secondary);
+  }
+
+  // Token colors. Use Carbon semantic tokens where possible so the
+  // palette tracks the active theme.
+  .trb-key    { color: var(--cds-link-primary); }
+  .trb-string { color: var(--cds-text-primary); }
+  .trb-number { color: var(--cds-support-warning); }
+  .trb-bool   { color: var(--cds-support-info); font-weight: 600; }
+  .trb-null   { color: var(--cds-text-helper); font-style: italic; }
+  .trb-punct  { color: var(--cds-text-secondary); }
+  .trb-preview {
+    color: var(--cds-text-helper);
+    font-style: italic;
+  }
+}

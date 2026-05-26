@@ -19,6 +19,7 @@ import { Play, TrashCan, RecordingFilled, Stop, Close, SidePanelClose, SidePanel
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
 import SnippetsPanel from '../components/snippets/SnippetsPanel';
+import TerminalResponseBody from '../components/terminal/TerminalResponseBody';
 import './EdgeLakeTerminalPage.scss';
 
 /**
@@ -698,13 +699,13 @@ function EdgeLakeTerminalPage() {
               <div className="transcript-entry__cmd">
                 <span className="transcript-entry__prompt">$</span> {entry.command}
               </div>
-              <pre
-                className={`transcript-entry__body${
-                  !entry.error && !entry.response ? ' transcript-entry__body--placeholder' : ''
-                }`}
-              >
-                {entryDisplayBody(entry)}
-              </pre>
+              <div className="transcript-entry__body">
+                <TerminalResponseBody
+                  body={entryDisplayBody(entry)}
+                  error={!!entry.error}
+                  placeholder={!entry.error && !entry.response}
+                />
+              </div>
             </div>
           ))
         )}

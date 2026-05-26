@@ -188,16 +188,13 @@
         margin-right: spacing.$spacing-02;
       }
 
+      // __body is a wrapper around <TerminalResponseBody> which owns
+      // its own font / color / margin via .trb-plain and .trb-json
+      // rules in TerminalResponseBody.scss. The page-level rule below
+      // only handles the error-row tint, which cascades into the
+      // child <pre> elements.
       &__body {
         margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: var(--cds-text-secondary);
-
-        &--placeholder {
-          color: var(--cds-text-helper);
-          font-style: italic;
-        }
       }
     }
   }
