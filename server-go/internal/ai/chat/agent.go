@@ -28,6 +28,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -86,6 +87,7 @@ type Agent struct {
 	sessionSvc  SessionService
 	tools       *ToolRegistry
 	resultStore *ResultStore
+	budget      *Budget
 	modelName   string
 	maxTurns    int
 }
@@ -96,6 +98,7 @@ type Config struct {
 	Model       string
 	MaxTurns    int
 	ResultStore *ResultStore // optional; when nil, no result-store summarization
+	Budget      *Budget      // optional; when nil, no cost guardrails
 }
 
 // NewAgent constructs a Dashboard Assistant agent. Returns an error
@@ -128,6 +131,7 @@ func NewAgent(sessionSvc SessionService, tools *ToolRegistry, config *Config) (*
 		sessionSvc:  sessionSvc,
 		tools:       tools,
 		resultStore: config.ResultStore,
+		budget:      config.Budget,
 		modelName:   model,
 		maxTurns:    maxTurns,
 	}, nil
@@ -179,8 +183,43 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 	// describe_tool round-trips.
 	revealedTierB := map[string]bool{}
 
+	// callerGUID is used by the per-user daily budget. Empty for
+	// anonymous/test invocations — the budget skips the per-user
+	// check in that case but still applies the conversation cap.
+	callerGUID := ""
+	if caller != nil && caller.User != nil {
+		callerGUID = caller.User.GUID
+	}
+
+	// softWarnedThisCall avoids spamming the client with the same
+	// "conversation is getting long" banner on every turn of a
+	// multi-turn cycle.
+	softWarnedThisCall := false
+
 	for turn := 0; turn < a.maxTurns; turn++ {
 		anthropicTools := a.tools.AnthropicToolParams(revealedTierB)
+
+		// Budget check before each API call. Refuses the call
+		// entirely past the hard limit; warns the client past the
+		// soft limit.
+		if a.budget != nil {
+			approx := EstimateContextTokens(systemPrompt, anthropicMessageTextContent(messages))
+			verdict, _ := a.budget.CheckBeforeCall(ctx, callerGUID, approx)
+			if !verdict.Allowed {
+				err := fmt.Errorf("%s", verdict.Reason)
+				a.sessionSvc.SendErrorEvent(session.ID, err, "budget_exceeded")
+				return err
+			}
+			if verdict.SoftWarn && !softWarnedThisCall {
+				softWarnedThisCall = true
+				a.sessionSvc.BroadcastEvent(session.ID, &models.AIEvent{
+					Type:      "budget_warn",
+					Data:      map[string]interface{}{"reason": verdict.Reason},
+					Timestamp: time.Now(),
+				})
+			}
+		}
+
 		params := anthropic.MessageNewParams{
 			Model:     anthropic.Model(a.modelName),
 			MaxTokens: 4096,
@@ -195,6 +234,15 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		if err != nil {
 			a.sessionSvc.SendErrorEvent(session.ID, err, "api_error")
 			return fmt.Errorf("Anthropic API error: %w", err)
+		}
+
+		// Record exact token usage from the response so the
+		// per-user daily budget converges on truth, not heuristics.
+		if a.budget != nil && callerGUID != "" {
+			_ = a.budget.RecordUsage(ctx, callerGUID,
+				int64(response.Usage.InputTokens),
+				int64(response.Usage.OutputTokens),
+			)
 		}
 
 		textContent := ""
@@ -319,3 +367,41 @@ func buildMessages(history []models.AIMessage, newUserContent string) []anthropi
 // (defaultSystemPrompt removed in step 6 — see prompt.go's
 // rolePreamble() and callerContextSection() for the templated
 // replacement.)
+
+// anthropicMessageTextContent returns the rendered text of every
+// content block in every message, for the budget estimator. The
+// Anthropic SDK's MessageParam is a tagged union of content blocks
+// (TextBlockParam, ToolUseBlockParam, ToolResultBlockParam); we
+// extract whatever's serializable to a string and ignore the rest.
+//
+// This is intentionally lossy — we just need a length proxy for
+// the conversation-context cap. Tool inputs / outputs that are
+// JSON-stringified strings contribute their full length; binary
+// blobs we don't have wouldn't anyway.
+func anthropicMessageTextContent(messages []anthropic.MessageParam) []string {
+	out := make([]string, 0, len(messages))
+	for _, m := range messages {
+		for _, block := range m.Content {
+			if block.OfText != nil {
+				out = append(out, block.OfText.Text)
+			}
+			if block.OfToolUse != nil {
+				// Tool inputs are arbitrary JSON values; serialize
+				// for the estimator. Length of args is usually
+				// small compared to result text so a JSON dump is
+				// fine.
+				if raw, err := json.Marshal(block.OfToolUse.Input); err == nil {
+					out = append(out, string(raw))
+				}
+			}
+			if block.OfToolResult != nil {
+				for _, sub := range block.OfToolResult.Content {
+					if sub.OfText != nil {
+						out = append(out, sub.OfText.Text)
+					}
+				}
+			}
+		}
+	}
+	return out
+}

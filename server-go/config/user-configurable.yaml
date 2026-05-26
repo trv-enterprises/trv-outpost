@@ -117,3 +117,10 @@ settings:
     category: ai
     description: "Dashboard Assistant — chat agent accessible from the app header. Requires ANTHROPIC_API_KEY at server start; this is a soft kill-switch independent of the Component AI agent. Restart required for changes to take effect."
     value: true
+
+  - key: assistant.daily_token_budget
+    category: ai
+    description: "Per-user daily token budget for the Dashboard Assistant. Object with `input` and `output` keys. Counted in Anthropic tokens, resets at UTC midnight. Defaults to 1M input / 250k output — generous for most workflows; lower if costs run away, raise for power users. A user past either cap is refused new turns until the next UTC day; their conversation is not lost."
+    value:
+      input: 1000000
+      output: 250000

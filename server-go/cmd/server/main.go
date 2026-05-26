@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
@@ -148,6 +149,7 @@ func main() {
 	webhookSecretRepo := repository.NewWebhookSecretRepository(mongodb.Database)
 	snippetRepo := repository.NewSnippetRepository(mongodb.Database)
 	chatToolResultRepo := repository.NewChatToolResultRepository(mongodb.Database)
+	chatUsageRepo := repository.NewChatUsageRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := componentRepo.CreateIndexes(ctx); err != nil {
@@ -202,6 +204,11 @@ func main() {
 	// Create chat tool result indexes (includes TTL for 24h sweep)
 	if err := chatToolResultRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create chat_tool_results indexes: %v", err)
+	}
+
+	// Create chat usage indexes (includes TTL for 90-day retention)
+	if err := chatUsageRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create chat_usage indexes: %v", err)
 	}
 
 	// Create alert indexes (incl. TTL for retention sweep)
@@ -365,8 +372,26 @@ func main() {
 			// model needs it.
 			chatResultStore := chat.NewResultStore(chatToolResultRepo)
 
+			// Per-user daily token budget. Reads the
+			// assistant.daily_token_budget admin setting; defaults
+			// kick in when the setting is missing or unparseable.
+			// The value can land in two shapes depending on origin:
+			//   - YAML-seeded: map[string]interface{}
+			//   - Admin-edited via UI/API: bson.D ([]bson.E) once
+			//     it round-trips through Mongo
+			// extractBudgetCaps handles both.
+			inputCap, outputCap := extractBudgetCaps(
+				ctx,
+				settingsService,
+				int64(chat.DefaultDailyInputBudget),
+				int64(chat.DefaultDailyOutputBudget),
+			)
+			chatBudget := chat.NewBudget(chatUsageRepo, inputCap, outputCap)
+			fmt.Printf("✓ Dashboard Assistant daily budget: %d input / %d output tokens/user\n", inputCap, outputCap)
+
 			ca, errCa := chat.NewAgent(aiSessionService, chatTools, &chat.Config{
 				ResultStore: chatResultStore,
+				Budget:      chatBudget,
 			})
 			if errCa != nil {
 				log.Printf("⚠️  Failed to construct Dashboard Assistant: %v", errCa)
@@ -1030,4 +1055,82 @@ func resolveDocsPath() string {
 		}
 	}
 	return ""
+}
+
+// extractBudgetCaps reads the assistant.daily_token_budget setting
+// and pulls the input/output caps out of it, handling both the
+// YAML-seeded shape (map[string]interface{}) and the
+// Mongo-round-tripped shape ([]bson.E) that admin edits produce.
+// Falls back to the passed defaults if anything goes wrong.
+func extractBudgetCaps(ctx context.Context, settingsSvc *service.SettingsService, defaultInput, defaultOutput int64) (int64, int64) {
+	inputCap := defaultInput
+	outputCap := defaultOutput
+	setting, err := settingsSvc.GetSetting(ctx, "assistant.daily_token_budget")
+	if err != nil || setting == nil {
+		return inputCap, outputCap
+	}
+	pairs := flattenBudgetValue(setting.Value)
+	if v, ok := pairs["input"]; ok && v > 0 {
+		inputCap = v
+	}
+	if v, ok := pairs["output"]; ok && v > 0 {
+		outputCap = v
+	}
+	return inputCap, outputCap
+}
+
+// flattenBudgetValue normalizes the polymorphic value shape of a
+// compound settings record into a map[string]int64. Accepts:
+//   - map[string]interface{} (YAML-seeded or test-injected)
+//   - bson.D / []bson.E (admin-edited, round-tripped through Mongo)
+//   - primitive values inside either shape: int / int32 / int64 / float64
+//
+// Returns an empty map on shape mismatches rather than panicking.
+func flattenBudgetValue(v interface{}) map[string]int64 {
+	out := map[string]int64{}
+	if v == nil {
+		return out
+	}
+	switch typed := v.(type) {
+	case map[string]interface{}:
+		for k, raw := range typed {
+			if n, ok := budgetCoerceInt64(raw); ok {
+				out[k] = n
+			}
+		}
+	case bson.D:
+		// bson.D is an alias for primitive.D ([]primitive.E),
+		// covering both YAML-seeded compound values that came
+		// back through Mongo decoding AND values written by the
+		// admin via PUT /api/settings/:key.
+		for _, e := range typed {
+			if n, ok := budgetCoerceInt64(e.Value); ok {
+				out[e.Key] = n
+			}
+		}
+	case []bson.E:
+		// Same content as bson.D but typed as the raw slice — can
+		// happen when the value was constructed directly rather
+		// than through the bson.D literal.
+		for _, e := range typed {
+			if n, ok := budgetCoerceInt64(e.Value); ok {
+				out[e.Key] = n
+			}
+		}
+	}
+	return out
+}
+
+func budgetCoerceInt64(raw interface{}) (int64, bool) {
+	switch n := raw.(type) {
+	case int64:
+		return n, true
+	case int32:
+		return int64(n), true
+	case int:
+		return int64(n), true
+	case float64:
+		return int64(n), true
+	}
+	return 0, false
 }
