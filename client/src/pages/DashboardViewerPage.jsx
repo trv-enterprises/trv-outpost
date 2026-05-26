@@ -421,6 +421,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // toggle from triggering a spurious resize → re-measure → re-scale cycle
   // that shifts the dashboard grid (especially visible in stretch-to-fill
   // mode during fullscreen).
+  //
+  // We watch both the window AND the container element. The window
+  // listener catches obvious cases (browser resize, fullscreen
+  // toggle). The ResizeObserver catches cases where the window
+  // stays the same size but the container's available width
+  // shrinks or grows — like when the Dashboard Assistant sidecard
+  // opens/closes and pushes the page reflow via CSS padding (no
+  // window resize fires for that).
   const hasPanels = panels && panels.length > 0;
   const lastSizeRef = useRef({ width: 0, height: 0 });
   useEffect(() => {
@@ -442,10 +450,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       raf2 = requestAnimationFrame(measure);
     });
     window.addEventListener('resize', measure);
+
+    // ResizeObserver picks up container-size changes that don't
+    // cause a window resize — the assistant-sidecard open/close
+    // is the primary case but anything that adds/removes padding
+    // on a parent container will trigger this too.
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => { measure(); });
+      ro.observe(containerRef.current);
+    }
+
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
       window.removeEventListener('resize', measure);
+      if (ro) ro.disconnect();
     };
   }, [hasPanels, isFullscreen, fitMode]);
 
