@@ -625,3 +625,14 @@ button.cds--overflow-menu {
   flex-wrap: wrap;
   row-gap: spacing.$spacing-04;
 }
+
+// Once the row wraps, Carbon's ContentSwitcher (the list/grid view
+// toggle) tries to claim the new line's full width because it
+// defaults to `display: flex` with no `flex` constraint. Pin it to
+// its content width so it stays a compact 2-button row even when
+// wrapped onto its own line. Same posture as a regular icon button
+// pair — the parent's row-gap handles vertical spacing.
+.page-toolbar .cds--content-switcher {
+  flex: 0 0 auto;
+  width: max-content;
+}
