@@ -22,7 +22,7 @@ func GetAnthropicTools(cat *registry.Catalog) []anthropic.ToolUnionParam {
 	toolParams := []anthropic.ToolParam{
 		{
 			Name:        "update_component_type",
-			Description: anthropic.String("Set the component type for the current draft. Call this first when creating a control or display component. For charts, this is set automatically."),
+			Description: anthropic.String("Set the component type for the current draft. Call this first when creating a control or display component. For charts, this is set automatically.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores chart_type. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code instead."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"component_type": map[string]interface{}{
@@ -82,7 +82,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_data_mapping",
-			Description: anthropic.String("Configure how data maps to chart axes and series"),
+			Description: anthropic.String("Configure how data maps to chart axes and series.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"connection_id":  map[string]interface{}{"type": "string", "description": "ID of the connection to use"},
@@ -110,7 +110,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_query_config",
-			Description: anthropic.String("Update the query configuration for data retrieval"),
+			Description: anthropic.String("Update the query configuration for data retrieval.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores query_config. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"query":            map[string]interface{}{"type": "string", "description": "The query string (SQL, API path, PromQL, etc.)"},
@@ -139,7 +139,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_filters",
-			Description: anthropic.String("Add or update data filters"),
+			Description: anthropic.String("Add or update data filters.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.filters. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"filters": map[string]interface{}{
@@ -159,7 +159,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_aggregation",
-			Description: anthropic.String("Configure data aggregation"),
+			Description: anthropic.String("Configure data aggregation.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.aggregation. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"type":    map[string]interface{}{"type": "string", "description": "Aggregation type", "enum": []string{"first", "last", "min", "max", "avg", "sum", "count", "limit"}},
@@ -171,7 +171,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_sliding_window",
-			Description: anthropic.String("Configure a time-based sliding window to show only recent data. Essential for streaming/real-time charts to prevent unbounded data growth."),
+			Description: anthropic.String("Configure a time-based sliding window to show only recent data. Essential for streaming/real-time charts to prevent unbounded data growth.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.sliding_window. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"duration":      map[string]interface{}{"type": "integer", "description": "Window duration in seconds (e.g., 300 for last 5 minutes, 3600 for last hour)"},
@@ -182,7 +182,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_time_bucket",
-			Description: anthropic.String("Configure time-bucketed aggregation for streaming data. Aggregates raw streaming data into time buckets (e.g., 1-minute averages). Only works with socket/streaming data sources."),
+			Description: anthropic.String("Configure time-bucketed aggregation for streaming data. Aggregates raw streaming data into time buckets (e.g., 1-minute averages). Only works with socket/streaming data sources.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.time_bucket. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"interval":      map[string]interface{}{"type": "integer", "description": "Bucket interval in seconds (e.g., 60 for 1-minute buckets, 3600 for hourly)"},
@@ -215,7 +215,7 @@ Otherwise: configure via the structured tools and let the editor's generator pro
 		},
 		{
 			Name:        "update_chart_options",
-			Description: anthropic.String("Update ECharts-specific options for the chart"),
+			Description: anthropic.String("Update ECharts-specific options for the chart.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"title":            map[string]interface{}{"type": "string", "description": "Chart title rendered inside the ECharts canvas. MUST equal the component title set via update_component_config — never the component name."},

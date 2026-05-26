@@ -68,6 +68,39 @@ func (e *ToolExecutor) broadcastComponentUpdate(component *models.Component) {
 	}
 }
 
+// rejectIfCustomCodeMode returns a failed ToolResult when the
+// component is in custom-code mode (use_custom_code=true), because
+// the chart will render whatever's in component_code verbatim and
+// ignore the structured-config fields (data_mapping, options,
+// chart_type, query_config, filters, aggregation, time_bucket,
+// sliding_window). A structured-config tool call against such a
+// component succeeds at the storage layer but produces no visible
+// effect — which led to the agent confidently reporting "done"
+// while the user saw no change.
+//
+// Returning a hard error from the tool surface forces the agent to
+// either flip use_custom_code=false (losing the current code) or
+// edit component_code directly via set_custom_code. Either path is
+// honest about what's actually happening.
+//
+// Returns nil when the tool call should proceed normally.
+func rejectIfCustomCodeMode(component *models.Component, toolName string) *ToolResult {
+	if component == nil || !component.UseCustomCode {
+		return nil
+	}
+	return &ToolResult{
+		Success: false,
+		Error: fmt.Sprintf(
+			"%s is a no-op when use_custom_code=true — the chart renders from component_code, not from this field. "+
+				"Either:\n"+
+				"  • Edit the custom code directly via set_custom_code, OR\n"+
+				"  • Call update_component with use_custom_code=false first to drop the custom code and re-enter structured-config mode (this discards the existing component_code).\n"+
+				"Use get_component_state to see the current code before deciding.",
+			toolName,
+		),
+	}
+}
+
 // ToolResult contains the result of executing a tool
 type ToolResult struct {
 	Success      bool        `json:"success"`
@@ -157,6 +190,9 @@ func (e *ToolExecutor) executeUpdateComponentType(ctx context.Context, chartID s
 	}
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
+	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_component_type"); rejected != nil {
+		return rejected, nil
 	}
 
 	// Guard: changing component_type on an already-populated component is
@@ -397,6 +433,9 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_data_mapping"); rejected != nil {
+		return rejected, nil
+	}
 
 	if params.ConnectionID != nil {
 		chart.ConnectionID = *params.ConnectionID
@@ -490,6 +529,9 @@ func (e *ToolExecutor) executeUpdateQueryConfig(ctx context.Context, chartID str
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_query_config"); rejected != nil {
+		return rejected, nil
+	}
 
 	// Initialize QueryConfig if nil
 	if chart.QueryConfig == nil {
@@ -540,6 +582,9 @@ func (e *ToolExecutor) executeUpdateFilters(ctx context.Context, chartID string,
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_filters"); rejected != nil {
+		return rejected, nil
+	}
 
 	// Initialize DataMapping if nil
 	if chart.DataMapping == nil {
@@ -580,6 +625,9 @@ func (e *ToolExecutor) executeUpdateAggregation(ctx context.Context, chartID str
 	}
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
+	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_aggregation"); rejected != nil {
+		return rejected, nil
 	}
 
 	// Initialize DataMapping if nil
@@ -634,6 +682,9 @@ func (e *ToolExecutor) executeUpdateSlidingWindow(ctx context.Context, chartID s
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
 	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_sliding_window"); rejected != nil {
+		return rejected, nil
+	}
 
 	// Initialize DataMapping if nil
 	if chart.DataMapping == nil {
@@ -682,6 +733,9 @@ func (e *ToolExecutor) executeUpdateTimeBucket(ctx context.Context, chartID stri
 	}
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
+	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_time_bucket"); rejected != nil {
+		return rejected, nil
 	}
 
 	// Initialize DataMapping if nil
@@ -785,6 +839,9 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 	}
 	if chart == nil {
 		return &ToolResult{Success: false, Error: fmt.Sprintf("chart not found: %s v%d", chartID, chartVersion)}, nil
+	}
+	if rejected := rejectIfCustomCodeMode(chart, "update_chart_options"); rejected != nil {
+		return rejected, nil
 	}
 
 	// Initialize Options if nil
