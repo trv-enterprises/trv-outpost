@@ -36,6 +36,8 @@
       "preload.js",
       "sidebar-preload.js",
       "sidebar/**/*",
+      "resources/sidebar-workspace-template/**/*",
+      "resources/entitlements.mac.plist",
       "node_modules/**/*"
     ],
     "extraResources": [

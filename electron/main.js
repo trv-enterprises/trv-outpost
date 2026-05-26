@@ -9,6 +9,7 @@
 // side-by-side, bounds set explicitly from the main process.
 const { app, BrowserWindow, BrowserView, ipcMain, safeStorage, screen, globalShortcut } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const Store = require('electron-store');
 const os = require('os');
 
@@ -48,6 +49,161 @@ let sidebarWidth = SIDEBAR_DEFAULT_WIDTH;
 // poll the global cursor position from main until `sidebar:drag-end`.
 let dragPollInterval = null;
 
+// --------- Sidebar workspace bootstrap ---------
+
+/**
+ * Path to the user-data sidebar workspace dir. Claude Code is spawned
+ * with this as its cwd, so the `.mcp.json` and `CLAUDE.md` here are
+ * what its session sees. The dir is created lazily on first launch by
+ * copying from the packaged template at
+ * electron/resources/sidebar-workspace-template/.
+ *
+ * Lives under app.getPath('userData') so it's writable in a packaged
+ * macOS app (the .app bundle itself is read-only after signing).
+ */
+function sidebarWorkspaceDir() {
+  // Allow override for dev / debugging.
+  return process.env.TRVE_SIDEBAR_CWD ||
+    path.join(app.getPath('userData'), 'sidebar-workspace');
+}
+
+/**
+ * Path to the packaged template dir. In dev (`npm run dev`) this is
+ * just the resources subdir relative to main.js. In a packaged build
+ * the file resolves via process.resourcesPath if electron-builder put
+ * it under `extraResources`; otherwise it remains __dirname-relative
+ * since the files array in package.json includes the resources dir.
+ */
+function sidebarWorkspaceTemplateDir() {
+  return path.join(__dirname, 'resources', 'sidebar-workspace-template');
+}
+
+/**
+ * Copy a directory recursively. Used to populate the workspace from
+ * the template. Node 16+ has fs.cpSync; we're on a much newer runtime
+ * via Electron's bundled Node, so it's fine to rely on it.
+ */
+function copyDirSync(src, dest) {
+  fs.cpSync(src, dest, { recursive: true });
+}
+
+/**
+ * Ensure the sidebar workspace dir exists. If it doesn't, copy the
+ * packaged template into it. Subsequent launches skip this entirely —
+ * the user may have customized .mcp.json or added their own files,
+ * and we don't want to clobber that.
+ *
+ * Returns the resolved workspace path. Throws (caught upstream) if
+ * something unrecoverable happens, e.g. permission errors.
+ */
+function ensureSidebarWorkspace() {
+  const workspace = sidebarWorkspaceDir();
+  if (!fs.existsSync(workspace)) {
+    const template = sidebarWorkspaceTemplateDir();
+    if (!fs.existsSync(template)) {
+      console.warn('[sidebar] template dir missing — workspace created empty:', template);
+      fs.mkdirSync(workspace, { recursive: true });
+    } else {
+      console.log('[sidebar] populating workspace from template:', template, '→', workspace);
+      copyDirSync(template, workspace);
+    }
+  }
+  return workspace;
+}
+
+// --------- Credential resolution ---------
+
+/**
+ * Resolve the credentials Claude Code should use to talk to the
+ * dashboard MCP server. Two shapes the dashboard webapp may have
+ * left in electron-store, plus a sidebar-only fallback:
+ *
+ *   case (a) — API-key-bootstrapped dashboard:
+ *     credentials.key starts with "trve_". Sidebar reuses it.
+ *   case (b) — Clerk-bootstrapped dashboard:
+ *     credentials.key is a JWT (or absent). JWTs are short-lived and
+ *     wrong-by-construction for a long-lived CLI session; fall back
+ *     to a separately-stored API key under sidebar.apiKey, which the
+ *     user mints in Manage → API Keys and saves once via a future
+ *     prompt UI.
+ *   case (c) — neither resolves:
+ *     return null. Caller surfaces a friendly error in the sidebar.
+ *
+ * Returns { url, key } or null. The URL falls back to the dashboard
+ * webapp's serverUrl, then to localhost:3001 for the dev case.
+ */
+async function resolveSidebarCredentials() {
+  let url = null;
+  let key = null;
+
+  // Read the dashboard's stored credentials. The shape is set by
+  // ipcMain.handle('save-config', ...) elsewhere in this file:
+  //   { serverUrl, encryptedKey | key, userName }
+  const dashboardCred = store.get('credentials');
+  if (dashboardCred) {
+    url = dashboardCred.serverUrl || null;
+    if (dashboardCred.encryptedKey && safeStorage.isEncryptionAvailable()) {
+      try {
+        key = safeStorage.decryptString(Buffer.from(dashboardCred.encryptedKey, 'base64'));
+      } catch (err) {
+        console.warn('[sidebar] failed to decrypt dashboard key:', err.message);
+      }
+    } else if (dashboardCred.key) {
+      key = dashboardCred.key;
+    }
+  }
+
+  // case (b): the dashboard's stored "key" is actually a JWT — not
+  // useful for a long-running CLI. Drop it and look for a sidebar
+  // key. JWTs are base64-encoded triples separated by dots; API keys
+  // start with the trve_ prefix.
+  if (key && !key.startsWith('trve_')) {
+    key = null;
+  }
+
+  if (!key) {
+    const sidebarKey = store.get('sidebar.encryptedKey');
+    if (sidebarKey && safeStorage.isEncryptionAvailable()) {
+      try {
+        key = safeStorage.decryptString(Buffer.from(sidebarKey, 'base64'));
+      } catch (err) {
+        console.warn('[sidebar] failed to decrypt sidebar key:', err.message);
+      }
+    } else {
+      const plain = store.get('sidebar.key');
+      if (plain) key = plain;
+    }
+  }
+
+  // URL fallback chain: explicit sidebar URL → dashboard URL → localhost dev.
+  if (!url) {
+    url = store.get('sidebar.serverUrl') || 'http://127.0.0.1:3001';
+  }
+
+  if (!key) return null;
+  return { url, key };
+}
+
+/**
+ * Save a sidebar-only API key. Used by the case (b) prompt flow and
+ * by the `sidebar:save-key` IPC handler. Encrypts via safeStorage
+ * when available; falls back to plaintext (with a console warning)
+ * when not.
+ */
+function saveSidebarKey(plaintextKey) {
+  if (!plaintextKey || typeof plaintextKey !== 'string') {
+    throw new Error('sidebar key must be a non-empty string');
+  }
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(plaintextKey).toString('base64');
+    store.set('sidebar.encryptedKey', encrypted);
+    store.delete('sidebar.key');
+  } else {
+    console.warn('[sidebar] safeStorage unavailable; storing key in plaintext');
+    store.set('sidebar.key', plaintextKey);
+  }
+}
+
 // --------- PTY session state ---------
 
 // node-pty is loaded lazily so the app can still launch and surface
@@ -66,33 +222,37 @@ try {
 let ptyProcess = null;
 
 /**
- * Spawn the `claude` CLI as a PTY, stripping any API-key env so the
- * CLI uses the user's subscription credentials instead of billing the
- * Anthropic Console. Returns the spawned IPty or null on failure.
+ * Spawn the `claude` CLI as a PTY in the curated sidebar workspace,
+ * carrying the resolved dashboard URL + API key in the spawn env.
+ *
+ * - cwd is the user-data sidebar workspace dir (populated from the
+ *   packaged template on first launch). Claude Code discovers
+ *   `.mcp.json` relative to cwd, so the workspace's curated config
+ *   determines which MCP servers the session connects to.
+ * - TRVE_DASHBOARD_URL + TRVE_DASHBOARD_KEY are injected so the
+ *   workspace's .mcp.json `${VAR}` placeholders resolve. The user
+ *   never has to set these in their shell.
+ * - ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are stripped — if
+ *   either survives, `claude` bills the Anthropic Console instead
+ *   of the user's subscription. Subscription-billed is the entire
+ *   point of hosting Claude Code in the sidebar.
+ *
+ * Returns the spawned IPty, or null on any failure (caller surfaces
+ * an error message in the sidebar pane).
  */
-function spawnClaudeCLI() {
+function spawnClaudeCLI(credentials, workspace) {
   if (!pty) return null;
+  if (!credentials || !credentials.key) {
+    console.error('[sidebar] spawn aborted: no resolved credentials');
+    return null;
+  }
 
-  // Subscription-billing guard: if either of these is set in the
-  // parent env, the spawned `claude` would use the API key path and
-  // charge the Console account instead of the user's subscription.
-  // Stripping is the entire point of hosting Claude Code in the
-  // sidebar; if we ever skip this, billing flips silently.
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
+  env.TRVE_DASHBOARD_URL = credentials.url;
+  env.TRVE_DASHBOARD_KEY = credentials.key;
 
-  // Claude Code discovers .mcp.json relative to cwd, so the sidebar's
-  // working directory determines which MCP servers light up. Default
-  // to the dashboard repo so this sidebar's whole point — talking to
-  // the running dashboard via the MCP server we ship in this repo —
-  // works out of the box. Override via the TRVE_SIDEBAR_CWD env var
-  // if you want the sidebar to land somewhere else (e.g. a personal
-  // scratch dir with a different .mcp.json).
-  //
-  // electron/main.js lives at <repo>/electron/main.js, so the repo
-  // root is one directory up.
-  const cwd = process.env.TRVE_SIDEBAR_CWD || path.dirname(__dirname);
   const shell = process.env.SHELL || '/bin/zsh';
 
   try {
@@ -104,7 +264,7 @@ function spawnClaudeCLI() {
       name: 'xterm-256color',
       cols: 100,
       rows: 30,
-      cwd,
+      cwd: workspace,
       env,
     });
   } catch (err) {
@@ -185,7 +345,7 @@ function setSidebarVisible(visible) {
   if (visible) ensurePtyStarted();
 }
 
-function ensurePtyStarted() {
+async function ensurePtyStarted() {
   if (ptyProcess) return;
   if (!pty) {
     sidebarView?.webContents.send('pty:error',
@@ -194,7 +354,31 @@ function ensurePtyStarted() {
     return;
   }
 
-  ptyProcess = spawnClaudeCLI();
+  // Bootstrap the curated workspace if needed, then resolve which
+  // API key the spawn should carry. Both can fail loudly — surface
+  // an actionable message in the sidebar pane.
+  let workspace;
+  try {
+    workspace = ensureSidebarWorkspace();
+  } catch (err) {
+    sidebarView?.webContents.send('pty:error',
+      `Failed to set up sidebar workspace: ${err.message}.\n` +
+      `Check filesystem permissions on ${app.getPath('userData')}.`);
+    return;
+  }
+
+  const credentials = await resolveSidebarCredentials();
+  if (!credentials) {
+    sidebarView?.webContents.send('pty:error',
+      `No dashboard credentials found.\n\n` +
+      `The sidebar needs an API key to talk to the dashboard's MCP server.\n` +
+      `Either sign into the dashboard with an API key (it will be reused), or\n` +
+      `mint one in Manage → API Keys and save it via the sidebar's setup prompt\n` +
+      `(coming in a follow-up build).`);
+    return;
+  }
+
+  ptyProcess = spawnClaudeCLI(credentials, workspace);
   if (!ptyProcess) {
     sidebarView?.webContents.send('pty:error',
       `Failed to spawn \`claude\` — make sure the CLI is installed and on PATH.\n` +
@@ -229,6 +413,11 @@ function createWindow() {
     // unchanged — only windowed mode gets the visible title strip.
     backgroundColor: '#161616',
     show: false,
+    // Title carries the Cmd+Shift+/ hint so users discover the
+    // sidebar toggle without us needing a separate UI button. The
+    // dashboard renderer's <title> would override this once the page
+    // loads, so we re-set after load below.
+    title: 'TRVE Dashboards   —   ⌘⇧/  Claude Code sidebar',
   });
 
   // Dashboard view — the existing webapp. Loaded the same way the
@@ -298,14 +487,30 @@ function createWindow() {
   });
 }
 
+// Title we want on the window regardless of what the dashboard
+// renderer sets via <title>. Carries the keyboard hint so the
+// sidebar toggle is discoverable without a separate UI button.
+const APP_WINDOW_TITLE = 'TRVE Dashboards   —   ⌘⇧/  Claude Code sidebar';
+
 // BrowserWindow's `ready-to-show` doesn't fire when content is loaded
 // into a BrowserView (only when the window's own webContents finishes).
 // Wire it from the dashboard view's webContents so the existing
-// "no white flash" UX is preserved.
+// "no white flash" UX is preserved. Also re-pins the window title
+// since the dashboard's <title> overrides whatever we set at
+// BrowserWindow construction.
 function bridgeReadyToShow() {
   if (!dashboardView || !mainWindow) return;
   dashboardView.webContents.once('did-finish-load', () => {
     mainWindow.emit('ready-to-show');
+    mainWindow.setTitle(APP_WINDOW_TITLE);
+  });
+  // The dashboard's renderer can re-set the document title at any
+  // time (route changes, etc.); each new "page-title-updated" event
+  // would normally update the BrowserWindow title. Re-pin after every
+  // such event so the hotkey hint stays visible.
+  dashboardView.webContents.on('page-title-updated', (event) => {
+    event.preventDefault();
+    mainWindow.setTitle(APP_WINDOW_TITLE);
   });
 }
 
@@ -357,6 +562,29 @@ ipcMain.handle('clear-config', async () => {
   } catch (err) {
     console.error('Failed to clear config:', err);
     return false;
+  }
+});
+
+// Sidebar API key save (case b — Clerk-bootstrapped dashboard).
+// Exposed to the dashboard renderer so a future "Set sidebar API key"
+// dialog can call it; can also be invoked from DevTools as
+// `await window.electron.sidebar.saveKey('trve_...')`. Triggers a PTY
+// respawn so the new key takes effect immediately without restarting
+// the app.
+ipcMain.handle('sidebar:save-key', async (event, plaintextKey) => {
+  try {
+    saveSidebarKey(plaintextKey);
+    // Kill the existing session (if any) so the next ensurePtyStarted
+    // picks up the new credential. Sidebar visibility / position are
+    // preserved.
+    if (ptyProcess) {
+      try { ptyProcess.kill(); } catch {}
+      ptyProcess = null;
+    }
+    if (sidebarVisible) await ensurePtyStarted();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 });
 

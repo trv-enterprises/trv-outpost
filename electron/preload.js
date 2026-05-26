@@ -22,12 +22,22 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Claude Code sidebar — the dashboard React app calls these to
   // toggle the right-hand sidebar that hosts the `claude` CLI. The
-  // sidebar lives in a separate WebContentsView; the dashboard never
-  // touches the terminal directly, only opens/closes the pane.
+  // sidebar lives in a separate BrowserView; the dashboard never
+  // touches the terminal directly, only opens/closes the pane and
+  // persists its credential.
   sidebar: {
     toggle: () => ipcRenderer.invoke('sidebar:toggle'),
     show: () => ipcRenderer.invoke('sidebar:show'),
     hide: () => ipcRenderer.invoke('sidebar:hide'),
     state: () => ipcRenderer.invoke('sidebar:state'),
+
+    // Save a sidebar-only API key. Used when the dashboard was
+    // bootstrapped via Clerk (no shared trve_... key); the user mints
+    // an API key in Manage → API Keys and pastes it here. Triggers a
+    // PTY respawn so the new key takes effect immediately.
+    //
+    // Today the only caller is the user typing in DevTools — a
+    // proper dialog UI is a follow-up.
+    saveKey: (plaintextKey) => ipcRenderer.invoke('sidebar:save-key', plaintextKey),
   },
 });

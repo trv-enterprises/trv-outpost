@@ -1,0 +1,12 @@
+{
+  "_comment": "Curated MCP config for the TRVE Dashboards desktop sidebar. The Electron host injects TRVE_DASHBOARD_URL and TRVE_DASHBOARD_KEY into the spawn env before launching `claude`; this file references them via ${VAR} expansion so the same template works whether the user has an API-key-bootstrapped server or a Clerk-bootstrapped one. Edit at your own risk — if you tear this up, use the Reset Sidebar Workspace menu option to restore it.",
+  "mcpServers": {
+    "dashboard": {
+      "type": "http",
+      "url": "${TRVE_DASHBOARD_URL}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${TRVE_DASHBOARD_KEY}"
+      }
+    }
+  }
+}
