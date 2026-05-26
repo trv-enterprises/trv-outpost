@@ -17,6 +17,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
+	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -42,23 +43,30 @@ var wsUpgrader = websocket.Upgrader{
 // Either may be nil (when ANTHROPIC_API_KEY isn't set, or for
 // chatAgent when assistant.enabled=false). The session-dispatch
 // logic falls back gracefully when its agent is nil.
+//
+// configService is required only for chat sessions — it resolves
+// the caller's active_namespace from user prefs so the chat agent
+// knows which namespace to operate in. Component AI agent doesn't
+// need it (component sessions carry their target component ID).
 type AISessionHandler struct {
-	service   *service.AISessionService
-	agent     *ai.Agent
-	chatAgent *chat.Agent
-	chartHub  *hub.ComponentHub
+	service       *service.AISessionService
+	agent         *ai.Agent
+	chatAgent     *chat.Agent
+	configService *service.ConfigService
+	chartHub      *hub.ComponentHub
 }
 
 // NewAISessionHandler creates a new AI session handler. `chatAgent`
 // may be nil when the Dashboard Assistant is disabled — in that case
 // the handler simply refuses to process chat-kind messages, same
 // posture as a nil Component agent.
-func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chatAgent *chat.Agent, chartHub *hub.ComponentHub) *AISessionHandler {
+func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chatAgent *chat.Agent, configService *service.ConfigService, chartHub *hub.ComponentHub) *AISessionHandler {
 	return &AISessionHandler{
-		service:   service,
-		agent:     agent,
-		chatAgent: chatAgent,
-		chartHub:  chartHub,
+		service:       service,
+		agent:         agent,
+		chatAgent:     chatAgent,
+		configService: configService,
+		chartHub:      chartHub,
 	}
 }
 
@@ -156,6 +164,13 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
+	// Capture the caller from the HTTP context BEFORE we spawn the
+	// goroutine — the gin context dies once the handler returns,
+	// and middleware.GetUser(c) wouldn't work from inside the
+	// goroutine.
+	callerUser := middleware.GetUser(c)
+	callerNamespace := h.resolveCallerNamespace(c.Request.Context(), callerUser)
+
 	// Process the message asynchronously. We dispatch on the
 	// session's Kind: chat-kind sessions route to the Dashboard
 	// Assistant; everything else (component-kind or legacy
@@ -181,8 +196,13 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 				h.service.SendErrorEvent(id, err, "assistant_disabled")
 				return
 			}
-			fmt.Printf("[Chat] Processing message for session %s\n", id)
-			if err := h.chatAgent.ProcessMessage(ctx, sessionResp.Session, req.Content); err != nil {
+			caller := &chat.CallerCtx{
+				User:      callerUser,
+				Namespace: callerNamespace,
+				Now:       time.Now(),
+			}
+			fmt.Printf("[Chat] Processing message for session %s (namespace=%s)\n", id, callerNamespace)
+			if err := h.chatAgent.ProcessMessage(ctx, sessionResp.Session, req.Content, caller); err != nil {
 				fmt.Printf("[Chat] Error processing message: %v\n", err)
 				h.service.SendErrorEvent(id, err, "ai_error")
 			}
@@ -394,4 +414,27 @@ func (h *AISessionHandler) CancelSession(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// resolveCallerNamespace pulls the caller's active_namespace from
+// their user-prefs. Best-effort: a missing or unparseable value
+// degrades to "default" rather than failing the request.
+//
+// Used by the chat path so create_* tools land in the namespace the
+// user has open in the header — matches the design doc's
+// "always-current-namespace" rule. The Component AI agent doesn't
+// need this because its sessions carry the target component ID.
+func (h *AISessionHandler) resolveCallerNamespace(ctx context.Context, user *models.User) string {
+	const defaultNamespace = "default"
+	if user == nil || h.configService == nil {
+		return defaultNamespace
+	}
+	cfg, err := h.configService.GetUserConfig(ctx, user.GUID)
+	if err != nil || cfg == nil {
+		return defaultNamespace
+	}
+	if ns, ok := cfg.Settings["active_namespace"].(string); ok && ns != "" {
+		return ns
+	}
+	return defaultNamespace
 }

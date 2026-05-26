@@ -386,7 +386,7 @@ func main() {
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
-	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chatAgent, chartHub)
+	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chatAgent, configService, chartHub)
 	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
 	debugHandler := handlers.NewDebugHandler()
 	streamHandler := handlers.NewStreamHandler(streamManager)

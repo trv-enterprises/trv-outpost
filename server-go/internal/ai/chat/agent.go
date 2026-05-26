@@ -30,6 +30,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -39,6 +40,25 @@ import (
 // Default model. Sonnet by design — broader scope means lower bar
 // per turn. Opus opt-in via admin setting will land in step 8.
 const defaultChatModel = "claude-sonnet-4-20250514"
+
+// CallerCtx carries per-message context the chat agent needs from
+// the HTTP request layer: who the user is (for caps + greeting),
+// which namespace they're operating in (for create_* tools), and
+// "now" for the date in the system prompt.
+//
+// The caller plumbs this into ProcessMessage; the agent doesn't
+// resolve any of these itself because they all derive from the
+// authenticated request rather than the persisted session.
+//
+// User may be nil (e.g. an unauthenticated test invocation); the
+// prompt-builder falls back to a generic preamble in that case.
+// Namespace defaults to "default" when empty. Now defaults to
+// time.Now() when zero.
+type CallerCtx struct {
+	User      *models.User
+	Namespace string
+	Now       time.Time
+}
 
 // Default max turns per ProcessMessage call. Lower than the Component
 // AI agent's because chat sessions can run indefinitely; we don't
@@ -130,9 +150,11 @@ func (a *Agent) ResultStore() *ResultStore {
 // maxTurns. This is the chat-side equivalent of
 // `internal/ai.Agent.ProcessMessage`.
 //
-// Step 2 keeps the prompt assembly inline; step 5 moves it into
-// the layers/ package.
-func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, userContent string) error {
+// `caller` carries the per-message context the handler must
+// resolve: who the user is, which namespace they're in, what
+// "now" is. May be nil for non-HTTP test invocations; the prompt
+// builder degrades gracefully.
+func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, userContent string, caller *CallerCtx) error {
 	if a == nil {
 		return fmt.Errorf("chat agent not initialized")
 	}
@@ -140,15 +162,15 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 	a.sessionSvc.SendThinkingEvent(session.ID, true)
 	defer a.sessionSvc.SendThinkingEvent(session.ID, false)
 
-	// Build conversation history. Step 5 replaces buildMessages with
-	// fuller history replay; for now we just walk the persisted
-	// turns and append the new user content.
+	// Build conversation history. We just walk the persisted turns
+	// and append the new user content; history compaction is a v1.1
+	// concern (see design doc, Phase 3).
 	messages := buildMessages(session.Messages, userContent)
 
 	// System prompt is assembled per-turn from layers (role text +
 	// caller context + Tier-B catalog). Tier-A schemas land in the
 	// API request's Tools field via AnthropicToolParams.
-	systemPrompt := buildSystemPrompt(a.tools)
+	systemPrompt := buildSystemPrompt(a.tools, caller)
 
 	// revealedTierB tracks which Tier-B tools the model has asked
 	// describe_tool to load this conversation. Once a Tier-B tool's
@@ -294,12 +316,6 @@ func buildMessages(history []models.AIMessage, newUserContent string) []anthropi
 	return messages
 }
 
-// defaultSystemPrompt is the smoke-test prompt. Step 6 replaces this
-// with a templated prompt that injects namespace + caps + date.
-func defaultSystemPrompt() string {
-	return `You are the TRVE Dashboard Assistant, helping the user manage their dashboard deployment.
-
-You have one tool available: get_current_user. Use it to find out who you're talking to, then greet them by name.
-
-Keep replies short and concrete. Do not invent capabilities you do not have.`
-}
+// (defaultSystemPrompt removed in step 6 — see prompt.go's
+// rolePreamble() and callerContextSection() for the templated
+// replacement.)
