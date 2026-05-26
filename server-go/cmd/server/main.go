@@ -389,9 +389,22 @@ func main() {
 			chatBudget := chat.NewBudget(chatUsageRepo, inputCap, outputCap)
 			fmt.Printf("✓ Dashboard Assistant daily budget: %d input / %d output tokens/user\n", inputCap, outputCap)
 
+			// Model selection from admin setting. Sonnet is the
+			// default; admins can opt into Opus for higher-fidelity
+			// answers at higher cost. Unknown values fall back to
+			// Sonnet rather than failing.
+			chatModelID := chat.ModelSonnet
+			if modelSetting, err := settingsService.GetSetting(ctx, "assistant.model"); err == nil && modelSetting != nil {
+				if s, ok := modelSetting.Value.(string); ok && s != "" {
+					chatModelID = chat.ResolveModelID(s)
+				}
+			}
+			fmt.Printf("✓ Dashboard Assistant model: %s\n", chatModelID)
+
 			ca, errCa := chat.NewAgent(aiSessionService, chatTools, &chat.Config{
 				ResultStore: chatResultStore,
 				Budget:      chatBudget,
+				Model:       chatModelID,
 			})
 			if errCa != nil {
 				log.Printf("⚠️  Failed to construct Dashboard Assistant: %v", errCa)

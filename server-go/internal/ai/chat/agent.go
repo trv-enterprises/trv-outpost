@@ -38,9 +38,34 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
+// Anthropic model IDs the Dashboard Assistant supports. Tied to
+// the assistant.model admin setting's allowed values: pass "sonnet"
+// or "opus" to ResolveModelID, get the concrete Anthropic ID back.
+//
+// These are concrete model IDs rather than the latest-aliases so
+// the assistant's behavior is stable across Anthropic releases —
+// admins can opt into newer models by bumping the constant.
+const (
+	ModelSonnet = "claude-sonnet-4-20250514"
+	ModelOpus   = "claude-opus-4-20250514"
+)
+
 // Default model. Sonnet by design — broader scope means lower bar
-// per turn. Opus opt-in via admin setting will land in step 8.
-const defaultChatModel = "claude-sonnet-4-20250514"
+// per turn. Opus opt-in via the assistant.model admin setting.
+const defaultChatModel = ModelSonnet
+
+// ResolveModelID maps the admin setting's short value to the full
+// Anthropic model ID. Empty / unknown inputs fall back to Sonnet
+// so a typo in the admin setting can't break the agent.
+func ResolveModelID(adminValue string) string {
+	switch adminValue {
+	case "opus":
+		return ModelOpus
+	case "sonnet":
+		return ModelSonnet
+	}
+	return defaultChatModel
+}
 
 // CallerCtx carries per-message context the chat agent needs from
 // the HTTP request layer: who the user is (for caps + greeting),

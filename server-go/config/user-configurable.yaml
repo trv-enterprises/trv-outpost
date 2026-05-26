@@ -124,3 +124,8 @@ settings:
     value:
       input: 1000000
       output: 250000
+
+  - key: assistant.model
+    category: ai
+    description: "Anthropic model the Dashboard Assistant runs. Allowed values: `sonnet` (faster + cheaper, default) or `opus` (more capable, more expensive). Switching takes effect on next server restart. Per-deployment choice; not per-user."
+    value: "sonnet"
