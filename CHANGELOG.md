@@ -6,6 +6,48 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.19.6] — 2026-05-26
+
+### Added
+
+- **Snippets panel (generic, iTerm-style).** A right-hand
+  saved-commands library inside the EdgeLake terminal page. User
+  snippets are private; global snippets are visible to everyone and
+  editable only by Manage-capable users. Single-click pastes the
+  command into the terminal input; double-click pastes and runs.
+  Tags become flat folders — a snippet with multiple tags appears
+  under each.
+- **Six EdgeLake starter snippets** seeded on first boot of any
+  deployment that doesn't already have globals for the
+  `edgelake-terminal` context: `GET STATUS`, `GET CONNECTIONS`,
+  `GET SERVERS`, `TEST NETWORK`, `BLOCKCHAIN GET OPERATOR`,
+  `SET DEBUG ON`. Admins who delete a starter keep it deleted.
+- **iTerm-style snippet search.** `title:foo`, `text:foo`, `tag:foo`,
+  `-foo` negation, `foo|bar` OR, AND-by-default across tokens. Help
+  popover behind a `?` icon explains the operators.
+- **Generic-by-design snippets API.** New collection + endpoints
+  (`GET/POST/PUT/DELETE /api/snippets`) keyed off a `context` field
+  so future surfaces (MQTT publisher, ad-hoc SQL tool) can mount the
+  same panel without bleeding snippets across. Design in
+  `docs/design-notes/snippets-panel.md`.
+- **Colorized JSON response renderer in the EdgeLake terminal.**
+  Response bodies that parse as JSON now render as a syntax-colored,
+  collapsible tree. Carbon semantic tokens for colors so the palette
+  tracks the active theme.
+- **Five-button JSON action bar** (top-right of every JSON body
+  with more than one container): collapse-all, collapse-one-level,
+  expand-one-level, expand-all, reset. The level buttons act
+  uniformly on every container at the matching depth, so one click
+  reveals every operator record's fields on a `blockchain get *`
+  payload.
+
+### Changed
+
+- **EdgeLake terminal layout.** Two-column flex when the snippets
+  panel is open; transcript and input column shrink to make room.
+  Panel toggle lives immediately to the right of the existing Clear
+  button. Panel-open state persists per user across devices.
+
 ## [0.18.3] — 2026-05-23
 
 ### Added
