@@ -598,3 +598,30 @@ button.cds--overflow-menu {
     text-overflow: clip;
   }
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Shared page-toolbar wrap behavior
+// ───────────────────────────────────────────────────────────────────
+//
+// Every design/manage list page renders a `.page-toolbar` with a
+// `.toolbar-left` (search + filters) and a `.toolbar-actions`
+// (Create button, etc.) inside it. Each page has its own SCSS file
+// declaring `display: flex` on these but none of them set
+// `flex-wrap` — so when the container narrows (e.g. when the
+// Dashboard Assistant sidecard opens and consumes 28rem on the
+// right), the toolbar children clip off the right edge.
+//
+// Set `flex-wrap: wrap` globally so toolbars reflow onto a second
+// line when they don't fit on one. The `row-gap` matches the inline
+// gap the per-page rules already declare, so wrapping looks
+// intentional rather than crowded.
+//
+// One outlier: ComponentsListPage was already wrapping (its
+// `.toolbar-left` has `flex-wrap: wrap`). The global doesn't conflict
+// because `flex-wrap` is the same value.
+.page-toolbar,
+.page-toolbar .toolbar-left,
+.page-toolbar .toolbar-actions {
+  flex-wrap: wrap;
+  row-gap: spacing.$spacing-04;
+}
