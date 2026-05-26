@@ -15,9 +15,23 @@ import AssistantToolCallCard from './AssistantToolCallCard';
  * Tool calls render inline as collapsible cards in the assistant
  * message that produced them.
  *
- * Auto-scrolls to the bottom whenever a new message arrives.
+ * `streamingContent` is the chat agent's in-progress assistant text
+ * — rendered as a transient bottom-most assistant message until the
+ * canonical `message` event arrives via WS and the hook clears the
+ * streaming buffer.
+ *
+ * `thinking` shows the spinner; the chat agent toggles it true at
+ * turn start and false at turn end, so it's a reliable "busy" flag.
+ *
+ * Auto-scrolls to the bottom whenever a new message arrives or new
+ * streaming content lands.
  */
-export default function AssistantMessageList({ messages, sending }) {
+export default function AssistantMessageList({
+  messages,
+  sending,
+  thinking,
+  streamingContent,
+}) {
   const scrollerRef = useRef(null);
 
   useEffect(() => {
@@ -25,9 +39,9 @@ export default function AssistantMessageList({ messages, sending }) {
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, sending]);
+  }, [messages, sending, thinking, streamingContent]);
 
-  if (!messages || messages.length === 0) {
+  if ((!messages || messages.length === 0) && !streamingContent) {
     return (
       <div className="assistant-messagelist assistant-messagelist--empty">
         <p>Ask the assistant anything about your dashboard deployment.</p>
@@ -44,7 +58,16 @@ export default function AssistantMessageList({ messages, sending }) {
       {messages.map((msg, idx) => (
         <AssistantMessage key={msg.id || `m-${idx}`} message={msg} />
       ))}
-      {sending && (
+      {streamingContent && (
+        <AssistantMessage
+          message={{
+            id: '__streaming__',
+            role: 'assistant',
+            content: streamingContent,
+          }}
+        />
+      )}
+      {(sending || thinking) && (
         <div className="assistant-messagelist__pending">
           <InlineLoading description="Assistant is thinking…" />
         </div>

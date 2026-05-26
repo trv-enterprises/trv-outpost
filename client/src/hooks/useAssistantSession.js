@@ -5,125 +5,217 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../api/client';
 
-// Step 10 uses a coarse polling refetch after sending a message —
-// just enough to get message-list rendering working end-to-end.
-// Step 11 replaces this with SSE / WebSocket streaming for live
-// token-by-token deltas.
-const REFETCH_DELAY_MS = 800;
-const REFETCH_INTERVAL_MS = 1500;
-const REFETCH_MAX_ATTEMPTS = 12; // ~18s total
+// Reconnect tuning — same shape as the Component AI agent's
+// useAISession. Stop trying after this many failures so a server
+// outage doesn't burn battery forever.
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 3000;
 
 /**
  * useAssistantSession — owns the lifecycle of a single Dashboard
- * Assistant conversation. v1 keeps things browser-local: no
- * persistence beyond the session record itself (TTL-cleaned
- * server-side after 24h of inactivity), no restore from server,
- * no conversation list.
+ * Assistant conversation, talking to the server over the existing
+ * WebSocket channel that the Component AI agent already uses.
  *
- * On `open=true`, lazily creates a chat session the first time the
- * user sends a message. On `open=false`, the session ID is kept in
- * state so re-opening the sidecard resumes the same conversation
- * (since the server-side record outlives the panel-close action).
+ * On first send, lazily creates a kind="chat" session, opens a WS,
+ * and listens for events:
+ *   - `message`: a persisted message (user OR assistant). Replaces
+ *     the optimistic user-message entry if one exists.
+ *   - `streaming`: partial text content from the model mid-turn.
+ *     Rendered as the assistant's "in-progress" content until the
+ *     paired `message` event lands.
+ *   - `thinking`: bool toggle for the spinner state.
+ *   - `error` / `budget_warn`: surfaced through error state /
+ *     warning state respectively.
  *
- * Returns:
- *   - sessionId: current session ID, or null
- *   - messages: AIMessage[]
- *   - loading: true while fetching the session
- *   - sending: true while a send is in-flight
- *   - error: last error message, or null
- *   - sendMessage(text): create-session-if-needed + send + refetch
- *   - clearChat(): drop the current session ID, start fresh next send
+ * Session ID persists across panel close/reopen so reopening
+ * resumes the same conversation (the server-side record outlives
+ * the panel by up to 24h). clearChat() drops state for a fresh
+ * conversation.
  */
 export default function useAssistantSession() {
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [thinking, setThinking] = useState(false);
+  const [warning, setWarning] = useState(null);
   const [error, setError] = useState(null);
+  const [sending, setSending] = useState(false);
 
-  // Refs hold the latest values for the async polling loop to read
-  // without re-running effects each time state changes.
   const sessionIdRef = useRef(null);
-  const cancelPollRef = useRef(null);
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const messagesRef = useRef(messages);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
-  const refetch = useCallback(async () => {
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // mergeMessage — append a new message OR replace an existing one
+  // by ID. Also drops local optimistic user-message entries (id
+  // prefix "local-") when the canonical version arrives.
+  const mergeMessage = useCallback((next) => {
+    if (!next || !next.id) return;
+    setMessages((prev) => {
+      // Replace by ID if present.
+      const existingIdx = prev.findIndex((m) => m.id === next.id);
+      if (existingIdx !== -1) {
+        const updated = prev.slice();
+        updated[existingIdx] = next;
+        return updated;
+      }
+      // If it's a user message, drop any matching local-optimistic
+      // copy (same content, same role). User typed → optimistic
+      // entry pushed → server broadcast arrives → we want one row.
+      if (next.role === 'user') {
+        const withoutLocal = prev.filter(
+          (m) => !(m.id?.startsWith('local-') && m.role === 'user' && m.content === next.content)
+        );
+        return [...withoutLocal, next];
+      }
+      return [...prev, next];
+    });
+  }, []);
+
+  const handleWSEvent = useCallback((event) => {
+    if (!event || !event.type) return;
+    const data = event.data || {};
+    switch (event.type) {
+      case 'connected':
+        // First event after WS handshake. Nothing to do — UI
+        // doesn't surface a "connected" indicator.
+        break;
+      case 'message':
+        if (data.message) {
+          mergeMessage(data.message);
+          // Clear any in-progress streaming text when the canonical
+          // message arrives; the persisted content supersedes it.
+          if (data.message.role === 'assistant') {
+            setStreamingContent('');
+          }
+        }
+        break;
+      case 'streaming':
+        // Server sends partial content; for the chat agent today
+        // this is the full turn's text at once rather than
+        // token-by-token, but the rendering treats it the same:
+        // a single transient string that the next `message` event
+        // overwrites.
+        if (typeof data.content === 'string') {
+          setStreamingContent(data.content);
+        }
+        if (data.done) {
+          // 'done' just means "this is the last streaming chunk."
+          // The `message` event right after carries the persisted
+          // record; we leave streamingContent alone until that
+          // event clears it.
+        }
+        break;
+      case 'thinking':
+        setThinking(!!data.thinking);
+        break;
+      case 'budget_warn':
+        if (data.reason) setWarning(String(data.reason));
+        break;
+      case 'error':
+        if (data.error) setError(String(data.error));
+        setThinking(false);
+        break;
+      default:
+        // Unknown event types are non-fatal; the Component AI
+        // agent emits some events the chat agent doesn't and
+        // vice versa. Silently ignore.
+        break;
+    }
+  }, [mergeMessage]);
+
+  const openWebSocket = useCallback(() => {
     const id = sessionIdRef.current;
     if (!id) return;
-    try {
-      const data = await apiClient.getAISession(id);
-      const session = data?.session || data;
-      if (session && Array.isArray(session.messages)) {
-        setMessages(session.messages);
+
+    // Close any existing connection before opening a new one.
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch { /* ignore */ }
+      wsRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    const url = apiClient.getAISessionWebSocketURL(id);
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      reconnectAttemptsRef.current = 0;
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.data);
+        handleWSEvent(parsed);
+      } catch {
+        // ignore unparseable frames
       }
-    } catch (err) {
-      setError(err?.message || String(err));
-    }
-  }, []);
+    };
 
-  // Stop any in-flight polling loop. Called on send (to start
-  // fresh) and on clear-chat.
-  const stopPolling = useCallback(() => {
-    if (cancelPollRef.current) {
-      cancelPollRef.current();
-      cancelPollRef.current = null;
-    }
-  }, []);
+    ws.onerror = () => {
+      // Suppress noisy logs — onclose handles reconnect.
+    };
 
-  // Poll the session for new messages until the assistant produces
-  // a final text response (or we hit the cap). This is the step-10
-  // stand-in for SSE streaming — coarse but works. The server-side
-  // session record is the source of truth.
-  const startPolling = useCallback(() => {
-    stopPolling();
-    let attempts = 0;
-    let cancelled = false;
-    const tick = async () => {
-      if (cancelled) return;
-      attempts += 1;
-      await refetch();
-      if (cancelled) return;
-      // Stop polling when the most recent message is an assistant
-      // turn WITHOUT pending tool_calls (i.e. the model returned
-      // plain text and is done for this user turn). The simple
-      // shape-test here suffices for step 10; step 11 switches to
-      // streaming and this whole pattern goes away.
-      const last = messagesRef.current[messagesRef.current.length - 1];
-      const finishedTurn =
-        last &&
-        last.role === 'assistant' &&
-        (!last.tool_calls || last.tool_calls.length === 0) &&
-        last.content;
-      if (finishedTurn || attempts >= REFETCH_MAX_ATTEMPTS) {
+    ws.onclose = (closeEvent) => {
+      // Clean close, no reconnect.
+      if (closeEvent.code === 1000) return;
+      // No session ID anymore (user cleared) — no reconnect.
+      if (!sessionIdRef.current) return;
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        setError('Lost connection to assistant. Send a new message to retry.');
         return;
       }
-      const handle = setTimeout(tick, REFETCH_INTERVAL_MS);
-      cancelPollRef.current = () => {
-        cancelled = true;
-        clearTimeout(handle);
-      };
+      reconnectAttemptsRef.current += 1;
+      reconnectTimeoutRef.current = setTimeout(openWebSocket, RECONNECT_DELAY_MS);
     };
-    cancelPollRef.current = () => { cancelled = true; };
-    setTimeout(tick, REFETCH_DELAY_MS);
-  }, [refetch, stopPolling]);
+  }, [handleWSEvent]);
 
-  // Mirror messages into a ref so the polling tick can read the
-  // latest array without re-creating the closure on every render.
-  const messagesRef = useRef(messages);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  const closeWebSocket = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (wsRef.current) {
+      try { wsRef.current.close(1000); } catch { /* ignore */ }
+      wsRef.current = null;
+    }
+  }, []);
+
+  const ensureSession = useCallback(async () => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    const created = await apiClient.createAssistantSession();
+    const id = created?.session?.id || created?.id;
+    if (!id) throw new Error('No session ID returned from server');
+    setSessionId(id);
+    sessionIdRef.current = id;
+    // Open the WS as soon as the session exists so we don't miss
+    // any events the agent emits before we'd otherwise be listening.
+    openWebSocket();
+    return id;
+  }, [openWebSocket]);
 
   const sendMessage = useCallback(async (text) => {
     const content = String(text || '').trim();
     if (!content || sending) return;
     setError(null);
+    setWarning(null);
     setSending(true);
 
-    // Optimistically render the user message so the UI feels
-    // responsive — the server-side record will overwrite this on
-    // the first refetch.
+    // Optimistic render so the input feels responsive — the
+    // server-side broadcast will dedup this via mergeMessage when
+    // its `message` event arrives.
     setMessages((prev) => [
       ...prev,
       {
@@ -135,48 +227,38 @@ export default function useAssistantSession() {
     ]);
 
     try {
-      let id = sessionIdRef.current;
-      if (!id) {
-        setLoading(true);
-        const created = await apiClient.createAssistantSession();
-        id = created?.session?.id || created?.id;
-        if (!id) {
-          throw new Error('No session ID returned from server');
-        }
-        setSessionId(id);
-        sessionIdRef.current = id;
-        setLoading(false);
-      }
+      const id = await ensureSession();
       await apiClient.sendAIMessage(id, content);
-      startPolling();
     } catch (err) {
       setError(err?.message || String(err));
-      setLoading(false);
     } finally {
       setSending(false);
     }
-  }, [sending, startPolling]);
+  }, [sending, ensureSession]);
 
   const clearChat = useCallback(() => {
-    stopPolling();
+    closeWebSocket();
     setSessionId(null);
     sessionIdRef.current = null;
     setMessages([]);
+    setStreamingContent('');
+    setThinking(false);
     setError(null);
-  }, [stopPolling]);
+    setWarning(null);
+  }, [closeWebSocket]);
 
-  // Stop polling on unmount so a closed sidecard doesn't keep
-  // ticking forever.
-  useEffect(() => () => stopPolling(), [stopPolling]);
+  // Tear down the WS on unmount so a closed sidecard doesn't leak.
+  useEffect(() => () => closeWebSocket(), [closeWebSocket]);
 
   return {
     sessionId,
     messages,
-    loading,
+    streamingContent,
+    thinking,
     sending,
+    warning,
     error,
     sendMessage,
     clearChat,
-    refetch,
   };
 }

@@ -155,6 +155,15 @@ export default function AssistantSidecard({
       </header>
 
       <div className="assistant-sidecard__body">
+        {session.warning && (
+          <InlineNotification
+            kind="warning"
+            title="Heads up"
+            subtitle={session.warning}
+            hideCloseButton
+            lowContrast
+          />
+        )}
         {session.error && (
           <InlineNotification
             kind="error"
@@ -167,6 +176,8 @@ export default function AssistantSidecard({
         <AssistantMessageList
           messages={session.messages}
           sending={session.sending}
+          thinking={session.thinking}
+          streamingContent={session.streamingContent}
         />
       </div>
 
