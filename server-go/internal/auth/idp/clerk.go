@@ -7,6 +7,7 @@ package idp
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
@@ -49,18 +50,30 @@ func (p *ClerkJWTIdP) Resolve(ctx context.Context, c *gin.Context) (*models.User
 		return nil, nil
 	}
 
+	// We log every failure path here. The bootstrap handler only
+	// surfaces the error in the 401 response body — without these
+	// logs, a silently-failing Clerk verifier is invisible from the
+	// server side, which cost us hours to diagnose (turned out to be
+	// a 15-hour clock skew on the prod-test VM that made every JWT
+	// look future-dated to the verifier).
 	identity, err := p.verifier.VerifyToken(ctx, token)
 	if err != nil {
+		log.Printf("[auth] clerk verify failed (token rejected by Clerk SDK): %v", err)
 		return nil, fmt.Errorf("%w: clerk verify: %v", ErrCredentialInvalid, err)
 	}
 	user, err := auth.ResolveUserByVerifiedIdentity(ctx, p.users, identity)
 	if err != nil {
+		log.Printf("[auth] clerk user resolution failed for sub=%s email=%s: %v",
+			identity.Subject, identity.Email, err)
 		return nil, fmt.Errorf("%w: clerk resolve: %v", ErrCredentialInvalid, err)
 	}
 	if user == nil {
+		log.Printf("[auth] clerk identity valid but no matching user record: sub=%s email=%s — set clerk_user_id on an existing user or create one with that email",
+			identity.Subject, identity.Email)
 		return nil, fmt.Errorf("%w: clerk user not authorized for this deployment", ErrCredentialInvalid)
 	}
 	if !user.Active {
+		log.Printf("[auth] clerk identity matched user %s (%s) but user is inactive", user.ID, user.Email)
 		return nil, fmt.Errorf("%w: clerk user inactive", ErrCredentialInvalid)
 	}
 	return user, nil

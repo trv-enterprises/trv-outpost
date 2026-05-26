@@ -51,6 +51,22 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Resolve build metadata
+        id: build_meta
+        run: |
+          # Strip the leading "v" from the git tag to get a clean
+          # semver string (matches the docker tag convention and what
+          # the Go version-stamping wants).
+          tag="${GITHUB_REF#refs/tags/}"
+          version="${tag#v}"
+          # Build number from client/build.json — the same field the
+          # client side stamps so server + client report the same
+          # build number out the About dialog.
+          build_num="$(grep -o '"buildNumber"[^0-9]*[0-9]*' client/build.json | grep -o '[0-9]*')"
+          echo "version=${version}"     >> "$GITHUB_OUTPUT"
+          echo "build_num=${build_num:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "git_commit=${GITHUB_SHA::12}"    >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -60,5 +76,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.build_meta.outputs.version }}
+            BUILD_NUM=${{ steps.build_meta.outputs.build_num }}
+            GIT_COMMIT=${{ steps.build_meta.outputs.git_commit }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
