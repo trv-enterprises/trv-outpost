@@ -651,12 +651,18 @@ button.cds--overflow-menu {
 //
 // Bump the divider line to a stronger contrast token and shrink
 // the header height so the rail's section breaks read as deliberate
-// gaps rather than wasted empty space. Carbon sets
-// `.cds--side-nav--collapsed` on the rail element when collapsed;
-// the rule is scoped under that so expanded-mode rendering is
-// unaffected.
-.cds--side-nav--collapsed,
-.cds--side-nav--rail:not(.cds--side-nav--expanded) {
+// gaps rather than wasted empty space.
+//
+// SideNav class application (per @carbon/react SideNav.js):
+//   - `.cds--side-nav--expanded` fires when expanded
+//   - `.cds--side-nav--collapsed` only fires when !expanded && isFixedNav
+//   - `.cds--side-nav--rail` only fires when isRail
+// We use neither isFixedNav nor isRail — App.jsx passes
+// `isPersistent={true}` + the `expanded` boolean — so the rail
+// state has NO positive class. The correct selector is "any
+// side-nav that doesn't carry the expanded class," which catches
+// the rail regardless of the other variant flags.
+.cds--side-nav:not(.cds--side-nav--expanded) {
   .design-mode-nav .nav-header,
   .manage-mode-nav .nav-header {
     height: spacing.$spacing-05;
