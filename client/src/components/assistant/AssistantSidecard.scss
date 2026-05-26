@@ -1,0 +1,99 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.assistant-sidecard {
+  position: fixed;
+  top: 3rem; // sit under the app header (Carbon header is 3rem tall)
+  right: 0;
+  bottom: 0;
+  background: var(--cds-layer-01);
+  border-left: 1px solid var(--cds-border-subtle-01);
+  display: flex;
+  flex-direction: column;
+  z-index: 7000; // above SideNav (which lives around 6000) but below modals
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  // The width is set inline by the React component so it can be
+  // dragged interactively.
+  min-width: 22rem;
+  max-width: 90vw;
+
+  // 1px drag handle widened to a 6px hit target via an absolute
+  // overlay. The visible affordance is the border on .assistant-
+  // sidecard itself; this strip just intercepts the mouse.
+  &__drag-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 1;
+  }
+
+  &__header {
+    flex: 0 0 auto;
+    padding: spacing.$spacing-04 spacing.$spacing-05;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+    background: var(--cds-layer-accent-01);
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: spacing.$spacing-03;
+  }
+
+  &__title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--cds-text-primary);
+  }
+
+  &__header-actions {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+  }
+
+  &__subtitle {
+    margin-top: spacing.$spacing-02;
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+  }
+
+  &__subtitle-value {
+    color: var(--cds-text-primary);
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  &__body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: spacing.$spacing-05;
+  }
+
+  &__empty {
+    color: var(--cds-text-helper);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  &__empty-hint {
+    margin-top: spacing.$spacing-03;
+    font-style: italic;
+  }
+
+  &__footer {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--cds-border-subtle-01);
+    background: var(--cds-layer-accent-01);
+    padding: spacing.$spacing-04 spacing.$spacing-05;
+    min-height: 3.5rem;
+  }
+}

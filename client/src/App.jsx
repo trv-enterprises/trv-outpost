@@ -29,6 +29,7 @@ import {
   ChartMultitype,
   Menu,
   Close,
+  AiLaunch,
 } from '@carbon/icons-react';
 import apiClient, { API_BASE } from './api/client';
 import { isElectron } from './utils/electron';
@@ -68,10 +69,12 @@ import EdgeLakeTerminalPage from './pages/EdgeLakeTerminalPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { AIAvailabilityProvider, useAIAvailability } from './context/AIAvailabilityContext';
-import { NamespaceProvider } from './context/NamespaceContext';
+import { NamespaceProvider, useNamespaces } from './context/NamespaceContext';
 import NamespacePicker from './components/NamespacePicker';
 import AccountMenu from './components/AccountMenu';
 import AboutDialog from './components/AboutDialog';
+import AssistantSidecard from './components/assistant/AssistantSidecard';
+import useAssistantSidecardState from './hooks/useAssistantSidecardState';
 import DevUserSwitcher from './components/DevUserSwitcher';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
@@ -110,6 +113,29 @@ function AIBuilderGate() {
   );
 }
 
+// Small wrapper around AssistantSidecard that lives INSIDE the
+// NamespaceProvider tree so it can read activeNamespace via context.
+// AppContent's body is outside the provider, so it can't call
+// useNamespaces directly — this child component bridges the gap.
+//
+// Step 9 ships the chrome only; modelLabel is a static placeholder
+// for now and will pull from /api/ai/availability once that endpoint
+// surfaces the model (step 8+ work, deferred to keep step 9 focused).
+function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onRequestClose }) {
+  const { activeNamespace } = useNamespaces();
+  return (
+    <AssistantSidecard
+      open={open}
+      width={width}
+      minWidth={minWidth}
+      onResize={onResize}
+      onRequestClose={onRequestClose}
+      namespace={activeNamespace || 'default'}
+      modelLabel="sonnet"
+    />
+  );
+}
+
 function AppContent({ onDisconnect }) {
   const [isSideNavExpanded, setIsSideNavExpanded] = useState(true);
   const [currentMode, setCurrentMode] = useState(() => {
@@ -140,6 +166,13 @@ function AppContent({ onDisconnect }) {
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
+
+  // Dashboard Assistant sidecard state. Render-gated by the
+  // chatAgentEnabled flag from /api/ai/availability (step 0 of the
+  // dashboard-assistant work). Hook owns open/close + width state,
+  // persists to localStorage (instant) + user prefs (cross-device).
+  const { chatAgentEnabled } = useAIAvailability();
+  const assistantSidecard = useAssistantSidecardState();
 
   // Bootstrap the visitor's identity on mount. Resolution chain:
   //
@@ -671,6 +704,24 @@ function AppContent({ onDisconnect }) {
               />
             </div>
             <HeaderGlobalBar>
+              {/* Dashboard Assistant launcher. Sits left of the rest
+                  of the header-action cluster (NamespacePicker, Help,
+                  Notifications, AccountMenu). Only renders when the
+                  chat agent is enabled at the deployment — i.e. when
+                  BOTH ANTHROPIC_API_KEY is set AND
+                  assistant.enabled is true. Toggle persists open
+                  state per-user. */}
+              {chatAgentEnabled && (
+                <HeaderGlobalAction
+                  aria-label={assistantSidecard.open ? 'Hide assistant' : 'Open assistant'}
+                  onClick={assistantSidecard.toggle}
+                  isActive={assistantSidecard.open}
+                  tooltipAlignment="end"
+                >
+                  <AiLaunch size={20} />
+                </HeaderGlobalAction>
+              )}
+
               {(userCapabilities.can_design || userCapabilities.can_manage) && <NamespacePicker />}
 
               {/* Dev-only user impersonation pill. Sits between
@@ -737,6 +788,23 @@ function AppContent({ onDisconnect }) {
         clerkActive={clerkActive}
       />
 
+      {/* Dashboard Assistant sidecard. Mount inside NamespaceProvider
+          (a few lines up) so AssistantSidecardWithNamespace can read
+          the active namespace via context. Render-gated upstream by
+          chatAgentEnabled — App.jsx already hides the launcher icon
+          when the chat agent is disabled, but we keep the gate here
+          too in case the icon is bypassed (e.g. a keyboard shortcut
+          path someday). */}
+      {chatAgentEnabled && (
+        <AssistantSidecardWithNamespace
+          open={assistantSidecard.open}
+          width={assistantSidecard.width}
+          minWidth={assistantSidecard.minWidth}
+          onResize={assistantSidecard.setWidth}
+          onRequestClose={() => assistantSidecard.setOpen(false)}
+        />
+      )}
+
       {/* Hide sidebar in View mode (uses tile view instead) and on
           off-mode routes like /account/* where currentMode is null —
           showing a Design/Manage sidenav there would be misleading. */}
@@ -751,7 +819,18 @@ function AppContent({ onDisconnect }) {
         </SideNav>
       )}
 
-      <Content className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}>
+      <Content
+        className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}
+        // When the Dashboard Assistant sidecard is open, shrink the
+        // main content area to its left so the page reflows around
+        // the panel instead of being covered by it. Drag-resize on
+        // the sidecard updates the width in real time.
+        style={
+          chatAgentEnabled && assistantSidecard.open
+            ? { paddingRight: `${assistantSidecard.width}px` }
+            : undefined
+        }
+      >
         <Routes>
           {/* Default route. Cascade by capability:
               1. can_view → first dashboard (or /view/dashboards if none)
