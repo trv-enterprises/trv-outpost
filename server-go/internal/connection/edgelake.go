@@ -377,6 +377,71 @@ func decodeChunkedBody(body []byte) []byte {
 	return decoded
 }
 
+// edgelakeErrorEnvelope models the JSON shape EdgeLake returns when a
+// query fails on the cluster side — peer refused, parser rejection,
+// distributed-fan-out failure, etc. The shape looks like:
+//   {
+//     "method": "get",
+//     "node": "<reporting node IP>",
+//     "err_code": 208,
+//     "err_text": "Network connection to peer refused",
+//     "local_msg": "Failed to create a socket using: 100.80.4.101:32448",
+//     "operaor_msg": "From operator at: 100.80.4.101:32448..."   // sic — EdgeLake's typo
+//   }
+//
+// Distinct from a successful response, which is either {"Query": [...]}
+// or a plain array of records. We check for this envelope before
+// trying any of the successful shapes so the error path produces a
+// useful message instead of "unable to parse EdgeLake response".
+type edgelakeErrorEnvelope struct {
+	Method     string `json:"method"`
+	Node       string `json:"node"`
+	ErrCode    int    `json:"err_code"`
+	ErrText    string `json:"err_text"`
+	LocalMsg   string `json:"local_msg"`
+	OperatorMsg string `json:"operaor_msg"` // EdgeLake's misspelling, kept verbatim
+}
+
+// formatEdgeLakeError turns a parsed error envelope into a clean,
+// user-facing message. Bare err_text is usually enough; for known
+// codes we layer a one-line actionable hint. Returns nil if the
+// envelope doesn't look like an EdgeLake error (no err_code set).
+func formatEdgeLakeError(body []byte) error {
+	var env edgelakeErrorEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil
+	}
+	if env.ErrCode == 0 && env.ErrText == "" {
+		return nil
+	}
+
+	// Pick the most specific detail message available, in
+	// descending order of usefulness for the caller.
+	detail := env.LocalMsg
+	if detail == "" {
+		detail = env.OperatorMsg
+	}
+
+	// Known error codes get a one-line hint. These are the
+	// patterns we've seen bite us; extend as we learn more.
+	hint := ""
+	switch env.ErrCode {
+	case 208: // Network connection to peer refused
+		hint = " (operator unreachable — usually transient, retry; if persistent, check cluster health with the EdgeLake Terminal extension's `test network` command)"
+	case 16: // SQL Failure
+		hint = " (the SQL parsed but failed at execution — check table existence and column types via list_edgelake_tables / get_edgelake_table_schema)"
+	case 46: // Failed to parse SQL statement
+		hint = " (EdgeLake's SQL parser rejected the query — see the connection-type guidance for the subset of Postgres syntax it accepts)"
+	case 134: // Error in SQL Select statement
+		hint = " (SELECT statement error — usually an unsupported function like EXTRACT or DATE_TRUNC; see the connection-type guidance)"
+	}
+
+	if detail != "" {
+		return fmt.Errorf("EdgeLake error (%s, code %d): %s%s", env.ErrText, env.ErrCode, detail, hint)
+	}
+	return fmt.Errorf("EdgeLake error (code %d): %s%s", env.ErrCode, env.ErrText, hint)
+}
+
 // parseQueryResponseRegistry parses EdgeLake response into registry.ResultSet
 func (a *EdgeLakeAdapter) parseQueryResponseRegistry(body []byte) (*registry.ResultSet, error) {
 	bodyStr := strings.TrimSpace(string(body))
@@ -386,6 +451,13 @@ func (a *EdgeLakeAdapter) parseQueryResponseRegistry(body []byte) (*registry.Res
 			Columns: []string{},
 			Rows:    [][]interface{}{},
 		}, nil
+	}
+
+	// EdgeLake returns its own error responses as JSON envelopes with
+	// `err_code` + `err_text`. Detect those first so we surface a
+	// clean message instead of "unable to parse".
+	if elErr := formatEdgeLakeError(body); elErr != nil {
+		return nil, elErr
 	}
 
 	var queryResult struct {
@@ -620,6 +692,12 @@ func (e *EdgeLakeDataSource) parseQueryResponse(body []byte) (*models.ResultSet,
 			Columns: []string{},
 			Rows:    [][]interface{}{},
 		}, nil
+	}
+
+	// Error envelope (peer refused / SQL parser rejection / etc.) — surface a
+	// clean message before attempting to parse as a successful response shape.
+	if elErr := formatEdgeLakeError(body); elErr != nil {
+		return nil, elErr
 	}
 
 	// Try parsing as {"Query": [...]} format
