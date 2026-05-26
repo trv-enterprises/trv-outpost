@@ -649,9 +649,11 @@ button.cds--overflow-menu {
 // the dark layer background, that thin gray line is hard to see —
 // the section grouping reads as one long undifferentiated list.
 //
-// Bump the divider line to a stronger contrast token and shrink
-// the header height so the rail's section breaks read as deliberate
-// gaps rather than wasted empty space.
+// Bump the divider line to a stronger contrast token so it's
+// visible in rail mode. The header band itself stays the same
+// 56px tall — shrinking it makes the section grouping disappear
+// entirely because the empty band is what reads as "section
+// break" alongside the line.
 //
 // SideNav class application (per @carbon/react SideNav.js):
 //   - `.cds--side-nav--expanded` fires when expanded
@@ -665,8 +667,6 @@ button.cds--overflow-menu {
 .cds--side-nav:not(.cds--side-nav--expanded) {
   .design-mode-nav .nav-header,
   .manage-mode-nav .nav-header {
-    height: spacing.$spacing-05;
-    padding: 0;
     border-bottom-color: var(--cds-border-strong-01);
   }
 
