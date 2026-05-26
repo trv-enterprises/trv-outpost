@@ -97,3 +97,165 @@
     min-height: 3.5rem;
   }
 }
+
+// ── Body content: message list + tool cards (step 10) ───────────
+
+.assistant-sidecard__body {
+  // Body still wraps everything; constrain so the cds--inline-notification
+  // doesn't stretch oddly.
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-04;
+}
+
+.assistant-sidecard__input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: spacing.$spacing-03;
+
+  .cds--form-item {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+  }
+}
+
+.assistant-messagelist {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-04;
+  overflow-y: auto;
+  min-height: 0;
+
+  &--empty {
+    color: var(--cds-text-helper);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    flex: 0 0 auto;
+  }
+
+  &__hint {
+    margin-top: spacing.$spacing-03;
+    font-style: italic;
+    color: var(--cds-text-helper);
+
+    em {
+      font-style: normal;
+      background: var(--cds-layer-02);
+      padding: 0 0.25rem;
+      border-radius: 2px;
+      color: var(--cds-text-primary);
+    }
+  }
+
+  &__pending {
+    padding: spacing.$spacing-03 0;
+  }
+}
+
+.assistant-message {
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+
+  &--user {
+    align-self: flex-end;
+
+    .assistant-message__content {
+      background: var(--cds-layer-selected-01);
+      color: var(--cds-text-primary);
+      padding: spacing.$spacing-03 spacing.$spacing-04;
+      border-radius: 6px;
+    }
+  }
+
+  &--assistant {
+    align-self: flex-start;
+
+    .assistant-message__content {
+      color: var(--cds-text-primary);
+    }
+  }
+
+  &__paragraph {
+    margin: 0;
+    line-height: 1.5;
+    font-size: 0.875rem;
+
+    & + & {
+      margin-top: spacing.$spacing-03;
+    }
+  }
+}
+
+.assistant-toolcall {
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  background: var(--cds-layer-02);
+  overflow: hidden;
+
+  &__header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    background: transparent;
+    border: none;
+    color: var(--cds-text-primary);
+    padding: spacing.$spacing-02 spacing.$spacing-03;
+    cursor: pointer;
+    font: inherit;
+
+    &:hover {
+      background: var(--cds-layer-hover-02);
+    }
+  }
+
+  &__chevron {
+    display: inline-flex;
+    color: var(--cds-icon-secondary);
+  }
+
+  &__icon {
+    color: var(--cds-icon-secondary);
+  }
+
+  &__name {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--cds-text-primary);
+  }
+
+  &__args {
+    flex: 1 1 auto;
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+
+  &__meta {
+    color: var(--cds-text-helper);
+    font-size: 0.7rem;
+  }
+
+  &__body {
+    border-top: 1px solid var(--cds-border-subtle-01);
+    padding: spacing.$spacing-03;
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+  }
+
+  &__section-label {
+    font-size: 0.6875rem;
+    color: var(--cds-text-helper);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: spacing.$spacing-02;
+  }
+}

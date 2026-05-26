@@ -2,9 +2,11 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useCallback, useEffect, useRef } from 'react';
-import { IconButton } from '@carbon/react';
-import { Close, Settings } from '@carbon/icons-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { IconButton, Button, TextArea, InlineNotification } from '@carbon/react';
+import { Close, Settings, Send } from '@carbon/icons-react';
+import useAssistantSession from '../../hooks/useAssistantSession';
+import AssistantMessageList from './AssistantMessageList';
 import './AssistantSidecard.scss';
 
 /**
@@ -12,9 +14,9 @@ import './AssistantSidecard.scss';
  * panel. Slides in from the right edge of the viewport; resizable
  * via a drag handle on its left edge.
  *
- * Step 9 ships the chrome: header (title + namespace/model line +
- * cog + close), resizable body container, footer placeholder.
- * Step 10 mounts the message list. Step 11 wires SSE.
+ * Step 9 shipped the chrome. Step 10 (this commit) wires the
+ * conversation: message list + input + send. Step 11 swaps the
+ * polling refetch for SSE so deltas arrive token-by-token.
  *
  * Props:
  *   - open: boolean
@@ -39,6 +41,10 @@ export default function AssistantSidecard({
   const draggingRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(width);
+
+  const session = useAssistantSession();
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef(null);
 
   const handleDragStart = useCallback((e) => {
     draggingRef.current = true;
@@ -75,7 +81,33 @@ export default function AssistantSidecard({
     };
   }, [open, onResize]);
 
+  // Auto-focus the input when the sidecard opens so the user can
+  // start typing immediately.
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus?.();
+    }
+  }, [open]);
+
+  const handleSend = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || session.sending) return;
+    setDraft('');
+    await session.sendMessage(text);
+  }, [draft, session]);
+
+  const handleKeyDown = useCallback((e) => {
+    // Enter sends, Shift-Enter newline. Carbon's TextArea fires
+    // onKeyDown on the native textarea so the keys work naturally.
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
   if (!open) return null;
+
+  const canSend = draft.trim().length > 0 && !session.sending;
 
   return (
     <aside
@@ -123,17 +155,46 @@ export default function AssistantSidecard({
       </header>
 
       <div className="assistant-sidecard__body">
-        {/* Step 10 mounts the message list here. */}
-        <div className="assistant-sidecard__empty">
-          <p>The assistant is ready, but message rendering and the input box land in the next two commits.</p>
-          <p className="assistant-sidecard__empty-hint">
-            Once steps 10 and 11 land, this is where you&apos;ll see the conversation and type to the assistant.
-          </p>
-        </div>
+        {session.error && (
+          <InlineNotification
+            kind="error"
+            title="Assistant error"
+            subtitle={session.error}
+            hideCloseButton
+            lowContrast
+          />
+        )}
+        <AssistantMessageList
+          messages={session.messages}
+          sending={session.sending}
+        />
       </div>
 
       <footer className="assistant-sidecard__footer">
-        {/* Step 11 mounts the input + send button here. */}
+        <div className="assistant-sidecard__input-row">
+          <TextArea
+            ref={inputRef}
+            id="assistant-input"
+            labelText=""
+            hideLabel
+            placeholder="Ask the assistant…"
+            value={draft}
+            rows={2}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={session.sending}
+          />
+          <Button
+            kind="primary"
+            size="md"
+            renderIcon={Send}
+            iconDescription="Send"
+            onClick={handleSend}
+            disabled={!canSend}
+          >
+            Send
+          </Button>
+        </div>
       </footer>
     </aside>
   );
