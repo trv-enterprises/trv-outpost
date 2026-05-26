@@ -180,7 +180,16 @@ async function resolveSidebarCredentials() {
     url = store.get('sidebar.serverUrl') || 'http://127.0.0.1:3001';
   }
 
-  if (!key) return null;
+  if (!key) {
+    console.log('[sidebar] resolveSidebarCredentials: no key found (case c — no creds)');
+    return null;
+  }
+  // Log which path won. Truncate the key so it doesn't end up in
+  // a screenshot during a demo.
+  const source = dashboardCred?.key === key || (dashboardCred?.encryptedKey && key.startsWith('trve_'))
+    ? 'dashboard-credential (case a)'
+    : 'sidebar-only key (case b)';
+  console.log(`[sidebar] resolveSidebarCredentials: ${source}, key=${key.slice(0, 10)}…, url=${url}`);
   return { url, key };
 }
 

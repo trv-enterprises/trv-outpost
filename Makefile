@@ -212,4 +212,77 @@ clean: ## Clean build artifacts
 	rm -rf client/dist/
 	@echo "✓ Cleaned"
 
+# ---------------------------------------------------------------------------
+# Electron sidebar test helpers
+# ---------------------------------------------------------------------------
+# The desktop app stores user data under macOS's per-app userData dir.
+# These targets help test the bootstrap / credential / workspace paths
+# without needing to manually rm -rf the right files.
+#
+# Platform note: paths below are macOS-specific. When we ship Linux /
+# Windows builds, USERDATA_DIR will need to branch on `uname`.
+USERDATA_DIR := $$HOME/Library/Application Support/trve-dashboards
+SIDEBAR_WORKSPACE := $(USERDATA_DIR)/sidebar-workspace
+SIDEBAR_CONFIG := $(USERDATA_DIR)/trve-dashboards-config.json
+
+sidebar-clear-creds: ## Wipe just the dashboard credentials (forces sign-in next launch)
+	@if pgrep -fl "dashboard/electron" >/dev/null 2>&1; then \
+		echo "⚠️  TRVE Dashboards Electron app appears to be running."; \
+		echo "    Quit it first (Cmd-Q in the app) — electron-store writes"; \
+		echo "    state on exit and may resurrect the file you're deleting."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(SIDEBAR_CONFIG)" ]; then \
+		echo "· No config file at $(SIDEBAR_CONFIG) — nothing to clear."; \
+	else \
+		rm -f "$(SIDEBAR_CONFIG)"; \
+		echo "✓ Deleted $(SIDEBAR_CONFIG)"; \
+		echo "  Next dashboard launch will prompt for server URL + API key."; \
+		echo "  Sidebar will fall back to its own key (if set) or to the no-creds error."; \
+	fi
+
+sidebar-reset-workspace: ## Re-copy .mcp.json + CLAUDE.md from the packaged template
+	@if [ ! -d "$(SIDEBAR_WORKSPACE)" ]; then \
+		echo "· No workspace at $(SIDEBAR_WORKSPACE) — nothing to reset."; \
+		echo "  Next sidebar open will bootstrap from the template."; \
+	else \
+		rm -rf "$(SIDEBAR_WORKSPACE)"; \
+		echo "✓ Deleted $(SIDEBAR_WORKSPACE)"; \
+		echo "  Next sidebar open will re-copy from"; \
+		echo "  electron/resources/sidebar-workspace-template/"; \
+	fi
+
+sidebar-clean-all: ## Nuke ALL Electron app userData (cookies, cache, store, workspace)
+	@if pgrep -fl "dashboard/electron" >/dev/null 2>&1; then \
+		echo "⚠️  TRVE Dashboards Electron app appears to be running."; \
+		echo "    Quit it first (Cmd-Q) — running renderers hold open files"; \
+		echo "    that this rm -rf would leave half-deleted."; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(USERDATA_DIR)" ]; then \
+		echo "· No userData dir at $(USERDATA_DIR) — nothing to clean."; \
+	else \
+		echo "⚠️  Removing $(USERDATA_DIR)"; \
+		echo "    This nukes credentials, cookies, localStorage, cache,"; \
+		echo "    sidebar workspace, and all other Electron state."; \
+		rm -rf "$(USERDATA_DIR)"; \
+		echo "✓ Cleaned. Next app launch is a fully-fresh install."; \
+	fi
+
+sidebar-inspect: ## Show what's currently in the Electron userData dir
+	@echo "userData dir: $(USERDATA_DIR)"
+	@if [ ! -d "$(USERDATA_DIR)" ]; then \
+		echo "  (does not exist)"; \
+	else \
+		echo "  contents:"; \
+		ls -la "$(USERDATA_DIR)" | sed 's/^/    /'; \
+		echo ""; \
+		if [ -d "$(SIDEBAR_WORKSPACE)" ]; then \
+			echo "sidebar workspace contents:"; \
+			ls -la "$(SIDEBAR_WORKSPACE)" | sed 's/^/    /'; \
+		else \
+			echo "sidebar workspace: not yet created (will be on first sidebar open)"; \
+		fi; \
+	fi
+
 .DEFAULT_GOAL := help
