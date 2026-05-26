@@ -1314,6 +1314,34 @@ class APIClient {
     });
   }
 
+  // ── Snippets (generic per-surface saved-command library) ──────────
+  // A snippet belongs to a host surface ("context"), e.g.
+  // "edgelake-terminal". User snippets are private to the caller;
+  // global snippets are visible to everyone and editable only by
+  // Manage-capable users. The list endpoint stamps `can_edit` per
+  // row so the client doesn't reimplement the gate.
+  async listSnippets(context) {
+    return this.request(`/api/snippets?context=${encodeURIComponent(context)}`);
+  }
+
+  async createSnippet({ scope, context, title, command, tags = [] } = {}) {
+    return this.request('/api/snippets', {
+      method: 'POST',
+      body: JSON.stringify({ scope, context, title, command, tags }),
+    });
+  }
+
+  async updateSnippet(id, { title, command, tags = [] } = {}) {
+    return this.request(`/api/snippets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title, command, tags }),
+    });
+  }
+
+  async deleteSnippet(id) {
+    return this.request(`/api/snippets/${id}`, { method: 'DELETE' });
+  }
+
   // ── Alerts (persisted bell-panel records) ─────────────────────────
   // Live alerts still arrive via SSE (/api/events/stream); these
   // endpoints back the bell-on-load hydrate and the per-row dismiss

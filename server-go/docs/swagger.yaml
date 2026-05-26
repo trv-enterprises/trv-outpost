@@ -1156,6 +1156,26 @@ definitions:
     required:
     - name
     type: object
+  models.CreateSnippetRequest:
+    properties:
+      command:
+        type: string
+      context:
+        type: string
+      scope:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    required:
+    - command
+    - context
+    - scope
+    - title
+    type: object
   models.CreateUserRequest:
     description: Request body for creating a new user
     properties:
@@ -2145,6 +2165,65 @@ definitions:
         description: Column containing timestamps
         type: string
     type: object
+  models.Snippet:
+    properties:
+      command:
+        type: string
+      context:
+        description: e.g. "edgelake-terminal"
+        type: string
+      created:
+        type: string
+      id:
+        type: string
+      owner_user_id:
+        type: string
+      scope:
+        description: '"user" | "global"'
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      updated:
+        type: string
+    type: object
+  models.SnippetListResponse:
+    properties:
+      snippets:
+        items:
+          $ref: '#/definitions/models.SnippetResponse'
+        type: array
+    type: object
+  models.SnippetResponse:
+    properties:
+      can_edit:
+        type: boolean
+      command:
+        type: string
+      context:
+        description: e.g. "edgelake-terminal"
+        type: string
+      created:
+        type: string
+      id:
+        type: string
+      owner_user_id:
+        type: string
+      scope:
+        description: '"user" | "global"'
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      updated:
+        type: string
+    type: object
   models.SocketConfig:
     properties:
       bidirectional:
@@ -2676,6 +2755,20 @@ definitions:
       value: {}
     required:
     - value
+    type: object
+  models.UpdateSnippetRequest:
+    properties:
+      command:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    required:
+    - command
+    - title
     type: object
   models.UpdateUserRequest:
     description: Request body for updating an existing user
@@ -4944,6 +5037,165 @@ paths:
       summary: Update a setting
       tags:
       - settings
+  /api/snippets:
+    get:
+      description: Returns the merged set of user-scoped snippets owned by the caller
+        plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`).
+        Each record carries a `can_edit` flag derived from the caller's capabilities
+        — global snippets are only editable by users with Manage capability.
+      parameters:
+      - description: Host surface key (e.g. edgelake-terminal)
+        in: query
+        name: context
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SnippetListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List snippets visible to the caller for a given host surface
+      tags:
+      - snippets
+    post:
+      consumes:
+      - application/json
+      description: Create a user snippet (default) or a global snippet (requires Manage
+        capability). The `scope` field is immutable after creation — promote a user
+        snippet to global by deleting and re-creating.
+      parameters:
+      - description: Snippet payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateSnippetRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Snippet'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a snippet
+      tags:
+      - snippets
+  /api/snippets/{id}:
+    delete:
+      description: Same ownership and capability rules as update.
+      parameters:
+      - description: Snippet ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a snippet
+      tags:
+      - snippets
+    put:
+      consumes:
+      - application/json
+      description: Edit title, command, and tags. Owner can edit user snippets; Manage
+        capability required to edit globals.
+      parameters:
+      - description: Snippet ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Snippet payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateSnippetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Snippet'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a snippet
+      tags:
+      - snippets
   /api/ws/status:
     get:
       description: WebSocket endpoint that pushes server status at specified intervals

@@ -2590,6 +2590,237 @@
                 }
             }
         },
+        "/api/snippets": {
+            "get": {
+                "description": "Returns the merged set of user-scoped snippets owned by the caller plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`). Each record carries a `can_edit` flag derived from the caller's capabilities — global snippets are only editable by users with Manage capability.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "List snippets visible to the caller for a given host surface",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host surface key (e.g. edgelake-terminal)",
+                        "name": "context",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SnippetListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a user snippet (default) or a global snippet (requires Manage capability). The `scope` field is immutable after creation — promote a user snippet to global by deleting and re-creating.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Create a snippet",
+                "parameters": [
+                    {
+                        "description": "Snippet payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateSnippetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Snippet"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/snippets/{id}": {
+            "put": {
+                "description": "Edit title, command, and tags. Owner can edit user snippets; Manage capability required to edit globals.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Update a snippet",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snippet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Snippet payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateSnippetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Snippet"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Same ownership and capability rules as update.",
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Delete a snippet",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snippet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/ws/status": {
             "get": {
                 "description": "WebSocket endpoint that pushes server status at specified intervals",
@@ -7313,6 +7544,35 @@
                 }
             }
         },
+        "models.CreateSnippetRequest": {
+            "type": "object",
+            "required": [
+                "command",
+                "context",
+                "scope",
+                "title"
+            ],
+            "properties": {
+                "command": {
+                    "type": "string"
+                },
+                "context": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "models.CreateUserRequest": {
             "description": "Request body for creating a new user",
             "type": "object",
@@ -8719,6 +8979,94 @@
                 }
             }
         },
+        "models.Snippet": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string"
+                },
+                "context": {
+                    "description": "e.g. \"edgelake-terminal\"",
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "description": "\"user\" | \"global\"",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SnippetListResponse": {
+            "type": "object",
+            "properties": {
+                "snippets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SnippetResponse"
+                    }
+                }
+            }
+        },
+        "models.SnippetResponse": {
+            "type": "object",
+            "properties": {
+                "can_edit": {
+                    "type": "boolean"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "context": {
+                    "description": "e.g. \"edgelake-terminal\"",
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "description": "\"user\" | \"global\"",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "string"
+                }
+            }
+        },
         "models.SocketConfig": {
             "type": "object",
             "required": [
@@ -9440,6 +9788,27 @@
             ],
             "properties": {
                 "value": {}
+            }
+        },
+        "models.UpdateSnippetRequest": {
+            "type": "object",
+            "required": [
+                "command",
+                "title"
+            ],
+            "properties": {
+                "command": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
             }
         },
         "models.UpdateUserRequest": {

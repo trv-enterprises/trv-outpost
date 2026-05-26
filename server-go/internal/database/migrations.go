@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -34,6 +36,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"users_kind_human_default_v1", migrateUsersKindHumanDefault},
 		{"strip_literal_secret_sentinels_v1", migrateStripLiteralSecretSentinels},
 		{"users_backfill_control_capability_v1", migrateBackfillControlCapability},
+		{"seed_global_snippets_v1", migrateSeedGlobalSnippetsV1},
 	}
 
 	coll := db.Collection("migrations")
@@ -653,5 +656,67 @@ func migrateStripLiteralSecretSentinels(ctx context.Context, db *mongo.Database)
 		cur.Close(ctx)
 	}
 	log.Printf("  connections: stripped %d total literal-sentinel secret occurrences", totalModified)
+	return nil
+}
+
+// migrateSeedGlobalSnippetsV1 seeds a small starter pack of global
+// snippets for the EdgeLake terminal on first boot. The migrations
+// framework only runs this once; an admin who deletes a seeded
+// snippet keeps it deleted, and no future deploy re-seeds.
+//
+// Snippets here are intentionally EdgeLake-flavored — the snippets
+// panel is a generic primitive, but the first surface that mounts it
+// is the EdgeLake terminal, so the starter pack matches that surface.
+// Other surfaces (MQTT publisher, SQL ad-hoc, etc.) get their own
+// per-context seed migration when they ship.
+func migrateSeedGlobalSnippetsV1(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("snippets")
+
+	// Defensive — if any globals already exist for this context (e.g.
+	// an admin manually inserted some), don't add the starter pack.
+	count, err := coll.CountDocuments(ctx, bson.M{
+		"context": "edgelake-terminal",
+		"scope":   "global",
+	})
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		log.Printf("  snippets: edgelake-terminal globals already present (%d) — skipping seed", count)
+		return nil
+	}
+
+	now := time.Now()
+	type starterRow struct {
+		Title   string
+		Command string
+		Tags    []string
+	}
+	starter := []starterRow{
+		{"GET STATUS", "get status", []string{"Investigation"}},
+		{"GET CONNECTIONS", "get connections", []string{"Investigation"}},
+		{"GET SERVERS", "get servers", []string{"Investigation"}},
+		{"TEST NETWORK", "test network", []string{"Network"}},
+		{"BLOCKCHAIN GET OPERATOR", "blockchain get table where type=operator", []string{"Network"}},
+		{"SET DEBUG ON", "set debug on", []string{"Debug"}},
+	}
+
+	docs := make([]interface{}, 0, len(starter))
+	for _, s := range starter {
+		docs = append(docs, bson.M{
+			"_id":     uuid.New().String(),
+			"scope":   "global",
+			"context": "edgelake-terminal",
+			"title":   s.Title,
+			"command": s.Command,
+			"tags":    s.Tags,
+			"created": now,
+			"updated": now,
+		})
+	}
+	if _, err := coll.InsertMany(ctx, docs); err != nil {
+		return err
+	}
+	log.Printf("  snippets: seeded %d global starter snippets for edgelake-terminal", len(docs))
 	return nil
 }

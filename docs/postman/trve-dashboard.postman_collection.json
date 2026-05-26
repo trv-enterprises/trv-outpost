@@ -4462,6 +4462,166 @@
       ]
     },
     {
+      "name": "snippets",
+      "description": "snippets endpoints (4).",
+      "item": [
+        {
+          "name": "Create a snippet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/snippets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "snippets"
+              ]
+            },
+            "description": "Create a snippet\n\nCreate a user snippet (default) or a global snippet (requires Manage capability). The `scope` field is immutable after creation — promote a user snippet to global by deleting and re-creating.\n\n\nResponses: 201, 400, 401, 403",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"command\": \"\",\n  \"context\": \"\",\n  \"scope\": \"\",\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a snippet",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/snippets/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "snippets",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Snippet ID"
+                }
+              ]
+            },
+            "description": "Delete a snippet\n\nSame ownership and capability rules as update.\n\n\nResponses: 204, 401, 403, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List snippets visible to the caller for a given host surface",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/snippets?context=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "snippets"
+              ],
+              "query": [
+                {
+                  "key": "context",
+                  "value": "",
+                  "description": "Host surface key (e.g. edgelake-terminal)",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "List snippets visible to the caller for a given host surface\n\nReturns the merged set of user-scoped snippets owned by the caller plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`). Each record carries a `can_edit` flag derived from the caller's capabilities — global snippets are only editable by users with Manage capability.\n\n\nResponses: 200, 400, 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Update a snippet",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/snippets/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "snippets",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Snippet ID"
+                }
+              ]
+            },
+            "description": "Update a snippet\n\nEdit title, command, and tags. Owner can edit user snippets; Manage capability required to edit globals.\n\n\nResponses: 200, 400, 401, 403, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"command\": \"\",\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "System",
       "description": "system endpoints (2).",
       "item": [

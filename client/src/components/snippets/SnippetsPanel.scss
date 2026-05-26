@@ -1,0 +1,245 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.snippets-panel {
+  display: flex;
+  flex-direction: column;
+  width: 18rem;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  color: var(--cds-text-primary);
+  font-size: 0.8125rem;
+  min-height: 0; // allow flex children to shrink
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: spacing.$spacing-03 spacing.$spacing-04;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+    background: var(--cds-layer-accent-01);
+  }
+
+  &__title {
+    font-weight: 600;
+    color: var(--cds-text-primary);
+  }
+
+  &__search-row {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    padding: spacing.$spacing-03;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+
+    .cds--search {
+      flex: 1 1 auto;
+    }
+  }
+
+  &__help-wrap {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  &__list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: spacing.$spacing-02 0;
+  }
+
+  &__loading,
+  &__empty,
+  &__error {
+    padding: spacing.$spacing-04;
+    color: var(--cds-text-helper);
+    font-style: italic;
+  }
+
+  &__error {
+    color: var(--cds-text-error);
+  }
+
+  &__group--untagged {
+    margin-bottom: spacing.$spacing-03;
+  }
+
+  &__folder {
+    border-top: 1px solid var(--cds-border-subtle-00);
+  }
+
+  &__folder-header {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--cds-text-secondary);
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    cursor: pointer;
+    padding: spacing.$spacing-02 spacing.$spacing-04;
+
+    &:hover {
+      background: var(--cds-layer-hover-01);
+    }
+  }
+
+  &__folder-name {
+    flex: 1 1 auto;
+    text-align: left;
+  }
+
+  &__folder-count {
+    color: var(--cds-text-helper);
+    font-weight: 400;
+  }
+
+  &__folder-items {
+    padding-bottom: spacing.$spacing-02;
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    padding: spacing.$spacing-03 spacing.$spacing-04;
+    border-top: 1px solid var(--cds-border-subtle-01);
+    background: var(--cds-layer-accent-01);
+  }
+
+  &__footer-spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.snippet-row {
+  display: flex;
+  align-items: center;
+  gap: spacing.$spacing-02;
+  padding: spacing.$spacing-02 spacing.$spacing-04;
+  cursor: pointer;
+  user-select: none;
+  color: var(--cds-text-primary);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  border-left: 2px solid transparent;
+
+  &:hover {
+    background: var(--cds-layer-hover-01);
+  }
+
+  &--selected {
+    background: var(--cds-layer-selected-01);
+    border-left-color: var(--cds-border-interactive);
+
+    &:hover {
+      background: var(--cds-layer-selected-hover-01);
+    }
+  }
+
+  &__icon {
+    flex: 0 0 auto;
+    color: var(--cds-icon-secondary);
+  }
+
+  &__global-marker {
+    flex: 0 0 auto;
+    color: var(--cds-link-primary);
+  }
+
+  &__title {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+// Edit modal — chip-style tag input and error rendering.
+.snippet-edit-modal {
+  &__field {
+    margin-bottom: spacing.$spacing-05;
+  }
+
+  &__tags-field {
+    .cds--label {
+      display: block;
+      margin-bottom: spacing.$spacing-02;
+    }
+  }
+
+  &__tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    padding: spacing.$spacing-02;
+    background: var(--cds-field-01);
+    border-bottom: 1px solid var(--cds-border-strong-01);
+    min-height: 2.5rem;
+  }
+
+  &__tag-input {
+    flex: 1 1 6rem;
+    min-width: 6rem;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--cds-text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+  }
+
+  &__hint {
+    color: var(--cds-text-helper);
+    font-size: 0.75rem;
+    margin: spacing.$spacing-02 0 0;
+  }
+
+  &__error {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    color: var(--cds-text-error);
+    font-size: 0.8125rem;
+    margin-top: spacing.$spacing-03;
+  }
+}
+
+// Popover help content — Carbon Popover gives us the container; we
+// style the inner content here.
+.snippets-search-help {
+  padding: spacing.$spacing-04;
+  font-size: 0.8125rem;
+  color: var(--cds-text-primary);
+  max-width: 20rem;
+
+  p {
+    margin: 0 0 spacing.$spacing-03;
+  }
+
+  ul {
+    margin: 0 0 spacing.$spacing-03;
+    padding-left: 1.25rem;
+
+    li {
+      margin-bottom: spacing.$spacing-02;
+    }
+  }
+
+  code {
+    background: var(--cds-layer-accent-01);
+    padding: 0 0.25rem;
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--cds-text-primary);
+  }
+}

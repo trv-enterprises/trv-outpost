@@ -144,6 +144,7 @@ func main() {
 	apiKeyRepo := repository.NewAPIKeyRepository(mongodb.Database)
 	alertRepo := repository.NewAlertRepository(mongodb.Database)
 	webhookSecretRepo := repository.NewWebhookSecretRepository(mongodb.Database)
+	snippetRepo := repository.NewSnippetRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := componentRepo.CreateIndexes(ctx); err != nil {
@@ -190,6 +191,11 @@ func main() {
 		log.Printf("Warning: Failed to create API key indexes: %v", err)
 	}
 
+	// Create snippet indexes
+	if err := snippetRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create snippet indexes: %v", err)
+	}
+
 	// Create alert indexes (incl. TTL for retention sweep)
 	if err := webhookSecretRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("⚠ Failed to create webhook_secrets indexes: %v", err)
@@ -218,6 +224,7 @@ func main() {
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, connectionRepo)
 	deviceDiscoveryService := service.NewDeviceDiscoveryService(connectionRepo, deviceTypeRepo, deviceRepo)
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
+	snippetService := service.NewSnippetService(snippetRepo)
 
 	// Namespace service with the three entity repos wired in. Each repo
 	// implements CountByNamespace + RenameNamespace so the service's
@@ -332,6 +339,7 @@ func main() {
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyService)
+	snippetHandler := handlers.NewSnippetHandler(snippetService)
 	systemUserHandler := handlers.NewSystemUserHandler(userService, apiKeyService)
 	eventHub := service.NewEventHub()
 	eventsHandler := handlers.NewEventsHandler(eventHub)
@@ -666,6 +674,19 @@ func main() {
 			apiKeys.POST("", apiKeyHandler.CreateAPIKey)
 			apiKeys.GET("/all", apiKeyHandler.ListAllAPIKeys) // admin
 			apiKeys.DELETE("/:id", apiKeyHandler.RevokeAPIKey)
+		}
+
+		// Snippets routes — generic across host surfaces (EdgeLake
+		// terminal today, MQTT publisher / SQL ad-hoc tomorrow). User
+		// snippets are private to the caller; global snippets are
+		// editable only by users with Manage capability (the service
+		// layer enforces).
+		snippets := api.Group("/snippets")
+		{
+			snippets.GET("", snippetHandler.ListSnippets)
+			snippets.POST("", snippetHandler.CreateSnippet)
+			snippets.PUT("/:id", snippetHandler.UpdateSnippet)
+			snippets.DELETE("/:id", snippetHandler.DeleteSnippet)
 		}
 
 		// Namespace routes

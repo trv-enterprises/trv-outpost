@@ -15,9 +15,10 @@ import {
   NumberInput,
   Tag,
 } from '@carbon/react';
-import { Play, TrashCan, RecordingFilled, Stop, Close } from '@carbon/icons-react';
+import { Play, TrashCan, RecordingFilled, Stop, Close, SidePanelClose, SidePanelOpen } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
+import SnippetsPanel from '../components/snippets/SnippetsPanel';
 import './EdgeLakeTerminalPage.scss';
 
 /**
@@ -43,6 +44,9 @@ const MIN_TIMEOUT_SECONDS = 1;
 const MAX_TIMEOUT_SECONDS = 300;
 
 const RECENT_DESTINATIONS_KEY = 'edgelake-terminal:recent-destinations';
+const SNIPPETS_OPEN_PREF_KEY = 'edgelake_terminal.snippets_panel_open';
+const SNIPPETS_OPEN_LOCAL_KEY = 'edgelake-terminal:snippets-open';
+const SNIPPETS_CONTEXT = 'edgelake-terminal';
 const MAX_RECENT_DESTINATIONS = 12;
 // Always-offered destinations.
 //   ""           → connection node (the EdgeLake node this connection
@@ -167,6 +171,22 @@ function EdgeLakeTerminalPage() {
 
   const transcriptRef = useRef(null);
   const inputRef = useRef(null);
+  // Last successfully-executed command — used to seed the snippets-
+  // panel "+" modal when the input field is empty.
+  const lastSuccessfulCommandRef = useRef('');
+
+  // Snippets-panel state. Seeded from localStorage for instant render;
+  // server-side user-pref is loaded async and overrides when present.
+  const [snippetsOpen, setSnippetsOpen] = useState(() => {
+    try {
+      const v = window.localStorage.getItem(SNIPPETS_OPEN_LOCAL_KEY);
+      if (v === 'false') return false;
+      return true;
+    } catch {
+      return true;
+    }
+  });
+  const [canManage, setCanManage] = useState(false);
 
   // Load EdgeLake-type connections. Use TypeID match where present,
   // fall back to legacy `type`.
@@ -198,6 +218,70 @@ function EdgeLakeTerminalPage() {
     }
   }, [history]);
 
+  // Bootstrap: capabilities (for Global checkbox gate) and persisted
+  // panel-open preference. Both are best-effort — failures fall back
+  // to safe defaults (can_manage=false, localStorage preference).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await apiClient.getCurrentUser();
+        if (!cancelled) setCanManage(!!me?.can_manage);
+      } catch { /* leave canManage=false */ }
+    })();
+    (async () => {
+      const userGuid = apiClient.getCurrentUserGuid?.();
+      if (!userGuid) return;
+      try {
+        const cfg = await apiClient.getUserConfig?.(userGuid);
+        const v = cfg?.settings?.[SNIPPETS_OPEN_PREF_KEY];
+        if (!cancelled && typeof v === 'boolean') {
+          setSnippetsOpen(v);
+        }
+      } catch { /* keep local default */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist panel-open changes: localStorage for instant next-render,
+  // user-config for cross-device. User-config write is best-effort.
+  const toggleSnippetsPanel = () => {
+    setSnippetsOpen((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(SNIPPETS_OPEN_LOCAL_KEY, String(next)); } catch { /* ignore */ }
+      const userGuid = apiClient.getCurrentUserGuid?.();
+      if (userGuid && apiClient.updateUserConfig) {
+        apiClient.updateUserConfig(userGuid, { [SNIPPETS_OPEN_PREF_KEY]: next })
+          .catch(() => { /* best-effort */ });
+      }
+      return next;
+    });
+  };
+
+  const getPrefillCommand = () => {
+    const draft = command.trim();
+    if (draft) return draft;
+    return lastSuccessfulCommandRef.current || '';
+  };
+
+  const pasteToInput = (text) => {
+    setCommand(text);
+    inputRef.current?.focus?.();
+  };
+
+  const pasteAndSubmit = (text) => {
+    setCommand(text);
+    // Submit on the next tick so React applies the setCommand first.
+    setTimeout(() => {
+      if (!busy && connectionId) {
+        // Mirror handleSubmit, but with the snippet command rather than
+        // whatever's in state (which may not have applied yet).
+        const cmd = text.trim();
+        if (cmd) submitCommand(cmd);
+      }
+    }, 0);
+  };
+
   const supportsFSAccess = useMemo(
     () => typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function',
     [],
@@ -223,6 +307,15 @@ function EdgeLakeTerminalPage() {
     e?.preventDefault?.();
     const cmd = command.trim();
     if (!cmd || !connectionId || busy) return;
+    await submitCommand(cmd);
+  };
+
+  // Run a specific command string. Called by both the form submit and
+  // the snippets panel (double-click / Run button). The form-submit
+  // path passes the trimmed command-field text; the snippets path
+  // passes the snippet command directly.
+  const submitCommand = async (cmd) => {
+    if (!cmd || !connectionId || busy) return;
 
     setBusy(true);
     const started = Date.now();
@@ -231,6 +324,7 @@ function EdgeLakeTerminalPage() {
     const ctl = new AbortController();
     abortControllerRef.current = ctl;
     let entry;
+    let succeeded = false;
     try {
       const result = await apiClient.executeEdgeLakeCommand({
         connectionId,
@@ -248,6 +342,7 @@ function EdgeLakeTerminalPage() {
         destination: dest,
         method: result?.method || '',
       };
+      succeeded = true;
     } catch (err) {
       const message = ctl.signal.aborted
         ? 'Cancelled by user.'
@@ -262,6 +357,9 @@ function EdgeLakeTerminalPage() {
       };
     }
     abortControllerRef.current = null;
+    if (succeeded) {
+      lastSuccessfulCommandRef.current = cmd;
+    }
 
     // Remember user-typed peer destinations (not builtins) for the
     // ComboBox dropdown in future sessions.
@@ -557,6 +655,15 @@ function EdgeLakeTerminalPage() {
           >
             Clear
           </Button>
+          <Button
+            kind="ghost"
+            size="md"
+            renderIcon={snippetsOpen ? SidePanelClose : SidePanelOpen}
+            onClick={toggleSnippetsPanel}
+            iconDescription={snippetsOpen ? 'Hide snippets' : 'Show snippets'}
+            hasIconOnly
+            tooltipAlignment="end"
+          />
         </div>
 
         {recording && (
@@ -566,7 +673,9 @@ function EdgeLakeTerminalPage() {
         )}
       </div>
 
-      <div className="terminal-transcript" ref={transcriptRef}>
+      <div className="terminal-body">
+        <div className="terminal-body__main">
+        <div className="terminal-transcript" ref={transcriptRef}>
         {history.length === 0 ? (
           <div className="terminal-transcript__empty">
             No commands yet. Type a command below and press Enter.
@@ -637,6 +746,19 @@ function EdgeLakeTerminalPage() {
       </form>
 
       {busy && <Loading description="Sending command…" small withOverlay={false} />}
+        </div>
+
+        {snippetsOpen && (
+          <SnippetsPanel
+            context={SNIPPETS_CONTEXT}
+            canCreateGlobal={canManage}
+            onPaste={pasteToInput}
+            onActivate={pasteAndSubmit}
+            getPrefillCommand={getPrefillCommand}
+            onRequestClose={toggleSnippetsPanel}
+          />
+        )}
+      </div>
     </div>
   );
 }
