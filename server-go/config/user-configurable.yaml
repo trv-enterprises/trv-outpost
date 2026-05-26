@@ -103,3 +103,17 @@ settings:
     category: extensions
     description: "EdgeLake Terminal extension — interactive AnyLog/EdgeLake command shell at /design/extensions/edgelake-terminal. Sends raw commands to any EdgeLake connection and prints the response. Disable to hide the sidebar link, redirect the route, and 403 the backing API. Chart queries against EdgeLake connections are NOT affected — this gates the terminal page only. To disable EdgeLake support entirely, use the Type Availability setting (enabled_types)."
     value: true
+
+  # ─── AI Assistant (dashboard-wide chat assistant) ───────────────────
+  # A persistent chat assistant accessible from a header icon. Separate
+  # from the Component AI agent (which is scoped to one chart at a
+  # time) and from the Electron sidebar (which runs Claude Code as a
+  # subscription session). When disabled, the header icon does not
+  # render and the assistant routes return 404. Independent of the
+  # Component AI agent's availability — both gates apply only to their
+  # own surface. Both require ANTHROPIC_API_KEY to be set at server
+  # start; this setting is a soft kill-switch on top of that.
+  - key: assistant.enabled
+    category: ai
+    description: "Dashboard Assistant — chat agent accessible from the app header. Requires ANTHROPIC_API_KEY at server start; this is a soft kill-switch independent of the Component AI agent. Restart required for changes to take effect."
+    value: true

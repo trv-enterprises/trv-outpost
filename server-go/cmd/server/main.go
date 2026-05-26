@@ -321,12 +321,33 @@ func main() {
 		fmt.Println("✓ AI Agent enabled (Anthropic SDK)")
 	}
 
+	// Dashboard Assistant readiness — distinct from the Component AI
+	// agent above. Two switches: ANTHROPIC_API_KEY must be set (so the
+	// Anthropic SDK can reach the API) AND the admin setting
+	// `assistant.enabled` must be true. Read at boot only; flipping
+	// the setting takes effect on next server restart, same posture as
+	// the enabled_types ledger.
+	chatAgentReady := false
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		assistantEnabled, errAss := settingsService.GetSetting(ctx, "assistant.enabled")
+		if errAss != nil {
+			log.Printf("⚠️  assistant.enabled setting not found — Dashboard Assistant disabled: %v", errAss)
+		} else if v, ok := assistantEnabled.Value.(bool); ok && v {
+			chatAgentReady = true
+			fmt.Println("✓ Dashboard Assistant enabled")
+		} else {
+			fmt.Println("· Dashboard Assistant disabled by admin setting (assistant.enabled=false)")
+		}
+	} else {
+		fmt.Println("· Dashboard Assistant disabled (ANTHROPIC_API_KEY not set)")
+	}
+
 	// Initialize handlers
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chartHub)
-	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent)
+	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
 	debugHandler := handlers.NewDebugHandler()
 	streamHandler := handlers.NewStreamHandler(streamManager)
 	configHandler := handlers.NewConfigHandler(configService)

@@ -424,7 +424,7 @@ const docTemplate = `{
         },
         "/api/ai/availability": {
             "get": {
-                "description": "Returns whether the AI agent is enabled in this deployment. Enabled iff ANTHROPIC_API_KEY was set at server start.",
+                "description": "Returns per-surface availability flags. ` + "`" + `enabled` + "`" + ` is a legacy alias for ` + "`" + `component_agent_enabled` + "`" + `. The Component AI agent is enabled iff ANTHROPIC_API_KEY was set at server start. The Dashboard Assistant additionally requires the ` + "`" + `assistant.enabled` + "`" + ` admin setting to be true at boot.",
                 "produces": [
                     "application/json"
                 ],
@@ -436,10 +436,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
+                            "$ref": "#/definitions/handlers.AIAvailabilityResponse"
                         }
                     }
                 }
@@ -5961,6 +5958,21 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "handlers.AIAvailabilityResponse": {
+            "description": "Per-surface AI availability flags for the SPA bootstrap.",
+            "type": "object",
+            "properties": {
+                "chat_agent_enabled": {
+                    "type": "boolean"
+                },
+                "component_agent_enabled": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "handlers.CategoryInfo": {
             "type": "object",
             "properties": {

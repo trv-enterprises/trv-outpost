@@ -43,7 +43,7 @@
                 "availability"
               ]
             },
-            "description": "AI availability\n\nReturns whether the AI agent is enabled in this deployment. Enabled iff ANTHROPIC_API_KEY was set at server start.\n\n\nResponses: 200"
+            "description": "AI availability\n\nReturns per-surface availability flags. `enabled` is a legacy alias for `component_agent_enabled`. The Component AI agent is enabled iff ANTHROPIC_API_KEY was set at server start. The Dashboard Assistant additionally requires the `assistant.enabled` admin setting to be true at boot.\n\n\nResponses: 200"
           },
           "response": []
         },
