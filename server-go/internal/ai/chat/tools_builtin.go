@@ -347,10 +347,16 @@ func chartDataMappingSchema() map[string]interface{} {
 // DashboardPanel array. Inlining the {x, y, w, h} cell-unit
 // convention here prevents the model from guessing pixel coords
 // or forgetting which is width vs height.
+//
+// text_config is modeled as a real sub-object so the model knows
+// section-header panels are a first-class shape, not an
+// afterthought. Without an explicit schema the model rarely uses
+// text panels even though dashboard layout discipline requires
+// them — see chat-agent-layout-planning-todo.
 func dashboardPanelsSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":        "array",
-		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells.",
+		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells. Use a mix of component panels (set component_id) and text-header panels (set text_config, leave component_id unset) to give the dashboard visual hierarchy. Section-header text panels are typically full-width × 2-cells-tall and sit above each logical group of charts.",
 		"items": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -359,9 +365,32 @@ func dashboardPanelsSchema() map[string]interface{} {
 				"y":            map[string]interface{}{"type": "integer", "description": "Top edge in grid cells (0-indexed)."},
 				"w":            map[string]interface{}{"type": "integer", "description": "Width in grid cells."},
 				"h":            map[string]interface{}{"type": "integer", "description": "Height in grid cells."},
-				"component_id": map[string]interface{}{"type": "string", "description": "ID of the component to render in this panel. Omit for an empty / text panel."},
+				"component_id": map[string]interface{}{"type": "string", "description": "ID of the component to render in this panel. Omit (and set text_config instead) for a text-only header panel."},
 				"title":        map[string]interface{}{"type": "string", "description": "Optional panel-level title override (falls back to the component's title or name)."},
-				"text_config":  map[string]interface{}{"type": "object", "description": "Inline text panel. Set instead of component_id for a text-only panel: {content, size, align}."},
+				"text_config": map[string]interface{}{
+					"type":        "object",
+					"description": "Inline text panel for section headers / dividers / dashboard titles. Set this and leave component_id unset for a text-only panel. Always set display_content to \"title\" for static text (other values render live date/time).",
+					"properties": map[string]interface{}{
+						"content": map[string]interface{}{
+							"type":        "string",
+							"description": "Text to display (e.g. \"NODE — COMPUTE\"). Plain text; no markdown.",
+						},
+						"display_content": map[string]interface{}{
+							"type":        "string",
+							"description": "What to render. \"title\" shows the static `content` string (the only sensible option for a header panel). Other values (date_short, time_12, etc.) render live date/time and ignore `content`.",
+						},
+						"size": map[string]interface{}{
+							"type":        "integer",
+							"description": "Font size in pixels. Typical values: 14 (small), 20 (default body / section subheader), 28 (section header), 36 (dashboard title).",
+						},
+						"align": map[string]interface{}{
+							"type":        "string",
+							"description": "Text alignment within the panel.",
+							"enum":        []string{"left", "center", "right"},
+						},
+					},
+					"required": []string{"content", "display_content"},
+				},
 			},
 			"required": []string{"id", "x", "y", "w", "h"},
 		},
