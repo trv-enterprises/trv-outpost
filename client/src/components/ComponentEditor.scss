@@ -167,16 +167,19 @@
     max-width: 800px;
   }
 
-  // Chart Type tile sits at 50% of the editor body width so it
-  // aligns with the Chart Name column above. Use width (not just
-  // max-width) so percentage resolution doesn't depend on the
-  // parent's content-block; the card explicitly takes half.
-  // Spacing: pull up toward the row above, breathing room below
-  // before the Connection/Preview/Code switcher.
+  // Chart Type spans the editor body's full reference width —
+  // matches the upper form's "Chart Name + Title" row width and
+  // the Query / Data Mapping sections below. width: 100% +
+  // max-width: none defeats any inherited 800px caps that might
+  // be in play.
+  // Spacing: a touch of breathing room above so it doesn't crowd
+  // the Tags / Namespace row, larger gap below before the
+  // Connection/Preview/Code switcher so the section visually
+  // belongs to the chart-type group rather than to what follows.
   > .mapping-section.type-card-section {
-    width: 50%;
-    max-width: 50%;
-    margin-top: 0;
+    width: 100%;
+    max-width: none;
+    margin-top: spacing.$spacing-05;
     margin-bottom: spacing.$spacing-07;
   }
 
