@@ -144,20 +144,25 @@
     }
   }
 
-  // Metadata, type cards, and sub-editors share a consistent max-width
-  // Chart configuration sections (switcher, connection, preview, code) are full-width
-  > .chart-metadata-section,
-  > .type-card-section,
+  // Reference width: the editor body fills the page route's
+  // content column. Display / Control sub-editors keep their
+  // legacy 800px cap (they pre-date the page-mode refactor and
+  // contain forms that look awkward stretched wide); the chart
+  // sub-tab's header form runs the full width so the metadata
+  // row's "Name 1/2 + Title 1/2" pair has real breathing room
+  // and the Query / Data Mapping sections below align with it.
   > .display-editor,
   > .control-editor {
     max-width: 800px;
   }
 
-  // Chart Type now uses the shared .mapping-section treatment so it
-  // matches DATA MAPPING below (labeled card, full reference width).
-  // Spacing: pull up toward the row above, breathing room below
+  // Chart Type tile is half-width relative to the section's
+  // reference, so it aligns with the Chart Name column above.
+  // Sits inside the shared .mapping-section card; spacing pulls
+  // it up toward the row above and leaves breathing room below
   // before the Connection/Preview/Code switcher.
   > .mapping-section.type-card-section {
+    max-width: calc(50% - #{spacing.$spacing-05} / 2);
     margin-top: 0;
     margin-bottom: spacing.$spacing-07;
   }
@@ -369,7 +374,8 @@
     align-items: stretch;
     gap: spacing.$spacing-05;
     margin-top: spacing.$spacing-05;
-    max-width: 800px;
+    // No max-width — the row fills the section's reference width,
+    // same as the header form above. Each child column gets half.
 
     > .query-row__query {
       flex: 1 1 0;
