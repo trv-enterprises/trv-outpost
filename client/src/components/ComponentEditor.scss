@@ -82,8 +82,12 @@
   // modifiers compute their widths against the section, not the
   // viewport.
   .chart-metadata-section {
-    margin-bottom: spacing.$spacing-05;
-    padding-bottom: spacing.$spacing-05;
+    // Pull the section flush against what follows (Chart Type
+    // card). The metadata-row's own margin-bottom already
+    // provides between-row separation; no additional padding
+    // here.
+    margin-bottom: spacing.$spacing-03;
+    padding-bottom: 0;
 
     .metadata-row {
       display: flex;
@@ -99,6 +103,13 @@
         flex-direction: row;
         flex-wrap: wrap;
         align-items: flex-start;
+      }
+
+      // Last metadata row shouldn't push the Chart Type card
+      // away — its margin-bottom adds gap on top of the section's
+      // own margin-bottom. Zero the last one out.
+      &:last-child {
+        margin-bottom: 0;
       }
     }
 
@@ -156,13 +167,15 @@
     max-width: 800px;
   }
 
-  // Chart Type tile is half-width relative to the section's
-  // reference, so it aligns with the Chart Name column above.
-  // Sits inside the shared .mapping-section card; spacing pulls
-  // it up toward the row above and leaves breathing room below
+  // Chart Type tile sits at 50% of the editor body width so it
+  // aligns with the Chart Name column above. Use width (not just
+  // max-width) so percentage resolution doesn't depend on the
+  // parent's content-block; the card explicitly takes half.
+  // Spacing: pull up toward the row above, breathing room below
   // before the Connection/Preview/Code switcher.
   > .mapping-section.type-card-section {
-    max-width: calc(50% - #{spacing.$spacing-05} / 2);
+    width: 50%;
+    max-width: 50%;
     margin-top: 0;
     margin-bottom: spacing.$spacing-07;
   }
@@ -424,6 +437,30 @@
   // Query section card
   .query-section {
     margin-top: spacing.$spacing-05;
+
+    // TSStore query controls (Query Type + Time Period or Number
+    // of Records) sit in a flex row that fills the card. Each
+    // control gets exactly half so the dropdowns don't get
+    // truncated by Carbon's 16-col Grid math, which produced
+    // 33%-ish columns inside the narrow card.
+    .tsstore-query-row {
+      display: flex;
+      flex-direction: row;
+      gap: spacing.$spacing-05;
+      margin-bottom: spacing.$spacing-04;
+
+      > .tsstore-query-row__col {
+        flex: 1 1 0;
+        min-width: 0;
+
+        // Let Carbon Select / NumberInput stretch to fill the
+        // column instead of their default content-sized width.
+        .cds--select,
+        .cds--number {
+          width: 100%;
+        }
+      }
+    }
 
     .query-header {
       display: flex;

@@ -2146,8 +2146,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   ) : isTSStore ? (
                     <div className="tsstore-query-section">
-                      <Grid narrow>
-                        <Column lg={6} md={4} sm={4}>
+                      {/* Flex row inside the half-width query card.
+                          Each control takes half the row, fully
+                          filling the card horizontally — Carbon's
+                          16-col Grid was producing 33% columns
+                          inside the narrow card and truncating the
+                          dropdown labels. */}
+                      <div className="tsstore-query-row">
+                        <div className="tsstore-query-row__col">
                           <Select
                             id="tsstore-query-type"
                             labelText="Query Type"
@@ -2161,9 +2167,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             <SelectItem value="oldest" text="Oldest Records" />
                             <SelectItem value="since" text="Time Range (Last...)" />
                           </Select>
-                        </Column>
+                        </div>
                         {tsstoreQueryType === 'since' ? (
-                          <Column lg={6} md={4} sm={4}>
+                          <div className="tsstore-query-row__col">
                             <Select
                               id="tsstore-since-duration"
                               labelText="Time Period"
@@ -2182,9 +2188,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               <SelectItem value="7d" text="Last 7 days" />
                               <SelectItem value="1w" text="Last 1 week" />
                             </Select>
-                          </Column>
+                          </div>
                         ) : (
-                          <Column lg={6} md={4} sm={4}>
+                          <div className="tsstore-query-row__col">
                             <NumberInput
                               id="tsstore-limit"
                               label="Number of Records"
@@ -2193,9 +2199,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               min={1}
                               max={10000}
                             />
-                          </Column>
+                          </div>
                         )}
-                      </Grid>
+                      </div>
                       <InlineNotification
                         kind="info"
                         title="TSStore Query"
