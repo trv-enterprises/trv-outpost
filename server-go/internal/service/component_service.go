@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
@@ -77,6 +78,24 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 		componentType = models.ComponentTypeChart
 	}
 
+	// Auto-codegen for structured charts: when the caller asks for a
+	// canonical chart_type with use_custom_code=false and didn't supply
+	// component_code, fall back to the registered template so the
+	// component renders something instead of "No chart" / Add-button.
+	//
+	// Today this is the only server-side codegen step — the React
+	// editor does richer transforms on save (column substitution, etc.)
+	// but the raw template at least produces a viewable chart. External
+	// callers (MCP, Dashboard Assistant) that don't run the React save
+	// path get a chart they can refine; the previous behavior was a
+	// silently-broken record.
+	componentCode := req.ComponentCode
+	if !req.UseCustomCode && componentType == models.ComponentTypeChart && componentCode == "" && req.ChartType != "" && req.ChartType != "custom" {
+		if tpl, ok := componenttemplates.Get(req.ChartType); ok {
+			componentCode = tpl
+		}
+	}
+
 	component := &models.Component{
 		Version:       1,
 		Status:        models.ComponentStatusFinal,
@@ -91,7 +110,7 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 		DataMapping:   req.DataMapping,
 		ControlConfig: req.ControlConfig,
 		DisplayConfig: req.DisplayConfig,
-		ComponentCode: req.ComponentCode,
+		ComponentCode: componentCode,
 		UseCustomCode: req.UseCustomCode,
 		Options:       req.Options,
 		Tags:          models.NormalizeTags(req.Tags),
