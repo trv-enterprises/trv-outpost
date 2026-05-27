@@ -167,18 +167,17 @@
     max-width: 800px;
   }
 
-  // Chart Type spans the editor body's full reference width —
-  // matches the upper form's "Chart Name + Title" row width and
-  // the Query / Data Mapping sections below. width: 100% +
-  // max-width: none defeats any inherited 800px caps that might
-  // be in play.
+  // Chart Type shares the same reference max-width as the other
+  // top-level editor sections (chart-metadata-section, tab-content,
+  // switcher-wrapper). That cap is set by the hosting page (e.g.
+  // ComponentDetailPage.scss → 1200px), so this rule deliberately
+  // does NOT set width or max-width — only spacing.
+  //
   // Spacing: a touch of breathing room above so it doesn't crowd
-  // the Tags / Namespace row, larger gap below before the
+  // the Tags/Namespace row; larger gap below before the
   // Connection/Preview/Code switcher so the section visually
   // belongs to the chart-type group rather than to what follows.
   > .mapping-section.type-card-section {
-    width: 100%;
-    max-width: none;
     margin-top: spacing.$spacing-05;
     margin-bottom: spacing.$spacing-07;
   }
@@ -201,7 +200,11 @@
       display: flex;
       align-items: center;
       gap: spacing.$spacing-04;
-      padding: spacing.$spacing-04;
+      // Horizontal padding only — the surrounding .mapping-section
+      // card already provides vertical padding around its contents,
+      // and stacking the tile's own top/bottom padding on top
+      // produced visible double-padding inside the Chart Type card.
+      padding: 0 spacing.$spacing-04;
       background-color: var(--cds-layer-01);
       border-radius: 4px;
       cursor: pointer;
@@ -378,62 +381,137 @@
     }
   }
 
-  // Query + Guidance side-by-side row. The query card and the
-  // connection-type guidance hint sit at half the reference width
-  // each. The guidance stretches to match the query card's height
-  // (align-items: stretch) and scrolls internally when expanded,
-  // so the row's height is governed by the query controls — not by
-  // however long the guidance prose runs.
-  .query-row {
+  // Connection picker tile + per-type guidance side-by-side.
+  // Left tile holds the connection Select with a description (i)
+  // Toggletip beside the label, and a wrapped tag-chip row below.
+  // Right column is the ConnectionGuidanceHint so the cheat-sheet
+  // sits adjacent to the picker — the user sees "ts-store doesn't
+  // speak SQL" in the same row they're selecting the connection.
+  .connection-row {
     display: flex;
     flex-direction: row;
-    align-items: stretch;
+    align-items: flex-start;
     gap: spacing.$spacing-05;
-    margin-top: spacing.$spacing-05;
-    // No max-width — the row fills the section's reference width,
-    // same as the header form above. Each child column gets half.
+    margin-bottom: spacing.$spacing-05;
 
-    > .query-row__query {
+    > .connection-row__picker {
       flex: 1 1 0;
       min-width: 0;
-      margin-top: 0; // gap from .query-row controls vertical spacing now
-    }
 
-    > .query-row__guidance {
-      flex: 1 1 0;
-      min-width: 0;
-      display: flex;       // children stretch via the inner hint's height: 100%
-      flex-direction: column;
-      min-height: 0;       // allow inner overflow to compute correctly
-
-      // Make the inner guidance card fill the column. We open the
-      // hint by default in this slot, so the body becomes a
-      // scrollable region sized to the remaining column height
-      // (not the hint's standalone max-height: 360px). The toggle
-      // row stays sticky-fixed at the top.
-      > .connection-guidance-hint {
-        margin: 0;
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-
-        // The body's standalone max-height is the right cap when
-        // the hint floats alone (e.g. ConnectionDetailPage). In
-        // the query row it gets in the way of the "stretch to
-        // column height" intent — override to fill the column
-        // and scroll.
-        .connection-guidance-hint__body {
-          flex: 1 1 auto;
-          max-height: none;
-          min-height: 0;
-        }
+      // .mapping-section adds margin-top: spacing-05 by default,
+      // which would push the picker tile down relative to the
+      // guidance card beside it. Zero it out so both columns
+      // start at the row's top edge.
+      &.mapping-section {
+        margin-top: 0;
       }
     }
 
-    // Narrow viewport / sidecard-open fallback: stack vertically.
+    > .connection-row__guidance {
+      flex: 1 1 0;
+      min-width: 0;
+
+      // Guidance card sits at the top of its column, aligned
+      // with the picker tile's header. It collapses tightly when
+      // closed and expands to its own max-height when opened —
+      // no stretch behavior tied to the picker's height.
+      > .connection-guidance-hint {
+        margin: 0;
+      }
+    }
+
     @media (max-width: 720px) {
       flex-direction: column;
+    }
+  }
+
+  // Header row inside the connection tile: "Connection" H4 +
+  // the description (i) Toggletip beside it. Mirrors the
+  // section-header treatment used by CHART TYPE, QUERY, and
+  // DATA MAPPING (uppercase, letterspaced — from the editor-
+  // level h4 rule). The Toggletip is inline-aligned with the
+  // header text so the (i) reads as part of the label.
+  .connection-picker-header {
+    // align-items: flex-start so the (i) icon hugs the top of
+    // the H4's cap-height rather than the line-box midpoint —
+    // uppercase letterspaced text reads as visually higher than
+    // its line-box center suggests, and a centered icon looks
+    // dropped relative to the caps.
+    display: flex;
+    align-items: flex-start;
+    gap: spacing.$spacing-02;
+    margin-bottom: spacing.$spacing-04; // mirror h4's default margin-bottom
+
+    h4 {
+      margin: 0;
+      line-height: 1; // collapse the line box to the cap height
+                      // so adjacent inline elements align flush
+                      // to the caps top
+    }
+
+    // Hover-trigger info tooltip beside the CONNECTION header.
+    // Carbon's Tooltip wraps an inline button, so we style the
+    // bare <button> trigger to match the icon-only sizing the
+    // prior Toggletip variant used. The trigger sits flush with
+    // the H4 cap top (margin-top: 1px) to align visually.
+    .connection-picker-info-tooltip {
+      display: inline-flex;
+      align-items: flex-start;
+    }
+
+    .connection-picker-info-trigger {
+      padding: 0;
+      margin: 1px 0 0 0;
+      color: var(--cds-text-secondary);
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      line-height: 0;
+
+      &:hover { color: var(--cds-link-primary); }
+      &:focus-visible {
+        outline: 2px solid var(--cds-focus);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  // Tag chip row beneath the Select inside the connection tile.
+  // Wraps onto multiple lines only as a last resort — the +N
+  // overflow Toggletip is the primary affordance.
+  .connection-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    margin-top: spacing.$spacing-03;
+
+    // Carbon Tag has its own default margin that bunches them
+    // up; collapse so the gap from our flex container is the
+    // single source of truth.
+    .cds--tag {
+      margin: 0;
+    }
+
+    .connection-tags-overflow {
+      font-size: 0.75rem;
+      color: var(--cds-text-secondary);
+      padding: 0 spacing.$spacing-02;
+      cursor: pointer;
+
+      &:hover { color: var(--cds-link-primary); }
+    }
+  }
+
+  // Query section — now stands alone at full reference width,
+  // since the guidance hint moved up to the connection row.
+  .query-row {
+    margin-top: spacing.$spacing-05;
+
+    > .query-row__query {
+      margin-top: 0;
     }
   }
 
@@ -615,6 +693,47 @@
     }
   }
 
+  // Single editor-level rule for the "Fetch data to modify …"
+  // hint rendered inside the data-mapping / filters / aggregation
+  // / sliding-window subsections. Replaces three duplicate
+  // .run-query-hint rules previously nested per-section, which
+  // were byte-identical but easy to drift independently. Inline
+  // `style={{ marginTop: '0.5rem' }}` overrides on the JSX side
+  // are also gone — top margin is owned by this rule now.
+  .run-query-hint {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    font-style: italic;
+    margin: spacing.$spacing-03 0 0 0;
+  }
+
+  // Full-width warning prompting the user to fetch sample data.
+  // Replaces the prior in-tile "Run query to load available
+  // columns for mapping" italic paragraphs that fired in three
+  // separate spots. Carbon's InlineNotification ships with
+  // max-width: 18rem on .cds--inline-notification which collapses
+  // it to a narrow card; force full-width here so it spans the
+  // same reference width as the DATA MAPPING / CHART TYPE / QUERY
+  // sections below it.
+  .run-query-warning.cds--inline-notification,
+  .run-query-warning {
+    margin: spacing.$spacing-05 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  // Generic "feature not configured / explanation" hint used by
+  // Filters, Aggregation, Sliding Window, and the banded-bar band-
+  // column copy. Was previously called .no-filters-message but
+  // showed up in places that had nothing to do with filters
+  // (sliding-window enable hint, etc.); renamed to .editor-info-hint
+  // for accuracy. Same visual treatment.
+  .editor-info-hint {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
   // Data mapping section
   .mapping-section {
     margin-top: spacing.$spacing-05;
@@ -739,12 +858,6 @@
       margin-top: spacing.$spacing-04;
     }
 
-    .run-query-hint {
-      color: var(--cds-text-secondary);
-      font-size: 0.875rem;
-      font-style: italic;
-      margin: 0;
-    }
   }
 
   // Chart options section (gauge, pie, bar/line/area)
@@ -837,11 +950,6 @@
       }
     }
 
-    .no-filters-message {
-      color: var(--cds-text-secondary);
-      font-size: 0.875rem;
-      margin: 0;
-    }
   }
 
   // Aggregation section
@@ -931,18 +1039,7 @@
       }
     }
 
-    .no-filters-message {
-      color: var(--cds-text-secondary);
-      font-size: 0.875rem;
-      margin: 0;
-    }
 
-    .run-query-hint {
-      color: var(--cds-text-secondary);
-      font-size: 0.875rem;
-      font-style: italic;
-      margin: 0;
-    }
   }
 
   // Time bucket section (for socket streaming datasources)
@@ -1001,18 +1098,7 @@
       }
     }
 
-    .no-filters-message {
-      color: var(--cds-text-secondary);
-      font-size: 0.875rem;
-      margin: 0;
-    }
 
-    .run-query-hint {
-      color: var(--cds-text-secondary);
-      font-size: 0.875rem;
-      font-style: italic;
-      margin: 0;
-    }
   }
 
   // Data preview table
