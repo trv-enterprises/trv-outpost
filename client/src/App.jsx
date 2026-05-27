@@ -75,7 +75,6 @@ import AccountMenu from './components/AccountMenu';
 import AboutDialog from './components/AboutDialog';
 import AssistantSidecard from './components/assistant/AssistantSidecard';
 import useAssistantSidecardState from './hooks/useAssistantSidecardState';
-import DevUserSwitcher from './components/DevUserSwitcher';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
@@ -150,7 +149,14 @@ function AppContent({ onDisconnect }) {
   const [firstDashboardId, setFirstDashboardId] = useState(null);
   const [dashboardsLoaded, setDashboardsLoaded] = useState(false);
   const { notifications, addNotification, hydrateFromServer: hydrateNotifications, panelOpen: notificationPanelOpen, togglePanel: toggleNotificationPanel, closePanel: closeNotificationPanel } = useNotifications();
-  const [users, setUsers] = useState([]);
+  // `_users` is the previously-exposed dev user list. The dev
+  // user-switcher pill (the only consumer) was removed in favor of
+  // the `?user_id=<guid>` URL param. The state + setUsers callsites
+  // in the bootstrap / Clerk paths below are intentionally kept so
+  // the existing identity-resolution flow isn't disturbed; nothing
+  // currently reads the array.
+  // eslint-disable-next-line no-unused-vars
+  const [_users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   // Goes true once the bootstrap chain has finished trying (success
   // or fail). Used to distinguish "still loading" from "tried,
@@ -459,12 +465,6 @@ function AppContent({ onDisconnect }) {
     }
   }, [identityResolved, currentUser, hydrateNotifications]);
 
-  // Handle user selection change
-  const handleUserChange = (user) => {
-    setCurrentUser(user);
-    apiClient.setCurrentUser(user.guid);
-  };
-
   // Fetch default dashboard (user preference or first alphabetically)
   const fetchDefaultDashboard = async () => {
     try {
@@ -726,18 +726,9 @@ function AppContent({ onDisconnect }) {
 
               {(userCapabilities.can_design || userCapabilities.can_manage) && <NamespacePicker />}
 
-              {/* Dev-only user impersonation pill. Sits between
-                  NamespacePicker and the help/notification icons so
-                  it reads as a context control alongside the
-                  namespace picker. Vite tree-shakes this out of
-                  production bundles via import.meta.env.DEV. */}
-              {import.meta.env.DEV && !electronMode && (
-                <DevUserSwitcher
-                  currentUser={currentUser}
-                  users={users}
-                  onUserChange={handleUserChange}
-                />
-              )}
+              {/* Dev user impersonation pill removed — initial
+                  load now accepts a `?user_id=<guid>` URL param,
+                  which makes the in-header switcher redundant. */}
 
               <HeaderGlobalAction
                 aria-label={`Help - Build ${buildInfo.buildNumber}`}
