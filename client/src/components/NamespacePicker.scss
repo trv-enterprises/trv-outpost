@@ -19,15 +19,21 @@
   }
 
   .cds--toggletip-button {
-    // Narrow the hit area so the (i) icon hugs the namespace
-    // dropdown to its right. The full 2.5rem square left too much
-    // empty space between the icon and the dropdown chip; trimming
-    // to 1.75rem keeps a comfortable click target while closing
-    // the visual gap. Left padding stays generous so the icon
-    // doesn't crowd whatever sits to its left (the AI launcher).
-    width: 1.75rem;
+    // The (i) icon should read as part of the namespace pill — a
+    // single grouped "namespace control" rather than two
+    // independent header buttons. Use box-sizing: content-box so
+    // the padding sets the gaps around the 16px icon without
+    // shrinking the icon's own size; the button width auto-sizes
+    // to (16px icon + 16px left padding + 0 right padding) ≈ 2rem.
+    //
+    //   - Generous LEFT padding (1rem) separates the group from
+    //     the AI launcher on the icon's left side
+    //   - Zero RIGHT padding so the icon nests flush against the
+    //     namespace pill on its right
+    box-sizing: content-box;
+    width: 16px;
     height: 3rem;
-    padding: 0 0.125rem 0 0.5rem;
+    padding: 0 0 0 1rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -44,10 +50,11 @@
   }
 }
 
-// Tiny left margin on the namespace dropdown pill so it doesn't
-// sit flush against the (i) icon's hover area.
+// No left margin on the pill itself — the (i) icon's zero right
+// padding already places it flush against the pill's left edge,
+// which is what we want to read as a single grouped control.
 .namespace-picker-wrap .namespace-picker {
-  margin-left: 0.25rem;
+  margin-left: 0;
 }
 
 // The Carbon header's HeaderGlobalAction slots are square icon buttons
