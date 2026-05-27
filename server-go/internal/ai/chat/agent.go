@@ -320,6 +320,7 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			// AnthropicToolParams will include the schema.
 			result, dispatchErr := a.tools.Dispatch(ctx, &DispatchEnv{
 				Session:     session,
+				Caller:      caller,
 				ResultStore: a.resultStore,
 				RevealTierB: func(name string) {
 					revealedTierB[name] = true

@@ -48,14 +48,18 @@ type Tool struct {
 }
 
 // DispatchEnv carries per-call context the handler needs: the
-// session the call originated from, the agent's result store (for
-// the get_full_result meta-tool), and a hook the describe_tool
-// meta-tool uses to signal that a Tier-B tool should be revealed
-// (i.e. its schema added to subsequent turns).
+// session the call originated from, the caller's identity (so
+// tools like get_current_user can resolve it without re-reading
+// auth), the agent's result store (for the get_full_result
+// meta-tool), and a hook the describe_tool meta-tool uses to
+// signal that a Tier-B tool should be revealed (i.e. its schema
+// added to subsequent turns).
 //
-// Caller + Namespace land in step 11 alongside SSE auth wiring.
+// Caller may be nil for anonymous test invocations; handlers
+// that need an identity must check.
 type DispatchEnv struct {
 	Session     *models.AISession
+	Caller      *CallerCtx
 	ResultStore *ResultStore
 
 	// RevealTierB is set by the agent. The describe_tool handler

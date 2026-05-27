@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
-	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
 // RegisterBuiltinTools wires the chat agent's Tier-A toolset. Every
@@ -190,18 +189,11 @@ func emptyObjectSchema() map[string]interface{} {
 
 func wrapGetCurrentUser(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
-		// Caller resolution from request context will land alongside
-		// the SSE auth wiring (step 11). For now we pass through
-		// whatever the session has — chat sessions don't yet carry
-		// the caller, so this returns the placeholder until then.
 		out, err := ops.GetCurrentUser(ctx, toolops.GetCurrentUserInput{
 			CallerGUID: callerGUIDFromEnv(env),
 		})
 		if err != nil {
-			return jsonResult(map[string]interface{}{
-				"note": "Caller identity not yet wired into chat sessions — landing in step 11 alongside SSE auth.",
-				"err":  err.Error(),
-			})
+			return "", err
 		}
 		return jsonResult(out)
 	}
@@ -372,20 +364,16 @@ func wrapGetCatalog(ops *toolops.Toolset) ToolHandler {
 	}
 }
 
-// callerGUIDFromEnv pulls the auth GUID off the DispatchEnv. Today's
-// DispatchEnv only carries the session; step 11 wires the caller
-// identity through from SSE auth, at which point this becomes a real
-// lookup. Until then it returns "" and the get_current_user tool
-// returns its placeholder.
+// callerGUIDFromEnv pulls the auth GUID off the DispatchEnv. Pulls
+// from env.Caller, which the agent populates from the per-message
+// CallerCtx. Returns "" when the caller is unresolved (anonymous
+// test invocations); toolops.GetCurrentUser surfaces a clean error
+// in that case.
 func callerGUIDFromEnv(env *DispatchEnv) string {
-	if env == nil || env.Session == nil {
+	if env == nil || env.Caller == nil || env.Caller.User == nil {
 		return ""
 	}
-	// Future: env.Caller.GUID once that field lands. For now the
-	// session record doesn't carry the caller; we just return empty
-	// and let the toolops function surface a helpful note.
-	_ = models.AISessionKindChat
-	return ""
+	return env.Caller.User.GUID
 }
 
 // jsonResult marshals any value to a JSON string for handing back to
