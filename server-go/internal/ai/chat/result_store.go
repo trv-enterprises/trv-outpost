@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -115,37 +116,46 @@ func (s *ResultStore) ClearSession(ctx context.Context, sessionID string) error 
 	return s.repo.DeleteBySession(ctx, sessionID)
 }
 
-// buildSummary produces the one-line string that takes the place of
-// the full result in the model's context. Best effort: it parses the
-// raw JSON and looks for common envelope shapes that the toolops
-// layer returns (e.g. {connections: [...], count: N}). For unknown
-// shapes it falls back to a size-only summary.
+// SummaryItemCap bounds how many entries we enumerate in a list
+// summary before truncating to a tail count. 50 covers virtually all
+// real deployments (typical user has ~10-30 connections / components,
+// ~5-15 dashboards) so the model can resolve "find X by name" from
+// the summary alone in nearly all cases. The full result is still
+// available via get_full_result for pathological sizes.
 //
-// The format is consistent: a human-readable description plus the
-// result_id at the end so the model knows what to pass to
-// get_full_result.
+// Token cost per entry is ~30-50 tokens (id + name + type + brief
+// metadata). 50 entries ≈ 1500-2500 tokens — comfortably under the
+// 8KB threshold that triggered summarization in the first place,
+// which means the summary itself stays small even after enrichment.
+const SummaryItemCap = 50
+
+// buildSummary produces the string that takes the place of the full
+// result in the model's context. Parses common toolops envelope
+// shapes and emits a compact {id, name, type, hint} per entry so the
+// model can usually answer "find X by name" without round-tripping
+// through get_full_result.
+//
+// Why per-entry detail (vs the previous 5-name preview): when the
+// model is looking up "the pi sensehat connection," a 5-name preview
+// from a 14-entry list often misses the target and forces a
+// get_full_result call. The full per-entry list is still tiny
+// compared to inlining the raw 26KB result.
+//
+// The format always ends with the result_id and a get_full_result
+// hint so the model knows the escape hatch is available.
 func buildSummary(toolName, resultID, rawResult string) string {
 	// Try to parse as JSON for a shape-aware summary.
 	var parsed interface{}
 	if err := json.Unmarshal([]byte(rawResult), &parsed); err == nil {
 		if envelope, ok := parsed.(map[string]interface{}); ok {
 			// Common toolops envelope shapes: {<plural-name>: [...], count: N}.
-			// Surface the count and the first few item names if present.
 			for _, listKey := range []string{"connections", "components", "dashboards", "namespaces"} {
 				if items, ok := envelope[listKey].([]interface{}); ok {
 					count := len(items)
 					if c, ok := envelope["count"].(float64); ok {
 						count = int(c)
 					}
-					sample := sampleNames(items, 5)
-					sampleHint := ""
-					if len(sample) > 0 {
-						sampleHint = fmt.Sprintf(" — first %d: %v", len(sample), sample)
-					}
-					return fmt.Sprintf(
-						"%s returned %d %s%s. Full result stored as %s — call get_full_result(%q) to retrieve everything (note: it's %d bytes, may consume significant context).",
-						toolName, count, listKey, sampleHint, resultID, resultID, len(rawResult),
-					)
+					return buildListSummary(toolName, listKey, resultID, items, count, len(rawResult))
 				}
 			}
 			// Other object — describe by top-level keys.
@@ -162,15 +172,7 @@ func buildSummary(toolName, resultID, rawResult string) string {
 			)
 		}
 		if items, ok := parsed.([]interface{}); ok {
-			sample := sampleNames(items, 5)
-			sampleHint := ""
-			if len(sample) > 0 {
-				sampleHint = fmt.Sprintf(" — first %d: %v", len(sample), sample)
-			}
-			return fmt.Sprintf(
-				"%s returned a JSON array of %d items%s. Stored as %s (%d bytes) — call get_full_result(%q) for the full content.",
-				toolName, len(items), sampleHint, resultID, len(rawResult), resultID,
-			)
+			return buildListSummary(toolName, "items", resultID, items, len(items), len(rawResult))
 		}
 	}
 	// Not JSON or unparseable shape — fall back to size only.
@@ -180,24 +182,116 @@ func buildSummary(toolName, resultID, rawResult string) string {
 	)
 }
 
-// sampleNames returns up to `n` "name" strings from a list of items,
-// best-effort. Used to give the model a sense of what's in a large
-// list without including the full content.
-func sampleNames(items []interface{}, n int) []string {
-	out := make([]string, 0, n)
-	for _, item := range items {
-		if len(out) >= n {
-			break
-		}
-		obj, ok := item.(map[string]interface{})
-		if !ok {
+// buildListSummary renders the {id, name, type, hint}-per-entry block
+// used by every list-shaped tool result. Covers up to SummaryItemCap
+// entries inline; anything beyond gets a "and N more — call
+// get_full_result" tail.
+func buildListSummary(toolName, listKey, resultID string, items []interface{}, count, rawBytes int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s returned %d %s.\n", toolName, count, listKey)
+
+	end := len(items)
+	if end > SummaryItemCap {
+		end = SummaryItemCap
+	}
+	for i := 0; i < end; i++ {
+		entry := summarizeListEntry(items[i])
+		if entry == "" {
 			continue
 		}
-		for _, key := range []string{"name", "title", "id"} {
-			if v, ok := obj[key].(string); ok && v != "" {
-				out = append(out, v)
-				break
+		fmt.Fprintf(&b, "- %s\n", entry)
+	}
+	if len(items) > SummaryItemCap {
+		fmt.Fprintf(&b, "- …and %d more entries — call get_full_result(%q) to see them.\n",
+			len(items)-SummaryItemCap, resultID)
+	}
+	fmt.Fprintf(&b,
+		"Full result stored as %s (%d bytes) — only call get_full_result(%q) if you need fields beyond what's shown above.",
+		resultID, rawBytes, resultID)
+	return b.String()
+}
+
+// summarizeListEntry renders one item from a list-shaped result. We
+// pull the common identifiers (id, name, type) plus a short hint
+// (description if short, tags, namespace) so the model can resolve
+// "the pi sensehat one" or "the postgres connection" without
+// fetching the full record.
+//
+// Returns "" for items we can't make sense of so the caller can skip.
+func summarizeListEntry(item interface{}) string {
+	obj, ok := item.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	id := stringField(obj, "id")
+	name := stringField(obj, "name")
+	if name == "" {
+		name = stringField(obj, "title")
+	}
+	typ := stringField(obj, "type")
+	if typ == "" {
+		// Components use component_type; dashboards have no type.
+		typ = stringField(obj, "component_type")
+	}
+	if typ == "" {
+		typ = stringField(obj, "chart_type")
+	}
+
+	parts := []string{}
+	if name != "" {
+		parts = append(parts, fmt.Sprintf("%q", name))
+	}
+	if id != "" {
+		parts = append(parts, fmt.Sprintf("id=%s", id))
+	}
+	if typ != "" {
+		parts = append(parts, fmt.Sprintf("type=%s", typ))
+	}
+
+	// Hint: short description (if <=80 chars), else namespace, else tags.
+	hint := ""
+	if desc := stringField(obj, "description"); desc != "" && len(desc) <= 80 {
+		hint = desc
+	} else if ns := stringField(obj, "namespace"); ns != "" && ns != "default" {
+		hint = "namespace=" + ns
+	}
+	if hint == "" {
+		if tags := stringArrayField(obj, "tags"); len(tags) > 0 {
+			cap := 4
+			if len(tags) < cap {
+				cap = len(tags)
 			}
+			hint = "tags=" + strings.Join(tags[:cap], ",")
+		}
+	}
+	if hint != "" {
+		parts = append(parts, hint)
+	}
+
+	return strings.Join(parts, " · ")
+}
+
+// stringField extracts a string value from a map, returning "" when
+// missing or wrong-typed.
+func stringField(obj map[string]interface{}, key string) string {
+	if v, ok := obj[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// stringArrayField extracts a []string from a map, returning nil
+// when missing or wrong-typed. Filters out non-string members.
+func stringArrayField(obj map[string]interface{}, key string) []string {
+	raw, ok := obj[key].([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, x := range raw {
+		if s, ok := x.(string); ok {
+			out = append(out, s)
 		}
 	}
 	return out

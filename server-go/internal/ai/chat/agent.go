@@ -341,8 +341,16 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			// summary + result_id; small results pass through
 			// unchanged. The get_full_result meta-tool can fetch
 			// the full content if the model decides it needs it.
+			//
+			// CRITICAL EXCLUSION: get_full_result itself bypasses
+			// the summarizer. Its whole purpose is to give the model
+			// the full payload it asked for — re-summarizing here
+			// creates an infinite cycle (fetch → summarize → fetch
+			// the new summary's result_id → summarize → ...), and
+			// the model never actually sees the data it requested.
+			// This was the failure mode in the 2026-05-26 export.
 			modelFacing := rawResultStr
-			if !isError && a.resultStore != nil {
+			if !isError && a.resultStore != nil && tu.Name != "get_full_result" {
 				if summarized, err := a.resultStore.Summarize(ctx, session.ID, tu.Name, rawResultStr); err == nil {
 					modelFacing = summarized
 				}
