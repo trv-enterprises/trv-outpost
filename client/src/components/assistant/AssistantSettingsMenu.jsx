@@ -2,7 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { OverflowMenu, OverflowMenuItem } from '@carbon/react';
+import { useEffect, useRef, useState } from 'react';
+import { IconButton } from '@carbon/react';
 import {
   Settings,
   TrashCan,
@@ -13,24 +14,23 @@ import {
 
 /**
  * AssistantSettingsMenu — the cog popover inside the sidecard
- * header. OverflowMenu mirrors the same pattern AccountMenu uses
- * elsewhere in the header so the visual language stays consistent.
+ * header. Hand-rolled rather than using Carbon's OverflowMenu
+ * because the OverflowMenu's positioning logic kept opening the
+ * menu upward (clipped behind the app header) despite
+ * `direction="bottom"` — its viewport-collision detection got
+ * confused by the sidecard's `position: fixed` parent.
  *
- * Props:
- *   - onClearChat()        — drops the current session.
- *   - onExportMarkdown()   — wires in step 13; passing undefined
- *                            hides the item.
- *   - onExportJson()       — same.
- *   - expandToolCalls       — current pref value (bool).
- *   - onToggleExpandToolCalls()
- *   - showTokenUsage        — current pref value (bool).
- *   - onToggleShowTokenUsage()
+ * Pattern: an IconButton trigger with a Carbon tooltip
+ * (`align="bottom-right"`, same as the sidecard's Close button
+ * which renders correctly). On click, toggle an absolutely-
+ * positioned menu div that sits BELOW the trigger. Click outside
+ * or Escape to close.
  *
- * The two toggle items use a left-side checkmark to indicate
- * current state — Carbon's OverflowMenuItem doesn't ship a true
- * "menu checkbox" so we mimic it with an inline icon column. The
- * empty space when not checked is intentional — keeps every row
- * the same horizontal layout so the eye can scan vertically.
+ * Items match the design doc's spec:
+ *   - Clear chat
+ *   - Export as Markdown / JSON (disabled when no messages)
+ *   - Expand tool calls by default (toggle)
+ *   - Show token usage (toggle)
  */
 export default function AssistantSettingsMenu({
   onClearChat,
@@ -41,74 +41,121 @@ export default function AssistantSettingsMenu({
   showTokenUsage,
   onToggleShowTokenUsage,
 }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Close on click outside, on Escape, and on any successful action.
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClickOutside = (e) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
+  // Action wrappers close the menu after running their handler.
+  const runAndClose = (fn) => () => {
+    if (fn) fn();
+    setOpen(false);
+  };
+
   return (
-    <OverflowMenu
-      aria-label="Assistant settings"
-      renderIcon={() => <Settings size={16} />}
-      // direction="bottom" tells Carbon to open the menu downward
-      // from the trigger. The `flipped` prop is intentionally
-      // omitted — it interacts with direction in a way that
-      // overrode our request and made the menu render upward
-      // (clipped by the app header above the sidecard).
-      direction="bottom"
-      size="sm"
-      menuOptionsClass="assistant-settings-menu"
-    >
-      <OverflowMenuItem
-        itemText={(
-          <span className="assistant-settings-menu__row">
+    <div className="assistant-settings-menu__wrap" ref={wrapRef}>
+      <IconButton
+        kind="ghost"
+        size="sm"
+        label="Assistant settings"
+        align="bottom-right"
+        onClick={() => setOpen((o) => !o)}
+        isSelected={open}
+      >
+        <Settings />
+      </IconButton>
+
+      {open && (
+        <div
+          className="assistant-settings-menu"
+          role="menu"
+          aria-label="Assistant settings menu"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="assistant-settings-menu__item"
+            onClick={runAndClose(onClearChat)}
+          >
             <TrashCan size={16} />
             <span>Clear chat</span>
-          </span>
-        )}
-        onClick={onClearChat}
-      />
+          </button>
 
-      <OverflowMenuItem
-        itemText={(
-          <span className="assistant-settings-menu__row">
+          <div className="assistant-settings-menu__divider" />
+
+          <button
+            type="button"
+            role="menuitem"
+            className="assistant-settings-menu__item"
+            onClick={runAndClose(onExportMarkdown)}
+            disabled={!onExportMarkdown}
+          >
             <Download size={16} />
             <span>Export as Markdown</span>
-          </span>
-        )}
-        onClick={onExportMarkdown}
-        disabled={!onExportMarkdown}
-        hasDivider
-      />
-      <OverflowMenuItem
-        itemText={(
-          <span className="assistant-settings-menu__row">
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="assistant-settings-menu__item"
+            onClick={runAndClose(onExportJson)}
+            disabled={!onExportJson}
+          >
             <DocumentExport size={16} />
             <span>Export as JSON</span>
-          </span>
-        )}
-        onClick={onExportJson}
-        disabled={!onExportJson}
-      />
+          </button>
 
-      <OverflowMenuItem
-        itemText={(
-          <span className="assistant-settings-menu__row assistant-settings-menu__row--toggle">
+          <div className="assistant-settings-menu__divider" />
+
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={!!expandToolCalls}
+            className="assistant-settings-menu__item"
+            onClick={() => {
+              onToggleExpandToolCalls?.();
+              // Don't close — toggles read better as "stay open
+              // until I'm done adjusting prefs".
+            }}
+          >
             <span className="assistant-settings-menu__check">
               {expandToolCalls && <Checkmark size={16} />}
             </span>
             <span>Expand tool calls by default</span>
-          </span>
-        )}
-        onClick={onToggleExpandToolCalls}
-        hasDivider
-      />
-      <OverflowMenuItem
-        itemText={(
-          <span className="assistant-settings-menu__row assistant-settings-menu__row--toggle">
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={!!showTokenUsage}
+            className="assistant-settings-menu__item"
+            onClick={() => {
+              onToggleShowTokenUsage?.();
+            }}
+          >
             <span className="assistant-settings-menu__check">
               {showTokenUsage && <Checkmark size={16} />}
             </span>
             <span>Show token usage</span>
-          </span>
-        )}
-        onClick={onToggleShowTokenUsage}
-      />
-    </OverflowMenu>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

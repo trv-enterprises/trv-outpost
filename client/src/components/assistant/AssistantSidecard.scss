@@ -262,43 +262,89 @@
 
 // ── Settings menu (cog popover, step 12) ────────────────────────
 
+// Drop-in replacement for the Carbon OverflowMenu approach lives
+// in AssistantSettingsMenu.jsx as a small hand-rolled popover
+// (IconButton trigger + absolute-positioned menu div). Carbon's
+// OverflowMenu kept opening upward despite direction="bottom" due
+// to a positioning bug interacting with the sidecard's fixed
+// parent; replacing it removes the problem at the root.
+
 .assistant-settings-menu {
-  // Carbon's OverflowMenu uses a portal — these styles target the
-  // items inside the menu options list, not the trigger. The
-  // OverflowMenu defaults to a small width which forced every
-  // label to wrap; pin a wider min-width so the labels render
-  // on one line each. The inner option buttons + content spans
-  // also need explicit nowrap because Carbon's default rule lets
-  // long labels wrap.
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
   min-width: 16rem;
+  background: var(--cds-layer);
+  border: 1px solid var(--cds-border-subtle-01);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 9000;
+  padding: spacing.$spacing-02 0;
+  display: flex;
+  flex-direction: column;
+  // The trigger sits inside a relatively-positioned container in
+  // the sidecard header so this `position: absolute` anchors to
+  // the trigger.
 
-  .cds--overflow-menu-options__btn,
-  .cds--overflow-menu-options__option-content {
-    white-space: nowrap;
-  }
-
-  .assistant-settings-menu__row {
+  .assistant-settings-menu__item {
     display: flex;
     align-items: center;
     gap: spacing.$spacing-03;
     width: 100%;
     white-space: nowrap;
+    background: transparent;
+    border: none;
+    color: var(--cds-text-primary);
+    font: inherit;
+    font-size: 0.875rem;
+    padding: spacing.$spacing-03 spacing.$spacing-05;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover:not(:disabled) {
+      background: var(--cds-layer-hover);
+    }
+
+    &:disabled {
+      color: var(--cds-text-disabled);
+      cursor: not-allowed;
+
+      svg {
+        color: var(--cds-icon-disabled);
+      }
+    }
+
+    svg {
+      flex: 0 0 16px;
+      color: var(--cds-icon-secondary);
+    }
   }
 
   // The toggle rows lead with a checkmark column so the user can
   // see which prefs are currently on at a glance. Empty space when
   // the value is off keeps every row's icon column aligned.
-  .assistant-settings-menu__row--toggle {
-    .assistant-settings-menu__check {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 0 16px;
-      width: 16px;
-      height: 16px;
-      color: var(--cds-icon-primary);
-    }
+  .assistant-settings-menu__check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--cds-icon-primary);
   }
+
+  .assistant-settings-menu__divider {
+    height: 1px;
+    background: var(--cds-border-subtle-01);
+    margin: spacing.$spacing-02 0;
+  }
+}
+
+// The cog trigger sits inside this wrapper so the absolute menu
+// positions relative to it.
+.assistant-settings-menu__wrap {
+  position: relative;
+  display: inline-flex;
 }
 
 .assistant-sidecard__token-usage {
