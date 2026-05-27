@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
+	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
 // RegisterBuiltinTools wires the chat agent's Tier-A toolset. Every
@@ -84,6 +85,30 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapQueryConnection(ops),
 	})
 
+	// Write surface for connections — Tier-B because the type-specific
+	// config shape is detailed and only relevant when the model is
+	// actually creating a connection. The model will load this via
+	// describe_tool after consulting get_type_catalog for the
+	// connection types it can use.
+	reg.Register(Tool{
+		Name: "create_connection",
+		Description: "Create a new connection (SQL, API, MQTT, EdgeLake, etc). Returns the persisted record including its assigned ID. Pass the type_id from get_type_catalog (e.g. \"db.postgres\", \"stream.mqtt\", \"store.tsstore\") and a type_config object whose keys match that type's config_schema. The legacy `type`/`config` fields work too but type_id/type_config is preferred. Defaults: namespace=\"default\" when omitted.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"name":        map[string]interface{}{"type": "string", "description": "Unique connection name (per namespace)"},
+				"description": map[string]interface{}{"type": "string", "description": "Free-form description"},
+				"namespace":   map[string]interface{}{"type": "string", "description": "Namespace slug; empty = \"default\""},
+				"type_id":     map[string]interface{}{"type": "string", "description": "Dotted type id from get_type_catalog (e.g. \"db.postgres\", \"stream.mqtt\")"},
+				"type_config": map[string]interface{}{"type": "object", "description": "Configuration object matching the type's config_schema"},
+				"tags":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Optional tags"},
+			},
+			"required": []string{"name", "type_id"},
+		},
+		Handler: wrapCreateConnection(ops),
+	})
+
 	// ─── Components ───
 	reg.Register(Tool{
 		Name:        "list_components",
@@ -100,6 +125,48 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapListComponents(ops),
 	})
 
+	reg.Register(Tool{
+		Name:        "get_component",
+		Description: "Get the latest version of a component (chart / control / display) by ID. Returns its full configuration including query_config, data_mapping, and any inline component_code. Use this when the model needs to inspect a component before referencing it from a dashboard.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string", "description": "Component ID"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapGetComponent(ops),
+	})
+
+	reg.Register(Tool{
+		Name: "create_component",
+		Description: "Create a chart, control, or display. Returns the persisted record including its assigned ID. For charts, prefer structured config (chart_type + query_config + data_mapping) over custom code — the server's codegen produces the React component from the structured fields. Set use_custom_code=true and supply component_code only when the structured config genuinely cannot represent what the user asked for. Defaults: component_type=\"chart\", namespace=\"default\". Reference the chart_types / control_types / display_types lists from get_type_catalog for valid type identifiers.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"component_type":  map[string]interface{}{"type": "string", "description": "\"chart\" (default), \"control\", or \"display\""},
+				"namespace":       map[string]interface{}{"type": "string", "description": "Namespace slug; empty = \"default\""},
+				"name":            map[string]interface{}{"type": "string", "description": "Unique component name (per namespace)"},
+				"title":           map[string]interface{}{"type": "string", "description": "Display title (defaults to name when empty)"},
+				"description":     map[string]interface{}{"type": "string"},
+				"chart_type":      map[string]interface{}{"type": "string", "description": "For charts: bar, line, pie, scatter, gauge, area, banded_bar, dataview, custom"},
+				"connection_id":   map[string]interface{}{"type": "string", "description": "Connection ID this component reads from (omit for connection-less components)"},
+				"query_config":    map[string]interface{}{"type": "object", "description": "Per-chart query config (sql / api / stream_filter / etc) — see ChartQueryConfig"},
+				"data_mapping":    map[string]interface{}{"type": "object", "description": "Column → axis mapping for the chart"},
+				"control_config":  map[string]interface{}{"type": "object", "description": "Control-specific config (control_type + UI fields) — only for component_type=control"},
+				"display_config":  map[string]interface{}{"type": "object", "description": "Display-specific config — only for component_type=display"},
+				"component_code":  map[string]interface{}{"type": "string", "description": "Inline React component code; only set with use_custom_code=true"},
+				"use_custom_code": map[string]interface{}{"type": "boolean", "description": "true = use component_code; false (default) = let the server's codegen produce code from the structured fields"},
+				"options":         map[string]interface{}{"type": "object", "description": "ECharts options overlay"},
+				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+			},
+			"required": []string{"name"},
+		},
+		Handler: wrapCreateComponent(ops),
+	})
+
 	// ─── Dashboards ───
 	reg.Register(Tool{
 		Name:        "list_dashboards",
@@ -107,6 +174,44 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Tier:        TierA,
 		InputSchema: emptyObjectSchema(),
 		Handler:     wrapListDashboards(ops),
+	})
+
+	reg.Register(Tool{
+		Name:        "get_dashboard",
+		Description: "Get a dashboard by ID, including its panels array. Use this to inspect a dashboard's composition before modifying it (e.g. \"add panel 4 with the new voltage chart\").",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string", "description": "Dashboard ID"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapGetDashboard(ops),
+	})
+
+	reg.Register(Tool{
+		Name: "create_dashboard",
+		Description: "Create a new dashboard. Returns the persisted record including its assigned ID. Panels are positioned on a 32×32-px grid via integer cell coords {x, y, w, h}; canvas size derives from layout_dimension (e.g. \"2k\" → 71×37 cells). Each panel references a component by component_id (which you must create FIRST via create_component). Set settings.layout_dimension when the user asks for a specific size; otherwise the server falls back to default_layout_dimension. Defaults: namespace=\"default\".",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"namespace":   map[string]interface{}{"type": "string", "description": "Namespace slug; empty = \"default\""},
+				"name":        map[string]interface{}{"type": "string", "description": "Unique dashboard name (per namespace)"},
+				"description": map[string]interface{}{"type": "string"},
+				"panels": map[string]interface{}{
+					"type":        "array",
+					"description": "Array of DashboardPanel entries; each carries {id, x, y, w, h, component_id?, text_config?}",
+					"items":       map[string]interface{}{"type": "object"},
+				},
+				"settings": map[string]interface{}{"type": "object", "description": "Dashboard-level settings (refresh_interval, layout_dimension, theme, etc)"},
+				"tags":     map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"metadata": map[string]interface{}{"type": "object"},
+			},
+			"required": []string{"name"},
+		},
+		Handler: wrapCreateDashboard(ops),
 	})
 
 	// Tier B: the catalog is big (every type with config + metadata)
@@ -267,6 +372,89 @@ func wrapListComponents(ops *toolops.Toolset) ToolHandler {
 			in.Tag = raw.Tag
 		}
 		out, err := ops.ListComponents(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapCreateConnection(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		// Unmarshal into the model's CreateConnectionRequest directly —
+		// the JSON shape matches the API contract.
+		var req models.CreateConnectionRequest
+		if err := json.Unmarshal(args, &req); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		// Apply caller's active namespace when the model didn't pick one
+		// explicitly — same behavior as the API handler.
+		if req.Namespace == "" && env != nil && env.Caller != nil {
+			req.Namespace = env.Caller.Namespace
+		}
+		out, err := ops.CreateConnection(ctx, toolops.CreateConnectionInput{Request: req})
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapGetComponent(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.GetComponentInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.GetComponent(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var req models.CreateComponentRequest
+		if err := json.Unmarshal(args, &req); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if req.Namespace == "" && env != nil && env.Caller != nil {
+			req.Namespace = env.Caller.Namespace
+		}
+		out, err := ops.CreateComponent(ctx, toolops.CreateComponentInput{Request: req})
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapGetDashboard(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.GetDashboardInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.GetDashboard(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapCreateDashboard(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var req models.CreateDashboardRequest
+		if err := json.Unmarshal(args, &req); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if req.Namespace == "" && env != nil && env.Caller != nil {
+			req.Namespace = env.Caller.Namespace
+		}
+		out, err := ops.CreateDashboard(ctx, toolops.CreateDashboardInput{Request: req})
 		if err != nil {
 			return "", err
 		}

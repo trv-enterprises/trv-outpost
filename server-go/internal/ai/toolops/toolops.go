@@ -172,6 +172,21 @@ func (t *Toolset) GetConnection(ctx context.Context, in GetConnectionInput) (*mo
 	return t.Connections.GetConnection(ctx, in.ID)
 }
 
+// CreateConnectionInput wraps the request model so callers can
+// stay on the strongly-typed schema.
+type CreateConnectionInput struct {
+	Request models.CreateConnectionRequest
+}
+
+// CreateConnection persists a new connection. Namespace defaults are
+// applied by the underlying service if Namespace is empty.
+func (t *Toolset) CreateConnection(ctx context.Context, in CreateConnectionInput) (*models.Connection, error) {
+	if t.Connections == nil {
+		return nil, fmt.Errorf("connection service not wired")
+	}
+	return t.Connections.CreateConnection(ctx, &in.Request)
+}
+
 type QueryConnectionInput struct {
 	ConnectionID string                 `json:"connection_id"`
 	Raw          string                 `json:"raw"`
@@ -252,6 +267,22 @@ func (t *Toolset) ListComponents(ctx context.Context, in ListComponentsInput) (*
 	}, nil
 }
 
+type GetComponentInput struct {
+	ID string `json:"id"`
+}
+
+// GetComponent returns the latest version of a component by ID.
+// Mirrors the existing list-then-pick pattern for the single-record case.
+func (t *Toolset) GetComponent(ctx context.Context, in GetComponentInput) (*models.Component, error) {
+	if t.Components == nil {
+		return nil, fmt.Errorf("component service not wired")
+	}
+	if in.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	return t.Components.GetComponent(ctx, in.ID)
+}
+
 type CreateComponentInput struct {
 	Request models.CreateComponentRequest
 }
@@ -285,6 +316,24 @@ func (t *Toolset) ListDashboards(ctx context.Context) (*ListDashboardsOutput, er
 		Dashboards: resp.Dashboards,
 		Count:      resp.Total,
 	}, nil
+}
+
+type GetDashboardInput struct {
+	ID string `json:"id"`
+}
+
+// GetDashboard returns a dashboard record by ID, including its
+// panels array. Use it when the model needs to inspect a dashboard's
+// composition (e.g. to add a panel to an existing layout) without
+// pulling every dashboard via list_dashboards.
+func (t *Toolset) GetDashboard(ctx context.Context, in GetDashboardInput) (*models.Dashboard, error) {
+	if t.Dashboards == nil {
+		return nil, fmt.Errorf("dashboard service not wired")
+	}
+	if in.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	return t.Dashboards.GetDashboard(ctx, in.ID)
 }
 
 type CreateDashboardInput struct {
