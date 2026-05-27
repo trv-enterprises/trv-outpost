@@ -68,6 +68,7 @@ import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
 import { useModeGuard } from '../context/ModeGuardContext';
 import useAssistantSurface from '../hooks/useAssistantSurface';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import { RefreshableComponentsProvider, useRefreshableComponentsContext } from '../context/RefreshableComponentsContext';
 import { syncKioskFromUrl, getKioskDashboardIds } from '../utils/kioskMode';
 
@@ -408,11 +409,44 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Publish the current dashboard surface to the Dashboard Assistant
   // so it can resolve "this dashboard / this panel" without a tool
-  // round trip. Built from panels + chartsMap; updates whenever either
-  // changes. We cap the panel list at 100 entries to keep token cost
-  // bounded for pathological dashboards.
+  // round trip.
+  //
+  // Perf-critical: this memo runs on every editablePanels change,
+  // which during a drag is 30+ frames/sec. The output payload doesn't
+  // include x/y/w/h (geometry isn't useful to the agent), so derive
+  // a *stable signature* — id + component_id + title only — and use
+  // that as the dep instead of the live panels array. While the user
+  // drags, the signature stays byte-identical and the heavy memo
+  // doesn't re-run. Panel cap stays at 100 to bound token cost on
+  // pathological dashboards.
+  //
+  // Surface registration is also gated on chat-agent availability —
+  // if the env key isn't set / admin disabled the assistant, no
+  // sidecard exists to consume the surface and the registration is
+  // pure waste. We rely on chatAgentEnabled here; the per-user
+  // capability gate that hides the launcher icon happens upstream in
+  // App.jsx and isn't reachable from here without prop drilling.
+  // Worst case: a non-designer pays the (now-cheap) registration on
+  // every dashboard mount.
+  const { chatAgentEnabled } = useAIAvailability();
+  const surfaceEligible = chatAgentEnabled;
+
+  const panelSignature = useMemo(() => {
+    if (!surfaceEligible) return '';
+    const list = panels || [];
+    const out = [];
+    const cap = Math.min(list.length, 100);
+    for (let i = 0; i < cap; i++) {
+      const p = list[i];
+      const chart = p.component_id ? chartsMap[p.component_id] : null;
+      const title = chart?.title || chart?.name || '';
+      out.push(`${p.id}|${p.component_id || ''}|${title}|${chart?.component_type || ''}|${chart?.chart_type || ''}`);
+    }
+    return out.join('\n');
+  }, [surfaceEligible, panels, chartsMap]);
+
   const assistantSurface = useMemo(() => {
-    if (!dashboard?.id) return null;
+    if (!surfaceEligible || !dashboard?.id) return null;
     const summarized = (panels || []).slice(0, 100).map((p) => {
       const chart = p.component_id ? chartsMap[p.component_id] : null;
       const entry = { id: p.id };
@@ -429,7 +463,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       surfaceName: dashboard.name,
       panels: summarized,
     };
-  }, [dashboard?.id, dashboard?.name, panels, chartsMap, isEditMode]);
+    // panelSignature carries the only panel-state we render into the
+    // payload; depending on it instead of `panels` directly lets drag
+    // frames skip this memo entirely.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surfaceEligible, dashboard?.id, dashboard?.name, panelSignature, isEditMode]);
   useAssistantSurface(assistantSurface);
 
   // In edit mode, grid extends to the layout dimension boundary (or panel extent if larger)

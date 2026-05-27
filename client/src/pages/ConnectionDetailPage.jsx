@@ -33,6 +33,7 @@ import NamespaceSelect from '../components/shared/NamespaceSelect';
 import SecretTextInput, { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
 import TLSSkipVerifyToggle from '../components/shared/TLSSkipVerifyToggle';
 import useAssistantSurface from '../hooks/useAssistantSurface';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -144,13 +145,18 @@ function ConnectionDetailPage() {
 
   // Publish the current connection surface to the Dashboard Assistant.
   // Always EDIT mode here — this page only renders the connection
-  // editor.
-  const assistantSurface = useMemo(() => ({
-    mode: 'EDIT',
-    surface: 'CONNECTION',
-    surfaceId: !isCreateMode ? (connection?.id || id) : undefined,
-    surfaceName: connection?.name || undefined,
-  }), [isCreateMode, id, connection?.id, connection?.name]);
+  // editor. Skip the registration entirely when the assistant is
+  // disabled — no consumer to feed.
+  const { chatAgentEnabled } = useAIAvailability();
+  const assistantSurface = useMemo(() => {
+    if (!chatAgentEnabled) return null;
+    return {
+      mode: 'EDIT',
+      surface: 'CONNECTION',
+      surfaceId: !isCreateMode ? (connection?.id || id) : undefined,
+      surfaceName: connection?.name || undefined,
+    };
+  }, [chatAgentEnabled, isCreateMode, id, connection?.id, connection?.name]);
   useAssistantSurface(assistantSurface);
 
   const fetchConnection = async () => {
