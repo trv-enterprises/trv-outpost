@@ -264,12 +264,25 @@
 
 .assistant-settings-menu {
   // Carbon's OverflowMenu uses a portal — these styles target the
-  // items inside the menu options list, not the trigger.
+  // items inside the menu options list, not the trigger. The
+  // OverflowMenu defaults to a small width which forced every
+  // label to wrap; pin a wider min-width so the labels render
+  // on one line each. The inner option buttons + content spans
+  // also need explicit nowrap because Carbon's default rule lets
+  // long labels wrap.
+  min-width: 16rem;
+
+  .cds--overflow-menu-options__btn,
+  .cds--overflow-menu-options__option-content {
+    white-space: nowrap;
+  }
+
   .assistant-settings-menu__row {
     display: flex;
     align-items: center;
     gap: spacing.$spacing-03;
     width: 100%;
+    white-space: nowrap;
   }
 
   // The toggle rows lead with a checkmark column so the user can
@@ -280,6 +293,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      flex: 0 0 16px;
       width: 16px;
       height: 16px;
       color: var(--cds-icon-primary);
