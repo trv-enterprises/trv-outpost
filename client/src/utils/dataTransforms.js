@@ -406,10 +406,60 @@ export function parseTimestamp(value, type = null) {
   }
 }
 
+// Option sets for each named preset. Pulled out of the switch body
+// so we can build one Intl.DateTimeFormat per (preset, locale,
+// timezone) and reuse it across calls — `date.toLocaleString(opts)`
+// internally constructs a new formatter on every invocation, which
+// shows up dominant in CPU profiles when a chart formats thousands
+// of timestamps (~8s out of a 15s trace on the Pi sense-hat
+// dashboard's 10K-sample line chart). Memoizing collapses that cost
+// to ~one formatter per chart axis.
+//
+// Output is byte-identical to the prior toLocaleString /
+// toLocaleTimeString / toLocaleDateString calls — explicit options
+// dominate the underlying ICU behavior regardless of method name.
+const PRESET_OPTIONS = {
+  short:                  { month: 'numeric', day: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit' },
+  long:                   { month: 'long',    day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' },
+  time:                   { hour: 'numeric', minute: '2-digit', second: '2-digit' },
+  time_short:             { hour: 'numeric', minute: '2-digit' },
+  date:                   { month: 'long',  day: 'numeric', year: 'numeric' },
+  date_short:             { month: 'numeric', day: 'numeric', year: '2-digit' },
+  chart:                  { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' },
+  chart_time:             { hour: 'numeric', minute: '2-digit' },
+  chart_time_seconds:     { hour: 'numeric', minute: '2-digit', second: '2-digit' },
+  chart_date:             { month: 'short', day: 'numeric' },
+  chart_datetime:         { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
+  chart_datetime_seconds: { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' },
+  // chart_auto picks time-vs-date inline based on data age.
+  __chart_auto_time:      { hour: 'numeric', minute: '2-digit' },
+  __chart_auto_date:      { month: 'short', day: 'numeric' },
+};
+
+// Cache of Intl.DateTimeFormat instances keyed on
+// preset|locale|timezone. Module-scope so it persists across all
+// chart renders and panel re-mounts. Bounded growth: presets are
+// a fixed list, locales rarely vary, and timezones are typically
+// one per deployment — practical max cache size <100.
+const FORMATTER_CACHE = new Map();
+
+function getFormatter(preset, locale, timezone) {
+  const opts = PRESET_OPTIONS[preset];
+  if (!opts) return null;
+  const key = `${preset}|${locale || ''}|${timezone || ''}`;
+  let f = FORMATTER_CACHE.get(key);
+  if (!f) {
+    const finalOpts = timezone ? { ...opts, timeZone: timezone } : opts;
+    f = new Intl.DateTimeFormat(locale, finalOpts);
+    FORMATTER_CACHE.set(key, f);
+  }
+  return f;
+}
+
 /**
  * Format a timestamp for display
  * @param {any} value - The timestamp value (unix, iso string, or Date)
- * @param {string} format - Format type: 'short', 'long', 'time', 'date', 'relative', 'iso'
+ * @param {string} format - Format type: 'short', 'long', 'time', 'date', 'relative', 'iso', 'chart_*'
  * @param {Object} options - Additional options
  * @param {string} options.locale - Locale string (default: 'en-US')
  * @param {string} options.timezone - Timezone (default: local)
@@ -423,178 +473,41 @@ export function formatTimestamp(value, format = 'short', options = {}) {
     return String(value); // Return original if can't parse
   }
 
-  const formatOptions = { timeZone: timezone };
+  // relative + iso don't go through Intl.DateTimeFormat
+  if (format === 'relative') return formatRelativeTime(date);
+  if (format === 'iso') return date.toISOString();
 
-  switch (format) {
-    case 'short':
-      // "1/15/24, 10:30 AM"
-      return date.toLocaleString(locale, {
-        ...formatOptions,
-        month: 'numeric',
-        day: 'numeric',
-        year: '2-digit',
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-
-    case 'long':
-      // "January 15, 2024 at 10:30:00 AM"
-      return date.toLocaleString(locale, {
-        ...formatOptions,
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-
-    case 'time':
-      // "10:30:00 AM"
-      return date.toLocaleTimeString(locale, {
-        ...formatOptions,
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-
-    case 'time_short':
-      // "10:30 AM"
-      return date.toLocaleTimeString(locale, {
-        ...formatOptions,
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-
-    case 'date':
-      // "January 15, 2024"
-      return date.toLocaleDateString(locale, {
-        ...formatOptions,
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
-
-    case 'date_short':
-      // "1/15/24"
-      return date.toLocaleDateString(locale, {
-        ...formatOptions,
-        month: 'numeric',
-        day: 'numeric',
-        year: '2-digit'
-      });
-
-    case 'relative':
-      // "5 minutes ago", "in 2 hours"
-      return formatRelativeTime(date);
-
-    case 'iso':
-      // "2024-01-15T10:30:00.000Z"
-      return date.toISOString();
-
-    case 'chart':
-      // Compact format for chart axes: "1/15 10:30" - always shows date and time
-      return date.toLocaleString(locale, {
-        ...formatOptions,
-        month: 'numeric',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-
-    case 'chart_time':
-      // Time only for chart axes: "10:30 AM"
-      return date.toLocaleTimeString(locale, {
-        ...formatOptions,
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-
-    case 'chart_time_seconds':
-      // Time with seconds for chart axes: "10:30:05 AM"
-      return date.toLocaleTimeString(locale, {
-        ...formatOptions,
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-
-    case 'chart_date':
-      // Date only for chart axes: "Jan 15"
-      return date.toLocaleDateString(locale, {
-        ...formatOptions,
-        month: 'short',
-        day: 'numeric'
-      });
-
-    case 'chart_datetime':
-      // Full date/time for chart axes: "Jan 15, 10:30 AM"
-      return date.toLocaleString(locale, {
-        ...formatOptions,
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-
-    case 'chart_datetime_seconds':
-      // Full date/time with seconds for chart axes: "Jan 15, 10:30:05 AM"
-      return date.toLocaleString(locale, {
-        ...formatOptions,
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-
-    case 'chart_auto': {
-      // Auto format based on data range - use when AI analyzes data spread
-      const now = new Date();
-      const diffHours = Math.abs(now.getTime() - date.getTime()) / (1000 * 60 * 60);
-      if (diffHours < 24) {
-        // Within a day - show time
-        return date.toLocaleTimeString(locale, {
-          ...formatOptions,
-          hour: 'numeric',
-          minute: '2-digit'
-        });
-      } else {
-        // Beyond a day - show date
-        return date.toLocaleDateString(locale, {
-          ...formatOptions,
-          month: 'short',
-          day: 'numeric'
-        });
-      }
-    }
-
-    default:
-      // Unknown format string. The most common cause is AI-generated
-      // chart code inventing a preset name like 'time_12_seconds' or
-      // 'HH:MM:SS'. The legacy fallback was toLocaleString which
-      // silently renders date + time — the opposite of what most
-      // chart-axis callers wanted, and impossible to debug from the
-      // rendered chart. Emit a one-time console warning naming the
-      // bad preset so it's visible in dev, then fall back to
-      // chart_time (time only) which is the safer default for a
-      // charting context.
-      if (typeof window !== 'undefined') {
-        const seen = (window.__formatTimestampUnknownPresets ||= new Set());
-        if (!seen.has(format)) {
-          seen.add(format);
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[formatTimestamp] Unknown format preset ${JSON.stringify(format)} — falling back to 'chart_time' (time only). Valid presets: chart, chart_time, chart_time_seconds, chart_date, chart_datetime, chart_datetime_seconds, iso.`
-          );
-        }
-      }
-      return date.toLocaleTimeString(locale, {
-        ...formatOptions,
-        hour: 'numeric',
-        minute: '2-digit',
-      });
+  // chart_auto picks time-vs-date based on age of the value.
+  if (format === 'chart_auto') {
+    const now = Date.now();
+    const diffHours = Math.abs(now - date.getTime()) / (1000 * 60 * 60);
+    const sub = diffHours < 24 ? '__chart_auto_time' : '__chart_auto_date';
+    return getFormatter(sub, locale, timezone).format(date);
   }
+
+  const formatter = getFormatter(format, locale, timezone);
+  if (formatter) return formatter.format(date);
+
+  // Unknown format string. The most common cause is AI-generated
+  // chart code inventing a preset name like 'time_12_seconds' or
+  // 'HH:MM:SS'. The legacy fallback was toLocaleString which
+  // silently renders date + time — the opposite of what most
+  // chart-axis callers wanted, and impossible to debug from the
+  // rendered chart. Emit a one-time console warning naming the
+  // bad preset so it's visible in dev, then fall back to
+  // chart_time (time only) which is the safer default for a
+  // charting context.
+  if (typeof window !== 'undefined') {
+    const seen = (window.__formatTimestampUnknownPresets ||= new Set());
+    if (!seen.has(format)) {
+      seen.add(format);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[formatTimestamp] Unknown format preset ${JSON.stringify(format)} — falling back to 'chart_time' (time only). Valid presets: chart, chart_time, chart_time_seconds, chart_date, chart_datetime, chart_datetime_seconds, iso.`
+      );
+    }
+  }
+  return getFormatter('chart_time', locale, timezone).format(date);
 }
 
 /**
