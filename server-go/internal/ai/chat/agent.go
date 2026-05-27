@@ -80,10 +80,18 @@ func ResolveModelID(adminValue string) string {
 // prompt-builder falls back to a generic preamble in that case.
 // Namespace defaults to "default" when empty. Now defaults to
 // time.Now() when zero.
+//
+// Surface is the per-turn view-state payload sent by the client
+// (sidecard's SendMessage body). When present, the prompt builder
+// renders a "## Current view" block so the agent can resolve
+// "this dashboard" / "this chart" without a tool round trip and
+// refuse writes that would clobber the user's active edit. Nil
+// for non-HTTP invocations or older client builds.
 type CallerCtx struct {
 	User      *models.User
 	Namespace string
 	Now       time.Time
+	Surface   *models.SurfaceContext
 }
 
 // Default max turns per ProcessMessage call. Lower than the Component

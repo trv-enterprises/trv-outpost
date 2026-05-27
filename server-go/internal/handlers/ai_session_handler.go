@@ -188,6 +188,10 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 	// goroutine.
 	callerUser := middleware.GetUser(c)
 	callerNamespace := h.resolveCallerNamespace(c.Request.Context(), callerUser)
+	// Surface context comes off the request body — captured here
+	// (synchronously with the request) so the goroutine can hand it
+	// to the chat agent's prompt builder.
+	callerSurface := req.SurfaceContext
 
 	// Process the message asynchronously. We dispatch on the
 	// session's Kind: chat-kind sessions route to the Dashboard
@@ -218,6 +222,7 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 				User:      callerUser,
 				Namespace: callerNamespace,
 				Now:       time.Now(),
+				Surface:   callerSurface,
 			}
 			fmt.Printf("[Chat] Processing message for session %s (namespace=%s)\n", id, callerNamespace)
 			if err := h.chatAgent.ProcessMessage(ctx, sessionResp.Session, req.Content, caller); err != nil {

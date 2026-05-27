@@ -118,6 +118,42 @@ type CreateAISessionRequest struct {
 // @Description Request body for sending a user message
 type SendMessageRequest struct {
 	Content string `json:"content" binding:"required"` // User message content
+
+	// SurfaceContext describes what the user is currently looking at
+	// in the UI. Used by the Dashboard Assistant to resolve
+	// "this dashboard" / "this chart" without a tool round trip and
+	// to refuse writes that would collide with the user's active
+	// edit. Optional; the Component AI agent ignores it.
+	SurfaceContext *SurfaceContext `json:"surface_context,omitempty"`
+}
+
+// SurfaceContext is the per-message view-state payload the client
+// attaches to every Dashboard Assistant send. Mirrors the React
+// AssistantSurfaceContext shape on the client.
+//
+// `Mode` is "VIEW" or "EDIT" — same string-uppercase the client
+// sends. `Surface` is "DASHBOARD" / "COMPONENT" / "CONNECTION".
+// `Panels` is only populated for DASHBOARD surfaces.
+//
+// All fields are optional; the prompt builder degrades gracefully
+// when fields are missing.
+type SurfaceContext struct {
+	Mode        string                 `json:"mode,omitempty"`
+	Surface     string                 `json:"surface,omitempty"`
+	SurfaceID   string                 `json:"surfaceId,omitempty"`
+	SurfaceName string                 `json:"surfaceName,omitempty"`
+	Panels      []SurfaceContextPanel  `json:"panels,omitempty"`
+}
+
+// SurfaceContextPanel describes a single panel in a dashboard
+// surface, with just enough metadata for the agent to resolve
+// "panel 3" / "the line chart" without listing components.
+type SurfaceContextPanel struct {
+	ID            string `json:"id,omitempty"`
+	Title         string `json:"title,omitempty"`
+	ComponentID   string `json:"componentId,omitempty"`
+	ComponentType string `json:"componentType,omitempty"`
+	ChartType     string `json:"chartType,omitempty"`
 }
 
 // AISessionResponse represents the API response for session operations

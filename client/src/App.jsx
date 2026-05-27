@@ -70,6 +70,7 @@ import { NotificationProvider, useNotifications } from './context/NotificationCo
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { AIAvailabilityProvider, useAIAvailability } from './context/AIAvailabilityContext';
 import { NamespaceProvider, useNamespaces } from './context/NamespaceContext';
+import { AssistantSurfaceProvider } from './context/AssistantSurfaceContext';
 import NamespacePicker from './components/NamespacePicker';
 import AccountMenu from './components/AccountMenu';
 import AboutDialog from './components/AboutDialog';
@@ -664,6 +665,7 @@ function AppContent({ onDisconnect }) {
 
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
+    <AssistantSurfaceProvider>
     <div className={electronMode ? 'electron-mode' : ''}>
       <HeaderContainer
         render={() => (
@@ -907,6 +909,7 @@ function AppContent({ onDisconnect }) {
         </Routes>
       </Content>
     </div>
+    </AssistantSurfaceProvider>
     </NamespaceProvider>
   );
 }

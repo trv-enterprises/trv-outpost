@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../api/client';
+import { useAssistantSurfaceValue } from '../context/AssistantSurfaceContext';
 
 // Reconnect tuning — same shape as the Component AI agent's
 // useAISession. Stop trying after this many failures so a server
@@ -46,6 +47,15 @@ export default function useAssistantSession() {
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const messagesRef = useRef(messages);
+
+  // Surface context: the current page registers this via
+  // useAssistantSurface(). We attach it to every outgoing message so
+  // the agent's prompt sees "user is viewing X" without a tool round
+  // trip. Read latest via ref so sendMessage's stable callback doesn't
+  // need a dep on every surface change.
+  const surface = useAssistantSurfaceValue();
+  const surfaceRef = useRef(surface);
+  useEffect(() => { surfaceRef.current = surface; }, [surface]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -228,7 +238,7 @@ export default function useAssistantSession() {
 
     try {
       const id = await ensureSession();
-      await apiClient.sendAIMessage(id, content);
+      await apiClient.sendAIMessage(id, content, { surfaceContext: surfaceRef.current });
     } catch (err) {
       setError(err?.message || String(err));
     } finally {

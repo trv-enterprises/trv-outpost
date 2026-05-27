@@ -67,6 +67,7 @@ import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
 import { useModeGuard } from '../context/ModeGuardContext';
+import useAssistantSurface from '../hooks/useAssistantSurface';
 import { RefreshableComponentsProvider, useRefreshableComponentsContext } from '../context/RefreshableComponentsContext';
 import { syncKioskFromUrl, getKioskDashboardIds } from '../utils/kioskMode';
 
@@ -404,6 +405,32 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     if (!panels || panels.length === 0) return 0;
     return panels.reduce((max, panel) => Math.max(max, panel.y + panel.h), 0);
   }, [panels]);
+
+  // Publish the current dashboard surface to the Dashboard Assistant
+  // so it can resolve "this dashboard / this panel" without a tool
+  // round trip. Built from panels + chartsMap; updates whenever either
+  // changes. We cap the panel list at 100 entries to keep token cost
+  // bounded for pathological dashboards.
+  const assistantSurface = useMemo(() => {
+    if (!dashboard?.id) return null;
+    const summarized = (panels || []).slice(0, 100).map((p) => {
+      const chart = p.component_id ? chartsMap[p.component_id] : null;
+      const entry = { id: p.id };
+      if (chart?.title || chart?.name) entry.title = chart.title || chart.name;
+      if (p.component_id) entry.componentId = p.component_id;
+      if (chart?.component_type) entry.componentType = chart.component_type;
+      if (chart?.chart_type) entry.chartType = chart.chart_type;
+      return entry;
+    });
+    return {
+      mode: isEditMode ? 'EDIT' : 'VIEW',
+      surface: 'DASHBOARD',
+      surfaceId: dashboard.id,
+      surfaceName: dashboard.name,
+      panels: summarized,
+    };
+  }, [dashboard?.id, dashboard?.name, panels, chartsMap, isEditMode]);
+  useAssistantSurface(assistantSurface);
 
   // In edit mode, grid extends to the layout dimension boundary (or panel extent if larger)
   // In view mode, grid fits tightly around panels

@@ -1026,10 +1026,17 @@ class APIClient {
     });
   }
 
-  async sendAIMessage(sessionId, content) {
+  async sendAIMessage(sessionId, content, options = {}) {
+    // surfaceContext is only meaningful for chat-kind sessions
+    // (Dashboard Assistant). The Component AI agent path passes
+    // undefined and the server ignores the field in that case.
+    const body = { content };
+    if (options.surfaceContext) {
+      body.surface_context = options.surfaceContext;
+    }
     return this.request(`/api/ai/sessions/${sessionId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
     });
   }
 

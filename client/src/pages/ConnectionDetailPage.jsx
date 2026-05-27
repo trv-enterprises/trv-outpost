@@ -32,6 +32,7 @@ import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
 import SecretTextInput, { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
 import TLSSkipVerifyToggle from '../components/shared/TLSSkipVerifyToggle';
+import useAssistantSurface from '../hooks/useAssistantSurface';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -140,6 +141,17 @@ function ConnectionDetailPage() {
       setNamespace(activeNamespace);
     }
   }, [isCreateMode, activeNamespace, namespace]);
+
+  // Publish the current connection surface to the Dashboard Assistant.
+  // Always EDIT mode here — this page only renders the connection
+  // editor.
+  const assistantSurface = useMemo(() => ({
+    mode: 'EDIT',
+    surface: 'CONNECTION',
+    surfaceId: !isCreateMode ? (connection?.id || id) : undefined,
+    surfaceName: connection?.name || undefined,
+  }), [isCreateMode, id, connection?.id, connection?.name]);
+  useAssistantSurface(assistantSurface);
 
   const fetchConnection = async () => {
     try {
