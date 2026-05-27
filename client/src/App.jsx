@@ -730,7 +730,13 @@ function AppContent({ onDisconnect }) {
                 </HeaderGlobalAction>
               )}
 
-              {(userCapabilities.can_design || userCapabilities.can_manage) && <NamespacePicker />}
+              {/* NamespacePicker (info icon + active-namespace pill)
+                  is authoring-only: it sets the default namespace for
+                  *newly created* records (dashboards, components,
+                  connections). Manage-only users administer the
+                  system rather than author content, so they don't
+                  need it. Gate on Design specifically. */}
+              {userCapabilities.can_design && <NamespacePicker />}
 
               {/* Dev user impersonation pill removed — initial
                   load now accepts a `?user_id=<guid>` URL param,
