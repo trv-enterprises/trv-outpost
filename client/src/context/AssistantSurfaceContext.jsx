@@ -4,6 +4,17 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
+// Two separate contexts on purpose:
+// - SurfaceValueContext changes every time the active surface changes.
+//   Only the sidecard (which reads the value) subscribes here.
+// - SurfaceMutatorContext is stable for the life of the provider.
+//   Pages that register surfaces subscribe here so their re-render
+//   doesn't fire when somebody else updates the surface — preventing
+//   a register → setSurface → re-render-via-mutator-context →
+//   register-again infinite loop.
+const SurfaceValueContext = createContext(null);
+const SurfaceMutatorContext = createContext(null);
+
 /**
  * AssistantSurfaceContext — per-turn awareness of what the user is
  * currently looking at, fed into the Dashboard Assistant's system
@@ -41,8 +52,6 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState } fro
  * tight so we don't accidentally exfiltrate page state into the
  * model's prompt.
  */
-
-const AssistantSurfaceContext = createContext(null);
 
 const ALLOWED_MODES = new Set(['VIEW', 'EDIT']);
 const ALLOWED_SURFACES = new Set(['DASHBOARD', 'COMPONENT', 'CONNECTION']);
@@ -93,27 +102,30 @@ export function AssistantSurfaceProvider({ children }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ surface, register, clear }), [surface, register, clear]);
+  // Mutator value is stable across renders — register/clear are
+  // useCallback'd with empty deps. That's what keeps consumers of
+  // the mutator (pages calling useAssistantSurface) from re-running
+  // their effect every time the value changes.
+  const mutator = useMemo(() => ({ register, clear }), [register, clear]);
 
   return (
-    <AssistantSurfaceContext.Provider value={value}>
-      {children}
-    </AssistantSurfaceContext.Provider>
+    <SurfaceMutatorContext.Provider value={mutator}>
+      <SurfaceValueContext.Provider value={surface}>
+        {children}
+      </SurfaceValueContext.Provider>
+    </SurfaceMutatorContext.Provider>
   );
 }
 
 // Used by the sidecard / session hook to read the current surface
 // at send time. Returns null when no page has registered.
 export function useAssistantSurfaceValue() {
-  const ctx = useContext(AssistantSurfaceContext);
-  return ctx?.surface || null;
+  return useContext(SurfaceValueContext);
 }
 
 // Internal helper for the page-side hook to grab the mutator API
-// without re-rendering on surface changes.
+// without re-rendering on surface changes. Returns null when used
+// outside the provider (e.g. unit tests).
 export function useAssistantSurfaceMutator() {
-  const ctx = useContext(AssistantSurfaceContext);
-  return ctx;
+  return useContext(SurfaceMutatorContext);
 }
-
-export default AssistantSurfaceContext;
