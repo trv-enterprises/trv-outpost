@@ -1706,16 +1706,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         </div>
       </div>
 
-      {/* Chart Type card — shown when componentType is 'chart'.
-          Hidden in custom-code mode since the chart type drives the generated
-          code, which is bypassed when the user supplies their own.
-          Constrained to half the section's reference width so it
-          aligns with the Chart Name column above. */}
+      {/* Chart Type section — shown when componentType is 'chart'.
+          Hidden in custom-code mode since the chart type drives the
+          generated code, which is bypassed when the user supplies
+          their own. Wrapped in `.mapping-section` so it visually
+          matches the DATA MAPPING section below (bordered card,
+          labeled header, full reference width). */}
       {componentType === 'chart' && !showCustomCode && (() => {
         const currentChartType = CHART_TYPES.find(t => t.id === chartType) || CHART_TYPES[0];
         const TypeIcon = currentChartType.icon;
         return (
-          <div className="type-card-section type-card-section--half">
+          <div className="mapping-section type-card-section">
             <h4>Chart Type</h4>
             <div className="type-card-current" onClick={() => setChartTypeModalOpen(true)}>
               <Button kind="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setChartTypeModalOpen(true); }}>
