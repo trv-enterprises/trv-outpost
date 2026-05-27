@@ -11,16 +11,6 @@
   bottom: 0;
   background: var(--cds-layer-01);
   border-left: 1px solid var(--cds-border-subtle-01);
-  // The AI launcher icon sits in the header's right cluster but
-  // not directly above the sidecard's left edge, so the sidecard
-  // doesn't have an obvious connection to a header item above it.
-  // A border on the top edge gives the panel a clean seal against
-  // the app header. `--cds-border-subtle-01` was too dim against
-  // the dark layer background to read as a line — bumped to
-  // `--cds-border-strong-01` for visibility, matching the contrast
-  // used elsewhere when a thin horizontal divider sits against the
-  // panel background.
-  border-top: 1px solid var(--cds-border-strong-01);
   display: flex;
   flex-direction: column;
   z-index: 7000; // above SideNav (which lives around 6000) but below modals

@@ -717,6 +717,7 @@ function AppContent({ onDisconnect }) {
                   onClick={assistantSidecard.toggle}
                   isActive={assistantSidecard.open}
                   tooltipAlignment="end"
+                  className="assistant-launcher-action"
                 >
                   <AiLaunch size={20} />
                 </HeaderGlobalAction>

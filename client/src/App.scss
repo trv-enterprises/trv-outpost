@@ -680,3 +680,26 @@ button.cds--overflow-menu {
     border-top: 1px solid #393939;
   }
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Assistant launcher — keep its bottom border when active
+// ───────────────────────────────────────────────────────────────────
+//
+// Carbon's `.cds--header__action--active` zeroes the bottom border
+// (`border-block-end: 1px solid transparent`) so an active header
+// button visually connects to the panel that opens directly below
+// it (typical pattern: switcher → switcher panel).
+//
+// The assistant sidecard doesn't open directly below the AI
+// launcher — it slides in from the far right of the viewport, with
+// the entire right-hand header cluster sitting between the launcher
+// and the sidecard's left edge. With Carbon's default the active
+// launcher looks like an unsealed cell pointing at nothing.
+//
+// Restore the bottom border specifically on this launcher when
+// active. Other header actions (account menu, notifications) keep
+// the Carbon default because their panels actually do anchor under
+// them in some cases.
+.assistant-launcher-action.cds--header__action--active {
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
