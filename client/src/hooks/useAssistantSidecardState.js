@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../api/client';
 
 const LOCAL_OPEN_KEY = 'assistant.sidecard_open';
@@ -57,16 +57,30 @@ export default function useAssistantSidecardState() {
   const [open, setOpenState] = useState(readLocalOpen);
   const [width, setWidthState] = useState(readLocalWidth);
 
-  // Hydrate from server-side user prefs once on mount. We don't
-  // overwrite if the user has already started interacting (open or
-  // width changed locally) — but for v1 the bootstrap fires fast
-  // enough that we just trust the server value when it returns.
+  // Hydrate from server-side user prefs. localStorage already
+  // seeded both pieces of state in the useState initializers above
+  // so the UI is correct from the first paint; this effect just
+  // overrides with the server value once it returns, so a
+  // preference set on another device is honored.
+  //
+  // Auth gating: we only run the GET when an access token is
+  // present. On a cold load the page mounts before the auth
+  // bootstrap completes, and an unauthenticated /api/config/user/:id
+  // returns 401 — which the apiClient logs to the console even
+  // though our catch block swallows it. Subscribe to the
+  // `apiclient-authenticated` window event so we re-fire after
+  // bootstrap finishes. (`hadHydratedRef` keeps us from re-firing
+  // on every subsequent token refresh.)
+  const hadHydratedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const hydrate = async () => {
+      if (hadHydratedRef.current) return;
+      if (!apiClient.getAccessToken?.()) return;
       const userGuid = apiClient.getCurrentUserGuid?.();
       if (!userGuid) return;
       try {
+        hadHydratedRef.current = true;
         const cfg = await apiClient.getUserConfig?.(userGuid);
         if (cancelled || !cfg?.settings) return;
         const serverOpen = cfg.settings[SERVER_OPEN_KEY];
@@ -78,10 +92,27 @@ export default function useAssistantSidecardState() {
           setWidthState(clampWidth(serverWidth));
         }
       } catch {
-        // best-effort; keep local value
+        // best-effort; keep local value. Reset the ref so a later
+        // event (after auth recovery) gets a fresh attempt.
+        hadHydratedRef.current = false;
       }
-    })();
-    return () => { cancelled = true; };
+    };
+
+    // Try once now (covers warm reloads where the token is already
+    // in memory before this hook mounts).
+    hydrate();
+
+    // And subscribe for the post-bootstrap fire (cold loads).
+    const onAuthenticated = () => hydrate();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('apiclient-authenticated', onAuthenticated);
+    }
+    return () => {
+      cancelled = true;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('apiclient-authenticated', onAuthenticated);
+      }
+    };
   }, []);
 
   const persist = useCallback((nextOpen, nextWidth) => {
