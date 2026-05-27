@@ -153,11 +153,29 @@
     max-width: 800px;
   }
 
-  // Chart Type card half-width variant. The card lives outside the
-  // metadata flex row so it needs its own constraint to align with
-  // the Name / Namespace column above.
+  // Chart Type card half-ish-width variant. The card lives outside
+  // the metadata flex row so it needs its own constraint. Sized a
+  // bit wider than a strict 50% — the (icon + label + description +
+  // Change button) combo reads cramped at ~340px and benefits from
+  // the extra horizontal room. Still well under the section's full
+  // reference width so it remains visually distinct from a full-
+  // width row.
+  //
+  // Spacing: pull the card up toward the field row above it (which
+  // already contributes margin-bottom: spacing-05 of its own — no
+  // need to double-stack), and add visible breathing room below
+  // before the Connection/Preview/Code switcher.
   > .type-card-section--half {
-    max-width: calc((800px - #{spacing.$spacing-05}) / 2);
+    max-width: calc((800px - #{spacing.$spacing-05}) / 2 + #{spacing.$spacing-09});
+    margin-top: 0;
+    margin-bottom: spacing.$spacing-07;
+
+    // Tighten the H4 -> tile gap so the header label sits close to
+    // its card and the card-to-switcher gap below is the dominant
+    // separation.
+    h4 {
+      margin-bottom: spacing.$spacing-03;
+    }
   }
 
   .display-editor__section {

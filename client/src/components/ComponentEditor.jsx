@@ -1660,6 +1660,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               size="md"
               invalid={!!nameError}
               invalidText={nameError}
+              helperText="Internal identifier; must be unique within the namespace"
             />
           </div>
           <div className="metadata-col metadata-col--half">
