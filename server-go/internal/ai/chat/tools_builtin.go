@@ -153,13 +153,13 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"description":     map[string]interface{}{"type": "string"},
 				"chart_type":      map[string]interface{}{"type": "string", "description": "For charts: bar, line, pie, scatter, gauge, area, banded_bar, dataview, custom"},
 				"connection_id":   map[string]interface{}{"type": "string", "description": "Connection ID this component reads from (omit for connection-less components)"},
-				"query_config":    map[string]interface{}{"type": "object", "description": "Per-chart query config (sql / api / stream_filter / etc) — see ChartQueryConfig"},
-				"data_mapping":    map[string]interface{}{"type": "object", "description": "Column → axis mapping for the chart"},
+				"query_config":    chartQueryConfigSchema(),
+				"data_mapping":    chartDataMappingSchema(),
 				"control_config":  map[string]interface{}{"type": "object", "description": "Control-specific config (control_type + UI fields) — only for component_type=control"},
 				"display_config":  map[string]interface{}{"type": "object", "description": "Display-specific config — only for component_type=display"},
 				"component_code":  map[string]interface{}{"type": "string", "description": "Inline React component code; only set with use_custom_code=true"},
 				"use_custom_code": map[string]interface{}{"type": "boolean", "description": "true = use component_code; false (default) = let the server's codegen produce code from the structured fields"},
-				"options":         map[string]interface{}{"type": "object", "description": "ECharts options overlay"},
+				"options":         map[string]interface{}{"type": "object", "description": "ECharts options overlay (passed through to ECharts as-is; use this for axis ranges, colors, etc.)"},
 				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
 			},
 			"required": []string{"name"},
@@ -192,7 +192,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 
 	reg.Register(Tool{
 		Name: "create_dashboard",
-		Description: "Create a new dashboard. Returns the persisted record including its assigned ID. Panels are positioned on a 32×32-px grid via integer cell coords {x, y, w, h}; canvas size derives from layout_dimension (e.g. \"2k\" → 71×37 cells). Each panel references a component by component_id (which you must create FIRST via create_component). Set settings.layout_dimension when the user asks for a specific size; otherwise the server falls back to default_layout_dimension. Defaults: namespace=\"default\".",
+		Description: "Create a new dashboard. Returns the persisted record including its assigned ID. Panels are positioned on a 32×32-px grid via integer cell coords {x, y, w, h}; canvas size derives from settings.layout_dimension. Each panel references a component by component_id (which you must create FIRST via create_component). Defaults: namespace=\"default\".\n\nLayout-dimension cell counts (cols × rows):\n  - 1080p (1920×1080) → 53 × 27\n  - 2k    (2560×1440) → 71 × 37\n  - 4k    (3840×2160) → 106 × 57\n  - 1440p (2560×1440) → 71 × 37\nKeep all panel x+w ≤ cols and y+h ≤ rows.",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -200,14 +200,10 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"namespace":   map[string]interface{}{"type": "string", "description": "Namespace slug; empty = \"default\""},
 				"name":        map[string]interface{}{"type": "string", "description": "Unique dashboard name (per namespace)"},
 				"description": map[string]interface{}{"type": "string"},
-				"panels": map[string]interface{}{
-					"type":        "array",
-					"description": "Array of DashboardPanel entries; each carries {id, x, y, w, h, component_id?, text_config?}",
-					"items":       map[string]interface{}{"type": "object"},
-				},
-				"settings": map[string]interface{}{"type": "object", "description": "Dashboard-level settings (refresh_interval, layout_dimension, theme, etc)"},
-				"tags":     map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
-				"metadata": map[string]interface{}{"type": "object"},
+				"panels":      dashboardPanelsSchema(),
+				"settings":    dashboardSettingsSchema(),
+				"tags":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"metadata":    map[string]interface{}{"type": "object"},
 			},
 			"required": []string{"name"},
 		},
@@ -283,6 +279,114 @@ func emptyObjectSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":       "object",
 		"properties": map[string]interface{}{},
+	}
+}
+
+// chartQueryConfigSchema returns the inline JSON-schema for
+// ChartQueryConfig (models/dashboard.go). Inlining the field names
+// is what stops the model from inventing plausible-but-wrong keys
+// like `query` / `query_type` (observed in the 2026-05-26 export —
+// fields were silently dropped during JSON unmarshal and the chart
+// shipped with an empty query).
+func chartQueryConfigSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "object",
+		"description": "How to query data for this chart. Field names are exact — extra keys are silently ignored.",
+		"properties": map[string]interface{}{
+			"raw": map[string]interface{}{
+				"type":        "string",
+				"description": "The query string. SQL statement for sql; API path/endpoint for api; filter expression for stream_filter / csv_filter.",
+			},
+			"type": map[string]interface{}{
+				"type":        "string",
+				"description": "Query mode: sql, api, csv_filter, stream_filter.",
+				"enum":        []string{"sql", "api", "csv_filter", "stream_filter"},
+			},
+			"params": map[string]interface{}{
+				"type":        "object",
+				"description": "Optional query parameters (named bind vars for sql, query-string params for api, etc).",
+			},
+		},
+	}
+}
+
+// chartDataMappingSchema returns the inline JSON-schema for
+// ChartDataMapping (models/dashboard.go). Same motivation as
+// chartQueryConfigSchema — the model was using `value` instead of
+// `y_axis` for gauges, and the field was silently dropped.
+func chartDataMappingSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "object",
+		"description": "Column → axis mapping for this chart. For a single-value chart like gauge, set y_axis to a one-element array of the value column name (e.g. y_axis: [\"temp\"]).",
+		"properties": map[string]interface{}{
+			"x_axis":        map[string]interface{}{"type": "string", "description": "Column name for the X axis (categories/time)."},
+			"x_axis_label":  map[string]interface{}{"type": "string", "description": "Display label for the X axis. Empty = no axis name (typical for time-series)."},
+			"x_axis_format": map[string]interface{}{"type": "string", "description": "Format for X values: chart, chart_time, chart_date, chart_datetime, short, long."},
+			"y_axis": map[string]interface{}{
+				"type":        "array",
+				"items":       map[string]interface{}{"type": "string"},
+				"description": "Column name(s) for the Y axis (values). Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0].",
+			},
+			"y_axis_label":   map[string]interface{}{"type": "string", "description": "Display label for the Y axis (legacy single label; use y_axis_labels for dual-axis)."},
+			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels. [0] = left axis, [1] = right axis on dual-axis charts."},
+			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
+			"group_by":       map[string]interface{}{"type": "string", "description": "Client-side grouping column."},
+			"label_col":      map[string]interface{}{"type": "string", "description": "Column used for pie/bar slice labels."},
+			"filters":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "object"}, "description": "Client-side filters: [{field, op, value}]. ops: eq, neq, gt, gte, lt, lte, contains, in, notIn, isNull, isNotNull."},
+			"aggregation":    map[string]interface{}{"type": "object", "description": "Optional aggregation: {type: first|last|min|max|avg|sum|count|limit, sort_by, field, count}."},
+			"sliding_window": map[string]interface{}{"type": "object", "description": "{duration: seconds, timestamp_col: \"ts\"} — keep only the last N seconds of data."},
+			"time_bucket":    map[string]interface{}{"type": "object", "description": "{interval: seconds, function: avg|min|max|sum|count, value_cols: [\"temp\",\"humidity\"], timestamp_col: \"ts\"} — aggregate streaming rows into time buckets."},
+			"sort_by":        map[string]interface{}{"type": "string"},
+			"sort_order":     map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
+			"limit":          map[string]interface{}{"type": "integer", "description": "Max rows the chart should render."},
+		},
+	}
+}
+
+// dashboardPanelsSchema returns the inline JSON-schema for the
+// DashboardPanel array. Inlining the {x, y, w, h} cell-unit
+// convention here prevents the model from guessing pixel coords
+// or forgetting which is width vs height.
+func dashboardPanelsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells.",
+		"items": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id":           map[string]interface{}{"type": "string", "description": "Stable panel id within the dashboard (e.g. \"panel-1\")."},
+				"x":            map[string]interface{}{"type": "integer", "description": "Left edge in grid cells (0-indexed)."},
+				"y":            map[string]interface{}{"type": "integer", "description": "Top edge in grid cells (0-indexed)."},
+				"w":            map[string]interface{}{"type": "integer", "description": "Width in grid cells."},
+				"h":            map[string]interface{}{"type": "integer", "description": "Height in grid cells."},
+				"component_id": map[string]interface{}{"type": "string", "description": "ID of the component to render in this panel. Omit for an empty / text panel."},
+				"title":        map[string]interface{}{"type": "string", "description": "Optional panel-level title override (falls back to the component's title or name)."},
+				"text_config":  map[string]interface{}{"type": "object", "description": "Inline text panel. Set instead of component_id for a text-only panel: {content, size, align}."},
+			},
+			"required": []string{"id", "x", "y", "w", "h"},
+		},
+	}
+}
+
+// dashboardSettingsSchema returns the inline JSON-schema for
+// DashboardSettings. layout_dimension is the most-asked field; the
+// rest are sensible defaults.
+func dashboardSettingsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "object",
+		"description": "Dashboard-level settings.",
+		"properties": map[string]interface{}{
+			"refresh_interval": map[string]interface{}{"type": "integer", "description": "Auto-refresh interval in ms (e.g. 5000 = 5s)."},
+			"theme":            map[string]interface{}{"type": "string", "description": "\"light\", \"dark\", or \"auto\"."},
+			"timezone":         map[string]interface{}{"type": "string", "description": "IANA timezone for x-axis timestamp display."},
+			"layout_dimension": map[string]interface{}{
+				"type":        "string",
+				"description": "Canvas size preset. \"1080p\" (1920×1080), \"1440p\"/\"2k\" (2560×1440), \"4k\" (3840×2160). Empty = server default.",
+			},
+			"title_scale": map[string]interface{}{"type": "integer", "description": "Title font scale percent (50-200, default 100)."},
+			"is_public":   map[string]interface{}{"type": "boolean"},
+			"allow_export": map[string]interface{}{"type": "boolean"},
+		},
 	}
 }
 

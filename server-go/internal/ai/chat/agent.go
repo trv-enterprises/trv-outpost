@@ -94,10 +94,16 @@ type CallerCtx struct {
 	Surface   *models.SurfaceContext
 }
 
-// Default max turns per ProcessMessage call. Lower than the Component
-// AI agent's because chat sessions can run indefinitely; we don't
-// want one user message to chew through 50 tool calls.
-const defaultChatMaxTurns = 8
+// Default max turns per ProcessMessage call. Matches the Component
+// AI agent's ceiling — builder workflows for non-trivial dashboards
+// routinely need 10-15 turns (one create_component per chart + one
+// create_dashboard + a few read/probe calls). The earlier ceiling of
+// 8 cut off real builds halfway through.
+//
+// The loop-detection guard in ProcessMessage catches degenerate
+// patterns (repeated identical tool calls) so this ceiling isn't the
+// only thing standing between a stuck agent and runaway cost.
+const defaultChatMaxTurns = 50
 
 // SessionService is the subset of the existing AISessionService that
 // the chat agent needs. Same interface shape the Component AI agent
@@ -229,6 +235,14 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 	// multi-turn cycle.
 	softWarnedThisCall := false
 
+	// recentToolCalls tracks the last loopDetectorWindow tool-call
+	// fingerprints in this ProcessMessage cycle. If the model
+	// invokes the same tool with the same args twice within the
+	// window we synthesize an is_error result instead of executing
+	// — cheaper than burning a turn and gives the model a clear
+	// signal to change approach. See toolCallFingerprint below.
+	recentToolCalls := make([]string, 0, loopDetectorWindow)
+
 	for turn := 0; turn < a.maxTurns; turn++ {
 		anthropicTools := a.tools.AnthropicToolParams(revealedTierB)
 
@@ -312,6 +326,30 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 
 		for _, tu := range toolUseBlocks {
 			assistantBlocks = append(assistantBlocks, anthropic.NewToolUseBlock(tu.ID, tu.Input, tu.Name))
+
+			// Loop detection: if this exact (tool, args) pair was just
+			// invoked, short-circuit with an is_error result instead of
+			// re-executing. The model usually pivots on the first
+			// "you already did this" signal — much cheaper than the
+			// next-undiscovered-cycle eating all 50 turns.
+			fingerprint := toolCallFingerprint(tu.Name, tu.Input)
+			if isDuplicateRecent(recentToolCalls, fingerprint) {
+				dupMsg := fmt.Sprintf(
+					"loop_detected: you just called %s with these same arguments. The previous result is in the conversation above. Try a different tool or change your arguments — repeating the same call won't produce different output.",
+					tu.Name,
+				)
+				toolResults = append(toolResults, anthropic.NewToolResultBlock(tu.ID, dupMsg, true))
+				modelToolCalls = append(modelToolCalls, models.ToolCall{
+					ID:     tu.ID,
+					Name:   tu.Name,
+					Input:  string(tu.Input),
+					Output: dupMsg,
+				})
+				// Don't push fingerprint again — same call shouldn't
+				// keep extending the window.
+				continue
+			}
+			recentToolCalls = appendBounded(recentToolCalls, fingerprint, loopDetectorWindow)
 
 			// Build the per-call dispatch env. The result store
 			// gives get_full_result something to fetch from; the
@@ -409,6 +447,48 @@ func buildMessages(history []models.AIMessage, newUserContent string) []anthropi
 // (defaultSystemPrompt removed in step 6 — see prompt.go's
 // rolePreamble() and callerContextSection() for the templated
 // replacement.)
+
+// loopDetectorWindow is the number of recent tool-call fingerprints
+// we hold per ProcessMessage call. A larger window catches looser
+// cycles but at the cost of falsely flagging legitimate retries with
+// the same args (e.g. polling a query). 8 is enough to spot tight
+// fetch→fetch and get→get patterns while leaving room for the model
+// to redo a call after one or two intervening different ones.
+const loopDetectorWindow = 8
+
+// toolCallFingerprint returns a stable string identifying a single
+// tool invocation, used by the in-cycle duplicate detector. We rely
+// on encoding/json producing deterministic output for our own
+// JSON.RawMessage inputs from Anthropic — they arrive already
+// canonicalized by the SDK.
+func toolCallFingerprint(name string, args []byte) string {
+	return name + ":" + string(args)
+}
+
+// isDuplicateRecent reports whether `fp` is already in the recent
+// fingerprint window.
+func isDuplicateRecent(window []string, fp string) bool {
+	for _, prev := range window {
+		if prev == fp {
+			return true
+		}
+	}
+	return false
+}
+
+// appendBounded appends `fp` to the recent-fingerprint window,
+// dropping the oldest entry once we exceed `cap`. Returns the
+// new slice (potentially the same backing array, potentially a
+// resliced view).
+func appendBounded(window []string, fp string, cap int) []string {
+	if len(window) < cap {
+		return append(window, fp)
+	}
+	// Slide: drop the oldest entry.
+	copy(window, window[1:])
+	window[len(window)-1] = fp
+	return window
+}
 
 // anthropicMessageTextContent returns the rendered text of every
 // content block in every message, for the budget estimator. The
