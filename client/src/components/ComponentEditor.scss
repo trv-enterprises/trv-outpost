@@ -388,19 +388,30 @@
       min-width: 0;
       display: flex;       // children stretch via the inner hint's height: 100%
       flex-direction: column;
+      min-height: 0;       // allow inner overflow to compute correctly
 
-      // Make the inner guidance card fill the column. Body scroll
-      // is handled by .connection-guidance-hint__body's max-height.
+      // Make the inner guidance card fill the column. We open the
+      // hint by default in this slot, so the body becomes a
+      // scrollable region sized to the remaining column height
+      // (not the hint's standalone max-height: 360px). The toggle
+      // row stays sticky-fixed at the top.
       > .connection-guidance-hint {
         margin: 0;
         flex: 1 1 auto;
         display: flex;
         flex-direction: column;
+        min-height: 0;
 
-        // When collapsed the body isn't rendered, so the card
-        // shrinks to its toggle row. That's fine — the row still
-        // sits at the top of the column, aligned with the query
-        // card's header.
+        // The body's standalone max-height is the right cap when
+        // the hint floats alone (e.g. ConnectionDetailPage). In
+        // the query row it gets in the way of the "stretch to
+        // column height" intent — override to fill the column
+        // and scroll.
+        .connection-guidance-hint__body {
+          flex: 1 1 auto;
+          max-height: none;
+          min-height: 0;
+        }
       }
     }
 

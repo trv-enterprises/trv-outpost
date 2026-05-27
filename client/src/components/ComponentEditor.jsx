@@ -2330,7 +2330,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     the prose. Hidden when the connection type has
                     no adapter-specific guidance. */}
                 <div className="query-row__guidance">
-                  <ConnectionGuidanceHint typeId={selectedDatasource.type} />
+                  <ConnectionGuidanceHint typeId={selectedDatasource.type} defaultOpen />
                 </div>
                 </div>
 
