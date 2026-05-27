@@ -665,6 +665,9 @@ button.cds--overflow-menu {
 // side-nav that doesn't carry the expanded class," which catches
 // the rail regardless of the other variant flags.
 .cds--side-nav:not(.cds--side-nav--expanded) {
+  // Bump the existing divider lines on `.nav-header` and the
+  // subsection variant to the stronger contrast token so they
+  // actually read in rail mode.
   .design-mode-nav .nav-header,
   .manage-mode-nav .nav-header {
     border-bottom-color: var(--cds-border-strong-01);
@@ -673,5 +676,21 @@ button.cds--overflow-menu {
   .design-mode-nav .nav-header--subsection,
   .manage-mode-nav .nav-header--subsection {
     border-top-color: var(--cds-border-strong-01);
+  }
+
+  // Top divider — above the first section's header.
+  // The expanded view also benefits from this; we mirror the same
+  // rule outside the :not() block for consistency.
+  .design-mode-nav > .nav-header:first-child,
+  .manage-mode-nav > .nav-header:first-child {
+    border-top: 1px solid var(--cds-border-strong-01);
+  }
+
+  // Closing divider — below the last `.nav-links` block. Anchors
+  // the bottom of the rail's grouped icons so the section structure
+  // reads as a complete block rather than trailing off.
+  .design-mode-nav > .nav-links:last-child,
+  .manage-mode-nav > .nav-links:last-child {
+    border-bottom: 1px solid var(--cds-border-strong-01);
   }
 }
