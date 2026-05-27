@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/connectionguidance"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
@@ -162,14 +163,122 @@ type GetConnectionInput struct {
 	ID string `json:"id"`
 }
 
-func (t *Toolset) GetConnection(ctx context.Context, in GetConnectionInput) (*models.Connection, error) {
+// GetConnectionOutput wraps the connection record with the
+// connection-type-specific guidance string (see
+// internal/connectionguidance) so an agent fetching a specific
+// connection sees the per-type query-config conventions in the
+// same response — no separate guidance round trip needed for the
+// common path. GuidanceType echoes the type id the guidance was
+// looked up against; falls back to a generic discovery hint when
+// no entry exists for the type.
+type GetConnectionOutput struct {
+	Connection   *models.Connection `json:"connection"`
+	GuidanceType string             `json:"guidance_type,omitempty"`
+	Guidance     string             `json:"guidance,omitempty"`
+}
+
+func (t *Toolset) GetConnection(ctx context.Context, in GetConnectionInput) (*GetConnectionOutput, error) {
 	if t.Connections == nil {
 		return nil, fmt.Errorf("connection service not wired")
 	}
 	if in.ID == "" {
 		return nil, fmt.Errorf("id is required")
 	}
-	return t.Connections.GetConnection(ctx, in.ID)
+	conn, err := t.Connections.GetConnection(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := &GetConnectionOutput{Connection: conn}
+	if conn != nil {
+		out.GuidanceType = conn.GetEffectiveTypeID()
+		out.Guidance, _ = connectionguidance.Get(out.GuidanceType)
+	}
+	return out, nil
+}
+
+// GetConnectionSchemaInput selects a connection by ID.
+//
+// Intentionally minimal: no Prometheus metric_prefix / contains /
+// max_metrics filters here. The MCP schema tool has inline metric
+// filtering today and there's discussion about moving the MCP
+// surface into a separate dashboard-agent codebase — pre-coupling
+// that helper into toolops would freeze a transitional shape.
+// When the time comes, lift the filter from wherever it lives into
+// a shared helper and call it from both consumers.
+type GetConnectionSchemaInput struct {
+	ConnectionID string `json:"connection_id"`
+}
+
+// GetConnectionSchemaOutput bundles the discovered schema with the
+// same per-type guidance the GetConnection path returns. Schema is
+// the SchemaResponse pass-through; Guidance lets the agent see the
+// query-config conventions for this connection type in the same
+// turn it learned the column shape.
+type GetConnectionSchemaOutput struct {
+	Schema       *models.SchemaResponse `json:"schema"`
+	GuidanceType string                 `json:"guidance_type,omitempty"`
+	Guidance     string                 `json:"guidance,omitempty"`
+}
+
+// GetConnectionSchema runs schema discovery against a connection
+// (SQL tables/columns, Prometheus metrics/labels, ts-store
+// sample-and-union, etc — see ConnectionService.GetSchema) and
+// attaches the per-type guidance for the connection's type.
+func (t *Toolset) GetConnectionSchema(ctx context.Context, in GetConnectionSchemaInput) (*GetConnectionSchemaOutput, error) {
+	if t.Connections == nil {
+		return nil, fmt.Errorf("connection service not wired")
+	}
+	if in.ConnectionID == "" {
+		return nil, fmt.Errorf("connection_id is required")
+	}
+	conn, err := t.Connections.GetConnection(ctx, in.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := t.Connections.GetSchema(ctx, in.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &GetConnectionSchemaOutput{Schema: schema}
+	if conn != nil {
+		out.GuidanceType = conn.GetEffectiveTypeID()
+		out.Guidance, _ = connectionguidance.Get(out.GuidanceType)
+	}
+	return out, nil
+}
+
+// GetConnectionTypeGuidanceInput selects a type id directly. Used
+// by callers that haven't picked a specific connection yet but want
+// to learn the query-config conventions for a type they're
+// considering (e.g. "what would a Postgres connection look like").
+type GetConnectionTypeGuidanceInput struct {
+	Type string `json:"type"`
+}
+
+// GetConnectionTypeGuidanceOutput mirrors the same {type, guidance}
+// shape the MCP and component-agent surfaces emit so consumers can
+// treat all three identically.
+type GetConnectionTypeGuidanceOutput struct {
+	Type     string `json:"type"`
+	Guidance string `json:"guidance"`
+	HasEntry bool   `json:"has_entry"`
+}
+
+// GetConnectionTypeGuidance returns the query-config conventions
+// for a connection type id (e.g. "store.tsstore", "api.prometheus").
+// When no entry exists the result still includes a generic
+// discovery hint — callers can detect this via has_entry=false.
+func (t *Toolset) GetConnectionTypeGuidance(_ context.Context, in GetConnectionTypeGuidanceInput) (*GetConnectionTypeGuidanceOutput, error) {
+	if in.Type == "" {
+		return nil, fmt.Errorf("type is required")
+	}
+	text, ok := connectionguidance.Get(in.Type)
+	return &GetConnectionTypeGuidanceOutput{
+		Type:     in.Type,
+		Guidance: text,
+		HasEntry: ok,
+	}, nil
 }
 
 // CreateConnectionInput wraps the request model so callers can

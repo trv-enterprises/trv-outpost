@@ -52,7 +52,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	// the model is doing something specific to a single connection.
 	reg.Register(Tool{
 		Name:        "get_connection",
-		Description: "Get the full configuration for a single connection by ID.",
+		Description: "Get the full configuration for a single connection by ID. Returns `{connection, guidance, guidance_type}` — the `guidance` field is the per-type cheat sheet for how to build query_config against this adapter (limits, DSL caveats, escape hatches). Read it before calling query_connection — adapter conventions are NOT inferrable from the generic query_connection schema alone.",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -67,9 +67,48 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapGetConnection(ops),
 	})
 
+	// Tier B: schema discovery (SQL tables/columns, Prometheus
+	// metrics/labels, ts-store sample-and-union, etc). Bundles the
+	// per-type guidance with the schema so the model learns both
+	// "what columns exist" and "how to write query_config" in one
+	// fetch.
+	reg.Register(Tool{
+		Name:        "get_connection_schema",
+		Description: "Discover the schema of a connection — tables and columns for SQL; metrics and labels for Prometheus; sampled JSON keys for ts-store. Returns `{schema, guidance, guidance_type}`; read the `guidance` for the query-config conventions this adapter actually accepts before calling query_connection. Returns success-with-error in `schema.error` for connection types that don't support schema discovery.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"connection_id": map[string]interface{}{"type": "string", "description": "Connection ID"},
+			},
+			"required": []string{"connection_id"},
+		},
+		Handler: wrapGetConnectionSchema(ops),
+	})
+
+	// Tier B: type-shopping. Use when no specific connection is
+	// selected yet — e.g. "what would a Postgres connection look
+	// like before I create one." For the more common
+	// "I've picked a connection and want to query it" path, the
+	// guidance bundled on get_connection / get_connection_schema is
+	// usually what you want.
+	reg.Register(Tool{
+		Name:        "get_connection_type_guidance",
+		Description: "Fetch the query_config conventions for a connection adapter type (e.g. `store.tsstore`, `api.prometheus`, `sql.postgres`). Use this when picking a type to create, or when you need conventions for a type and don't have a specific connection ID in hand. For an existing connection prefer `get_connection` / `get_connection_schema` — they bundle the same guidance with the actual connection / column data.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"type": map[string]interface{}{"type": "string", "description": "Connection type id (matches the `type_id` from get_type_catalog)."},
+			},
+			"required": []string{"type"},
+		},
+		Handler: wrapGetConnectionTypeGuidance(ops),
+	})
+
 	reg.Register(Tool{
 		Name:        "query_connection",
-		Description: "Execute an ad-hoc query against a connection. Pass `connection_id`, `raw` (the query string), `type` (sql / api / csv_filter / stream_filter), and optional `params`. Pass `limit` to cap rows returned — useful when you only need to verify the result shape before building a chart. `limit: 1` is the common shape-probe pattern.",
+		Description: "Execute an ad-hoc query against a connection. Pass `connection_id`, `raw` (the query string), `type` (sql / api / csv_filter / stream_filter), and optional `params`. Pass `limit` to cap rows returned — useful when you only need to verify the result shape before building a chart. `limit: 1` is the common shape-probe pattern. NOTE: adapters interpret `raw` and `params` differently — some have a custom DSL or implicit row caps. Call `get_connection` or `get_connection_type_guidance` FIRST and read the bundled `guidance` field; relying on the generic schema alone gets you silently-downgraded results on adapters like ts-store.",
 		Tier:        TierA,
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -464,6 +503,34 @@ func wrapGetConnection(ops *toolops.Toolset) ToolHandler {
 			return "", fmt.Errorf("invalid args: %w", err)
 		}
 		out, err := ops.GetConnection(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapGetConnectionSchema(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.GetConnectionSchemaInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.GetConnectionSchema(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapGetConnectionTypeGuidance(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.GetConnectionTypeGuidanceInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.GetConnectionTypeGuidance(ctx, in)
 		if err != nil {
 			return "", err
 		}

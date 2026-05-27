@@ -170,16 +170,86 @@ This is a streaming connection — the dashboard subscribes to the topic glob an
 Return columns: depends on data_path. With no data_path, you get topic + payload (raw). With a data_path, you get topic + value (extracted).
 `,
 
-	"stream.tsstore": `
-query_config shape for ts-store push streams:
+	"store.tsstore": `
+ts-store does NOT speak SQL. query_connection takes a small DSL on
+the "raw" field, not a SQL string. Writing SQL silently downgrades
+to "newest" and you get 10 rows — the WHERE clause is ignored. Use
+the shapes below, or for live data switch the connection's
+transport to "streaming" and use stream_filter (see below).
+
+The query_config.type field is documentary for ts-store (dispatch
+is by the connection's type, not the query's). Use "api" for REST-
+mode connections and "stream_filter" for streaming-mode — that's
+what the editor and tooling expect.
+
+# REST mode (transport: rest or unset)
+
+query_config shapes:
+
+    // Latest N records (default cap = 10 rows)
+    { "raw": "newest", "type": "api", "params": { "limit": 100 } }
+
+    // Oldest N records (default cap = 10 rows)
+    { "raw": "oldest", "type": "api", "params": { "limit": 100 } }
+
+    // All records since a unix-second timestamp (default cap = 100000)
+    { "raw": "since:1779900000", "type": "api", "params": { "limit": 5000 } }
+
+    // Records in a unix-second range (default cap = 100000)
+    { "raw": "range:1779900000:1779903600", "type": "api", "params": {} }
+
+Implicit row caps when params.limit is unset:
+  - newest / oldest / default → 10
+  - since:* / range:*         → 100000
+
+ALWAYS pass an explicit params.limit when you care about the row
+count. The default cap on "newest" is 10 — small enough to surprise
+you if you assumed otherwise.
+
+Server-side filtering (optional, any raw mode):
+  - params.filter            — substring match against record JSON
+  - params.filter_ignore_case — case-insensitive variant (bool)
+
+Anything richer (per-column predicates, math, GROUP BY) must be
+done client-side via data_mapping.filters or by pulling a wider
+window with since/range and aggregating in the component.
+
+# Streaming mode (transport: streaming)
+
+Live push connections (the dashboard server holds a websocket to
+ts-store, components receive records as they arrive):
 
     {
-      "raw":    "<series_name or wildcard>",
+      "raw":    "<series_name or wildcard or empty>",
       "type":   "stream_filter",
       "params": { }
     }
 
-ts-store is a push-based stream. The dashboard server holds the subscription; components receive records as they arrive. Use get_connection_schema to discover series and inbound payload shapes.
+A given ts-store connection is either REST or streaming based on
+its config.transport — they are not interchangeable. To convert,
+edit the connection.
+
+# Discovering columns
+
+Call get_connection_schema first — the adapter handles all three
+ts-store store data_types:
+  - "schema" stores: returns the formal schema endpoint's columns
+  - "json" / unset:  samples 10 newest records and unions their keys
+  - "text" stores:   returns an empty column list (text payload has
+                     no fields — render the raw message)
+
+Return columns from query_connection match what get_connection_schema
+shows, plus a synthetic "timestamp" column on every record.
+
+# Common pitfall (do not do this)
+
+  // WRONG — SQL is silently downgraded to "newest" / 10 rows
+  { "raw": "SELECT * FROM x WHERE ts >= NOW() - INTERVAL '1 hour'",
+    "type": "tsstore" }
+
+There is no SQL parser in the ts-store adapter. The "type" field
+above is also not real ("tsstore" isn't a supported query type id).
+Use newest/oldest/since:/range: with params.limit instead.
 `,
 
 	"api.rest": `
