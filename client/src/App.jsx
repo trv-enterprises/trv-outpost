@@ -121,7 +121,7 @@ function AIBuilderGate() {
 // Step 9 ships the chrome only; modelLabel is a static placeholder
 // for now and will pull from /api/ai/availability once that endpoint
 // surfaces the model (step 8+ work, deferred to keep step 9 focused).
-function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onRequestClose }) {
+function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onRequestClose, currentUser }) {
   const { activeNamespace } = useNamespaces();
   return (
     <AssistantSidecard
@@ -132,6 +132,7 @@ function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onReq
       onRequestClose={onRequestClose}
       namespace={activeNamespace || 'default'}
       modelLabel="sonnet"
+      userName={currentUser?.name || currentUser?.guid || null}
     />
   );
 }
@@ -803,6 +804,7 @@ function AppContent({ onDisconnect }) {
           minWidth={assistantSidecard.minWidth}
           onResize={assistantSidecard.setWidth}
           onRequestClose={() => assistantSidecard.setOpen(false)}
+          currentUser={currentUser}
         />
       )}
 

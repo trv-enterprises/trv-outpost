@@ -9,6 +9,7 @@ import useAssistantSession from '../../hooks/useAssistantSession';
 import useAssistantPreferences from '../../hooks/useAssistantPreferences';
 import AssistantMessageList from './AssistantMessageList';
 import AssistantSettingsMenu from './AssistantSettingsMenu';
+import { exportAsMarkdown, exportAsJson } from './exportConversation';
 import './AssistantSidecard.scss';
 
 /**
@@ -40,6 +41,7 @@ export default function AssistantSidecard({
   onRequestClose,
   namespace = 'default',
   modelLabel = 'sonnet',
+  userName = null,
 }) {
   const draggingRef = useRef(false);
   const dragStartXRef = useRef(0);
@@ -49,6 +51,28 @@ export default function AssistantSidecard({
   const prefs = useAssistantPreferences();
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
+
+  // Export handlers are passed to the cog menu. Only wire them when
+  // the conversation has at least one message — the menu reads
+  // undefined as "disable this item" so empty conversations
+  // surface the items as future-features rather than no-ops.
+  const hasMessages = session.messages && session.messages.length > 0;
+  const handleExportMarkdown = useCallback(() => {
+    exportAsMarkdown({
+      messages: session.messages,
+      namespace,
+      modelLabel,
+      user: userName,
+    });
+  }, [session.messages, namespace, modelLabel, userName]);
+  const handleExportJson = useCallback(() => {
+    exportAsJson({
+      messages: session.messages,
+      namespace,
+      modelLabel,
+      user: userName,
+    });
+  }, [session.messages, namespace, modelLabel, userName]);
 
   const handleDragStart = useCallback((e) => {
     draggingRef.current = true;
@@ -131,11 +155,11 @@ export default function AssistantSidecard({
           <div className="assistant-sidecard__header-actions">
             <AssistantSettingsMenu
               onClearChat={session.clearChat}
-              // Export handlers land in step 13. Passing undefined
-              // keeps the menu items rendered but disabled so users
-              // see what's coming without ghost-functionality.
-              onExportMarkdown={undefined}
-              onExportJson={undefined}
+              // Pass undefined when there are no messages so the
+              // export items render as disabled rather than firing
+              // on an empty conversation.
+              onExportMarkdown={hasMessages ? handleExportMarkdown : undefined}
+              onExportJson={hasMessages ? handleExportJson : undefined}
               expandToolCalls={prefs.expandToolCalls}
               onToggleExpandToolCalls={prefs.toggleExpandToolCalls}
               showTokenUsage={prefs.showTokenUsage}
