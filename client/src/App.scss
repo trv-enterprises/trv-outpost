@@ -225,7 +225,11 @@ button.cds--header__action {
       }
     }
 
-    // Hide design mode nav content when collapsed
+    // Hide design mode nav content when collapsed. The border-bottom
+    // on `.nav-header` is intentionally preserved here (formerly set
+    // to `none`) so the section divider lines remain visible for
+    // positional reference between groups — the rail mode strong-
+    // contrast color override lives further down.
     .design-mode-nav {
       .nav-header span {
         display: none;
@@ -235,7 +239,6 @@ button.cds--header__action {
         justify-content: center;
         padding: spacing.$spacing-03;
         margin: 0;
-        border-bottom: none;
       }
 
       .nav-links .cds--side-nav__link-text {
@@ -243,7 +246,9 @@ button.cds--header__action {
       }
     }
 
-    // Hide manage mode nav content when collapsed
+    // Hide manage mode nav content when collapsed. Same reasoning
+    // as design-mode-nav above: keep the .nav-header border-bottom
+    // so section dividers stay visible in rail mode.
     .manage-mode-nav {
       .nav-header span {
         display: none;
@@ -253,7 +258,6 @@ button.cds--header__action {
         justify-content: center;
         padding: spacing.$spacing-03;
         margin: 0;
-        border-bottom: none;
       }
     }
   }
@@ -665,32 +669,14 @@ button.cds--overflow-menu {
 // side-nav that doesn't carry the expanded class," which catches
 // the rail regardless of the other variant flags.
 .cds--side-nav:not(.cds--side-nav--expanded) {
-  // Bump the existing divider lines on `.nav-header` and the
-  // subsection variant to the stronger contrast token so they
-  // actually read in rail mode.
-  .design-mode-nav .nav-header,
-  .manage-mode-nav .nav-header {
-    border-bottom-color: var(--cds-border-strong-01);
-  }
-
-  .design-mode-nav .nav-header--subsection,
-  .manage-mode-nav .nav-header--subsection {
-    border-top-color: var(--cds-border-strong-01);
-  }
-
-  // Top divider — above the first section's header.
-  // The expanded view also benefits from this; we mirror the same
-  // rule outside the :not() block for consistency.
+  // Top divider — above the first section's header. There's no
+  // pre-existing element with a top border at the very top of the
+  // nav, so we add one explicitly. Color matches the existing
+  // `.nav-header` border-bottom in DesignModeNav.scss /
+  // ManageModeNav.scss (`#393939`) so all rail-mode dividers look
+  // the same as the expanded view's dividers.
   .design-mode-nav > .nav-header:first-child,
   .manage-mode-nav > .nav-header:first-child {
-    border-top: 1px solid var(--cds-border-strong-01);
-  }
-
-  // Closing divider — below the last `.nav-links` block. Anchors
-  // the bottom of the rail's grouped icons so the section structure
-  // reads as a complete block rather than trailing off.
-  .design-mode-nav > .nav-links:last-child,
-  .manage-mode-nav > .nav-links:last-child {
-    border-bottom: 1px solid var(--cds-border-strong-01);
+    border-top: 1px solid #393939;
   }
 }

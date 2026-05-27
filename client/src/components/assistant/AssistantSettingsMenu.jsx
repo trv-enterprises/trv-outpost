@@ -46,6 +46,13 @@ export default function AssistantSettingsMenu({
       aria-label="Assistant settings"
       renderIcon={() => <Settings size={16} />}
       flipped
+      // Force the menu popover to open BELOW the cog. Carbon's
+      // auto-direction heuristic guesses based on viewport
+      // position, but with the sidecard's fixed positioning it
+      // sometimes guesses "open upward" and the menu gets clipped
+      // by the app header above. The cog is always at the top of
+      // the sidecard, so "open downward" is always right here.
+      direction="bottom"
       size="sm"
       menuOptionsClass="assistant-settings-menu"
     >
