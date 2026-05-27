@@ -707,12 +707,18 @@ function AppContent({ onDisconnect }) {
             <HeaderGlobalBar>
               {/* Dashboard Assistant launcher. Sits left of the rest
                   of the header-action cluster (NamespacePicker, Help,
-                  Notifications, AccountMenu). Only renders when the
-                  chat agent is enabled at the deployment — i.e. when
-                  BOTH ANTHROPIC_API_KEY is set AND
-                  assistant.enabled is true. Toggle persists open
-                  state per-user. */}
-              {chatAgentEnabled && (
+                  Notifications, AccountMenu). Only renders when:
+                    1. The chat agent is enabled at the deployment
+                       (ANTHROPIC_API_KEY set AND assistant.enabled
+                       is true), AND
+                    2. The caller has Design capability. The
+                       assistant is a builder; View-only users
+                       wouldn't have anything actionable to ask, and
+                       Manage-only is system administration that the
+                       chat agent isn't built for (the design doc
+                       explicitly excludes Manage-shaped tools like
+                       system-user creation from v1). */}
+              {chatAgentEnabled && userCapabilities.can_design && (
                 <HeaderGlobalAction
                   aria-label={assistantSidecard.open ? 'Hide assistant' : 'Open assistant'}
                   onClick={assistantSidecard.toggle}
@@ -788,7 +794,7 @@ function AppContent({ onDisconnect }) {
           when the chat agent is disabled, but we keep the gate here
           too in case the icon is bypassed (e.g. a keyboard shortcut
           path someday). */}
-      {chatAgentEnabled && (
+      {chatAgentEnabled && userCapabilities.can_design && (
         <AssistantSidecardWithNamespace
           open={assistantSidecard.open}
           width={assistantSidecard.width}
@@ -820,7 +826,7 @@ function AppContent({ onDisconnect }) {
         // the panel instead of being covered by it. Drag-resize on
         // the sidecard updates the width in real time.
         style={
-          chatAgentEnabled && assistantSidecard.open
+          chatAgentEnabled && userCapabilities.can_design && assistantSidecard.open
             ? { paddingRight: `${assistantSidecard.width}px` }
             : undefined
         }

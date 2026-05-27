@@ -88,6 +88,24 @@ func (h *AISessionHandler) CreateSession(c *gin.Context) {
 		return
 	}
 
+	// Capability gate for chat-kind sessions. The Dashboard Assistant
+	// is a builder agent — View-only and Manage-only users have no
+	// actionable use for it (V can't author anything, M operates on
+	// surfaces the chat agent's toolset doesn't cover in v1). Refuse
+	// the session-create rather than letting a session exist that
+	// can't usefully act on anything. Component-kind sessions
+	// (Component AI agent) keep their existing posture (gated only
+	// by route auth + the per-tool capability checks in toolops).
+	if req.Kind == models.AISessionKindChat {
+		caller := middleware.GetUser(c)
+		if caller == nil || !caller.HasCapability(models.CapabilityDesign) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Dashboard Assistant requires the Design capability.",
+			})
+			return
+		}
+	}
+
 	response, err := h.service.CreateSession(c.Request.Context(), &req)
 	if err != nil {
 		status := http.StatusInternalServerError
