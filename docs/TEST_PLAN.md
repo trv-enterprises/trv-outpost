@@ -516,6 +516,144 @@ curl -X POST "${TS_STORE_URL}/api/stores/${STORE}/alerts/webhook" \
 
 ---
 
+## P. Dashboard Assistant (chat agent, v0.20.0)
+
+Verifies the third agent surface — the persistent sidecard launched
+from the header `<AI>` icon. Architecture: `internal/ai/chat/`,
+sidecard at `client/src/components/assistant/AssistantSidecard.jsx`,
+launcher in `client/src/App.jsx`.
+
+### P.1 Prerequisites
+
+- [ ] `ANTHROPIC_API_KEY` env var is set on the server.
+- [ ] `assistant.enabled` admin setting is `true` (default).
+- [ ] `assistant.model` is set (`sonnet` by default).
+- [ ] `GET /api/ai/availability` returns `chat_agent_enabled: true`.
+
+### P.2 Capability gates (UI)
+
+For each profile below, switch with `?user_id=<guid>` in the URL or
+the local dev user-list, hard refresh, and verify what the header
+shows.
+
+| Profile | Caps | Launcher visible? | Namespace picker? |
+|---------|------|-------------------|-------------------|
+| Tom Viviano (full) | view+design+manage+control | YES | YES |
+| Designer | view+design+control | YES | YES |
+| Admin (locally trimmed) | manage only | NO | NO |
+| Support | view+control | NO | NO |
+
+- [ ] Full caller: `<AI>` button visible on right of header; clicking opens the sidecard.
+- [ ] Designer: same — launcher visible, sidecard opens.
+- [ ] Manage-only Admin: launcher absent from header; NamespacePicker also absent.
+- [ ] Support: launcher absent; NamespacePicker absent.
+
+### P.3 Capability gate (server)
+
+Even if a non-Design caller bypassed the client gate (custom client,
+direct API call), the server should refuse.
+
+- [ ] As Support (or Manage-only Admin), POST `/api/ai/sessions` with
+      `{"kind": "chat"}` returns **403** with the error message
+      `"Dashboard Assistant requires the Design capability."`
+- [ ] As Designer or full caller, the same POST returns **201** with
+      a session ID.
+
+### P.4 Surface context — dashboard (VIEW mode)
+
+Open `/view/dashboards/<id>` for a dashboard with at least 2-3
+chart panels. Open the assistant. Ask: *"What am I looking at?"*
+
+- [ ] Response names the dashboard correctly (by `title` or `name`).
+- [ ] Response lists the panel titles, including their chart types.
+- [ ] Response does NOT call `list_components` to find the answer
+      (tool calls are visible in the message list). It infers from
+      the system prompt's "Current view" block.
+- [ ] Response mentions "VIEW mode" or equivalent.
+
+### P.5 Surface context — dashboard (EDIT mode)
+
+Same dashboard, enter Design mode and click edit on the dashboard.
+Ask: *"Update panel 1's title"*.
+
+- [ ] Assistant declines (or routes to "save/discard first"),
+      referencing the active edit. The active-edit-respect rule in
+      `rolePreamble` is honoring its job.
+- [ ] Read-only queries still work in EDIT mode (ask: *"what data
+      source is panel 1 using?"* — should answer without a write).
+
+### P.6 Surface context — component editor
+
+Navigate to `/design/components/<id>` and open a component for edit.
+Open the assistant. Ask: *"What component am I editing?"*
+
+- [ ] Response names the component (title or name fallback).
+- [ ] Response identifies the surface as a component editor and the
+      mode as EDIT.
+- [ ] Ask the assistant to update this component → it should refuse
+      / route to "save or discard in the editor first" instead of
+      calling `update_component` directly. (Note: `update_component`
+      isn't in the chat toolset yet anyway; the test verifies the
+      *prompt* rule, not the server-side guard.)
+
+### P.7 Surface context — connection editor
+
+`/design/connections/<id>` → open assistant → *"What connection am
+I editing?"*
+
+- [ ] Response names the connection and identifies the surface as
+      a connection editor, EDIT mode.
+
+### P.8 Conversation features
+
+- [ ] Send a message; user message appears optimistically, then is
+      replaced by the canonical version when the server's
+      `message` event arrives (no duplicate).
+- [ ] Thinking spinner appears while the agent is working.
+- [ ] Streaming text appears as the agent produces it (single chunk
+      today, but the panel doesn't blank-flash on each turn).
+- [ ] Send a long-running conversation (~5+ turns). When the
+      conversation-token soft cap is approached, the yellow
+      `budget_warn` banner appears at the top of the panel.
+- [ ] Cog menu → **Clear chat** drops state and starts a new
+      conversation; sidecard close+reopen preserves the conversation.
+- [ ] Cog menu → **Export Markdown** downloads a `.md` file with the
+      conversation transcript and collapsible tool-call blocks.
+- [ ] Cog menu → **Export JSON** downloads a `.json` file with the
+      raw message records.
+- [ ] Cog menu toggles for `expandToolCalls` and `showTokenUsage`
+      persist across reload (stored in localStorage).
+
+### P.9 Resize + reflow
+
+- [ ] Drag the left edge of the sidecard — width changes smoothly,
+      `<Content>` reflows around the new width (no overlap).
+- [ ] Width persists across reload (stored in user-prefs).
+- [ ] Close the sidecard — `<Content>` reclaims the full width, no
+      dead band on the right.
+- [ ] In `/view/dashboards/:id`, the dashboard grid re-fits when
+      the sidecard opens/closes (ResizeObserver wiring).
+
+### P.10 Get current user
+
+In any chat session, ask: *"Who am I?"*
+
+- [ ] Response includes the caller's name (or GUID for pseudo-users),
+      email if set, and the capability list.
+- [ ] Response does NOT return the stale "caller GUID not provided"
+      placeholder (fixed 2026-05-26 by wiring `Caller` into
+      `DispatchEnv`).
+
+### P.11 Cost guardrails
+
+- [ ] After the per-user daily input budget hits the hard cap, the
+      next message returns an error event with code `budget_exceeded`
+      and the panel surfaces it as an error banner. (Reaching this
+      naturally is expensive; can be artificially triggered by
+      lowering `assistant.daily_token_budget` for the test.)
+
+---
+
 ## Notes
 
 Use this space to track issues found during testing:
