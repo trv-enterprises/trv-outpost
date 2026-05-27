@@ -1228,6 +1228,17 @@ class APIClient {
     return this.request(`/api/registry/connections${qs}`);
   }
 
+  // Per-type query-config guidance — the same cheat sheet the chat
+  // agent receives bundled on get_connection. Use for the
+  // ConnectionDetailPage info card and the ComponentEditor query
+  // hint. Returns { type_id, guidance, has_entry }; has_entry=false
+  // means the response still carries a generic discovery fallback
+  // (safe to render, just not adapter-specific).
+  async getConnectionTypeGuidance(typeId) {
+    if (!typeId) return null;
+    return this.request(`/api/registry/connections/${encodeURIComponent(typeId)}/guidance`);
+  }
+
   async getRegistryComponentTypes({ category = '', includeDisabled = false } = {}) {
     const params = new URLSearchParams();
     if (category) params.set('category', category);

@@ -716,6 +716,7 @@ func main() {
 		{
 			registryRoutes.GET("/connections", registryHandler.ListConnectionTypes)
 			registryRoutes.GET("/connections/:typeId", registryHandler.GetConnectionType)
+			registryRoutes.GET("/connections/:typeId/guidance", registryHandler.GetConnectionTypeGuidance)
 			registryRoutes.GET("/categories", registryHandler.ListCategories)
 			registryRoutes.GET("/components", registryHandler.ListComponentTypes)
 			registryRoutes.GET("/components/:typeId", registryHandler.GetComponentType)

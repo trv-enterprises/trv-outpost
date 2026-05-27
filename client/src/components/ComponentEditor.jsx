@@ -40,6 +40,7 @@ import TagInput from './shared/TagInput';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from './shared/NamespaceSelect';
+import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import './ComponentEditor.scss';
 
 // Chart types available
@@ -1829,6 +1830,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 )}
               </Column>
             </Grid>
+
+            {/* Per-type query-config conventions for the picked
+                connection. Surfaces the same cheat-sheet the chat
+                agent receives via toolops so manual chart authors
+                see warnings about ts-store's DSL, EdgeLake's narrow
+                SQL subset, etc. Collapsed by default; hidden when
+                the type has no adapter-specific guidance. */}
+            {selectedDatasource && (
+              <ConnectionGuidanceHint typeId={selectedDatasource.type} />
+            )}
 
             {selectedDatasource && (
               <>

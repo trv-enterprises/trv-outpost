@@ -1,0 +1,55 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/styles/scss/spacing' as spacing;
+
+.connection-guidance-hint {
+  // Constrain to its container — InlineNotification's default is
+  // 100% width which makes the card stretch awkwardly when placed
+  // beside narrow form columns. Allow the parent to govern width.
+  max-width: 100%;
+  margin: spacing.$spacing-04 0;
+}
+
+.connection-guidance-hint__details {
+  margin-top: spacing.$spacing-03;
+}
+
+.connection-guidance-hint__summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--cds-link-primary);
+  user-select: none;
+  display: inline-block;
+  padding: spacing.$spacing-02 0;
+
+  &:hover {
+    color: var(--cds-link-primary-hover);
+    text-decoration: underline;
+  }
+
+  // Hide the default disclosure triangle — the "Show / Hide details"
+  // toggle text carries the affordance, the triangle just adds noise
+  // next to the InlineNotification's own icon.
+  &::-webkit-details-marker { display: none; }
+  &::marker { content: ''; }
+}
+
+.connection-guidance-hint__body {
+  // Monospace pre for the prose — guidance strings include code
+  // examples that need to stay aligned. Keep wrapping enabled so a
+  // narrow editor column doesn't blow out horizontally.
+  font-family: var(--cds-code-02-font-family, 'IBM Plex Mono', monospace);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--cds-text-secondary);
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  padding: spacing.$spacing-04;
+  margin: spacing.$spacing-03 0 0 0;
+  max-height: 360px;
+  overflow-y: auto;
+}
