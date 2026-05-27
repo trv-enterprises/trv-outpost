@@ -19,8 +19,15 @@
   }
 
   .cds--toggletip-button {
-    width: 2.5rem;
+    // Narrow the hit area so the (i) icon hugs the namespace
+    // dropdown to its right. The full 2.5rem square left too much
+    // empty space between the icon and the dropdown chip; trimming
+    // to 1.75rem keeps a comfortable click target while closing
+    // the visual gap. Left padding stays generous so the icon
+    // doesn't crowd whatever sits to its left (the AI launcher).
+    width: 1.75rem;
     height: 3rem;
+    padding: 0 0.125rem 0 0.5rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -35,6 +42,12 @@
       color: var(--cds-icon-primary, #f4f4f4);
     }
   }
+}
+
+// Tiny left margin on the namespace dropdown pill so it doesn't
+// sit flush against the (i) icon's hover area.
+.namespace-picker-wrap .namespace-picker {
+  margin-left: 0.25rem;
 }
 
 // The Carbon header's HeaderGlobalAction slots are square icon buttons
