@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useEffect, useState } from 'react';
-import { InlineNotification } from '@carbon/react';
+import { Information, ChevronRight, ChevronDown } from '@carbon/icons-react';
 import apiClient from '../../api/client';
 import './ConnectionGuidanceHint.scss';
 
@@ -58,25 +58,31 @@ export default function ConnectionGuidanceHint({ typeId, defaultOpen = false }) 
   // say.
   if (!typeId || !guidance || !hasEntry) return null;
 
+  // We render our own bordered card rather than wrapping a Carbon
+  // InlineNotification because the disclosure toggle is interactive
+  // and Carbon's notification validator rejects interactive nodes
+  // inside `subtitle` ("component should have no interactive child
+  // nodes"). The visual treatment mimics InlineNotification kind=info
+  // — left accent stripe, info icon, lowContrast layer background —
+  // using Carbon tokens directly so theme switches still work.
+  const ChevronIcon = open ? ChevronDown : ChevronRight;
   return (
-    <InlineNotification
-      kind="info"
-      lowContrast
-      hideCloseButton
-      title={`Query conventions for ${typeId}`}
-      className="connection-guidance-hint"
-      subtitle={(
-        <details
-          open={open}
-          onToggle={(e) => setOpen(e.currentTarget.open)}
-          className="connection-guidance-hint__details"
-        >
-          <summary className="connection-guidance-hint__summary">
-            {open ? 'Hide details' : 'Show details'}
-          </summary>
-          <pre className="connection-guidance-hint__body">{guidance}</pre>
-        </details>
+    <div className="connection-guidance-hint" role="region" aria-label={`Query conventions for ${typeId}`}>
+      <button
+        type="button"
+        className="connection-guidance-hint__toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <Information size={16} className="connection-guidance-hint__info-icon" />
+        <span className="connection-guidance-hint__title">
+          Query conventions for <code>{typeId}</code>
+        </span>
+        <ChevronIcon size={16} className="connection-guidance-hint__chevron" />
+      </button>
+      {open && (
+        <pre className="connection-guidance-hint__body">{guidance}</pre>
       )}
-    />
+    </div>
   );
 }

@@ -70,7 +70,17 @@
     flex-shrink: 0;
   }
 
-  // Chart metadata section (name, type, description)
+  // Chart metadata section (name, title, description, tags, namespace).
+  //
+  // Layout intent (see component-editor-header-form-rearrange memo):
+  //   row 1: chart name (1/2)        title (1/2)
+  //   row 2: description (full)
+  //   row 3: namespace (1/4)         tags (3/4)
+  //
+  // Reference width is the section's max-width — see the > selector
+  // below. Nothing in this form should exceed that bound; column
+  // modifiers compute their widths against the section, not the
+  // viewport.
   .chart-metadata-section {
     margin-bottom: spacing.$spacing-05;
     padding-bottom: spacing.$spacing-05;
@@ -80,6 +90,57 @@
       flex-direction: column;
       gap: spacing.$spacing-05;
       margin-bottom: spacing.$spacing-05;
+
+      // Split rows lay out children side-by-side, with column
+      // modifiers picking the proportion. Stacks vertically on
+      // narrow viewports (or when the editor is in the sidecard-
+      // shrunk pane) so half-width fields don't squeeze unreadable.
+      &.metadata-row--split {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+    }
+
+    // Column modifiers — proportions against the section's reference
+    // width. They cap themselves with max-width so the parent flex
+    // doesn't stretch a "half" beyond half of the section even when
+    // the row contains only one column (e.g. mid-edit when a TagInput
+    // collapses transiently).
+    .metadata-col {
+      flex: 1 1 auto;
+      min-width: 0; // allow TextInput's internal width: 100% to shrink
+
+      &--full {
+        flex-basis: 100%;
+      }
+      &--half {
+        flex-basis: calc(50% - #{spacing.$spacing-05} / 2);
+        max-width: calc(50% - #{spacing.$spacing-05} / 2);
+      }
+      &--quarter {
+        flex-basis: calc(25% - #{spacing.$spacing-05} * 3 / 4);
+        max-width: calc(25% - #{spacing.$spacing-05} * 3 / 4);
+      }
+      &--three-quarters {
+        flex-basis: calc(75% - #{spacing.$spacing-05} / 4);
+        max-width: calc(75% - #{spacing.$spacing-05} / 4);
+      }
+    }
+
+    // Narrow viewport / sidecard-open fallback: stack all columns.
+    // ~720px is roughly the point where halves become unreadable
+    // for a TextInput with a label + helper text.
+    @media (max-width: 720px) {
+      .metadata-row--split {
+        flex-direction: column;
+      }
+      .metadata-col--half,
+      .metadata-col--quarter,
+      .metadata-col--three-quarters {
+        flex-basis: 100%;
+        max-width: 100%;
+      }
     }
   }
 
@@ -90,6 +151,13 @@
   > .display-editor,
   > .control-editor {
     max-width: 800px;
+  }
+
+  // Chart Type card half-width variant. The card lives outside the
+  // metadata flex row so it needs its own constraint to align with
+  // the Name / Namespace column above.
+  > .type-card-section--half {
+    max-width: calc((800px - #{spacing.$spacing-05}) / 2);
   }
 
   .display-editor__section {

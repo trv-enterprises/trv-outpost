@@ -1636,66 +1636,85 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         })()}
       </div>
 
-      {/* Display/Control basic info */}
+      {/* Header form for the chart sub-tab. Layout:
+            row 1: Name (1/2)     Title (1/2)
+            row 2: Description (full)
+            row 3: Namespace (1/4) Tags (3/4)
+          Reference width = the section's max-width (set in SCSS to
+          the same value Title used to occupy). Nothing in this form
+          overflows that width — see component-editor-header-form-
+          rearrange memory. */}
       <div className="chart-metadata-section">
-        <div className="metadata-row">
-          <TextInput
-            id="chart-name"
-            labelText={componentType === 'control' ? 'Control Name' : componentType === 'display' ? 'Display Name' : 'Chart Name'}
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (nameError) setNameError('');
-            }}
-            onBlur={(e) => checkDuplicateChartName(e.target.value)}
-            placeholder={componentType === 'control' ? 'Enter control name' : componentType === 'display' ? 'Enter display name' : 'Enter chart name'}
-            size="md"
-            invalid={!!nameError}
-            invalidText={nameError}
-          />
+        <div className="metadata-row metadata-row--split">
+          <div className="metadata-col metadata-col--half">
+            <TextInput
+              id="chart-name"
+              labelText={componentType === 'control' ? 'Control Name' : componentType === 'display' ? 'Display Name' : 'Chart Name'}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError('');
+              }}
+              onBlur={(e) => checkDuplicateChartName(e.target.value)}
+              placeholder={componentType === 'control' ? 'Enter control name' : componentType === 'display' ? 'Enter display name' : 'Enter chart name'}
+              size="md"
+              invalid={!!nameError}
+              invalidText={nameError}
+            />
+          </div>
+          <div className="metadata-col metadata-col--half">
+            <TextInput
+              id="chart-title"
+              labelText="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
+              size="md"
+              helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
+            />
+          </div>
         </div>
         <div className="metadata-row">
-          <TextInput
-            id="chart-title"
-            labelText="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
-            size="md"
-            helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
-          />
-          <TextInput
-            id="chart-description"
-            labelText="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={componentType === 'control' ? 'Enter control description' : 'Enter chart description'}
-            size="md"
-          />
-          <TagInput
-            id="chart-tags"
-            label="Tags"
-            value={tags}
-            onChange={setTags}
-          />
+          <div className="metadata-col metadata-col--full">
+            <TextInput
+              id="chart-description"
+              labelText="Description (optional)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={componentType === 'control' ? 'Enter control description' : 'Enter chart description'}
+              size="md"
+            />
+          </div>
         </div>
-        <div className="metadata-row">
-          <NamespaceSelect
-            id="chart-namespace"
-            value={namespace}
-            onChange={setNamespace}
-          />
+        <div className="metadata-row metadata-row--split">
+          <div className="metadata-col metadata-col--quarter">
+            <NamespaceSelect
+              id="chart-namespace"
+              value={namespace}
+              onChange={setNamespace}
+            />
+          </div>
+          <div className="metadata-col metadata-col--three-quarters">
+            <TagInput
+              id="chart-tags"
+              label="Tags"
+              value={tags}
+              onChange={setTags}
+            />
+          </div>
         </div>
       </div>
 
       {/* Chart Type card — shown when componentType is 'chart'.
           Hidden in custom-code mode since the chart type drives the generated
-          code, which is bypassed when the user supplies their own. */}
+          code, which is bypassed when the user supplies their own.
+          Constrained to half the section's reference width so it
+          aligns with the Chart Name column above. */}
       {componentType === 'chart' && !showCustomCode && (() => {
         const currentChartType = CHART_TYPES.find(t => t.id === chartType) || CHART_TYPES[0];
         const TypeIcon = currentChartType.icon;
         return (
-          <div className="type-card-section">
+          <div className="type-card-section type-card-section--half">
             <h4>Chart Type</h4>
             <div className="type-card-current" onClick={() => setChartTypeModalOpen(true)}>
               <Button kind="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setChartTypeModalOpen(true); }}>
