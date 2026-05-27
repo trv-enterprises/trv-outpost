@@ -357,7 +357,54 @@
     }
   }
 
-  // Query section
+  // Query + Guidance side-by-side row. The query card and the
+  // connection-type guidance hint sit at half the reference width
+  // each. The guidance stretches to match the query card's height
+  // (align-items: stretch) and scrolls internally when expanded,
+  // so the row's height is governed by the query controls — not by
+  // however long the guidance prose runs.
+  .query-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: spacing.$spacing-05;
+    margin-top: spacing.$spacing-05;
+    max-width: 800px;
+
+    > .query-row__query {
+      flex: 1 1 0;
+      min-width: 0;
+      margin-top: 0; // gap from .query-row controls vertical spacing now
+    }
+
+    > .query-row__guidance {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;       // children stretch via the inner hint's height: 100%
+      flex-direction: column;
+
+      // Make the inner guidance card fill the column. Body scroll
+      // is handled by .connection-guidance-hint__body's max-height.
+      > .connection-guidance-hint {
+        margin: 0;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+
+        // When collapsed the body isn't rendered, so the card
+        // shrinks to its toggle row. That's fine — the row still
+        // sits at the top of the column, aligned with the query
+        // card's header.
+      }
+    }
+
+    // Narrow viewport / sidecard-open fallback: stack vertically.
+    @media (max-width: 720px) {
+      flex-direction: column;
+    }
+  }
+
+  // Query section card
   .query-section {
     margin-top: spacing.$spacing-05;
 

@@ -1852,19 +1852,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               </Column>
             </Grid>
 
-            {/* Per-type query-config conventions for the picked
-                connection. Surfaces the same cheat-sheet the chat
-                agent receives via toolops so manual chart authors
-                see warnings about ts-store's DSL, EdgeLake's narrow
-                SQL subset, etc. Collapsed by default; hidden when
-                the type has no adapter-specific guidance. */}
-            {selectedDatasource && (
-              <ConnectionGuidanceHint typeId={selectedDatasource.type} />
-            )}
-
             {selectedDatasource && (
               <>
-                <div className="query-section">
+                {/* Query + Guidance row. Two cards side-by-side at
+                    half the reference width each: the Query
+                    configuration on the left, and the connection-
+                    type Query Conventions hint on the right. The
+                    guidance card stretches to match the query
+                    card's height and scrolls internally when
+                    expanded, so it never pushes the form taller
+                    than the query controls require. */}
+                <div className="query-row">
+                <div className="query-section mapping-section query-row__query">
                   <div className="query-header">
                     <h4>{selectedDatasource.type === 'socket' ? 'Stream Capture' : selectedDatasource.type === 'mqtt' ? 'Topic Selection' : 'Query'}</h4>
                     <div className="query-header-actions">
@@ -2323,6 +2322,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       className={`query-textarea ${selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 'query-textarea--compact' : ''}`}
                     />
                   )}
+                </div>
+                {/* Right column of the query row: per-type query-
+                    config conventions. Stretches to match the
+                    query card's height; scrolls internally when
+                    expanded so the form layout doesn't grow with
+                    the prose. Hidden when the connection type has
+                    no adapter-specific guidance. */}
+                <div className="query-row__guidance">
+                  <ConnectionGuidanceHint typeId={selectedDatasource.type} />
+                </div>
                 </div>
 
                 {previewError && (
