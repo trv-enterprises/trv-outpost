@@ -325,7 +325,7 @@ func main() {
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
 	toolExecutor := ai.NewToolExecutor(componentRepo, connectionRepo, connectionService, deviceTypeRepo, chartHub)
 	deviceTypeLister := &service.DeviceTypeListerAdapter{Service: deviceTypeService}
-	catalogProvider := service.NewCatalogProvider(deviceTypeLister, typeFilter)
+	catalogProvider := service.NewCatalogProviderWithLayout(deviceTypeLister, configService, typeFilter)
 
 	// Shared toolops layer — both MCP and the Dashboard Assistant
 	// chat agent wrap these pure Go function bodies. See
@@ -433,7 +433,7 @@ func main() {
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	commandHandler := handlers.NewCommandHandler(connectionService, componentService, deviceTypeService)
 	frigateHandler := handlers.NewFrigateHandler(connectionService)
-	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
+	registryHandler := handlers.NewRegistryHandler(deviceTypeService, configService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)

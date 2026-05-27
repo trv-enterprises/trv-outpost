@@ -192,7 +192,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 
 	reg.Register(Tool{
 		Name: "create_dashboard",
-		Description: "Create a new dashboard. Returns the persisted record including its assigned ID. Panels are positioned on a 32×32-px grid via integer cell coords {x, y, w, h}; canvas size derives from settings.layout_dimension. Each panel references a component by component_id (which you must create FIRST via create_component). Defaults: namespace=\"default\".\n\nLayout-dimension cell counts (cols × rows):\n  - 1080p (1920×1080) → 53 × 27\n  - 2k    (2560×1440) → 71 × 37\n  - 4k    (3840×2160) → 106 × 57\n  - 1440p (2560×1440) → 71 × 37\nKeep all panel x+w ≤ cols and y+h ≤ rows.",
+		Description: "Create a new dashboard. Returns the persisted record including its assigned ID. Panels are positioned on a 32×32-px grid via integer cell coords {x, y, w, h}; canvas size derives from settings.layout_dimension. Each panel references a component by component_id (which you must create FIRST via create_component). Defaults: namespace=\"default\".\n\nThe `settings.layout_dimension` value must match one of the preset names returned by `get_type_catalog` in the `layout_dimensions` array. Each entry tells you the cols × rows cell budget for panel coordinates — call get_type_catalog first if you need to pick a size. Keep all panel x+w ≤ cols and y+h ≤ rows for whichever preset you choose.",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -381,7 +381,7 @@ func dashboardSettingsSchema() map[string]interface{} {
 			"timezone":         map[string]interface{}{"type": "string", "description": "IANA timezone for x-axis timestamp display."},
 			"layout_dimension": map[string]interface{}{
 				"type":        "string",
-				"description": "Canvas size preset. \"1080p\" (1920×1080), \"1440p\"/\"2k\" (2560×1440), \"4k\" (3840×2160). Empty = server default.",
+				"description": "Canvas size preset name. Must exactly match one of the `name` values from `get_type_catalog`'s `layout_dimensions` array — preset names are deployment-specific (e.g. \"2560x1440-2K\", \"1920x1080-HD\"). Use the entry's `cols` × `rows` to plan panel coordinates. Empty = server default.",
 			},
 			"title_scale": map[string]interface{}{"type": "integer", "description": "Title font scale percent (50-200, default 100)."},
 			"is_public":   map[string]interface{}{"type": "boolean"},

@@ -20,14 +20,16 @@ import (
 // their single source of truth.
 type RegistryHandler struct {
 	deviceTypes *service.DeviceTypeService
+	layoutDims  registry.LayoutDimensionLister
 	filter      registry.TypeFilter
 }
 
 // NewRegistryHandler creates a new registry handler. deviceTypes may be nil
-// (the catalog endpoint will omit device types if so). filter may be nil
-// (no filtering applied — useful in tests).
-func NewRegistryHandler(deviceTypes *service.DeviceTypeService, filter registry.TypeFilter) *RegistryHandler {
-	return &RegistryHandler{deviceTypes: deviceTypes, filter: filter}
+// (the catalog endpoint will omit device types if so). layoutDims may be
+// nil (the catalog will omit layout dimensions). filter may be nil (no
+// filtering applied — useful in tests).
+func NewRegistryHandler(deviceTypes *service.DeviceTypeService, layoutDims registry.LayoutDimensionLister, filter registry.TypeFilter) *RegistryHandler {
+	return &RegistryHandler{deviceTypes: deviceTypes, layoutDims: layoutDims, filter: filter}
 }
 
 // activeFilter returns the effective filter for a request: nil if the
@@ -286,7 +288,7 @@ func (h *RegistryHandler) GetComponentType(c *gin.Context) {
 // @Success 200 {object} registry.Catalog
 // @Router /api/registry/catalog [get]
 func (h *RegistryHandler) GetCatalog(c *gin.Context) {
-	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister(), h.activeFilter(c))
+	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -333,7 +335,7 @@ func (h *RegistryHandler) ListIntegrations(c *gin.Context) {
 // @Success 200 {string} string "Markdown document"
 // @Router /api/registry/catalog.md [get]
 func (h *RegistryHandler) GetCatalogMarkdown(c *gin.Context) {
-	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister(), h.activeFilter(c))
+	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

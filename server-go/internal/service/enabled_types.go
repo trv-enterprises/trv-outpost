@@ -184,19 +184,35 @@ func pickStringArray(m map[string]interface{}, key string) []string {
 // using the installed device-type service and TypeFilter. Used by the AI
 // agent so each user message rebuilds the prompt and tool enums from the
 // current admin selections.
+//
+// layoutDims is optional. When supplied, the resulting catalog includes
+// the deployment's layout-dimension presets (with cell-grid math) so the
+// chat agent can pick correct settings.layout_dimension keys without
+// embedding deployment-specific names in its system prompt.
 type CatalogProvider struct {
 	deviceTypes registry.DeviceTypeLister
+	layoutDims  registry.LayoutDimensionLister
 	filter      registry.TypeFilter
 }
 
-// NewCatalogProvider constructs a CatalogProvider.
+// NewCatalogProvider constructs a CatalogProvider with only device
+// types — no layout dimensions. Kept for backward compatibility with
+// older call sites that don't have a ConfigService handy.
 func NewCatalogProvider(deviceTypes registry.DeviceTypeLister, filter registry.TypeFilter) *CatalogProvider {
 	return &CatalogProvider{deviceTypes: deviceTypes, filter: filter}
 }
 
+// NewCatalogProviderWithLayout constructs a CatalogProvider that
+// includes layout-dimension presets. Wire the ConfigService (or any
+// LayoutDimensionLister) so the chat-agent surface sees the real
+// preset keys for this deployment.
+func NewCatalogProviderWithLayout(deviceTypes registry.DeviceTypeLister, layoutDims registry.LayoutDimensionLister, filter registry.TypeFilter) *CatalogProvider {
+	return &CatalogProvider{deviceTypes: deviceTypes, layoutDims: layoutDims, filter: filter}
+}
+
 // GetCatalog implements ai.CatalogProvider.
 func (p *CatalogProvider) GetCatalog(ctx context.Context) (*registry.Catalog, error) {
-	return registry.BuildCatalog(ctx, p.deviceTypes, p.filter)
+	return registry.BuildCatalogWithLayout(ctx, p.deviceTypes, p.layoutDims, p.filter)
 }
 
 // DeviceTypeListerAdapter adapts DeviceTypeService to registry.DeviceTypeLister.

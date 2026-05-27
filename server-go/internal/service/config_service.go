@@ -10,6 +10,7 @@ import (
 
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -306,6 +307,26 @@ func (s *ConfigService) ValidatePanelBounds(ctx context.Context, panels []models
 	}
 
 	return nil
+}
+
+// ListLayoutDimensionsForCatalog implements registry.LayoutDimensionLister
+// so the chat-agent's CatalogProvider can fan layout-dimension presets
+// into the unified Catalog. Returns the deployment-current preset
+// list (Mongo > YAML fallback) along with the default preset's name.
+//
+// Adapter only — the heavy lifting (BSON normalization, YAML
+// fallback) is in the existing private getLayoutDimensions.
+func (s *ConfigService) ListLayoutDimensionsForCatalog(ctx context.Context) ([]registry.LayoutDimensionEntry, string, error) {
+	dimensions, defaultName := s.getLayoutDimensions(ctx)
+	entries := make([]registry.LayoutDimensionEntry, 0, len(dimensions))
+	for _, d := range dimensions {
+		entries = append(entries, registry.LayoutDimensionEntry{
+			Name:      d.Name,
+			MaxWidth:  d.MaxWidth,
+			MaxHeight: d.MaxHeight,
+		})
+	}
+	return entries, defaultName, nil
 }
 
 // GetUserConfig retrieves user-specific configuration
