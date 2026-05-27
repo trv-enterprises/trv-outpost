@@ -681,10 +681,21 @@ button.cds--overflow-menu {
   }
 }
 
-// (Previously added top + bottom borders on the active launcher
-// to seal the cell; removed because the cell's bottom edge already
-// sits on the page-content area's top border, and adding our own
-// bottom border on top of that produced a doubled, "highlighted"
-// 2px-looking line. Carbon's default — transparent bottom, subtle
-// left/right — is the right behavior here; the surrounding elements
-// already supply the visual frame.)
+// ───────────────────────────────────────────────────────────────────
+// Assistant launcher — restore continuity of the header bottom border
+// ───────────────────────────────────────────────────────────────────
+//
+// Carbon's `.cds--header__action--active` paints a different
+// background fill on the cell. The header itself has
+// `border-bottom: 1px solid #393939` which should run continuously
+// across the bottom of the header — but the active cell's
+// background fill visually interrupts that line where the icon
+// sits, leaving a gap at the very bottom of the cell.
+//
+// Re-paint the missing 1px at the cell's own bottom using the
+// EXACT same color the header bottom uses (`#393939`), so the
+// horizontal line reads as continuous across the entire header
+// bottom whether the launcher is active or not.
+.assistant-launcher-action.cds--header__action--active {
+  border-block-end: 1px solid #393939;
+}
