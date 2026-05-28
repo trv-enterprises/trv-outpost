@@ -501,6 +501,51 @@ both, leaving every other chart type on the legacy paths:
 - `chart_editor_spec_driven` and `chart_codegen_spec_driven`
   no longer exist as settings.
 
+## Per-type field audit — what each spec must capture
+
+Before migrating a chart type to the spec, audit it against:
+
+1. **The legacy JSX block in `ComponentEditor.jsx`** — every
+   Carbon input visible there is a per-type field that must
+   appear in `sections[*].fields`.
+2. **The `CHART_TYPE_CONFIG.<type>` capability flags** — those
+   become the spec's `capabilities` block. Drift between the
+   two breaks the cross-chart "Data Mapping" panel (which gates
+   aggregation / time-bucket / sort-limit / filters on these
+   flags).
+3. **The codegen branch in `getDataDrivenChartCode`** — every
+   `chartOptions?.foo` reference is a per-type knob the
+   editor must surface (or has surfaced and stripped from UI).
+4. **The gap-filler list** (y-axis range, log scale, tooltip
+   formatter, N-columns single-y, legend — see
+   [[chart-config-cleanup-and-editor-split]]). Each gap that
+   applies to the chart type lands as a new spec field during
+   the migration, not as a separate follow-up.
+
+PR 1 audit results (gauge):
+
+- **Per-type fields captured.** min, max, warning_threshold,
+  danger_threshold, unit, arc_thickness, value_column — every
+  legacy chartOptions key for gauge is in the spec.
+- **Gap-filler list doesn't apply.** Gauge has no axes, no
+  tooltip, no legend, no multi-column. Y-axis min/max already
+  covered by gauge_min/gauge_max. Skip.
+- **Capabilities reflect actual fit, not legacy CHART_TYPE_CONFIG
+  blindly.** The legacy `CHART_TYPE_CONFIG.gauge.hasTimeBucket
+  = true` is misleading — time bucketing rolls N rows into M
+  buckets, and a gauge consumes one row only, so it would
+  throw away M-1 buckets. Set `has_time_bucket: false` in the
+  spec. `has_aggregation: true` and `has_filters: true` stay
+  true because both have real meaning for a gauge ("show max
+  of last 100 polls", "show only rows where status='active'").
+- **Stored-but-ignored fields stripped on next save.** The
+  cruft strip from PR 2 of the chart-config-cleanup design
+  applies here too: when gauge saves through the spec path,
+  data_mapping fields not in the spec's `binds` paths should
+  be projected out. Currently NOT in PR 1 scope; PR 1 round-
+  trips the full chart record verbatim, deferring the strip
+  to a PR-3-level pass. Track via [[chart-config-cleanup-and-editor-split]].
+
 ## Open questions to resolve before PR 1
 
 1. **Spec versioning when fields are added.** If the spec
