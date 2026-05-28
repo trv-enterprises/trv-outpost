@@ -1719,15 +1719,18 @@
   // Single-axis row: column 1/4 | label 1/4 | stack ~1/8 | spacer | remove.
   // The 1fr in the middle absorbs the remaining ~1/4 so the row reads
   // as "two 1/4 fields, controls on the right, room to breathe."
+  //
+  // Gap matches the section-level metadata-row gap (spacing-05) so the
+  // 25% cells in this row line up with the metadata-col--quarter cells
+  // in sibling subsections like X-axis. No padding/background — the
+  // row sits flush with the rest of the section content so vertical
+  // edges align across subsections.
   .spec-yacl__row {
     display: grid;
     grid-template-columns: 25% 25% auto 1fr auto;
     grid-template-areas: 'column label stack . remove';
-    gap: spacing.$spacing-04;
+    gap: spacing.$spacing-05;
     align-items: end;
-    padding: spacing.$spacing-03;
-    background: var(--cds-layer-01);
-    border-radius: 4px;
 
     .spec-yacl__column { grid-area: column; }
     .spec-yacl__label  { grid-area: label; }
