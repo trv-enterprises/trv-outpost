@@ -6,6 +6,146 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] — 2026-05-27
+
+### Added
+
+- **Dashboard Assistant (chat agent).** A third AI agent surface, a
+  persistent chat sidecard reachable from a header launcher.
+  Where the existing Component AI agent lives inside the editor
+  and is scoped to one component, the assistant operates across
+  the deployment — connections, components, dashboards,
+  namespaces. Tiered tool surface: Tier-A tools always loaded,
+  Tier-B tools revealed via `describe_tool`. Large tool results
+  stored server-side and summarized inline; the agent fetches
+  the verbatim payload via `get_full_result` only when it needs
+  it. Two-switch gate (`assistant.enabled` admin setting +
+  `ANTHROPIC_API_KEY`); visible to Design-capable users.
+- **Surface context.** The assistant sees the user's current
+  mode (VIEW / EDIT), surface (DASHBOARD / COMPONENT /
+  CONNECTION), panel list, and active edits. The agent refuses
+  to `update_*` a surface the user is mid-editing.
+- **Layout-planning workflow in the assistant's system prompt.**
+  Probe data → pick canvas from `get_type_catalog` → outline
+  sections → use text-header panels → size by role → create
+  components THEN dashboard. Replaces the prior "build it"
+  framing that produced sparse layouts.
+- **Per-type connection guidance (shared).** The
+  `connectionguidance` package now keys on the registry type
+  ids (prior ts-store key was unreachable). ts-store guidance
+  rewritten with the REST DSL reference (`newest` / `oldest` /
+  `since:` / `range:`), default row caps, SQL silent-downgrade
+  trap callout, and json / schema / text store-data-type
+  variants.
+- **Guidance bundled on `get_connection` /
+  `get_connection_schema`** in `internal/ai/toolops`. External
+  callers (MCP, dashboard-agent CLI, future surfaces) see the
+  same cheat sheet alongside the connection or column data.
+- **New `GET /api/registry/connections/{typeId}/guidance`
+  endpoint.** Surfaces the same text to the human UI; legacy
+  short types (`tsstore`, `mqtt`, `sql`) are normalized
+  server-side to their registry ids so older callers keep
+  working.
+- **`ConnectionGuidanceHint` React component.** Renders the
+  per-type cheat sheet beside the connection picker in the
+  ComponentEditor and on the ConnectionDetailPage as a
+  Tooltip-driven (i) hover hint.
+- **Catalog exposes `layout_dimensions[]`.** Server computes the
+  cell-grid budget for each preset (matching the viewer's fit
+  math) so the assistant picks deployment-correct preset names
+  instead of guessing canonical ones.
+- **Server-side auto-codegen on `create_component`.** When an
+  external caller creates a component with `use_custom_code=false`
+  and a canonical `chart_type` but no `component_code`,
+  `ComponentService.CreateComponent` writes the raw chart
+  template server-side. Closes a footgun where agent-built
+  charts rendered as "Add" buttons until manually opened + saved.
+- **Conversation export (Markdown / JSON).** Cog popover on the
+  assistant sidecard exports the active conversation locally.
+
+### Changed
+
+- **ComponentEditor restructured.** "Connection" tab renamed
+  "Details". The connection picker and per-type guidance now
+  share the Details tab inside `.mapping-section` cards. The
+  connection description moves into an (i) hover Tooltip
+  alongside the Connection label.
+- **Header form pairs Chart Name + Title** (1/2 + 1/2) and
+  **Namespace + Tags** (1/4 + 3/4); Description spans the full
+  reference width. Frees several rows of vertical space.
+- **Chart Type tile and Query / Data Mapping sections** all use
+  the shared bordered-card treatment with consistent labeled H4
+  headers.
+- **Full-width yellow warning above DATA MAPPING** when no
+  sample is loaded — clicking "Fetch Data" in the warning runs
+  the same handler as the Query section's header button.
+  Warning subtitle is connection-aware (SQL/EdgeLake lists only
+  Data Mapping; other types list Data Mapping + Filters +
+  Aggregation + Sliding Window).
+- **Filters / Aggregation / Sliding Window hidden for SQL and
+  EdgeLake.** The query language already expresses what those
+  sections do; the redundant UI added cognitive load without
+  earning its keep. Streaming + REST + Prometheus + MQTT keep
+  them.
+- **Unified "Fetch Data" button label** across every connection
+  type (MQTT mid-capture keeps its dedicated "Stop Capture"
+  affordance).
+- **Pre-fetch + modify hints normalized** ("No filters
+  configured." / "Fetch data to modify filters.") across Data
+  Mapping / Filters / Aggregation / Time Bucket. Three
+  duplicate `.run-query-hint` SCSS rules consolidated.
+
+### Fixed
+
+- **Drag-frame surface-registration storm** in the dashboard
+  viewer. The assistant-surface memo's dep was the live panels
+  array; every `setEditablePanels` during drag triggered a
+  JSON.stringify + provider re-render at 30+ Hz. Fixed by
+  keying the memo on a stable signature (geometry doesn't go
+  into the payload, so the memo no-ops while only x/y/w/h
+  change).
+- **`Intl.DateTimeFormat` allocation hot path.** A chart that
+  renders 100 timestamps per refresh tick was constructing 100
+  fresh ICU formatters; `formatTimestamp` now caches formatter
+  instances per (preset, locale, timezone). Hit ~7s out of 15s
+  on the Pi sensehat dashboard's profile.
+- **`useAssistantSidecardState` 401 on cold load.** Hook fired
+  its `/api/config/user/:id` GET before the auth bootstrap
+  completed. Now gates on `apiClient.getAccessToken()` and
+  re-fires on `apiclient-authenticated` event.
+- **`get_full_result` infinite cycle.** The chat agent's
+  result-store re-summarized the meta-tool's payload, producing
+  a new result_id the agent then chased. One-line exclusion in
+  the agent loop.
+- **Loop detector + raised maxTurns.** Builder workflows need
+  10-15 turns; previous cap of 8 cut multi-component builds
+  short. New cap is 50, with a duplicate-tool-call fingerprint
+  detector as the structural defense.
+- **NamespacePicker visibility.** Gated on Design capability
+  so view-only users don't see authoring affordances.
+
+### API
+
+- New: `GET /api/ai/availability` — exposes `enabled`,
+  `component_agent_enabled`, `chat_agent_enabled`.
+- New: `POST /api/ai/sessions` (kind=chat),
+  `GET /api/ai/sessions/:id/ws`,
+  `POST /api/ai/sessions/:id/save`, etc. — chat-agent surface.
+- New: `GET /api/registry/connections/{typeId}/guidance` —
+  per-type query-config guidance.
+- Changed: `GET /api/registry/catalog` (and `.md`) now include
+  `layout_dimensions[]`.
+
+### Migration
+
+Existing components created by external callers with empty
+`component_code` continue to render the raw template until they
+are opened + saved in the editor (the per-column substitution
+that `ComponentService.CreateComponent` doesn't do today). The
+proper fix — share a single codegen between editor and server
+— is captured in `chart-codegen-consolidation-todo` for a
+future release.
+
 ## [0.19.6] — 2026-05-26
 
 ### Added
