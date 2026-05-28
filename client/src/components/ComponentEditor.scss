@@ -156,16 +156,13 @@
   }
 
   // Reference width: the editor body fills the page route's
-  // content column. Display / Control sub-editors keep their
-  // legacy 800px cap (they pre-date the page-mode refactor and
-  // contain forms that look awkward stretched wide); the chart
-  // sub-tab's header form runs the full width so the metadata
-  // row's "Name 1/2 + Title 1/2" pair has real breathing room
-  // and the Query / Data Mapping sections below align with it.
-  > .display-editor,
-  > .control-editor {
-    max-width: 800px;
-  }
+  // content column (~1200px). The metadata header in display /
+  // control editors inherits that full width via the page-level
+  // selector list in ComponentDetailPage.scss. Tiles inside the
+  // display / control editors are capped at half the reference
+  // width (600px) — see `.display-editor .mapping-section` rule
+  // below. Form controls inside those tiles cap at ~580px via
+  // .display-editor__section's per-control rule.
 
   // Chart Type shares the same reference max-width as the other
   // top-level editor sections (chart-metadata-section, tab-content,
@@ -190,6 +187,33 @@
     h4 {
       margin-bottom: 0; // gap handles spacing, no extra margin after header
     }
+
+    // Per-control max-width cap. The .mapping-section tile is
+    // capped at 600px (half the metadata reference) — see
+    // `.display-editor .mapping-section` below. Controls inside
+    // fill the tile naturally up to ~580px, leaving a touch of
+    // inset between the control edge and the card padding.
+    //
+    // Carbon's form components wrap the actual input in a div
+    // that controls width, so the selector targets the outer
+    // wrapper rather than the inner <input>.
+    .cds--text-input-wrapper,
+    .cds--text-area,
+    .cds--select,
+    .cds--number,
+    .cds--dropdown,
+    .cds--form-item {
+      max-width: 580px;
+    }
+  }
+
+  // Cap tiles inside the Display Editor at half the metadata
+  // reference width (~600px). Keeps the form from "swimming" in a
+  // 1200px-wide card when most controls are short Selects and
+  // NumberInputs. The metadata header above stays at the full
+  // reference width.
+  .display-editor .mapping-section {
+    max-width: 600px;
   }
 
   // Type card — shared pattern for Chart Type and Display Type (mirrors Control Type card)

@@ -18,6 +18,73 @@
     letter-spacing: 0.5px;
   }
 
+  // Section tiles all cap at half the metadata reference width
+  // (~600px). The stacked-row layouts inside .command-section
+  // and the 50/50 rows inside .ui-config-section render fine at
+  // this width — they no longer rely on Carbon's lg breakpoint
+  // expanding to multi-column.
+  > .control-type-section,
+  > .connection-section,
+  > .command-section,
+  > .ui-config-section {
+    max-width: 600px;
+  }
+
+  // Carbon's modern <Grid> is a 16-column CSS Grid at lg+ (and
+  // 8/4 at md/sm), so `<Column lg={6}>` is 6/16 = 37.5% — not the
+  // 50% the JSX author intended. Override the grid to use a 12-
+  // column track inside .ui-config-section so `lg={6}` renders as
+  // visual 50%, `lg={4}` as 33%, `lg={3}` as 25%. Carbon exposes
+  // the column count via the `--cds-grid-columns` CSS variable;
+  // override at the grid container.
+  //
+  // Same fix could go in .command-section, but it now uses our
+  // .control-form-stack flex helper instead — no Grid inside.
+  > .ui-config-section .cds--css-grid {
+    --cds-grid-columns: 12;
+  }
+
+  // Stacked form layout helper used inside .command-section.
+  // Replaces the prior Carbon Grid which over-narrowed at the
+  // tile cap. Each .control-form-row is a flex row that wraps
+  // below 720px; .control-form-row__half splits 50/50.
+  .control-form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-05;
+  }
+
+  .control-form-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;       // refresh-icon button aligns
+                                  // with input baseline, not top
+    gap: spacing.$spacing-04;
+
+    .control-form-row__main {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .control-form-row__action {
+      flex: 0 0 auto;
+      padding-bottom: 2px;        // visually centers the icon
+                                  // against the input box
+    }
+    .control-form-row__half {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    @media (max-width: 720px) {
+      flex-direction: column;
+      align-items: stretch;
+
+      .control-form-row__action {
+        align-self: flex-end;
+      }
+    }
+  }
+
   // Control Type Selection
   .control-type-section {
     // Compact display of current type

@@ -111,8 +111,10 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
 
   return (
     <div className="display-editor">
-      {/* Display Type selector — card + modal */}
-      <div className="type-card-section">
+      {/* Display Type selector — wrapped in .mapping-section to
+          match the Chart Type tile treatment in ComponentEditor
+          (bordered card, labeled H4, consistent inner padding). */}
+      <div className="mapping-section type-card-section">
         <h4>Display Type</h4>
         <div className="type-card-current" onClick={() => setTypeModalOpen(true)}>
           <Button kind="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setTypeModalOpen(true); }}>
@@ -164,7 +166,7 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
 
       {/* Weather fields */}
       {displayType === 'weather' && (
-        <div className="display-editor__section">
+        <div className="mapping-section display-editor__section">
           <h4>Weather Configuration</h4>
           <Dropdown
             id="weather-mqtt-connection"
@@ -199,10 +201,18 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
         </div>
       )}
 
-      {/* Frigate Alerts fields */}
+      {/* Frigate Alerts fields. Wrapped in .mapping-section so it
+          matches the Chart Type / Data Mapping / Query bordered-
+          card treatment at metadata-wide. Controls inside each cap
+          their own max-width via the .display-editor__section
+          rule in ComponentEditor.scss (~400px) — that's why
+          they're stacked vertically here rather than partitioned
+          into 1/2 + 1/4 grid slots. Each control reads at its
+          natural width inside the wide card. */}
       {displayType === 'frigate_alerts' && (
-        <div className="display-editor__section">
+        <div className="mapping-section display-editor__section">
           <h4>Frigate Alerts Configuration</h4>
+
           <Dropdown
             id="frigate-alerts-connection"
             titleText="Frigate Connection"
@@ -272,7 +282,7 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
 
       {/* Frigate Camera fields */}
       {displayType === 'frigate_camera' && (
-        <div className="display-editor__section">
+        <div className="mapping-section display-editor__section">
           <h4>Frigate Camera Configuration</h4>
           <Dropdown
             id="frigate-connection"

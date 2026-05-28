@@ -18,9 +18,13 @@ import {
   IconButton,
   Loading,
   Modal,
-  Button
+  Button,
+  Tooltip,
+  Toggletip,
+  ToggletipButton,
+  ToggletipContent
 } from '@carbon/react';
-import { Renew } from '@carbon/icons-react';
+import { Renew, Information } from '@carbon/icons-react';
 import Icon from '@mdi/react';
 import {
   mdiPowerPlug,
@@ -411,40 +415,83 @@ function ControlEditor({
         document.body
       )}
 
-      {/* Connection & Command — hidden for decorative controls */}
+      {/* Connection & Command — hidden for decorative controls.
+          Connection block mirrors the chart-page Connection picker:
+          h4 header + (i) hover Tooltip exposing the description,
+          then the Select with its label hidden (the h4 IS the
+          label), then a tag-chip row beneath (type chip + user
+          tags). Same .connection-tags-row / .connection-picker-*
+          styles from ComponentEditor.scss. */}
       {needsConnection && <><div className="connection-section">
-        <h4>Connection</h4>
-        <Grid narrow>
-          <Column lg={8} md={4} sm={4}>
-            <Select
-              id="control-connection"
-              labelText="Target Connection"
-              value={connectionId || ''}
-              onChange={(e) => onConnectionIdChange(e.target.value)}
-              disabled={loadingConnections}
-              helperText="Select a connection that supports write operations"
+        <div className="connection-picker-header">
+          <h4>Connection</h4>
+          {selectedConnection?.description && (
+            <Tooltip
+              align="bottom"
+              label={selectedConnection.description}
+              className="connection-picker-info-tooltip"
             >
-              <SelectItem value="" text={loadingConnections ? 'Loading...' : 'Select a connection...'} />
-              {connections.map(conn => (
-                <SelectItem
-                  key={conn.id}
-                  value={conn.id}
-                  text={`${conn.name} (${conn.type})`}
-                />
+              <button
+                type="button"
+                className="connection-picker-info-trigger"
+                aria-label="Connection description"
+              >
+                <Information size={16} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+        <Select
+          id="control-connection"
+          labelText=""
+          hideLabel
+          value={connectionId || ''}
+          onChange={(e) => onConnectionIdChange(e.target.value)}
+          disabled={loadingConnections}
+          helperText="Select a connection that supports write operations"
+        >
+          <SelectItem value="" text={loadingConnections ? 'Loading...' : 'Select a connection...'} />
+          {connections.map(conn => (
+            <SelectItem
+              key={conn.id}
+              value={conn.id}
+              text={`${conn.name} (${conn.type})`}
+            />
+          ))}
+        </Select>
+        {selectedConnection && (() => {
+          const userTags = Array.isArray(selectedConnection.tags) ? selectedConnection.tags : [];
+          const chips = [
+            { label: selectedConnection.type, kind: 'type' },
+            ...userTags.map(t => ({ label: t, kind: 'user' })),
+          ];
+          const VISIBLE_TAG_CAP = 4;
+          const visible = chips.slice(0, VISIBLE_TAG_CAP);
+          const overflow = chips.slice(VISIBLE_TAG_CAP);
+          return (
+            <div className="connection-tags-row">
+              {visible.map((chip, i) => (
+                <Tag
+                  key={`${chip.kind}-${chip.label}-${i}`}
+                  type={chip.kind === 'type' ? 'blue' : 'gray'}
+                  size="sm"
+                >
+                  {chip.label}
+                </Tag>
               ))}
-            </Select>
-          </Column>
-          <Column lg={4} md={4} sm={4}>
-            {selectedConnection && (
-              <div className="connection-info">
-                <Tag type="cyan">{selectedConnection.type}</Tag>
-                {selectedConnection.description && (
-                  <span className="connection-description">{selectedConnection.description}</span>
-                )}
-              </div>
-            )}
-          </Column>
-        </Grid>
+              {overflow.length > 0 && (
+                <Toggletip align="bottom">
+                  <ToggletipButton label={`Show ${overflow.length} more tag${overflow.length === 1 ? '' : 's'}`}>
+                    <span className="connection-tags-overflow">+{overflow.length}…</span>
+                  </ToggletipButton>
+                  <ToggletipContent>
+                    <p>{chips.map(c => c.label).join(', ')}</p>
+                  </ToggletipContent>
+                </Toggletip>
+              )}
+            </div>
+          );
+        })()}
 
         {connections.length === 0 && !loadingConnections && (
           <InlineNotification
@@ -457,28 +504,39 @@ function ControlEditor({
         )}
       </div>
 
-      {/* Command Configuration */}
+      {/* Command Configuration. Stacked rows inside the tile —
+          the prior Carbon Grid `Column lg={8|1|3}` layout truncated
+          the Device Topic combobox at narrow tile widths. Three
+          natural rows now: Device Topic (with refresh) → Device
+          Type → Command Target. Each row fills the tile width. */}
       <div className="command-section">
         <h4>Command Configuration</h4>
-        {isMQTT ? (
-          <Grid narrow>
-            <Column lg={8} md={5} sm={3}>
-              <ComboBox
-                id="mqtt-topic-select"
-                titleText="Device Topic"
-                items={mqttTopics}
-                itemToString={(item) => item || ''}
-                selectedItem={comboBoxTopic}
-                onChange={({ selectedItem }) => handleTopicSelect(selectedItem)}
-                placeholder={loadingTopics ? 'Loading topics...' : 'Select a device topic...'}
-                disabled={loadingTopics}
-                helperText={usesRawTopic
-                  ? 'Select a topic to pre-fill the publish topic below'
-                  : 'Select a device state topic to auto-fill the command target'}
-              />
-            </Column>
-            <Column lg={1} md={1} sm={1}>
-              <div className="mqtt-topic-refresh">
+        {!connectionId ? (
+          // No connection selected yet — the right fields to show
+          // here depend on the connection's type (MQTT gets device
+          // topic / device type / command target; other types get
+          // the generic action / target / payload form). Defer the
+          // form until the user picks a connection.
+          <p className="editor-info-hint">Select a connection first.</p>
+        ) : isMQTT ? (
+          <div className="control-form-stack">
+            <div className="control-form-row">
+              <div className="control-form-row__main">
+                <ComboBox
+                  id="mqtt-topic-select"
+                  titleText="Device Topic"
+                  items={mqttTopics}
+                  itemToString={(item) => item || ''}
+                  selectedItem={comboBoxTopic}
+                  onChange={({ selectedItem }) => handleTopicSelect(selectedItem)}
+                  placeholder={loadingTopics ? 'Loading topics...' : 'Select a device topic...'}
+                  disabled={loadingTopics}
+                  helperText={usesRawTopic
+                    ? 'Select a topic to pre-fill the publish topic below'
+                    : 'Select a device state topic to auto-fill the command target'}
+                />
+              </div>
+              <div className="control-form-row__action">
                 <IconButton
                   label="Refresh topics"
                   kind="ghost"
@@ -488,94 +546,88 @@ function ControlEditor({
                   {loadingTopics ? <Loading small withOverlay={false} /> : <Renew />}
                 </IconButton>
               </div>
-            </Column>
+            </div>
             {!usesRawTopic && (
-              <Column lg={3} md={2} sm={4}>
-                <Select
-                  id="mqtt-device-type-select"
-                  labelText="Device Type"
-                  value={controlConfig?.device_type_id || ''}
-                  onChange={(e) => handleDeviceTypeSelect(e.target.value || null)}
-                  helperText="Optional — defines payload format"
-                >
-                  <SelectItem value="" text="None (manual payload)" />
-                  {mqttDeviceTypes.map(dt => (
-                    <SelectItem key={dt.id} value={dt.id} text={dt.name} />
-                  ))}
-                </Select>
-              </Column>
+              <Select
+                id="mqtt-device-type-select"
+                labelText="Device Type"
+                value={controlConfig?.device_type_id || ''}
+                onChange={(e) => handleDeviceTypeSelect(e.target.value || null)}
+                helperText="Optional — defines payload format"
+              >
+                <SelectItem value="" text="None (manual payload)" />
+                {mqttDeviceTypes.map(dt => (
+                  <SelectItem key={dt.id} value={dt.id} text={dt.name} />
+                ))}
+              </Select>
             )}
-            <Column lg={12} md={8} sm={4}>
-              <TextInput
-                id="mqtt-command-target"
-                labelText={usesRawTopic ? 'Publish Topic' : 'Command Target (topic)'}
-                value={controlConfig?.target || ''}
-                onChange={(e) => updateConfig('target', e.target.value)}
-                placeholder={usesRawTopic ? 'e.g., zigbee2mqtt/Small Garage Door' : 'e.g., zigbee2mqtt/device/set or caseta/device'}
-                helperText={usesRawTopic ? 'MQTT topic to publish to — edit freely after selecting from above' : 'MQTT topic to publish commands to'}
-              />
-            </Column>
+            <TextInput
+              id="mqtt-command-target"
+              labelText={usesRawTopic ? 'Publish Topic' : 'Command Target (topic)'}
+              value={controlConfig?.target || ''}
+              onChange={(e) => updateConfig('target', e.target.value)}
+              placeholder={usesRawTopic ? 'e.g., zigbee2mqtt/Small Garage Door' : 'e.g., zigbee2mqtt/device/set or caseta/device'}
+              helperText={usesRawTopic ? 'MQTT topic to publish to — edit freely after selecting from above' : 'MQTT topic to publish commands to'}
+            />
             {controlType !== CONTROL_TYPES.MQTT_PUBLISH && controlConfig?.device_type_id && (() => {
               const previews = getPayloadPreview();
               if (!previews) return null;
               return (
-                <Column lg={12} md={8} sm={4}>
-                  <div className="mqtt-schema-info">
-                    <Tag type="teal">Device Type: {controlConfig.device_type_id}</Tag>
-                    <div className="payload-preview">
-                      {previews.map((p, i) => (
-                        <span key={i}>
-                          <span className="payload-label">{p.label}:</span>
-                          <code>{JSON.stringify(p.payload)}</code>
-                        </span>
-                      ))}
-                    </div>
+                <div className="mqtt-schema-info">
+                  <Tag type="teal">Device Type: {controlConfig.device_type_id}</Tag>
+                  <div className="payload-preview">
+                    {previews.map((p, i) => (
+                      <span key={i}>
+                        <span className="payload-label">{p.label}:</span>
+                        <code>{JSON.stringify(p.payload)}</code>
+                      </span>
+                    ))}
                   </div>
-                </Column>
+                </div>
               );
             })()}
-          </Grid>
+          </div>
         ) : (
-          <Grid narrow>
-            <Column lg={6} md={4} sm={4}>
-              <TextInput
-                id="command-action"
-                labelText="Action"
-                value={commandConfig.action || ''}
-                onChange={(e) => updateCommandConfig('action', e.target.value)}
-                placeholder="set, toggle, send, execute..."
-                helperText="The command action to perform"
-              />
-            </Column>
-            <Column lg={6} md={4} sm={4}>
-              <TextInput
-                id="command-target"
-                labelText="Target (optional)"
-                value={commandConfig.target || ''}
-                onChange={(e) => updateCommandConfig('target', e.target.value)}
-                placeholder="device_id, channel, topic..."
-                helperText="Optional target identifier"
-              />
-            </Column>
-            <Column lg={12} md={8} sm={4}>
-              <TextArea
-                id="command-payload-template"
-                labelText="Payload Template (JSON)"
-                value={stringifyPayloadTemplate(commandConfig.payload_template)}
-                onChange={(e) => {
-                  try {
-                    const parsed = JSON.parse(e.target.value);
-                    updateCommandConfig('payload_template', parsed);
-                  } catch {
-                    // Allow invalid JSON while editing
-                  }
-                }}
-                placeholder='{"value": "{{value}}", "timestamp": "{{value}}"}'
-                helperText='Use {{value}} as placeholder for the control value'
-                rows={4}
-              />
-            </Column>
-          </Grid>
+          <div className="control-form-stack">
+            <div className="control-form-row">
+              <div className="control-form-row__half">
+                <TextInput
+                  id="command-action"
+                  labelText="Action"
+                  value={commandConfig.action || ''}
+                  onChange={(e) => updateCommandConfig('action', e.target.value)}
+                  placeholder="set, toggle, send, execute..."
+                  helperText="The command action to perform"
+                />
+              </div>
+              <div className="control-form-row__half">
+                <TextInput
+                  id="command-target"
+                  labelText="Target (optional)"
+                  value={commandConfig.target || ''}
+                  onChange={(e) => updateCommandConfig('target', e.target.value)}
+                  placeholder="device_id, channel, topic..."
+                  helperText="Optional target identifier"
+                />
+              </div>
+            </div>
+            <TextArea
+              id="command-payload-template"
+              labelText="Payload Template (JSON)"
+              value={stringifyPayloadTemplate(commandConfig.payload_template)}
+              onChange={(e) => {
+                try {
+                  const parsed = JSON.parse(e.target.value);
+                  updateCommandConfig('payload_template', parsed);
+                } catch {
+                  // Allow invalid JSON while editing
+                }
+              }}
+              placeholder='{"value": "{{value}}", "timestamp": "{{value}}"}'
+              helperText='Use {{value}} as placeholder for the control value'
+              rows={4}
+            />
+          </div>
         )}
       </div></>}
 
