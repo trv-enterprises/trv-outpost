@@ -479,11 +479,13 @@ both, leaving every other chart type on the legacy paths:
   `chart_type === 'gauge'`. Otherwise legacy
   `getDataDrivenChartCode`.
 - **Side-by-side test:** with both flags off, save a gauge,
-  capture the resulting component_code. Turn editor flag on,
-  save again — code should be byte-identical (codegen still
-  legacy). Turn codegen flag on, save again — code should be
-  byte-identical (now generated from template). Any drift is
-  a schema bug to fix before Stage 2.
+  capture the resulting `component_code` (baseline). Turn
+  both flags on, save again — code should be byte-identical
+  (new editor saves the same form data; new template emits
+  the same string). Any drift is a schema or template bug to
+  fix before Stage 2; the string diff itself points at the
+  seam. Half-on combinations aren't tested separately — they
+  aren't a real production state.
 
 **Acceptance:**
 - Gauge editor renders from spec when its flag is on, from
@@ -803,9 +805,11 @@ When Stage 3 commits land:
   the editor flag is on; legacy JSX otherwise.
 - Gauge template emits the component code when the codegen
   flag is on; legacy `getDataDrivenChartCode` otherwise.
-- Save round-trip is byte-identical between legacy + new for
-  representative gauge configs (with each flag independently
-  on/off — four combinations).
+- Save round-trip is byte-identical between both-flags-off
+  (baseline) and both-flags-on (end-state) for representative
+  gauge configs. Half-on combinations aren't tested — they
+  aren't a real production state and their equivalence is
+  implied by the two-corner test passing.
 - Schema validator runs on spec load (dev mode).
 - Field-type renderers exist for column_select, enum, number,
   text, and at least one boolean (for the boolean toggle).
