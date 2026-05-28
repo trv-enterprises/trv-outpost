@@ -245,7 +245,7 @@
             "description": "Send message to AI session\n\nSend a user message to an AI session. The AI agent will process the message asynchronously.\n\n\nResponses: 202, 400, 404, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"content\": \"\"\n}",
+              "raw": "{\n  \"content\": \"\",\n  \"surface_context\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4088,7 +4088,7 @@
     },
     {
       "name": "Registry (type catalog)",
-      "description": "registry endpoints (8).",
+      "description": "registry endpoints (9).",
       "item": [
         {
           "name": "Catalog rendered as markdown",
@@ -4316,6 +4316,42 @@
               ]
             },
             "description": "List registered integrations\n\nIntegrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Per-type query-config conventions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/registry/connections/{typeId}/guidance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "registry",
+                "connections",
+                ":typeId",
+                "guidance"
+              ],
+              "variable": [
+                {
+                  "key": "typeId",
+                  "value": "",
+                  "description": "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')"
+                }
+              ]
+            },
+            "description": "Per-type query-config conventions\n\nReturns the cheat-sheet describing how to write query_config for a given connection adapter type — implicit row caps, supported DSL keywords, common pitfalls, etc. Sourced from the same connectionguidance package the chat agent reads. Accepts either a registry type id (e.g. \"store.tsstore\") or the legacy short type (\"tsstore\"); legacy values are mapped server-side so existing UI callers keep working.\n\n\nResponses: 200"
           },
           "response": []
         },

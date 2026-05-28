@@ -19,6 +19,15 @@ definitions:
       type_count:
         type: integer
     type: object
+  handlers.ConnectionTypeGuidanceResponse:
+    properties:
+      guidance:
+        type: string
+      has_entry:
+        type: boolean
+      type_id:
+        type: string
+    type: object
   handlers.CreateSystemUserRequest:
     properties:
       capabilities:
@@ -2166,6 +2175,15 @@ definitions:
       content:
         description: User message content
         type: string
+      surface_context:
+        allOf:
+        - $ref: '#/definitions/models.SurfaceContext'
+        description: |-
+          SurfaceContext describes what the user is currently looking at
+          in the UI. Used by the Dashboard Assistant to resolve
+          "this dashboard" / "this chart" without a tool round trip and
+          to refuse writes that would collide with the user's active
+          edit. Optional; the Component AI agent ignores it.
     required:
     - content
     type: object
@@ -2351,6 +2369,34 @@ definitions:
         type: string
       timestamp_scale:
         description: '"s", "ms", "ns" — auto-detected if empty'
+        type: string
+    type: object
+  models.SurfaceContext:
+    properties:
+      mode:
+        type: string
+      panels:
+        items:
+          $ref: '#/definitions/models.SurfaceContextPanel'
+        type: array
+      surface:
+        type: string
+      surfaceId:
+        type: string
+      surfaceName:
+        type: string
+    type: object
+  models.SurfaceContextPanel:
+    properties:
+      chartType:
+        type: string
+      componentId:
+        type: string
+      componentType:
+        type: string
+      id:
+        type: string
+      title:
         type: string
     type: object
   models.SystemConfigResponse:
@@ -2954,6 +3000,10 @@ definitions:
         items:
           $ref: '#/definitions/registry.IntegrationInfo'
         type: array
+      layout_dimensions:
+        items:
+          $ref: '#/definitions/registry.LayoutDimensionSummary'
+        type: array
     type: object
   registry.ComponentCapabilities:
     properties:
@@ -3119,6 +3169,21 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  registry.LayoutDimensionSummary:
+    properties:
+      cols:
+        type: integer
+      is_default:
+        type: boolean
+      max_height:
+        type: integer
+      max_width:
+        type: integer
+      name:
+        type: string
+      rows:
+        type: integer
     type: object
   registry.TypeInfo:
     properties:
@@ -4937,6 +5002,31 @@ paths:
             additionalProperties: true
             type: object
       summary: Get a specific connection type
+      tags:
+      - registry
+  /api/registry/connections/{typeId}/guidance:
+    get:
+      description: Returns the cheat-sheet describing how to write query_config for
+        a given connection adapter type — implicit row caps, supported DSL keywords,
+        common pitfalls, etc. Sourced from the same connectionguidance package the
+        chat agent reads. Accepts either a registry type id (e.g. "store.tsstore")
+        or the legacy short type ("tsstore"); legacy values are mapped server-side
+        so existing UI callers keep working.
+      parameters:
+      - description: Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type
+          ('tsstore', 'prometheus')
+        in: path
+        name: typeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ConnectionTypeGuidanceResponse'
+      summary: Per-type query-config conventions
       tags:
       - registry
   /api/registry/integrations:

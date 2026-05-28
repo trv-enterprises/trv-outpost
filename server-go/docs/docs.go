@@ -2418,6 +2418,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/registry/connections/{typeId}/guidance": {
+            "get": {
+                "description": "Returns the cheat-sheet describing how to write query_config for a given connection adapter type — implicit row caps, supported DSL keywords, common pitfalls, etc. Sourced from the same connectionguidance package the chat agent reads. Accepts either a registry type id (e.g. \"store.tsstore\") or the legacy short type (\"tsstore\"); legacy values are mapped server-side so existing UI callers keep working.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Per-type query-config conventions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')",
+                        "name": "typeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ConnectionTypeGuidanceResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/registry/integrations": {
             "get": {
                 "description": "Integrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.",
@@ -5987,6 +6016,20 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.ConnectionTypeGuidanceResponse": {
+            "type": "object",
+            "properties": {
+                "guidance": {
+                    "type": "string"
+                },
+                "has_entry": {
+                    "type": "boolean"
+                },
+                "type_id": {
+                    "type": "string"
+                }
+            }
+        },
         "handlers.CreateSystemUserRequest": {
             "type": "object",
             "required": [
@@ -8978,6 +9021,14 @@ const docTemplate = `{
                 "content": {
                     "description": "User message content",
                     "type": "string"
+                },
+                "surface_context": {
+                    "description": "SurfaceContext describes what the user is currently looking at\nin the UI. Used by the Dashboard Assistant to resolve\n\"this dashboard\" / \"this chart\" without a tool round trip and\nto refuse writes that would collide with the user's active\nedit. Optional; the Component AI agent ignores it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.SurfaceContext"
+                        }
+                    ]
                 }
             }
         },
@@ -9224,6 +9275,49 @@ const docTemplate = `{
                 },
                 "timestamp_scale": {
                     "description": "\"s\", \"ms\", \"ns\" — auto-detected if empty",
+                    "type": "string"
+                }
+            }
+        },
+        "models.SurfaceContext": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string"
+                },
+                "panels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SurfaceContextPanel"
+                    }
+                },
+                "surface": {
+                    "type": "string"
+                },
+                "surfaceId": {
+                    "type": "string"
+                },
+                "surfaceName": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SurfaceContextPanel": {
+            "type": "object",
+            "properties": {
+                "chartType": {
+                    "type": "string"
+                },
+                "componentId": {
+                    "type": "string"
+                },
+                "componentType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }
@@ -10048,6 +10142,12 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/registry.IntegrationInfo"
                     }
+                },
+                "layout_dimensions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.LayoutDimensionSummary"
+                    }
                 }
             }
         },
@@ -10277,6 +10377,29 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "registry.LayoutDimensionSummary": {
+            "type": "object",
+            "properties": {
+                "cols": {
+                    "type": "integer"
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "max_height": {
+                    "type": "integer"
+                },
+                "max_width": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
                 }
             }
         },
