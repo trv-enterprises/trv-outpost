@@ -81,7 +81,8 @@
   // below. Nothing in this form should exceed that bound; column
   // modifiers compute their widths against the section, not the
   // viewport.
-  .chart-metadata-section {
+  .chart-metadata-section,
+  .spec-section {
     // Pull the section flush against what follows (Chart Type
     // card). The metadata-row's own margin-bottom already
     // provides between-row separation; no additional padding
