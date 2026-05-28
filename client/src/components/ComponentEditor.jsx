@@ -1294,10 +1294,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // and 401s under session-token auth. apiClient attaches the
       // access JWT (or API key) and throws an Error with .status / .body
       // on non-2xx, so the existing error handling works unchanged.
+      // Server's QueryRequest shape is { query: { raw, type, params } } —
+      // see server-go/internal/models/connection.go. SQLQueryBuilder and
+      // friends wrap correctly; this caller had been sending the inner
+      // object flat, which bound to QueryRequest{Query: zero} on the
+      // server and made the adapter reject with "query is required".
+      // Why did anything ever work? Because tsstore's adapter treats
+      // empty raw as "newest" + default cap, so flat payloads got back
+      // ANY result on tsstore connections — masking the bug for SQL /
+      // EdgeLake / Prometheus / API users who hit "query is required."
       const data = await apiClient.queryConnection(selectedConnectionId, {
-        raw: rawQuery,
-        type: queryType,
-        params: queryParams,
+        query: {
+          raw: rawQuery,
+          type: queryType,
+          params: queryParams,
+        },
       });
 
       setPreviewData(data.result_set);
