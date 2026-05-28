@@ -1644,65 +1644,54 @@
   }
 }
 
-// NullableNumber: label + Auto checkbox on the header line; the
-// NumberInput drops below when Auto is unchecked. When Auto is
-// checked the input doesn't render at all so there's no
-// confusingly-zero NumberInput sitting under the label.
+// NullableNumber: label on its own line at the top (matching Carbon
+// labelText positioning), then an input row below holding the
+// NumberInput + Auto checkbox side-by-side. Auto-checked → input
+// hides; the checkbox stays so the user can toggle back.
 //
-// Alignment notes:
-//   - Label sits at the cell's left edge (matches Carbon's own
-//     labelText position).
-//   - Auto checkbox sits inline directly after the label so the
-//     row reads "Min  [✓] Auto" rather than the label and checkbox
-//     getting pushed to opposite edges via space-between.
-//   - Header line has a fixed height that matches Carbon's own
-//     labelText line height — this aligns the NumberInput baseline
-//     in this cell with the Select baseline in the next cell when
-//     both are siblings in the same row.
+// The Auto checkbox sits at the same vertical position as the input
+// (input baseline), NOT next to the label — that way it visually
+// associates with the value, not the field name.
 .spec-nullable-number {
   display: flex;
   flex-direction: column;
   gap: spacing.$spacing-02;
 
-  &__header {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    gap: spacing.$spacing-04;
-    // Match the height Carbon allocates for a single-line labelText
-    // so neighboring cells (Select, plain NumberInput) align at the
-    // top of their inputs.
-    min-height: 1rem;
-    line-height: 1;
-  }
-
   &__label {
     color: var(--cds-text-secondary);
     font-size: 0.75rem;
     font-weight: 400;
-    line-height: 1.2;
-    // Use Carbon's label margin so this cell's label sits at the
-    // same baseline as labelText in neighboring inputs.
+    line-height: 1.34; // Carbon's labelText line-height
     margin: 0;
   }
 
-  // Tighten the inline Auto checkbox so it doesn't introduce extra
-  // vertical space on the header row. Carbon's Checkbox at default
-  // size has its own 1.5rem min-height which pushes everything down.
+  &__input-row {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+    min-height: 2rem; // matches Carbon NumberInput size="sm" height
+
+    // NumberInput should grow to fill the row's remaining space.
+    .cds--form-item.cds--number {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+  }
+
+  // Tighten the Auto checkbox so it doesn't introduce extra vertical
+  // space on the input row. Carbon's Checkbox at default size has
+  // its own 1.5rem min-height + form-item margin.
   .cds--form-item.cds--checkbox-wrapper {
     margin: 0;
     min-height: 0;
+    flex: 0 0 auto;
   }
   .cds--checkbox-label {
-    padding-left: spacing.$spacing-05; // room for the box + a small gap
+    padding-left: spacing.$spacing-05;
     min-height: 0;
     line-height: 1;
     font-size: 0.75rem;
     color: var(--cds-text-secondary);
-  }
-  .cds--checkbox-label::before,
-  .cds--checkbox-label::after {
-    top: 0; // align the box with the label baseline rather than centered on the larger min-height
   }
 }
 

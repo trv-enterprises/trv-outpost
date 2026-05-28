@@ -6,19 +6,12 @@ import { Checkbox, NumberInput } from '@carbon/react';
 import { useSpecRenderContext } from '../SpecContext';
 
 /**
- * Pattern B per-end auto: a checkbox labeled "Auto" inline with a
- * NumberInput. Auto checked → NumberInput hides, value stored as
- * null (= auto; codegen omits the corresponding min/max). Unchecked
- * → NumberInput shows with the manual value.
- *
- * Storage shape: `null | number`. Default: `null` (auto). Codegen
- * treats null as "let the axis library auto-scale" (omits the bound
- * from the ECharts axis literal).
- *
- * The layout puts the field label on its own line with the Auto
- * checkbox to the right, then the NumberInput below when manual.
- * This keeps "Decimals" reading as the field name rather than
- * "Decimals — Auto" reading as one phrase.
+ * Pattern B per-end auto: an "Auto" checkbox sits on the input row,
+ * not the label row. The field label is on its own line at the top
+ * (matching the position Carbon labelText uses for plain NumberInput
+ * + Select fields). Below: input + Auto checkbox side-by-side.
+ * When Auto is checked the input hides; the checkbox stays so the
+ * user can toggle back. Storage shape: `null | number`. Default null.
  */
 export default function NullableNumberField({ field }) {
   const { formState, onFieldChange } = useSpecRenderContext();
@@ -28,16 +21,28 @@ export default function NullableNumberField({ field }) {
 
   return (
     <div className="spec-nullable-number">
-      <div className="spec-nullable-number__header">
-        <label className="spec-nullable-number__label">{field.label}</label>
+      <label className="spec-nullable-number__label">{field.label}</label>
+      <div className="spec-nullable-number__input-row">
+        {!isAuto && (
+          <NumberInput
+            id={`spec-${field.id}`}
+            label=""
+            hideLabel
+            helperText={field.helperText}
+            value={value}
+            onChange={(_e, { value: next }) => onFieldChange(field.id, next == null || next === '' ? null : Number(next))}
+            min={field.min ?? -1000000}
+            max={field.max ?? 1000000}
+            step={field.step ?? 1}
+            hideSteppers
+            size="sm"
+          />
+        )}
         <Checkbox
           id={`spec-${field.id}-auto`}
           labelText="Auto"
           checked={isAuto}
           onChange={(_e, { checked }) => {
-            // Auto on → null. Auto off → fall back to the declared
-            // default, or 0 if none. The user can then type their
-            // actual value.
             if (checked) {
               onFieldChange(field.id, null);
             } else {
@@ -49,21 +54,6 @@ export default function NullableNumberField({ field }) {
           }}
         />
       </div>
-      {!isAuto && (
-        <NumberInput
-          id={`spec-${field.id}`}
-          label=""
-          hideLabel
-          helperText={field.helperText}
-          value={value}
-          onChange={(_e, { value: next }) => onFieldChange(field.id, next == null || next === '' ? null : Number(next))}
-          min={field.min ?? -1000000}
-          max={field.max ?? 1000000}
-          step={field.step ?? 1}
-          hideSteppers
-          size="sm"
-        />
-      )}
     </div>
   );
 }

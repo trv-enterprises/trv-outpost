@@ -850,7 +850,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         namespace: activeNamespace || 'default',
         tags: [],
         componentType: 'chart',
-        chartType: 'bar',
+        chartType: 'line',
         controlConfig: null,
         displayConfig: null,
         connectionId: '',
@@ -1162,7 +1162,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setName('');
     setDescription('');
     setNamespace(activeNamespace || 'default');
-    setChartType('bar');
+    // Line is the most-used chart type on this platform (most data
+    // is time-stamped). The initialState snapshot below must agree
+    // so dirty-detection doesn't think the form is dirty on mount.
+    setChartType('line');
     setSelectedConnectionId('');
     setSelectedDatasource(null);
     setQueryRaw('');
