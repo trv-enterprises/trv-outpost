@@ -654,6 +654,91 @@ In any chat session, ask: *"Who am I?"*
 
 ---
 
+## Q. Spec-driven chart editor — gauge under feature flag (PR 1)
+
+Two independent feature flags ship the spec-driven editor + codegen
+for gauge only. Both default false. Manage Settings → search:
+
+- `chart_editor_spec_driven` — flips the gauge configuration panel
+  from the hand-coded JSX block to a renderer that reads
+  `client/src/chart-spec/specs/gauge.json`.
+- `chart_codegen_spec_driven` — flips gauge code generation from
+  the legacy switch in `getDataDrivenChartCode` to the template at
+  `client/src/chart-codegen/echarts/templates/gauge_v1.js`.
+
+The acceptance bar is **byte-identical** output across the four flag
+combinations for the same gauge configuration. Any divergence is a
+schema or template bug to fix before PR 2 starts migrating the other
+chart types.
+
+### Q.1 Setup
+
+- [ ] In Manage → Settings, confirm both flags exist with value
+      `false` (defaults).
+- [ ] Open or create a gauge chart bound to any connection (ts-store
+      Pi sensehat is a convenient real source).
+- [ ] Save it. Note the resulting `component_code` (visible in the
+      Code tab) — this is the **baseline** for the byte-identical
+      tests below.
+
+### Q.2 Quadrant 1 — both flags off (baseline)
+
+- [ ] Both flags off.
+- [ ] Gauge editor renders the legacy "Gauge Options" Carbon Grid.
+- [ ] Saving produces the same `component_code` as the baseline.
+- [ ] The chart renders correctly on a dashboard.
+
+### Q.3 Quadrant 2 — editor on, codegen off
+
+- [ ] `chart_editor_spec_driven` = true; `chart_codegen_spec_driven`
+      = false.
+- [ ] Refresh the editor. Gauge configuration panel now renders
+      from the spec — the section headers ("Data Mapping", "Gauge
+      Options", "Appearance") and the fields (Value Column, Min,
+      Max, Warning, Danger, Unit, Arc Thickness) match the legacy
+      JSX 1:1.
+- [ ] Editing any field updates the saved chart record exactly as
+      the legacy editor would (yAxisColumns[0], chartOptions.*).
+- [ ] Saving produces `component_code` byte-identical to the
+      Q.2 baseline (legacy codegen still in use).
+
+### Q.4 Quadrant 3 — editor off, codegen on
+
+- [ ] `chart_editor_spec_driven` = false; `chart_codegen_spec_driven`
+      = true.
+- [ ] Refresh the editor. Gauge panel renders the legacy JSX.
+- [ ] Saving produces `component_code` byte-identical to the
+      Q.2 baseline (template emits the same string the legacy
+      switch did).
+- [ ] The chart renders correctly on a dashboard.
+
+### Q.5 Quadrant 4 — both flags on
+
+- [ ] Both flags on.
+- [ ] Editor renders from spec; codegen runs from template.
+- [ ] Saving produces `component_code` byte-identical to the
+      Q.2 baseline.
+- [ ] The chart renders correctly on a dashboard.
+
+### Q.6 Automated regression check
+
+- [ ] `npm run verify:chart-spec` (in `client/`) exits 0. This runs
+      `scripts/verify-gauge-template.mjs` which asserts the gauge
+      template output contains the same structural markers the
+      legacy branch emits (Component arrow, ResizeObserver guard,
+      useData destructure, gauge series shape, color stops, etc.).
+- [ ] CI runs the same check as part of `npm run build`.
+
+### Q.7 Other chart types unaffected
+
+- [ ] With both flags on, open a bar / line / pie / number /
+      dataview chart and confirm the editor renders the legacy
+      JSX and the saved code is unchanged. The flags only route
+      gauge through the spec path; everything else falls through
+      to legacy.
+
+---
+
 ## Notes
 
 Use this space to track issues found during testing:

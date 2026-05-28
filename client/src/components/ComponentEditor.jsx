@@ -45,6 +45,9 @@ import { useEnabledTypes } from '../context/EnabledTypesContext';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from './shared/NamespaceSelect';
 import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
+import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
+import { getChartTypeSpec } from '../chart-spec';
+import { getCodegenTemplateForChartType } from '../chart-codegen';
 import './ComponentEditor.scss';
 
 // Chart types available
@@ -442,6 +445,25 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [activeTab, setActiveTab] = useState(0);
   const [hasChanges, setHasChanges] = useState(false);
   const [initialState, setInitialState] = useState(null);
+
+  // Chart spec-driven editor + codegen feature flags (PR 1 — gauge
+  // only). Each defaults false; when true AND a spec/template exists
+  // for the active chart_type, the editor renders sections from the
+  // JSON spec / the codegen emits from a template instead of the
+  // legacy per-type branches. Flags are independent so editor and
+  // codegen migrations can be staged. Fetched once at mount.
+  const [chartSpecEditorEnabled, setChartSpecEditorEnabled] = useState(false);
+  const [chartSpecCodegenEnabled, setChartSpecCodegenEnabled] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getSetting('chart_editor_spec_driven')
+      .then((s) => { if (!cancelled) setChartSpecEditorEnabled(Boolean(s?.value)); })
+      .catch(() => {});
+    apiClient.getSetting('chart_codegen_spec_driven')
+      .then((s) => { if (!cancelled) setChartSpecCodegenEnabled(Boolean(s?.value)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Get current chart type configuration
   const chartTypeConfig = useMemo(() => {
@@ -1417,7 +1439,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming);
+    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, chartSpecCodegenEnabled);
   }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle]);
 
   const filteredPreviewData = useMemo(() => {
@@ -2906,7 +2928,37 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {!showCustomCode && chartType === 'gauge' && (
+                {!showCustomCode && chartType === 'gauge' && chartSpecEditorEnabled && getChartTypeSpec('gauge') && (
+                  <SpecDrivenSections
+                    spec={getChartTypeSpec('gauge')}
+                    availableColumns={availableColumns}
+                    formState={{
+                      y_axis_0: yAxisColumns[0] || '',
+                      gauge_min: chartOptions.gaugeMin,
+                      gauge_max: chartOptions.gaugeMax,
+                      gauge_warning_threshold: chartOptions.gaugeWarningThreshold,
+                      gauge_danger_threshold: chartOptions.gaugeDangerThreshold,
+                      gauge_unit: chartOptions.gaugeUnit,
+                      gauge_line_thickness: chartOptions.gaugeLineThickness ?? 8,
+                    }}
+                    onFieldChange={(fieldId, value) => {
+                      switch (fieldId) {
+                        case 'y_axis_0':
+                          setYAxisColumns(value ? [value] : []);
+                          break;
+                        case 'gauge_min': updateChartOption('gaugeMin', value); break;
+                        case 'gauge_max': updateChartOption('gaugeMax', value); break;
+                        case 'gauge_warning_threshold': updateChartOption('gaugeWarningThreshold', value); break;
+                        case 'gauge_danger_threshold': updateChartOption('gaugeDangerThreshold', value); break;
+                        case 'gauge_unit': updateChartOption('gaugeUnit', value); break;
+                        case 'gauge_line_thickness': updateChartOption('gaugeLineThickness', value); break;
+                        default: break;
+                      }
+                    }}
+                  />
+                )}
+
+                {!showCustomCode && chartType === 'gauge' && !(chartSpecEditorEnabled && getChartTypeSpec('gauge')) && (
                   <div className="chart-options-section">
                     <h4>Gauge Options</h4>
                     <Grid narrow>
@@ -4018,7 +4070,7 @@ export function getStaticChartCode(chartType) {
   return templates[chartType] || templates.bar;
 }
 
-export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '', isTSStoreStreaming = false) {
+export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, chartId = '', isTSStoreStreaming = false, useSpecCodegen = false) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], visibleColumns = null, chartName = '' } = transforms;
 
@@ -4169,6 +4221,33 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
       ${chartType === 'line' || chartType === 'area' ? 'smooth: true,' : ''}
       itemStyle: { color: '#0f62fe' }
     }];`;
+  }
+
+  // Spec-driven codegen dispatch — PR 1 (gauge only). When the
+  // chart_codegen_spec_driven admin flag is on AND a template is
+  // registered for this chart_type, route to the template and skip
+  // the legacy per-type branches below. Output must be byte-identical
+  // to the legacy branch for the same input — verified via the
+  // four-quadrant manual test in docs/TEST_PLAN.md Section Q.
+  if (useSpecCodegen) {
+    const reg = getCodegenTemplateForChartType(chartType);
+    if (reg) {
+      return reg.templateFn({
+        connectionId,
+        queryRaw,
+        queryType,
+        queryParams,
+        extraOptionsLine,
+        useDataFields,
+        noDataLine,
+        transformsConfig,
+        hasTransforms,
+        yAxisStr,
+        chartName,
+        chartOptions,
+        bindings: reg.spec.codegen.template_bindings,
+      });
+    }
   }
 
   if (chartType === 'pie') {

@@ -1,0 +1,129 @@
+{
+  "schema_version": "1",
+  "chart_type": "gauge",
+  "library": "echarts",
+  "display": {
+    "label": "Gauge",
+    "icon": "Meter",
+    "description": "Display a single value on a dial"
+  },
+  "capabilities": {
+    "requires_x_axis": false,
+    "requires_y_axis": true,
+    "multiple_y_axis": false,
+    "has_series_column": false,
+    "has_axis_labels": false,
+    "has_x_axis_format": false,
+    "has_time_bucket": false,
+    "has_sort_limit": false,
+    "has_visible_columns": false,
+    "has_filters": true,
+    "has_aggregation": false
+  },
+  "sections": [
+    {
+      "id": "data_mapping",
+      "label": "Data Mapping",
+      "layout": "row-2",
+      "fields": [
+        {
+          "id": "y_axis_0",
+          "binds": "data_mapping.y_axis[0]",
+          "type": "column_select",
+          "label": "Value Column",
+          "required": true,
+          "helperText": "Numeric column whose first row's value renders on the dial."
+        }
+      ]
+    },
+    {
+      "id": "chart_options",
+      "label": "Gauge Options",
+      "layout": "row-4",
+      "fields": [
+        {
+          "id": "gauge_min",
+          "binds": "options.gaugeMin",
+          "type": "number",
+          "label": "Min Value",
+          "default": 0,
+          "min": -1000000,
+          "step": 1
+        },
+        {
+          "id": "gauge_max",
+          "binds": "options.gaugeMax",
+          "type": "number",
+          "label": "Max Value",
+          "default": 100,
+          "max": 1000000,
+          "step": 1
+        },
+        {
+          "id": "gauge_warning_threshold",
+          "binds": "options.gaugeWarningThreshold",
+          "type": "number",
+          "label": "Warning Threshold (%)",
+          "default": 70,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "helperText": "Yellow zone starts"
+        },
+        {
+          "id": "gauge_danger_threshold",
+          "binds": "options.gaugeDangerThreshold",
+          "type": "number",
+          "label": "Danger Threshold (%)",
+          "default": 90,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "helperText": "Red zone starts"
+        }
+      ]
+    },
+    {
+      "id": "chart_options_extras",
+      "label": "Appearance",
+      "layout": "row-2",
+      "fields": [
+        {
+          "id": "gauge_unit",
+          "binds": "options.gaugeUnit",
+          "type": "text",
+          "label": "Unit Suffix",
+          "default": "",
+          "placeholder": "e.g., °F, %, psi"
+        },
+        {
+          "id": "gauge_line_thickness",
+          "binds": "options.gaugeLineThickness",
+          "type": "slider",
+          "label": "Arc Thickness (%)",
+          "default": 8,
+          "min": 1,
+          "max": 16,
+          "step": 1
+        }
+      ]
+    }
+  ],
+  "codegen": {
+    "library": "echarts",
+    "template_id": "gauge_v1",
+    "template_bindings": {
+      "value_source": {
+        "kind": "first_row_y_value",
+        "y_axis_index": 0
+      },
+      "min": "options.gaugeMin",
+      "max": "options.gaugeMax",
+      "warning_threshold_pct": "options.gaugeWarningThreshold",
+      "danger_threshold_pct": "options.gaugeDangerThreshold",
+      "unit": "options.gaugeUnit",
+      "line_thickness_pct": "options.gaugeLineThickness",
+      "query_limit": 1
+    }
+  }
+}

@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node increment-build.js && npm run lint:strict && vite build",
+    "build": "node increment-build.js && npm run lint:strict && npm run verify:chart-spec && vite build",
     "lint": "eslint .",
     "lint:strict": "eslint . --max-warnings=10000 --quiet",
+    "verify:chart-spec": "node scripts/verify-gauge-template.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

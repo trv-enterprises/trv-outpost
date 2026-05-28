@@ -129,6 +129,10 @@
         flex-basis: calc(50% - #{spacing.$spacing-05} / 2);
         max-width: calc(50% - #{spacing.$spacing-05} / 2);
       }
+      &--third {
+        flex-basis: calc(33.333% - #{spacing.$spacing-05} * 2 / 3);
+        max-width: calc(33.333% - #{spacing.$spacing-05} * 2 / 3);
+      }
       &--quarter {
         flex-basis: calc(25% - #{spacing.$spacing-05} * 3 / 4);
         max-width: calc(25% - #{spacing.$spacing-05} * 3 / 4);
@@ -147,6 +151,7 @@
         flex-direction: column;
       }
       .metadata-col--half,
+      .metadata-col--third,
       .metadata-col--quarter,
       .metadata-col--three-quarters {
         flex-basis: 100%;

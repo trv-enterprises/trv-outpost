@@ -129,3 +129,21 @@ settings:
     category: ai
     description: "Anthropic model the Dashboard Assistant runs. Allowed values: `sonnet` (faster + cheaper, default) or `opus` (more capable, more expensive). Switching takes effect on next server restart. Per-deployment choice; not per-user."
     value: "sonnet"
+
+  # ─── Chart spec-driven editor (preview) ─────────────────────────────
+  # Two independent feature flags that opt-in to the spec-driven chart
+  # configuration system. Editor and codegen flags are separate so they
+  # can be flipped on staggered — turn editor on first, verify save
+  # round-trip is byte-identical to legacy, then turn codegen on. See
+  # docs/design-notes/chart-spec-driven-editor.md. Defaults `false`
+  # until PR 3 flips them. Only `gauge` charts honor the flags in PR 1;
+  # other chart types ignore them.
+  - key: chart_editor_spec_driven
+    category: chart_spec
+    description: "When true, the chart editor renders configuration sections from a JSON spec (currently gauge only). When false, the legacy per-chart-type JSX blocks render. Save round-trip is identical between the two paths. Preview feature; defaults false."
+    value: false
+
+  - key: chart_codegen_spec_driven
+    category: chart_spec
+    description: "When true, chart component_code is generated from a JSON spec's template (currently gauge only). When false, the legacy getDataDrivenChartCode switch generates the code. Output is byte-identical when correct. Preview feature; defaults false."
+    value: false
