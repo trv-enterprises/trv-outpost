@@ -67,6 +67,8 @@ import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
 import { useModeGuard } from '../context/ModeGuardContext';
+import useAssistantSurface from '../hooks/useAssistantSurface';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import { RefreshableComponentsProvider, useRefreshableComponentsContext } from '../context/RefreshableComponentsContext';
 import { syncKioskFromUrl, getKioskDashboardIds } from '../utils/kioskMode';
 
@@ -405,6 +407,69 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return panels.reduce((max, panel) => Math.max(max, panel.y + panel.h), 0);
   }, [panels]);
 
+  // Publish the current dashboard surface to the Dashboard Assistant
+  // so it can resolve "this dashboard / this panel" without a tool
+  // round trip.
+  //
+  // Perf-critical: this memo runs on every editablePanels change,
+  // which during a drag is 30+ frames/sec. The output payload doesn't
+  // include x/y/w/h (geometry isn't useful to the agent), so derive
+  // a *stable signature* — id + component_id + title only — and use
+  // that as the dep instead of the live panels array. While the user
+  // drags, the signature stays byte-identical and the heavy memo
+  // doesn't re-run. Panel cap stays at 100 to bound token cost on
+  // pathological dashboards.
+  //
+  // Surface registration is also gated on chat-agent availability —
+  // if the env key isn't set / admin disabled the assistant, no
+  // sidecard exists to consume the surface and the registration is
+  // pure waste. We rely on chatAgentEnabled here; the per-user
+  // capability gate that hides the launcher icon happens upstream in
+  // App.jsx and isn't reachable from here without prop drilling.
+  // Worst case: a non-designer pays the (now-cheap) registration on
+  // every dashboard mount.
+  const { chatAgentEnabled } = useAIAvailability();
+  const surfaceEligible = chatAgentEnabled;
+
+  const panelSignature = useMemo(() => {
+    if (!surfaceEligible) return '';
+    const list = panels || [];
+    const out = [];
+    const cap = Math.min(list.length, 100);
+    for (let i = 0; i < cap; i++) {
+      const p = list[i];
+      const chart = p.component_id ? chartsMap[p.component_id] : null;
+      const title = chart?.title || chart?.name || '';
+      out.push(`${p.id}|${p.component_id || ''}|${title}|${chart?.component_type || ''}|${chart?.chart_type || ''}`);
+    }
+    return out.join('\n');
+  }, [surfaceEligible, panels, chartsMap]);
+
+  const assistantSurface = useMemo(() => {
+    if (!surfaceEligible || !dashboard?.id) return null;
+    const summarized = (panels || []).slice(0, 100).map((p) => {
+      const chart = p.component_id ? chartsMap[p.component_id] : null;
+      const entry = { id: p.id };
+      if (chart?.title || chart?.name) entry.title = chart.title || chart.name;
+      if (p.component_id) entry.componentId = p.component_id;
+      if (chart?.component_type) entry.componentType = chart.component_type;
+      if (chart?.chart_type) entry.chartType = chart.chart_type;
+      return entry;
+    });
+    return {
+      mode: isEditMode ? 'EDIT' : 'VIEW',
+      surface: 'DASHBOARD',
+      surfaceId: dashboard.id,
+      surfaceName: dashboard.name,
+      panels: summarized,
+    };
+    // panelSignature carries the only panel-state we render into the
+    // payload; depending on it instead of `panels` directly lets drag
+    // frames skip this memo entirely.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surfaceEligible, dashboard?.id, dashboard?.name, panelSignature, isEditMode]);
+  useAssistantSurface(assistantSurface);
+
   // In edit mode, grid extends to the layout dimension boundary (or panel extent if larger)
   // In view mode, grid fits tightly around panels
   const maxGridCol = isEditMode && gridCols
@@ -421,6 +486,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // toggle from triggering a spurious resize → re-measure → re-scale cycle
   // that shifts the dashboard grid (especially visible in stretch-to-fill
   // mode during fullscreen).
+  //
+  // We watch both the window AND the container element. The window
+  // listener catches obvious cases (browser resize, fullscreen
+  // toggle). The ResizeObserver catches cases where the window
+  // stays the same size but the container's available width
+  // shrinks or grows — like when the Dashboard Assistant sidecard
+  // opens/closes and pushes the page reflow via CSS padding (no
+  // window resize fires for that).
   const hasPanels = panels && panels.length > 0;
   const lastSizeRef = useRef({ width: 0, height: 0 });
   useEffect(() => {
@@ -442,10 +515,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       raf2 = requestAnimationFrame(measure);
     });
     window.addEventListener('resize', measure);
+
+    // ResizeObserver picks up container-size changes that don't
+    // cause a window resize — the assistant-sidecard open/close
+    // is the primary case but anything that adds/removes padding
+    // on a parent container will trigger this too.
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => { measure(); });
+      ro.observe(containerRef.current);
+    }
+
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
       window.removeEventListener('resize', measure);
+      if (ro) ro.disconnect();
     };
   }, [hasPanels, isFullscreen, fitMode]);
 

@@ -225,7 +225,11 @@ button.cds--header__action {
       }
     }
 
-    // Hide design mode nav content when collapsed
+    // Hide design mode nav content when collapsed. The border-bottom
+    // on `.nav-header` is intentionally preserved here (formerly set
+    // to `none`) so the section divider lines remain visible for
+    // positional reference between groups — the rail mode strong-
+    // contrast color override lives further down.
     .design-mode-nav {
       .nav-header span {
         display: none;
@@ -235,7 +239,6 @@ button.cds--header__action {
         justify-content: center;
         padding: spacing.$spacing-03;
         margin: 0;
-        border-bottom: none;
       }
 
       .nav-links .cds--side-nav__link-text {
@@ -243,7 +246,9 @@ button.cds--header__action {
       }
     }
 
-    // Hide manage mode nav content when collapsed
+    // Hide manage mode nav content when collapsed. Same reasoning
+    // as design-mode-nav above: keep the .nav-header border-bottom
+    // so section dividers stay visible in rail mode.
     .manage-mode-nav {
       .nav-header span {
         display: none;
@@ -253,7 +258,6 @@ button.cds--header__action {
         justify-content: center;
         padding: spacing.$spacing-03;
         margin: 0;
-        border-bottom: none;
       }
     }
   }
@@ -597,4 +601,101 @@ button.cds--overflow-menu {
     overflow: visible;
     text-overflow: clip;
   }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Shared page-toolbar wrap behavior
+// ───────────────────────────────────────────────────────────────────
+//
+// Every design/manage list page renders a `.page-toolbar` with a
+// `.toolbar-left` (search + filters) and a `.toolbar-actions`
+// (Create button, etc.) inside it. Each page has its own SCSS file
+// declaring `display: flex` on these but none of them set
+// `flex-wrap` — so when the container narrows (e.g. when the
+// Dashboard Assistant sidecard opens and consumes 28rem on the
+// right), the toolbar children clip off the right edge.
+//
+// Set `flex-wrap: wrap` globally so toolbars reflow onto a second
+// line when they don't fit on one. The `row-gap` matches the inline
+// gap the per-page rules already declare, so wrapping looks
+// intentional rather than crowded.
+//
+// One outlier: ComponentsListPage was already wrapping (its
+// `.toolbar-left` has `flex-wrap: wrap`). The global doesn't conflict
+// because `flex-wrap` is the same value.
+.page-toolbar,
+.page-toolbar .toolbar-left,
+.page-toolbar .toolbar-actions {
+  flex-wrap: wrap;
+  row-gap: spacing.$spacing-04;
+}
+
+// Once the row wraps, Carbon's ContentSwitcher (the list/grid view
+// toggle) tries to claim the new line's full width because it
+// defaults to `display: flex` with no `flex` constraint. Pin it to
+// its content width so it stays a compact 2-button row even when
+// wrapped onto its own line. Same posture as a regular icon button
+// pair — the parent's row-gap handles vertical spacing.
+.page-toolbar .cds--content-switcher {
+  flex: 0 0 auto;
+  width: max-content;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// SideNav rail-mode section dividers
+// ───────────────────────────────────────────────────────────────────
+//
+// DesignModeNav and ManageModeNav render section headers (RESOURCES,
+// EXTENSIONS, ...) as `.nav-header` divs whose role at narrow widths
+// is just to provide a visual divider between adjacent groups of
+// icons. In rail mode (~48px wide) the label text is clipped by
+// overflow:hidden so only the 1px border-bottom remains. Against
+// the dark layer background, that thin gray line is hard to see —
+// the section grouping reads as one long undifferentiated list.
+//
+// Bump the divider line to a stronger contrast token so it's
+// visible in rail mode. The header band itself stays the same
+// 56px tall — shrinking it makes the section grouping disappear
+// entirely because the empty band is what reads as "section
+// break" alongside the line.
+//
+// SideNav class application (per @carbon/react SideNav.js):
+//   - `.cds--side-nav--expanded` fires when expanded
+//   - `.cds--side-nav--collapsed` only fires when !expanded && isFixedNav
+//   - `.cds--side-nav--rail` only fires when isRail
+// We use neither isFixedNav nor isRail — App.jsx passes
+// `isPersistent={true}` + the `expanded` boolean — so the rail
+// state has NO positive class. The correct selector is "any
+// side-nav that doesn't carry the expanded class," which catches
+// the rail regardless of the other variant flags.
+.cds--side-nav:not(.cds--side-nav--expanded) {
+  // Top divider — above the first section's header. There's no
+  // pre-existing element with a top border at the very top of the
+  // nav, so we add one explicitly. Color matches the existing
+  // `.nav-header` border-bottom in DesignModeNav.scss /
+  // ManageModeNav.scss (`#393939`) so all rail-mode dividers look
+  // the same as the expanded view's dividers.
+  .design-mode-nav > .nav-header:first-child,
+  .manage-mode-nav > .nav-header:first-child {
+    border-top: 1px solid #393939;
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Assistant launcher — restore continuity of the header bottom border
+// ───────────────────────────────────────────────────────────────────
+//
+// Carbon's `.cds--header__action--active` paints a different
+// background fill on the cell. The header itself has
+// `border-bottom: 1px solid #393939` which should run continuously
+// across the bottom of the header — but the active cell's
+// background fill visually interrupts that line where the icon
+// sits, leaving a gap at the very bottom of the cell.
+//
+// Re-paint the missing 1px at the cell's own bottom using the
+// EXACT same color the header bottom uses (`#393939`), so the
+// horizontal line reads as continuous across the entire header
+// bottom whether the launcher is active or not.
+.assistant-launcher-action.cds--header__action--active {
+  border-block-end: 1px solid #393939;
 }

@@ -1013,10 +1013,30 @@ class APIClient {
     return this.request(`/api/ai/sessions/${sessionId}`);
   }
 
-  async sendAIMessage(sessionId, content) {
+  // ── Dashboard Assistant (chat-kind sessions) ──────────────────────
+  // Same `/api/ai/sessions` family as the Component AI agent, but
+  // with `kind: "chat"` set so the server's session-kind dispatch
+  // routes messages to the chat agent (internal/ai/chat) instead of
+  // the Component AI agent. The chat agent ignores component-scoped
+  // fields entirely.
+  async createAssistantSession() {
+    return this.request('/api/ai/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'chat' }),
+    });
+  }
+
+  async sendAIMessage(sessionId, content, options = {}) {
+    // surfaceContext is only meaningful for chat-kind sessions
+    // (Dashboard Assistant). The Component AI agent path passes
+    // undefined and the server ignores the field in that case.
+    const body = { content };
+    if (options.surfaceContext) {
+      body.surface_context = options.surfaceContext;
+    }
     return this.request(`/api/ai/sessions/${sessionId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -1206,6 +1226,17 @@ class APIClient {
   async getRegistryConnectionTypes({ includeDisabled = false } = {}) {
     const qs = includeDisabled ? '?include_disabled=true' : '';
     return this.request(`/api/registry/connections${qs}`);
+  }
+
+  // Per-type query-config guidance — the same cheat sheet the chat
+  // agent receives bundled on get_connection. Use for the
+  // ConnectionDetailPage info card and the ComponentEditor query
+  // hint. Returns { type_id, guidance, has_entry }; has_entry=false
+  // means the response still carries a generic discovery fallback
+  // (safe to render, just not adapter-specific).
+  async getConnectionTypeGuidance(typeId) {
+    if (!typeId) return null;
+    return this.request(`/api/registry/connections/${encodeURIComponent(typeId)}/guidance`);
   }
 
   async getRegistryComponentTypes({ category = '', includeDisabled = false } = {}) {

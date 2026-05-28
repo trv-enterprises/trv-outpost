@@ -61,8 +61,13 @@
     flex: 1;
     overflow: auto;
 
-    // Constrain component-editor content sections to max-width
+    // Constrain component-editor content sections to a shared
+    // reference max-width. Every direct content section of the
+    // editor that should align horizontally with the others
+    // belongs in this list — including the Chart Type card,
+    // which sits between the metadata and the tab content.
     .chart-metadata-section,
+    .type-card-section,
     .component-editor-switcher-wrapper,
     .tab-content {
       max-width: var(--component-editor-max-width, 1200px);

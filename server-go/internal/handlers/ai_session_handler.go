@@ -15,7 +15,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
+	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -30,19 +32,41 @@ var wsUpgrader = websocket.Upgrader{
 	},
 }
 
-// AISessionHandler handles AI session-related HTTP requests
+// AISessionHandler handles AI session-related HTTP requests. Two
+// agents share this handler today (post-step-1):
+//
+//   - agent (the Component AI agent) handles sessions with
+//     Kind="component" or empty.
+//   - chatAgent (the Dashboard Assistant) handles sessions with
+//     Kind="chat".
+//
+// Either may be nil (when ANTHROPIC_API_KEY isn't set, or for
+// chatAgent when assistant.enabled=false). The session-dispatch
+// logic falls back gracefully when its agent is nil.
+//
+// configService is required only for chat sessions — it resolves
+// the caller's active_namespace from user prefs so the chat agent
+// knows which namespace to operate in. Component AI agent doesn't
+// need it (component sessions carry their target component ID).
 type AISessionHandler struct {
-	service  *service.AISessionService
-	agent    *ai.Agent
-	chartHub *hub.ComponentHub
+	service       *service.AISessionService
+	agent         *ai.Agent
+	chatAgent     *chat.Agent
+	configService *service.ConfigService
+	chartHub      *hub.ComponentHub
 }
 
-// NewAISessionHandler creates a new AI session handler
-func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chartHub *hub.ComponentHub) *AISessionHandler {
+// NewAISessionHandler creates a new AI session handler. `chatAgent`
+// may be nil when the Dashboard Assistant is disabled — in that case
+// the handler simply refuses to process chat-kind messages, same
+// posture as a nil Component agent.
+func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, chatAgent *chat.Agent, configService *service.ConfigService, chartHub *hub.ComponentHub) *AISessionHandler {
 	return &AISessionHandler{
-		service:  service,
-		agent:    agent,
-		chartHub: chartHub,
+		service:       service,
+		agent:         agent,
+		chatAgent:     chatAgent,
+		configService: configService,
+		chartHub:      chartHub,
 	}
 }
 
@@ -62,6 +86,24 @@ func (h *AISessionHandler) CreateSession(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Capability gate for chat-kind sessions. The Dashboard Assistant
+	// is a builder agent — View-only and Manage-only users have no
+	// actionable use for it (V can't author anything, M operates on
+	// surfaces the chat agent's toolset doesn't cover in v1). Refuse
+	// the session-create rather than letting a session exist that
+	// can't usefully act on anything. Component-kind sessions
+	// (Component AI agent) keep their existing posture (gated only
+	// by route auth + the per-tool capability checks in toolops).
+	if req.Kind == models.AISessionKindChat {
+		caller := middleware.GetUser(c)
+		if caller == nil || !caller.HasCapability(models.CapabilityDesign) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Dashboard Assistant requires the Design capability.",
+			})
+			return
+		}
 	}
 
 	response, err := h.service.CreateSession(c.Request.Context(), &req)
@@ -140,35 +182,66 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// Process message with AI agent asynchronously
-	// Use background context since HTTP request context will be cancelled after response
-	if h.agent != nil {
-		go func() {
-			ctx := context.Background()
+	// Capture the caller from the HTTP context BEFORE we spawn the
+	// goroutine — the gin context dies once the handler returns,
+	// and middleware.GetUser(c) wouldn't work from inside the
+	// goroutine.
+	callerUser := middleware.GetUser(c)
+	callerNamespace := h.resolveCallerNamespace(c.Request.Context(), callerUser)
+	// Surface context comes off the request body — captured here
+	// (synchronously with the request) so the goroutine can hand it
+	// to the chat agent's prompt builder.
+	callerSurface := req.SurfaceContext
 
-			fmt.Printf("[AI Agent] Starting to process message for session %s\n", id)
+	// Process the message asynchronously. We dispatch on the
+	// session's Kind: chat-kind sessions route to the Dashboard
+	// Assistant; everything else (component-kind or legacy
+	// empty-kind) goes to the Component AI agent. Either agent can
+	// be nil when its required env (API key + admin setting) isn't
+	// in place — we fail loudly in that case rather than silently
+	// dropping the message.
+	go func() {
+		ctx := context.Background()
 
-			// Get session for processing
-			sessionResp, err := h.service.GetSession(ctx, id)
-			if err != nil {
-				fmt.Printf("[AI Agent] Error getting session: %v\n", err)
-				h.service.SendErrorEvent(id, err, "session_error")
+		sessionResp, err := h.service.GetSession(ctx, id)
+		if err != nil {
+			fmt.Printf("[AI] Error getting session %s: %v\n", id, err)
+			h.service.SendErrorEvent(id, err, "session_error")
+			return
+		}
+
+		kind := sessionResp.Session.KindOrDefault()
+		switch kind {
+		case models.AISessionKindChat:
+			if h.chatAgent == nil {
+				err := fmt.Errorf("Dashboard Assistant is not enabled in this deployment")
+				h.service.SendErrorEvent(id, err, "assistant_disabled")
 				return
 			}
-
-			fmt.Printf("[AI Agent] Got session, calling ProcessMessage\n")
-
-			// Process the message with the AI agent
+			caller := &chat.CallerCtx{
+				User:      callerUser,
+				Namespace: callerNamespace,
+				Now:       time.Now(),
+				Surface:   callerSurface,
+			}
+			fmt.Printf("[Chat] Processing message for session %s (namespace=%s)\n", id, callerNamespace)
+			if err := h.chatAgent.ProcessMessage(ctx, sessionResp.Session, req.Content, caller); err != nil {
+				fmt.Printf("[Chat] Error processing message: %v\n", err)
+				h.service.SendErrorEvent(id, err, "ai_error")
+			}
+		default:
+			if h.agent == nil {
+				err := fmt.Errorf("AI agent not available")
+				h.service.SendErrorEvent(id, err, "ai_disabled")
+				return
+			}
+			fmt.Printf("[AI Agent] Processing message for session %s\n", id)
 			if err := h.agent.ProcessMessage(ctx, sessionResp.Session, req.Content); err != nil {
 				fmt.Printf("[AI Agent] Error processing message: %v\n", err)
 				h.service.SendErrorEvent(id, err, "ai_error")
-			} else {
-				fmt.Printf("[AI Agent] ProcessMessage completed successfully\n")
 			}
-		}()
-	} else {
-		fmt.Printf("[AI Agent] Agent is nil, skipping AI processing\n")
-	}
+		}
+	}()
 
 	// Return immediately with accepted status
 	c.JSON(http.StatusAccepted, gin.H{
@@ -364,4 +437,27 @@ func (h *AISessionHandler) CancelSession(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// resolveCallerNamespace pulls the caller's active_namespace from
+// their user-prefs. Best-effort: a missing or unparseable value
+// degrades to "default" rather than failing the request.
+//
+// Used by the chat path so create_* tools land in the namespace the
+// user has open in the header — matches the design doc's
+// "always-current-namespace" rule. The Component AI agent doesn't
+// need this because its sessions carry the target component ID.
+func (h *AISessionHandler) resolveCallerNamespace(ctx context.Context, user *models.User) string {
+	const defaultNamespace = "default"
+	if user == nil || h.configService == nil {
+		return defaultNamespace
+	}
+	cfg, err := h.configService.GetUserConfig(ctx, user.GUID)
+	if err != nil || cfg == nil {
+		return defaultNamespace
+	}
+	if ns, ok := cfg.Settings["active_namespace"].(string); ok && ns != "" {
+		return ns
+	}
+	return defaultNamespace
 }

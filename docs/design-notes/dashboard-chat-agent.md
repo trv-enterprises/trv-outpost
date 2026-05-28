@@ -685,6 +685,25 @@ The system prompt gets the same incremental refinement the
 Component AI agent's system prompt has had — start small, harden
 based on observed failure modes.
 
+### Hard rules the prompt must encode
+
+Some lessons are already in hand from the parallel `dashboard-agent`
+CLI work — bake them in from day 1 so we don't repeat:
+
+- **Always prefer structured component config over `use_custom_code`.**
+  When creating a chart, set `component_type`, `chart_type`,
+  `connection_id`, `data_mapping`, `query_config` etc. and let
+  server-side codegen produce `component_code`. Only fall back to
+  custom code when the structured config genuinely cannot represent
+  what the user asked for. The dashboard-agent CLI defaulted to
+  custom code (likely because it wanted to set y-axis range / log
+  scale / tooltip formatter fields that weren't in the structured
+  config); the result was charts that wouldn't open cleanly in the
+  visual editor. The Dashboard Assistant must not inherit that bias.
+  Tom is extending the structured configs to close those gaps in
+  parallel; the assistant should treat custom code as the
+  last-resort path.
+
 ---
 
 ## Open questions

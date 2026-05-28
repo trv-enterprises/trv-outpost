@@ -2,13 +2,15 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Loading, Modal } from '@carbon/react';
 import { Save, Close, ArrowLeft } from '@carbon/icons-react';
 import ComponentEditor from '../components/ComponentEditor';
 import apiClient from '../api/client';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
+import useAssistantSurface from '../hooks/useAssistantSurface';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './ComponentDetailPage.scss';
 
 /**
@@ -47,6 +49,24 @@ function ComponentDetailPage() {
       fetchChart();
     }
   }, [id]);
+
+  // Publish the current component surface to the Dashboard Assistant.
+  // Always EDIT mode here — this page only renders the editor, never
+  // a read-only view. New (unsaved) components publish a surface
+  // without an ID so the agent at least knows the user is in the
+  // editor, even before save. Skip the registration entirely when
+  // the assistant is disabled — no consumer to feed.
+  const { chatAgentEnabled } = useAIAvailability();
+  const assistantSurface = useMemo(() => {
+    if (!chatAgentEnabled) return null;
+    return {
+      mode: 'EDIT',
+      surface: 'COMPONENT',
+      surfaceId: !isCreateMode ? (chart?.id || id) : undefined,
+      surfaceName: chart?.title || chart?.name || undefined,
+    };
+  }, [chatAgentEnabled, isCreateMode, id, chart?.id, chart?.title, chart?.name]);
+  useAssistantSurface(assistantSurface);
 
   const fetchChart = async () => {
     try {

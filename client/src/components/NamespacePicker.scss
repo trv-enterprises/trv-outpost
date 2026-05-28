@@ -19,8 +19,21 @@
   }
 
   .cds--toggletip-button {
-    width: 2.5rem;
+    // The (i) icon should read as part of the namespace pill — a
+    // single grouped "namespace control" rather than two
+    // independent header buttons. Use box-sizing: content-box so
+    // the padding sets the gaps around the 16px icon without
+    // shrinking the icon's own size; the button width auto-sizes
+    // to (16px icon + 16px left padding + 0 right padding) ≈ 2rem.
+    //
+    //   - Generous LEFT padding (1rem) separates the group from
+    //     the AI launcher on the icon's left side
+    //   - Zero RIGHT padding so the icon nests flush against the
+    //     namespace pill on its right
+    box-sizing: content-box;
+    width: 16px;
     height: 3rem;
+    padding: 0 0 0 1rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -35,6 +48,13 @@
       color: var(--cds-icon-primary, #f4f4f4);
     }
   }
+}
+
+// No left margin on the pill itself — the (i) icon's zero right
+// padding already places it flush against the pill's left edge,
+// which is what we want to read as a single grouped control.
+.namespace-picker-wrap .namespace-picker {
+  margin-left: 0;
 }
 
 // The Carbon header's HeaderGlobalAction slots are square icon buttons

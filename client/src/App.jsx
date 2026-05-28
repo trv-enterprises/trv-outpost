@@ -29,6 +29,7 @@ import {
   ChartMultitype,
   Menu,
   Close,
+  AiLaunch,
 } from '@carbon/icons-react';
 import apiClient, { API_BASE } from './api/client';
 import { isElectron } from './utils/electron';
@@ -68,11 +69,13 @@ import EdgeLakeTerminalPage from './pages/EdgeLakeTerminalPage';
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import { EnabledTypesProvider } from './context/EnabledTypesContext';
 import { AIAvailabilityProvider, useAIAvailability } from './context/AIAvailabilityContext';
-import { NamespaceProvider } from './context/NamespaceContext';
+import { NamespaceProvider, useNamespaces } from './context/NamespaceContext';
+import { AssistantSurfaceProvider } from './context/AssistantSurfaceContext';
 import NamespacePicker from './components/NamespacePicker';
 import AccountMenu from './components/AccountMenu';
 import AboutDialog from './components/AboutDialog';
-import DevUserSwitcher from './components/DevUserSwitcher';
+import AssistantSidecard from './components/assistant/AssistantSidecard';
+import useAssistantSidecardState from './hooks/useAssistantSidecardState';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
@@ -110,6 +113,30 @@ function AIBuilderGate() {
   );
 }
 
+// Small wrapper around AssistantSidecard that lives INSIDE the
+// NamespaceProvider tree so it can read activeNamespace via context.
+// AppContent's body is outside the provider, so it can't call
+// useNamespaces directly — this child component bridges the gap.
+//
+// Step 9 ships the chrome only; modelLabel is a static placeholder
+// for now and will pull from /api/ai/availability once that endpoint
+// surfaces the model (step 8+ work, deferred to keep step 9 focused).
+function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onRequestClose, currentUser }) {
+  const { activeNamespace } = useNamespaces();
+  return (
+    <AssistantSidecard
+      open={open}
+      width={width}
+      minWidth={minWidth}
+      onResize={onResize}
+      onRequestClose={onRequestClose}
+      namespace={activeNamespace || 'default'}
+      modelLabel="sonnet"
+      userName={currentUser?.name || currentUser?.guid || null}
+    />
+  );
+}
+
 function AppContent({ onDisconnect }) {
   const [isSideNavExpanded, setIsSideNavExpanded] = useState(true);
   const [currentMode, setCurrentMode] = useState(() => {
@@ -123,7 +150,14 @@ function AppContent({ onDisconnect }) {
   const [firstDashboardId, setFirstDashboardId] = useState(null);
   const [dashboardsLoaded, setDashboardsLoaded] = useState(false);
   const { notifications, addNotification, hydrateFromServer: hydrateNotifications, panelOpen: notificationPanelOpen, togglePanel: toggleNotificationPanel, closePanel: closeNotificationPanel } = useNotifications();
-  const [users, setUsers] = useState([]);
+  // `_users` is the previously-exposed dev user list. The dev
+  // user-switcher pill (the only consumer) was removed in favor of
+  // the `?user_id=<guid>` URL param. The state + setUsers callsites
+  // in the bootstrap / Clerk paths below are intentionally kept so
+  // the existing identity-resolution flow isn't disturbed; nothing
+  // currently reads the array.
+  // eslint-disable-next-line no-unused-vars
+  const [_users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   // Goes true once the bootstrap chain has finished trying (success
   // or fail). Used to distinguish "still loading" from "tried,
@@ -140,6 +174,13 @@ function AppContent({ onDisconnect }) {
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
+
+  // Dashboard Assistant sidecard state. Render-gated by the
+  // chatAgentEnabled flag from /api/ai/availability (step 0 of the
+  // dashboard-assistant work). Hook owns open/close + width state,
+  // persists to localStorage (instant) + user prefs (cross-device).
+  const { chatAgentEnabled } = useAIAvailability();
+  const assistantSidecard = useAssistantSidecardState();
 
   // Bootstrap the visitor's identity on mount. Resolution chain:
   //
@@ -425,12 +466,6 @@ function AppContent({ onDisconnect }) {
     }
   }, [identityResolved, currentUser, hydrateNotifications]);
 
-  // Handle user selection change
-  const handleUserChange = (user) => {
-    setCurrentUser(user);
-    apiClient.setCurrentUser(user.guid);
-  };
-
   // Fetch default dashboard (user preference or first alphabetically)
   const fetchDefaultDashboard = async () => {
     try {
@@ -630,6 +665,7 @@ function AppContent({ onDisconnect }) {
 
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
+    <AssistantSurfaceProvider>
     <div className={electronMode ? 'electron-mode' : ''}>
       <HeaderContainer
         render={() => (
@@ -671,20 +707,42 @@ function AppContent({ onDisconnect }) {
               />
             </div>
             <HeaderGlobalBar>
-              {(userCapabilities.can_design || userCapabilities.can_manage) && <NamespacePicker />}
-
-              {/* Dev-only user impersonation pill. Sits between
-                  NamespacePicker and the help/notification icons so
-                  it reads as a context control alongside the
-                  namespace picker. Vite tree-shakes this out of
-                  production bundles via import.meta.env.DEV. */}
-              {import.meta.env.DEV && !electronMode && (
-                <DevUserSwitcher
-                  currentUser={currentUser}
-                  users={users}
-                  onUserChange={handleUserChange}
-                />
+              {/* Dashboard Assistant launcher. Sits left of the rest
+                  of the header-action cluster (NamespacePicker, Help,
+                  Notifications, AccountMenu). Only renders when:
+                    1. The chat agent is enabled at the deployment
+                       (ANTHROPIC_API_KEY set AND assistant.enabled
+                       is true), AND
+                    2. The caller has Design capability. The
+                       assistant is a builder; View-only users
+                       wouldn't have anything actionable to ask, and
+                       Manage-only is system administration that the
+                       chat agent isn't built for (the design doc
+                       explicitly excludes Manage-shaped tools like
+                       system-user creation from v1). */}
+              {chatAgentEnabled && userCapabilities.can_design && (
+                <HeaderGlobalAction
+                  aria-label={assistantSidecard.open ? 'Hide assistant' : 'Open assistant'}
+                  onClick={assistantSidecard.toggle}
+                  isActive={assistantSidecard.open}
+                  tooltipAlignment="end"
+                  className="assistant-launcher-action"
+                >
+                  <AiLaunch size={20} />
+                </HeaderGlobalAction>
               )}
+
+              {/* NamespacePicker (info icon + active-namespace pill)
+                  is authoring-only: it sets the default namespace for
+                  *newly created* records (dashboards, components,
+                  connections). Manage-only users administer the
+                  system rather than author content, so they don't
+                  need it. Gate on Design specifically. */}
+              {userCapabilities.can_design && <NamespacePicker />}
+
+              {/* Dev user impersonation pill removed — initial
+                  load now accepts a `?user_id=<guid>` URL param,
+                  which makes the in-header switcher redundant. */}
 
               <HeaderGlobalAction
                 aria-label={`Help - Build ${buildInfo.buildNumber}`}
@@ -737,6 +795,24 @@ function AppContent({ onDisconnect }) {
         clerkActive={clerkActive}
       />
 
+      {/* Dashboard Assistant sidecard. Mount inside NamespaceProvider
+          (a few lines up) so AssistantSidecardWithNamespace can read
+          the active namespace via context. Render-gated upstream by
+          chatAgentEnabled — App.jsx already hides the launcher icon
+          when the chat agent is disabled, but we keep the gate here
+          too in case the icon is bypassed (e.g. a keyboard shortcut
+          path someday). */}
+      {chatAgentEnabled && userCapabilities.can_design && (
+        <AssistantSidecardWithNamespace
+          open={assistantSidecard.open}
+          width={assistantSidecard.width}
+          minWidth={assistantSidecard.minWidth}
+          onResize={assistantSidecard.setWidth}
+          onRequestClose={() => assistantSidecard.setOpen(false)}
+          currentUser={currentUser}
+        />
+      )}
+
       {/* Hide sidebar in View mode (uses tile view instead) and on
           off-mode routes like /account/* where currentMode is null —
           showing a Design/Manage sidenav there would be misleading. */}
@@ -751,7 +827,18 @@ function AppContent({ onDisconnect }) {
         </SideNav>
       )}
 
-      <Content className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}>
+      <Content
+        className={`app-content ${(!currentMode || currentMode === MODES.VIEW) ? 'app-content--no-nav' : (isSideNavExpanded ? '' : 'app-content--nav-collapsed')}`}
+        // When the Dashboard Assistant sidecard is open, shrink the
+        // main content area to its left so the page reflows around
+        // the panel instead of being covered by it. Drag-resize on
+        // the sidecard updates the width in real time.
+        style={
+          chatAgentEnabled && userCapabilities.can_design && assistantSidecard.open
+            ? { paddingRight: `${assistantSidecard.width}px` }
+            : undefined
+        }
+      >
         <Routes>
           {/* Default route. Cascade by capability:
               1. can_view → first dashboard (or /view/dashboards if none)
@@ -822,6 +909,7 @@ function AppContent({ onDisconnect }) {
         </Routes>
       </Content>
     </div>
+    </AssistantSurfaceProvider>
     </NamespaceProvider>
   );
 }

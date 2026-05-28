@@ -424,7 +424,7 @@ const docTemplate = `{
         },
         "/api/ai/availability": {
             "get": {
-                "description": "Returns whether the AI agent is enabled in this deployment. Enabled iff ANTHROPIC_API_KEY was set at server start.",
+                "description": "Returns per-surface availability flags. ` + "`" + `enabled` + "`" + ` is a legacy alias for ` + "`" + `component_agent_enabled` + "`" + `. The Component AI agent is enabled iff ANTHROPIC_API_KEY was set at server start. The Dashboard Assistant additionally requires the ` + "`" + `assistant.enabled` + "`" + ` admin setting to be true at boot.",
                 "produces": [
                     "application/json"
                 ],
@@ -436,10 +436,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
+                            "$ref": "#/definitions/handlers.AIAvailabilityResponse"
                         }
                     }
                 }
@@ -2416,6 +2413,35 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/registry/connections/{typeId}/guidance": {
+            "get": {
+                "description": "Returns the cheat-sheet describing how to write query_config for a given connection adapter type — implicit row caps, supported DSL keywords, common pitfalls, etc. Sourced from the same connectionguidance package the chat agent reads. Accepts either a registry type id (e.g. \"store.tsstore\") or the legacy short type (\"tsstore\"); legacy values are mapped server-side so existing UI callers keep working.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Per-type query-config conventions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')",
+                        "name": "typeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ConnectionTypeGuidanceResponse"
                         }
                     }
                 }
@@ -5961,6 +5987,21 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "handlers.AIAvailabilityResponse": {
+            "description": "Per-surface AI availability flags for the SPA bootstrap.",
+            "type": "object",
+            "properties": {
+                "chat_agent_enabled": {
+                    "type": "boolean"
+                },
+                "component_agent_enabled": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
         "handlers.CategoryInfo": {
             "type": "object",
             "properties": {
@@ -5972,6 +6013,20 @@ const docTemplate = `{
                 },
                 "type_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.ConnectionTypeGuidanceResponse": {
+            "type": "object",
+            "properties": {
+                "guidance": {
+                    "type": "string"
+                },
+                "has_entry": {
+                    "type": "boolean"
+                },
+                "type_id": {
+                    "type": "string"
                 }
             }
         },
@@ -6287,22 +6342,22 @@ const docTemplate = `{
             }
         },
         "models.AISession": {
-            "description": "AI session for component creation/editing",
+            "description": "AI session for component editing (kind=component) or general chat (kind=chat)",
             "type": "object",
             "properties": {
                 "chart_version": {
-                    "description": "Version being edited (always a draft)",
+                    "description": "Version being edited (component sessions only)",
                     "type": "integer"
                 },
                 "component_id": {
-                    "description": "Component UUID being edited",
+                    "description": "Component UUID being edited (component sessions only)",
                     "type": "string"
                 },
                 "created": {
                     "type": "string"
                 },
                 "dashboard_id": {
-                    "description": "Auto-attach to this dashboard on save",
+                    "description": "Auto-attach to this dashboard on save (component sessions only)",
                     "type": "string"
                 },
                 "expires_at": {
@@ -6310,6 +6365,10 @@ const docTemplate = `{
                 },
                 "id": {
                     "description": "UUID",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "\"component\" (default) | \"chat\"",
                     "type": "string"
                 },
                 "messages": {
@@ -6320,7 +6379,7 @@ const docTemplate = `{
                     }
                 },
                 "panel_id": {
-                    "description": "Auto-attach to this panel on save",
+                    "description": "Auto-attach to this panel on save (component sessions only)",
                     "type": "string"
                 },
                 "status": {
@@ -7249,6 +7308,10 @@ const docTemplate = `{
                 },
                 "initial_message": {
                     "description": "First user message (optional)",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "Kind selects which agent surface owns the session. \"component\"\n(or empty) targets the Component AI agent and requires a\nComponentID; \"chat\" targets the Dashboard Assistant and\nignores the component-scoped fields.",
                     "type": "string"
                 },
                 "panel_id": {
@@ -8958,6 +9021,14 @@ const docTemplate = `{
                 "content": {
                     "description": "User message content",
                     "type": "string"
+                },
+                "surface_context": {
+                    "description": "SurfaceContext describes what the user is currently looking at\nin the UI. Used by the Dashboard Assistant to resolve\n\"this dashboard\" / \"this chart\" without a tool round trip and\nto refuse writes that would collide with the user's active\nedit. Optional; the Component AI agent ignores it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.SurfaceContext"
+                        }
+                    ]
                 }
             }
         },
@@ -9204,6 +9275,49 @@ const docTemplate = `{
                 },
                 "timestamp_scale": {
                     "description": "\"s\", \"ms\", \"ns\" — auto-detected if empty",
+                    "type": "string"
+                }
+            }
+        },
+        "models.SurfaceContext": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string"
+                },
+                "panels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SurfaceContextPanel"
+                    }
+                },
+                "surface": {
+                    "type": "string"
+                },
+                "surfaceId": {
+                    "type": "string"
+                },
+                "surfaceName": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SurfaceContextPanel": {
+            "type": "object",
+            "properties": {
+                "chartType": {
+                    "type": "string"
+                },
+                "componentId": {
+                    "type": "string"
+                },
+                "componentType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }
@@ -10028,6 +10142,12 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/registry.IntegrationInfo"
                     }
+                },
+                "layout_dimensions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.LayoutDimensionSummary"
+                    }
                 }
             }
         },
@@ -10257,6 +10377,29 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "registry.LayoutDimensionSummary": {
+            "type": "object",
+            "properties": {
+                "cols": {
+                    "type": "integer"
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "max_height": {
+                    "type": "integer"
+                },
+                "max_width": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
                 }
             }
         },

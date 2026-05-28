@@ -20,8 +20,11 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth/idp"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
@@ -145,6 +148,8 @@ func main() {
 	alertRepo := repository.NewAlertRepository(mongodb.Database)
 	webhookSecretRepo := repository.NewWebhookSecretRepository(mongodb.Database)
 	snippetRepo := repository.NewSnippetRepository(mongodb.Database)
+	chatToolResultRepo := repository.NewChatToolResultRepository(mongodb.Database)
+	chatUsageRepo := repository.NewChatUsageRepository(mongodb.Database)
 
 	// Create chart indexes
 	if err := componentRepo.CreateIndexes(ctx); err != nil {
@@ -194,6 +199,16 @@ func main() {
 	// Create snippet indexes
 	if err := snippetRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create snippet indexes: %v", err)
+	}
+
+	// Create chat tool result indexes (includes TTL for 24h sweep)
+	if err := chatToolResultRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create chat_tool_results indexes: %v", err)
+	}
+
+	// Create chat usage indexes (includes TTL for 90-day retention)
+	if err := chatUsageRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("Warning: Failed to create chat_usage indexes: %v", err)
 	}
 
 	// Create alert indexes (incl. TTL for retention sweep)
@@ -310,7 +325,15 @@ func main() {
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
 	toolExecutor := ai.NewToolExecutor(componentRepo, connectionRepo, connectionService, deviceTypeRepo, chartHub)
 	deviceTypeLister := &service.DeviceTypeListerAdapter{Service: deviceTypeService}
-	catalogProvider := service.NewCatalogProvider(deviceTypeLister, typeFilter)
+	catalogProvider := service.NewCatalogProviderWithLayout(deviceTypeLister, configService, typeFilter)
+
+	// Shared toolops layer — both MCP and the Dashboard Assistant
+	// chat agent wrap these pure Go function bodies. See
+	// docs/design-notes/dashboard-chat-agent.md for the rationale.
+	// Constructed once here; the MCP registry and chat agent each
+	// receive a pointer.
+	opsToolset := toolops.New(connectionService, componentService, dashboardService, namespaceService, userRepo, catalogProvider)
+
 	var aiAgent *ai.Agent
 	agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
 	if err != nil {
@@ -321,12 +344,88 @@ func main() {
 		fmt.Println("✓ AI Agent enabled (Anthropic SDK)")
 	}
 
+	// Dashboard Assistant readiness — distinct from the Component AI
+	// agent above. Two switches: ANTHROPIC_API_KEY must be set (so the
+	// Anthropic SDK can reach the API) AND the admin setting
+	// `assistant.enabled` must be true. Read at boot only; flipping
+	// the setting takes effect on next server restart, same posture as
+	// the enabled_types ledger.
+	chatAgentReady := false
+	var chatAgent *chat.Agent
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		assistantEnabled, errAss := settingsService.GetSetting(ctx, "assistant.enabled")
+		if errAss != nil {
+			log.Printf("⚠️  assistant.enabled setting not found — Dashboard Assistant disabled: %v", errAss)
+		} else if v, ok := assistantEnabled.Value.(bool); ok && v {
+			// Wire the chat-agent tool registry. Tier-A tools wrap
+			// the shared toolops layer so MCP and the chat agent
+			// share one truth about what each operation does.
+			chatTools := chat.NewToolRegistry()
+			chat.RegisterBuiltinTools(chatTools, opsToolset)
+
+			// Server-side store for oversize tool results. The
+			// chat agent's ProcessMessage loop runs every tool
+			// output through this — small results pass through,
+			// large results get persisted server-side and
+			// summarized for the model. The get_full_result
+			// meta-tool retrieves the verbatim content when the
+			// model needs it.
+			chatResultStore := chat.NewResultStore(chatToolResultRepo)
+
+			// Per-user daily token budget. Reads the
+			// assistant.daily_token_budget admin setting; defaults
+			// kick in when the setting is missing or unparseable.
+			// The value can land in two shapes depending on origin:
+			//   - YAML-seeded: map[string]interface{}
+			//   - Admin-edited via UI/API: bson.D ([]bson.E) once
+			//     it round-trips through Mongo
+			// extractBudgetCaps handles both.
+			inputCap, outputCap := extractBudgetCaps(
+				ctx,
+				settingsService,
+				int64(chat.DefaultDailyInputBudget),
+				int64(chat.DefaultDailyOutputBudget),
+			)
+			chatBudget := chat.NewBudget(chatUsageRepo, inputCap, outputCap)
+			fmt.Printf("✓ Dashboard Assistant daily budget: %d input / %d output tokens/user\n", inputCap, outputCap)
+
+			// Model selection from admin setting. Sonnet is the
+			// default; admins can opt into Opus for higher-fidelity
+			// answers at higher cost. Unknown values fall back to
+			// Sonnet rather than failing.
+			chatModelID := chat.ModelSonnet
+			if modelSetting, err := settingsService.GetSetting(ctx, "assistant.model"); err == nil && modelSetting != nil {
+				if s, ok := modelSetting.Value.(string); ok && s != "" {
+					chatModelID = chat.ResolveModelID(s)
+				}
+			}
+			fmt.Printf("✓ Dashboard Assistant model: %s\n", chatModelID)
+
+			ca, errCa := chat.NewAgent(aiSessionService, chatTools, &chat.Config{
+				ResultStore: chatResultStore,
+				Budget:      chatBudget,
+				Model:       chatModelID,
+			})
+			if errCa != nil {
+				log.Printf("⚠️  Failed to construct Dashboard Assistant: %v", errCa)
+			} else {
+				chatAgent = ca
+				chatAgentReady = true
+				fmt.Println("✓ Dashboard Assistant enabled")
+			}
+		} else {
+			fmt.Println("· Dashboard Assistant disabled by admin setting (assistant.enabled=false)")
+		}
+	} else {
+		fmt.Println("· Dashboard Assistant disabled (ANTHROPIC_API_KEY not set)")
+	}
+
 	// Initialize handlers
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 	componentHandler := handlers.NewComponentHandler(componentService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
-	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chartHub)
-	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent)
+	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chatAgent, configService, chartHub)
+	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
 	debugHandler := handlers.NewDebugHandler()
 	streamHandler := handlers.NewStreamHandler(streamManager)
 	configHandler := handlers.NewConfigHandler(configService)
@@ -334,7 +433,7 @@ func main() {
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	commandHandler := handlers.NewCommandHandler(connectionService, componentService, deviceTypeService)
 	frigateHandler := handlers.NewFrigateHandler(connectionService)
-	registryHandler := handlers.NewRegistryHandler(deviceTypeService, typeFilter)
+	registryHandler := handlers.NewRegistryHandler(deviceTypeService, configService, typeFilter)
 	deviceTypeHandler := handlers.NewDeviceTypeHandler(deviceTypeService)
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceDiscoveryService)
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
@@ -439,7 +538,7 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService)
 
 	// Initialize MCP
-	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter)
+	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter, opsToolset)
 	mcpHandler := mcp.NewHandler(mcpRegistry)
 
 	// PUBLIC bootstrap routes — must be reachable BEFORE the auth
@@ -617,6 +716,7 @@ func main() {
 		{
 			registryRoutes.GET("/connections", registryHandler.ListConnectionTypes)
 			registryRoutes.GET("/connections/:typeId", registryHandler.GetConnectionType)
+			registryRoutes.GET("/connections/:typeId/guidance", registryHandler.GetConnectionTypeGuidance)
 			registryRoutes.GET("/categories", registryHandler.ListCategories)
 			registryRoutes.GET("/components", registryHandler.ListComponentTypes)
 			registryRoutes.GET("/components/:typeId", registryHandler.GetComponentType)
@@ -969,4 +1069,82 @@ func resolveDocsPath() string {
 		}
 	}
 	return ""
+}
+
+// extractBudgetCaps reads the assistant.daily_token_budget setting
+// and pulls the input/output caps out of it, handling both the
+// YAML-seeded shape (map[string]interface{}) and the
+// Mongo-round-tripped shape ([]bson.E) that admin edits produce.
+// Falls back to the passed defaults if anything goes wrong.
+func extractBudgetCaps(ctx context.Context, settingsSvc *service.SettingsService, defaultInput, defaultOutput int64) (int64, int64) {
+	inputCap := defaultInput
+	outputCap := defaultOutput
+	setting, err := settingsSvc.GetSetting(ctx, "assistant.daily_token_budget")
+	if err != nil || setting == nil {
+		return inputCap, outputCap
+	}
+	pairs := flattenBudgetValue(setting.Value)
+	if v, ok := pairs["input"]; ok && v > 0 {
+		inputCap = v
+	}
+	if v, ok := pairs["output"]; ok && v > 0 {
+		outputCap = v
+	}
+	return inputCap, outputCap
+}
+
+// flattenBudgetValue normalizes the polymorphic value shape of a
+// compound settings record into a map[string]int64. Accepts:
+//   - map[string]interface{} (YAML-seeded or test-injected)
+//   - bson.D / []bson.E (admin-edited, round-tripped through Mongo)
+//   - primitive values inside either shape: int / int32 / int64 / float64
+//
+// Returns an empty map on shape mismatches rather than panicking.
+func flattenBudgetValue(v interface{}) map[string]int64 {
+	out := map[string]int64{}
+	if v == nil {
+		return out
+	}
+	switch typed := v.(type) {
+	case map[string]interface{}:
+		for k, raw := range typed {
+			if n, ok := budgetCoerceInt64(raw); ok {
+				out[k] = n
+			}
+		}
+	case bson.D:
+		// bson.D is an alias for primitive.D ([]primitive.E),
+		// covering both YAML-seeded compound values that came
+		// back through Mongo decoding AND values written by the
+		// admin via PUT /api/settings/:key.
+		for _, e := range typed {
+			if n, ok := budgetCoerceInt64(e.Value); ok {
+				out[e.Key] = n
+			}
+		}
+	case []bson.E:
+		// Same content as bson.D but typed as the raw slice — can
+		// happen when the value was constructed directly rather
+		// than through the bson.D literal.
+		for _, e := range typed {
+			if n, ok := budgetCoerceInt64(e.Value); ok {
+				out[e.Key] = n
+			}
+		}
+	}
+	return out
+}
+
+func budgetCoerceInt64(raw interface{}) (int64, bool) {
+	switch n := raw.(type) {
+	case int64:
+		return n, true
+	case int32:
+		return int64(n), true
+	case int:
+		return int64(n), true
+	case float64:
+		return int64(n), true
+	}
+	return 0, false
 }

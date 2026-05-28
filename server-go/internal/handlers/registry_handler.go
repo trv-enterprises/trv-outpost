@@ -7,8 +7,10 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/connectionguidance"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -20,14 +22,16 @@ import (
 // their single source of truth.
 type RegistryHandler struct {
 	deviceTypes *service.DeviceTypeService
+	layoutDims  registry.LayoutDimensionLister
 	filter      registry.TypeFilter
 }
 
 // NewRegistryHandler creates a new registry handler. deviceTypes may be nil
-// (the catalog endpoint will omit device types if so). filter may be nil
-// (no filtering applied — useful in tests).
-func NewRegistryHandler(deviceTypes *service.DeviceTypeService, filter registry.TypeFilter) *RegistryHandler {
-	return &RegistryHandler{deviceTypes: deviceTypes, filter: filter}
+// (the catalog endpoint will omit device types if so). layoutDims may be
+// nil (the catalog will omit layout dimensions). filter may be nil (no
+// filtering applied — useful in tests).
+func NewRegistryHandler(deviceTypes *service.DeviceTypeService, layoutDims registry.LayoutDimensionLister, filter registry.TypeFilter) *RegistryHandler {
+	return &RegistryHandler{deviceTypes: deviceTypes, layoutDims: layoutDims, filter: filter}
 }
 
 // activeFilter returns the effective filter for a request: nil if the
@@ -174,6 +178,78 @@ func (h *RegistryHandler) GetConnectionType(c *gin.Context) {
 	c.JSON(http.StatusOK, info)
 }
 
+// ConnectionTypeGuidanceResponse describes the query-config
+// conventions for a connection adapter type — the same text the
+// chat agent reads via toolops, surfaced to the human editor so
+// users see "ts-store doesn't speak SQL" in the same place they
+// configure a chart against it.
+type ConnectionTypeGuidanceResponse struct {
+	TypeID   string `json:"type_id"`
+	Guidance string `json:"guidance"`
+	HasEntry bool   `json:"has_entry"`
+}
+
+// legacyToRegistryTypeID maps the short connection.type strings used
+// throughout the older UI ("sql", "tsstore", "mqtt", ...) to the
+// registry type IDs that connectionguidance is keyed by
+// ("sql.postgres", "store.tsstore", "stream.mqtt", ...). Mirrors the
+// canonical conversion in models.Connection.GetEffectiveTypeID for
+// the cases that don't need to peek at the connection's config
+// sub-block. When the legacy string already looks like a registry id
+// (contains a dot), passes it through unchanged so existing
+// registry-keyed callers keep working.
+//
+// Some legacy types (notably "sql" and "socket") need the connection
+// config to pick the right registry id — for those we fall back to
+// the most common variant. Callers that want sub-driver precision
+// should send the registry id directly.
+func legacyToRegistryTypeID(in string) string {
+	if in == "" || strings.Contains(in, ".") {
+		return in
+	}
+	switch in {
+	case "sql":
+		return "sql.postgres" // default; specific dialect requires registry id
+	case "csv":
+		return "file.csv"
+	case "socket":
+		return "stream.websocket"
+	case "api":
+		return "api.rest"
+	case "tsstore":
+		return "store.tsstore"
+	case "prometheus":
+		return "api.prometheus"
+	case "edgelake":
+		return "api.edgelake"
+	case "mqtt":
+		return "stream.mqtt"
+	case "frigate":
+		return "frigate"
+	default:
+		return in
+	}
+}
+
+// GetConnectionTypeGuidance godoc
+// @Summary Per-type query-config conventions
+// @Description Returns the cheat-sheet describing how to write query_config for a given connection adapter type — implicit row caps, supported DSL keywords, common pitfalls, etc. Sourced from the same connectionguidance package the chat agent reads. Accepts either a registry type id (e.g. "store.tsstore") or the legacy short type ("tsstore"); legacy values are mapped server-side so existing UI callers keep working.
+// @Tags registry
+// @Produce json
+// @Param typeId path string true "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')"
+// @Success 200 {object} ConnectionTypeGuidanceResponse
+// @Router /api/registry/connections/{typeId}/guidance [get]
+func (h *RegistryHandler) GetConnectionTypeGuidance(c *gin.Context) {
+	raw := c.Param("typeId")
+	resolved := legacyToRegistryTypeID(raw)
+	text, ok := connectionguidance.Get(resolved)
+	c.JSON(http.StatusOK, ConnectionTypeGuidanceResponse{
+		TypeID:   resolved,
+		Guidance: text,
+		HasEntry: ok,
+	})
+}
+
 // ListCategoriesResponse represents the response for listing categories
 type ListCategoriesResponse struct {
 	Categories []CategoryInfo `json:"categories"`
@@ -286,7 +362,7 @@ func (h *RegistryHandler) GetComponentType(c *gin.Context) {
 // @Success 200 {object} registry.Catalog
 // @Router /api/registry/catalog [get]
 func (h *RegistryHandler) GetCatalog(c *gin.Context) {
-	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister(), h.activeFilter(c))
+	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -333,7 +409,7 @@ func (h *RegistryHandler) ListIntegrations(c *gin.Context) {
 // @Success 200 {string} string "Markdown document"
 // @Router /api/registry/catalog.md [get]
 func (h *RegistryHandler) GetCatalogMarkdown(c *gin.Context) {
-	cat, err := registry.BuildCatalog(c.Request.Context(), h.deviceTypeLister(), h.activeFilter(c))
+	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

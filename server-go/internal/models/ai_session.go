@@ -15,6 +15,20 @@ const (
 	AISessionStatusCancelled = "cancelled" // User discarded changes
 )
 
+// AI Session kind constants — discriminates the two agent surfaces
+// that share this collection:
+//
+//   - "component": the Component AI agent, scoped to one chart by ID
+//   - "chat": the Dashboard Assistant, unscoped builder
+//
+// Empty string is treated as "component" for backwards compatibility
+// with records written before the discriminator existed. See
+// AISession.KindOrDefault().
+const (
+	AISessionKindComponent = "component"
+	AISessionKindChat      = "chat"
+)
+
 // AI Message role constants
 const (
 	AIMessageRoleUser      = "user"
@@ -22,19 +36,41 @@ const (
 	AIMessageRoleSystem    = "system"
 )
 
-// AISession represents an active AI component editing session
-// @Description AI session for component creation/editing
+// AISession represents an active AI agent conversation. Two agent
+// surfaces share this collection, discriminated by Kind:
+//
+//   - Kind="component" — the Component AI agent, scoped to a chart
+//     by ComponentID. ChartVersion, DashboardID, PanelID are populated.
+//   - Kind="chat" — the Dashboard Assistant, unscoped. ComponentID
+//     and the chart/dashboard/panel fields are empty.
+//
+// Records written before the Kind field existed have an empty Kind;
+// KindOrDefault() returns "component" for those so the existing
+// dispatch logic keeps working.
+// @Description AI session for component editing (kind=component) or general chat (kind=chat)
 type AISession struct {
 	ID           string      `json:"id" bson:"_id"`                            // UUID
-	ComponentID  string      `json:"component_id" bson:"component_id"`         // Component UUID being edited
-	ChartVersion int         `json:"chart_version" bson:"chart_version"`       // Version being edited (always a draft)
+	Kind         string      `json:"kind,omitempty" bson:"kind,omitempty"`     // "component" (default) | "chat"
+	ComponentID  string      `json:"component_id,omitempty" bson:"component_id,omitempty"` // Component UUID being edited (component sessions only)
+	ChartVersion int         `json:"chart_version,omitempty" bson:"chart_version,omitempty"` // Version being edited (component sessions only)
 	Messages     []AIMessage `json:"messages" bson:"messages"`                 // Conversation history
 	Status       string      `json:"status" bson:"status"`                     // "active" | "completed" | "cancelled"
-	DashboardID  string      `json:"dashboard_id,omitempty" bson:"dashboard_id,omitempty"` // Auto-attach to this dashboard on save
-	PanelID      string      `json:"panel_id,omitempty" bson:"panel_id,omitempty"`         // Auto-attach to this panel on save
+	DashboardID  string      `json:"dashboard_id,omitempty" bson:"dashboard_id,omitempty"` // Auto-attach to this dashboard on save (component sessions only)
+	PanelID      string      `json:"panel_id,omitempty" bson:"panel_id,omitempty"`         // Auto-attach to this panel on save (component sessions only)
 	Created      time.Time   `json:"created" bson:"created"`
 	Updated      time.Time   `json:"updated" bson:"updated"`
 	ExpiresAt    time.Time   `json:"expires_at" bson:"expires_at"`
+}
+
+// KindOrDefault returns the session's Kind, defaulting to
+// AISessionKindComponent when the field is empty. Records persisted
+// before the Kind discriminator existed don't carry the field; this
+// helper keeps existing dispatch paths working without a migration.
+func (s *AISession) KindOrDefault() string {
+	if s == nil || s.Kind == "" {
+		return AISessionKindComponent
+	}
+	return s.Kind
 }
 
 // AIMessage represents a single message in the AI conversation
@@ -59,6 +95,11 @@ type ToolCall struct {
 // CreateAISessionRequest represents a request to create a new AI session
 // @Description Request body for creating a new AI session
 type CreateAISessionRequest struct {
+	// Kind selects which agent surface owns the session. "component"
+	// (or empty) targets the Component AI agent and requires a
+	// ComponentID; "chat" targets the Dashboard Assistant and
+	// ignores the component-scoped fields.
+	Kind           string `json:"kind,omitempty"`
 	ComponentID    string `json:"component_id"`    // Existing component ID to edit (optional, omit for new component)
 	InitialMessage string `json:"initial_message"` // First user message (optional)
 
@@ -77,6 +118,42 @@ type CreateAISessionRequest struct {
 // @Description Request body for sending a user message
 type SendMessageRequest struct {
 	Content string `json:"content" binding:"required"` // User message content
+
+	// SurfaceContext describes what the user is currently looking at
+	// in the UI. Used by the Dashboard Assistant to resolve
+	// "this dashboard" / "this chart" without a tool round trip and
+	// to refuse writes that would collide with the user's active
+	// edit. Optional; the Component AI agent ignores it.
+	SurfaceContext *SurfaceContext `json:"surface_context,omitempty"`
+}
+
+// SurfaceContext is the per-message view-state payload the client
+// attaches to every Dashboard Assistant send. Mirrors the React
+// AssistantSurfaceContext shape on the client.
+//
+// `Mode` is "VIEW" or "EDIT" — same string-uppercase the client
+// sends. `Surface` is "DASHBOARD" / "COMPONENT" / "CONNECTION".
+// `Panels` is only populated for DASHBOARD surfaces.
+//
+// All fields are optional; the prompt builder degrades gracefully
+// when fields are missing.
+type SurfaceContext struct {
+	Mode        string                 `json:"mode,omitempty"`
+	Surface     string                 `json:"surface,omitempty"`
+	SurfaceID   string                 `json:"surfaceId,omitempty"`
+	SurfaceName string                 `json:"surfaceName,omitempty"`
+	Panels      []SurfaceContextPanel  `json:"panels,omitempty"`
+}
+
+// SurfaceContextPanel describes a single panel in a dashboard
+// surface, with just enough metadata for the agent to resolve
+// "panel 3" / "the line chart" without listing components.
+type SurfaceContextPanel struct {
+	ID            string `json:"id,omitempty"`
+	Title         string `json:"title,omitempty"`
+	ComponentID   string `json:"componentId,omitempty"`
+	ComponentType string `json:"componentType,omitempty"`
+	ChartType     string `json:"chartType,omitempty"`
 }
 
 // AISessionResponse represents the API response for session operations

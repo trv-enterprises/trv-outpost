@@ -1,5 +1,15 @@
 basePath: /api
 definitions:
+  handlers.AIAvailabilityResponse:
+    description: Per-surface AI availability flags for the SPA bootstrap.
+    properties:
+      chat_agent_enabled:
+        type: boolean
+      component_agent_enabled:
+        type: boolean
+      enabled:
+        type: boolean
+    type: object
   handlers.CategoryInfo:
     properties:
       display_name:
@@ -8,6 +18,15 @@ definitions:
         type: string
       type_count:
         type: integer
+    type: object
+  handlers.ConnectionTypeGuidanceResponse:
+    properties:
+      guidance:
+        type: string
+      has_entry:
+        type: boolean
+      type_id:
+        type: string
     type: object
   handlers.CreateSystemUserRequest:
     properties:
@@ -219,23 +238,27 @@ definitions:
         type: array
     type: object
   models.AISession:
-    description: AI session for component creation/editing
+    description: AI session for component editing (kind=component) or general chat
+      (kind=chat)
     properties:
       chart_version:
-        description: Version being edited (always a draft)
+        description: Version being edited (component sessions only)
         type: integer
       component_id:
-        description: Component UUID being edited
+        description: Component UUID being edited (component sessions only)
         type: string
       created:
         type: string
       dashboard_id:
-        description: Auto-attach to this dashboard on save
+        description: Auto-attach to this dashboard on save (component sessions only)
         type: string
       expires_at:
         type: string
       id:
         description: UUID
+        type: string
+      kind:
+        description: '"component" (default) | "chat"'
         type: string
       messages:
         description: Conversation history
@@ -243,7 +266,7 @@ definitions:
           $ref: '#/definitions/models.AIMessage'
         type: array
       panel_id:
-        description: Auto-attach to this panel on save
+        description: Auto-attach to this panel on save (component sessions only)
         type: string
       status:
         description: '"active" | "completed" | "cancelled"'
@@ -951,6 +974,13 @@ definitions:
         type: string
       initial_message:
         description: First user message (optional)
+        type: string
+      kind:
+        description: |-
+          Kind selects which agent surface owns the session. "component"
+          (or empty) targets the Component AI agent and requires a
+          ComponentID; "chat" targets the Dashboard Assistant and
+          ignores the component-scoped fields.
         type: string
       panel_id:
         description: Panel within the dashboard
@@ -2145,6 +2175,15 @@ definitions:
       content:
         description: User message content
         type: string
+      surface_context:
+        allOf:
+        - $ref: '#/definitions/models.SurfaceContext'
+        description: |-
+          SurfaceContext describes what the user is currently looking at
+          in the UI. Used by the Dashboard Assistant to resolve
+          "this dashboard" / "this chart" without a tool round trip and
+          to refuse writes that would collide with the user's active
+          edit. Optional; the Component AI agent ignores it.
     required:
     - content
     type: object
@@ -2330,6 +2369,34 @@ definitions:
         type: string
       timestamp_scale:
         description: '"s", "ms", "ns" — auto-detected if empty'
+        type: string
+    type: object
+  models.SurfaceContext:
+    properties:
+      mode:
+        type: string
+      panels:
+        items:
+          $ref: '#/definitions/models.SurfaceContextPanel'
+        type: array
+      surface:
+        type: string
+      surfaceId:
+        type: string
+      surfaceName:
+        type: string
+    type: object
+  models.SurfaceContextPanel:
+    properties:
+      chartType:
+        type: string
+      componentId:
+        type: string
+      componentType:
+        type: string
+      id:
+        type: string
+      title:
         type: string
     type: object
   models.SystemConfigResponse:
@@ -2933,6 +3000,10 @@ definitions:
         items:
           $ref: '#/definitions/registry.IntegrationInfo'
         type: array
+      layout_dimensions:
+        items:
+          $ref: '#/definitions/registry.LayoutDimensionSummary'
+        type: array
     type: object
   registry.ComponentCapabilities:
     properties:
@@ -3098,6 +3169,21 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  registry.LayoutDimensionSummary:
+    properties:
+      cols:
+        type: integer
+      is_default:
+        type: boolean
+      max_height:
+        type: integer
+      max_width:
+        type: integer
+      name:
+        type: string
+      rows:
+        type: integer
     type: object
   registry.TypeInfo:
     properties:
@@ -3578,17 +3664,17 @@ paths:
       - Alerts
   /api/ai/availability:
     get:
-      description: Returns whether the AI agent is enabled in this deployment. Enabled
-        iff ANTHROPIC_API_KEY was set at server start.
+      description: Returns per-surface availability flags. `enabled` is a legacy alias
+        for `component_agent_enabled`. The Component AI agent is enabled iff ANTHROPIC_API_KEY
+        was set at server start. The Dashboard Assistant additionally requires the
+        `assistant.enabled` admin setting to be true at boot.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: boolean
-            type: object
+            $ref: '#/definitions/handlers.AIAvailabilityResponse'
       summary: AI availability
       tags:
       - ai
@@ -4916,6 +5002,31 @@ paths:
             additionalProperties: true
             type: object
       summary: Get a specific connection type
+      tags:
+      - registry
+  /api/registry/connections/{typeId}/guidance:
+    get:
+      description: Returns the cheat-sheet describing how to write query_config for
+        a given connection adapter type — implicit row caps, supported DSL keywords,
+        common pitfalls, etc. Sourced from the same connectionguidance package the
+        chat agent reads. Accepts either a registry type id (e.g. "store.tsstore")
+        or the legacy short type ("tsstore"); legacy values are mapped server-side
+        so existing UI callers keep working.
+      parameters:
+      - description: Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type
+          ('tsstore', 'prometheus')
+        in: path
+        name: typeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ConnectionTypeGuidanceResponse'
+      summary: Per-type query-config conventions
       tags:
       - registry
   /api/registry/integrations:

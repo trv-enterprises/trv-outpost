@@ -9,33 +9,72 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
 
-// AIAvailabilityHandler answers "is the AI agent available in this
-// deployment?" — a single boolean derived from whether the agent
-// constructor succeeded at boot (i.e. ANTHROPIC_API_KEY was set).
+// AIAvailabilityHandler answers "which AI surfaces are available in
+// this deployment?" — currently two flags:
+//
+//   - `component_agent_enabled`: derived from whether the Component
+//     AI agent constructor succeeded at boot (i.e. ANTHROPIC_API_KEY
+//     was set).
+//   - `chat_agent_enabled`: same env precondition AND the admin
+//     setting `assistant.enabled` evaluating to true. Restart is
+//     required for changes to take effect.
 //
 // Exposed unauthenticated so the app shell can decide whether to
-// render AI menu items before the user has signed in. It leaks no
-// secrets, only the binary fact of "AI on/off."
+// render AI menu items / the assistant header icon before the user
+// has signed in. It leaks no secrets, only the binary fact of
+// "available / not available" per surface.
+//
+// Legacy callers consume the `enabled` field, which we keep as an
+// alias for `component_agent_enabled` so existing clients don't
+// break.
 type AIAvailabilityHandler struct {
-	agent *ai.Agent
+	agent           *ai.Agent
+	chatAgentReady  bool
+	settingsService *service.SettingsService
 }
 
-// NewAIAvailabilityHandler returns a handler that reports whether
-// the passed-in agent is non-nil. Pass the same *ai.Agent that
-// AISessionHandler receives — nil means "no API key, no AI."
-func NewAIAvailabilityHandler(agent *ai.Agent) *AIAvailabilityHandler {
-	return &AIAvailabilityHandler{agent: agent}
+// NewAIAvailabilityHandler returns a handler that reports the
+// availability of both AI surfaces. `agent` is the Component AI
+// agent (nil means "no Component AI"). `chatAgentReady` reflects
+// whether the Dashboard Assistant constructor succeeded at boot
+// (which already accounts for both the env key and the admin
+// setting — so it's a single bool here). `settingsService` is
+// retained for future hot-toggle support; for v1 the bool we were
+// constructed with is authoritative.
+func NewAIAvailabilityHandler(agent *ai.Agent, chatAgentReady bool, settingsService *service.SettingsService) *AIAvailabilityHandler {
+	return &AIAvailabilityHandler{
+		agent:           agent,
+		chatAgentReady:  chatAgentReady,
+		settingsService: settingsService,
+	}
+}
+
+// AIAvailabilityResponse is the shape returned by GetAvailability.
+// `Enabled` is the legacy field, retained as an alias for
+// `ComponentAgentEnabled` so SPA bootstraps written before the
+// chat agent landed don't break.
+// @Description Per-surface AI availability flags for the SPA bootstrap.
+type AIAvailabilityResponse struct {
+	Enabled               bool `json:"enabled"`
+	ComponentAgentEnabled bool `json:"component_agent_enabled"`
+	ChatAgentEnabled      bool `json:"chat_agent_enabled"`
 }
 
 // GetAvailability godoc
 // @Summary      AI availability
-// @Description  Returns whether the AI agent is enabled in this deployment. Enabled iff ANTHROPIC_API_KEY was set at server start.
+// @Description  Returns per-surface availability flags. `enabled` is a legacy alias for `component_agent_enabled`. The Component AI agent is enabled iff ANTHROPIC_API_KEY was set at server start. The Dashboard Assistant additionally requires the `assistant.enabled` admin setting to be true at boot.
 // @Tags         ai
 // @Produce      json
-// @Success      200  {object}  map[string]bool
+// @Success      200  {object}  AIAvailabilityResponse
 // @Router       /api/ai/availability [get]
 func (h *AIAvailabilityHandler) GetAvailability(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"enabled": h.agent != nil})
+	componentAgentEnabled := h.agent != nil
+	c.JSON(http.StatusOK, AIAvailabilityResponse{
+		Enabled:               componentAgentEnabled,
+		ComponentAgentEnabled: componentAgentEnabled,
+		ChatAgentEnabled:      h.chatAgentReady,
+	})
 }

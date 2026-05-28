@@ -48,8 +48,33 @@ func NewAISessionService(sessionRepo *repository.AISessionRepository, chartRepo 
 	}
 }
 
-// CreateSession creates a new AI session and chart draft
+// CreateSession creates a new AI session.
+//
+// Two session kinds share this entrypoint:
+//   - kind="chat" (Dashboard Assistant): creates an unscoped session
+//     with no associated component or chart draft. None of the
+//     component / dashboard / panel fields on the request are used.
+//   - kind="component" (Component AI agent) or empty (legacy default):
+//     creates or attaches to a chart draft and runs the original
+//     component-editing flow below.
 func (s *AISessionService) CreateSession(ctx context.Context, req *models.CreateAISessionRequest) (*models.AISessionResponse, error) {
+	// Chat-kind sessions are unscoped — no component draft, no
+	// chart-version dance, no panel attachment. Short-circuit before
+	// any component-side logic runs so we can't accidentally touch a
+	// component repo on behalf of a chat session.
+	if req.Kind == models.AISessionKindChat {
+		session := &models.AISession{
+			ID:       uuid.New().String(),
+			Kind:     models.AISessionKindChat,
+			Messages: []models.AIMessage{},
+			Status:   models.AISessionStatusActive,
+		}
+		if err := s.sessionRepo.Create(ctx, session); err != nil {
+			return nil, fmt.Errorf("error creating chat session: %w", err)
+		}
+		return &models.AISessionResponse{Session: session}, nil
+	}
+
 	var chart *models.Component
 	var chartVersion int
 
@@ -149,6 +174,7 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 	// Create the session
 	session := &models.AISession{
 		ID:           uuid.New().String(),
+		Kind:         models.AISessionKindComponent,
 		ComponentID:  chart.ID,
 		ChartVersion: chartVersion,
 		Messages:     []models.AIMessage{},

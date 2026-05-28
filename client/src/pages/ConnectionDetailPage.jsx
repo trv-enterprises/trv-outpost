@@ -32,6 +32,9 @@ import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
 import SecretTextInput, { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
 import TLSSkipVerifyToggle from '../components/shared/TLSSkipVerifyToggle';
+import useAssistantSurface from '../hooks/useAssistantSurface';
+import { useAIAvailability } from '../context/AIAvailabilityContext';
+import ConnectionGuidanceHint from '../components/shared/ConnectionGuidanceHint';
 import './ConnectionDetailPage.scss';
 
 /**
@@ -140,6 +143,22 @@ function ConnectionDetailPage() {
       setNamespace(activeNamespace);
     }
   }, [isCreateMode, activeNamespace, namespace]);
+
+  // Publish the current connection surface to the Dashboard Assistant.
+  // Always EDIT mode here — this page only renders the connection
+  // editor. Skip the registration entirely when the assistant is
+  // disabled — no consumer to feed.
+  const { chatAgentEnabled } = useAIAvailability();
+  const assistantSurface = useMemo(() => {
+    if (!chatAgentEnabled) return null;
+    return {
+      mode: 'EDIT',
+      surface: 'CONNECTION',
+      surfaceId: !isCreateMode ? (connection?.id || id) : undefined,
+      surfaceName: connection?.name || undefined,
+    };
+  }, [chatAgentEnabled, isCreateMode, id, connection?.id, connection?.name]);
+  useAssistantSurface(assistantSurface);
 
   const fetchConnection = async () => {
     try {
@@ -1748,6 +1767,15 @@ function ConnectionDetailPage() {
           {type === 'edgelake' && renderEdgeLakeConfig()}
           {type === 'mqtt' && renderMQTTConfig()}
           {type === 'frigate' && renderFrigateConfig()}
+
+          {/* Per-type query-config conventions — surfaces the same
+              cheat-sheet the chat agent receives via toolops. Helps
+              users editing query_config against adapters with non-
+              obvious behavior (ts-store's DSL, EdgeLake's narrow
+              SQL subset, Prometheus's envelope). Collapsed by
+              default so it doesn't dominate the form. Hidden when
+              the type has no adapter-specific guidance. */}
+          <ConnectionGuidanceHint typeId={type} />
         </div>
       </div>
 

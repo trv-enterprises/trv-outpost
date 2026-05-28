@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
@@ -31,10 +32,20 @@ type ToolRegistry struct {
 	deviceTypeService *service.DeviceTypeService
 	settingsService   *service.SettingsService
 	typeFilter        registry.TypeFilter
+
+	// toolops is the shared lower-level tool-implementation layer.
+	// As of v0.20.0 we're migrating individual tools to shim through
+	// it; the registry holds the rest of the service refs for
+	// not-yet-migrated handlers. May be nil during early bootstrap
+	// or in tests — every shim must nil-check.
+	toolops *toolops.Toolset
 }
 
 // NewToolRegistry wires services into a fresh tool registry and registers
 // every tool the MCP server exposes. typeFilter may be nil (no filtering).
+// ops may be nil — handlers that have been migrated to the shared
+// toolops layer fall back to legacy direct-service calls when ops is
+// nil, so partial wiring during bootstrap doesn't break MCP.
 func NewToolRegistry(
 	connectionSvc *service.ConnectionService,
 	dashboardSvc *service.DashboardService,
@@ -42,6 +53,7 @@ func NewToolRegistry(
 	deviceTypeSvc *service.DeviceTypeService,
 	settingsSvc *service.SettingsService,
 	typeFilter registry.TypeFilter,
+	ops *toolops.Toolset,
 ) *ToolRegistry {
 	r := &ToolRegistry{
 		tools:             make(map[string]Tool),
@@ -52,6 +64,7 @@ func NewToolRegistry(
 		deviceTypeService: deviceTypeSvc,
 		settingsService:   settingsSvc,
 		typeFilter:        typeFilter,
+		toolops:           ops,
 	}
 
 	r.registerCatalogTools()
@@ -265,6 +278,13 @@ func (r *ToolRegistry) registerConnectionTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
+			// Shim through the shared toolops layer when available so
+			// MCP and the Dashboard Assistant share one truth. Fall
+			// back to direct service calls only when toolops isn't
+			// wired (early bootstrap, tests).
+			if r.toolops != nil {
+				return r.toolops.ListConnections(context.Background())
+			}
 			ctx := context.Background()
 			conns, total, err := r.connectionService.ListConnections(ctx, 100, 0)
 			if err != nil {
@@ -293,6 +313,9 @@ func (r *ToolRegistry) registerConnectionTools() {
 			id, ok := args["id"].(string)
 			if !ok {
 				return nil, fmt.Errorf("id must be a string")
+			}
+			if r.toolops != nil {
+				return r.toolops.GetConnection(context.Background(), toolops.GetConnectionInput{ID: id})
 			}
 			return r.connectionService.GetConnection(context.Background(), id)
 		},
@@ -411,6 +434,16 @@ func (r *ToolRegistry) registerConnectionTools() {
 		func(args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "connection_id")
 			queryMap, _ := args["query"].(map[string]interface{})
+			limit := getInt(args, "limit")
+			if r.toolops != nil {
+				return r.toolops.QueryConnection(context.Background(), toolops.QueryConnectionInput{
+					ConnectionID: id,
+					Raw:          getString(queryMap, "raw"),
+					Type:         getString(queryMap, "type"),
+					Params:       getMap(queryMap, "params"),
+					Limit:        limit,
+				})
+			}
 			req := &models.QueryRequest{
 				Query: models.Query{
 					Raw:    getString(queryMap, "raw"),
@@ -427,7 +460,6 @@ func (r *ToolRegistry) registerConnectionTools() {
 			// in every one). For probe-style usage the caller has
 			// usually baked LIMIT into the SQL anyway; this is the
 			// safety net + token-saving trim.
-			limit := getInt(args, "limit")
 			if limit > 0 && len(resp.ResultSet.Rows) > limit {
 				resp.ResultSet.Rows = resp.ResultSet.Rows[:limit]
 				if resp.ResultSet.Metadata == nil {
@@ -672,6 +704,13 @@ func (r *ToolRegistry) registerComponentTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
+			if r.toolops != nil {
+				return r.toolops.ListComponents(context.Background(), toolops.ListComponentsInput{
+					ChartType:    getString(args, "chart_type"),
+					ConnectionID: getString(args, "connection_id"),
+					Tag:          getString(args, "tag"),
+				})
+			}
 			params := models.ComponentQueryParams{
 				Page:         1,
 				PageSize:     100,
@@ -964,6 +1003,9 @@ func (r *ToolRegistry) registerDashboardTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
+			if r.toolops != nil {
+				return r.toolops.ListDashboards(context.Background())
+			}
 			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{Page: 1, PageSize: 100})
 			if err != nil {
 				return nil, err

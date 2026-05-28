@@ -20,12 +20,87 @@ import (
 // Device types come from a DB-backed lister supplied at call time — the
 // registry package intentionally has no hard dependency on service/models.
 type Catalog struct {
-	Integrations    []IntegrationInfo   `json:"integrations"`
-	ConnectionTypes []TypeInfo          `json:"connection_types"`
-	ChartTypes      []ComponentTypeInfo `json:"chart_types"`
-	ControlTypes    []ComponentTypeInfo `json:"control_types"`
-	DisplayTypes    []ComponentTypeInfo `json:"display_types"`
-	DeviceTypes     []DeviceTypeSummary `json:"device_types"`
+	Integrations     []IntegrationInfo        `json:"integrations"`
+	ConnectionTypes  []TypeInfo               `json:"connection_types"`
+	ChartTypes       []ComponentTypeInfo      `json:"chart_types"`
+	ControlTypes     []ComponentTypeInfo      `json:"control_types"`
+	DisplayTypes     []ComponentTypeInfo      `json:"display_types"`
+	DeviceTypes      []DeviceTypeSummary      `json:"device_types"`
+	LayoutDimensions []LayoutDimensionSummary `json:"layout_dimensions,omitempty"`
+}
+
+// LayoutDimensionSummary describes one dashboard-canvas size preset.
+// The chat agent and MCP consume this to know which key to set on
+// dashboard.settings.layout_dimension — preset names vary by
+// deployment (admins can rename, add, remove via Manage Settings).
+//
+// Cols/Rows are server-computed using the same cell-grid math the
+// React viewer applies (32-px cells, 4-px gaps, fixed viewer chrome).
+// That way the agent can plan panel coordinates against an exact
+// cell budget without having to do the geometry itself.
+type LayoutDimensionSummary struct {
+	Name      string `json:"name"`
+	MaxWidth  int    `json:"max_width"`
+	MaxHeight int    `json:"max_height"`
+	Cols      int    `json:"cols"`
+	Rows      int    `json:"rows"`
+	IsDefault bool   `json:"is_default,omitempty"`
+}
+
+// LayoutDimensionLister supplies the deployment's layout-dimension
+// presets to the catalog. Implementations live in the service layer
+// (ConfigService) so the registry package keeps no DB / Mongo
+// dependency. defaultName is the preset to mark IsDefault=true.
+type LayoutDimensionLister interface {
+	ListLayoutDimensionsForCatalog(ctx context.Context) (entries []LayoutDimensionEntry, defaultName string, err error)
+}
+
+// LayoutDimensionEntry is the minimal raw shape returned by the
+// lister. The catalog runs the cell-grid math on these to produce
+// LayoutDimensionSummary.
+type LayoutDimensionEntry struct {
+	Name      string
+	MaxWidth  int
+	MaxHeight int
+}
+
+// Grid math constants — must agree with the React viewer
+// (client/src/pages/DashboardViewerPage.jsx — VIEWER_CHROME_V/H, VIEWER_GAP).
+//
+//	cell pitch  = 32 px
+//	gap         = 4 px
+//	viewer chrome (vertical)   = 109 px (header + toolbar + padding)
+//	viewer chrome (horizontal) = 4 px  (border)
+//
+//	available = canvas - chrome
+//	count     = floor( (available + gap) / (cell + gap) )
+//
+// The `+gap` in the numerator is what the viewer uses — it accounts
+// for the fact that N cells only need N-1 gaps between them, so the
+// final gap "doesn't count" toward the bound. Drop it and you lose
+// one row at most boundary sizes (e.g. 2K becomes 36 rows instead of
+// the viewer's 37).
+//
+// Changing these here without updating the viewer (or vice versa)
+// produces dashboards that don't fit. Keep them in lockstep.
+const (
+	gridCellPx  = 32
+	gridGapPx   = 4
+	gridChromeV = 109
+	gridChromeH = 4
+)
+
+// computeCells derives the (cols, rows) cell budget for a canvas of
+// the given pixel dimensions. Mirrors the viewer's fit math exactly.
+func computeCells(maxWidth, maxHeight int) (cols, rows int) {
+	step := gridCellPx + gridGapPx
+	if maxWidth > gridChromeH {
+		cols = (maxWidth - gridChromeH + gridGapPx) / step
+	}
+	if maxHeight > gridChromeV {
+		rows = (maxHeight - gridChromeV + gridGapPx) / step
+	}
+	return cols, rows
 }
 
 // DeviceTypeSummary is the minimal, serializable slice of a DeviceType that
@@ -57,7 +132,20 @@ type DeviceTypeLister interface {
 // declared by an integration's OwnedConnectionType are included as
 // synthetic TypeInfo entries when the integration is enabled, so the
 // frontend picker and AI prompt see them.
+//
+// Layout dimensions are not included by this entry point — callers that
+// want them (the chat agent's CatalogProvider) should use
+// BuildCatalogWithLayout. The MCP catalog handler is fine without
+// dimensions for now; pages that need them go through the dedicated
+// /api/config/system endpoint.
 func BuildCatalog(ctx context.Context, deviceTypes DeviceTypeLister, filter TypeFilter) (*Catalog, error) {
+	return BuildCatalogWithLayout(ctx, deviceTypes, nil, filter)
+}
+
+// BuildCatalogWithLayout is the same as BuildCatalog but also fans in
+// the deployment's layout-dimension presets. Pass nil for layoutDims
+// to skip dimensions (equivalent to BuildCatalog).
+func BuildCatalogWithLayout(ctx context.Context, deviceTypes DeviceTypeLister, layoutDims LayoutDimensionLister, filter TypeFilter) (*Catalog, error) {
 	cat := &Catalog{
 		Integrations:    ListIntegrations(),
 		ConnectionTypes: List(),
@@ -75,6 +163,34 @@ func BuildCatalog(ctx context.Context, deviceTypes DeviceTypeLister, filter Type
 			return nil, fmt.Errorf("list device types: %w", err)
 		}
 		cat.DeviceTypes = dts
+	}
+
+	if layoutDims != nil {
+		entries, defaultName, err := layoutDims.ListLayoutDimensionsForCatalog(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list layout dimensions: %w", err)
+		}
+		summaries := make([]LayoutDimensionSummary, 0, len(entries))
+		for _, e := range entries {
+			cols, rows := computeCells(e.MaxWidth, e.MaxHeight)
+			summaries = append(summaries, LayoutDimensionSummary{
+				Name:      e.Name,
+				MaxWidth:  e.MaxWidth,
+				MaxHeight: e.MaxHeight,
+				Cols:      cols,
+				Rows:      rows,
+				IsDefault: e.Name == defaultName,
+			})
+		}
+		// Sort by canvas width so the chat-agent surface matches the
+		// editor dropdown's ordering (small → large).
+		sort.Slice(summaries, func(i, j int) bool {
+			if summaries[i].MaxWidth != summaries[j].MaxWidth {
+				return summaries[i].MaxWidth < summaries[j].MaxWidth
+			}
+			return summaries[i].MaxHeight < summaries[j].MaxHeight
+		})
+		cat.LayoutDimensions = summaries
 	}
 
 	if filter != nil {
@@ -181,6 +297,20 @@ func (c *Catalog) RenderMarkdown() string {
 	sb.WriteString("## Display types\n\n")
 	sb.WriteString("Non-chart visual components bundled with the frontend (Frigate viewers, weather, etc).\n\n")
 	writeComponentTypes(&sb, c.DisplayTypes)
+
+	if len(c.LayoutDimensions) > 0 {
+		sb.WriteString("## Layout dimensions\n\n")
+		sb.WriteString("Dashboard canvas presets configured for this deployment. Set `settings.layout_dimension` on a dashboard to the exact `name` of one of these entries. `cols` × `rows` is the cell-grid budget for panel placement.\n\n")
+		for _, d := range c.LayoutDimensions {
+			marker := ""
+			if d.IsDefault {
+				marker = " (default)"
+			}
+			fmt.Fprintf(&sb, "- **`%s`** — %d×%d px, grid %d × %d cells%s\n",
+				d.Name, d.MaxWidth, d.MaxHeight, d.Cols, d.Rows, marker)
+		}
+		sb.WriteString("\n")
+	}
 
 	if len(c.DeviceTypes) > 0 {
 		sb.WriteString("## Device types\n\n")

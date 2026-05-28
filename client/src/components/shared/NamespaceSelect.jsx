@@ -26,7 +26,7 @@ export default function NamespaceSelect({
   value,
   onChange,
   labelText = 'Namespace',
-  helperText = 'Uniqueness is scoped to (namespace, name) — same name can exist in different namespaces.',
+  helperText = 'Uniqueness is scoped to (namespace, name).',
   disabled = false,
 }) {
   const { namespaces } = useNamespaces();

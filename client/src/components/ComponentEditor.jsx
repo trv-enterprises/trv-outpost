@@ -23,9 +23,13 @@ import {
   IconButton,
   Slider,
   Modal,
-  Checkbox
+  Checkbox,
+  Toggletip,
+  ToggletipButton,
+  ToggletipContent,
+  Tooltip
 } from '@carbon/react';
-import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown } from '@carbon/icons-react';
+import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown, Information } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
 import { API_BASE } from '../api/client';
 import SQLQueryBuilder from './SQLQueryBuilder';
@@ -40,6 +44,7 @@ import TagInput from './shared/TagInput';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from './shared/NamespaceSelect';
+import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import './ComponentEditor.scss';
 
 // Chart types available
@@ -949,6 +954,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Derived datasource type flags (used in multiple places)
   const isTSStore = selectedDatasource?.type === 'tsstore';
+
+  // Connection types whose query language already expresses what
+  // the client-side Filters / Aggregation / Sliding Window
+  // sections do — SQL has WHERE/GROUP BY natively, EdgeLake's
+  // AnyLog SQL covers the same ground. For these, the client-side
+  // controls add cognitive load without earning their keep, so we
+  // hide them. REST and Prometheus keep them (thinner query
+  // languages), as do all streaming types where client-side
+  // slicing of accumulated data is the primary use case.
+  const queryLanguageOwnsClientSideOps =
+    selectedDatasource?.type === 'sql' ||
+    selectedDatasource?.type === 'edgelake';
   const isTSStoreStreaming = isTSStore && selectedDatasource?.config?.tsstore?.transport === 'streaming';
   const isSocket = selectedDatasource?.type === 'socket';
   const isMQTT = selectedDatasource?.type === 'mqtt';
@@ -1635,66 +1652,87 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         })()}
       </div>
 
-      {/* Display/Control basic info */}
+      {/* Header form for the chart sub-tab. Layout:
+            row 1: Name (1/2)     Title (1/2)
+            row 2: Description (full)
+            row 3: Namespace (1/4) Tags (3/4)
+          Reference width = the section's max-width (set in SCSS to
+          the same value Title used to occupy). Nothing in this form
+          overflows that width — see component-editor-header-form-
+          rearrange memory. */}
       <div className="chart-metadata-section">
-        <div className="metadata-row">
-          <TextInput
-            id="chart-name"
-            labelText={componentType === 'control' ? 'Control Name' : componentType === 'display' ? 'Display Name' : 'Chart Name'}
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (nameError) setNameError('');
-            }}
-            onBlur={(e) => checkDuplicateChartName(e.target.value)}
-            placeholder={componentType === 'control' ? 'Enter control name' : componentType === 'display' ? 'Enter display name' : 'Enter chart name'}
-            size="md"
-            invalid={!!nameError}
-            invalidText={nameError}
-          />
+        <div className="metadata-row metadata-row--split">
+          <div className="metadata-col metadata-col--half">
+            <TextInput
+              id="chart-name"
+              labelText={componentType === 'control' ? 'Control Name' : componentType === 'display' ? 'Display Name' : 'Chart Name'}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError('');
+              }}
+              onBlur={(e) => checkDuplicateChartName(e.target.value)}
+              placeholder={componentType === 'control' ? 'Enter control name' : componentType === 'display' ? 'Enter display name' : 'Enter chart name'}
+              size="md"
+              invalid={!!nameError}
+              invalidText={nameError}
+              helperText="Internal identifier; must be unique within the namespace"
+            />
+          </div>
+          <div className="metadata-col metadata-col--half">
+            <TextInput
+              id="chart-title"
+              labelText="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
+              size="md"
+              helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
+            />
+          </div>
         </div>
         <div className="metadata-row">
-          <TextInput
-            id="chart-title"
-            labelText="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
-            size="md"
-            helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
-          />
-          <TextInput
-            id="chart-description"
-            labelText="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={componentType === 'control' ? 'Enter control description' : 'Enter chart description'}
-            size="md"
-          />
-          <TagInput
-            id="chart-tags"
-            label="Tags"
-            value={tags}
-            onChange={setTags}
-          />
+          <div className="metadata-col metadata-col--full">
+            <TextInput
+              id="chart-description"
+              labelText="Description (optional)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={componentType === 'control' ? 'Enter control description' : 'Enter chart description'}
+              size="md"
+            />
+          </div>
         </div>
-        <div className="metadata-row">
-          <NamespaceSelect
-            id="chart-namespace"
-            value={namespace}
-            onChange={setNamespace}
-          />
+        <div className="metadata-row metadata-row--split">
+          <div className="metadata-col metadata-col--quarter">
+            <NamespaceSelect
+              id="chart-namespace"
+              value={namespace}
+              onChange={setNamespace}
+            />
+          </div>
+          <div className="metadata-col metadata-col--three-quarters">
+            <TagInput
+              id="chart-tags"
+              label="Tags"
+              value={tags}
+              onChange={setTags}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Chart Type card — shown when componentType is 'chart'.
-          Hidden in custom-code mode since the chart type drives the generated
-          code, which is bypassed when the user supplies their own. */}
+      {/* Chart Type section — shown when componentType is 'chart'.
+          Hidden in custom-code mode since the chart type drives the
+          generated code, which is bypassed when the user supplies
+          their own. Wrapped in `.mapping-section` so it visually
+          matches the DATA MAPPING section below (bordered card,
+          labeled header, full reference width). */}
       {componentType === 'chart' && !showCustomCode && (() => {
         const currentChartType = CHART_TYPES.find(t => t.id === chartType) || CHART_TYPES[0];
         const TypeIcon = currentChartType.icon;
         return (
-          <div className="type-card-section">
+          <div className="mapping-section type-card-section">
             <h4>Chart Type</h4>
             <div className="type-card-current" onClick={() => setChartTypeModalOpen(true)}>
               <Button kind="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setChartTypeModalOpen(true); }}>
@@ -1778,7 +1816,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           JSX, so the form values are no longer load-bearing). */}
       {componentType === 'chart' && (() => {
         const tabs = [
-          { key: 'datasource', label: 'Connection' },
+          { key: 'datasource', label: 'Details' },
           { key: 'preview', label: 'Preview' },
           { key: 'code', label: 'Code' },
         ];
@@ -1802,11 +1840,36 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         {/* Connection Tab */}
         {isOnTab('datasource') && (
           <div className="tab-content">
-            <Grid narrow>
-              <Column lg={6} md={4} sm={4}>
+            {/* Connection picker tile + per-type guidance side-by-
+                side. Left tile holds the Select (with an info
+                Toggletip exposing the connection's description) and
+                a tag row below (type chip + the connection's user
+                tags). Right column holds the ConnectionGuidanceHint
+                so the cheat-sheet sits adjacent to the picker. */}
+            <div className="connection-row">
+              <div className="connection-row__picker mapping-section">
+                <div className="connection-picker-header">
+                  <h4>Connection</h4>
+                  {selectedDatasource?.description && (
+                    <Tooltip
+                      align="bottom"
+                      label={selectedDatasource.description}
+                      className="connection-picker-info-tooltip"
+                    >
+                      <button
+                        type="button"
+                        className="connection-picker-info-trigger"
+                        aria-label="Connection description"
+                      >
+                        <Information size={16} />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
                 <Select
                   id="datasource-select"
-                  labelText="Connection"
+                  labelText=""
+                  hideLabel
                   value={selectedConnectionId}
                   onChange={(e) => handleDatasourceChange(e.target.value)}
                 >
@@ -1819,20 +1882,66 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     />
                   ))}
                 </Select>
-              </Column>
-              <Column lg={6} md={4} sm={4}>
+                {selectedDatasource && (() => {
+                  // Compose tag chip list: type chip first, then
+                  // the connection's user-defined tags. Truncate
+                  // to keep the row from wrapping wider than the
+                  // tile; surface the full list in a tooltip on
+                  // the "+N more" overflow.
+                  const userTags = Array.isArray(selectedDatasource.tags) ? selectedDatasource.tags : [];
+                  const chips = [
+                    { label: selectedDatasource.type, kind: 'type' },
+                    ...userTags.map(t => ({ label: t, kind: 'user' })),
+                  ];
+                  const VISIBLE_TAG_CAP = 4;
+                  const visible = chips.slice(0, VISIBLE_TAG_CAP);
+                  const overflow = chips.slice(VISIBLE_TAG_CAP);
+                  return (
+                    <div className="connection-tags-row">
+                      {visible.map((chip, i) => (
+                        <Tag
+                          key={`${chip.kind}-${chip.label}-${i}`}
+                          type={chip.kind === 'type' ? 'blue' : 'gray'}
+                          size="sm"
+                        >
+                          {chip.label}
+                        </Tag>
+                      ))}
+                      {overflow.length > 0 && (
+                        <Toggletip align="bottom">
+                          <ToggletipButton label={`Show ${overflow.length} more tag${overflow.length === 1 ? '' : 's'}`}>
+                            <span className="connection-tags-overflow">+{overflow.length}…</span>
+                          </ToggletipButton>
+                          <ToggletipContent>
+                            <p>
+                              {chips.map(c => c.label).join(', ')}
+                            </p>
+                          </ToggletipContent>
+                        </Toggletip>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="connection-row__guidance">
                 {selectedDatasource && (
-                  <div className="datasource-info">
-                    <Tag type="blue">{selectedDatasource.type}</Tag>
-                    <span className="datasource-description">{selectedDatasource.description}</span>
-                  </div>
+                  <ConnectionGuidanceHint typeId={selectedDatasource.type} />
                 )}
-              </Column>
-            </Grid>
+              </div>
+            </div>
 
             {selectedDatasource && (
               <>
-                <div className="query-section">
+                {/* Query + Guidance row. Two cards side-by-side at
+                    half the reference width each: the Query
+                    configuration on the left, and the connection-
+                    type Query Conventions hint on the right. The
+                    guidance card stretches to match the query
+                    card's height and scrolls internally when
+                    expanded, so it never pushes the form taller
+                    than the query controls require. */}
+                <div className="query-row">
+                <div className="query-section mapping-section query-row__query">
                   <div className="query-header">
                     <h4>{selectedDatasource.type === 'socket' ? 'Stream Capture' : selectedDatasource.type === 'mqtt' ? 'Topic Selection' : 'Query'}</h4>
                     <div className="query-header-actions">
@@ -1881,6 +1990,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           <Switch name="raw" text="Raw SQL" />
                         </ContentSwitcher>
                       )}
+                      {/* Unified "Fetch Data" button across all
+                          connection types — see component-editor
+                          terminology audit (2026-05-27). The only
+                          exception is MQTT mid-capture, which keeps
+                          a dedicated "Stop Capture" affordance
+                          (different semantics, different handler).
+                          Per-type disabled logic preserved verbatim. */}
                       {selectedDatasource.type === 'socket' || isTSStoreStreaming ? (
                         <Button
                           kind="tertiary"
@@ -1889,7 +2005,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           onClick={fetchPreviewData}
                           disabled={previewLoading}
                         >
-                          {previewLoading ? 'Capturing...' : 'Capture Sample (5s)'}
+                          {previewLoading ? 'Fetching…' : 'Fetch Data'}
                         </Button>
                       ) : isMQTT ? (
                         previewLoading ? (
@@ -1898,7 +2014,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             size="sm"
                             renderIcon={Close}
                             onClick={() => {
-                              // Cancel the MQTT capture
                               if (mqttCaptureRef.current) {
                                 mqttCaptureRef.current.close();
                                 mqttCaptureRef.current = null;
@@ -1914,7 +2029,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             renderIcon={Play}
                             onClick={fetchPreviewData}
                           >
-                            Capture Sample
+                            Fetch Data
                           </Button>
                         )
                       ) : isTSStore ? (
@@ -1925,7 +2040,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           onClick={fetchPreviewData}
                           disabled={previewLoading}
                         >
-                          {previewLoading ? 'Fetching...' : 'Fetch Data'}
+                          {previewLoading ? 'Fetching…' : 'Fetch Data'}
                         </Button>
                       ) : queryMode === 'raw' && (
                         <Button
@@ -1935,7 +2050,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           onClick={fetchPreviewData}
                           disabled={previewLoading || (selectedDatasource?.type !== 'api' && !queryRaw.trim())}
                         >
-                          {previewLoading ? 'Running...' : 'Run Query'}
+                          {previewLoading ? 'Fetching…' : 'Fetch Data'}
                         </Button>
                       )}
                     </div>
@@ -1947,7 +2062,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       <InlineNotification
                         kind="info"
                         title="Stream Preview"
-                        subtitle="Click 'Capture Sample' to collect 5 seconds of stream data for preview. This helps discover the data schema for mapping. Use client-side filters below to filter the captured data."
+                        subtitle="Click Fetch Data to collect 5 seconds of stream data for preview. This helps discover the data schema for mapping. Use client-side filters below to filter the captured data."
                         hideCloseButton
                         lowContrast
                       />
@@ -2115,8 +2230,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   ) : isTSStore ? (
                     <div className="tsstore-query-section">
-                      <Grid narrow>
-                        <Column lg={6} md={4} sm={4}>
+                      {/* Flex row inside the half-width query card.
+                          Each control takes half the row, fully
+                          filling the card horizontally — Carbon's
+                          16-col Grid was producing 33% columns
+                          inside the narrow card and truncating the
+                          dropdown labels. */}
+                      <div className="tsstore-query-row">
+                        <div className="tsstore-query-row__col">
                           <Select
                             id="tsstore-query-type"
                             labelText="Query Type"
@@ -2130,9 +2251,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             <SelectItem value="oldest" text="Oldest Records" />
                             <SelectItem value="since" text="Time Range (Last...)" />
                           </Select>
-                        </Column>
+                        </div>
                         {tsstoreQueryType === 'since' ? (
-                          <Column lg={6} md={4} sm={4}>
+                          <div className="tsstore-query-row__col">
                             <Select
                               id="tsstore-since-duration"
                               labelText="Time Period"
@@ -2151,9 +2272,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               <SelectItem value="7d" text="Last 7 days" />
                               <SelectItem value="1w" text="Last 1 week" />
                             </Select>
-                          </Column>
+                          </div>
                         ) : (
-                          <Column lg={6} md={4} sm={4}>
+                          <div className="tsstore-query-row__col">
                             <NumberInput
                               id="tsstore-limit"
                               label="Number of Records"
@@ -2162,21 +2283,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               min={1}
                               max={10000}
                             />
-                          </Column>
+                          </div>
                         )}
-                      </Grid>
-                      <InlineNotification
-                        kind="info"
-                        title="TSStore Query"
-                        subtitle={
-                          tsstoreQueryType === 'since'
-                            ? `Will fetch all records from the last ${tsstoreSinceDuration}. Schema is auto-discovered from the JSON data.`
-                            : `Will fetch the ${tsstoreLimit} ${tsstoreQueryType} records from the timeseries store. Schema is auto-discovered from the JSON data.`
-                        }
-                        hideCloseButton
-                        lowContrast
-                        style={{ marginTop: '1rem' }}
-                      />
+                      </div>
                     </div>
                   ) : selectedDatasource.type === 'sql' && queryMode === 'visual' ? (
                     <SQLQueryBuilder
@@ -2292,6 +2401,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     />
                   )}
                 </div>
+                </div>
 
                 {previewError && (
                   <InlineNotification
@@ -2302,6 +2412,41 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     hideCloseButton
                   />
                 )}
+
+                {/* Full-width warning prompting the user to fetch
+                    sample data before configuring the chart's data
+                    sections. Subtitle lists only the sections that
+                    actually appear for this connection type —
+                    queryLanguageOwnsClientSideOps (SQL / EdgeLake)
+                    hides Filters / Aggregation / Sliding Window,
+                    so naming them in the warning would mislead. */}
+                {!showCustomCode && !previewData && (() => {
+                  const sections = ['Data Mapping'];
+                  if (!queryLanguageOwnsClientSideOps) {
+                    sections.push('Filters', 'Aggregation', 'Sliding Window');
+                  }
+                  const sentence = sections.length === 1
+                    ? `${sections[0]} is enabled`
+                    : `${sections.slice(0, -1).join(', ')}, and ${sections[sections.length - 1]} are enabled`;
+                  return (
+                    <InlineNotification
+                      kind="warning"
+                      lowContrast
+                      hideCloseButton
+                      title="Fetch data to configure mappings."
+                      subtitle={`${sentence} once a sample is loaded from the connection above.`}
+                      actions={
+                        <NotificationActionButton
+                          onClick={fetchPreviewData}
+                          disabled={previewLoading}
+                        >
+                          {previewLoading ? 'Fetching…' : 'Fetch Data'}
+                        </NotificationActionButton>
+                      }
+                      className="run-query-warning"
+                    />
+                  );
+                })()}
 
                 {!showCustomCode && (
                 <div className="mapping-section">
@@ -2620,10 +2765,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             )}
                           </Grid>
                         ) : (
-                          <p className="run-query-hint">Run query to load available columns for mapping</p>
+                          <p className="editor-info-hint">No data mapping configured.</p>
                         )}
                         {((chartTypeConfig.hasXAxis && xAxisColumn) || (chartTypeConfig.hasYAxis && yAxisColumns.length > 0)) && (
-                          <p className="run-query-hint" style={{ marginTop: '0.5rem' }}>Run query to modify column mappings</p>
+                          <p className="run-query-hint">Fetch data to modify column mappings.</p>
                         )}
                       </div>
                     )
@@ -2828,8 +2973,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {/* Filters Section */}
-                {!showCustomCode && (
+                {/* Filters Section. Hidden when the connection's
+                    query language already owns this responsibility
+                    (SQL WHERE / EdgeLake WHERE) — see
+                    queryLanguageOwnsClientSideOps memo. */}
+                {!showCustomCode && !queryLanguageOwnsClientSideOps && (
                 <div className="filters-section">
                   <div className="section-header">
                     <h4>Filters (Client-Side)</h4>
@@ -2912,23 +3060,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             </div>
                           ))}
                         </div>
-                        <p className="run-query-hint" style={{ marginTop: '0.5rem' }}>Run query to modify filters</p>
+                        <p className="run-query-hint">Fetch data to modify filters.</p>
                       </div>
                     )
                   ) : (
-                    <p className="no-filters-message">
-                      {availableColumns.length === 0
-                        ? "No filters configured. Run query to add filters."
-                        : "No filters configured. Filters are applied after data is fetched."}
-                    </p>
+                    <p className="editor-info-hint">No filters configured.</p>
                   )}
                 </div>
                 )}
 
                 {/* Aggregation & Sorting Section — chart-type-gated.
                     Banded-bar (and any future per-row-aggregated type) opts
-                    out via hasAggregation:false in CHART_TYPE_CONFIG. */}
-                {!showCustomCode && chartTypeConfig.hasAggregation !== false && (
+                    out via hasAggregation:false in CHART_TYPE_CONFIG.
+                    Also hidden when the connection's query language
+                    already owns aggregation (SQL GROUP BY / EdgeLake
+                    GROUP BY). */}
+                {!showCustomCode && chartTypeConfig.hasAggregation !== false && !queryLanguageOwnsClientSideOps && (
                 <div className="aggregation-section">
                   <h4>Aggregation & Sorting</h4>
                   {availableColumns.length > 0 ? (
@@ -3094,17 +3241,23 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               </div>
                             </Column>
                           </Grid>
-                          <p className="run-query-hint" style={{ marginTop: '0.5rem' }}>Run query to modify aggregation and sorting</p>
+                          <p className="run-query-hint">Fetch data to modify aggregation and sorting.</p>
                         </>
                       ) : (
-                        <p className="run-query-hint">No aggregation configured. Run query to add aggregation and sorting.</p>
+                        <p className="editor-info-hint">No aggregation configured.</p>
                       )}
                     </div>
                   )}
                 </div>
                 )}
 
-                {/* Sliding Window Section - for time-series data */}
+                {/* Sliding Window Section - for time-series data.
+                    Hidden when the connection's query already
+                    expresses time bounds (SQL WHERE ts > … /
+                    EdgeLake equivalent) — re-querying with a new
+                    time literal is the natural pattern for those
+                    types. */}
+                {!showCustomCode && !queryLanguageOwnsClientSideOps && (
                 <div className="sliding-window-section">
                   <div className="section-header">
                     <h4>Sliding Window (Time-Series)</h4>
@@ -3165,11 +3318,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </Grid>
                   )}
                   {!slidingWindowEnabled && (
-                    <p className="no-filters-message">
+                    <p className="editor-info-hint">
                       Enable to show only recent data (e.g., last 5 minutes). Useful for streaming/real-time charts.
                     </p>
                   )}
                 </div>
+                )}
 
                 {/* Band Columns - banded_bar (Levey-Jennings) only */}
                 {!showCustomCode && chartType === 'banded_bar' && (
@@ -3192,7 +3346,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         </Select>
                       </Column>
                     </Grid>
-                    <p className="no-filters-message" style={{ marginBottom: '0.75rem' }}>
+                    <p className="editor-info-hint" style={{ marginBottom: '0.75rem' }}>
                       Each row in the data must carry these columns. The renderer reads each row's own values to draw a per-row envelope — bands move with the data.
                     </p>
                     {[
@@ -3350,14 +3504,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               </div>
                             </Column>
                           </Grid>
-                          <p className="run-query-hint" style={{ marginTop: '0.5rem' }}>Run query to modify time bucket settings</p>
+                          <p className="run-query-hint">Fetch data to modify time bucket settings.</p>
                         </div>
                       ) : (
-                        <p className="run-query-hint">Capture sample data to configure time bucket aggregation</p>
+                        <p className="run-query-hint">Fetch data to configure time bucket aggregation.</p>
                       )
                     )}
                     {!timeBucketEnabled && (
-                      <p className="no-filters-message">
+                      <p className="editor-info-hint">
                         Enable to aggregate streaming data into time buckets (e.g., 1-minute averages). Server-side aggregation reduces data volume for high-frequency streams.
                       </p>
                     )}
