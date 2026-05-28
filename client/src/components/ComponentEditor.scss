@@ -1678,13 +1678,13 @@
     gap: spacing.$spacing-03;
   }
 
-  // Single-axis row: column | label | stack | remove. Column and
-  // label each take 1fr (roughly 1/4 of available with the auto
-  // columns reserving space).
+  // Single-axis row: column 1/4 | label 1/4 | stack ~1/8 | spacer | remove.
+  // The 1fr in the middle absorbs the remaining ~1/4 so the row reads
+  // as "two 1/4 fields, controls on the right, room to breathe."
   .spec-yacl__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
-    grid-template-areas: 'column label stack remove';
+    grid-template-columns: 25% 25% auto 1fr auto;
+    grid-template-areas: 'column label stack . remove';
     gap: spacing.$spacing-04;
     align-items: end;
     padding: spacing.$spacing-03;
@@ -1706,11 +1706,10 @@
     }
   }
 
-  // Dual-axis mode: column | label | axis | stack | remove. Adding
-  // the axis selector pushes the layout to 5 columns; column, label,
-  // and axis split the flexible space.
+  // Dual-axis mode: column 1/4 | label 1/4 | axis 1/4 | stack auto | remove.
+  // Three 1/4 fields plus the controls; no spacer column needed.
   &--dual .spec-yacl__row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(6rem, auto) auto auto;
+    grid-template-columns: 25% 25% 25% auto auto;
     grid-template-areas: 'column label axis stack remove';
 
     @media (max-width: 720px) {
@@ -1745,14 +1744,14 @@
     gap: spacing.$spacing-03;
   }
 
-  // 1/4 widths: value (1fr), color (small swatch, auto), label
-  // (1fr), remove (auto). With two flexible columns and two fixed
-  // ones, the swatch + remove sit tight while value + label take
-  // equal share of the row.
+  // 1/4 widths: value 1/4 | color swatch | label 1/4 | spacer | remove.
+  // The 1fr spacer absorbs the remaining horizontal space so value +
+  // label don't stretch to fill it. Matches the y_axis_columns_list
+  // row layout pattern.
   .spec-threshold-list__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
-    grid-template-areas: 'value color label remove';
+    grid-template-columns: 25% auto 25% 1fr auto;
+    grid-template-areas: 'value color label . remove';
     gap: spacing.$spacing-04;
     align-items: end;
     padding: spacing.$spacing-03;
