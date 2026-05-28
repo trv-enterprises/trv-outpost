@@ -1612,12 +1612,60 @@
   margin-bottom: spacing.$spacing-03;
 }
 
-// NullableNumber: checkbox-inline-with-NumberInput. When the
-// Auto checkbox is on, the NumberInput hides entirely.
+// Spec subsections — h5-headed groups inside one tile. Used to
+// collapse several related sections (Display / Performance / Tooltip
+// / Legend / Y-range / Thresholds) under one "Chart Options" tile.
+.spec-subsection {
+  margin-top: spacing.$spacing-05;
+  padding-top: spacing.$spacing-04;
+  border-top: 1px solid var(--cds-border-subtle-01);
+
+  // The first subsection in a tile sits right under the h4 — skip
+  // the top border + extra spacing so it visually attaches to the
+  // section header.
+  &:first-of-type {
+    margin-top: spacing.$spacing-03;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  &__heading {
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0 0 spacing.$spacing-04 0;
+    line-height: 1.4;
+  }
+
+  &__helper {
+    color: var(--cds-text-secondary);
+    font-weight: 400;
+    font-size: 0.75rem;
+  }
+}
+
+// NullableNumber: label + Auto checkbox on the header line; the
+// NumberInput drops below when Auto is unchecked. When Auto is
+// checked the input doesn't render at all so there's no
+// confusingly-zero NumberInput sitting under the label.
 .spec-nullable-number {
   display: flex;
   flex-direction: column;
-  gap: spacing.$spacing-03;
+  gap: spacing.$spacing-02;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: spacing.$spacing-04;
+  }
+
+  &__label {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.2;
+  }
 }
 
 // YAxisColumnsList: free list of {column, stack, axis?} rows.

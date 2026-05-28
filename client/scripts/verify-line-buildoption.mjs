@@ -176,6 +176,19 @@ const data = {
   check('case 8: tooltip disabled', opt.tooltip?.show === false);
 }
 
+// --- Case 8b: tooltip formatter is a real function (decimals + units) ---
+{
+  const values = {
+    data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] },
+    options: { tooltip: { decimals: 2, units: '%' } },
+  };
+  const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
+  check('case 8b: tooltip.formatter is a function', typeof opt.tooltip?.formatter === 'function');
+  // Smoke-test the formatter: feed it a single ECharts-like param.
+  const out = opt.tooltip.formatter([{ value: 12.345, seriesName: 'cpu', marker: '●', axisValueLabel: 't1' }]);
+  check('case 8b: formatter applies decimals + units', typeof out === 'string' && out.includes('12.35') && out.includes('%'));
+}
+
 // --- Case 9: tooltip single mode ---
 {
   const values = {

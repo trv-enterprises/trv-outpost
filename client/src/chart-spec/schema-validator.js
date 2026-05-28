@@ -180,7 +180,7 @@ function validateField(field, path, errors, sectionFieldIds) {
   }
 }
 
-function validateSection(section, path, errors, allFieldIds) {
+function validateSection(section, path, errors, allFieldIds, depth = 0) {
   if (!section || typeof section !== 'object') {
     pushErr(errors, path, 'must be an object');
     return;
@@ -194,36 +194,79 @@ function validateSection(section, path, errors, allFieldIds) {
   if (section.layout && !SUPPORTED_LAYOUTS.has(section.layout)) {
     pushErr(errors, `${path}.layout`, `unsupported layout "${section.layout}"`);
   }
-  if (!Array.isArray(section.fields) || section.fields.length === 0) {
-    pushErr(errors, `${path}.fields`, 'must be a non-empty array');
+  // section.visibleWhen on subsections lets a whole subsection be
+  // gated on a sibling field (e.g. right-y-range subsection appears
+  // only when multipleYAxis is on).
+  if (section.visibleWhen) {
+    if (typeof section.visibleWhen !== 'object') {
+      pushErr(errors, `${path}.visibleWhen`, 'must be an object');
+    } else {
+      const vw = section.visibleWhen;
+      if (typeof vw.field !== 'string') {
+        pushErr(errors, `${path}.visibleWhen.field`, 'missing or not a string');
+      }
+      if (!SUPPORTED_VW_OPERATORS.has(vw.operator)) {
+        pushErr(errors, `${path}.visibleWhen.operator`, `unsupported operator "${vw.operator}"`);
+      }
+    }
+  }
+  const hasFields = Array.isArray(section.fields) && section.fields.length > 0;
+  const hasSubsections = Array.isArray(section.subsections) && section.subsections.length > 0;
+  if (hasFields && hasSubsections) {
+    pushErr(errors, path, 'must have either "fields" or "subsections", not both');
     return;
   }
-  section.fields.forEach((field, i) => {
-    validateField(field, `${path}.fields[${i}]`, errors, allFieldIds);
-  });
+  if (!hasFields && !hasSubsections) {
+    pushErr(errors, path, 'must have a non-empty "fields" or "subsections" array');
+    return;
+  }
+  if (depth > 1) {
+    pushErr(errors, path, 'subsection nesting limited to one level (h4 → h5)');
+    return;
+  }
+  if (hasFields) {
+    section.fields.forEach((field, i) => {
+      validateField(field, `${path}.fields[${i}]`, errors, allFieldIds);
+    });
+  } else {
+    section.subsections.forEach((sub, i) => {
+      validateSection(sub, `${path}.subsections[${i}]`, errors, allFieldIds, depth + 1);
+    });
+  }
 }
 
 /**
  * Cross-field check: visibleWhen.field must reference a field id
- * that exists somewhere in the spec. Walks sections after every
- * field has been collected so forward references work too.
+ * that exists somewhere in the spec. Walks sections + subsections
+ * after every field has been collected so forward references work.
  */
+function collectFieldIds(section, out) {
+  if (Array.isArray(section.fields)) section.fields.forEach((f) => f.id && out.add(f.id));
+  if (Array.isArray(section.subsections)) section.subsections.forEach((s) => collectFieldIds(s, out));
+}
+
+function checkVisibleWhen(section, path, known, errors) {
+  if (section.visibleWhen && typeof section.visibleWhen.field === 'string' && !known.has(section.visibleWhen.field)) {
+    pushErr(errors, `${path}.visibleWhen.field`, `references unknown field id "${section.visibleWhen.field}" — must match an existing field in this spec`);
+  }
+  if (Array.isArray(section.fields)) {
+    section.fields.forEach((field, fi) => {
+      const vw = field.visibleWhen;
+      if (vw && typeof vw.field === 'string' && !known.has(vw.field)) {
+        pushErr(errors, `${path}.fields[${fi}].visibleWhen.field`, `references unknown field id "${vw.field}" — must match an existing field in this spec`);
+      }
+    });
+  }
+  if (Array.isArray(section.subsections)) {
+    section.subsections.forEach((s, si) => checkVisibleWhen(s, `${path}.subsections[${si}]`, known, errors));
+  }
+}
+
 function validateVisibleWhenRefs(spec, errors) {
   if (!Array.isArray(spec.sections)) return;
   const known = new Set();
-  spec.sections.forEach((s) => (s.fields || []).forEach((f) => f.id && known.add(f.id)));
-  spec.sections.forEach((section, si) => {
-    (section.fields || []).forEach((field, fi) => {
-      const vw = field.visibleWhen;
-      if (vw && typeof vw.field === 'string' && !known.has(vw.field)) {
-        pushErr(
-          errors,
-          `sections[${si}].fields[${fi}].visibleWhen.field`,
-          `references unknown field id "${vw.field}" — must match an existing field in this spec`,
-        );
-      }
-    });
-  });
+  spec.sections.forEach((s) => collectFieldIds(s, known));
+  spec.sections.forEach((section, si) => checkVisibleWhen(section, `sections[${si}]`, known, errors));
 }
 
 /**

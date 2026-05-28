@@ -3119,10 +3119,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       y_right_scale: chartOptions.yAxisRange?.right?.scale || 'linear',
                       // tooltip
                       tooltip_mode: chartOptions.tooltip?.mode || 'multi',
-                      tooltip_format: chartOptions.tooltip?.format || 'auto',
                       tooltip_decimals: chartOptions.tooltip?.decimals ?? null,
                       tooltip_units: chartOptions.tooltip?.units || '',
-                      tooltip_custom_formatter: chartOptions.tooltip?.customFormatter || '',
                       // legend
                       legend_show: chartOptions.legend?.show !== false,
                       legend_position: chartOptions.legend?.position || 'top',
@@ -3187,17 +3185,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'tooltip_mode':
                           updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), mode: value });
                           break;
-                        case 'tooltip_format':
-                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), format: value });
-                          break;
                         case 'tooltip_decimals':
                           updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), decimals: value });
                           break;
                         case 'tooltip_units':
                           updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), units: value });
-                          break;
-                        case 'tooltip_custom_formatter':
-                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), customFormatter: value });
                           break;
                         case 'legend_show':
                           updateChartOption('legend', { ...(chartOptions.legend || {}), show: value });

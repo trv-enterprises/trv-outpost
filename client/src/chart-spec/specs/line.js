@@ -95,34 +95,33 @@ function buildYAxisDefs(dualAxis, range) {
  * Mode 'hidden' → tooltip disabled. Mode 'single' → trigger 'item'.
  * Mode 'multi' (default) → trigger 'axis'.
  */
-function buildTooltip(tt, ctx) {
+function buildTooltip(tt) {
   if (!tt || tt.mode === 'hidden') return { show: false };
   const block = { trigger: tt.mode === 'single' ? 'item' : 'axis' };
 
-  if (tt.format === 'custom' && tt.customFormatter && tt.customFormatter.trim()) {
-    // Custom formatter: a JS expression body. The shell evaluates
-    // it via new Function('params', body) → string. Returned as a
-    // string here so the option literal stays JSON-serializable;
-    // the shell post-processes it into a real function before
-    // handing the option to ECharts.
-    block.formatter = { __raw: 'custom', body: tt.customFormatter };
-    return block;
-  }
-
-  // Auto / units / decimals path. Build a stable formatter helper.
+  // Auto path only — decimals + units. There is no per-knob custom
+  // formatter escape hatch on purpose: chart-level use_custom_code
+  // is the right answer when a formatter genuinely needs JS, and
+  // adding a freeform code field here multiplies the eval surface
+  // for marginal benefit. The 80% case (decimals + units) is here.
   const decimals = tt.decimals == null ? null : Number(tt.decimals);
   const units = tt.units || '';
-  const fmt = (val) => {
+  const formatValue = (val) => {
     if (val == null) return '';
     const num = Number(val);
     if (!Number.isFinite(num)) return String(val);
     const str = decimals == null ? String(num) : num.toFixed(decimals);
     return units ? `${str} ${units}` : str;
   };
-  block.formatter = { __raw: 'auto', decimals, units };
-  // Stash the resolved auto-formatter on the block so the shell can
-  // attach it without re-deriving. The shell sees __raw and replaces.
-  ctx.tooltipAutoFormatter = fmt;
+  // Real function on the option literal — Stage 2 buildOption returns
+  // a live JS object to React, so we don't need the __raw marker
+  // trick the original draft used to keep it JSON-serializable.
+  block.formatter = (params) => {
+    const arr = Array.isArray(params) ? params : [params];
+    const header = arr[0]?.axisValueLabel || arr[0]?.name || '';
+    const parts = arr.map((p) => `${p.marker || ''}${p.seriesName ? p.seriesName + ': ' : ''}${formatValue(p.value)}`);
+    return [header, ...parts].filter(Boolean).join('<br/>');
+  };
   return block;
 }
 
@@ -222,7 +221,6 @@ function buildThresholds(thresholds, mode) {
  */
 export function buildOption(values, data, helpers = {}) {
   const { formatCellValue, chartType = 'line', xAxisFormat = 'chart', chartName = '' } = helpers;
-  const ctx = {};
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
   const yEntries = rawYAxis.map(normalizeYEntry).filter((e) => e.column);
@@ -296,7 +294,7 @@ export function buildOption(values, data, helpers = {}) {
     }));
   }
 
-  const tooltip = buildTooltip(opts.tooltip || {}, ctx);
+  const tooltip = buildTooltip(opts.tooltip || {});
   const legend = buildLegend(opts.legend || {}, dualAxis, series.length > 1);
 
   const { markLine, visualMap } = buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
@@ -345,17 +343,11 @@ export function buildOption(values, data, helpers = {}) {
     option.grid.top = (option.grid.top || 10) + 28;
   }
 
-  // Stash the resolved tooltip auto-formatter so the shell can hook
-  // it into the option (the {__raw:'auto'} marker tells the shell to
-  // replace `tooltip.formatter` with the function form).
-  if (ctx.tooltipAutoFormatter && option.tooltip && option.tooltip.formatter && option.tooltip.formatter.__raw === 'auto') {
-    option.tooltip.formatter = (params) => {
-      const arr = Array.isArray(params) ? params : [params];
-      const parts = arr.map((p) => `${p.marker || ''}${p.seriesName ? p.seriesName + ': ' : ''}${ctx.tooltipAutoFormatter(p.value)}`);
-      const header = arr[0]?.axisValueLabel || arr[0]?.name || '';
-      return [header, ...parts].filter(Boolean).join('<br/>');
-    };
-  }
+  // tooltip.formatter is already a real function (assigned in
+  // buildTooltip). The earlier draft used a __raw marker pattern to
+  // keep the option JSON-serializable for legacy string codegen; the
+  // Stage 2 shell takes a live JS object so we just assign functions
+  // directly.
 
   return option;
 }
