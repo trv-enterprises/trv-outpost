@@ -25,20 +25,21 @@ const RIGHT_AXIS_COLOR = '#8a3ffc';
 const STACK_GROUP = 'stack0';
 
 /**
- * Normalize a y_axis entry from any of three shapes into the
- * canonical { column, stack, axis } shape:
- *   - bare string (legacy):  'cpu'        → { column: 'cpu', stack: false, axis: 'left' }
- *   - partial object:        { column: 'cpu' } → same with defaults
- *   - full object (current): { column: 'cpu', stack: true, axis: 'right' }
+ * Normalize a y_axis entry from any of these shapes into the canonical
+ * { column, label, stack, axis } shape:
+ *   - bare string (legacy):  'cpu' → defaults applied
+ *   - partial object:        { column: 'cpu' } → defaults filled in
+ *   - full object (current): { column: 'cpu', label: 'CPU %', stack: true, axis: 'right' }
  *
  * This is the read-path migration shim — legacy line records load
  * cleanly without a Mongo migration.
  */
 function normalizeYEntry(e) {
-  if (typeof e === 'string') return { column: e, stack: false, axis: 'left' };
-  if (!e || typeof e !== 'object') return { column: '', stack: false, axis: 'left' };
+  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left' };
+  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left' };
   return {
     column: typeof e.column === 'string' ? e.column : '',
+    label: typeof e.label === 'string' ? e.label : '',
     stack: Boolean(e.stack),
     axis: e.axis === 'right' ? 'right' : 'left',
   };
@@ -220,12 +221,17 @@ function buildThresholds(thresholds, mode) {
  * @returns {Object} an ECharts `option` literal
  */
 export function buildOption(values, data, helpers = {}) {
-  const { formatCellValue, chartType = 'line', xAxisFormat = 'chart', chartName = '' } = helpers;
+  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'chart', chartName = '' } = helpers;
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
   const yEntries = rawYAxis.map(normalizeYEntry).filter((e) => e.column);
   const dualAxis = Boolean(values?.data_mapping?.multiple_y_axis);
   const xAxisCol = values?.data_mapping?.x_axis || '';
+  const xAxisLabel = values?.data_mapping?.x_axis_label || '';
+  // Prefer the spec-bound x_axis_format when present (Stage 2 line),
+  // fall back to the helper for callers that pre-Stage-2 passed it
+  // alongside the data.
+  const xAxisFormat = values?.data_mapping?.x_axis_format || helperXAxisFormat;
   const seriesCol = values?.data_mapping?.series || '';
 
   const columns = data?.columns || [];
@@ -290,7 +296,7 @@ export function buildOption(values, data, helpers = {}) {
       sampling,
       showDataLabels,
       chartType,
-      seriesName: entry.column,
+      seriesName: entry.label || entry.column,
     }));
   }
 
@@ -305,11 +311,21 @@ export function buildOption(values, data, helpers = {}) {
 
   const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange);
 
+  // X-axis literal. Name renders below the axis when xAxisLabel is set;
+  // empty label means no name (axis is silent — matches "leave empty
+  // to hide" helper text in the spec).
+  const xAxis = { type: 'category', data: categories };
+  if (xAxisLabel) {
+    xAxis.name = xAxisLabel;
+    xAxis.nameLocation = 'middle';
+    xAxis.nameGap = 30;
+  }
+
   const option = {
     backgroundColor: 'transparent',
     tooltip,
     grid: { top: legend?.top != null ? 35 : 10, left: 50, right: 20, bottom: opts.chartShowZoomSlider ? 50 : 30, containLabel: true },
-    xAxis: { type: 'category', data: categories },
+    xAxis,
     yAxis,
     series,
   };

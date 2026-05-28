@@ -256,6 +256,55 @@ const data = {
   check('case 13: title text set when chartName provided', opt.title?.text === 'CPU');
 }
 
+// --- Case 14: per-column label overrides series name ---
+{
+  const values = {
+    data_mapping: {
+      x_axis: 'ts',
+      y_axis: [
+        { column: 'cpu', label: 'CPU %', stack: false, axis: 'left' },
+        { column: 'mem', label: '',      stack: false, axis: 'left' },
+      ],
+    },
+    options: {},
+  };
+  const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
+  check('case 14: series with explicit label uses it', opt.series[0]?.name === 'CPU %');
+  check('case 14: series with empty label falls back to column name', opt.series[1]?.name === 'mem');
+}
+
+// --- Case 15: x-axis label emits xAxis.name ---
+{
+  const values = {
+    data_mapping: {
+      x_axis: 'ts',
+      x_axis_label: 'Time',
+      y_axis: [{ column: 'cpu', stack: false, axis: 'left' }],
+    },
+    options: {},
+  };
+  const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
+  check('case 15: xAxis.name set when x_axis_label provided', opt.xAxis?.name === 'Time');
+  check('case 15: xAxis.nameLocation is middle (under-axis placement)', opt.xAxis?.nameLocation === 'middle');
+}
+
+// --- Case 16: x_axis_format from values overrides helper default ---
+{
+  const values = {
+    data_mapping: {
+      x_axis: 'ts',
+      x_axis_format: 'chart_time_seconds',
+      y_axis: [{ column: 'cpu', stack: false, axis: 'left' }],
+    },
+    options: {},
+  };
+  // Use a formatCellValue that records the format it received.
+  let observed = null;
+  const recording = (val, col, opts) => { observed = opts?.timestampFormat; return String(val ?? ''); };
+  buildOption(values, data, { formatCellValue: recording, chartType: 'line', xAxisFormat: 'chart' /* helper says 'chart' */ });
+  check('case 16: values.data_mapping.x_axis_format wins over helper', observed === 'chart_time_seconds');
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

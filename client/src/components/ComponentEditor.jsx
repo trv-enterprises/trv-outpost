@@ -2577,7 +2577,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   );
                 })()}
 
-                {!showCustomCode && (
+                {/* Legacy Data Mapping section. Hidden for line when the
+                    spec-driven editor is on — the spec's Data Mapping
+                    section (Dual Y-axis toggle, y_axis_columns list,
+                    x-axis, pivot) replaces it. Bar/area/pie/etc. keep
+                    this block until they migrate. */}
+                {!showCustomCode && !(chartType === 'line' && chartSpecEditorEnabled && getChartTypeSpec('line')) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3094,14 +3099,32 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     spec={getChartTypeSpec('line')}
                     availableColumns={availableColumns}
                     formState={{
-                      // data_mapping
-                      multipleYAxis: chartTypeConfig.multipleYAxis && yAxisColumns.length === 2,
+                      // data_mapping. multipleYAxis read order:
+                      //   1. Capability gate (chart_type can be dual-axis)
+                      //   2. If chartOptions.multipleYAxis is set, use it
+                      //      (user's explicit persisted choice).
+                      //   3. Otherwise legacy fallback: a 2-column chart
+                      //      is dual-axis by convention. Keeps existing
+                      //      charts behaving as before until the user
+                      //      flips the toggle for the first time.
+                      multipleYAxis: chartTypeConfig.multipleYAxis && (
+                        chartOptions.multipleYAxis !== undefined
+                          ? Boolean(chartOptions.multipleYAxis)
+                          : yAxisColumns.length === 2
+                      ),
                       y_axis_columns: yAxisColumns.map((col, i) => ({
                         column: col,
+                        // Per-column user-facing label sourced from the
+                        // existing yAxisLabels array (index-aligned to
+                        // yAxisColumns). Empty falls back to the column
+                        // name at render time.
+                        label: (Array.isArray(yAxisLabels) ? yAxisLabels[i] : '') || '',
                         stack: Boolean(chartOptions.chartStacked),
-                        axis: i === 1 && chartTypeConfig.multipleYAxis ? 'right' : 'left',
+                        axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
                       })),
                       x_axis_column: xAxisColumn,
+                      x_axis_label: xAxisLabel || '',
+                      x_axis_format: xAxisFormat || 'chart',
                       series_column: seriesColumn,
                       // chart_options
                       chart_smooth: chartOptions.chartSmooth !== false,
@@ -3131,15 +3154,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
                         case 'multipleYAxis': {
-                          // Mode flip writes into yAxisColumns + chartTypeConfig.
-                          // Soft block: if turning ON and we already have ≥3 columns,
-                          // refuse — user must trim first.
+                          // Soft block: turning ON with ≥3 columns already
+                          // present refuses (helper text on the spec section
+                          // explains "drop columns to 2 before switching").
                           if (value && yAxisColumns.length > 2) {
-                            // No-op; the helper text in the spec section explains.
                             return;
                           }
-                          // Mode lives on CHART_TYPE_CONFIG; toggle the panel's
-                          // session intent by capping/uncapping yAxisColumns.
+                          // Persist the user's explicit choice on chartOptions.
+                          // This is what the read path consults so the toggle
+                          // round-trips correctly (off → off stays off).
+                          updateChartOption('multipleYAxis', value);
+                          // When turning ON with only one column picked, seed
+                          // a second column so dual-axis has something on the
+                          // right side. When turning OFF, leave columns alone.
                           if (value && yAxisColumns.length === 1 && availableColumns.length > 1) {
                             const next = availableColumns.find((c) => c !== yAxisColumns[0]);
                             if (next) setYAxisColumns([yAxisColumns[0], next]);
@@ -3147,17 +3174,26 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         }
                         case 'y_axis_columns': {
-                          // Free list of {column, stack, axis}. Push columns into yAxisColumns.
-                          // Stack flag: the legacy single-stack toggle maps to "any entry stacked";
-                          // when ANY entry has stack:true, set chartStacked=true (best-effort
-                          // translation until per-column stack lands in codegen).
+                          // Free list of {column, label, stack, axis}.
+                          //   - Push columns into yAxisColumns.
+                          //   - Push per-row labels into yAxisLabels
+                          //     (index-aligned to yAxisColumns). Empty
+                          //     strings preserved so the index alignment
+                          //     stays correct on save.
+                          //   - Best-effort translate "any entry stacked"
+                          //     to the legacy single chartStacked toggle
+                          //     until per-column stack lands in codegen.
                           const cols = (value || []).map((e) => e?.column).filter(Boolean);
+                          const labels = (value || []).map((e) => (typeof e?.label === 'string' ? e.label : ''));
                           setYAxisColumns(cols);
+                          setYAxisLabels(labels);
                           const anyStacked = (value || []).some((e) => e?.stack);
                           updateChartOption('chartStacked', anyStacked);
                           break;
                         }
                         case 'x_axis_column': setXAxisColumn(value); break;
+                        case 'x_axis_label': setXAxisLabel(value); break;
+                        case 'x_axis_format': setXAxisFormat(value); break;
                         case 'series_column': setSeriesColumn(value); break;
                         case 'chart_smooth': updateChartOption('chartSmooth', value); break;
                         case 'chart_show_data_labels': updateChartOption('chartShowDataLabels', value); break;

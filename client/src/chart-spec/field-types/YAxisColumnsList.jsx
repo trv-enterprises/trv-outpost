@@ -2,13 +2,16 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { Select, SelectItem, Checkbox, IconButton, Button } from '@carbon/react';
+import { Select, SelectItem, TextInput, Checkbox, IconButton, Button } from '@carbon/react';
 import { Add, Close } from '@carbon/icons-react';
 import { useSpecRenderContext } from '../SpecContext';
 
 /**
  * Free list of Y-axis column entries. Each entry is
- * `{ column: string, stack: boolean, axis?: 'left' | 'right' }`.
+ * `{ column: string, label: string, stack: boolean, axis?: 'left' | 'right' }`.
+ *
+ * Per-row label is the user-facing series name (shows in the legend,
+ * tooltip series prefix). Empty falls back to the column name.
  *
  * Mode controlled by a sibling `multipleYAxis` boolean field in the
  * same spec — its current value is read from formState and gates:
@@ -16,16 +19,15 @@ import { useSpecRenderContext } from '../SpecContext';
  *   - the "+ Add column" cap (off → unlimited; on → max 2)
  *
  * Stack groups: per-column `stack` boolean. Columns with `stack:true`
- * share one internal stack group name at codegen time (string is
- * implementation detail, never user-visible — see the line spec).
+ * share one internal stack group name at codegen time.
  *
  * Defaults applied when adding a column:
  *   - column: '' (user must pick)
+ *   - label: ''
  *   - stack: false
  *   - axis: in dual-axis mode, first added = 'left', second = 'right'
  *
- * The ✕ remove button is disabled when only one row remains — Y is
- * required for line/bar/area/scatter.
+ * The ✕ remove button is disabled when only one row remains.
  *
  * Field-spec extensions used by this renderer:
  *   - field.modeFieldId: id of the sibling multipleYAxis boolean
@@ -39,14 +41,14 @@ export default function YAxisColumnsListField({ field }) {
   const isDualAxis = Boolean(formState[modeFieldId]);
 
   const raw = Array.isArray(formState[field.id]) ? formState[field.id] : [];
-  // Normalize legacy/loose shapes so the renderer doesn't have to
-  // litter optional chains. A bare string is treated as a column
-  // with default stack + axis.
+  // Normalize legacy/loose shapes. A bare string (legacy y_axis: ['a','b'])
+  // becomes a default entry; partial objects fill in defaults too.
   const entries = raw.map((e) => {
-    if (typeof e === 'string') return { column: e, stack: false, axis: 'left' };
-    if (!e || typeof e !== 'object') return { column: '', stack: false, axis: 'left' };
+    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left' };
+    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left' };
     return {
       column: typeof e.column === 'string' ? e.column : '',
+      label: typeof e.label === 'string' ? e.label : '',
       stack: Boolean(e.stack),
       axis: e.axis === 'right' ? 'right' : 'left',
     };
@@ -63,22 +65,15 @@ export default function YAxisColumnsListField({ field }) {
   };
 
   const addEntry = () => {
-    // Default axis for new row in dual mode: first → left, second → right.
-    // In single mode, axis is always 'left' (effectively ignored).
     const nextAxis = isDualAxis && entries.length === 1 ? 'right' : 'left';
-    const next = [...entries, { column: '', stack: false, axis: nextAxis }];
+    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis }];
     onFieldChange(field.id, next);
   };
 
-  // Cap is the meaningful constraint only in dual-axis mode.
   const atCap = isDualAxis && entries.length >= maxInDualAxis;
-  // Carbon won't let us pre-empt the soft block (flipping dual on
-  // with 3+ rows already present); that logic lives at the
-  // multipleYAxis Toggle's side. Here we just respect the current
-  // state.
 
   return (
-    <div className="spec-y-axis-columns-list">
+    <div className={`spec-y-axis-columns-list ${isDualAxis ? 'spec-y-axis-columns-list--dual' : ''}`}>
       {field.helperText && (
         <div className="spec-field-helper">{field.helperText}</div>
       )}
@@ -98,6 +93,16 @@ export default function YAxisColumnsListField({ field }) {
                   <SelectItem key={col} value={col} text={col} />
                 ))}
               </Select>
+            </div>
+            <div className="spec-yacl__label">
+              <TextInput
+                id={`spec-${field.id}-${i}-label`}
+                labelText={i === 0 ? 'Column name' : undefined}
+                hideLabel={i !== 0}
+                value={entry.label}
+                onChange={(e) => updateEntry(i, { label: e.target.value })}
+                placeholder={entry.column || 'Series name in legend'}
+              />
             </div>
             {isDualAxis && (
               <div className="spec-yacl__axis">

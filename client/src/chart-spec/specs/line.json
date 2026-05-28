@@ -30,40 +30,83 @@
     {
       "id": "data_mapping",
       "label": "Data Mapping",
-      "layout": "single-column",
-      "fields": [
+      "subsections": [
         {
-          "id": "multipleYAxis",
-          "binds": "data_mapping.multiple_y_axis",
-          "type": "boolean",
-          "label": "Dual Y-axis",
-          "default": false,
-          "helperText": "Off: all columns on one axis (N allowed). On: split across left/right axes (capped at 2 columns)."
+          "id": "x_axis_group",
+          "label": "X-axis",
+          "layout": "row-3",
+          "fields": [
+            {
+              "id": "x_axis_column",
+              "binds": "data_mapping.x_axis",
+              "type": "column_select",
+              "label": "X-axis column",
+              "required": true,
+              "helperText": "Usually a timestamp."
+            },
+            {
+              "id": "x_axis_label",
+              "binds": "data_mapping.x_axis_label",
+              "type": "text",
+              "label": "X-axis label",
+              "default": "",
+              "placeholder": "Leave empty to hide"
+            },
+            {
+              "id": "x_axis_format",
+              "binds": "data_mapping.x_axis_format",
+              "type": "enum",
+              "label": "Timestamp format",
+              "default": "chart",
+              "options": [
+                { "value": "chart", "label": "Date + Time (1/15 10:30)" },
+                { "value": "chart_time", "label": "Time Only (10:30 AM)" },
+                { "value": "chart_time_seconds", "label": "Time + Seconds (10:30:05 AM)" },
+                { "value": "chart_date", "label": "Date Only (Jan 15)" },
+                { "value": "chart_datetime", "label": "Full (Jan 15, 10:30 AM)" },
+                { "value": "chart_datetime_seconds", "label": "Full + Seconds (Jan 15, 10:30:05 AM)" }
+              ]
+            }
+          ]
         },
         {
-          "id": "y_axis_columns",
-          "binds": "data_mapping.y_axis",
-          "type": "y_axis_columns_list",
-          "label": "Y-axis columns",
-          "required": true,
-          "helperText": "Numeric columns to plot. Use the In-stack checkbox to stack a subset of columns; columns left out stack-free draw independently (useful for a high-water total line).",
-          "modeFieldId": "multipleYAxis",
-          "maxInDualAxis": 2
+          "id": "y_axis_group",
+          "label": "Y-axis",
+          "layout": "single-column",
+          "fields": [
+            {
+              "id": "multipleYAxis",
+              "binds": "data_mapping.multiple_y_axis",
+              "type": "boolean",
+              "label": "Dual Y-axis",
+              "default": false,
+              "helperText": "Off: all columns on one axis (N allowed). On: split across left/right axes (capped at 2 columns)."
+            },
+            {
+              "id": "y_axis_columns",
+              "binds": "data_mapping.y_axis",
+              "type": "y_axis_columns_list",
+              "label": "Y-axis columns",
+              "required": true,
+              "helperText": "Numeric columns to plot. The column-name field overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of columns (columns left out stack-free draw independently — useful for a high-water total line).",
+              "modeFieldId": "multipleYAxis",
+              "maxInDualAxis": 2
+            }
+          ]
         },
         {
-          "id": "x_axis_column",
-          "binds": "data_mapping.x_axis",
-          "type": "column_select",
-          "label": "X-axis column",
-          "required": true,
-          "helperText": "Usually a timestamp."
-        },
-        {
-          "id": "series_column",
-          "binds": "data_mapping.series",
-          "type": "column_select",
-          "label": "Pivot by column",
-          "helperText": "Use this column's distinct values to split one value column into multiple series — e.g. a `location` column with warehouse/north/south produces three series. Leave empty when every series is already its own column."
+          "id": "series_group",
+          "label": "Pivot",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "series_column",
+              "binds": "data_mapping.series",
+              "type": "column_select",
+              "label": "Pivot by column",
+              "helperText": "Use this column's distinct values to split one value column into multiple series — e.g. a `location` column with warehouse/north/south produces three series. Leave empty when every series is already its own column."
+            }
+          ]
         }
       ]
     },
@@ -132,7 +175,7 @@
           "id": "y_axis_range_left",
           "label": "Left Y-axis range",
           "helperText": "Auto lets the axis library scale to the data; uncheck to set manual bounds.",
-          "layout": "row-3",
+          "layout": "row-4",
           "fields": [
             {
               "id": "y_left_min",
@@ -167,7 +210,7 @@
           "id": "y_axis_range_right",
           "label": "Right Y-axis range",
           "helperText": "Only used when Dual Y-axis is on.",
-          "layout": "row-3",
+          "layout": "row-4",
           "visibleWhen": { "field": "multipleYAxis", "operator": "truthy" },
           "fields": [
             {
