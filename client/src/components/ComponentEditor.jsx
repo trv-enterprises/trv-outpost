@@ -163,7 +163,14 @@ const CHART_TYPE_CONFIG = {
     hasSeriesColumn: false,
     hasAxisLabels: false,
     hasXAxisFormat: false,
-    hasTimeBucket: true,
+    // Single-value display. Keep the transforms that meaningfully
+    // collapse multiple rows into one (aggregation: "avg of last
+    // N rows"; sliding window: "last 5 min of streaming data";
+    // filters: "only rows where status=active"). Skip the ones
+    // that produce many outputs (time bucket: M buckets → can't
+    // render) or that pick rows without affecting the chosen one
+    // (sort+limit: row 0 is row 0).
+    hasTimeBucket: false,
     hasSortLimit: false,
     xAxisLabel: '',
     yAxisLabel: 'Value Column',
@@ -179,7 +186,8 @@ const CHART_TYPE_CONFIG = {
     hasSeriesColumn: false,
     hasAxisLabels: false,
     hasXAxisFormat: false,
-    hasTimeBucket: true,
+    // Same single-value rationale as gauge above.
+    hasTimeBucket: false,
     hasSortLimit: false,
     xAxisLabel: '',
     yAxisLabel: 'Value Column',
@@ -3526,8 +3534,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {/* Time Bucket Section - for socket streaming datasources only */}
-                {selectedDatasource?.type === 'socket' && (
+                {/* Time Bucket Section - for socket streaming datasources
+                    AND chart types that consume multi-row time series.
+                    Single-value displays (gauge/number) opt out via
+                    hasTimeBucket:false. */}
+                {selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false && (
                   <div className="time-bucket-section">
                     <div className="section-header">
                       <h4>Time Bucket Aggregation (Streaming)</h4>

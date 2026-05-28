@@ -530,14 +530,46 @@ PR 1 audit results (gauge):
 - **Gap-filler list doesn't apply.** Gauge has no axes, no
   tooltip, no legend, no multi-column. Y-axis min/max already
   covered by gauge_min/gauge_max. Skip.
-- **Capabilities reflect actual fit, not legacy CHART_TYPE_CONFIG
-  blindly.** The legacy `CHART_TYPE_CONFIG.gauge.hasTimeBucket
-  = true` is misleading — time bucketing rolls N rows into M
-  buckets, and a gauge consumes one row only, so it would
-  throw away M-1 buckets. Set `has_time_bucket: false` in the
-  spec. `has_aggregation: true` and `has_filters: true` stay
-  true because both have real meaning for a gauge ("show max
-  of last 100 polls", "show only rows where status='active'").
+- **Capabilities reflect actual fit.** Gauge consumes one
+  value — the first row of the (post-transform) result set.
+  The question for each client-side transform is "does this
+  meaningfully collapse N rows into one?"
+  - `has_aggregation: true` — kept on. "Show avg/max/min
+    of the last N rows" is a real ask. The gauge consumes
+    one row; aggregation produces one row from many.
+    Composes naturally.
+  - `has_filters: true` — kept on. "Show only rows where
+    status='active'" is a real ask.
+  - Sliding Window — kept on (no capability flag for it
+    yet; today gauge inherits the always-on behavior). The
+    "show the last 5 min averaged" smoothed-streaming case
+    needs Sliding Window + Aggregation together to work.
+    PR-2-scope work: add a `has_sliding_window` flag and
+    have line/bar/area opt out for non-time-series queries
+    where it's not useful.
+  - `has_time_bucket: false` — corrected. Time bucketing
+    produces M buckets and the gauge can only render one,
+    so M-1 are thrown away. Legacy was `true` but the flag
+    never actually gated the JSX; the Time Bucket panel
+    render condition now also checks `hasTimeBucket !==
+    false`.
+  - `has_sort_limit: false` — already correct. Sort+limit
+    picks N rows from a result set; gauge consumes row 0
+    of whatever it's given, so sort doesn't change the
+    rendered value.
+
+  Server-side aggregation (SQL GROUP BY / EdgeLake / ts-store
+  rolling) is a separate layer — for query languages that
+  own aggregation, the editor already hides client-side
+  transforms via `queryLanguageOwnsClientSideOps`. A
+  "5-minute avg gauge" on SQL is written in the SQL; on MQTT
+  it's client-side sliding-window + aggregation.
+- **The "single-value display" template applies to `number`
+  too.** `CHART_TYPE_CONFIG.number` carried the same legacy
+  flag drift and is fixed in the same pass (its comment
+  explicitly says "everything downstream mirrors gauge
+  exactly"). When PR 2 writes `number.json`, the same
+  capabilities apply.
 - **Stored-but-ignored fields stripped on next save.** The
   cruft strip from PR 2 of the chart-config-cleanup design
   applies here too: when gauge saves through the spec path,
