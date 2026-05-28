@@ -2417,15 +2417,38 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       initialDatabase={edgelakeDatabase}
                     />
                   ) : (
-                    <TextArea
-                      id="query-raw"
-                      labelText={getQueryLabelForType(selectedDatasource.type)}
-                      value={queryRaw}
-                      onChange={(e) => setQueryRaw(e.target.value)}
-                      placeholder={getQueryPlaceholderForType(selectedDatasource.type)}
-                      rows={selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 1 : 6}
-                      className={`query-textarea ${selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 'query-textarea--compact' : ''}`}
-                    />
+                    <>
+                      {/* EdgeLake Raw mode also needs a database
+                          parameter — the AnyLog operator routes by
+                          database name (it's part of the wrapping
+                          the adapter does: sql <db> format=json
+                          "<your SQL>"). Visual mode collects this
+                          through EdgeLakeQueryBuilder; Raw mode had
+                          no field, so the server always returned
+                          "database parameter is required for
+                          EdgeLake queries." Add a small input here
+                          so Raw mode is actually usable. */}
+                      {selectedDatasource.type === 'edgelake' && (
+                        <TextInput
+                          id="edgelake-database"
+                          labelText="Database"
+                          value={edgelakeDatabase}
+                          onChange={(e) => setEdgelakeDatabase(e.target.value)}
+                          placeholder="e.g. my_db"
+                          helperText="EdgeLake routes queries by database name (wraps in 'sql <db> format=json …')."
+                          style={{ marginBottom: '0.5rem' }}
+                        />
+                      )}
+                      <TextArea
+                        id="query-raw"
+                        labelText={getQueryLabelForType(selectedDatasource.type)}
+                        value={queryRaw}
+                        onChange={(e) => setQueryRaw(e.target.value)}
+                        placeholder={getQueryPlaceholderForType(selectedDatasource.type)}
+                        rows={selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 1 : 6}
+                        className={`query-textarea ${selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 'query-textarea--compact' : ''}`}
+                      />
+                    </>
                   )}
                 </div>
                 </div>
