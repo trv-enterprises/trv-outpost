@@ -516,14 +516,47 @@ both, leaving every other chart type on the legacy paths:
 - Library options block is small (`echarts` only) so Stage 1
   doesn't accidentally drift into library abstraction work.
 
-### Stage 2 — migrate the remaining chart types end-to-end
+### Stage 2 — migrate the remaining chart types to end-state shape
+
+**Order:** `line` first (most complex — dual-axis, multi-series,
+smoothing, zoom, axis labels, time-axis-format), then in order
+that lets lessons propagate: bar, area (share line's shape),
+pie, scatter, number, dataview, banded_bar. Starting with line
+means structural lessons surface early and can feed back into
+the gauge spec/buildOption (Stage 1 used a string-emitter port;
+Stage 2 line-first work tells us how to convert gauge to the
+end-state shape too).
+
+**Approach:** end-state shape directly, NOT string-emitter
+ports. Each `<type>.json` declares the form; each `<type>.js`
+exports `buildOption(values, data) → ECharts option`. The
+generic shell (Stage 2 deliverable) imports the right
+`buildOption`, runs `useData`, manages container resize, and
+renders `<ReactECharts option={...} />`. No string-templated
+codegen, no `DynamicComponentLoader` eval for spec-driven
+types.
+
+**Acceptance shifts from byte-identical to render-identical.**
+Stage 1's gauge promise was "same string output, both paths."
+Stage 2's promise is "same visual output on the dashboard,
+both paths." The `component_code` strings WILL differ
+(different shape entirely — one's a string emitter, one
+imports a generic shell). What matters: a representative
+chart of each migrated type renders identically with both
+flags off vs both flags on. Eyeball + screenshot compare for
+real charts.
 
 **Scope:**
-- Write specs + templates for line, bar, area, pie, scatter,
-  number, dataview, banded_bar.
-- Migrate each chart type's editor UI AND codegen from the
-  per-type JSX block + per-type codegen branch to the spec +
-  template.
+- Write spec + `buildOption` for each chart type. Per type:
+  `client/src/chart-spec/specs/<chart_type>.json` +
+  `client/src/chart-spec/specs/<chart_type>.js`.
+- Build the generic shell:
+  `client/src/chart-codegen/SpecDrivenChart.jsx`. Imports a
+  type's `buildOption`, wires `useData`, ResizeObserver,
+  loading/error states, theme. One copy total.
+- Wire the codegen-flag dispatch: when on, `getDataDrivenChartCode`
+  emits a one-liner that renders `<SpecDrivenChart specName="..." />`
+  instead of a fully-inlined chart component.
 - Per-type whitelists (from
   `chart-config-cleanup-and-editor-split.md` Stage 2) become
   literally the spec's field list — no separate whitelist
@@ -531,26 +564,239 @@ both, leaving every other chart type on the legacy paths:
 - Cruft-strip migration in `server-go/internal/database/
   migrations.go` runs against the spec rather than a separate
   whitelist file.
-- Begin shifting per-type templates from "string emitter"
-  toward `buildOption(values, data) → option` pure functions,
-  per the end-state shape above. Each chart type migrated in
-  Stage 2 should land closer to that shape, even if not all
-  the way — the goal is to know what the final per-chart-type
-  surface looks like by the end of Stage 2.
+- Save-path migrations for any field-shape changes (e.g.
+  line's `y_axis: ['a','b']` → `y_axis: [{column:'a', stack:false, axis:'left'},...]`).
+  Lazy on save when going through the spec path; read-path
+  shim translates legacy shape on load.
 - AI tool descriptions reference the spec by name (e.g.
   `update_data_mapping` describes its fields as "see the
   current chart's spec").
 
 **Acceptance:**
-- All chart types render their editor + emit their code from
-  spec/template when both flags are on.
-- Side-by-side test (legacy off vs new on) produces
-  byte-identical component_code for representative records of
-  each chart type.
+- For each migrated chart type, the same representative
+  chart record renders visually identically with both flags
+  off vs both flags on.
+- `npm run verify:chart-spec` validates that every
+  `buildOption` returns an ECharts option literal with the
+  expected top-level keys (`series`, `tooltip`, etc.) for
+  representative inputs — smoke test, not byte diff.
 - Flag-off path still works end-to-end (deletion of the
   legacy paths is in Stage 3, not here).
 - Every existing chart in dev continues to save and render
   correctly under both flag states.
+
+#### Stage 2 line scope — locked 2026-05-28
+
+Line is the most complex chart type and its scope is locked
+in detail so the work can start without re-deliberating. Other
+chart types (bar, area, etc.) follow line's pattern with their
+own variations.
+
+**Data mapping section:**
+
+- `multipleYAxis` — Carbon Toggle (existing pattern). Off:
+  N columns share one y-axis. On: per-row axis selector
+  appears, columns capped at 2. When flipping ON with 3+
+  columns already present, soft-block via helper text
+  ("Drop columns to 2 before switching to dual-axis"); the
+  toggle stays off until the user trims. When flipping OFF,
+  existing per-row `axis` values are kept (load-bearing on
+  the toggle, not destroyed). Today's `multipleYAxis`
+  semantics conflate "mode" and "column cap" — this
+  separates them.
+- `y_axis_columns` — free list of `{column, stack, axis?}`
+  entries (NOT a flat string array as today). New
+  `YAxisColumnsList` field-type renderer:
+  - "+ Add column" button at list bottom. Disabled at 2/2
+    when `multipleYAxis: true`.
+  - ✕ IconButton on each row to remove. Disabled when only
+    one row remains (Y is required).
+  - Per-row column picker (ColumnSelect against
+    `availableColumns`).
+  - Per-row `stack` checkbox ("In stack"). Default false.
+    Columns with `stack: true` share an internal stack
+    group string (implementation detail, never user-visible).
+    Only one stack group total — no multi-stack DSL. Mixed
+    in-stack and out-of-stack columns work as expected
+    (per Tom's high-water example: stack 3 component series,
+    leave the total series out for the high-water line).
+  - Per-row `axis: 'left'|'right'` selector — only visible
+    when `multipleYAxis: true`. Default: first column left,
+    second column right.
+- `x_axis_column` — ColumnSelect (unchanged).
+- `series_column` — ColumnSelect. Label renamed to
+  **"Pivot by column"** (was "Series Column"); helper text
+  rewritten to clarify pivot semantics. Internal state
+  name `seriesColumn` stays — this is a label-only rename
+  in the spec, not a code-wide refactor (that's a
+  separate cleanup pass).
+
+**Chart-options section:**
+
+- `chart_smooth` (boolean) — line + area only via
+  `visibleWhen { field: chart_type, operator: in, value: ['line','area'] }`.
+  Existing behavior.
+- `chart_show_data_labels` (boolean) — existing.
+- `chart_show_zoom_slider` (boolean) — existing.
+- `show_symbol` (boolean, default true) — NEW. Toggles
+  ECharts `series.showSymbol`. Default true matches today's
+  default; users on dense time series who want clean lines
+  set it false.
+- `sampling` (enum: off | lttb | average | max, default off) —
+  NEW. Sets ECharts `series.sampling`. Big perf win for
+  ≥10k-point series. Default off so existing charts don't
+  change.
+
+(Dropped: `chart_stacked` — subsumed by per-column `stack`
+checkbox in `y_axis_columns`.)
+
+**Y-axis ranges section** (gap-filler from cleanup design):
+
+Pattern B per-end auto. Storage: `null` = auto, number =
+manual. Codegen: when null, omit `min`/`max` from the
+ECharts yAxis literal; when number, emit it.
+
+New field-type renderer `NullableNumber`: Carbon checkbox
+("Auto") inline with a NumberInput. Checked → input
+hidden/disabled, value stored as `null`. Unchecked → input
+shown, value stored as the entered number.
+
+- `y_left_min` (NullableNumber, default null)
+- `y_left_max` (NullableNumber, default null)
+- `y_left_scale` (enum: linear | log, default linear)
+- `y_right_min` (NullableNumber, default null) — visibleWhen
+  `multipleYAxis: true`
+- `y_right_max` (NullableNumber, default null) — visibleWhen
+  `multipleYAxis: true`
+- `y_right_scale` (enum: linear | log, default linear) —
+  visibleWhen `multipleYAxis: true`
+
+X-axis range fields (`x_min`, `x_max`) are **deferred** until
+time-axis/value-x support lands. Today's line charts use
+category-axis (x is a list of formatted timestamp labels);
+x_min/x_max have no codegen path to attach to. Adding the
+fields as dead UI would be the slickness anti-pattern we
+agreed to avoid.
+
+**Tooltip section** (gap-filler):
+
+- `tooltip_mode` (enum: single | multi | hidden, default
+  multi) — NEW from Grafana audit. Maps to ECharts
+  `tooltip.trigger` ('item'/'axis') and `tooltip.show`.
+- `tooltip_format` (enum: auto | custom, default auto).
+- `tooltip_decimals` (number, default null = auto).
+- `tooltip_units` (text, default '').
+- `tooltip_custom_formatter` (code/textarea) — visibleWhen
+  `tooltip_format === 'custom'`.
+
+**Legend section** (gap-filler):
+
+- `legend_show` (boolean, default true when >1 series).
+- `legend_position` (enum: top | bottom | left | right,
+  default top).
+
+**Thresholds section** (NEW from ECharts + Grafana audit —
+the explicit ask):
+
+- `y_thresholds` — free list of `{value, color, label?}`
+  entries. New `ThresholdList` field-type renderer (similar
+  shape to `YAxisColumnsList`: + Add / ✕ Remove rows;
+  per-row NumberInput, color picker, optional text label).
+- `y_threshold_render_mode` (enum: line | color_segments |
+  both, default line) — visibleWhen
+  `y_thresholds` is `not_empty`. Maps to:
+  - `line` → ECharts `markLine.data: [{ yAxis: value, lineStyle: { color } }]`
+    overlay. Constant-color line, reference at value.
+  - `color_segments` → ECharts
+    `visualMap: { type: 'continuous', pieces: [{lt: t1, color: c1}, {gt: t1, lt: t2, color: c2}, ...] }`.
+    Colors the series line itself based on value (green
+    below threshold, yellow between, red above). The
+    explicit ask Tom called out.
+  - `both` → emit both markLine AND visualMap.
+
+The thresholds are a single conceptual knob ("threshold
+points") with a render-mode choice. One data shape, three
+render strategies.
+
+**Capabilities block:**
+
+```jsonc
+"capabilities": {
+  "requires_x_axis": true,
+  "requires_y_axis": true,
+  "multiple_y_axis": true,
+  "single_axis_n_columns": true,
+  "has_pivot_series": true,
+  "has_axis_labels": true,
+  "has_x_axis_format": true,
+  "has_time_bucket": true,
+  "has_sort_limit": true,
+  "has_filters": true,
+  "has_aggregation": true,
+  "has_sliding_window": true,
+  "has_visible_columns": false,
+  "has_legend_config": true,
+  "has_tooltip_config": true,
+  "has_axis_range": true,
+  "has_thresholds": true
+}
+```
+
+`single_axis_n_columns` is new and locks in the N-series-
+single-axis semantics from `[[multiple-yaxis-series-same-range-todo]]`.
+
+**Save-path migration:**
+
+Existing line records have:
+```jsonc
+{
+  "data_mapping": { "y_axis": ["cpu", "mem"], ... },
+  "options": { "chartStacked": false, "multipleYAxis": true, ... }
+}
+```
+
+When saved through the spec path, becomes:
+```jsonc
+{
+  "data_mapping": {
+    "y_axis": [
+      { "column": "cpu", "stack": false, "axis": "left" },
+      { "column": "mem", "stack": false, "axis": "right" }
+    ],
+    "multipleYAxis": true,
+    ...
+  },
+  "options": { ... }   // chartStacked removed
+}
+```
+
+**Read-path shim**: on load, if `y_axis[0]` is a string,
+translate to the new shape immediately. `chartStacked: true`
+loaded from a legacy record gets distributed to every entry's
+`stack: true` on load (matches the legacy single-stack
+behavior; existing in-the-wild charts retain their visual).
+
+**Total fields on line.json:** 13 (data-mapping: 3 +
+multipleYAxis = 4; chart-options: 5; y-range: 6; tooltip: 5;
+legend: 2; thresholds: 2). Roughly 3× gauge.json — matches
+"line is the most complex chart type" expectation.
+
+**Deferred from Stage 2 line** (memory-noted, not in scope):
+
+- `connectNulls` (boolean) — easy to add later when someone
+  asks; not requested.
+- `animation` (boolean) — same.
+- Time-axis (`xAxis.type: 'time'` vs category) — real
+  behavior change, deserves its own effort.
+- `markArea` / `markPoint` — cousins of `markLine`; we ship
+  the threshold render path and see if users ask for
+  additional overlays.
+- Step lines (`series.step`) — niche.
+- Mixed-display series (some columns as bars, some lines) —
+  Grafana feature; defer.
+- Fill opacity / line width controls — niche.
+- Table legend with min/max/avg/last per row — Grafana
+  feature, awkward in ECharts.
 
 ### Stage 3 — flip defaults, delete legacy paths, reach end-state
 
