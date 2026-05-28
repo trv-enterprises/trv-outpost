@@ -1717,17 +1717,20 @@
   }
 
   // Single-axis row: column 1/4 | label 1/4 | stack ~1/8 | spacer | remove.
-  // The 1fr in the middle absorbs the remaining ~1/4 so the row reads
-  // as "two 1/4 fields, controls on the right, room to breathe."
   //
-  // Gap matches the section-level metadata-row gap (spacing-05) so the
-  // 25% cells in this row line up with the metadata-col--quarter cells
-  // in sibling subsections like X-axis. No padding/background — the
-  // row sits flush with the rest of the section content so vertical
-  // edges align across subsections.
+  // Width math must match the metadata-col--quarter cells used by
+  // sibling subsections (X-axis row, Y-range, etc.):
+  //   .metadata-col--quarter { flex-basis: calc(25% - spacing-05 * 3/4) }
+  // That's "25% minus 3/4 of one gap" — derived from spreading 3 gaps
+  // across 4 quarter cells. Reproducing the exact same expression on
+  // our grid track ensures the column edges align vertically with
+  // the X-axis subsection above.
   .spec-yacl__row {
     display: grid;
-    grid-template-columns: 25% 25% auto 1fr auto;
+    grid-template-columns:
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      auto 1fr auto;
     grid-template-areas: 'column label stack . remove';
     gap: spacing.$spacing-05;
     align-items: end;
@@ -1749,8 +1752,14 @@
 
   // Dual-axis mode: column 1/4 | label 1/4 | axis 1/4 | stack auto | remove.
   // Three 1/4 fields plus the controls; no spacer column needed.
+  // Same calc as the single-axis row so the column edges still align
+  // with the X-axis subsection above.
   &--dual .spec-yacl__row {
-    grid-template-columns: 25% 25% 25% auto auto;
+    grid-template-columns:
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      auto auto;
     grid-template-areas: 'column label axis stack remove';
 
     @media (max-width: 720px) {
