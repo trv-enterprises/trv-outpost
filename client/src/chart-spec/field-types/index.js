@@ -8,16 +8,25 @@ import NumberField from './NumberField';
 import TextField from './TextField';
 import BooleanField from './BooleanField';
 import SliderField from './SliderField';
+import NullableNumberField from './NullableNumber';
+import YAxisColumnsListField from './YAxisColumnsList';
+import ThresholdListField from './ThresholdList';
 
 const FIELD_RENDERERS = {
+  // Stage 1
   column_select: ColumnSelectField,
   enum: EnumSelectField,
   number: NumberField,
   text: TextField,
   boolean: BooleanField,
   slider: SliderField,
-  // column_multi_select + code defer to PR 2; the spec schema permits
-  // them but PR 1's gauge spec doesn't use them.
+  // Stage 2
+  nullable_number: NullableNumberField,
+  y_axis_columns_list: YAxisColumnsListField,
+  threshold_list: ThresholdListField,
+  // column_multi_select + code stay deferred — no current spec uses
+  // either. The schema validator permits them; renderers land when
+  // a spec needs them.
 };
 
 export function getFieldRenderer(type) {

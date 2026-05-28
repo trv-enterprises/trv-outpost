@@ -1,0 +1,311 @@
+{
+  "schema_version": "1",
+  "chart_type": "line",
+  "library": "echarts",
+  "display": {
+    "label": "Line Chart",
+    "icon": "ChartLine",
+    "description": "Show trends over time"
+  },
+  "capabilities": {
+    "requires_x_axis": true,
+    "requires_y_axis": true,
+    "multiple_y_axis": true,
+    "single_axis_n_columns": true,
+    "has_pivot_series": true,
+    "has_axis_labels": true,
+    "has_x_axis_format": true,
+    "has_time_bucket": true,
+    "has_sort_limit": true,
+    "has_visible_columns": false,
+    "has_filters": true,
+    "has_aggregation": true,
+    "has_sliding_window": true,
+    "has_legend_config": true,
+    "has_tooltip_config": true,
+    "has_axis_range": true,
+    "has_thresholds": true
+  },
+  "sections": [
+    {
+      "id": "data_mapping",
+      "label": "Data Mapping",
+      "layout": "single-column",
+      "fields": [
+        {
+          "id": "multipleYAxis",
+          "binds": "data_mapping.multiple_y_axis",
+          "type": "boolean",
+          "label": "Dual Y-axis",
+          "default": false,
+          "helperText": "Off: all columns on one axis (N allowed). On: split across left/right axes (capped at 2 columns)."
+        },
+        {
+          "id": "y_axis_columns",
+          "binds": "data_mapping.y_axis",
+          "type": "y_axis_columns_list",
+          "label": "Y-axis columns",
+          "required": true,
+          "helperText": "Numeric columns to plot. Use the In-stack checkbox to stack a subset of columns; columns left out stack-free will draw independently (useful for a high-water total line).",
+          "modeFieldId": "multipleYAxis",
+          "maxInDualAxis": 2
+        },
+        {
+          "id": "x_axis_column",
+          "binds": "data_mapping.x_axis",
+          "type": "column_select",
+          "label": "X-axis column",
+          "required": true,
+          "helperText": "Usually a timestamp."
+        },
+        {
+          "id": "series_column",
+          "binds": "data_mapping.series",
+          "type": "column_select",
+          "label": "Pivot by column",
+          "helperText": "Use this column's distinct values to split one value column into multiple series — e.g. a `location` column with warehouse/north/south produces three series. Leave empty when every series is already its own column."
+        }
+      ]
+    },
+    {
+      "id": "chart_options",
+      "label": "Chart Options",
+      "layout": "row-4",
+      "fields": [
+        {
+          "id": "chart_smooth",
+          "binds": "options.chartSmooth",
+          "type": "boolean",
+          "label": "Smooth curves",
+          "default": true
+        },
+        {
+          "id": "chart_show_data_labels",
+          "binds": "options.chartShowDataLabels",
+          "type": "boolean",
+          "label": "Data labels",
+          "default": false
+        },
+        {
+          "id": "chart_show_zoom_slider",
+          "binds": "options.chartShowZoomSlider",
+          "type": "boolean",
+          "label": "Zoom slider",
+          "default": false
+        },
+        {
+          "id": "show_symbol",
+          "binds": "options.showSymbol",
+          "type": "boolean",
+          "label": "Show point markers",
+          "default": true,
+          "helperText": "Turn off for dense time series to get a clean line."
+        }
+      ]
+    },
+    {
+      "id": "perf_options",
+      "label": "Performance",
+      "layout": "row-2",
+      "fields": [
+        {
+          "id": "sampling",
+          "binds": "options.sampling",
+          "type": "enum",
+          "label": "Downsampling",
+          "default": "off",
+          "options": [
+            { "value": "off", "label": "Off (render every point)" },
+            { "value": "lttb", "label": "LTTB (perceptual)" },
+            { "value": "average", "label": "Average" },
+            { "value": "max", "label": "Max" }
+          ],
+          "helperText": "Use for ≥10k-point series. LTTB preserves the visual shape; average/max preserve their respective statistics."
+        }
+      ]
+    },
+    {
+      "id": "y_axis_range_left",
+      "label": "Left Y-axis range",
+      "layout": "row-3",
+      "fields": [
+        {
+          "id": "y_left_min",
+          "binds": "options.yAxisRange.left.min",
+          "type": "nullable_number",
+          "label": "Min",
+          "default": null,
+          "step": 1
+        },
+        {
+          "id": "y_left_max",
+          "binds": "options.yAxisRange.left.max",
+          "type": "nullable_number",
+          "label": "Max",
+          "default": null,
+          "step": 1
+        },
+        {
+          "id": "y_left_scale",
+          "binds": "options.yAxisRange.left.scale",
+          "type": "enum",
+          "label": "Scale",
+          "default": "linear",
+          "options": [
+            { "value": "linear", "label": "Linear" },
+            { "value": "log", "label": "Logarithmic" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "y_axis_range_right",
+      "label": "Right Y-axis range",
+      "layout": "row-3",
+      "fields": [
+        {
+          "id": "y_right_min",
+          "binds": "options.yAxisRange.right.min",
+          "type": "nullable_number",
+          "label": "Min",
+          "default": null,
+          "step": 1,
+          "visibleWhen": { "field": "multipleYAxis", "operator": "truthy" }
+        },
+        {
+          "id": "y_right_max",
+          "binds": "options.yAxisRange.right.max",
+          "type": "nullable_number",
+          "label": "Max",
+          "default": null,
+          "step": 1,
+          "visibleWhen": { "field": "multipleYAxis", "operator": "truthy" }
+        },
+        {
+          "id": "y_right_scale",
+          "binds": "options.yAxisRange.right.scale",
+          "type": "enum",
+          "label": "Scale",
+          "default": "linear",
+          "options": [
+            { "value": "linear", "label": "Linear" },
+            { "value": "log", "label": "Logarithmic" }
+          ],
+          "visibleWhen": { "field": "multipleYAxis", "operator": "truthy" }
+        }
+      ]
+    },
+    {
+      "id": "tooltip_config",
+      "label": "Tooltip",
+      "layout": "row-4",
+      "fields": [
+        {
+          "id": "tooltip_mode",
+          "binds": "options.tooltip.mode",
+          "type": "enum",
+          "label": "Mode",
+          "default": "multi",
+          "options": [
+            { "value": "multi", "label": "All series" },
+            { "value": "single", "label": "Single series" },
+            { "value": "hidden", "label": "Hidden" }
+          ]
+        },
+        {
+          "id": "tooltip_format",
+          "binds": "options.tooltip.format",
+          "type": "enum",
+          "label": "Value format",
+          "default": "auto",
+          "options": [
+            { "value": "auto", "label": "Auto" },
+            { "value": "custom", "label": "Custom" }
+          ]
+        },
+        {
+          "id": "tooltip_decimals",
+          "binds": "options.tooltip.decimals",
+          "type": "nullable_number",
+          "label": "Decimals",
+          "default": null,
+          "min": 0,
+          "max": 10,
+          "step": 1
+        },
+        {
+          "id": "tooltip_units",
+          "binds": "options.tooltip.units",
+          "type": "text",
+          "label": "Units suffix",
+          "default": "",
+          "placeholder": "e.g. %, °C, MB/s"
+        },
+        {
+          "id": "tooltip_custom_formatter",
+          "binds": "options.tooltip.customFormatter",
+          "type": "code",
+          "label": "Custom formatter",
+          "default": "",
+          "helperText": "JS expression body. Receives `params` (ECharts tooltip params). Return a string.",
+          "visibleWhen": { "field": "tooltip_format", "operator": "eq", "value": "custom" }
+        }
+      ]
+    },
+    {
+      "id": "legend_config",
+      "label": "Legend",
+      "layout": "row-2",
+      "fields": [
+        {
+          "id": "legend_show",
+          "binds": "options.legend.show",
+          "type": "boolean",
+          "label": "Show legend",
+          "default": true,
+          "helperText": "When more than one series is present."
+        },
+        {
+          "id": "legend_position",
+          "binds": "options.legend.position",
+          "type": "enum",
+          "label": "Position",
+          "default": "top",
+          "options": [
+            { "value": "top", "label": "Top" },
+            { "value": "bottom", "label": "Bottom" },
+            { "value": "left", "label": "Left" },
+            { "value": "right", "label": "Right" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thresholds_config",
+      "label": "Y-axis Thresholds",
+      "layout": "single-column",
+      "fields": [
+        {
+          "id": "y_thresholds",
+          "binds": "options.yThresholds",
+          "type": "threshold_list",
+          "label": "Thresholds",
+          "helperText": "Reference lines or color stops on the Y axis. Each threshold is a numeric value with a color and optional label."
+        },
+        {
+          "id": "y_threshold_render_mode",
+          "binds": "options.yThresholdRenderMode",
+          "type": "enum",
+          "label": "Render as",
+          "default": "line",
+          "options": [
+            { "value": "line", "label": "Reference line at value" },
+            { "value": "color_segments", "label": "Color the line by value" },
+            { "value": "both", "label": "Both" }
+          ],
+          "visibleWhen": { "field": "y_thresholds", "operator": "not_empty" }
+        }
+      ]
+    }
+  ]
+}

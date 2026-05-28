@@ -4,11 +4,14 @@
 
 import { assertValidChartTypeSpec } from './schema-validator';
 import gaugeSpec from './specs/gauge.json';
+import lineSpec from './specs/line.json';
 
 // Validate every spec at module load so a malformed spec fails fast in
-// dev. PR 1 only ships gauge; PR 2 adds the remaining 8 chart types.
+// dev. Stage 1 shipped gauge; Stage 2 starts with line. Other chart
+// types follow in Stage 2.
 const SPECS = {
   gauge: assertValidChartTypeSpec(gaugeSpec, 'specs/gauge.json'),
+  line: assertValidChartTypeSpec(lineSpec, 'specs/line.json'),
 };
 
 /**
@@ -36,7 +39,7 @@ export function hasChartTypeSpec(chartType) {
 }
 
 /**
- * Returns all chart types that have a spec. PR 1: ['gauge'].
+ * Returns all chart types that have a spec.
  *
  * @returns {string[]}
  */

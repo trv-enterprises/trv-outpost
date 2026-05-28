@@ -714,13 +714,125 @@ if a cross-corner failed, the diff would point at the seam.
       useData destructure, gauge series shape, color stops, etc.).
 - [ ] CI runs the same check as part of `npm run build`.
 
-### Q.5 Other chart types unaffected
+### Q.5 Other chart types unaffected by Stage 1 gauge work
 
-- [ ] With both flags on, open a bar / line / pie / number /
-      dataview chart and confirm the editor renders the legacy
-      JSX and the saved code is unchanged. The flags only route
-      gauge through the spec path; everything else falls through
-      to legacy.
+- [ ] With both flags on, open a bar / pie / number / dataview
+      chart (NOT line — line has its own Stage 2 path below) and
+      confirm the editor renders the legacy JSX and the saved
+      code is unchanged. The Stage 1 flags only route gauge
+      through the spec path; pre-Stage-2 chart types fall
+      through to legacy.
+
+## Q-Stage-2. Line chart — spec-driven editor + buildOption codegen
+
+Stage 2 line ships the **end-state shape**: `specs/line.json` +
+`specs/line.js`'s `buildOption(values, data, helpers)` returning
+an ECharts option object that the generic `<SpecDrivenChart />`
+shell renders directly. No string-templated codegen.
+
+Acceptance is **render-identical**, NOT byte-identical to legacy.
+The component_code emitted with the codegen flag on is a
+one-liner mounting the shell — entirely different shape from
+the legacy line branch's inlined chart code — but the rendered
+chart on the dashboard must match.
+
+### Q-S2.1 Setup
+
+- [ ] Both flags off. In Manage → Settings, confirm
+      `chart_editor_spec_driven` and `chart_codegen_spec_driven`
+      exist and default to `false`.
+- [ ] Open or create a representative line chart bound to any
+      connection (Pi sensehat is convenient).
+
+### Q-S2.2 Both flags OFF — baseline render
+
+- [ ] Editor renders the legacy "Chart Options" block (stacked,
+      smooth, data labels, zoom slider toggles only — no Y-axis
+      range, no tooltip mode, no thresholds, no sampling).
+- [ ] On the dashboard, the chart renders the line with current
+      data. Note: line position, legend, axis labels, tooltip on
+      hover. This is the **baseline**.
+
+### Q-S2.3 Both flags ON — spec-driven render
+
+- [ ] Both flags on. Refresh the editor.
+- [ ] Editor renders the spec-driven sections: Data Mapping,
+      Chart Options (now includes Show point markers + Downsampling),
+      Performance, Left Y-axis range (with Auto checkboxes),
+      Right Y-axis range (hidden — Dual Y-axis toggle is off),
+      Tooltip, Legend, Y-axis Thresholds.
+- [ ] No legacy "Chart Options" block visible (it's suppressed
+      for line when the spec flag is on).
+- [ ] Save the chart. The persisted `component_code` is a
+      one-liner like `const Component = () => <SpecDrivenChart specName="line" />;`
+      — that's expected. Different shape from baseline, same
+      eventual render.
+- [ ] On the dashboard, the chart renders **visually identically**
+      to the baseline. Line position, legend, axis labels,
+      tooltip on hover all match.
+
+### Q-S2.4 Spec-driven editor — exercise each gap-filler
+
+With both flags on (Q-S2.3 state):
+
+- [ ] **Dual Y-axis toggle**: turn on; Right Y-axis range fields
+      appear; the y_axis column list grows an Axis Left/Right
+      selector per row.
+- [ ] **Y-axis range (left)**: uncheck Auto Min, set 0. Chart
+      y-axis floor locks at 0. Uncheck Auto Max, set 100.
+      Ceiling locks at 100. Set Scale to Log — y-axis renders
+      logarithmically.
+- [ ] **Show point markers**: turn off; dots disappear from the
+      line, line shape unchanged.
+- [ ] **Downsampling**: set to LTTB. For a low-density chart
+      this should look identical (LTTB only kicks in past ~10k
+      points). For visual confirmation use a chart with a
+      large result set.
+- [ ] **Tooltip mode → Single**: hover the chart — only one
+      series shows in the tooltip instead of all.
+- [ ] **Tooltip mode → Hidden**: hover the chart — no tooltip
+      appears.
+- [ ] **Legend → Show off**: legend disappears even when there
+      are multiple series.
+- [ ] **Legend → Position bottom**: legend moves to the bottom
+      of the chart.
+- [ ] **Thresholds → add one at value=50, color yellow**: with
+      render mode "Reference line at value" (default), a
+      dashed yellow horizontal line draws at y=50.
+- [ ] **Threshold render mode → Color the line by value**: the
+      reference line disappears, the line itself is now
+      yellow above 50 and the default color below.
+- [ ] **Threshold render mode → Both**: both effects together.
+
+### Q-S2.5 Pivot column (Series Column → Pivot by column rename)
+
+- [ ] In the spec-driven editor, the "Pivot by column" field
+      label is shown (not "Series Column"). The helper text
+      explains "Use this column's distinct values to split one
+      value column into multiple series."
+- [ ] Pick a pivot column on a multi-row query. The chart
+      renders one series per distinct pivot value with the
+      pivot value as the legend label.
+
+### Q-S2.6 Automated regression check
+
+- [ ] `npm run verify:chart-spec` (in `client/`) exits 0. This
+      now runs both the gauge template verifier and the line
+      buildOption smoke test (13 cases covering single/dual
+      axis, N-series, stack subsets, y-range with log scale,
+      zoom slider, both threshold render modes, tooltip modes,
+      legend suppression, pivot, area chart type, chart title).
+- [ ] CI runs the same check as part of `npm run build`.
+
+### Q-S2.7 Legacy line records still render under the new path
+
+- [ ] A line chart saved BEFORE Stage 2 (with the old flat
+      `y_axis: ['cpu','mem']` shape and `chartStacked: false`)
+      loads in the new editor without errors. The read-path
+      shim in `line.js::normalizeYEntry` translates the legacy
+      shape on the fly.
+- [ ] With both flags on, the legacy chart renders identically
+      to how it rendered before Stage 2 shipped.
 
 ---
 

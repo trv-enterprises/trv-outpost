@@ -14,6 +14,8 @@
  * @property {boolean} [requires_x_axis]
  * @property {boolean} [requires_y_axis]
  * @property {boolean} [multiple_y_axis]
+ * @property {boolean} [single_axis_n_columns]
+ * @property {boolean} [has_pivot_series]
  * @property {boolean} [has_series_column]
  * @property {boolean} [has_axis_labels]
  * @property {boolean} [has_x_axis_format]
@@ -22,6 +24,11 @@
  * @property {boolean} [has_visible_columns]
  * @property {boolean} [has_filters]
  * @property {boolean} [has_aggregation]
+ * @property {boolean} [has_sliding_window]
+ * @property {boolean} [has_legend_config]
+ * @property {boolean} [has_tooltip_config]
+ * @property {boolean} [has_axis_range]
+ * @property {boolean} [has_thresholds]
  */
 
 /**
@@ -41,16 +48,16 @@
  * @typedef {Object} FieldSpec
  * @property {string} id
  * @property {string} binds         dot-path into the saved component shape
- * @property {'column_select'|'column_multi_select'|'enum'|'text'|'number'|'boolean'|'slider'|'code'} type
+ * @property {'column_select'|'column_multi_select'|'enum'|'text'|'number'|'boolean'|'slider'|'code'|'nullable_number'|'y_axis_columns_list'|'threshold_list'} type
  * @property {string} label
  * @property {boolean} [required]
  * @property {string} [helperText]
  * @property {string} [placeholder]
  * @property {*} [default]
  * @property {FieldSpecEnumOption[]} [options]   for enum
- * @property {number} [min]                       for number / slider
- * @property {number} [max]                       for number / slider
- * @property {number} [step]                      for number / slider
+ * @property {number} [min]                       for number / slider / nullable_number
+ * @property {number} [max]                       for number / slider / nullable_number
+ * @property {number} [step]                      for number / slider / nullable_number
  * @property {VisibleWhen} [visibleWhen]
  */
 
@@ -66,8 +73,8 @@
 /**
  * @typedef {Object} CodegenSpec
  * @property {string} library            "echarts" today; "d3" / "vis-network" later
- * @property {string} template_id        registry key for the template module
- * @property {Object<string,*>} template_bindings
+ * @property {string} [template_id]      legacy Stage-1 string-emitter dispatch key. Optional in Stage 2+ — specs that ship a buildOption render path don't need it.
+ * @property {Object<string,*>} [template_bindings]
  */
 
 /**
@@ -78,16 +85,17 @@
  * @property {ChartTypeSpecDisplay} display
  * @property {ChartTypeSpecCapabilities} [capabilities]
  * @property {SectionSpec[]} sections
- * @property {CodegenSpec} codegen
+ * @property {CodegenSpec} [codegen]   Optional in Stage 2+. Stage 1 specs (gauge) still ship a codegen block with template_id; Stage 2+ specs use the spec_name → buildOption registry instead.
  */
 
-// Validator. Hand-rolled — keeps PR 1 dependency-free; AJV (~30KB) can
-// land later if validation needs grow. Errors are collected and returned
-// as a list so a single bad spec doesn't mask others.
+// Validator. Hand-rolled — keeps the editor dep-free; AJV (~30KB) can
+// land later if validation needs grow. Errors are collected and
+// returned as a list so a single bad spec doesn't mask others.
 
 const SUPPORTED_SCHEMA_VERSIONS = new Set(['1']);
 const SUPPORTED_LIBRARIES = new Set(['echarts']);
 const SUPPORTED_FIELD_TYPES = new Set([
+  // Stage 1
   'column_select',
   'column_multi_select',
   'enum',
@@ -96,6 +104,10 @@ const SUPPORTED_FIELD_TYPES = new Set([
   'boolean',
   'slider',
   'code',
+  // Stage 2 additions
+  'nullable_number',     // Carbon checkbox-inline-with-NumberInput; null = auto, number = manual
+  'y_axis_columns_list', // free list of { column, stack, axis? } entries
+  'threshold_list',      // free list of { value, color, label? } entries
 ]);
 const SUPPORTED_LAYOUTS = new Set([
   'single-column',
@@ -192,6 +204,29 @@ function validateSection(section, path, errors, allFieldIds) {
 }
 
 /**
+ * Cross-field check: visibleWhen.field must reference a field id
+ * that exists somewhere in the spec. Walks sections after every
+ * field has been collected so forward references work too.
+ */
+function validateVisibleWhenRefs(spec, errors) {
+  if (!Array.isArray(spec.sections)) return;
+  const known = new Set();
+  spec.sections.forEach((s) => (s.fields || []).forEach((f) => f.id && known.add(f.id)));
+  spec.sections.forEach((section, si) => {
+    (section.fields || []).forEach((field, fi) => {
+      const vw = field.visibleWhen;
+      if (vw && typeof vw.field === 'string' && !known.has(vw.field)) {
+        pushErr(
+          errors,
+          `sections[${si}].fields[${fi}].visibleWhen.field`,
+          `references unknown field id "${vw.field}" — must match an existing field in this spec`,
+        );
+      }
+    });
+  });
+}
+
+/**
  * Validate a ChartTypeSpec object. Returns an array of error strings —
  * empty array means the spec is valid. Caller decides what to do with
  * errors (throw in dev, log in prod).
@@ -226,18 +261,25 @@ export function validateChartTypeSpec(spec) {
     spec.sections.forEach((section, i) => {
       validateSection(section, `sections[${i}]`, errors, allFieldIds);
     });
+    validateVisibleWhenRefs(spec, errors);
   }
-  if (!spec.codegen || typeof spec.codegen !== 'object') {
-    pushErr(errors, 'codegen', 'missing or not an object');
-  } else {
-    if (!SUPPORTED_LIBRARIES.has(spec.codegen.library)) {
-      pushErr(errors, 'codegen.library', `unsupported library "${spec.codegen.library}"`);
-    }
-    if (typeof spec.codegen.template_id !== 'string' || !spec.codegen.template_id) {
-      pushErr(errors, 'codegen.template_id', 'missing or empty');
-    }
-    if (!spec.codegen.template_bindings || typeof spec.codegen.template_bindings !== 'object') {
-      pushErr(errors, 'codegen.template_bindings', 'must be an object');
+  // codegen block is OPTIONAL in Stage 2+. Stage 1 specs (gauge)
+  // still ship a string-emitter template_id; Stage 2+ specs use the
+  // spec_name → buildOption registry under chart-spec/specs/<type>.js
+  // and don't need this block. When present, validate its shape.
+  if (spec.codegen !== undefined) {
+    if (typeof spec.codegen !== 'object' || spec.codegen === null) {
+      pushErr(errors, 'codegen', 'must be an object when present');
+    } else {
+      if (!SUPPORTED_LIBRARIES.has(spec.codegen.library)) {
+        pushErr(errors, 'codegen.library', `unsupported library "${spec.codegen.library}"`);
+      }
+      if (spec.codegen.template_id !== undefined && (typeof spec.codegen.template_id !== 'string' || !spec.codegen.template_id)) {
+        pushErr(errors, 'codegen.template_id', 'must be a non-empty string when present');
+      }
+      if (spec.codegen.template_bindings !== undefined && (typeof spec.codegen.template_bindings !== 'object' || spec.codegen.template_bindings === null)) {
+        pushErr(errors, 'codegen.template_bindings', 'must be an object when present');
+      }
     }
   }
   return errors;
@@ -246,7 +288,7 @@ export function validateChartTypeSpec(spec) {
 /**
  * Validates and throws in dev mode if invalid. In production, logs the
  * errors but doesn't throw — broken specs would already have been
- * caught at PR merge time, and a throw would crash the editor.
+ * caught at merge time, and a throw would crash the editor.
  *
  * @param {ChartTypeSpec} spec
  * @param {string} sourceLabel  e.g. "gauge.json" — included in errors

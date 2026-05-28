@@ -1599,3 +1599,143 @@
     }
   }
 }
+
+// ─── Spec-driven field renderers (Stage 2) ───────────────────────
+// These styles live at the document root (outside .component-editor)
+// because the spec-driven sections render at the same DOM level as
+// the legacy editor's metadata header — they don't sit under the
+// .component-editor wrapper's scope in every render path.
+
+.spec-field-helper {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  margin-bottom: spacing.$spacing-03;
+}
+
+// NullableNumber: checkbox-inline-with-NumberInput. When the
+// Auto checkbox is on, the NumberInput hides entirely.
+.spec-nullable-number {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+}
+
+// YAxisColumnsList: free list of {column, stack, axis?} rows.
+// Each row lays out: column-picker | (axis-picker when dual) |
+// stack-checkbox | remove-button.
+.spec-y-axis-columns-list {
+  .spec-yacl__rows {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+  }
+
+  .spec-yacl__row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) auto auto;
+    grid-template-areas: 'column stack remove';
+    gap: spacing.$spacing-04;
+    align-items: end;
+    padding: spacing.$spacing-03;
+    background: var(--cds-layer-01);
+    border-radius: 4px;
+
+    .spec-yacl__column { grid-area: column; }
+    .spec-yacl__axis   { grid-area: axis; }
+    .spec-yacl__stack  { grid-area: stack; }
+    .spec-yacl__remove { grid-area: remove; }
+
+    // When dual-axis is on, the Axis picker becomes visible and
+    // takes a column between column and stack.
+    &:has(.spec-yacl__axis) {
+      grid-template-columns: minmax(0, 2fr) minmax(7rem, 1fr) auto auto;
+      grid-template-areas: 'column axis stack remove';
+    }
+
+    @media (max-width: 720px) {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        'column remove'
+        'stack stack';
+
+      &:has(.spec-yacl__axis) {
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+          'column remove'
+          'axis axis'
+          'stack stack';
+      }
+    }
+  }
+
+  .spec-yacl__add {
+    margin-top: spacing.$spacing-04;
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+
+    .spec-yacl__cap-hint {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+    }
+  }
+}
+
+// ThresholdList: free list of {value, color, label?} rows.
+// Layout: value | color-swatch | label | remove.
+.spec-threshold-list {
+  .spec-threshold-list__rows {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+  }
+
+  .spec-threshold-list__row {
+    display: grid;
+    grid-template-columns: minmax(6rem, 1fr) auto minmax(0, 2fr) auto;
+    grid-template-areas: 'value color label remove';
+    gap: spacing.$spacing-04;
+    align-items: end;
+    padding: spacing.$spacing-03;
+    background: var(--cds-layer-01);
+    border-radius: 4px;
+
+    .spec-threshold-list__value  { grid-area: value; }
+    .spec-threshold-list__color  {
+      grid-area: color;
+      display: flex;
+      flex-direction: column;
+      gap: spacing.$spacing-02;
+      // The native color input is fixed-size; the label above it
+      // mirrors Carbon's labelText positioning so the row aligns
+      // visually with the NumberInput and TextInput labels.
+      input[type='color'] {
+        width: 2.5rem;
+        height: 2.5rem;
+        border: 1px solid var(--cds-border-subtle-01);
+        border-radius: 4px;
+        padding: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+    }
+    .spec-threshold-list__color-label {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+      min-height: 1rem;
+    }
+    .spec-threshold-list__label  { grid-area: label; }
+    .spec-threshold-list__remove { grid-area: remove; }
+
+    @media (max-width: 720px) {
+      grid-template-columns: 1fr auto auto;
+      grid-template-areas:
+        'value color remove'
+        'label label label';
+    }
+  }
+
+  .spec-threshold-list__add {
+    margin-top: spacing.$spacing-04;
+  }
+}

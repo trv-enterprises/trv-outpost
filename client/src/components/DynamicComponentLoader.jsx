@@ -42,6 +42,7 @@ import {
 // happens once at app startup in main.jsx.
 import { AgGridReact } from 'ag-grid-react';
 import { useDataviewLayout } from '../hooks/useDataviewLayout';
+import SpecDrivenChart from '../chart-codegen/SpecDrivenChart';
 
 // Context to provide transforms to child components
 const TransformsContext = createContext(null);
@@ -51,7 +52,11 @@ const TransformsContext = createContext(null);
 // destructures `config` from useData()'s return rather than from props — so
 // we mirror it onto the useData return value as a convenience to avoid
 // chart-by-chart fixes.
-const ComponentConfigContext = createContext(null);
+// Exported so spec-driven shells (SpecDrivenChart) can read the chart's
+// full config (data_mapping, options, chart_type, etc.) without having
+// to thread props through. Internal eval'd components don't need this —
+// they already destructure `config` from useData()'s return shape.
+export const ComponentConfigContext = createContext(null);
 
 // Context that exposes the live data (columns + rows) and stream state
 // for the chart in this subtree. Populated by DynamicComponentLoader so
@@ -234,6 +239,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         'TableToolbarSearch',
         'AgGridReact',
         'useDataviewLayout',
+        'SpecDrivenChart',
         `
         ${transformedCode}
         return typeof Component !== 'undefined' ? Component :
@@ -273,7 +279,8 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         TableToolbarContent,
         TableToolbarSearch,
         AgGridReact,
-        useDataviewLayout
+        useDataviewLayout,
+        SpecDrivenChart
       );
 
       setComponent(() => LoadedComponent);

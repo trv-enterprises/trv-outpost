@@ -48,6 +48,7 @@ import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
 import { getChartTypeSpec } from '../chart-spec';
 import { getCodegenTemplateForChartType } from '../chart-codegen';
+import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import './ComponentEditor.scss';
 
 // Chart types available
@@ -3080,8 +3081,147 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {/* Chart Options Section - Bar/Line/Area */}
-                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && (
+                {/* Spec-driven sections for line (Stage 2). When the
+                    editor flag is on AND the chart_type has a spec,
+                    render its sections (Data Mapping, Chart Options,
+                    Performance, Y-axis ranges, Tooltip, Legend,
+                    Thresholds). The legacy Bar/Line/Area block below
+                    is suppressed for line in that case to avoid
+                    rendering both. Bar and area continue to use the
+                    legacy block until they migrate. */}
+                {!showCustomCode && chartType === 'line' && chartSpecEditorEnabled && getChartTypeSpec('line') && (
+                  <SpecDrivenSections
+                    spec={getChartTypeSpec('line')}
+                    availableColumns={availableColumns}
+                    formState={{
+                      // data_mapping
+                      multipleYAxis: chartTypeConfig.multipleYAxis && yAxisColumns.length === 2,
+                      y_axis_columns: yAxisColumns.map((col, i) => ({
+                        column: col,
+                        stack: Boolean(chartOptions.chartStacked),
+                        axis: i === 1 && chartTypeConfig.multipleYAxis ? 'right' : 'left',
+                      })),
+                      x_axis_column: xAxisColumn,
+                      series_column: seriesColumn,
+                      // chart_options
+                      chart_smooth: chartOptions.chartSmooth !== false,
+                      chart_show_data_labels: Boolean(chartOptions.chartShowDataLabels),
+                      chart_show_zoom_slider: Boolean(chartOptions.chartShowZoomSlider),
+                      show_symbol: chartOptions.showSymbol !== false,
+                      // perf
+                      sampling: chartOptions.sampling || 'off',
+                      // y range
+                      y_left_min: chartOptions.yAxisRange?.left?.min ?? null,
+                      y_left_max: chartOptions.yAxisRange?.left?.max ?? null,
+                      y_left_scale: chartOptions.yAxisRange?.left?.scale || 'linear',
+                      y_right_min: chartOptions.yAxisRange?.right?.min ?? null,
+                      y_right_max: chartOptions.yAxisRange?.right?.max ?? null,
+                      y_right_scale: chartOptions.yAxisRange?.right?.scale || 'linear',
+                      // tooltip
+                      tooltip_mode: chartOptions.tooltip?.mode || 'multi',
+                      tooltip_format: chartOptions.tooltip?.format || 'auto',
+                      tooltip_decimals: chartOptions.tooltip?.decimals ?? null,
+                      tooltip_units: chartOptions.tooltip?.units || '',
+                      tooltip_custom_formatter: chartOptions.tooltip?.customFormatter || '',
+                      // legend
+                      legend_show: chartOptions.legend?.show !== false,
+                      legend_position: chartOptions.legend?.position || 'top',
+                      // thresholds
+                      y_thresholds: Array.isArray(chartOptions.yThresholds) ? chartOptions.yThresholds : [],
+                      y_threshold_render_mode: chartOptions.yThresholdRenderMode || 'line',
+                    }}
+                    onFieldChange={(fieldId, value) => {
+                      switch (fieldId) {
+                        case 'multipleYAxis': {
+                          // Mode flip writes into yAxisColumns + chartTypeConfig.
+                          // Soft block: if turning ON and we already have ≥3 columns,
+                          // refuse — user must trim first.
+                          if (value && yAxisColumns.length > 2) {
+                            // No-op; the helper text in the spec section explains.
+                            return;
+                          }
+                          // Mode lives on CHART_TYPE_CONFIG; toggle the panel's
+                          // session intent by capping/uncapping yAxisColumns.
+                          if (value && yAxisColumns.length === 1 && availableColumns.length > 1) {
+                            const next = availableColumns.find((c) => c !== yAxisColumns[0]);
+                            if (next) setYAxisColumns([yAxisColumns[0], next]);
+                          }
+                          break;
+                        }
+                        case 'y_axis_columns': {
+                          // Free list of {column, stack, axis}. Push columns into yAxisColumns.
+                          // Stack flag: the legacy single-stack toggle maps to "any entry stacked";
+                          // when ANY entry has stack:true, set chartStacked=true (best-effort
+                          // translation until per-column stack lands in codegen).
+                          const cols = (value || []).map((e) => e?.column).filter(Boolean);
+                          setYAxisColumns(cols);
+                          const anyStacked = (value || []).some((e) => e?.stack);
+                          updateChartOption('chartStacked', anyStacked);
+                          break;
+                        }
+                        case 'x_axis_column': setXAxisColumn(value); break;
+                        case 'series_column': setSeriesColumn(value); break;
+                        case 'chart_smooth': updateChartOption('chartSmooth', value); break;
+                        case 'chart_show_data_labels': updateChartOption('chartShowDataLabels', value); break;
+                        case 'chart_show_zoom_slider': updateChartOption('chartShowZoomSlider', value); break;
+                        case 'show_symbol': updateChartOption('showSymbol', value); break;
+                        case 'sampling': updateChartOption('sampling', value); break;
+                        case 'y_left_min':
+                          updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), left: { ...(chartOptions.yAxisRange?.left || {}), min: value } });
+                          break;
+                        case 'y_left_max':
+                          updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), left: { ...(chartOptions.yAxisRange?.left || {}), max: value } });
+                          break;
+                        case 'y_left_scale':
+                          updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), left: { ...(chartOptions.yAxisRange?.left || {}), scale: value } });
+                          break;
+                        case 'y_right_min':
+                          updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), right: { ...(chartOptions.yAxisRange?.right || {}), min: value } });
+                          break;
+                        case 'y_right_max':
+                          updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), right: { ...(chartOptions.yAxisRange?.right || {}), max: value } });
+                          break;
+                        case 'y_right_scale':
+                          updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), right: { ...(chartOptions.yAxisRange?.right || {}), scale: value } });
+                          break;
+                        case 'tooltip_mode':
+                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), mode: value });
+                          break;
+                        case 'tooltip_format':
+                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), format: value });
+                          break;
+                        case 'tooltip_decimals':
+                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), decimals: value });
+                          break;
+                        case 'tooltip_units':
+                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), units: value });
+                          break;
+                        case 'tooltip_custom_formatter':
+                          updateChartOption('tooltip', { ...(chartOptions.tooltip || {}), customFormatter: value });
+                          break;
+                        case 'legend_show':
+                          updateChartOption('legend', { ...(chartOptions.legend || {}), show: value });
+                          break;
+                        case 'legend_position':
+                          updateChartOption('legend', { ...(chartOptions.legend || {}), position: value });
+                          break;
+                        case 'y_thresholds':
+                          updateChartOption('yThresholds', value);
+                          break;
+                        case 'y_threshold_render_mode':
+                          updateChartOption('yThresholdRenderMode', value);
+                          break;
+                        default: break;
+                      }
+                    }}
+                  />
+                )}
+
+                {/* Chart Options Section - Bar/Line/Area (legacy).
+                    Suppressed for line when the spec-driven editor is
+                    on (the spec's chart-options section renders the
+                    equivalent fields plus the gap-fillers). */}
+                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && !(chartType === 'line' && chartSpecEditorEnabled && getChartTypeSpec('line')) && (
                   <div className="chart-options-section">
                     <h4>Chart Options</h4>
                     <Grid narrow>
@@ -4239,13 +4379,32 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
     }];`;
   }
 
-  // Spec-driven codegen dispatch — PR 1 (gauge only). When the
-  // chart_codegen_spec_driven admin flag is on AND a template is
-  // registered for this chart_type, route to the template and skip
-  // the legacy per-type branches below. Output must be byte-identical
-  // to the legacy branch for the same input — verified via the
-  // four-quadrant manual test in docs/TEST_PLAN.md Section Q.
+  // Spec-driven codegen dispatch.
+  //
+  // Two paths, in priority order:
+  //
+  //   Stage 2 (end-state shape, line+): if the chart_type has a
+  //   buildOption module under chart-spec/specs/<type>.js, emit
+  //   a tiny code string that mounts the generic <SpecDrivenChart>
+  //   shell. The shell calls buildOption with the saved config +
+  //   live data and renders ECharts directly — no string templating
+  //   beyond this one-liner emission.
+  //
+  //   Stage 1 (string-emitter port, gauge): if the chart_type has a
+  //   template_id-registered emitter, call its templateFn. Output
+  //   is byte-identical to the legacy branch.
+  //
+  // Stage 2 wins when both exist (Stage 1 gauge migrates to the
+  // buildOption shape in a later task; until then they're disjoint
+  // per chart type).
   if (useSpecCodegen) {
+    if (chartHasBuildOption(chartType)) {
+      // Stage 2 path. The emitted string just mounts the shell; the
+      // shell reads its config + data from contexts the loader
+      // already provides. No useData call here, no inlined chart
+      // shape — line.js owns all of that.
+      return `const Component = () => {\n  return <SpecDrivenChart specName="${chartType}" />;\n};`;
+    }
     const reg = getCodegenTemplateForChartType(chartType);
     if (reg) {
       return reg.templateFn({
