@@ -1542,10 +1542,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         x_axis: xAxisColumn,
         x_axis_label: xAxisLabel || '',
         x_axis_format: xAxisFormat || 'chart',
-        y_axis: yAxisColumns,
+        // Strip empty-column placeholders before saving. The spec-driven
+        // y_axis_columns_list keeps unfilled new rows around so the user
+        // can pick a column, but they shouldn't reach the wire — same for
+        // their index-aligned labels.
+        y_axis: yAxisColumns.filter((c) => typeof c === 'string' && c.length > 0),
         // y_axis_label kept for back-compat; y_axis_labels is the new per-column source of truth.
         y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
-        y_axis_labels: yAxisLabels && yAxisLabels.length > 0 ? yAxisLabels : undefined,
+        y_axis_labels: (() => {
+          if (!Array.isArray(yAxisLabels) || yAxisLabels.length === 0) return undefined;
+          // Realign labels with the filtered y_axis. We compute the index
+          // map from yAxisColumns → kept indices and project labels through it.
+          const keep = yAxisColumns.map((c, i) => (typeof c === 'string' && c.length > 0 ? i : -1)).filter((i) => i >= 0);
+          const aligned = keep.map((i) => yAxisLabels[i] || '');
+          return aligned.length > 0 ? aligned : undefined;
+        })(),
         group_by: groupByColumn || '',
         series: seriesColumn || '', // Column for series partitioning in time buckets
         filters: filters.length > 0 ? filters : [],
@@ -3170,24 +3181,37 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           updateChartOption('multipleYAxis', value);
                           // When turning ON with only one column picked, seed
                           // a second column so dual-axis has something on the
-                          // right side. When turning OFF, leave columns alone.
+                          // right side. When turning OFF, leave the column
+                          // count alone but normalize stored axis values to
+                          // 'left' so saved data doesn't carry stale 'right'
+                          // assignments from a previous dual-axis state.
                           if (value && yAxisColumns.length === 1 && availableColumns.length > 1) {
                             const next = availableColumns.find((c) => c !== yAxisColumns[0]);
                             if (next) setYAxisColumns([yAxisColumns[0], next]);
                           }
+                          // Note: the y_axis_columns entries' axis fields are
+                          // derived from chartOptions.multipleYAxis in the
+                          // formState builder, so they re-render correctly on
+                          // toggle. The actual saved record still uses the
+                          // legacy flat yAxisColumns array, so there's no
+                          // stale-axis field on disk.
                           break;
                         }
                         case 'y_axis_columns': {
                           // Free list of {column, label, stack, axis}.
-                          //   - Push columns into yAxisColumns.
+                          //   - Push columns into yAxisColumns. Empty-column
+                          //     entries (created by "+ Add column" before the
+                          //     user picks one) are preserved as empty strings
+                          //     so the row stays visible until the user picks
+                          //     a column or removes it. Filtering them out
+                          //     here would make the new row vanish on the
+                          //     next render.
                           //   - Push per-row labels into yAxisLabels
-                          //     (index-aligned to yAxisColumns). Empty
-                          //     strings preserved so the index alignment
-                          //     stays correct on save.
+                          //     (index-aligned to yAxisColumns).
                           //   - Best-effort translate "any entry stacked"
                           //     to the legacy single chartStacked toggle
                           //     until per-column stack lands in codegen.
-                          const cols = (value || []).map((e) => e?.column).filter(Boolean);
+                          const cols = (value || []).map((e) => (typeof e?.column === 'string' ? e.column : ''));
                           const labels = (value || []).map((e) => (typeof e?.label === 'string' ? e.label : ''));
                           setYAxisColumns(cols);
                           setYAxisLabels(labels);
