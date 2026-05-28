@@ -1648,6 +1648,17 @@
 // NumberInput drops below when Auto is unchecked. When Auto is
 // checked the input doesn't render at all so there's no
 // confusingly-zero NumberInput sitting under the label.
+//
+// Alignment notes:
+//   - Label sits at the cell's left edge (matches Carbon's own
+//     labelText position).
+//   - Auto checkbox sits inline directly after the label so the
+//     row reads "Min  [✓] Auto" rather than the label and checkbox
+//     getting pushed to opposite edges via space-between.
+//   - Header line has a fixed height that matches Carbon's own
+//     labelText line height — this aligns the NumberInput baseline
+//     in this cell with the Select baseline in the next cell when
+//     both are siblings in the same row.
 .spec-nullable-number {
   display: flex;
   flex-direction: column;
@@ -1655,9 +1666,14 @@
 
   &__header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     gap: spacing.$spacing-04;
+    // Match the height Carbon allocates for a single-line labelText
+    // so neighboring cells (Select, plain NumberInput) align at the
+    // top of their inputs.
+    min-height: 1rem;
+    line-height: 1;
   }
 
   &__label {
@@ -1665,6 +1681,28 @@
     font-size: 0.75rem;
     font-weight: 400;
     line-height: 1.2;
+    // Use Carbon's label margin so this cell's label sits at the
+    // same baseline as labelText in neighboring inputs.
+    margin: 0;
+  }
+
+  // Tighten the inline Auto checkbox so it doesn't introduce extra
+  // vertical space on the header row. Carbon's Checkbox at default
+  // size has its own 1.5rem min-height which pushes everything down.
+  .cds--form-item.cds--checkbox-wrapper {
+    margin: 0;
+    min-height: 0;
+  }
+  .cds--checkbox-label {
+    padding-left: spacing.$spacing-05; // room for the box + a small gap
+    min-height: 0;
+    line-height: 1;
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+  }
+  .cds--checkbox-label::before,
+  .cds--checkbox-label::after {
+    top: 0; // align the box with the label baseline rather than centered on the larger min-height
   }
 }
 
