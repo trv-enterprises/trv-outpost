@@ -6,6 +6,71 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.20.1] — 2026-05-27
+
+### Fixed
+
+- **SQL / EdgeLake / Prometheus / API queries failed with
+  "query is required."** ComponentEditor's `fetchPreviewData`
+  was POSTing the Query object flat (`{raw, type, params}`)
+  instead of wrapped in `{query: {raw, type, params}}` as the
+  server expects. Gin's JSON binder accepted the flat shape
+  with `Query=zero` and the adapter rejected. tsstore silently
+  masked the bug by falling back to "newest" + default row cap
+  when `raw` was empty.
+- **EdgeLake Raw mode rejected every query with "database
+  parameter is required for EdgeLake queries."** Visual mode
+  collected the database via `EdgeLakeQueryBuilder` but Raw
+  mode had no field. Raw mode now exposes a Database `<Select>`
+  populated from `list_edgelake_databases`, half-width, above
+  the SQL textarea.
+- **tsstore custom-code charts rendered "No data available"
+  in Preview.** The editor's chart-load logic only restored
+  `tsstoreQueryType` / `tsstoreLimit` when
+  `query_config.type === 'tsstore'`, but agent-built charts
+  save `type: "api"` while still using the tsstore DSL on
+  `raw`. Dispatch now reads the raw-string shape
+  (`since:DURATION` / `newest` / `oldest`) instead.
+- **Custom-code mode showed a misleading Details tab.** Hidden
+  entirely when `use_custom_code` is on; tabs are Preview /
+  Code only. The connection + query are already shown inline
+  inside the custom code, and the Details tab's Fetch Data
+  button doesn't drive custom code anyway.
+- **ControlEditor UI Configuration columns rendered at 37.5%
+  instead of 50%.** Carbon's modern Grid is 16-column at lg+,
+  so `Column lg={6}` was 6/16 not 6/12. Override the grid
+  container to 12 columns inside `.ui-config-section` so
+  `lg={6}` = 50%, `lg={4}` = 33%, `lg={3}` = 25% — without
+  rewriting 27 Column instances.
+- **EdgeLake Raw mode showed a generic SQL placeholder** that
+  didn't match the bare-SQL form the adapter wraps. Placeholder
+  updated to bare SQL.
+
+### Changed
+
+- **DisplayEditor tile treatment** consistent with the chart
+  side. Display Type tile + Frigate Alerts / Frigate Camera /
+  Weather config tiles all use the shared `.mapping-section`
+  bordered card. Tiles cap at 600px (half the editor
+  reference width); form controls inside cap at 580px so
+  they have a slight inset from the card padding.
+- **ControlEditor tile treatment** matches DisplayEditor.
+  Control Type, Connection, Command Configuration, UI
+  Configuration all wrapped in `.mapping-section` at 600px.
+- **ControlEditor Connection section** now mirrors the
+  chart-page picker — H4 header + hover `(i)` Tooltip
+  exposing the connection's description, hidden-label Select,
+  tag chips beneath (type chip + user tags with a Toggletip
+  "+N" overflow when more than 4 chips).
+- **ControlEditor Command Configuration** replaced Carbon Grid
+  + Column with a flex stack. Device Topic combobox no longer
+  truncates inside the narrow tile.
+- **ControlEditor Command Configuration empty-state.** Shows
+  "Select a connection first." when no connection is
+  selected — before, the legacy non-MQTT command form
+  (Action / Target / Payload Template) was showing by default
+  regardless of control type.
+
 ## [0.20.0] — 2026-05-27
 
 ### Added
