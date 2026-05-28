@@ -84,8 +84,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   Tier-B tools revealed via `describe_tool`. Large tool results
   stored server-side and summarized inline; the agent fetches
   the verbatim payload via `get_full_result` only when it needs
-  it. Two-switch gate (`assistant.enabled` admin setting +
-  `ANTHROPIC_API_KEY`); visible to Design-capable users.
+  it. Two-switch gate (`ANTHROPIC_API_KEY` env at deployment +
+  the user's `design` capability); the `assistant.enabled`
+  admin setting acts as a master kill-switch that defaults to
+  on, flip it off to disable the feature deployment-wide.
 - **Surface context.** The assistant sees the user's current
   mode (VIEW / EDIT), surface (DASHBOARD / COMPONENT /
   CONNECTION), panel list, and active edits. The agent refuses
