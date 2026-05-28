@@ -644,16 +644,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       if (tb) {
         console.log('[ComponentEditor] Loading time_bucket:', { tb, hasValidTimeBucket });
       }
-      // TSStore query config initialization
-      if (chart.query_config?.type === 'tsstore') {
-        const rawQuery = chart.query_config?.raw || 'newest';
-        if (rawQuery.startsWith('since:')) {
-          setTsstoreQueryType('since');
-          setTsstoreSinceDuration(rawQuery.substring(6)); // Extract duration after "since:"
-        } else {
-          setTsstoreQueryType(rawQuery);
-          setTsstoreSinceDuration('1h');
-        }
+      // TSStore query config initialization. We dispatch on the
+      // saved raw shape (since:DURATION / newest / oldest) rather
+      // than on query_config.type, because the type field is
+      // documentary for tsstore — agent-built charts often save
+      // type:"api" while still using the tsstore DSL on raw. The
+      // shape of raw is the source of truth for which control to
+      // restore.
+      const rawQuery = chart.query_config?.raw || '';
+      if (rawQuery.startsWith('since:')) {
+        setTsstoreQueryType('since');
+        setTsstoreSinceDuration(rawQuery.substring(6));
+        setTsstoreLimit(chart.query_config?.params?.limit || 100);
+      } else if (rawQuery === 'newest' || rawQuery === 'oldest') {
+        setTsstoreQueryType(rawQuery);
+        setTsstoreSinceDuration('1h');
         setTsstoreLimit(chart.query_config?.params?.limit || 100);
       }
       // EdgeLake query config initialization
@@ -1815,11 +1820,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           code mode (the user controls those things directly in their
           JSX, so the form values are no longer load-bearing). */}
       {componentType === 'chart' && (() => {
-        const tabs = [
-          { key: 'datasource', label: 'Details' },
-          { key: 'preview', label: 'Preview' },
-          { key: 'code', label: 'Code' },
-        ];
+        // In custom-code mode the Details tab is misleading — the
+        // connection + query are already shown inline inside the
+        // custom-code section above, and the Details tab's
+        // Fetch Data button doesn't drive custom code anyway. If
+        // the user wants to modify the data path they switch to
+        // generated code. Drop the tab entirely in this mode.
+        const tabs = showCustomCode
+          ? [
+              { key: 'preview', label: 'Preview' },
+              { key: 'code', label: 'Code' },
+            ]
+          : [
+              { key: 'datasource', label: 'Details' },
+              { key: 'preview', label: 'Preview' },
+              { key: 'code', label: 'Code' },
+            ];
         const activeKey = tabs[Math.min(activeTab, tabs.length - 1)]?.key || tabs[0].key;
         const isOnTab = (key) => activeKey === key;
         return (
