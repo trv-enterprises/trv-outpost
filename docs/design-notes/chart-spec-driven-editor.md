@@ -564,6 +564,32 @@ PR 1 audit results (gauge):
   transforms via `queryLanguageOwnsClientSideOps`. A
   "5-minute avg gauge" on SQL is written in the SQL; on MQTT
   it's client-side sliding-window + aggregation.
+
+  **Gating principle: chart-type AND connection-type.**
+  Every cross-chart panel (Filters, Aggregation+Sort+Limit,
+  Sliding Window, Time Bucket) now has a uniform shape:
+  ```jsx
+  {chartTypeConfig.hasX !== false && !queryLanguageOwnsClientSideOps && (...)}
+  ```
+  Both conditions must hold for the section to render. Chart
+  types opt out via `hasX: false` in `CHART_TYPE_CONFIG`;
+  connection types opt out via `queryLanguageOwnsClientSideOps`
+  (true for SQL, EdgeLake — anywhere the query language owns
+  filtering/aggregation). Sort+Limit gets its own
+  `hasSortLimit !== false` check nested inside the Aggregation
+  panel so gauge can keep aggregation while hiding sort+limit.
+  PR 1 added `hasFilters`, `hasSlidingWindow` to the flag set
+  alongside the existing `hasAggregation`, `hasTimeBucket`,
+  `hasSortLimit`.
+
+  Most chart types will leave every flag absent (= panel
+  shows). The mechanism exists so that the unusual types
+  (gauge, number) can opt out where their render semantics
+  don't compose with the transform — not so every chart
+  type has to declare every flag. Today only gauge and number
+  set explicit `false` values, and they only set
+  `hasSortLimit: false` and `hasTimeBucket: false` (single-
+  value render contract makes those two meaningless).
 - **The "single-value display" template applies to `number`
   too.** `CHART_TYPE_CONFIG.number` carried the same legacy
   flag drift and is fixed in the same pass (its comment

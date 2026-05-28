@@ -18,7 +18,8 @@
     "has_sort_limit": false,
     "has_visible_columns": false,
     "has_filters": true,
-    "has_aggregation": true
+    "has_aggregation": true,
+    "has_sliding_window": true
   },
   "sections": [
     {

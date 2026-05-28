@@ -3134,8 +3134,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 {/* Filters Section. Hidden when the connection's
                     query language already owns this responsibility
                     (SQL WHERE / EdgeLake WHERE) — see
-                    queryLanguageOwnsClientSideOps memo. */}
-                {!showCustomCode && !queryLanguageOwnsClientSideOps && (
+                    queryLanguageOwnsClientSideOps memo. Also hidden
+                    for chart types that opt out via
+                    hasFilters:false. */}
+                {!showCustomCode && chartTypeConfig.hasFilters !== false && !queryLanguageOwnsClientSideOps && (
                 <div className="filters-section">
                   <div className="section-header">
                     <h4>Filters (Client-Side)</h4>
@@ -3294,44 +3296,46 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           </Column>
                         )}
                       </Grid>
-                      <Grid narrow className="sort-row">
-                        <Column lg={4} md={4} sm={4}>
-                          <Select
-                            id="sort-by"
-                            labelText="Sort By"
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                          >
-                            <SelectItem value="" text="None" />
-                            {availableColumns.map(col => (
-                              <SelectItem key={col} value={col} text={col} />
-                            ))}
-                          </Select>
-                        </Column>
-                        <Column lg={4} md={4} sm={4}>
-                          <Select
-                            id="sort-order"
-                            labelText="Sort Order"
-                            value={sortOrder}
-                            onChange={(e) => setSortOrder(e.target.value)}
-                            disabled={!sortBy}
-                          >
-                            <SelectItem value="asc" text="Ascending" />
-                            <SelectItem value="desc" text="Descending" />
-                          </Select>
-                        </Column>
-                        <Column lg={4} md={4} sm={4}>
-                          <NumberInput
-                            id="limit-rows"
-                            label="Limit"
-                            value={limitRows}
-                            onChange={(e, { value }) => setLimitRows(value)}
-                            min={0}
-                            max={10000}
-                            helperText="0 = no limit"
-                          />
-                        </Column>
-                      </Grid>
+                      {chartTypeConfig.hasSortLimit !== false && (
+                        <Grid narrow className="sort-row">
+                          <Column lg={4} md={4} sm={4}>
+                            <Select
+                              id="sort-by"
+                              labelText="Sort By"
+                              value={sortBy}
+                              onChange={(e) => setSortBy(e.target.value)}
+                            >
+                              <SelectItem value="" text="None" />
+                              {availableColumns.map(col => (
+                                <SelectItem key={col} value={col} text={col} />
+                              ))}
+                            </Select>
+                          </Column>
+                          <Column lg={4} md={4} sm={4}>
+                            <Select
+                              id="sort-order"
+                              labelText="Sort Order"
+                              value={sortOrder}
+                              onChange={(e) => setSortOrder(e.target.value)}
+                              disabled={!sortBy}
+                            >
+                              <SelectItem value="asc" text="Ascending" />
+                              <SelectItem value="desc" text="Descending" />
+                            </Select>
+                          </Column>
+                          <Column lg={4} md={4} sm={4}>
+                            <NumberInput
+                              id="limit-rows"
+                              label="Limit"
+                              value={limitRows}
+                              onChange={(e, { value }) => setLimitRows(value)}
+                              min={0}
+                              max={10000}
+                              helperText="0 = no limit"
+                            />
+                          </Column>
+                        </Grid>
+                      )}
                     </>
                   ) : (
                     <div className="saved-values-display">
@@ -3414,8 +3418,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     expresses time bounds (SQL WHERE ts > … /
                     EdgeLake equivalent) — re-querying with a new
                     time literal is the natural pattern for those
-                    types. */}
-                {!showCustomCode && !queryLanguageOwnsClientSideOps && (
+                    types. Also hidden for chart types that opt out
+                    via hasSlidingWindow:false. */}
+                {!showCustomCode && chartTypeConfig.hasSlidingWindow !== false && !queryLanguageOwnsClientSideOps && (
                 <div className="sliding-window-section">
                   <div className="section-header">
                     <h4>Sliding Window (Time-Series)</h4>
