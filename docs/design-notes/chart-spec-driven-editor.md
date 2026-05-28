@@ -359,10 +359,13 @@ Server-side admin setting `chart_editor_spec_driven` (default
 
 `true` can be set globally OR per-user (via the existing
 user-prefs system) so we can dogfood the spec-driven path on
-specific accounts before flipping the default. Once both paths
-have rendered identically for every chart type in real-world
-use for a release cycle, the feature switch is removed and
-the legacy paths deleted.
+specific accounts before flipping the default. Once local
+verification (the two-corner byte-identical test + the
+automated `verify:chart-spec` check) passes for every chart
+type, the feature switch is removed and the legacy paths
+deleted. No homelab soak required — auth (the only meaningful
+prod-vs-local difference) isn't on this refactor's blast
+surface.
 
 ## Working model
 
@@ -546,18 +549,18 @@ both, leaving every other chart type on the legacy paths:
   each chart type.
 - Flag-off path still works end-to-end (deletion of the
   legacy paths is in Stage 3, not here).
-- Every existing chart in dev / homelab continues to save
-  and render correctly under both flag states.
+- Every existing chart in dev continues to save and render
+  correctly under both flag states.
 
 ### Stage 3 — flip defaults, delete legacy paths, reach end-state
 
 **Scope:**
 - Flip both feature flags' defaults to `true` in
   `server-go/config/user-configurable.yaml`.
-- After at least one release cycle on the new defaults with no
-  regressions reported, remove the legacy per-type JSX blocks
-  from ComponentEditor and the legacy `getDataDrivenChartCode`
-  + `getStaticChartCode` switches.
+- Once local verification is clean (two-corner byte-identical
+  test + `verify:chart-spec`), remove the legacy per-type JSX
+  blocks from ComponentEditor and the legacy
+  `getDataDrivenChartCode` + `getStaticChartCode` switches.
 - Complete the migration of per-chart templates from string-
   emitters to `buildOption(values, data) → option` pure
   functions. The static-vs-data-driven generator split
