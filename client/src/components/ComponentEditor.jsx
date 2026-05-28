@@ -274,7 +274,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const { isChartTypeEnabled, enabledDisplayTypes, enabledControlTypes } = useEnabledTypes();
   const [tags, setTags] = useState([]);
   const [componentType, setComponentType] = useState('chart'); // 'chart', 'control', or 'display'
-  const [chartType, setChartType] = useState('bar');
+  // Default chart type for new charts. Line is the most-used type
+  // for time-series dashboards (most data on this platform is
+  // time-stamped, and bar/area are special-case picks rather than
+  // the default).
+  const [chartType, setChartType] = useState('line');
   const [chartTypeModalOpen, setChartTypeModalOpen] = useState(false);
 
   // Control configuration (when componentType === 'control')
