@@ -34,7 +34,7 @@
         {
           "id": "x_axis_group",
           "label": "X-axis",
-          "layout": "row-3",
+          "layout": "row-4",
           "fields": [
             {
               "id": "x_axis_column",
@@ -97,14 +97,14 @@
         {
           "id": "series_group",
           "label": "Pivot",
+          "helperText": "Use a column's distinct values to split one value column into multiple series — e.g. a `location` column with warehouse/north/south produces three series. Leave empty when every series is already its own column.",
           "layout": "row-4",
           "fields": [
             {
               "id": "series_column",
               "binds": "data_mapping.series",
               "type": "column_select",
-              "label": "Pivot by column",
-              "helperText": "Use this column's distinct values to split one value column into multiple series — e.g. a `location` column with warehouse/north/south produces three series. Leave empty when every series is already its own column."
+              "label": "Pivot by column"
             }
           ]
         }
@@ -154,7 +154,7 @@
           "id": "perf",
           "label": "Performance",
           "helperText": "Downsampling for ≥10k-point series. LTTB preserves visual shape; average/max preserve statistics.",
-          "layout": "row-2",
+          "layout": "row-4",
           "fields": [
             {
               "id": "sampling",
@@ -246,7 +246,7 @@
           "id": "tooltip_config",
           "label": "Tooltip",
           "helperText": "Mode controls when the tooltip appears on hover; Decimals + Units format the values inside.",
-          "layout": "row-3",
+          "layout": "row-4",
           "fields": [
             {
               "id": "tooltip_mode",
