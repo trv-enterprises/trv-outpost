@@ -1,6 +1,6 @@
 # Chart Spec-Driven Editor
 
-**Status:** design, ready to start PR 1
+**Status:** design, ready to start Stage 1
 **Date:** 2026-05-28
 **Owner:** tom
 **Branch:** `chart-spec-driven-editor`
@@ -355,7 +355,7 @@ Server-side admin setting `chart_editor_spec_driven` (default
   unchanged.
 - `true` → editor renders from spec; legacy JSX paths skipped.
   Codegen still uses legacy `getDataDrivenChartCode` (changes
-  in PR 3, not PR 1).
+  in Stage 3, not Stage 1).
 
 `true` can be set globally OR per-user (via the existing
 user-prefs system) so we can dogfood the spec-driven path on
@@ -364,21 +364,82 @@ have rendered identically for every chart type in real-world
 use for a release cycle, the feature switch is removed and
 the legacy paths deleted.
 
-## Sequencing — three PRs
+## Working model
 
-### PR 1 — schema + dual-render + dual-codegen for ONE chart type
+This refactor runs as commits on the `chart-spec-driven-editor`
+branch, not as separate PRs. The "Stage 1 / 2 / 3" headings
+below describe **logical milestones** on the branch — each
+should be a coherent checkpoint where the branch builds, both
+flags can be flipped without regression, and the work to date
+can be paused. They are not separate review units.
 
-**Why PR 1 includes a generator:** The schema's
+When the branch finally lands on `main`, it can land as one
+merge or as a string of squashed merges along the stage
+boundaries; that's a decision for merge time, not for
+sequencing the work.
+
+## End-state shape (what we're aiming at)
+
+Two source-of-truth files per chart type, no third indirection:
+
+```
+client/src/chart-spec/specs/
+├── gauge.json     declarative — form, capabilities, save bindings
+├── gauge.js       small pure render function → ECharts option object
+├── line.json
+├── line.js
+└── ...
+```
+
+- The **JSON** owns everything declarative: section layout,
+  field types, save-time bindings, capability flags. This is
+  what a future standalone editor edits. Tom can hand-edit
+  it for a new chart type without re-reading 1000 lines of
+  JSX.
+- The **JS module** owns the per-chart ECharts shape. One
+  exported `buildOption(values, data)` function, returning the
+  ECharts `option` object. Roughly 40 lines per chart type
+  (vs. the current ~900 in `getDataDrivenChartCode`).
+- A **generic shell** wraps every chart: ResizeObserver,
+  loading/error states, `useData` integration, theme. One
+  copy, not per-type.
+- The JSON does NOT contain a `render_module` pointer to the
+  `.js`. Co-location by filename is the registry. Adding
+  `"render_module": "./gauge.js"` would be ceremony — the JSON
+  pretending to be configuration when it's really a stable
+  boilerplate line that mirrors the file next to it. Adding
+  a new chart type means writing both files; both files are
+  required; the wiring between them is a one-line entry in a
+  central registry alongside the field-type renderer registry
+  pattern that already exists.
+- The string-templated codegen path (today's "emit a code
+  string that DynamicComponentLoader evaluates at runtime")
+  goes away entirely. Charts become a normal React component
+  that imports `buildOption` and renders. The static-vs-data-
+  driven generator split also goes away — same `buildOption`
+  is called with sample data for previews and real data for
+  live charts.
+
+This end-state is the destination. The stages below are the
+path to get there incrementally without breaking everything
+at once.
+
+## Sequencing — three stages on the branch
+
+### Stage 1 — schema + dual-render + dual-codegen for ONE chart type
+
+**Why Stage 1 includes a generator:** The schema's
 `codegen.template_id` + `template_bindings` blocks are part of
-the schema's shape, not bolted on later. If we ship the editor
-side of the schema without exercising the codegen side, we may
-ship a schema that's elegant for forms but broken for code
-generation — and not discover that until PR 3 when the cost of
-fixing it is much higher. The generator in PR 1 is a forcing
-function: if the schema can't drive codegen for gauge, the
-schema is wrong, and we'd rather know in PR 1 than in PR 3.
+the schema's shape, not bolted on later. If we land the editor
+side without exercising the codegen side, we may end up with
+a schema that's elegant for forms but broken for code
+generation — and not discover that until Stage 3 when the cost
+of fixing it is much higher. The generator in Stage 1 is a
+forcing function: if the schema can't drive codegen for gauge,
+the schema is wrong, and we'd rather know in Stage 1 than in
+Stage 3.
 
-So PR 1 ships **two feature flags**, **gauge end-to-end** under
+Stage 1 ships **two feature flags**, **gauge end-to-end** under
 both, leaving every other chart type on the legacy paths:
 
 - `chart_editor_spec_driven` (admin setting): editor renders
@@ -422,7 +483,7 @@ both, leaving every other chart type on the legacy paths:
   save again — code should be byte-identical (codegen still
   legacy). Turn codegen flag on, save again — code should be
   byte-identical (now generated from template). Any drift is
-  a schema bug to fix before PR 2.
+  a schema bug to fix before Stage 2.
 
 **Acceptance:**
 - Gauge editor renders from spec when its flag is on, from
@@ -437,7 +498,7 @@ both, leaving every other chart type on the legacy paths:
 - One field type per category exercised (column_select, enum,
   number, text, boolean — gauge uses all but boolean; add a
   throwaway boolean field to the gauge spec for the test, or
-  defer the boolean-renderer test to PR 2).
+  defer the boolean-renderer test to Stage 2).
 
 **Why gauge first:**
 - Small fields set (~6 options).
@@ -447,10 +508,10 @@ both, leaving every other chart type on the legacy paths:
   current editor, so we can A/B compare quickly.
 - Stresses the conditional visibility (warning threshold
   visible only when threshold-style gauge is configured).
-- Library options block is small (`echarts` only) so PR 1
+- Library options block is small (`echarts` only) so Stage 1
   doesn't accidentally drift into library abstraction work.
 
-### PR 2 — migrate the remaining chart types end-to-end
+### Stage 2 — migrate the remaining chart types end-to-end
 
 **Scope:**
 - Write specs + templates for line, bar, area, pie, scatter,
@@ -459,12 +520,18 @@ both, leaving every other chart type on the legacy paths:
   per-type JSX block + per-type codegen branch to the spec +
   template.
 - Per-type whitelists (from
-  `chart-config-cleanup-and-editor-split.md` PR 2) become
+  `chart-config-cleanup-and-editor-split.md` Stage 2) become
   literally the spec's field list — no separate whitelist
   needed.
 - Cruft-strip migration in `server-go/internal/database/
   migrations.go` runs against the spec rather than a separate
   whitelist file.
+- Begin shifting per-type templates from "string emitter"
+  toward `buildOption(values, data) → option` pure functions,
+  per the end-state shape above. Each chart type migrated in
+  Stage 2 should land closer to that shape, even if not all
+  the way — the goal is to know what the final per-chart-type
+  surface looks like by the end of Stage 2.
 - AI tool descriptions reference the spec by name (e.g.
   `update_data_mapping` describes its fields as "see the
   current chart's spec").
@@ -476,20 +543,25 @@ both, leaving every other chart type on the legacy paths:
   byte-identical component_code for representative records of
   each chart type.
 - Flag-off path still works end-to-end (deletion of the
-  legacy paths is in PR 3, not here).
+  legacy paths is in Stage 3, not here).
 - Every existing chart in dev / homelab continues to save
   and render correctly under both flag states.
 
-### PR 3 — flip defaults, delete legacy paths
+### Stage 3 — flip defaults, delete legacy paths, reach end-state
 
 **Scope:**
 - Flip both feature flags' defaults to `true` in
   `server-go/config/user-configurable.yaml`.
-- After a release cycle on the new defaults with no
-  regressions reported, remove the legacy per-type JSX
-  blocks from ComponentEditor and the legacy
-  `getDataDrivenChartCode` switch.
-- Remove the feature flags themselves in a follow-up patch
+- After at least one release cycle on the new defaults with no
+  regressions reported, remove the legacy per-type JSX blocks
+  from ComponentEditor and the legacy `getDataDrivenChartCode`
+  + `getStaticChartCode` switches.
+- Complete the migration of per-chart templates from string-
+  emitters to `buildOption(values, data) → option` pure
+  functions. The static-vs-data-driven generator split
+  collapses into one call site that feeds either sample data
+  or `useData` rows into the same function.
+- Remove the feature flags themselves in a follow-up commit
   once the legacy code is gone.
 
 **Acceptance:**
@@ -497,9 +569,15 @@ both, leaving every other chart type on the legacy paths:
   4813).
 - No remaining `case 'gauge':` / `case 'line':` / etc.
   branches in the editor or codegen source. Adding chart
-  type N+1 is one .json file and one template.
+  type N+1 is one `.json` + one `.js` file under
+  `chart-spec/specs/`, plus one registry entry.
 - `chart_editor_spec_driven` and `chart_codegen_spec_driven`
   no longer exist as settings.
+- The string-template codegen path (the thing that produced
+  JSX strings for `DynamicComponentLoader` to evaluate at
+  runtime) is gone for spec-driven chart types. Charts are
+  normal React components that import `buildOption` from
+  their spec's `.js` module.
 
 ## Per-type field audit — what each spec must capture
 
@@ -522,7 +600,7 @@ Before migrating a chart type to the spec, audit it against:
    applies to the chart type lands as a new spec field during
    the migration, not as a separate follow-up.
 
-PR 1 audit results (gauge):
+Stage 1 audit results (gauge):
 
 - **Per-type fields captured.** min, max, warning_threshold,
   danger_threshold, unit, arc_thickness, value_column — every
@@ -578,7 +656,7 @@ PR 1 audit results (gauge):
   filtering/aggregation). Sort+Limit gets its own
   `hasSortLimit !== false` check nested inside the Aggregation
   panel so gauge can keep aggregation while hiding sort+limit.
-  PR 1 added `hasFilters`, `hasSlidingWindow` to the flag set
+  Stage 1 added `hasFilters`, `hasSlidingWindow` to the flag set
   alongside the existing `hasAggregation`, `hasTimeBucket`,
   `hasSortLimit`.
 
@@ -594,17 +672,17 @@ PR 1 audit results (gauge):
   too.** `CHART_TYPE_CONFIG.number` carried the same legacy
   flag drift and is fixed in the same pass (its comment
   explicitly says "everything downstream mirrors gauge
-  exactly"). When PR 2 writes `number.json`, the same
+  exactly"). When Stage 2 writes `number.json`, the same
   capabilities apply.
 - **Stored-but-ignored fields stripped on next save.** The
-  cruft strip from PR 2 of the chart-config-cleanup design
+  cruft strip from Stage 2 of the chart-config-cleanup design
   applies here too: when gauge saves through the spec path,
   data_mapping fields not in the spec's `binds` paths should
-  be projected out. Currently NOT in PR 1 scope; PR 1 round-
+  be projected out. Currently NOT in Stage 1 scope; Stage 1 round-
   trips the full chart record verbatim, deferring the strip
   to a PR-3-level pass. Track via [[chart-config-cleanup-and-editor-split]].
 
-## Open questions to resolve before PR 1
+## Open questions to resolve before Stage 1
 
 1. **Spec versioning when fields are added.** If the spec
    ships v1 with five gauge fields and v2 adds `gauge_unit`,
@@ -661,12 +739,12 @@ PR 1 audit results (gauge):
 
 - **The standalone editor goal pulls in a direction that
   competes with shipping fast.** Resist the urge to design
-  for the standalone editor in PR 1. Ship the schema +
+  for the standalone editor in Stage 1. Ship the schema +
   in-app renderer first; the standalone tool is a thin
   wrapper later.
 
 - **Old chart records that have cruft fields.** The cruft-
-  strip migration in PR 2 removes them on the next save, but
+  strip migration in Stage 2 removes them on the next save, but
   records that don't get re-saved keep their cruft until
   someone opens + saves. Acceptable; flagged in chart-config-
   cleanup-and-editor-split.md too.
@@ -681,12 +759,12 @@ PR 1 audit results (gauge):
 
 **Leaves intact** from `chart-config-cleanup-and-editor-split.md`:
 - The structural split (move codegen / state / tabs into
-  `client/src/components/component-editor/`). PR 1 should
+  `client/src/components/component-editor/`). Stage 1 should
   land the file-organization scaffold even before the spec
   has migrated all chart types.
 - The gap-filler list (axis ranges, log scale, tooltip,
   N columns, legend). These become spec entries instead of
-  hand-coded fields; PR 3 surfaces them in the schema.
+  hand-coded fields; Stage 3 surfaces them in the schema.
 - The migration to strip cruft on save.
 
 ## What stays in source forever (not in spec)
@@ -703,21 +781,21 @@ PR 1 audit results (gauge):
 
 ## Definition of done (full series)
 
-When PR 3 lands:
+When Stage 3 commits land:
 
 - `client/src/components/ComponentEditor.jsx` is <1000 lines
   (from 4813).
 - No `case 'gauge':` / `case 'line':` / per-chart-type
   branches in editor or codegen source.
 - Adding chart type N+1 = one `specs/foo.json` + one
-  `chart-codegen/echarts/templates/foo_v1.js` + (if needed)
-  one new field-type renderer. Zero edits to
-  ComponentEditor / getDataDrivenChartCode / the AI agent.
+  `specs/foo.js` (exporting `buildOption`) + (if needed) one
+  new field-type renderer. Zero edits to ComponentEditor /
+  getDataDrivenChartCode / the AI agent.
 - Schema validator catches malformed specs at build time.
 - `chart_editor_spec_driven` feature switch removed; only
   the spec-driven path exists.
 
-## Definition of done (PR 1 only)
+## Definition of done (Stage 1 only)
 
 - Branch `chart-spec-driven-editor`, two feature flags wired
   (`chart_editor_spec_driven`, `chart_codegen_spec_driven`).
@@ -735,17 +813,17 @@ When PR 3 lands:
   ("Spec-driven chart editor — gauge under feature flag").
 - Memory note updated: `chart-codegen-consolidation-todo`
   is superseded (both editor and codegen sides are now
-  spec-driven once PR 3 lands).
+  spec-driven once Stage 3 lands).
 
 ---
 
 ## TL;DR
 
 Stop hand-coding per-type JSX and per-type codegen. Move both
-behind a JSON schema. PR 1 ships **gauge end-to-end** (editor
+behind a JSON schema. Stage 1 ships **gauge end-to-end** (editor
 + codegen, both behind feature flags) — proves the schema can
-drive both sides. PR 2 migrates the remaining 8 chart types
-end-to-end. PR 3 flips the defaults, removes the legacy paths,
+drive both sides. Stage 2 migrates the remaining 8 chart types
+end-to-end. Stage 3 flips the defaults, removes the legacy paths,
 deletes the feature flags. The schema is forward-compatible
 with a future standalone editor; the codegen is forward-
 compatible with non-ECharts libraries via a `library:` field
