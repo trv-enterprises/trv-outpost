@@ -515,6 +515,17 @@
     }
   }
 
+  // EdgeLake Database picker in Raw mode — half the row width
+  // (database names are short; full-width reads as overweight).
+  .edgelake-database-row {
+    width: 50%;
+    margin-bottom: spacing.$spacing-05;
+
+    @media (max-width: 720px) {
+      width: 100%;
+    }
+  }
+
   // Query section card
   .query-section {
     margin-top: spacing.$spacing-05;

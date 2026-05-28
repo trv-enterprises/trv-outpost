@@ -328,6 +328,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // EdgeLake query configuration (for raw mode database param)
   const [edgelakeDatabase, setEdgelakeDatabase] = useState('');
+  // Database list for the Raw-mode picker. Populated lazily when
+  // the user lands on an EdgeLake connection so we don't query
+  // every connection at editor mount.
+  const [edgelakeDatabasesList, setEdgelakeDatabasesList] = useState([]);
+  const [edgelakeDatabasesLoading, setEdgelakeDatabasesLoading] = useState(false);
 
   // MQTT topic selection
   const [mqttTopics, setMqttTopics] = useState([]);
@@ -956,6 +961,33 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setSelectedDatasource(null);
     }
   }, [selectedConnectionId, connections]);
+
+  // Lazy-load EdgeLake database list when the active connection is
+  // EdgeLake. Visual mode (EdgeLakeQueryBuilder) loads its own
+  // copy; this populates the Raw-mode database Select so users
+  // don't have to hand-type the name. One fetch per connection
+  // change; resets when the connection switches.
+  useEffect(() => {
+    if (!selectedConnectionId || selectedDatasource?.type !== 'edgelake') {
+      setEdgelakeDatabasesList([]);
+      return;
+    }
+    let cancelled = false;
+    setEdgelakeDatabasesLoading(true);
+    apiClient.getEdgeLakeDatabases(selectedConnectionId)
+      .then((res) => {
+        if (cancelled) return;
+        setEdgelakeDatabasesList(Array.isArray(res?.databases) ? res.databases : []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEdgelakeDatabasesList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEdgelakeDatabasesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedConnectionId, selectedDatasource?.type]);
 
   // Derived datasource type flags (used in multiple places)
   const isTSStore = selectedDatasource?.type === 'tsstore';
@@ -2418,26 +2450,42 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     />
                   ) : (
                     <>
-                      {/* EdgeLake Raw mode also needs a database
-                          parameter — the AnyLog operator routes by
-                          database name (it's part of the wrapping
-                          the adapter does: sql <db> format=json
-                          "<your SQL>"). Visual mode collects this
-                          through EdgeLakeQueryBuilder; Raw mode had
-                          no field, so the server always returned
-                          "database parameter is required for
-                          EdgeLake queries." Add a small input here
-                          so Raw mode is actually usable. */}
+                      {/* EdgeLake Raw mode needs a database parameter
+                          (AnyLog routes by database — the adapter
+                          wraps the bare SQL as `sql <db> format=json
+                          "…"` server-side). Use a Select populated
+                          from list_edgelake_databases so the user
+                          doesn't have to remember the exact name;
+                          constrained to half the row width since
+                          database names are short. */}
                       {selectedDatasource.type === 'edgelake' && (
-                        <TextInput
-                          id="edgelake-database"
-                          labelText="Database"
-                          value={edgelakeDatabase}
-                          onChange={(e) => setEdgelakeDatabase(e.target.value)}
-                          placeholder="e.g. my_db"
-                          helperText="EdgeLake routes queries by database name (wraps in 'sql <db> format=json …')."
-                          style={{ marginBottom: '0.5rem' }}
-                        />
+                        <div className="edgelake-database-row">
+                          <Select
+                            id="edgelake-database"
+                            labelText="Database"
+                            value={edgelakeDatabase}
+                            onChange={(e) => setEdgelakeDatabase(e.target.value)}
+                            disabled={edgelakeDatabasesLoading}
+                            helperText={
+                              edgelakeDatabasesLoading
+                                ? 'Loading databases…'
+                                : 'EdgeLake routes queries by database name.'
+                            }
+                          >
+                            <SelectItem value="" text={edgelakeDatabasesLoading ? 'Loading…' : 'Select a database…'} />
+                            {edgelakeDatabasesList.map((db) => (
+                              <SelectItem key={db} value={db} text={db} />
+                            ))}
+                            {/* If the saved value isn't in the
+                                list (e.g. the list fetch failed,
+                                or the DB was renamed), keep it as
+                                a fallback option so the form
+                                doesn't silently clear it. */}
+                            {edgelakeDatabase && !edgelakeDatabasesList.includes(edgelakeDatabase) && (
+                              <SelectItem value={edgelakeDatabase} text={`${edgelakeDatabase} (not in list)`} />
+                            )}
+                          </Select>
+                        </div>
                       )}
                       <TextArea
                         id="query-raw"
