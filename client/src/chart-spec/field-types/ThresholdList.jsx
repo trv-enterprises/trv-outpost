@@ -58,7 +58,10 @@ export default function ThresholdListField({ field }) {
       <div className="spec-threshold-list__rows">
         {entries.map((entry, i) => (
           <div key={i} className="spec-threshold-list__row">
-            <div className="spec-threshold-list__value">
+            {/* Value + color in the first 1/4 cell: the swatch sits
+                inline with the numeric value so they read as one
+                composite "what threshold at what color" control. */}
+            <div className="spec-threshold-list__value-color">
               <NumberInput
                 id={`spec-${field.id}-${i}-value`}
                 label={i === 0 ? 'Value' : undefined}
@@ -68,17 +71,9 @@ export default function ThresholdListField({ field }) {
                 step={1}
                 hideSteppers
               />
-            </div>
-            <div className="spec-threshold-list__color">
-              {/* Native color input — Carbon doesn't ship a color
-                  picker, and rolling one is out of scope for a list
-                  renderer. The input renders a small swatch users
-                  click to get the OS picker. */}
-              <label htmlFor={`spec-${field.id}-${i}-color`} className="spec-threshold-list__color-label">
-                {i === 0 ? 'Color' : ''}
-              </label>
               <input
                 id={`spec-${field.id}-${i}-color`}
+                className="spec-threshold-list__swatch"
                 type="color"
                 value={entry.color}
                 onChange={(e) => updateEntry(i, { color: e.target.value })}

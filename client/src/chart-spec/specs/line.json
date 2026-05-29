@@ -283,7 +283,7 @@
         {
           "id": "legend_config",
           "label": "Legend",
-          "layout": "row-2",
+          "layout": "row-4",
           "fields": [
             {
               "id": "legend_show",
@@ -304,7 +304,8 @@
                 { "value": "bottom", "label": "Bottom" },
                 { "value": "left", "label": "Left" },
                 { "value": "right", "label": "Right" }
-              ]
+              ],
+              "visibleWhen": { "field": "legend_show", "operator": "truthy" }
             }
           ]
         },
@@ -319,7 +320,15 @@
               "binds": "options.yThresholds",
               "type": "threshold_list",
               "label": "Thresholds"
-            },
+            }
+          ]
+        },
+        {
+          "id": "thresholds_render_mode_group",
+          "label": "Threshold rendering",
+          "layout": "row-4",
+          "visibleWhen": { "field": "y_thresholds", "operator": "not_empty" },
+          "fields": [
             {
               "id": "y_threshold_render_mode",
               "binds": "options.yThresholdRenderMode",
@@ -330,8 +339,7 @@
                 { "value": "line", "label": "Reference line at value" },
                 { "value": "color_segments", "label": "Color the line by value" },
                 { "value": "both", "label": "Both" }
-              ],
-              "visibleWhen": { "field": "y_thresholds", "operator": "not_empty" }
+              ]
             }
           ]
         }

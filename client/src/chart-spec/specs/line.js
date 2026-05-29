@@ -143,6 +143,9 @@ function buildLegend(legend, dualAxis, multipleSeries) {
     case 'top':
     default:       block.top = 8; break;
   }
+  // Default selection mode (ECharts: 'multiple' = clicking a series
+  // toggles it independently). No explicit knob exposed — multi-toggle
+  // is the universal expectation.
   return block;
 }
 

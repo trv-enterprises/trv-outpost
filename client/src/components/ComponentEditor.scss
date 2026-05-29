@@ -1644,14 +1644,10 @@
   }
 }
 
-// NullableNumber: label on its own line at the top (matching Carbon
-// labelText positioning), then an input row below holding the
-// NumberInput + Auto checkbox side-by-side. Auto-checked → input
-// hides; the checkbox stays so the user can toggle back.
-//
-// The Auto checkbox sits at the same vertical position as the input
-// (input baseline), NOT next to the label — that way it visually
-// associates with the value, not the field name.
+// NullableNumber: label on top, then a single row holding the
+// NumberInput + Auto checkbox side-by-side. The NumberInput
+// shrinks to leave room for the checkbox; when Auto is checked
+// the input disappears and the row is just the checkbox.
 .spec-nullable-number {
   display: flex;
   flex-direction: column;
@@ -1661,26 +1657,40 @@
     color: var(--cds-text-secondary);
     font-size: 0.75rem;
     font-weight: 400;
-    line-height: 1.34; // Carbon's labelText line-height
+    line-height: 1.34;
     margin: 0;
   }
 
-  &__input-row {
+  &__row {
     display: flex;
-    align-items: center;
+    flex-wrap: nowrap;
+    align-items: stretch;
     gap: spacing.$spacing-04;
-    min-height: 2rem; // matches Carbon NumberInput size="sm" height
+    min-height: 2.5rem;
 
-    // NumberInput should grow to fill the row's remaining space.
+    // NumberInput shrinks to fill remaining space after the checkbox.
+    // The wrapper has its own internal padding-bottom for the helper
+    // text slot, which makes the input's bottom border sit a couple
+    // px higher than sibling Select/TextInput bottom borders in the
+    // same row. Stretch the wrapper to fill the row's height and
+    // push the input element to the bottom so the borders align.
     .cds--form-item.cds--number {
-      flex: 1 1 auto;
+      flex: 1 1 0;
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    // The NumberInput's helper container holds the input + decorative
+    // elements. Drop any bottom padding so the input's underline sits
+    // at the row's bottom edge, matching Select/TextInput.
+    .cds--number__input-wrapper {
+      margin-bottom: 0;
     }
   }
 
-  // Tighten the Auto checkbox so it doesn't introduce extra vertical
-  // space on the input row. Carbon's Checkbox at default size has
-  // its own 1.5rem min-height + form-item margin.
+  // Tighten Carbon's checkbox so it sits flush in the row.
   .cds--form-item.cds--checkbox-wrapper {
     margin: 0;
     min-height: 0;
@@ -1689,9 +1699,10 @@
   .cds--checkbox-label {
     padding-left: spacing.$spacing-05;
     min-height: 0;
-    line-height: 1;
+    line-height: 1.34;
     font-size: 0.75rem;
     color: var(--cds-text-secondary);
+    white-space: nowrap;
   }
 }
 
@@ -1739,25 +1750,25 @@
     }
   }
 
-  // Dual-axis mode: column 1/4 | label 1/4 | axis 1/4 | stack auto | remove.
-  // Three 1/4 fields plus the controls; no spacer column needed.
-  // Same calc as the single-axis row so the column edges still align
-  // with the X-axis subsection above.
+  // Dual-axis mode: column 1/4 | label 1/4 | axis 1/4 | spacer | remove.
+  // In-stack is hidden because stacking series across different axes
+  // doesn't produce meaningful values. Same quarter calc as the
+  // single-axis row so column edges still align with the X-axis
+  // subsection above.
   &--dual .spec-yacl__row {
     grid-template-columns:
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
-      auto auto;
-    grid-template-areas: 'column label axis stack remove';
+      1fr auto;
+    grid-template-areas: 'column label axis . remove';
 
     @media (max-width: 720px) {
       grid-template-columns: 1fr auto;
       grid-template-areas:
         'column remove'
         'label  label'
-        'axis   axis'
-        'stack  stack';
+        'axis   axis';
     }
   }
 
@@ -1783,52 +1794,58 @@
     gap: spacing.$spacing-03;
   }
 
-  // 1/4 widths: value 1/4 | color swatch | label 1/4 | spacer | remove.
-  // The 1fr spacer absorbs the remaining horizontal space so value +
-  // label don't stretch to fill it. Matches the y_axis_columns_list
-  // row layout pattern.
+  // Three quarter cells: value+color (composite) | label | remove.
+  // The 4th quarter stays empty for alignment with sibling row-4
+  // subsections. Math matches metadata-col--quarter exactly so the
+  // cell edges line up with the rest of the editor.
   .spec-threshold-list__row {
     display: grid;
-    grid-template-columns: 25% auto 25% 1fr auto;
-    grid-template-areas: 'value color label . remove';
-    gap: spacing.$spacing-04;
+    grid-template-columns:
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      calc(25% - #{spacing.$spacing-05} * 3 / 4)
+      1fr;
+    grid-template-areas: 'value-color label remove .';
+    gap: spacing.$spacing-05;
     align-items: end;
-    padding: spacing.$spacing-03;
-    background: var(--cds-layer-01);
-    border-radius: 4px;
 
-    .spec-threshold-list__value  { grid-area: value; }
-    .spec-threshold-list__color  {
-      grid-area: color;
+    .spec-threshold-list__value-color {
+      grid-area: value-color;
       display: flex;
-      flex-direction: column;
-      gap: spacing.$spacing-02;
-      // The native color input is fixed-size; the label above it
-      // mirrors Carbon's labelText positioning so the row aligns
-      // visually with the NumberInput and TextInput labels.
-      input[type='color'] {
-        width: 2.5rem;
-        height: 2.5rem;
-        border: 1px solid var(--cds-border-subtle-01);
-        border-radius: 4px;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
+      align-items: end;
+      gap: spacing.$spacing-03;
+
+      // NumberInput shrinks to fill remaining space next to the swatch.
+      .cds--form-item.cds--number {
+        flex: 1 1 0;
+        min-width: 0;
       }
     }
-    .spec-threshold-list__color-label {
-      color: var(--cds-text-secondary);
-      font-size: 0.75rem;
-      min-height: 1rem;
+
+    // Native color input sized to match Carbon NumberInput height
+    // so the swatch sits flush at the bottom border line.
+    .spec-threshold-list__swatch {
+      width: 2.5rem;
+      height: 2.5rem;
+      border: 1px solid var(--cds-border-subtle-01);
+      border-radius: 4px;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+      flex: 0 0 auto;
     }
+
     .spec-threshold-list__label  { grid-area: label; }
-    .spec-threshold-list__remove { grid-area: remove; }
+    .spec-threshold-list__remove {
+      grid-area: remove;
+      justify-self: start;
+    }
 
     @media (max-width: 720px) {
-      grid-template-columns: 1fr auto auto;
+      grid-template-columns: 1fr auto;
       grid-template-areas:
-        'value color remove'
-        'label label label';
+        'value-color remove'
+        'label       label';
     }
   }
 

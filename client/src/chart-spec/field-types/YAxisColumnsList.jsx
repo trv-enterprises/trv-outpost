@@ -118,14 +118,19 @@ export default function YAxisColumnsListField({ field }) {
                 </Select>
               </div>
             )}
-            <div className="spec-yacl__stack">
-              <Checkbox
-                id={`spec-${field.id}-${i}-stack`}
-                labelText="In stack"
-                checked={entry.stack}
-                onChange={(_e, { checked }) => updateEntry(i, { stack: checked })}
-              />
-            </div>
+            {/* In-stack only applies in single-axis mode. Dual-axis
+                series live on different scales, so summing them via
+                a stack group doesn't produce meaningful values. */}
+            {!isDualAxis && (
+              <div className="spec-yacl__stack">
+                <Checkbox
+                  id={`spec-${field.id}-${i}-stack`}
+                  labelText="In stack"
+                  checked={entry.stack}
+                  onChange={(_e, { checked }) => updateEntry(i, { stack: checked })}
+                />
+              </div>
+            )}
             <div className="spec-yacl__remove">
               <IconButton
                 kind="ghost"

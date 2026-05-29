@@ -1607,9 +1607,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
-      options: chartType === 'banded_bar'
-        ? { ...chartOptions, bandedBarStyle }
-        : chartOptions,
+      options: (() => {
+        if (chartType === 'banded_bar') {
+          return { ...chartOptions, bandedBarStyle };
+        }
+        // When dual-axis is on, the In-stack checkbox is hidden in
+        // the editor (stacking across different axes doesn't produce
+        // meaningful values). Strip the stale chartStacked flag from
+        // the wire so a hidden setting doesn't quietly persist.
+        if (chartType === 'line' && chartOptions.multipleYAxis && chartOptions.chartStacked) {
+          const { chartStacked: _drop, ...rest } = chartOptions;
+          return rest;
+        }
+        return chartOptions;
+      })(),
     };
 
     onSave(chartPayload);

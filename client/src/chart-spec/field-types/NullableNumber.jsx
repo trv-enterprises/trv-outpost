@@ -6,12 +6,15 @@ import { Checkbox, NumberInput } from '@carbon/react';
 import { useSpecRenderContext } from '../SpecContext';
 
 /**
- * Pattern B per-end auto: an "Auto" checkbox sits on the input row,
- * not the label row. The field label is on its own line at the top
- * (matching the position Carbon labelText uses for plain NumberInput
- * + Select fields). Below: input + Auto checkbox side-by-side.
- * When Auto is checked the input hides; the checkbox stays so the
- * user can toggle back. Storage shape: `null | number`. Default null.
+ * Per-end auto. Cell layout:
+ *
+ *   Min
+ *   [NumberInput] [✓] Auto    ← side-by-side on one row
+ *
+ * The Auto checkbox is always visible. The NumberInput hides
+ * when Auto is checked (the row becomes just the checkbox).
+ *
+ * Storage shape: `null | number`. Default null (auto).
  */
 export default function NullableNumberField({ field }) {
   const { formState, onFieldChange } = useSpecRenderContext();
@@ -19,10 +22,23 @@ export default function NullableNumberField({ field }) {
   const value = raw == null ? null : Number(raw);
   const isAuto = value == null;
 
+  const handleAutoToggle = (_e, { checked }) => {
+    if (checked) {
+      onFieldChange(field.id, null);
+    } else {
+      const fallback = field.default != null && Number.isFinite(Number(field.default))
+        ? Number(field.default)
+        : 0;
+      onFieldChange(field.id, fallback);
+    }
+  };
+
   return (
     <div className="spec-nullable-number">
-      <label className="spec-nullable-number__label">{field.label}</label>
-      <div className="spec-nullable-number__input-row">
+      <label className="spec-nullable-number__label" htmlFor={`spec-${field.id}`}>
+        {field.label}
+      </label>
+      <div className="spec-nullable-number__row">
         {!isAuto && (
           <NumberInput
             id={`spec-${field.id}`}
@@ -35,23 +51,13 @@ export default function NullableNumberField({ field }) {
             max={field.max ?? 1000000}
             step={field.step ?? 1}
             hideSteppers
-            size="sm"
           />
         )}
         <Checkbox
           id={`spec-${field.id}-auto`}
           labelText="Auto"
           checked={isAuto}
-          onChange={(_e, { checked }) => {
-            if (checked) {
-              onFieldChange(field.id, null);
-            } else {
-              const fallback = field.default != null && Number.isFinite(Number(field.default))
-                ? Number(field.default)
-                : 0;
-              onFieldChange(field.id, fallback);
-            }
-          }}
+          onChange={handleAutoToggle}
         />
       </div>
     </div>
