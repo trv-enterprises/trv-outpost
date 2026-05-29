@@ -2611,7 +2611,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(['line', 'bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && !(['line', 'bar', 'area'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3123,7 +3123,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -3290,7 +3290,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 {/* Chart Options Section - Bar/Line/Area (legacy).
                     Suppressed for spec-driven chart types (line, bar);
                     area still uses this block until its migration. */}
-                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && !(['line', 'bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && !(['line', 'bar', 'area'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                   <div className="chart-options-section">
                     <h4>Chart Options</h4>
                     <Grid narrow>
@@ -4496,13 +4496,10 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
   //   live data and renders ECharts directly — no string templating
   //   beyond this one-liner emission.
   //
-  //   Stage 1 (string-emitter port, gauge): if the chart_type has a
-  //   template_id-registered emitter, call its templateFn. Output
-  //   is byte-identical to the legacy branch.
-  //
-  // Stage 2 wins when both exist (Stage 1 gauge migrates to the
-  // buildOption shape in a later task; until then they're disjoint
-  // per chart type).
+  //   Stage 1 (string-emitter template): the fallback for any chart
+  //   type with a template_id but no buildOption module yet. Gauge has
+  //   migrated to buildOption, so gauge_v1 is no longer reached; the
+  //   template path stays for future not-yet-migrated types.
   if (useSpecCodegen) {
     if (chartHasBuildOption(chartType)) {
       // Stage 2 path. The emitted string just mounts the shell; the

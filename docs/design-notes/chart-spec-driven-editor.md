@@ -100,6 +100,25 @@ options panel for the library-specific block.
   primitives (`single-column`, `row-2`, `row-3`, `full-width`,
   `inset-card`) covers ~95% of editor needs. Don't build
   Figma.
+- **JSON-first layout — JS only when unreasonable in JSON
+  (the positive form of the rule above).** The default home for
+  *everything* about a field — which section/row it's in, its
+  half/third/quarter width, its conditional visibility — is the
+  JSON spec, interpreted by the one generic
+  `SpecDrivenSections.jsx`. Drop into a hand-written
+  `field-types/*.jsx` renderer **only** when a field's *internal*
+  layout can't be declared: variable-length / composite-row /
+  add-remove widgets (`YAxisColumnsList`, `ThresholdList`). The
+  bar is "unreasonable to express in JSON," not "slightly more
+  convenient in JS." Litmus, in order: (1) a `row-N` primitive +
+  an existing simple field type → JSON; (2) needs a *new simple*
+  field type (one Carbon input, no internal layout) → ~20-line
+  `field-types/` wrapper, still referenced from JSON; (3) a
+  variable-length composite row → bespoke `field-types/*.jsx`,
+  the only accepted "JS layout," kept rare. Note the renderer
+  (`<type>.js` / `buildOption`) holds **no** editor layout — it's
+  runtime-only; editor layout lives in the JSON + field-type
+  renderers, never in the chart's render module.
 - **Don't auto-generate the AI agent's tool schemas in this
   refactor.** It's the eventual payoff but it's a refactor on
   top of a refactor. Land editor + codegen on the spec first;

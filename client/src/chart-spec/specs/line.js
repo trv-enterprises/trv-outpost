@@ -22,11 +22,19 @@
 // shape that the rest of Stage 2 will follow. After line lands and
 // works, gauge migrates to the same shape (task #168).
 
+import {
+  COLOR_PRIMARY,
+  COLOR_SECONDARY,
+  COLOR_TEXT_SECONDARY,
+  TRANSPARENT_BG,
+  makeValueFormatter,
+} from '../option-helpers.js';
+
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
 // (matches legacy). N-series single-axis mode uses ECharts' default
 // palette by leaving series.itemStyle.color unset.
-const LEFT_AXIS_COLOR = '#0f62fe';
-const RIGHT_AXIS_COLOR = '#8a3ffc';
+const LEFT_AXIS_COLOR = COLOR_PRIMARY;
+const RIGHT_AXIS_COLOR = COLOR_SECONDARY;
 
 // Internal stack-group name. Single string is fine — we only support
 // one stack group per chart for now. Multi-group would be a future
@@ -121,15 +129,7 @@ function buildTooltip(tt) {
   // is the right answer when a formatter genuinely needs JS, and
   // adding a freeform code field here multiplies the eval surface
   // for marginal benefit. The 80% case (decimals + units) is here.
-  const decimals = tt.decimals == null ? null : Number(tt.decimals);
-  const units = tt.units || '';
-  const formatValue = (val) => {
-    if (val == null) return '';
-    const num = Number(val);
-    if (!Number.isFinite(num)) return String(val);
-    const str = decimals == null ? String(num) : num.toFixed(decimals);
-    return units ? `${str} ${units}` : str;
-  };
+  const formatValue = makeValueFormatter(tt.decimals, tt.units);
   // Real function on the option literal — Stage 2 buildOption returns
   // a live JS object to React, so we don't need the __raw marker
   // trick the original draft used to keep it JSON-serializable.
@@ -150,7 +150,7 @@ function buildLegend(legend, dualAxis, multipleSeries) {
   const pos = legend?.position || 'top';
   const block = {
     type: 'scroll',
-    textStyle: { color: '#c6c6c6' },
+    textStyle: { color: COLOR_TEXT_SECONDARY },
   };
   switch (pos) {
     case 'bottom': block.bottom = 0; break;
@@ -381,7 +381,11 @@ export function buildOption(values, data, helpers = {}) {
   // X-axis literal. Name renders below the axis when xAxisLabel is set;
   // empty label means no name (axis is silent — matches "leave empty
   // to hide" helper text in the spec).
+  // boundaryGap:false for area so the fill starts flush against the
+  // y-axis (matches legacy area codegen); line/bar keep the default
+  // (true) so category ticks sit centered under their gridlines.
   const xAxis = { type: 'category', data: categories };
+  if (chartType === 'area') xAxis.boundaryGap = false;
   if (xAxisLabel) {
     xAxis.name = xAxisLabel;
     xAxis.nameLocation = 'middle';
@@ -403,7 +407,7 @@ export function buildOption(values, data, helpers = {}) {
   const gridLeft = legendPos === 'left' ? 135 : 50;
   const gridRight = legendPos === 'right' ? 135 : 20;
   const option = {
-    backgroundColor: 'transparent',
+    backgroundColor: TRANSPARENT_BG,
     tooltip,
     grid: { top: gridTop, left: gridLeft, right: gridRight, bottom: gridBottom, containLabel: true },
     xAxis,
@@ -422,8 +426,8 @@ export function buildOption(values, data, helpers = {}) {
         backgroundColor: '#262626',
         dataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.3 } },
         selectedDataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.6 } },
-        handleStyle: { color: '#0f62fe' },
-        textStyle: { color: '#c6c6c6' },
+        handleStyle: { color: COLOR_PRIMARY },
+        textStyle: { color: COLOR_TEXT_SECONDARY },
       },
       { type: 'inside', xAxisIndex: [0], start: 70, end: 100 },
     ];

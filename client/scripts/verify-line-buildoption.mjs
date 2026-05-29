@@ -246,14 +246,17 @@ const data = {
   check('case 12: area has areaStyle', !!opt.series[0]?.areaStyle);
 }
 
-// --- Case 13: chart title ---
+// --- Case 13: title is NOT in the option (ChartShell owns it) ---
 {
   const values = {
     data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] },
     options: {},
   };
   const opt = buildOption(values, data, { formatCellValue, chartType: 'line', chartName: 'CPU' });
-  check('case 13: title text set when chartName provided', opt.title?.text === 'CPU');
+  // Title renders as an HTML header in ChartShell, outside ECharts —
+  // unified across line/bar/area/gauge. buildOption must leave
+  // option.title unset so it can't collide with the top legend.
+  check('case 13: buildOption does NOT set option.title (ChartShell owns it)', opt.title === undefined);
 }
 
 // --- Case 14: per-column label overrides series name ---

@@ -109,22 +109,5 @@
         }
       ]
     }
-  ],
-  "codegen": {
-    "library": "echarts",
-    "template_id": "gauge_v1",
-    "template_bindings": {
-      "value_source": {
-        "kind": "first_row_y_value",
-        "y_axis_index": 0
-      },
-      "min": "options.gaugeMin",
-      "max": "options.gaugeMax",
-      "warning_threshold_pct": "options.gaugeWarningThreshold",
-      "danger_threshold_pct": "options.gaugeDangerThreshold",
-      "unit": "options.gaugeUnit",
-      "line_thickness_pct": "options.gaugeLineThickness",
-      "query_limit": 1
-    }
-  }
+  ]
 }

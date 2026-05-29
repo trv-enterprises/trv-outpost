@@ -3,12 +3,17 @@
 // See LICENSE file for details.
 
 import { getChartTypeSpec } from '../chart-spec';
-import { renderGaugeV1 } from './echarts/templates/gauge_v1';
 
-// template_id → render(ctx) function. PR 1: gauge only.
-const TEMPLATES = {
-  gauge_v1: renderGaugeV1,
-};
+// template_id → render(ctx) function.
+//
+// Currently EMPTY: gauge (the only Stage 1 string-emitter) has migrated
+// to the end-state buildOption shape, so no chart type uses this path
+// anymore. The registry + lookup are retained as the documented seam for
+// any future chart type that needs a string-emitter template before it
+// can move to buildOption. With the map empty,
+// getCodegenTemplateForChartType always returns null and callers fall
+// back to the legacy getDataDrivenChartCode dispatch.
+const TEMPLATES = {};
 
 /**
  * Look up the codegen template for a chart type via its spec. Returns

@@ -13,16 +13,26 @@
 // any future per-route bundles.
 
 import { buildOption as buildLineOption } from './specs/line';
+import { buildOption as buildGaugeOption } from './specs/gauge';
 
 const BUILD_OPTIONS = {
   line: buildLineOption,
+  // gauge migrated from the Stage 1 string-emitter (gauge_v1.js) to the
+  // end-state buildOption shape. Its own module — gauge is structurally
+  // unlike line (single dial value, no axes), so it doesn't share the
+  // line dispatch.
+  gauge: buildGaugeOption,
   // bar shares line.js's render — line.js dispatches on chartType.
   // The form spec (bar.json) differs from line.json (no smoothing /
   // symbol / sampling controls), so the editor still gets bar-specific
   // sections; only the render is shared.
   bar: buildLineOption,
-  // area, pie, scatter, number, dataview, banded_bar — added as each
-  // chart type's <type>.js (or shared dispatch) lands during Stage 2.
+  // area is line + fill — line.js sets areaStyle and boundaryGap:false
+  // when chartType==='area'. Keeps the full chart-options set (smooth,
+  // showSymbol, sampling), unlike bar.
+  area: buildLineOption,
+  // pie, scatter, number, dataview, banded_bar — added as each chart
+  // type's <type>.js (or shared dispatch) lands during Stage 2.
 };
 
 /**
