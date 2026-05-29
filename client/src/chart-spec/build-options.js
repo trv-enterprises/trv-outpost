@@ -14,6 +14,7 @@
 
 import { buildOption as buildLineOption } from './specs/line';
 import { buildOption as buildGaugeOption } from './specs/gauge';
+import { buildOption as buildPieOption } from './specs/pie';
 
 const BUILD_OPTIONS = {
   line: buildLineOption,
@@ -31,8 +32,11 @@ const BUILD_OPTIONS = {
   // when chartType==='area'. Keeps the full chart-options set (smooth,
   // showSymbol, sampling), unlike bar.
   area: buildLineOption,
-  // pie, scatter, number, dataview, banded_bar — added as each chart
-  // type's <type>.js (or shared dispatch) lands during Stage 2.
+  // pie has its own module — one label column + one value column, no
+  // x/y axes, so it doesn't share the line dispatch.
+  pie: buildPieOption,
+  // scatter, number, dataview, banded_bar — added as each chart type's
+  // <type>.js (or shared dispatch) lands during Stage 2.
 };
 
 /**

@@ -7,15 +7,17 @@ import gaugeSpec from './specs/gauge.json';
 import lineSpec from './specs/line.json';
 import barSpec from './specs/bar.json';
 import areaSpec from './specs/area.json';
+import pieSpec from './specs/pie.json';
 
 // Validate every spec at module load so a malformed spec fails fast in
-// dev. Stage 1 shipped gauge; Stage 2: line, bar, area. Other chart
-// types follow.
+// dev. Stage 1 shipped gauge; Stage 2: line, bar, area, pie. Other
+// chart types follow.
 const SPECS = {
   gauge: assertValidChartTypeSpec(gaugeSpec, 'specs/gauge.json'),
   line: assertValidChartTypeSpec(lineSpec, 'specs/line.json'),
   bar: assertValidChartTypeSpec(barSpec, 'specs/bar.json'),
   area: assertValidChartTypeSpec(areaSpec, 'specs/area.json'),
+  pie: assertValidChartTypeSpec(pieSpec, 'specs/pie.json'),
 };
 
 /**

@@ -1,0 +1,146 @@
+{
+  "schema_version": "1",
+  "chart_type": "pie",
+  "library": "echarts",
+  "display": {
+    "label": "Pie Chart",
+    "icon": "ChartPie",
+    "description": "Show proportions of a whole"
+  },
+  "capabilities": {
+    "requires_x_axis": false,
+    "requires_y_axis": false,
+    "multiple_y_axis": false,
+    "single_axis_n_columns": false,
+    "has_pivot_series": false,
+    "has_axis_labels": false,
+    "has_x_axis_format": false,
+    "has_time_bucket": false,
+    "has_sort_limit": true,
+    "has_visible_columns": false,
+    "has_filters": true,
+    "has_aggregation": true,
+    "has_sliding_window": false,
+    "has_legend_config": true,
+    "has_tooltip_config": true,
+    "has_axis_range": false,
+    "has_thresholds": false
+  },
+  "sections": [
+    {
+      "id": "data_mapping",
+      "label": "Data Mapping",
+      "subsections": [
+        {
+          "id": "slice_group",
+          "label": "Slices",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "label_column",
+              "binds": "data_mapping.x_axis",
+              "type": "column_select",
+              "label": "Label column",
+              "required": true,
+              "helperText": "Category for each slice (e.g. region, status)."
+            },
+            {
+              "id": "value_column",
+              "binds": "data_mapping.y_axis[0]",
+              "type": "column_select",
+              "label": "Value column",
+              "required": true,
+              "helperText": "Numeric column sized into each slice."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chart_options",
+      "label": "Chart Options",
+      "subsections": [
+        {
+          "id": "display",
+          "label": "Display",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "pie_inner_radius",
+              "binds": "options.pieInnerRadius",
+              "type": "number",
+              "label": "Inner radius %",
+              "default": 0,
+              "min": 0,
+              "max": 90,
+              "step": 5,
+              "helperText": "0 = pie, >0 = donut."
+            },
+            {
+              "id": "pie_show_labels",
+              "binds": "options.pieShowLabels",
+              "type": "boolean",
+              "label": "Show slice labels",
+              "default": true
+            }
+          ]
+        },
+        {
+          "id": "tooltip_config",
+          "label": "Tooltip",
+          "helperText": "Decimals + Units format the value shown alongside the percentage.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "tooltip_decimals",
+              "binds": "options.tooltip.decimals",
+              "type": "nullable_number",
+              "label": "Decimals",
+              "default": null,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            {
+              "id": "tooltip_units",
+              "binds": "options.tooltip.units",
+              "type": "text",
+              "label": "Units suffix",
+              "default": "",
+              "placeholder": "e.g. GB, req/s"
+            }
+          ]
+        },
+        {
+          "id": "legend_config",
+          "label": "Legend",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "legend_show",
+              "binds": "options.legend.show",
+              "type": "boolean",
+              "label": "Show legend",
+              "default": true
+            },
+            {
+              "id": "legend_position",
+              "binds": "options.legend.position",
+              "type": "enum",
+              "label": "Position",
+              "default": "left",
+              "helperText": "Left/right reserve ~135px of plot width for the legend column.",
+              "options": [
+                { "value": "top", "label": "Top" },
+                { "value": "bottom", "label": "Bottom" },
+                { "value": "left", "label": "Left" },
+                { "value": "right", "label": "Right" }
+              ],
+              "visibleWhen": { "field": "legend_show", "operator": "truthy" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1857,12 +1857,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           {isEditMode ? (
             <>
               {/* View jumps to the read-only viewer of the dashboard
-                  being edited. Only shown for DESIGN-mode edit sessions
-                  (cancelOrigin) — when editing from VIEW mode the viewer
-                  already offers a native Edit/Cancel round-trip, so View
-                  would be redundant there. Hidden for new dashboards too:
-                  there's no saved record to view yet. */}
-              {cancelOrigin.current && !isNewDashboard && (
+                  being edited (drops edit mode in place). Shown for both
+                  DESIGN- and VIEW-originated edits for consistency — in
+                  either case it lands on the viewer of the dashboard you're
+                  editing. Hidden only for new dashboards, which have no
+                  saved record to view yet. */}
+              {!isNewDashboard && (
                 <Button
                   kind="ghost"
                   size="sm"

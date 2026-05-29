@@ -47,7 +47,6 @@ import NamespaceSelect from './shared/NamespaceSelect';
 import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
 import { getChartTypeSpec } from '../chart-spec';
-import { getCodegenTemplateForChartType } from '../chart-codegen';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import './ComponentEditor.scss';
 
@@ -2611,7 +2610,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(['line', 'bar', 'area'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && !(['line', 'bar', 'area', 'pie'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3084,7 +3083,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 {/* Chart Options Section - Pie. (Outer gate added via the
                     Number block's `!showCustomCode` doesn't reach here —
                     each section needs its own.) */}
-                {!showCustomCode && chartType === 'pie' && (
+                {!showCustomCode && chartType === 'pie' && !(chartSpecEditorEnabled && getChartTypeSpec('pie')) && (
                   <div className="chart-options-section">
                     <h4>Pie Chart Options</h4>
                     <Grid narrow>
@@ -3123,7 +3122,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -3155,6 +3154,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       x_axis_label: xAxisLabel || '',
                       x_axis_format: xAxisFormat || 'chart',
                       series_column: seriesColumn,
+                      // pie field ids — label binds to x_axis, value to
+                      // y_axis[0]; map the shared state onto pie's ids so
+                      // ColumnSelect (keyed by field.id) shows the saved
+                      // selection.
+                      label_column: xAxisColumn,
+                      value_column: (Array.isArray(yAxisColumns) ? yAxisColumns[0] : '') || '',
+                      pie_inner_radius: chartOptions.pieInnerRadius ?? 0,
+                      pie_show_labels: chartOptions.pieShowLabels !== false,
                       // chart_options
                       chart_smooth: chartOptions.chartSmooth !== false,
                       chart_show_data_labels: Boolean(chartOptions.chartShowDataLabels),
@@ -3237,6 +3244,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'x_axis_label': setXAxisLabel(value); break;
                         case 'x_axis_format': setXAxisFormat(value); break;
                         case 'series_column': setSeriesColumn(value); break;
+                        // Pie: label column binds to data_mapping.x_axis,
+                        // value column to data_mapping.y_axis[0]. Map the
+                        // pie-specific field ids onto the same state.
+                        case 'label_column': setXAxisColumn(value); break;
+                        case 'value_column': setYAxisColumns(value ? [value] : []); break;
+                        case 'pie_inner_radius': updateChartOption('pieInnerRadius', value); break;
+                        case 'pie_show_labels': updateChartOption('pieShowLabels', value); break;
                         case 'chart_smooth': updateChartOption('chartSmooth', value); break;
                         case 'chart_show_data_labels': updateChartOption('chartShowDataLabels', value); break;
                         case 'chart_show_zoom_slider': updateChartOption('chartShowZoomSlider', value); break;
@@ -4487,45 +4501,17 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
 
   // Spec-driven codegen dispatch.
   //
-  // Two paths, in priority order:
-  //
-  //   Stage 2 (end-state shape, line+): if the chart_type has a
-  //   buildOption module under chart-spec/specs/<type>.js, emit
-  //   a tiny code string that mounts the generic <SpecDrivenChart>
-  //   shell. The shell calls buildOption with the saved config +
-  //   live data and renders ECharts directly — no string templating
-  //   beyond this one-liner emission.
-  //
-  //   Stage 1 (string-emitter template): the fallback for any chart
-  //   type with a template_id but no buildOption module yet. Gauge has
-  //   migrated to buildOption, so gauge_v1 is no longer reached; the
-  //   template path stays for future not-yet-migrated types.
-  if (useSpecCodegen) {
-    if (chartHasBuildOption(chartType)) {
-      // Stage 2 path. The emitted string just mounts the shell; the
-      // shell reads its config + data from contexts the loader
-      // already provides. No useData call here, no inlined chart
-      // shape — line.js owns all of that.
-      return `const Component = () => {\n  return <SpecDrivenChart specName="${chartType}" />;\n};`;
-    }
-    const reg = getCodegenTemplateForChartType(chartType);
-    if (reg) {
-      return reg.templateFn({
-        connectionId,
-        queryRaw,
-        queryType,
-        queryParams,
-        extraOptionsLine,
-        useDataFields,
-        noDataLine,
-        transformsConfig,
-        hasTransforms,
-        yAxisStr,
-        chartName,
-        chartOptions,
-        bindings: reg.spec.codegen.template_bindings,
-      });
-    }
+  // If the chart_type has a buildOption module under
+  // chart-spec/specs/<type>.js, emit a tiny code string that mounts the
+  // generic <SpecDrivenChart> shell. The shell calls buildOption with the
+  // saved config + live data and renders ECharts directly — no string
+  // templating beyond this one-liner emission. Every spec-driven chart
+  // type now uses buildOption; the old Stage 1 string-emitter template
+  // registry (chart-codegen/index.js) has been removed. Chart types
+  // without a buildOption fall through to the legacy
+  // getDataDrivenChartCode dispatch below.
+  if (useSpecCodegen && chartHasBuildOption(chartType)) {
+    return `const Component = () => {\n  return <SpecDrivenChart specName="${chartType}" />;\n};`;
   }
 
   if (chartType === 'pie') {
