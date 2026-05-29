@@ -25,6 +25,88 @@
     }
   }
 
+  // Edit mode: the toolbar carries more controls (dimension picker, zoom,
+  // View/Cancel/Save) AND an editable title input. On narrow widths the
+  // title would crowd or clip the controls, so let the toolbar wrap to a
+  // second row instead of locking it at one 56px line. The title row sits
+  // on top; center + right controls flow to the next line when space runs
+  // out. View mode keeps the fixed single-row toolbar.
+  &.edit-mode-active .viewer-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+    max-height: none;
+    row-gap: spacing.$spacing-03;
+    padding-top: spacing.$spacing-02;
+    padding-bottom: spacing.$spacing-02;
+
+    // Three-zone toolbar (Option 3): name left, center group on the true
+    // center line, action group right — with the title allowed to borrow
+    // the side zones' unused space.
+    //
+    //   - left + right zones are equal (flex: 1 1 0) so when their content
+    //     is symmetric the leftover space splits evenly and the center
+    //     zone lands on the toolbar's true center line.
+    //   - The center zone is content-sized (flex: 0 0 auto) with internal
+    //     justify-content:center, so it never grows/shifts on its own —
+    //     the equal side zones do the centering.
+    //   - The title input inside the left zone grows up to its max-width
+    //     cap, eating the left zone's slack first; the row only wraps once
+    //     both side zones are exhausted.
+    // IMPORTANT: only the TOOLBAR wraps (whole groups drop to row 2).
+    // The groups themselves do NOT wrap internally — otherwise the
+    // action cluster fragments into a staircase (View on one line,
+    // Cancel on the next, Save below that). flex-wrap:nowrap +
+    // flex-shrink:0 keeps each group atomic: it either fits on the row
+    // or drops to the next row as a unit.
+    // The left zone keeps a real minimum width so the title can't be
+    // crushed to its border before the row wraps. Once the title hits
+    // this floor and the row still can't fit the center + action groups,
+    // the flex container wraps them to row 2 — instead of letting the
+    // title collapse to nothing and overlap. min-width is the wrap
+    // trigger; without it (min-width:0) the zone shrinks toward zero and
+    // the row never decides it's out of space.
+    .toolbar-left {
+      flex: 1 1 auto;
+      min-width: 280px;
+      overflow: visible;
+      justify-content: flex-start;
+      flex-wrap: nowrap;
+    }
+
+    .toolbar-center {
+      flex: 0 0 auto;
+      justify-content: center;
+      flex-wrap: nowrap;
+    }
+
+    .toolbar-right {
+      // Equal flex with toolbar-left keeps the center group on the true
+      // center line. flex-wrap:nowrap + the buttons' own flex-shrink:0
+      // keep the action cluster atomic so it drops to row 2 as a unit
+      // instead of fragmenting into a staircase.
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-end;
+      flex-wrap: nowrap;
+    }
+
+    // Keep every action/control inside the side+center groups from
+    // shrinking, so a tight row pushes the WHOLE group to the next line
+    // rather than squeezing individual buttons.
+    .toolbar-center > *,
+    .toolbar-right > * {
+      flex-shrink: 0;
+    }
+
+    .dashboard-name-input {
+      // Drop the 200px floor in wrap mode — when the title shares its row
+      // (wide screens) it can shrink; when it wraps to its own row it has
+      // the full width anyway.
+      min-width: 0;
+    }
+  }
+
   .viewer-toolbar {
     display: flex;
     align-items: center;
@@ -167,6 +249,28 @@
       gap: spacing.$spacing-03;
       flex: 1;
       min-width: 0;
+
+      // Edit-mode toolbar: View ✕ Save │ ⚙. A subtle vertical divider
+      // formalizes the separation between the action cluster and the
+      // settings action (Carbon's group-separation pattern), and the
+      // gear gets a bordered secondary hit target so it doesn't read as
+      // a floating ghost icon next to the bordered Cancel/Save buttons.
+      .edit-toolbar-divider {
+        width: 1px;
+        align-self: stretch;
+        margin: spacing.$spacing-02 spacing.$spacing-02;
+        background-color: var(--cds-border-subtle-01);
+        flex-shrink: 0;
+      }
+
+      .edit-toolbar-settings {
+        // Match the bordered look + height of the secondary Cancel button.
+        border: 1px solid var(--cds-border-subtle-01);
+
+        &:hover {
+          border-color: var(--cds-border-strong-01);
+        }
+      }
 
       .last-refresh {
         color: #6f6f6f;

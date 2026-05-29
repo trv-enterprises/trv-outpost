@@ -12,6 +12,10 @@ import {
   OverflowMenu,
   OverflowMenuItem,
   Modal,
+  ComposedModal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
   Select,
   SelectItem,
   TextInput,
@@ -31,6 +35,7 @@ import {
   Information,
   StarFilled,
   Edit,
+  View,
   Save,
   Close,
   TrashCan,
@@ -66,6 +71,7 @@ import NamespaceSelect from '../components/shared/NamespaceSelect';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
+import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import { useModeGuard } from '../context/ModeGuardContext';
 import useAssistantSurface from '../hooks/useAssistantSurface';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
@@ -183,6 +189,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // user came from design and should return there, not jump into view mode.
   const [fromDesign, setFromDesign] = useState(() => !!location.state?.fromDesign);
 
+  // The ORIGIN of this edit session, captured once at mount and never
+  // mutated. `fromDesign` (above) doubles as a post-save preview-framing
+  // flag — saveEditMode flips it true to show single-dashboard chrome —
+  // which makes it the wrong thing to gate Cancel's destination on. A
+  // chart reached from the viewer, edited, and saved would otherwise have
+  // fromDesign=true and route a subsequent Cancel to the design list
+  // instead of back to the viewer. cancelOrigin stays put: "did this
+  // session start from the design list?" decides where Cancel/discard go.
+  const cancelOrigin = useRef(!!location.state?.fromDesign || id === 'new');
+
   // ── Edit mode state ──────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
   const [editablePanels, setEditablePanels] = useState([]);
@@ -193,6 +209,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // ref carries the guard's promise resolver so each button in the modal
   // can decide proceed/stay.
   const [modeSwitchPromptOpen, setModeSwitchPromptOpen] = useState(false);
+  // True when the "Unsaved changes" dialog was triggered by the in-editor
+  // View button rather than a header mode switch. In that case the three
+  // dialog actions operate in place (goToViewer) instead of resolving the
+  // header mode-switch guard promise.
+  const [viewNavMode, setViewNavMode] = useState(false);
   const modeSwitchResolveRef = useRef(null);
   const { setModeGuard, clearModeGuard, setIsEditingDashboard } = useModeGuard();
 
@@ -1112,13 +1133,41 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
 
   const finishCancelNavigation = () => {
-    if (isNewDashboard || fromDesign) {
+    // Use the stable origin, NOT the mutable fromDesign — a from-viewer
+    // edit that was previously saved has fromDesign=true but should still
+    // return to the viewer, not the design list.
+    if (cancelOrigin.current) {
       navigate('/design/dashboards', { replace: true });
       return;
     }
-    // Stay on this dashboard but drop out of edit mode.
+    // Stay on this dashboard but drop out of edit mode (back to viewer).
     setIsEditMode(false);
     setEditHasChanges(false);
+  };
+
+  // VIEW button (design-mode editor): jump to the read-only viewer of the
+  // dashboard being edited without leaving the page. View always lands on
+  // the viewer in place; it never routes to the design list, because
+  // "view what I'm editing" has one meaning regardless of origin.
+  //
+  //   - Clean → straight to viewer.
+  //   - Dirty → the SAME three-option "Unsaved changes" dialog the header
+  //     mode-switch uses (Keep Editing / Discard and switch / Save and
+  //     switch). Pressing View isn't a cancel, so the user deserves the
+  //     save path too. The dialog's handlers branch on viewNavMode to act
+  //     in place (goToViewer) rather than resolving the header guard.
+  const goToViewer = () => {
+    setIsEditMode(false);
+    setEditHasChanges(false);
+  };
+
+  const handleViewClick = () => {
+    if (editHasChanges) {
+      setViewNavMode(true);
+      setModeSwitchPromptOpen(true);
+      return;
+    }
+    goToViewer();
   };
 
   const handleDimensionChange = (newDimension) => {
@@ -1175,10 +1224,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         invalidateTagsCache();
         setIsEditMode(false);
         setEditHasChanges(false);
-        // After Save from the designer, show the finished dashboard in a
-        // single-dashboard view (no prev/next/home). The user returned to
-        // this route from design, so mark it as a design-origin preview.
-        setFromDesign(true);
+        // Post-save framing depends on where the edit session began:
+        //   - DESIGN origin (cancelOrigin) → show the finished dashboard
+        //     as a single-dashboard design preview (no prev/next/home),
+        //     so the designer reviews exactly what they built.
+        //   - VIEW origin → return to normal VIEW mode with full viewer
+        //     chrome restored. Leave fromDesign untouched (false) so the
+        //     prev/next/home nav and viewer-list back-arrow come back.
+        if (cancelOrigin.current) {
+          setFromDesign(true);
+        }
         fetchDashboard();
         return id;
       }
@@ -1256,6 +1311,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // dashboard).
   const modeSwitchSave = async () => {
     setModeSwitchPromptOpen(false);
+    // View-button path: save in place, then drop to the viewer. saveEditMode's
+    // own post-save framing handles the rest (design-origin → single-dashboard
+    // preview). No header guard to resolve.
+    if (viewNavMode) {
+      setViewNavMode(false);
+      const ok = await saveEditMode();
+      if (ok) goToViewer();
+      return;
+    }
     // Skip the post-save navigate inside saveEditMode — App.jsx is
     // about to handle the destination based on the new mode.
     const savedId = await saveEditMode({ skipNavigate: true });
@@ -1273,6 +1337,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
   const modeSwitchDiscard = () => {
     setModeSwitchPromptOpen(false);
+    // View-button path: discard edits and drop to the viewer in place.
+    if (viewNavMode) {
+      setViewNavMode(false);
+      goToViewer();
+      return;
+    }
     setIsEditMode(false);
     setEditHasChanges(false);
     const resolver = modeSwitchResolveRef.current;
@@ -1285,6 +1355,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
   const modeSwitchStay = () => {
     setModeSwitchPromptOpen(false);
+    // View-button path: just close the dialog, stay in the editor.
+    if (viewNavMode) {
+      setViewNavMode(false);
+      return;
+    }
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
     if (resolver) resolver({ proceed: false });
@@ -1781,23 +1856,30 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           )}
           {isEditMode ? (
             <>
+              {/* View jumps to the read-only viewer of the dashboard
+                  being edited. Only shown for DESIGN-mode edit sessions
+                  (cancelOrigin) — when editing from VIEW mode the viewer
+                  already offers a native Edit/Cancel round-trip, so View
+                  would be redundant there. Hidden for new dashboards too:
+                  there's no saved record to view yet. */}
+              {cancelOrigin.current && !isNewDashboard && (
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  onClick={handleViewClick}
+                  renderIcon={View}
+                >
+                  View
+                </Button>
+              )}
               <Button
-                kind="ghost"
+                kind="secondary"
                 size="sm"
                 onClick={exitEditMode}
                 renderIcon={Close}
               >
                 Cancel
               </Button>
-              <IconButton
-                kind="ghost"
-                size="sm"
-                label="Dashboard settings"
-                align="bottom"
-                onClick={() => setSettingsModalOpen(true)}
-              >
-                <Settings size={20} />
-              </IconButton>
               <Button
                 kind="primary"
                 size="sm"
@@ -1807,6 +1889,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               >
                 {editSaving ? 'Saving...' : 'Save'}
               </Button>
+              {/* Settings sits in its own group, separated from the
+                  View/Cancel/Save action cluster by a Carbon divider and
+                  given a bordered (secondary) hit target so it reads as a
+                  distinct toolbar action rather than floating ghost icon. */}
+              <span className="edit-toolbar-divider" aria-hidden="true" />
+              <IconButton
+                className="edit-toolbar-settings"
+                kind="secondary"
+                size="sm"
+                label="Dashboard settings"
+                align="bottom"
+                onClick={() => setSettingsModalOpen(true)}
+              >
+                <Settings size={20} />
+              </IconButton>
             </>
           ) : (
             <>
@@ -2325,39 +2422,39 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       </Modal>
 
       {/* Discard changes confirmation */}
-      {showDiscardModal && (
-        <Modal
-          open={true}
-          onRequestClose={() => setShowDiscardModal(false)}
-          onRequestSubmit={confirmDiscard}
-          modalHeading="Discard Changes?"
-          primaryButtonText="Discard"
-          secondaryButtonText="Keep Editing"
-          danger
-        >
-          <p>You have unsaved layout changes. Are you sure you want to discard them?</p>
-        </Modal>
-      )}
+      <DiscardChangesModal
+        open={showDiscardModal}
+        onKeepEditing={() => setShowDiscardModal(false)}
+        onDiscard={confirmDiscard}
+        body="You have unsaved layout changes. Are you sure you want to discard them?"
+      />
 
       {/* Mode-switch interception: three options so "cancel" can't be
           misread as either "abandon edits" or "abandon the mode switch". */}
       {modeSwitchPromptOpen && (
-        <Modal
-          open={true}
-          onRequestClose={modeSwitchStay}
-          modalHeading="Unsaved changes"
-          passiveModal
+        <ComposedModal
+          open={modeSwitchPromptOpen}
+          onClose={() => { modeSwitchStay(); return true; }}
           size="sm"
         >
-          <p style={{ marginBottom: '1.5rem' }}>
-            This dashboard has unsaved changes. Save before switching modes?
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <Button kind="ghost" onClick={modeSwitchStay}>Stay and keep editing</Button>
-            <Button kind="danger--ghost" onClick={modeSwitchDiscard}>Discard and switch</Button>
+          <ModalHeader
+            title="Unsaved changes"
+            closeModal={modeSwitchStay}
+            buttonOnClick={modeSwitchStay}
+          />
+          <ModalBody>
+            <p>This dashboard has unsaved changes. Save before switching to view?</p>
+          </ModalBody>
+          {/* ModalFooter with 3 buttons docks them full-bleed at the
+              bottom edge — matching the native Modal's two-button footer
+              (Discard Changes? dialog). Order maps to Carbon footer
+              convention: secondary, then the two primary-ish actions. */}
+          <ModalFooter>
+            <Button kind="secondary" onClick={modeSwitchStay}>Keep Editing</Button>
+            <Button kind="danger" onClick={modeSwitchDiscard}>Discard and switch</Button>
             <Button kind="primary" onClick={modeSwitchSave}>Save and switch</Button>
-          </div>
-        </Modal>
+          </ModalFooter>
+        </ComposedModal>
       )}
     </div>
     </RefreshableComponentsProvider>
