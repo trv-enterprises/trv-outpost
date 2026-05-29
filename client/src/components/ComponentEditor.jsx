@@ -3959,7 +3959,44 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         the component doesn't already provide it. */}
                     <DynamicComponentLoader
                       code={generatedCode}
-                      componentMeta={{ title, name, description }}
+                      componentMeta={{
+                        title,
+                        name,
+                        description,
+                        // Spec-driven shell (SpecDrivenChart) reads
+                        // chart_type / data_mapping / options off the
+                        // ComponentConfigContext. Mirror the viewer's
+                        // shape here so the preview renders the same
+                        // option literal a saved chart would. line.js's
+                        // normalizeYEntry shim accepts both string and
+                        // object y_axis entries — we pass objects here
+                        // so per-row label / stack / axis from the
+                        // editor's working state are visible to the
+                        // preview without a save round-trip.
+                        chart_type: chartType,
+                        data_mapping: selectedConnectionId ? {
+                          x_axis: xAxisColumn,
+                          x_axis_label: xAxisLabel || '',
+                          x_axis_format: xAxisFormat || 'chart',
+                          y_axis: yAxisColumns
+                            .map((column, i) => ({
+                              column,
+                              label: (Array.isArray(yAxisLabels) ? yAxisLabels[i] : '') || '',
+                              stack: Boolean(chartOptions.chartStacked),
+                              axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
+                            }))
+                            .filter((e) => e.column && e.column.length > 0),
+                          // Pass through undefined (not false) when the
+                          // user never flipped the toggle — line.js's
+                          // dualAxis logic uses undefined to mean "fall
+                          // back to 2-column convention," whereas an
+                          // explicit false forces single-axis with N
+                          // columns. Mirrors the formState builder.
+                          multiple_y_axis: chartOptions.multipleYAxis,
+                          series: seriesColumn || '',
+                        } : undefined,
+                        options: chartOptions,
+                      }}
                       connectionId={selectedConnectionId || null}
                       queryConfig={selectedConnectionId ? {
                         raw: selectedDatasource?.type === 'tsstore'

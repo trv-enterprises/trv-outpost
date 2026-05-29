@@ -27,21 +27,25 @@ const STACK_GROUP = 'stack0';
 /**
  * Normalize a y_axis entry from any of these shapes into the canonical
  * { column, label, stack, axis } shape:
- *   - bare string (legacy):  'cpu' → defaults applied
+ *   - bare string (legacy):  'cpu' → defaults applied (axis unset)
  *   - partial object:        { column: 'cpu' } → defaults filled in
  *   - full object (current): { column: 'cpu', label: 'CPU %', stack: true, axis: 'right' }
+ *
+ * `axis` is left unset when the entry didn't specify one, so the
+ * dual-axis path can apply the "first left, second right" legacy
+ * convention. When an entry DOES specify left/right, that wins.
  *
  * This is the read-path migration shim — legacy line records load
  * cleanly without a Mongo migration.
  */
 function normalizeYEntry(e) {
-  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left' };
-  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left' };
+  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined };
+  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined };
   return {
     column: typeof e.column === 'string' ? e.column : '',
     label: typeof e.label === 'string' ? e.label : '',
     stack: Boolean(e.stack),
-    axis: e.axis === 'right' ? 'right' : 'left',
+    axis: e.axis === 'right' ? 'right' : e.axis === 'left' ? 'left' : undefined,
   };
 }
 
@@ -60,8 +64,11 @@ function buildSeriesForColumn(entry, idx, ctx) {
   if (sampling && sampling !== 'off') series.sampling = sampling;
   if (showDataLabels) series.label = { show: true, position: 'top' };
   if (dualAxis) {
-    series.yAxisIndex = entry.axis === 'right' ? 1 : 0;
-    series.itemStyle = { color: entry.axis === 'right' ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR };
+    // Side: explicit `axis` wins; otherwise default first column left,
+    // second column right (matches legacy convention).
+    const sideRight = entry.axis === 'right' || (entry.axis == null && idx === 1);
+    series.yAxisIndex = sideRight ? 1 : 0;
+    series.itemStyle = { color: sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR };
   } else if (stackedCount === 1 && idx === 0 && !entry.stack) {
     // Single-axis, single-column, unstacked → force blue for parity
     // with the legacy single-series default. With ≥2 columns we let
@@ -228,7 +235,13 @@ export function buildOption(values, data, helpers = {}) {
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
   const yEntries = rawYAxis.map(normalizeYEntry).filter((e) => e.column);
-  const dualAxis = Boolean(values?.data_mapping?.multiple_y_axis);
+  // Dual-axis trigger matches the legacy convention: explicit toggle
+  // wins; otherwise 2 columns = dual-axis by convention. Same fallback
+  // the editor's formState builder uses (ComponentEditor.jsx ~line 3139)
+  // so saved charts, AI agent, and the preview all render the same.
+  const explicitMultiYAxis = values?.data_mapping?.multiple_y_axis;
+  const dualAxis = explicitMultiYAxis === true
+    || (explicitMultiYAxis == null && yEntries.length === 2);
   const xAxisCol = values?.data_mapping?.x_axis || '';
   const xAxisLabel = values?.data_mapping?.x_axis_label || '';
   // Prefer the spec-bound x_axis_format when present (Stage 2 line),
@@ -324,10 +337,14 @@ export function buildOption(values, data, helpers = {}) {
     xAxis.nameGap = 30;
   }
 
+  // Grid top budget. Legend at top: 8 (line spec default) — give just
+  // enough to clear the legend row without a wide gap. Legacy used 35
+  // and felt too airy at small panel sizes; 24 hugs the chart tighter.
+  const gridTop = legend?.top != null ? 24 : 10;
   const option = {
     backgroundColor: 'transparent',
     tooltip,
-    grid: { top: legend?.top != null ? 35 : 10, left: 50, right: 20, bottom: opts.chartShowZoomSlider ? 50 : 30, containLabel: true },
+    grid: { top: gridTop, left: 50, right: 20, bottom: opts.chartShowZoomSlider ? 50 : 30, containLabel: true },
     xAxis,
     yAxis,
     series,
@@ -351,16 +368,13 @@ export function buildOption(values, data, helpers = {}) {
     ];
   }
 
-  if (chartName) {
-    option.title = {
-      text: chartName,
-      left: 'center',
-      top: 0,
-      textStyle: { color: '#f4f4f4', fontSize: 16 },
-    };
-    // Push grid down to make room.
-    option.grid.top = (option.grid.top || 10) + 28;
-  }
+  // Title is rendered OUTSIDE ECharts (HTML div in SpecDrivenChart)
+  // — same convention legacy line/area/bar codegen uses. Putting it
+  // inside `option.title` collides with the top-positioned legend
+  // and steals layout from `containLabel` math. `chartName` is
+  // intentionally unread here; the shell uses it.
+  // eslint-disable-next-line no-unused-expressions
+  chartName;
 
   // tooltip.formatter is already a real function (assigned in
   // buildTooltip). The earlier draft used a __raw marker pattern to

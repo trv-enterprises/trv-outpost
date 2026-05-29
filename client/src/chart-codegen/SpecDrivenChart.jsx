@@ -81,9 +81,36 @@ export default function SpecDrivenChart({ specName }) {
     );
   }
 
+  // Title is rendered as an HTML div above the ECharts canvas — same
+  // convention legacy line/area/bar codegen uses (see
+  // ComponentEditor.jsx getDataDrivenChartCode `titleHeader`). Keeps
+  // the title centered on the full panel regardless of y-axis label
+  // width or legend, and avoids the option.title vs option.legend
+  // top-of-canvas collision.
+  const chartName = config?.title || config?.name || '';
   return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {chartName ? (
+        <div style={{
+          display: 'block',
+          height: '2.5rem',
+          lineHeight: '2.5rem',
+          flexShrink: 0,
+          padding: '0 0.75rem',
+          fontSize: '1rem',
+          fontWeight: 600,
+          color: 'var(--cds-text-primary)',
+          textAlign: 'center',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {chartName}
+        </div>
+      ) : null}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />
+      </div>
     </div>
   );
 }

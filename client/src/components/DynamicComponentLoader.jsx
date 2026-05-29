@@ -297,11 +297,33 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // componentMeta is optional — undefined when the loader is invoked outside
   // a saved-component context (AI preview, ad-hoc usage); fields fall back
   // to empty strings so the component can `config?.title || 'fallback'`.
+  //
+  // Legacy eval'd code (AI-generated, custom code) only reads
+  // `{ title, name, description }` — the system prompt documents that
+  // contract. Spec-driven shells (SpecDrivenChart) need the full chart
+  // record so they can read `config.data_mapping`, `config.options`,
+  // `config.chart_type`, and `config.transforms?.x_axis_format`. We
+  // expose those additional fields here; legacy code ignores them.
   const config = useMemo(() => ({
     title: componentMeta?.title || '',
     name: componentMeta?.name || '',
     description: componentMeta?.description || '',
-  }), [componentMeta?.title, componentMeta?.name, componentMeta?.description]);
+    // Spec-driven fields. Undefined when componentMeta doesn't carry
+    // them (legacy charts, ad-hoc usage). SpecDrivenChart reads with
+    // optional chaining and falls back to empty defaults.
+    chart_type: componentMeta?.chart_type,
+    data_mapping: componentMeta?.data_mapping,
+    options: componentMeta?.options,
+    transforms: componentMeta?.transforms,
+  }), [
+    componentMeta?.title,
+    componentMeta?.name,
+    componentMeta?.description,
+    componentMeta?.chart_type,
+    componentMeta?.data_mapping,
+    componentMeta?.options,
+    componentMeta?.transforms,
+  ]);
 
   if (error) {
     return (
