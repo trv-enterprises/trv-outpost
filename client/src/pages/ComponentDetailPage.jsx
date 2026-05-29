@@ -8,6 +8,7 @@ import { Button, Loading, Modal } from '@carbon/react';
 import { Save, Close, ArrowLeft } from '@carbon/icons-react';
 import ComponentEditor from '../components/ComponentEditor';
 import apiClient from '../api/client';
+import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import useAssistantSurface from '../hooks/useAssistantSurface';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
@@ -192,19 +193,12 @@ function ComponentDetailPage() {
       />
 
       {/* Discard changes confirmation */}
-      {showDiscardModal && (
-        <Modal
-          open={true}
-          danger
-          onRequestClose={() => setShowDiscardModal(false)}
-          onRequestSubmit={confirmDiscard}
-          modalHeading="Discard changes?"
-          primaryButtonText="Discard"
-          secondaryButtonText="Keep editing"
-        >
-          <p>You have unsaved changes. Discard them and leave?</p>
-        </Modal>
-      )}
+      <DiscardChangesModal
+        open={showDiscardModal}
+        onKeepEditing={() => setShowDiscardModal(false)}
+        onDiscard={confirmDiscard}
+        body="You have unsaved changes. Discard them and leave?"
+      />
 
       {/* Save confirmation modal */}
       {showSaveModal && (

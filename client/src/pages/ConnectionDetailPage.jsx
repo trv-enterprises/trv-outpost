@@ -25,6 +25,7 @@ import {
 } from '@carbon/react';
 import { Save, Close, TrashCan, Play, ConnectionSignal, Checkmark, ErrorFilled, ArrowLeft } from '@carbon/icons-react';
 import apiClient, { API_BASE } from '../api/client';
+import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -1780,19 +1781,11 @@ function ConnectionDetailPage() {
       </div>
 
       {/* Cancel confirmation modal */}
-      {showCancelModal && (
-        <Modal
-          open={true}
-          onRequestClose={() => setShowCancelModal(false)}
-          onRequestSubmit={confirmCancel}
-          modalHeading="Discard Changes?"
-          primaryButtonText="Discard"
-          secondaryButtonText="Keep Editing"
-          danger
-        >
-          <p>You have unsaved changes. Are you sure you want to discard them?</p>
-        </Modal>
-      )}
+      <DiscardChangesModal
+        open={showCancelModal}
+        onKeepEditing={() => setShowCancelModal(false)}
+        onDiscard={confirmCancel}
+      />
 
       {/* Save confirmation modal */}
       {showSaveModal && (

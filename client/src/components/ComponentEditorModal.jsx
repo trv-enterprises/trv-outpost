@@ -7,6 +7,7 @@ import { Modal } from '@carbon/react';
 import ComponentEditor from './ComponentEditor';
 import apiClient from '../api/client';
 import { invalidateTagsCache } from './shared/tagsApi';
+import DiscardChangesModal from './shared/DiscardChangesModal';
 import './ComponentEditorModal.scss';
 
 /**
@@ -148,24 +149,15 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
       </Modal>
 
       {/* Cancel confirmation modal */}
-      <Modal
+      <DiscardChangesModal
         open={showCancelConfirm}
-        onRequestClose={() => setShowCancelConfirm(false)}
-        onRequestSubmit={() => {
+        onKeepEditing={() => setShowCancelConfirm(false)}
+        onDiscard={() => {
           setShowCancelConfirm(false);
           onClose();
         }}
-        modalHeading="Discard Changes?"
-        modalLabel="Unsaved Changes"
-        primaryButtonText="Discard"
-        secondaryButtonText="Keep Editing"
-        danger
-        size="xs"
-      >
-        <p style={{ color: 'var(--cds-text-secondary)' }}>
-          You have unsaved changes to this chart. Are you sure you want to discard them?
-        </p>
-      </Modal>
+        body="You have unsaved changes to this chart. Are you sure you want to discard them?"
+      />
     </>
   );
 }

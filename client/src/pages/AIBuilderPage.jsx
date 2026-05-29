@@ -26,6 +26,7 @@ import AiIcon from '../components/icons/AiIcon';
 import AIComponentPreview from '../components/AIComponentPreview';
 import { useAISession } from '../hooks/useAISession';
 import apiClient from '../api/client';
+import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import { getDataDrivenChartCode, getStaticChartCode } from '../components/ComponentEditor';
 import './AIBuilderPage.scss';
 
@@ -556,23 +557,12 @@ function AIBuilderPage() {
       )}
 
       {/* Discard Dialog */}
-      {showDiscardDialog && (
-        <Modal
-          open={true}
-          onRequestClose={() => setShowDiscardDialog(false)}
-          onRequestSubmit={handleDiscard}
-          modalHeading="Discard Changes?"
-          primaryButtonText="Discard"
-          secondaryButtonText="Keep Editing"
-          danger
-          size="sm"
-        >
-          <p>
-            You have unsaved changes. Are you sure you want to discard them?
-            This action cannot be undone.
-          </p>
-        </Modal>
-      )}
+      <DiscardChangesModal
+        open={showDiscardDialog}
+        onKeepEditing={() => setShowDiscardDialog(false)}
+        onDiscard={handleDiscard}
+        body="You have unsaved changes. Are you sure you want to discard them? This action cannot be undone."
+      />
     </div>
   );
 }
