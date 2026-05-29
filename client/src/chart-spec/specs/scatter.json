@@ -1,0 +1,274 @@
+{
+  "schema_version": "1",
+  "chart_type": "scatter",
+  "library": "echarts",
+  "display": {
+    "label": "Scatter Plot",
+    "icon": "ChartScatter",
+    "description": "Plot data points on two numeric axes"
+  },
+  "capabilities": {
+    "requires_x_axis": true,
+    "requires_y_axis": true,
+    "multiple_y_axis": false,
+    "single_axis_n_columns": false,
+    "has_pivot_series": true,
+    "has_axis_labels": true,
+    "has_x_axis_format": false,
+    "has_time_bucket": false,
+    "has_sort_limit": true,
+    "has_visible_columns": false,
+    "has_filters": true,
+    "has_aggregation": true,
+    "has_sliding_window": false,
+    "has_legend_config": true,
+    "has_tooltip_config": true,
+    "has_axis_range": true,
+    "has_thresholds": false
+  },
+  "sections": [
+    {
+      "id": "data_mapping",
+      "label": "Data Mapping",
+      "subsections": [
+        {
+          "id": "axes_group",
+          "label": "Axes",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "x_axis_column",
+              "binds": "data_mapping.x_axis",
+              "type": "column_select",
+              "label": "X-axis column",
+              "required": true,
+              "helperText": "Numeric column for the horizontal position."
+            },
+            {
+              "id": "value_column",
+              "binds": "data_mapping.y_axis[0]",
+              "type": "column_select",
+              "label": "Y-axis column",
+              "required": true,
+              "helperText": "Numeric column for the vertical position."
+            },
+            {
+              "id": "x_axis_label",
+              "binds": "data_mapping.x_axis_label",
+              "type": "text",
+              "label": "X-axis label",
+              "default": "",
+              "placeholder": "Leave empty to hide"
+            },
+            {
+              "id": "y_axis_label",
+              "binds": "data_mapping.y_axis_label",
+              "type": "text",
+              "label": "Y-axis label",
+              "default": "",
+              "placeholder": "Leave empty to hide"
+            }
+          ]
+        },
+        {
+          "id": "encode_group",
+          "label": "Point encoding",
+          "helperText": "Optional: size points by a third numeric column (bubble chart), and/or split into colored series by a category column.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "size_column",
+              "binds": "data_mapping.size_column",
+              "type": "column_select",
+              "label": "Size by column",
+              "helperText": "Bubble mode: point area scales with this column's value. Leave empty for uniform size."
+            },
+            {
+              "id": "series_column",
+              "binds": "data_mapping.series",
+              "type": "column_select",
+              "label": "Color by column",
+              "helperText": "Splits points into one colored series per distinct value, with a legend."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chart_options",
+      "label": "Chart Options",
+      "subsections": [
+        {
+          "id": "point_style",
+          "label": "Point style",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "symbol_size",
+              "binds": "options.symbolSize",
+              "type": "number",
+              "label": "Point size",
+              "default": 15,
+              "min": 1,
+              "max": 80,
+              "step": 1,
+              "helperText": "Base diameter. Ignored when Size-by-column is set."
+            },
+            {
+              "id": "symbol_shape",
+              "binds": "options.symbolShape",
+              "type": "enum",
+              "label": "Point shape",
+              "default": "circle",
+              "options": [
+                { "value": "circle", "label": "Circle" },
+                { "value": "rect", "label": "Square" },
+                { "value": "roundRect", "label": "Rounded square" },
+                { "value": "triangle", "label": "Triangle" },
+                { "value": "diamond", "label": "Diamond" },
+                { "value": "pin", "label": "Pin" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "x_axis_range",
+          "label": "X-axis range",
+          "helperText": "Auto scales to the data; uncheck to set manual bounds. Scatter's X is a true numeric axis, so range applies here (unlike category charts).",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "x_min",
+              "binds": "options.xAxisRange.min",
+              "type": "nullable_number",
+              "label": "Min",
+              "default": null,
+              "step": 1
+            },
+            {
+              "id": "x_max",
+              "binds": "options.xAxisRange.max",
+              "type": "nullable_number",
+              "label": "Max",
+              "default": null,
+              "step": 1
+            },
+            {
+              "id": "x_scale",
+              "binds": "options.xAxisRange.scale",
+              "type": "enum",
+              "label": "Scale",
+              "default": "linear",
+              "options": [
+                { "value": "linear", "label": "Linear" },
+                { "value": "log", "label": "Logarithmic" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "y_axis_range",
+          "label": "Y-axis range",
+          "helperText": "Auto scales to the data; uncheck to set manual bounds.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "y_left_min",
+              "binds": "options.yAxisRange.left.min",
+              "type": "nullable_number",
+              "label": "Min",
+              "default": null,
+              "step": 1
+            },
+            {
+              "id": "y_left_max",
+              "binds": "options.yAxisRange.left.max",
+              "type": "nullable_number",
+              "label": "Max",
+              "default": null,
+              "step": 1
+            },
+            {
+              "id": "y_left_scale",
+              "binds": "options.yAxisRange.left.scale",
+              "type": "enum",
+              "label": "Scale",
+              "default": "linear",
+              "options": [
+                { "value": "linear", "label": "Linear" },
+                { "value": "log", "label": "Logarithmic" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "tooltip_config",
+          "label": "Tooltip",
+          "helperText": "Decimals + Units format the x/y values inside the tooltip.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "tooltip_mode",
+              "binds": "options.tooltip.mode",
+              "type": "enum",
+              "label": "Mode",
+              "default": "single",
+              "options": [
+                { "value": "single", "label": "Show point" },
+                { "value": "hidden", "label": "Hidden" }
+              ]
+            },
+            {
+              "id": "tooltip_decimals",
+              "binds": "options.tooltip.decimals",
+              "type": "nullable_number",
+              "label": "Decimals",
+              "default": null,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            {
+              "id": "tooltip_units",
+              "binds": "options.tooltip.units",
+              "type": "text",
+              "label": "Units suffix",
+              "default": "",
+              "placeholder": "e.g. ms, MB"
+            }
+          ]
+        },
+        {
+          "id": "legend_config",
+          "label": "Legend",
+          "helperText": "Only used when Color-by-column splits the points into multiple series.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "legend_show",
+              "binds": "options.legend.show",
+              "type": "boolean",
+              "label": "Show legend",
+              "default": true
+            },
+            {
+              "id": "legend_position",
+              "binds": "options.legend.position",
+              "type": "enum",
+              "label": "Position",
+              "default": "top",
+              "helperText": "Left/right reserve ~135px of plot width for the legend column.",
+              "options": [
+                { "value": "top", "label": "Top" },
+                { "value": "bottom", "label": "Bottom" },
+                { "value": "left", "label": "Left" },
+                { "value": "right", "label": "Right" }
+              ],
+              "visibleWhen": { "field": "legend_show", "operator": "truthy" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

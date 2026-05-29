@@ -237,6 +237,107 @@ const CHART_TYPE_CONFIG = {
   },
 };
 
+// Canonical default chart-options. Single source of truth for the
+// chartOptions initial state, the new-chart reset (resetForm), and the
+// chart-load merge baseline. IMPORTANT: resets/loads must base on a
+// fresh copy of THIS (not the previous chartOptions state) so that
+// spec-driven keys absent here (xAxisRange, yAxisRange, sizeColumn,
+// tooltip, legend, yThresholds, symbolShape, …) don't bleed from a
+// previously-edited chart into the next one on a reused editor instance.
+const DEFAULT_CHART_OPTIONS = {
+  // Gauge options
+  gaugeMin: 0,
+  gaugeMax: 100,
+  gaugeWarningThreshold: 70,  // Where yellow zone starts (%)
+  gaugeDangerThreshold: 90,   // Where red zone starts (%)
+  gaugeUnit: '',              // Unit suffix (e.g., '°F', '%')
+  // Number (single-value display) options. numberSize stays unset on
+  // create so the editor can lazy-populate it from the admin default;
+  // once the user saves/edits it's always a concrete number.
+  numberSize: null,
+  numberUnit: '',
+  // Pie options
+  pieInnerRadius: 0,          // 0 = pie, >0 = donut
+  pieShowLabels: true,
+  // Bar/Line/Area options
+  chartStacked: false,
+  chartSmooth: true,
+  chartShowDataLabels: false,
+  chartShowZoomSlider: false,
+};
+
+/**
+ * Connection tag chips that fit-to-width: render every tag, but measure
+ * the row and collapse whatever doesn't fit on one line into a "+N…"
+ * toggletip. Replaces the old hard cap of 4, which hid tags even when
+ * there was plenty of horizontal room.
+ *
+ * A hidden probe lays out ALL chips with the same flex/gap/wrap rules as
+ * the visible row; we read each chip's offsetTop and keep the ones on the
+ * first line (same offsetTop as the first chip). Re-measures on resize.
+ *
+ * @param {string[]} tags  ordered, deduped chips (type tag first).
+ */
+function ConnectionTagsRow({ tags }) {
+  const containerRef = useRef(null);
+  const [visibleCount, setVisibleCount] = useState(tags.length);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+
+    const measure = () => {
+      const probe = el.querySelector('.connection-tags-probe');
+      if (!probe) return;
+      const chipEls = Array.from(probe.querySelectorAll('[data-tag-chip]'));
+      if (chipEls.length === 0) { setVisibleCount(0); return; }
+      const firstTop = chipEls[0].offsetTop;
+      let fit = 0;
+      for (let i = 0; i < chipEls.length; i++) {
+        if (chipEls[i].offsetTop > firstTop) break;
+        fit++;
+      }
+      setVisibleCount(Math.max(1, fit));
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tags]);
+
+  const visible = tags.slice(0, visibleCount);
+  const overflow = tags.slice(visibleCount);
+
+  return (
+    <div className="connection-tags-row" ref={containerRef}>
+      {/* Hidden probe: all chips, used purely for measurement. */}
+      <div className="connection-tags-probe" aria-hidden="true">
+        {tags.map((tag, i) => (
+          <Tag key={`probe-${tag}-${i}`} type={i === 0 ? 'blue' : 'gray'} size="sm" data-tag-chip="">
+            {tag}
+          </Tag>
+        ))}
+      </div>
+      {visible.map((tag, i) => (
+        <Tag key={`${tag}-${i}`} type={i === 0 ? 'blue' : 'gray'} size="sm">
+          {tag}
+        </Tag>
+      ))}
+      {overflow.length > 0 && (
+        <Toggletip align="bottom">
+          <ToggletipButton label={`Show ${overflow.length} more tag${overflow.length === 1 ? '' : 's'}`}>
+            <span className="connection-tags-overflow">+{overflow.length}…</span>
+          </ToggletipButton>
+          <ToggletipContent>
+            <p>{tags.join(', ')}</p>
+          </ToggletipContent>
+        </Toggletip>
+      )}
+    </div>
+  );
+}
+
 /**
  * ComponentEditor Component
  *
@@ -422,33 +523,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [componentCode, setComponentCode] = useState('');
   const [showCustomCode, setShowCustomCode] = useState(false);
 
-  // Chart-specific options (gauge thresholds, pie radius, etc.)
-  const [chartOptions, setChartOptions] = useState({
-    // Gauge options
-    gaugeMin: 0,
-    gaugeMax: 100,
-    gaugeWarningThreshold: 70,  // Where yellow zone starts (%)
-    gaugeDangerThreshold: 90,   // Where red zone starts (%)
-    gaugeUnit: '',              // Unit suffix (e.g., '°F', '%')
-    // Number (single-value display) options.
-    // numberSize stays unset on create so the editor can lazy-populate it
-    // from the admin default (default_numeric_chart_number_size). Once the
-    // user saves or edits, it's always a concrete number.
-    numberSize: null,           // px size of the value text
-    numberUnit: '',             // Unit suffix (same size as value, inline)
-    // Pie options
-    pieInnerRadius: 0,          // 0 = pie, >0 = donut
-    pieShowLabels: true,
-    // Bar/Line/Area options
-    chartStacked: false,
-    chartSmooth: true,
-    chartShowDataLabels: false,
-    // Zoom slider — renders a draggable range bar under the x-axis
-    // plus inside (wheel/pinch) zoom on the plot itself. Off by
-    // default; the small adopted-from-the-AI-version pattern that
-    // gives users a way to drill into a noisy long time-series.
-    chartShowZoomSlider: false,
-  });
+  // Chart-specific options (gauge thresholds, pie radius, etc.).
+  // Initialized from the module-scope DEFAULT_CHART_OPTIONS via a fresh
+  // copy so per-instance edits never mutate the shared default, and so
+  // reset/load can rebase on the same source of truth.
+  const [chartOptions, setChartOptions] = useState(() => ({ ...DEFAULT_CHART_OPTIONS }));
 
   // Query mode: 'visual' for SQLQueryBuilder, 'raw' for TextArea
   const [queryMode, setQueryMode] = useState('raw');
@@ -741,13 +820,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       if (usingCustomCode) {
         setActiveTab(1);
       }
-      // Initialize chart options from saved data
-      if (chart.options) {
-        setChartOptions(prev => ({
-          ...prev,
-          ...chart.options
-        }));
-      }
+      // Initialize chart options from saved data. Base on a fresh copy
+      // of DEFAULT_CHART_OPTIONS — NOT the prior chartOptions state — so
+      // a previously-edited chart's keys (xAxisRange, sizeColumn,
+      // tooltip, …) don't bleed into this one on a reused editor
+      // instance. Starting from defaults still backfills option keys for
+      // charts saved before those keys existed.
+      setChartOptions({ ...DEFAULT_CHART_OPTIONS, ...(chart.options || {}) });
       // Snapshot mirrors the post-load values for every field in the diff —
       // including the legacy y_axis_label → y_axis_labels seeding and the
       // default aggregation shape — so the form doesn't read as dirty on
@@ -827,10 +906,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         bandedBarStyle: chart.options?.bandedBarStyle || 'time_series',
         // Capture chartOptions snapshot AS MERGED with defaults so it
         // matches whatever the state ends up holding after the
-        // setChartOptions spread above. Otherwise dirty fires
-        // immediately because the saved record carries fewer keys
-        // than the state's defaults.
-        chartOptions: { ...chartOptions, ...(chart.options || {}) },
+        // setChartOptions spread above (DEFAULT_CHART_OPTIONS base, NOT
+        // the prior chartOptions state). Otherwise the snapshot and the
+        // actual state diverge and the form reads dirty on load.
+        chartOptions: { ...DEFAULT_CHART_OPTIONS, ...(chart.options || {}) },
         componentCode: chart.component_code || '',
         showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code),
       }));
@@ -1110,6 +1189,63 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   };
 
+  // Drop column selections that aren't in `cols`. Called after a fetch
+  // (re)populates availableColumns — switching connection or editing the
+  // query can change the schema, and a selection pointing at a column
+  // that no longer exists silently breaks the chart and leaves a ghost
+  // value in the picker. Empties/resets every column-bearing field so the
+  // user re-picks from the new schema. Applies to all chart types.
+  const pruneStaleColumnSelections = (cols) => {
+    const has = (c) => typeof c === 'string' && c.length > 0 && cols.includes(c);
+
+    if (xAxisColumn && !has(xAxisColumn)) setXAxisColumn('');
+    setYAxisColumns((prev) => {
+      const kept = (prev || []).filter(has);
+      return kept.length === (prev || []).length ? prev : kept;
+    });
+    if (seriesColumn && !has(seriesColumn)) setSeriesColumn('');
+    if (groupByColumn && !has(groupByColumn)) setGroupByColumn('');
+    if (sortBy && !has(sortBy)) setSortBy('');
+    // Sliding window: clearing its timestamp column must also disable the
+    // feature. Leaving it enabled with no timestamp creates an
+    // unsaveable "enabled but no timestamp column" state (save validation
+    // rejects it). The two stay in lockstep: no timestamp ⇒ off.
+    if (slidingWindowTimestampCol && !has(slidingWindowTimestampCol)) {
+      setSlidingWindowTimestampCol('');
+      setSlidingWindowEnabled(false);
+    }
+
+    // chartOptions-held column (scatter bubble size).
+    if (chartOptions.sizeColumn && !has(chartOptions.sizeColumn)) {
+      updateChartOption('sizeColumn', '');
+    }
+
+    // visible_columns subset (dataview) — keep only present ones.
+    setVisibleColumns((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      const kept = prev.filter(has);
+      return kept.length === prev.length ? prev : kept;
+    });
+
+    // Time bucket value + timestamp columns.
+    setTimeBucketValueCols((prev) => {
+      const kept = (prev || []).filter(has);
+      return kept.length === (prev || []).length ? prev : kept;
+    });
+    if (timeBucketTimestampCol && !has(timeBucketTimestampCol)) setTimeBucketTimestampCol('');
+
+    // Banded-bar column map — clear any member not in the new schema.
+    setBandColumns((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      let changed = false;
+      for (const k of Object.keys(next)) {
+        if (next[k] && !has(next[k])) { next[k] = ''; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  };
+
   // Handle MQTT topic selection — sample the topic to discover schema
   const handleMQTTTopicSelect = async (topic) => {
     setMqttSelectedTopic(topic);
@@ -1159,8 +1295,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   const resetForm = () => {
     setName('');
+    setTitle('');
     setDescription('');
     setNamespace(activeNamespace || 'default');
+    setTags([]);
+    setComponentType('chart');
+    setControlConfig(null);
+    setDisplayConfig(null);
     // Line is the most-used chart type on this platform (most data
     // is time-stamped). The initialState snapshot below must agree
     // so dirty-detection doesn't think the form is dirty on mount.
@@ -1182,6 +1323,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setSortBy('');
     setSortOrder('desc');
     setLimitRows(0);
+    setColumnAliases({});
+    setVisibleColumns(null);
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
     setSlidingWindowTimestampCol('');
@@ -1196,8 +1339,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTsstoreLimit(100);
     setTsstoreSinceDuration('1h');
     setEdgelakeDatabase('');
+    setParserPreset('none');
+    setParserDataPath('');
+    setParserTimestampField('');
+    setParserTimestampScale('');
     setComponentCode('');
     setShowCustomCode(false);
+    // Wholesale replace — a fresh copy of the defaults, NOT a merge over
+    // the prior chartOptions state, so spec-driven keys (xAxisRange,
+    // sizeColumn, tooltip, …) can't bleed from a previously-edited chart.
+    setChartOptions({ ...DEFAULT_CHART_OPTIONS });
     setPreviewData(null);
     setPreviewError(null);
     setAvailableColumns([]);
@@ -1383,13 +1534,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setPreviewData(data.result_set);
 
       if (data.result_set?.columns) {
-        setAvailableColumns(data.result_set.columns);
+        const cols = data.result_set.columns;
+        setAvailableColumns(cols);
 
-        if (!xAxisColumn && data.result_set.columns.length > 0) {
-          setXAxisColumn(data.result_set.columns[0]);
+        // Drop any saved column selection the new result set no longer
+        // contains (connection switch / query edit changes the schema).
+        // Otherwise stale selections linger in the pickers and silently
+        // break the chart.
+        pruneStaleColumnSelections(cols);
+
+        if (!xAxisColumn && cols.length > 0) {
+          setXAxisColumn(cols[0]);
         }
-        if (yAxisColumns.length === 0 && data.result_set.columns.length > 1) {
-          setYAxisColumns([data.result_set.columns[1]]);
+        if (yAxisColumns.length === 0 && cols.length > 1) {
+          setYAxisColumns([cols[1]]);
         }
       }
     } catch (err) {
@@ -1507,15 +1665,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       return;
     }
 
-    // Sliding window requires a timestamp column to be meaningful. If
-    // the toggle is on but the column is empty, the save would silently
-    // strip the sliding_window block entirely (see line below where
-    // both flags are required to persist), and the user would see the
-    // toggle flip back off on reload. Block save instead so they pick
-    // a column or turn the toggle off explicitly.
+    // Sliding window requires a timestamp column to be meaningful, but
+    // "enabled with no timestamp" isn't a user error to block on — it
+    // happens when the timestamp column gets pruned (connection switch /
+    // query edit) while the toggle lingers on. Self-heal: default the
+    // feature to off when no timestamp is present, and reset the toggle
+    // so the UI matches. The save block below only persists
+    // sliding_window when both are set, so nothing stale is written.
     if (slidingWindowEnabled && !slidingWindowTimestampCol) {
-      alert('Sliding Window is enabled but no Timestamp Column is selected. Pick a timestamp column or turn off Sliding Window before saving.');
-      return;
+      setSlidingWindowEnabled(false);
     }
 
     const chartPayload = {
@@ -1561,6 +1719,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         })(),
         group_by: groupByColumn || '',
         series: seriesColumn || '', // Column for series partitioning in time buckets
+        // Scatter bubble mode: column whose value sizes each point.
+        // Persisted on data_mapping (a data dimension, like series) so
+        // scatter.js reads it alongside x/y. Empty for non-scatter.
+        size_column: chartOptions.sizeColumn || '',
         filters: filters.length > 0 ? filters : [],
         aggregation: aggregation.type ? aggregation : null,
         sliding_window: slidingWindowEnabled && slidingWindowTimestampCol ? {
@@ -2001,44 +2163,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   ))}
                 </Select>
                 {selectedDatasource && (() => {
-                  // Compose tag chip list: type chip first, then
-                  // the connection's user-defined tags. Truncate
-                  // to keep the row from wrapping wider than the
-                  // tile; surface the full list in a tooltip on
-                  // the "+N more" overflow.
-                  const userTags = Array.isArray(selectedDatasource.tags) ? selectedDatasource.tags : [];
-                  const chips = [
-                    { label: selectedDatasource.type, kind: 'type' },
-                    ...userTags.map(t => ({ label: t, kind: 'user' })),
-                  ];
-                  const VISIBLE_TAG_CAP = 4;
-                  const visible = chips.slice(0, VISIBLE_TAG_CAP);
-                  const overflow = chips.slice(VISIBLE_TAG_CAP);
-                  return (
-                    <div className="connection-tags-row">
-                      {visible.map((chip, i) => (
-                        <Tag
-                          key={`${chip.kind}-${chip.label}-${i}`}
-                          type={chip.kind === 'type' ? 'blue' : 'gray'}
-                          size="sm"
-                        >
-                          {chip.label}
-                        </Tag>
-                      ))}
-                      {overflow.length > 0 && (
-                        <Toggletip align="bottom">
-                          <ToggletipButton label={`Show ${overflow.length} more tag${overflow.length === 1 ? '' : 's'}`}>
-                            <span className="connection-tags-overflow">+{overflow.length}…</span>
-                          </ToggletipButton>
-                          <ToggletipContent>
-                            <p>
-                              {chips.map(c => c.label).join(', ')}
-                            </p>
-                          </ToggletipContent>
-                        </Toggletip>
-                      )}
-                    </div>
-                  );
+                  // Type tag first, then the connection's user tags,
+                  // deduped (a user tag equal to the type tag shows once).
+                  // ConnectionTagsRow fits as many as the row width allows
+                  // and collapses the rest into a +N… toggletip — no fixed
+                  // cap, so tags aren't hidden when there's room.
+                  const seen = new Set();
+                  const chips = [selectedDatasource.type, ...(Array.isArray(selectedDatasource.tags) ? selectedDatasource.tags : [])]
+                    .filter((t) => {
+                      if (!t || seen.has(t)) return false;
+                      seen.add(t);
+                      return true;
+                    });
+                  return <ConnectionTagsRow tags={chips} />;
                 })()}
               </div>
               <div className="connection-row__guidance">
@@ -2610,7 +2747,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(['line', 'bar', 'area', 'pie'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3122,7 +3259,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area', 'pie'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -3162,6 +3299,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       value_column: (Array.isArray(yAxisColumns) ? yAxisColumns[0] : '') || '',
                       pie_inner_radius: chartOptions.pieInnerRadius ?? 0,
                       pie_show_labels: chartOptions.pieShowLabels !== false,
+                      // scatter field ids
+                      y_axis_label: yAxisLabel || '',
+                      size_column: chartOptions.sizeColumn || '',
+                      symbol_size: chartOptions.symbolSize ?? 15,
+                      symbol_shape: chartOptions.symbolShape || 'circle',
+                      x_min: chartOptions.xAxisRange?.min ?? null,
+                      x_max: chartOptions.xAxisRange?.max ?? null,
+                      x_scale: chartOptions.xAxisRange?.scale || 'linear',
                       // chart_options
                       chart_smooth: chartOptions.chartSmooth !== false,
                       chart_show_data_labels: Boolean(chartOptions.chartShowDataLabels),
@@ -3251,6 +3396,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'value_column': setYAxisColumns(value ? [value] : []); break;
                         case 'pie_inner_radius': updateChartOption('pieInnerRadius', value); break;
                         case 'pie_show_labels': updateChartOption('pieShowLabels', value); break;
+                        // Scatter: y label uses the shared yAxisLabel state;
+                        // size column + symbol style live on chartOptions;
+                        // x-axis range is scatter-only (true value axis).
+                        case 'y_axis_label': setYAxisLabel(value); break;
+                        case 'size_column': updateChartOption('sizeColumn', value); break;
+                        case 'symbol_size': updateChartOption('symbolSize', value); break;
+                        case 'symbol_shape': updateChartOption('symbolShape', value); break;
+                        case 'x_min':
+                          updateChartOption('xAxisRange', { ...(chartOptions.xAxisRange || {}), min: value });
+                          break;
+                        case 'x_max':
+                          updateChartOption('xAxisRange', { ...(chartOptions.xAxisRange || {}), max: value });
+                          break;
+                        case 'x_scale':
+                          updateChartOption('xAxisRange', { ...(chartOptions.xAxisRange || {}), scale: value });
+                          break;
                         case 'chart_smooth': updateChartOption('chartSmooth', value); break;
                         case 'chart_show_data_labels': updateChartOption('chartShowDataLabels', value); break;
                         case 'chart_show_zoom_slider': updateChartOption('chartShowZoomSlider', value); break;
@@ -4007,6 +4168,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           // columns. Mirrors the formState builder.
                           multiple_y_axis: chartOptions.multipleYAxis,
                           series: seriesColumn || '',
+                          // scatter reads these off data_mapping
+                          y_axis_label: yAxisLabel || '',
+                          size_column: chartOptions.sizeColumn || '',
                         } : undefined,
                         options: chartOptions,
                       }}

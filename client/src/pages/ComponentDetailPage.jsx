@@ -180,7 +180,14 @@ function ComponentDetailPage() {
         </div>
       </div>
 
+      {/* key on the route id (or 'new' for create) so navigating between
+          charts — or from an edit to a fresh create — remounts the editor
+          with clean state instead of bleeding the previous chart's fields
+          (e.g. a stale options.xAxisRange or phantom sliding window) into
+          the next one. The init effect resets on `chart` change too; this
+          is belt-and-suspenders for instance reuse. */}
       <ComponentEditor
+        key={id || 'new'}
         ref={editorRef}
         chart={chart}
         onSave={handleSave}

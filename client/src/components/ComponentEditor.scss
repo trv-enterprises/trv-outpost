@@ -517,6 +517,28 @@
     align-items: center;
     gap: spacing.$spacing-02;
     margin-top: spacing.$spacing-03;
+    position: relative;
+
+    // Hidden measurement probe — lays out ALL chips with the same
+    // flex/gap/wrap rules as the visible row so ConnectionTagsRow can
+    // read each chip's offsetTop and decide how many fit on line one.
+    // Absolutely positioned + invisible so it spans the real row's
+    // width and wraps naturally, without affecting the row's height or
+    // painting anything.
+    .connection-tags-probe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: spacing.$spacing-02;
+      visibility: hidden;
+      pointer-events: none;
+
+      .cds--tag { margin: 0; }
+    }
 
     // Carbon Tag has its own default margin that bunches them
     // up; collapse so the gap from our flex container is the

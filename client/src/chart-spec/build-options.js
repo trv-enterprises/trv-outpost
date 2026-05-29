@@ -15,6 +15,7 @@
 import { buildOption as buildLineOption } from './specs/line';
 import { buildOption as buildGaugeOption } from './specs/gauge';
 import { buildOption as buildPieOption } from './specs/pie';
+import { buildOption as buildScatterOption } from './specs/scatter';
 
 const BUILD_OPTIONS = {
   line: buildLineOption,
@@ -35,7 +36,10 @@ const BUILD_OPTIONS = {
   // pie has its own module — one label column + one value column, no
   // x/y axes, so it doesn't share the line dispatch.
   pie: buildPieOption,
-  // scatter, number, dataview, banded_bar — added as each chart type's
+  // scatter has its own module — numeric [x,y] points on value axes,
+  // optional bubble sizing + color-by-category. Doesn't share line.
+  scatter: buildScatterOption,
+  // number, dataview, banded_bar — added as each chart type's
   // <type>.js (or shared dispatch) lands during Stage 2.
 };
 
