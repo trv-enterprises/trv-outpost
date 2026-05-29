@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useContext, useMemo } from 'react';
+import { useCallback, useContext, useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { DataContext, ComponentConfigContext } from '../components/DynamicComponentLoader';
 import { formatCellValue } from '../utils/dataTransforms';
@@ -29,6 +29,27 @@ export default function SpecDrivenChart({ specName }) {
   const dataCtx = useContext(DataContext);
   const config = useContext(ComponentConfigContext);
 
+  // Tracks which legend entries are currently visible. ECharts owns
+  // the canonical visibility state internally; we mirror it here so
+  // buildOption can react to it (e.g. dual-axis line hides the dead
+  // axis when its sole series is toggled off). Null = "no toggle has
+  // happened yet, assume everything visible." A {name: bool} map
+  // appears on the first legendselectchanged event.
+  const [legendSelected, setLegendSelected] = useState(null);
+
+  const handleLegendSelectChanged = useCallback((params) => {
+    // params.selected is `{seriesName: boolean}` — ECharts' authoritative
+    // snapshot of which legend entries are currently selected. Store as
+    // a fresh object so React picks up the change.
+    if (params && params.selected) {
+      setLegendSelected({ ...params.selected });
+    }
+  }, []);
+
+  const onEvents = useMemo(() => ({
+    legendselectchanged: handleLegendSelectChanged,
+  }), [handleLegendSelectChanged]);
+
   const option = useMemo(() => {
     const build = getBuildOptionForChartType(specName);
     if (!build) {
@@ -49,8 +70,11 @@ export default function SpecDrivenChart({ specName }) {
       chartType: specName,
       xAxisFormat: config?.transforms?.x_axis_format || config?.data_mapping?.x_axis_format || 'chart',
       chartName: config?.title || config?.name || '',
+      // Map of seriesName → visible. Undefined when no toggle has
+      // happened yet — buildOption treats undefined as "all visible."
+      legendSelected,
     });
-  }, [specName, config, dataCtx?.data]);
+  }, [specName, config, dataCtx?.data, legendSelected]);
 
   if (dataCtx?.loading) {
     return (
@@ -109,7 +133,12 @@ export default function SpecDrivenChart({ specName }) {
         </div>
       ) : null}
       <div style={{ flex: 1, minHeight: 0 }}>
-        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />
+        <ReactECharts
+          option={option}
+          style={{ height: '100%', width: '100%' }}
+          theme="carbon-dark"
+          onEvents={onEvents}
+        />
       </div>
     </div>
   );

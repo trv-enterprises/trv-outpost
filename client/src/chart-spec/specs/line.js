@@ -144,11 +144,11 @@ function buildLegend(legend, dualAxis, multipleSeries) {
     textStyle: { color: '#c6c6c6' },
   };
   switch (pos) {
-    case 'bottom': block.bottom = 8; break;
-    case 'left':   block.left = 8; block.orient = 'vertical'; break;
-    case 'right':  block.right = 8; block.orient = 'vertical'; break;
+    case 'bottom': block.bottom = 0; break;
+    case 'left':   block.left = 0; block.orient = 'vertical'; break;
+    case 'right':  block.right = 0; block.orient = 'vertical'; break;
     case 'top':
-    default:       block.top = 8; break;
+    default:       block.top = 0; break;
   }
   // Default selection mode (ECharts: 'multiple' = clicking a series
   // toggles it independently). No explicit knob exposed — multi-toggle
@@ -231,7 +231,7 @@ function buildThresholds(thresholds, mode) {
  * @returns {Object} an ECharts `option` literal
  */
 export function buildOption(values, data, helpers = {}) {
-  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'chart', chartName = '' } = helpers;
+  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'chart', chartName = '', legendSelected } = helpers;
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
   const yEntries = rawYAxis.map(normalizeYEntry).filter((e) => e.column);
@@ -327,6 +327,33 @@ export function buildOption(values, data, helpers = {}) {
 
   const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange);
 
+  // Dual-axis dead-axis hide. When the user toggles off the only series
+  // bound to one of the two y-axes via the legend, ECharts hides the
+  // series itself but leaves the orphan axis line + labels on screen.
+  // We mirror the visibility map ECharts exposed via legendselectchanged
+  // (helpers.legendSelected) and set show:false on any yAxisIndex that
+  // has no visible series. The surviving axis keeps its scale —
+  // ECharts does NOT promote the survivor to span the full plot, but
+  // the orphan line/labels vanish, which is the cleanup we wanted.
+  // legendSelected is undefined on the very first render (no toggle
+  // has fired yet) — treat that as "everything visible."
+  if (dualAxis && Array.isArray(yAxis) && legendSelected) {
+    const axisHasVisibleSeries = [false, false];
+    series.forEach((s) => {
+      const visible = legendSelected[s.name] !== false;
+      if (!visible) return;
+      const idx = s.yAxisIndex === 1 ? 1 : 0;
+      axisHasVisibleSeries[idx] = true;
+    });
+    // Write `show` explicitly on every axis (true OR false). ECharts'
+    // option merge keeps the previous render's `show: false` sticky if
+    // we only set it conditionally — the toggled-back-on axis would
+    // never re-appear because nothing wrote `show: true`.
+    yAxis.forEach((ax, i) => {
+      ax.show = axisHasVisibleSeries[i];
+    });
+  }
+
   // X-axis literal. Name renders below the axis when xAxisLabel is set;
   // empty label means no name (axis is silent — matches "leave empty
   // to hide" helper text in the spec).
@@ -337,10 +364,11 @@ export function buildOption(values, data, helpers = {}) {
     xAxis.nameGap = 30;
   }
 
-  // Grid top budget. Legend at top: 8 (line spec default) — give just
-  // enough to clear the legend row without a wide gap. Legacy used 35
-  // and felt too airy at small panel sizes; 24 hugs the chart tighter.
-  const gridTop = legend?.top != null ? 24 : 10;
+  // Grid top budget. Legend at top: 8 (line spec default), legend
+  // text + marker ~14px tall, plus ~14px breathing room before the
+  // plot starts → grid.top: 36. Earlier 24 caused the top series
+  // line to brush against the legend text at narrow panel heights.
+  const gridTop = legend?.top != null ? 36 : 10;
   const option = {
     backgroundColor: 'transparent',
     tooltip,
