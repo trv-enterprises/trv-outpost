@@ -234,7 +234,22 @@ export function buildOption(values, data, helpers = {}) {
   const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'chart', chartName = '', legendSelected } = helpers;
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
-  const yEntries = rawYAxis.map(normalizeYEntry).filter((e) => e.column);
+  // Legacy save shape parks per-column labels in a parallel array
+  // `data_mapping.y_axis_labels` instead of inline on each y_axis
+  // entry. Merge the parallel array onto the normalized entries here
+  // so buildSeriesForColumn sees a single `entry.label` regardless of
+  // which shape the record was saved in. When the entry already
+  // carries a label, the inline one wins.
+  const rawYLabels = Array.isArray(values?.data_mapping?.y_axis_labels) ? values.data_mapping.y_axis_labels : [];
+  const yEntries = rawYAxis
+    .map((e, i) => {
+      const norm = normalizeYEntry(e);
+      if (!norm.label && typeof rawYLabels[i] === 'string') {
+        norm.label = rawYLabels[i];
+      }
+      return norm;
+    })
+    .filter((e) => e.column);
   // Dual-axis trigger matches the legacy convention: explicit toggle
   // wins; otherwise 2 columns = dual-axis by convention. Same fallback
   // the editor's formState builder uses (ComponentEditor.jsx ~line 3139)
@@ -364,15 +379,24 @@ export function buildOption(values, data, helpers = {}) {
     xAxis.nameGap = 30;
   }
 
-  // Grid top budget. Legend at top: 8 (line spec default), legend
-  // text + marker ~14px tall, plus ~14px breathing room before the
-  // plot starts → grid.top: 36. Earlier 24 caused the top series
-  // line to brush against the legend text at narrow panel heights.
-  const gridTop = legend?.top != null ? 36 : 10;
+  // Grid edge budget. ECharts doesn't auto-reserve plot space for
+  // legends — they overlay the canvas. We bump the grid edge on the
+  // legend's side so the plot doesn't run under it. Side legends get
+  // a generous ~180px column on the assumption that users who pick
+  // left/right will widen the panel to accommodate; long series
+  // names still get plenty of room without truncating. Top is the
+  // default and the recommended position; the AI agent prompt should
+  // steer toward top unless the user explicitly asks otherwise.
+  const legendPos = legend ? (opts?.legend?.position || 'top') : null;
+  const gridTop = legendPos === 'top' ? 36 : 10;
+  const gridBottomBase = opts.chartShowZoomSlider ? 50 : 30;
+  const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
+  const gridLeft = legendPos === 'left' ? 135 : 50;
+  const gridRight = legendPos === 'right' ? 135 : 20;
   const option = {
     backgroundColor: 'transparent',
     tooltip,
-    grid: { top: gridTop, left: 50, right: 20, bottom: opts.chartShowZoomSlider ? 50 : 30, containLabel: true },
+    grid: { top: gridTop, left: gridLeft, right: gridRight, bottom: gridBottom, containLabel: true },
     xAxis,
     yAxis,
     series,

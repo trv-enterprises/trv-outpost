@@ -299,6 +299,7 @@
               "type": "enum",
               "label": "Position",
               "default": "top",
+              "helperText": "Top is the default and the recommended position. Left/right reserve ~135px of plot width for the legend column — widen the panel to compensate.",
               "options": [
                 { "value": "top", "label": "Top" },
                 { "value": "bottom", "label": "Bottom" },
