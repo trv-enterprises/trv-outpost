@@ -78,7 +78,16 @@ export default function YAxisColumnsListField({ field }) {
         <div className="spec-field-helper">{field.helperText}</div>
       )}
       <div className="spec-yacl__rows">
-        {entries.map((entry, i) => (
+        {entries.map((entry, i) => {
+          // Inject the saved column as an option when availableColumns
+          // is still empty (editing a chart before re-running the
+          // query), so the configured selection shows instead of going
+          // blank. Once a fetch repopulates the list the duplicate
+          // collapses naturally.
+          const colOptions = entry.column && !availableColumns.includes(entry.column)
+            ? [entry.column, ...availableColumns]
+            : availableColumns;
+          return (
           <div key={i} className="spec-yacl__row">
             <div className="spec-yacl__column">
               <Select
@@ -89,7 +98,7 @@ export default function YAxisColumnsListField({ field }) {
                 onChange={(e) => updateEntry(i, { column: e.target.value })}
               >
                 <SelectItem value="" text="Select a column" />
-                {availableColumns.map((col) => (
+                {colOptions.map((col) => (
                   <SelectItem key={col} value={col} text={col} />
                 ))}
               </Select>
@@ -143,7 +152,8 @@ export default function YAxisColumnsListField({ field }) {
               </IconButton>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       <div className="spec-yacl__add">
         <Button

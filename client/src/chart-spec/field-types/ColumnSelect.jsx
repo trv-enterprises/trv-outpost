@@ -9,6 +9,16 @@ export default function ColumnSelectField({ field }) {
   const { availableColumns, formState, onFieldChange } = useSpecRenderContext();
   const value = formState[field.id] ?? '';
 
+  // When editing a saved chart, availableColumns is empty until the
+  // user re-runs the query. Carbon's <Select> renders blank if `value`
+  // has no matching <SelectItem>, which would make a configured chart
+  // look unconfigured. Inject the saved value as an option so the
+  // current selection always shows; once a fetch repopulates
+  // availableColumns the duplicate collapses naturally.
+  const options = value && !availableColumns.includes(value)
+    ? [value, ...availableColumns]
+    : availableColumns;
+
   return (
     <Select
       id={`spec-${field.id}`}
@@ -20,7 +30,7 @@ export default function ColumnSelectField({ field }) {
       invalidText={field.required ? 'Required' : undefined}
     >
       <SelectItem value="" text={field.placeholder || 'Select a column'} />
-      {availableColumns.map((col) => (
+      {options.map((col) => (
         <SelectItem key={col} value={col} text={col} />
       ))}
     </Select>

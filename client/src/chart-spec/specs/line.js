@@ -8,6 +8,15 @@
 // object. No string templating. No DynamicComponentLoader eval for
 // this path — the shell renders the option directly via ReactECharts.
 //
+// This file backs **line, area, and bar**. The render path is
+// structurally the same (categorical x, numeric y, optional dual axis,
+// optional pivot, optional thresholds). Per-type tweaks live inline:
+//   - chartType === 'area' → adds areaStyle; type stays 'line'.
+//   - chartType === 'bar' → series.type 'bar'; smooth/showSymbol/
+//     sampling are skipped (their gates are line/area-only).
+// The specs (line.json / bar.json) differ in which fields they expose;
+// the buildOption code reads chartType from helpers and branches.
+//
 // Stage 1's gauge_v1.js was a verbatim port of the legacy gauge codegen
 // branch. This file is intentionally not that — it's the end-state
 // shape that the rest of Stage 2 will follow. After line lands and

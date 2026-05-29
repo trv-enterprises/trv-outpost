@@ -16,8 +16,13 @@ import { buildOption as buildLineOption } from './specs/line';
 
 const BUILD_OPTIONS = {
   line: buildLineOption,
-  // bar, area, pie, scatter, number, dataview, banded_bar — added as
-  // each chart type's <type>.js lands during Stage 2.
+  // bar shares line.js's render — line.js dispatches on chartType.
+  // The form spec (bar.json) differs from line.json (no smoothing /
+  // symbol / sampling controls), so the editor still gets bar-specific
+  // sections; only the render is shared.
+  bar: buildLineOption,
+  // area, pie, scatter, number, dataview, banded_bar — added as each
+  // chart type's <type>.js (or shared dispatch) lands during Stage 2.
 };
 
 /**

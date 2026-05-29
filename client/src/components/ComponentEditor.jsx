@@ -2611,7 +2611,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(chartType === 'line' && chartSpecEditorEnabled && getChartTypeSpec('line')) && (
+                {!showCustomCode && !(['line', 'bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3123,9 +3123,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && chartType === 'line' && chartSpecEditorEnabled && getChartTypeSpec('line') && (
+                {!showCustomCode && ['line', 'bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
-                    spec={getChartTypeSpec('line')}
+                    spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
                     formState={{
                       // data_mapping. multipleYAxis read order:
@@ -3288,10 +3288,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 )}
 
                 {/* Chart Options Section - Bar/Line/Area (legacy).
-                    Suppressed for line when the spec-driven editor is
-                    on (the spec's chart-options section renders the
-                    equivalent fields plus the gap-fillers). */}
-                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && !(chartType === 'line' && chartSpecEditorEnabled && getChartTypeSpec('line')) && (
+                    Suppressed for spec-driven chart types (line, bar);
+                    area still uses this block until its migration. */}
+                {!showCustomCode && ['bar', 'line', 'area'].includes(chartType) && !(['line', 'bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                   <div className="chart-options-section">
                     <h4>Chart Options</h4>
                     <Grid narrow>

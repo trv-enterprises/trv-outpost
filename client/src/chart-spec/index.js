@@ -5,13 +5,15 @@
 import { assertValidChartTypeSpec } from './schema-validator';
 import gaugeSpec from './specs/gauge.json';
 import lineSpec from './specs/line.json';
+import barSpec from './specs/bar.json';
 
 // Validate every spec at module load so a malformed spec fails fast in
-// dev. Stage 1 shipped gauge; Stage 2 starts with line. Other chart
-// types follow in Stage 2.
+// dev. Stage 1 shipped gauge; Stage 2 starts with line, then bar.
+// Other chart types follow.
 const SPECS = {
   gauge: assertValidChartTypeSpec(gaugeSpec, 'specs/gauge.json'),
   line: assertValidChartTypeSpec(lineSpec, 'specs/line.json'),
+  bar: assertValidChartTypeSpec(barSpec, 'specs/bar.json'),
 };
 
 /**
