@@ -43,6 +43,7 @@ import {
 import { AgGridReact } from 'ag-grid-react';
 import { useDataviewLayout } from '../hooks/useDataviewLayout';
 import SpecDrivenChart from '../chart-codegen/SpecDrivenChart';
+import { CARBON_COLORS } from '../chart-spec/option-helpers';
 
 // Context to provide transforms to child components
 const TransformsContext = createContext(null);
@@ -115,6 +116,9 @@ function useDataWithTransforms(params) {
  * - ReactECharts: ECharts React wrapper component
  * - carbonTheme: Carbon Design System ECharts theme (light mode)
  * - carbonDarkTheme: Carbon Design System ECharts theme (dark mode)
+ * - CARBON_COLORS: Carbon palette object ({primary, secondary, ok, warn, danger,
+ *   text, textSecondary}). Use these instead of hardcoded hex so custom charts
+ *   match spec-driven charts and follow theme changes.
  * - Carbon DataTable components: DataTable, Table, TableHead, TableRow, TableHeader,
  *   TableBody, TableCell, TableContainer, TableToolbar, TableToolbarContent, TableToolbarSearch
  *
@@ -240,6 +244,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         'AgGridReact',
         'useDataviewLayout',
         'SpecDrivenChart',
+        'CARBON_COLORS',
         `
         ${transformedCode}
         return typeof Component !== 'undefined' ? Component :
@@ -280,7 +285,8 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         TableToolbarSearch,
         AgGridReact,
         useDataviewLayout,
-        SpecDrivenChart
+        SpecDrivenChart,
+        CARBON_COLORS
       );
 
       setComponent(() => LoadedComponent);

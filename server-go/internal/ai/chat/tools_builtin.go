@@ -198,12 +198,38 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"display_config":  map[string]interface{}{"type": "object", "description": "Display-specific config — only for component_type=display"},
 				"component_code":  map[string]interface{}{"type": "string", "description": "Inline React component code; only set with use_custom_code=true"},
 				"use_custom_code": map[string]interface{}{"type": "boolean", "description": "true = use component_code; false (default) = let the server's codegen produce code from the structured fields"},
-				"options":         map[string]interface{}{"type": "object", "description": "ECharts options overlay (passed through to ECharts as-is; use this for axis ranges, colors, etc.)"},
+				"options":         chartOptionsSchema(),
 				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
 			},
 			"required": []string{"name"},
 		},
 		Handler: wrapCreateComponent(ops),
+	})
+
+	reg.Register(Tool{
+		Name: "update_component",
+		Description: "Modify an existing component in place (charts, controls, displays). PREFER THIS over rewriting a chart as custom code: get_component first to see its current config, then patch only the fields that change. Only the fields you set are touched — omit the rest. For charts, changing chart_type / data_mapping / query_config / options keeps the component spec-driven and re-renders automatically; you do NOT need to (and should not) set component_code for a config chart. Set use_custom_code=true + component_code only when the structured config genuinely cannot express the request. Do not call this on a component the user is actively editing (see the active-edit rule).",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id":              map[string]interface{}{"type": "string", "description": "Component ID to update (required)."},
+				"title":           map[string]interface{}{"type": "string", "description": "Display title."},
+				"description":     map[string]interface{}{"type": "string"},
+				"chart_type":      map[string]interface{}{"type": "string", "description": "For charts: bar, line, pie, scatter, gauge, area, banded_bar, dataview, custom. Changing this re-syncs the rendered chart."},
+				"connection_id":   map[string]interface{}{"type": "string", "description": "Connection ID this component reads from."},
+				"query_config":    chartQueryConfigSchema(),
+				"data_mapping":    chartDataMappingSchema(),
+				"control_config":  map[string]interface{}{"type": "object", "description": "Control-specific config — only for component_type=control"},
+				"display_config":  map[string]interface{}{"type": "object", "description": "Display-specific config — only for component_type=display"},
+				"component_code":  map[string]interface{}{"type": "string", "description": "Inline React component code; only set together with use_custom_code=true"},
+				"use_custom_code": map[string]interface{}{"type": "boolean", "description": "Set true to switch this chart into custom-code mode (destructive: config fields stop driving the render). Leave unset to keep it spec-driven."},
+				"options":         chartOptionsSchema(),
+				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapUpdateComponent(ops),
 	})
 
 	// ─── Dashboards ───
@@ -363,9 +389,24 @@ func chartDataMappingSchema() map[string]interface{} {
 			"x_axis_format": map[string]interface{}{"type": "string", "description": "Format for X values: chart, chart_time, chart_date, chart_datetime, short, long."},
 			"y_axis": map[string]interface{}{
 				"type":        "array",
-				"items":       map[string]interface{}{"type": "string"},
-				"description": "Column name(s) for the Y axis (values). Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0].",
+				"description": "Column name(s) for the Y axis (values). Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0]. Each entry is EITHER a plain column-name string OR an object {column, label?, stack?, axis?} for per-column control: `label` overrides the legend name, `stack: true` adds the column to the stack group (columns left unstacked draw independently — e.g. a total line over stacked parts), `axis: \"left\"|\"right\"` assigns it to an axis on dual-axis charts. Mix forms freely, e.g. [\"cpu\", {\"column\":\"mem\",\"stack\":true,\"axis\":\"right\"}].",
+				"items": map[string]interface{}{
+					"oneOf": []interface{}{
+						map[string]interface{}{"type": "string"},
+						map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"column": map[string]interface{}{"type": "string", "description": "Data column name."},
+								"label":  map[string]interface{}{"type": "string", "description": "Legend label override; empty = use column name."},
+								"stack":  map[string]interface{}{"type": "boolean", "description": "Add to the stack group."},
+								"axis":   map[string]interface{}{"type": "string", "enum": []string{"left", "right"}, "description": "Axis assignment (dual-axis charts)."},
+							},
+							"required": []string{"column"},
+						},
+					},
+				},
 			},
+			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: columns split across left/right axes (capped at 2 columns); pair with each entry's `axis` and with options.yAxisRange.right."},
 			"y_axis_label":   map[string]interface{}{"type": "string", "description": "Display label for the Y axis (legacy single label; use y_axis_labels for dual-axis)."},
 			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels. [0] = left axis, [1] = right axis on dual-axis charts."},
 			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
@@ -378,6 +419,56 @@ func chartDataMappingSchema() map[string]interface{} {
 			"sort_by":        map[string]interface{}{"type": "string"},
 			"sort_order":     map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
 			"limit":          map[string]interface{}{"type": "integer", "description": "Max rows the chart should render."},
+		},
+	}
+}
+
+// chartOptionsSchema returns the inline JSON-schema for the chart
+// `options` overlay. options is stored as a free-form map on the
+// component, but the spec-driven renderer reads a known set of keys —
+// enumerating them here is what lets the agent configure axis ranges,
+// tooltips, thresholds, etc. via config instead of falling to custom
+// code (the configure-first goal). These keys are the authoritative
+// `binds: "options.*"` paths from the client chart specs
+// (client/src/chart-spec/specs/*.json); keep them in sync when the
+// specs gain fields. Not every chart type honors every key (a gauge
+// ignores yThresholds); unknown keys are harmless.
+func chartOptionsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "object",
+		"description": "Spec-driven chart options overlay. Set these to configure an existing chart rather than rewriting it as custom code. Field names are exact (camelCase) and match the editor's Chart Options form.",
+		"properties": map[string]interface{}{
+			"yAxisRange": map[string]interface{}{
+				"type":        "object",
+				"description": "Manual Y-axis bounds + scale. Shape: {left: {min, max, scale}, right: {min, max, scale}}. min/max are numbers or null (null = auto-scale to data). scale is \"linear\" (default) or \"log\". `right` is only used when data_mapping.multiple_y_axis is true (dual-axis).",
+			},
+			"tooltip": map[string]interface{}{
+				"type":        "object",
+				"description": "Tooltip config. Shape: {mode, decimals, units}. mode: \"multi\" (all series, default), \"single\" (hovered series only), or \"hidden\". decimals: integer 0-10 or null. units: suffix string like \"%\" or \"°C\".",
+			},
+			"yThresholds": map[string]interface{}{
+				"type":        "array",
+				"items":       map[string]interface{}{"type": "object"},
+				"description": "Reference lines / color stops at specific Y values. Each: {value: number, color: hex string, label?: string}. Pair with yThresholdRenderMode.",
+			},
+			"yThresholdRenderMode": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"line", "color_segments", "both"},
+				"description": "How yThresholds render: \"line\" (reference line at value, default), \"color_segments\" (color the series by value), or \"both\".",
+			},
+			"sampling": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"off", "lttb", "average", "max"},
+				"description": "Downsampling for dense (≥10k-point) series. \"lttb\" preserves visual shape; average/max preserve statistics. Default \"off\".",
+			},
+			"legend": map[string]interface{}{
+				"type":        "object",
+				"description": "Legend config. Shape: {show: bool (default true), position: \"top\"|\"bottom\"|\"left\"|\"right\" (default \"top\")}. Left/right reserve ~135px of plot width.",
+			},
+			"chartSmooth":          map[string]interface{}{"type": "boolean", "description": "Smooth (curved) line segments. line/area only."},
+			"showSymbol":           map[string]interface{}{"type": "boolean", "description": "Show point markers on the line. Turn off for dense time series. line/area only."},
+			"chartShowDataLabels":  map[string]interface{}{"type": "boolean", "description": "Render the value next to each data point."},
+			"chartShowZoomSlider":  map[string]interface{}{"type": "boolean", "description": "Show the bottom zoom/pan slider."},
 		},
 	}
 }
@@ -624,6 +715,31 @@ func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
 			req.Namespace = env.Caller.Namespace
 		}
 		out, err := ops.CreateComponent(ctx, toolops.CreateComponentInput{Request: req})
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapUpdateComponent(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		// id rides alongside the patch fields in the tool args; pull it
+		// out, then unmarshal the rest as the partial-update request.
+		var idHolder struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(args, &idHolder); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if idHolder.ID == "" {
+			return "", fmt.Errorf("id is required")
+		}
+		var req models.UpdateComponentRequest
+		if err := json.Unmarshal(args, &req); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.UpdateComponent(ctx, toolops.UpdateComponentInput{ID: idHolder.ID, Request: req})
 		if err != nil {
 			return "", err
 		}

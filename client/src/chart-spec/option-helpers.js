@@ -23,6 +23,24 @@ export const COLOR_DANGER = '#da1e28'; // red60
 export const COLOR_TEXT = '#f4f4f4';
 export const COLOR_TEXT_SECONDARY = '#c6c6c6';
 
+// CARBON_COLORS is the same palette as a single named object. Spec-driven
+// charts import the COLOR_* constants directly; custom-code charts can't
+// import, so the dynamic loader injects THIS object into their eval scope
+// (as `CARBON_COLORS`). Custom code references e.g. CARBON_COLORS.primary
+// instead of a hardcoded '#0f62fe', which keeps custom charts consistent
+// with spec-driven ones and gives us a single seam to resolve from Carbon
+// theme tokens at runtime later (see the chart-colors-resolve-carbon-tokens
+// todo) — when that lands, theme switches flow into custom charts for free.
+export const CARBON_COLORS = {
+  primary: COLOR_PRIMARY,
+  secondary: COLOR_SECONDARY,
+  ok: COLOR_OK,
+  warn: COLOR_WARN,
+  danger: COLOR_DANGER,
+  text: COLOR_TEXT,
+  textSecondary: COLOR_TEXT_SECONDARY,
+};
+
 // ── Numeric coercion ─────────────────────────────────────────────────
 
 /** Coerce to a finite number, or return `fallback` when it isn't one. */

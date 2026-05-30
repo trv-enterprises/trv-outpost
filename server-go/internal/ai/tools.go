@@ -336,27 +336,15 @@ Use this BEFORE configuring data mapping to understand the data structure.`),
 		},
 		{
 			Name: "get_component_template",
-			Description: anthropic.String(`Get a React component template for a chart type.
-Call AFTER setting chart_type with update_component_config.
-Returns Carbon g100 dark theme styled code to customize with your column names.
-For non-standard charts, use "custom" to get general formatting guidelines and color tokens.
+			Description: anthropic.String(`Get the custom-code starting template — a React/ECharts skeleton with Carbon g100 styling, the CARBON_COLORS palette, and the data helpers (toObjects, getValue, formatTimestamp, formatCellValue) already wired.
 
-For chart_type "banded_bar" pass an optional "style" arg to fetch the
-template for a specific visual variant — time_series (default), column_filled,
-column_outlined, or column_box. Without "style" the time_series template is
-returned. To switch an existing banded_bar from one style to another in custom
-code, fetch the target style's template here and re-implement from it.`),
+ONLY use this for hand-written custom code, paired with set_custom_code. The canonical chart types (line, bar, area, pie, scatter, gauge, number, dataview, banded_bar) are spec-driven and render from configuration — do NOT fetch a template for them; configure them with update_data_mapping / update_chart_options instead. There is exactly one template, "custom"; there are no per-type or styled templates anymore.`),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"chart_type": map[string]interface{}{
 						"type":        "string",
-						"description": "Chart type to get template for",
+						"description": "Always \"custom\" — the only available template.",
 						"enum":        templateEnum,
-					},
-					"style": map[string]interface{}{
-						"type":        "string",
-						"description": "Banded-bar visual style. Only meaningful when chart_type is 'banded_bar'; ignored otherwise. Defaults to 'time_series'.",
-						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
 					},
 				},
 				Required: []string{"chart_type"},
@@ -468,9 +456,13 @@ func chartTypeEnum(cat *registry.Catalog) []string {
 }
 
 // chartTemplateEnum returns the chart_type enum for get_component_template.
-// Same set as chartTypeEnum today, but isolated so we can diverge if needed.
-func chartTemplateEnum(cat *registry.Catalog) []string {
-	return chartTypeEnum(cat)
+// Only "custom" remains — canonical chart types are spec-driven and
+// configured via update_data_mapping / update_chart_options, not
+// scaffolded from a template. The cat arg is unused now but kept so the
+// call site (which threads the filtered catalog through every enum) stays
+// uniform.
+func chartTemplateEnum(_ *registry.Catalog) []string {
+	return []string{"custom"}
 }
 
 // IsComponentUpdateTool returns true if the tool modifies the component

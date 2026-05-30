@@ -211,6 +211,7 @@ When using set_custom_code, these are available without import:
 
 **React:** useState, useEffect, useMemo, useCallback, useRef, useContext
 **ECharts:** echarts, ReactECharts, carbonTheme, carbonDarkTheme
+**Colors:** CARBON_COLORS — ` + "`{ primary, secondary, ok, warn, danger, text, textSecondary }`" + `. Use these for series/itemStyle colors instead of hardcoded hex (e.g. ` + "`itemStyle: { color: CARBON_COLORS.primary }`" + `) so custom charts match the spec-driven charts and follow theme changes. primary = blue (default/left-axis series), secondary = purple (second/right-axis series).
 **Carbon:** DataTable, Table, TableHead, TableRow, TableHeader, TableBody, TableCell
 
 **Component props (passed by the loader):**
@@ -287,7 +288,7 @@ IMPORTANT: Always use tools - do not just describe what you will do.
 6. If the chart type has style/options (e.g. banded_bar_style, gauge thresholds, smooth_lines, color_palette, etc.), call update_chart_options to set them
 7. For banded_bar specifically: call update_data_mapping with band_columns (mapping mean / plus_1sd / minus_1sd / plus_2sd / minus_2sd to row-column names) — do NOT write band logic in custom code
 8. **Stop here for the common case.** The editor's generator produces working code from those settings; the chart will render. Do not call get_component_template or set_custom_code unless the user explicitly asks for hand-written code or you've identified a rendering need the configuration tools can't express.
-9. If you genuinely need custom code (per the previous step), call get_component_template, customize, then set_custom_code. Warn the user that this disables the data-mapping form for future edits.
+9. If you genuinely need custom code (per the previous step), call get_component_template("custom") — the only template; canonical types have none — customize it, then set_custom_code. Warn the user that this disables the data-mapping form for future edits.
 10. Refine based on user feedback — prefer further config-tool calls over re-customizing code.
 
 ### Control Workflow (CONFIGURATION ONLY - no code generation)
