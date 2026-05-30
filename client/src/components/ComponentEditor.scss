@@ -1679,6 +1679,24 @@
 // Spec subsections — h5-headed groups inside one tile. Used to
 // collapse several related sections (Display / Performance / Tooltip
 // / Legend / Y-range / Thresholds) under one "Chart Options" tile.
+// Client Side Processing groups the four transform panels (Filters,
+// Aggregation, Sliding Window, Time Bucket) as subsections of one card.
+// Those panels each still carry their legacy standalone-card class
+// (.filters-section etc.), which would draw a card-within-a-card here.
+// Strip that chrome inside the parent so .spec-subsection owns the
+// layout (top-border dividers between siblings, no nested backgrounds).
+.client-side-processing {
+  .filters-section,
+  .aggregation-section,
+  .sliding-window-section,
+  .time-bucket-section {
+    margin-top: 0;
+    padding: 0;
+    background-color: transparent;
+    border-radius: 0;
+  }
+}
+
 .spec-subsection {
   margin-top: spacing.$spacing-05;
   padding-top: spacing.$spacing-04;

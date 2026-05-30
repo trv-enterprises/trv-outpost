@@ -3612,16 +3612,35 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                {/* Filters Section. Hidden when the connection's
+                {/* Client Side Processing — one parent card grouping the
+                    client-side transform panels (Filters, Aggregation &
+                    Sorting, Sliding Window, Time Bucket) as subsections.
+                    The parent renders only when at least one child would
+                    show; each child keeps its own gate below. The
+                    SQL/EdgeLake "query language owns these ops" gate
+                    (queryLanguageOwnsClientSideOps) hides the first three;
+                    Time Bucket is socket-streaming only. */}
+                {!showCustomCode && (
+                  (!queryLanguageOwnsClientSideOps && (
+                    chartTypeConfig.hasFilters !== false ||
+                    chartTypeConfig.hasAggregation !== false ||
+                    chartTypeConfig.hasSlidingWindow !== false
+                  )) ||
+                  (selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false)
+                ) && (
+                <div className="mapping-section spec-section client-side-processing">
+                  <h4>Client Side Processing</h4>
+
+                {/* Filters subsection. Hidden when the connection's
                     query language already owns this responsibility
                     (SQL WHERE / EdgeLake WHERE) — see
                     queryLanguageOwnsClientSideOps memo. Also hidden
                     for chart types that opt out via
                     hasFilters:false. */}
                 {!showCustomCode && chartTypeConfig.hasFilters !== false && !queryLanguageOwnsClientSideOps && (
-                <div className="filters-section">
+                <div className="spec-subsection filters-section">
                   <div className="section-header">
-                    <h4>Filters (Client-Side)</h4>
+                    <h5 className="spec-subsection__heading">Filters (Client-Side)</h5>
                     <Button
                       kind="ghost"
                       size="sm"
@@ -3717,8 +3736,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     already owns aggregation (SQL GROUP BY / EdgeLake
                     GROUP BY). */}
                 {!showCustomCode && chartTypeConfig.hasAggregation !== false && !queryLanguageOwnsClientSideOps && (
-                <div className="aggregation-section">
-                  <h4>Aggregation & Sorting</h4>
+                <div className="spec-subsection aggregation-section">
+                  <h5 className="spec-subsection__heading">Aggregation &amp; Sorting</h5>
                   {availableColumns.length > 0 ? (
                     <>
                       <Grid narrow>
@@ -3902,9 +3921,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     types. Also hidden for chart types that opt out
                     via hasSlidingWindow:false. */}
                 {!showCustomCode && chartTypeConfig.hasSlidingWindow !== false && !queryLanguageOwnsClientSideOps && (
-                <div className="sliding-window-section">
+                <div className="spec-subsection sliding-window-section">
                   <div className="section-header">
-                    <h4>Sliding Window (Time-Series)</h4>
+                    <h5 className="spec-subsection__heading">Sliding Window (Time-Series)</h5>
                     <Toggle
                       id="sliding-window-toggle"
                       labelText=""
@@ -4029,9 +4048,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     Single-value displays (gauge/number) opt out via
                     hasTimeBucket:false. */}
                 {selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false && (
-                  <div className="time-bucket-section">
+                  <div className="spec-subsection time-bucket-section">
                     <div className="section-header">
-                      <h4>Time Bucket Aggregation (Streaming)</h4>
+                      <h5 className="spec-subsection__heading">Time Bucket Aggregation (Streaming)</h5>
                       <Toggle
                         id="time-bucket-toggle"
                         labelText=""
@@ -4167,6 +4186,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       </p>
                     )}
                   </div>
+                )}
+
+                </div>
                 )}
 
                 {filteredPreviewData && (
