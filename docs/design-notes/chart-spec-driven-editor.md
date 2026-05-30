@@ -819,6 +819,17 @@ legend: 2; thresholds: 2). Roughly 3× gauge.json — matches
 
 ### Stage 3 — flip defaults, delete legacy paths, reach end-state
 
+> **✅ DONE (2026-05-30, branch `chart-spec-stage3`).** Shipped as 4
+> commits: (1) hardcode both flags true, (2) delete dead editor JSX
+> (~590 lines), (3) delete dead codegen branches (~610 lines),
+> (4) remove the flag constants + conditionals + the two
+> `user-configurable.yaml` settings. `getDataDrivenChartCode` now only
+> emits the spec dispatch + the line/bar/area/scatter fallthrough for a
+> `custom` chart with a connection but no code; `getStaticChartCode`
+> stays for the no-connection preview. The two settings were removed from
+> YAML but may linger as orphaned rows in existing deployments' Mongo
+> `settings` collection (inert — nothing reads them; no migration added).
+
 **Scope:**
 - Flip both feature flags' defaults to `true` in
   `server-go/config/user-configurable.yaml`.

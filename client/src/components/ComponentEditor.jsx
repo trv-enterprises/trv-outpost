@@ -540,21 +540,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [hasChanges, setHasChanges] = useState(false);
   const [initialState, setInitialState] = useState(null);
 
-  // Chart spec-driven editor + codegen feature flags (PR 1 — gauge
-  // only). Each defaults false; when true AND a spec/template exists
-  // for the active chart_type, the editor renders sections from the
-  // JSON spec / the codegen emits from a template instead of the
-  // legacy per-type branches. Flags are independent so editor and
-  // codegen migrations can be staged. Fetched once at mount.
-  // Stage 3: the spec-driven editor + codegen are now the only path —
-  // every canonical chart type has a spec + buildOption/view. These were
-  // admin-setting feature flags during the staged migration; now hardcoded
-  // true. The legacy per-type JSX + codegen branches still exist below but
-  // are unreachable (deleted in subsequent Stage 3 steps). The constants
-  // (and the `&& chartSpecEditorEnabled` conditions referencing them) are
-  // removed once the dead branches are gone.
-  const chartSpecEditorEnabled = true;
-  const chartSpecCodegenEnabled = true;
 
   // Get current chart type configuration
   const chartTypeConfig = useMemo(() => {
@@ -1612,7 +1597,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, chartSpecCodegenEnabled);
+    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true);
   }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle]);
 
   const filteredPreviewData = useMemo(() => {
@@ -2777,7 +2762,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 })()}
 
 
-                {!showCustomCode && chartType === 'gauge' && chartSpecEditorEnabled && getChartTypeSpec('gauge') && (
+                {!showCustomCode && chartType === 'gauge' && getChartTypeSpec('gauge') && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec('gauge')}
                     availableColumns={availableColumns}
@@ -2815,7 +2800,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number', 'dataview'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number', 'dataview'].includes(chartType) && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}

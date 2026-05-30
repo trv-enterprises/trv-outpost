@@ -129,25 +129,3 @@ settings:
     category: ai
     description: "Anthropic model the Dashboard Assistant runs. Allowed values: `sonnet` (faster + cheaper, default) or `opus` (more capable, more expensive). Switching takes effect on next server restart. Per-deployment choice; not per-user."
     value: "sonnet"
-
-  # ─── Chart spec-driven editor (preview) ─────────────────────────────
-  # Two independent feature flags that opt-in to the spec-driven chart
-  # configuration system. Editor and codegen flags are separate so they
-  # can be flipped on staggered — turn editor on first, verify save
-  # round-trip is byte-identical to legacy, then turn codegen on. See
-  # docs/design-notes/chart-spec-driven-editor.md. Defaults `false`
-  # until PR 3 flips them. Only `gauge` charts honor the flags in PR 1;
-  # other chart types ignore them.
-  # Stage 3: spec-driven editor + codegen are now the only path for every
-  # canonical chart type. Defaulted true; the client hardcodes them on and
-  # the legacy branches are being deleted. These settings are removed
-  # entirely in the final Stage 3 step.
-  - key: chart_editor_spec_driven
-    category: chart_spec
-    description: "Deprecated (Stage 3): spec-driven editor is always on. Kept transiently during the deletion pass."
-    value: true
-
-  - key: chart_codegen_spec_driven
-    category: chart_spec
-    description: "Deprecated (Stage 3): spec-driven codegen is always on. Kept transiently during the deletion pass."
-    value: true
