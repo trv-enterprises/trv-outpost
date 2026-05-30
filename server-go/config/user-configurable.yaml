@@ -138,12 +138,16 @@ settings:
   # docs/design-notes/chart-spec-driven-editor.md. Defaults `false`
   # until PR 3 flips them. Only `gauge` charts honor the flags in PR 1;
   # other chart types ignore them.
+  # Stage 3: spec-driven editor + codegen are now the only path for every
+  # canonical chart type. Defaulted true; the client hardcodes them on and
+  # the legacy branches are being deleted. These settings are removed
+  # entirely in the final Stage 3 step.
   - key: chart_editor_spec_driven
     category: chart_spec
-    description: "When true, the chart editor renders configuration sections from a JSON spec (currently gauge only). When false, the legacy per-chart-type JSX blocks render. Save round-trip is identical between the two paths. Preview feature; defaults false."
-    value: false
+    description: "Deprecated (Stage 3): spec-driven editor is always on. Kept transiently during the deletion pass."
+    value: true
 
   - key: chart_codegen_spec_driven
     category: chart_spec
-    description: "When true, chart component_code is generated from a JSON spec's template (currently gauge only). When false, the legacy getDataDrivenChartCode switch generates the code. Output is byte-identical when correct. Preview feature; defaults false."
-    value: false
+    description: "Deprecated (Stage 3): spec-driven codegen is always on. Kept transiently during the deletion pass."
+    value: true

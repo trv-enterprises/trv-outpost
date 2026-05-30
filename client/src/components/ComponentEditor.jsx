@@ -546,18 +546,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // JSON spec / the codegen emits from a template instead of the
   // legacy per-type branches. Flags are independent so editor and
   // codegen migrations can be staged. Fetched once at mount.
-  const [chartSpecEditorEnabled, setChartSpecEditorEnabled] = useState(false);
-  const [chartSpecCodegenEnabled, setChartSpecCodegenEnabled] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    apiClient.getSetting('chart_editor_spec_driven')
-      .then((s) => { if (!cancelled) setChartSpecEditorEnabled(Boolean(s?.value)); })
-      .catch(() => {});
-    apiClient.getSetting('chart_codegen_spec_driven')
-      .then((s) => { if (!cancelled) setChartSpecCodegenEnabled(Boolean(s?.value)); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  // Stage 3: the spec-driven editor + codegen are now the only path —
+  // every canonical chart type has a spec + buildOption/view. These were
+  // admin-setting feature flags during the staged migration; now hardcoded
+  // true. The legacy per-type JSX + codegen branches still exist below but
+  // are unreachable (deleted in subsequent Stage 3 steps). The constants
+  // (and the `&& chartSpecEditorEnabled` conditions referencing them) are
+  // removed once the dead branches are gone.
+  const chartSpecEditorEnabled = true;
+  const chartSpecCodegenEnabled = true;
 
   // Get current chart type configuration
   const chartTypeConfig = useMemo(() => {
