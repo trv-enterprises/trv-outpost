@@ -6,6 +6,32 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] — 2026-05-29
+
+### Added
+
+- **Spec-driven migration complete for every chart type.** banded_bar
+  (Levey-Jennings) now derives its editor + render from a spec +
+  `buildOption`, including all four visual styles. The two non-ECharts
+  types — **number** and **dataview** — migrate via a new tagged
+  view-descriptor contract + view registry (`buildOption` returns
+  `{render, props}` rendered by a registered React view instead of an
+  ECharts option), so they're config-driven without being forced through
+  ECharts.
+- **Banded-bar legend panel** — show toggle + position (top/bottom/left/
+  right), default on/top.
+- **Per-component "show title" toggle** — hide a chart's title on the
+  dashboard to reclaim its vertical space (uniform across all chart
+  types). Pairs with a Text panel for custom/giant titles.
+- **Text panel font sizes up to 400px** (was 48), matching the Number
+  component's range so a Text-panel title can be sized to a giant Number.
+
+### Changed
+
+- **Client-side transform panels grouped** under one "Client Side
+  Processing" section (Filters, Aggregation & Sorting, Sliding Window,
+  Time Bucket as subsections).
+
 ## [0.21.0] — 2026-05-29
 
 ### Added
