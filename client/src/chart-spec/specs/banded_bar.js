@@ -200,52 +200,52 @@ export function buildOption(values, data, helpers = {}) {
     formatter: tooltipFormatter,
   };
 
-  // Legend lists each rendered pair's label plus the center, inner→outer.
-  // column_box draws only the innermost band, so its legend lists just
-  // that one pair (listing bands it doesn't draw would mislead).
-  const legendPairs = style === 'column_box' ? pairs.slice(0, 1) : pairs;
-  const legendData = [...legendPairs.map((p) => p.label), centerLabel];
+  // Legend lists every rendered pair's label plus the center, inner→outer.
+  // All styles (including column_box, which now draws the full scheme)
+  // render every resolved pair, so the legend matches what's drawn.
+  const legendData = [...pairs.map((p) => p.label), centerLabel];
   const legendBlock = legend ? { ...legend, data: legendData } : undefined;
 
   // ── time_series: stacked-area band regions behind the center line ───
-  // Two independent stacks anchored on the center line: an 'up' stack that
-  // fills upward through each pair's upper half, and a 'down' stack that
-  // fills downward through each pair's lower half. Within each stack the
-  // region widths are measured from the next-inner edge (the center for
-  // the innermost pair, the previous pair otherwise) so the areas tile the
-  // envelope exactly instead of overpainting. ECharts paints later series
-  // on top, so we add outer→inner to keep inner fills visually on top.
+  // ONE positive stack built from the outermost lower bound upward.
+  // ECharts area-stacks by summing from the axis baseline and splits +/-
+  // values into separate sub-stacks, so a center-anchored ±width approach
+  // breaks the lower half (negatives anchor at 0, not at the center).
+  // Instead lay contiguous positive-width regions bottom→top across the
+  // full envelope:
+  //   base = outermost lower bound (transparent)
+  //   lower regions outer→inner: gap up to the next-inner lower (center for innermost)
+  //   upper regions inner→outer: gap up to this pair's upper
+  // Lower + upper region of a pair share the pair's name so one legend key
+  // toggles both; only the upper region carries the legend entry.
   if (style === 'time_series') {
     const series = [];
 
     if (pairs.length > 0) {
-      // Transparent anchors lift each stack to the center line.
+      const outer = pairs[pairs.length - 1];
       series.push({
-        name: '_upbase', type: 'line', stack: 'up', data: centerVals, symbol: 'none',
+        name: '_base', type: 'line', stack: 'band', data: outer.lower, symbol: 'none',
         lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, tooltip: { show: false },
       });
-      series.push({
-        name: '_downbase', type: 'line', stack: 'down', data: centerVals, symbol: 'none',
-        lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, tooltip: { show: false },
-      });
+      // Lower regions, outer→inner.
       for (let k = pairs.length - 1; k >= 0; k--) {
         const p = pairs[k];
-        const tone = toneFor(k);
-        const innerUpper = k === 0 ? centerVals : pairs[k - 1].upper;
-        const innerLower = k === 0 ? centerVals : pairs[k - 1].lower;
-        // Upper half — carries the legend entry for this pair.
+        const innerEdge = k === 0 ? centerVals : pairs[k - 1].lower;
         series.push({
-          name: p.label, type: 'line', stack: 'up', symbol: 'none',
-          data: p.upper.map((u, i) => round4(u - innerUpper[i])),
-          lineStyle: { opacity: 0 }, areaStyle: { color: tone.areaFill },
+          name: p.label, type: 'line', stack: 'band', symbol: 'none',
+          data: p.lower.map((l, i) => round4(innerEdge[i] - l)),
+          lineStyle: { opacity: 0 }, areaStyle: { color: toneFor(k).areaFill },
+          showInLegend: false,
         });
-        // Lower half — same label so the one legend key toggles both, but
-        // kept out of the legend list to avoid a duplicate entry. Widths
-        // are negative so the 'down' stack fills BELOW the center anchor.
+      }
+      // Upper regions, inner→outer (these carry the legend entries).
+      for (let k = 0; k < pairs.length; k++) {
+        const p = pairs[k];
+        const innerEdge = k === 0 ? centerVals : pairs[k - 1].upper;
         series.push({
-          name: p.label, type: 'line', stack: 'down', symbol: 'none',
-          data: p.lower.map((l, i) => round4(l - innerLower[i])),
-          lineStyle: { opacity: 0 }, areaStyle: { color: tone.areaFill }, showInLegend: false,
+          name: p.label, type: 'line', stack: 'band', symbol: 'none',
+          data: p.upper.map((u, i) => round4(u - innerEdge[i])),
+          lineStyle: { opacity: 0 }, areaStyle: { color: toneFor(k).areaFill },
         });
       }
     }
@@ -263,36 +263,20 @@ export function buildOption(values, data, helpers = {}) {
   }
 
   // ── column_* : per-row vertical stacked-bar glyphs ──────────────────
-  const showBorders = style === 'column_outlined';
-  const onlyInner = style === 'column_box';
+  // All three column styles draw every band region as stacked bars from
+  // the outermost lower bound up to the outermost upper bound. They differ
+  // only in chrome:
+  //   column_filled   — solid fills, no borders, small round center dot
+  //   column_outlined — solid fills + band borders, small round center dot
+  //   column_box      — solid fills + band borders, large rect center tick
+  // (column_box used to draw the inner band only; it now shows the full
+  // scheme like the others, distinguished by the box-style center tick.)
+  const showBorders = style === 'column_outlined' || style === 'column_box';
   const series = [];
 
-  // column_box: only the innermost band, drawn as a stacked bar with a
-  // border, plus a center tick.
-  if (onlyInner) {
-    const inner = pairs[0];
-    if (inner) {
-      const tone = toneFor(0);
-      series.push({
-        name: '_base', type: 'bar', stack: 'box', data: inner.lower,
-        itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false },
-      });
-      series.push({
-        name: inner.label, type: 'bar', stack: 'box',
-        data: inner.upper.map((u, i) => round4(u - inner.lower[i])),
-        itemStyle: { color: tone.barFill, borderColor: tone.stroke, borderWidth: 1 },
-      });
-    }
-    series.push({
-      name: centerLabel, type: 'scatter', data: centerVals, symbolSize: 14,
-      symbol: 'rect', itemStyle: { color: MEAN_TICK_COLOR },
-    });
-  } else if (pairs.length > 0) {
-    // column_filled / column_outlined: stacked-bar rectangles per row.
-    // Transparent base lifts the stack to the outermost lower bound, then
-    // each successive region (outer→inner lower gap, innermost, inner→outer
-    // upper gap) stacks upward to tile the envelope.
+  if (pairs.length > 0) {
     const outer = pairs[pairs.length - 1];
+    // Transparent base lifts the stack to the outermost lower bound.
     series.push({
       name: '_base', type: 'bar', stack: 'col', data: outer.lower,
       itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false },
@@ -326,6 +310,15 @@ export function buildOption(values, data, helpers = {}) {
         },
       });
     }
+  }
+  // Center marker: column_box uses a large rect tick (its signature);
+  // the others a small round dot.
+  if (style === 'column_box') {
+    series.push({
+      name: centerLabel, type: 'scatter', data: centerVals, symbolSize: 14,
+      symbol: 'rect', itemStyle: { color: MEAN_TICK_COLOR },
+    });
+  } else {
     series.push({
       name: centerLabel, type: 'scatter', data: centerVals, symbolSize: 6,
       itemStyle: { color: COLOR_PRIMARY },
