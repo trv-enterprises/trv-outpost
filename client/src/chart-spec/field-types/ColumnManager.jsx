@@ -84,19 +84,24 @@ export default function ColumnManager() {
 
   const renderRow = (col, opts) => (
     <div key={col} className="alias-row">
-      <Checkbox
-        id={`visible-${col}`}
-        labelText=""
-        checked={isVisible(col)}
-        onChange={() => toggleVisible(col)}
-      />
-      <div style={{ display: 'inline-flex', flexDirection: 'column', visibility: opts.canReorder ? 'visible' : 'hidden' }}>
-        <IconButton kind="ghost" size="sm" label="Move up" onClick={() => moveColumn(col, -1)} disabled={!opts.canMoveUp}>
-          <CaretUp size={14} />
-        </IconButton>
-        <IconButton kind="ghost" size="sm" label="Move down" onClick={() => moveColumn(col, 1)} disabled={!opts.canMoveDown}>
-          <CaretDown size={14} />
-        </IconButton>
+      {/* First quarter: checkbox anchored left, reorder arrows centered
+          in the remaining space. Grouped so the column name stays one
+          cell over, not pushed away by the arrows. */}
+      <div className="alias-row__controls">
+        <Checkbox
+          id={`visible-${col}`}
+          labelText=""
+          checked={isVisible(col)}
+          onChange={() => toggleVisible(col)}
+        />
+        <div className="alias-row__reorder" style={{ visibility: opts.canReorder ? 'visible' : 'hidden' }}>
+          <IconButton kind="ghost" size="sm" label="Move up" onClick={() => moveColumn(col, -1)} disabled={!opts.canMoveUp}>
+            <CaretUp size={14} />
+          </IconButton>
+          <IconButton kind="ghost" size="sm" label="Move down" onClick={() => moveColumn(col, 1)} disabled={!opts.canMoveDown}>
+            <CaretDown size={14} />
+          </IconButton>
+        </div>
       </div>
       <span className="column-name" title={col}>{col}</span>
       <TextInput
