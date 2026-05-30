@@ -259,6 +259,7 @@ const DEFAULT_CHART_OPTIONS = {
   // once the user saves/edits it's always a concrete number.
   numberSize: null,
   numberUnit: '',
+  numberDecimals: 'auto',     // 'auto' (≤2 places) | '0'..'4' (forced)
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -2899,6 +2900,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // stored number; unit is free text.
                       number_size: String(chartOptions.numberSize ?? 120),
                       number_unit: chartOptions.numberUnit || '',
+                      // Decimal places enum. Stored as a string ('auto' |
+                      // '0'..'4'); default 'auto' keeps the auto formatter.
+                      number_decimals: chartOptions.numberDecimals ?? 'auto',
                       // dataview: the column_manager widget reads these two
                       // keys directly (visible_columns null = show all).
                       visible_columns: visibleColumns,
@@ -3058,6 +3062,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'number_unit':
                           updateChartOption('numberUnit', value);
+                          break;
+                        // decimals enum stored as the raw string ('auto' |
+                        // '0'..'4'); number.js coerces. Keep it a string so
+                        // '0' round-trips (Number('0')→0 would be fine but the
+                        // spec options are string-valued, so stay consistent).
+                        case 'number_decimals':
+                          updateChartOption('numberDecimals', value);
                           break;
                         // dataview: the column_manager widget writes the
                         // visible-columns whitelist (null = show all) and
