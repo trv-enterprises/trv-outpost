@@ -3640,7 +3640,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 {!showCustomCode && chartTypeConfig.hasFilters !== false && !queryLanguageOwnsClientSideOps && (
                 <div className="spec-subsection filters-section">
                   <div className="section-header">
-                    <h5 className="spec-subsection__heading">Filters (Client-Side)</h5>
+                    <h5 className="spec-subsection__heading">Filters</h5>
                     <Button
                       kind="ghost"
                       size="sm"

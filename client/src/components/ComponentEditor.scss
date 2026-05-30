@@ -1682,19 +1682,52 @@
 // Client Side Processing groups the four transform panels (Filters,
 // Aggregation, Sliding Window, Time Bucket) as subsections of one card.
 // Those panels each still carry their legacy standalone-card class
-// (.filters-section etc.), which would draw a card-within-a-card here.
-// Strip that chrome inside the parent so .spec-subsection owns the
-// layout (top-border dividers between siblings, no nested backgrounds).
-.client-side-processing {
+// (.filters-section etc.), whose card chrome lives under `.component-
+// editor` — so this override must ALSO be under `.component-editor` to
+// win specificity (a bare `.client-side-processing .filters-section`
+// loses to `.component-editor .filters-section`). Strip the card chrome
+// + per-section margins/padding so .spec-subsection owns the layout
+// (flush-left headings, top-border dividers, no nested backgrounds).
+.component-editor .client-side-processing {
+  // Each subsection carries BOTH its legacy card class (.filters-section
+  // etc.) and .spec-subsection. Let .spec-subsection own ALL the spacing
+  // (margin-top + padding-top around the divider) and zero the legacy
+  // class's own margin/padding so the two don't double up. Also strip the
+  // legacy card chrome (background, radius).
   .filters-section,
   .aggregation-section,
   .sliding-window-section,
   .time-bucket-section {
-    margin-top: 0;
+    margin: 0;
     padding: 0;
     background-color: transparent;
     border-radius: 0;
   }
+
+  // .spec-subsection provides the vertical rhythm. Its defaults
+  // (margin-top $spacing-05 + padding-top $spacing-04 + top border) give
+  // each subsection room above its divider. First subsection attaches
+  // directly under the h4 — no divider, no top gap.
+  .spec-subsection {
+    margin-top: spacing.$spacing-05;
+    padding-top: spacing.$spacing-04;
+
+    &:first-of-type {
+      margin-top: 0;
+      padding-top: 0;
+    }
+  }
+
+  // Tighten the heading-to-first-subsection gap.
+  > h4 {
+    margin-bottom: spacing.$spacing-03;
+  }
+
+  // Note: subsection header rows with a button/toggle (Filters / Sliding
+  // Window / Time Bucket) are a few px taller than Aggregation's bare
+  // heading in the empty state. Deliberately not equalized — once a query
+  // is run each subsection fills with fields and the delta is invisible;
+  // not worth the layout fight.
 }
 
 .spec-subsection {
