@@ -6,6 +6,20 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] — 2026-05-29
+
+### Changed
+
+- **Spec-driven chart refactor complete (Stage 3).** Every chart type
+  now derives its editor and render from a JSON spec + a small render
+  function; the legacy per-chart-type editor JSX and the
+  string-templated `getDataDrivenChartCode` branches have been removed
+  (~1,200 lines), along with the `chart_editor_spec_driven` /
+  `chart_codegen_spec_driven` feature flags (the spec path is now the
+  only path). No user-facing behavior change — an internal cleanup that
+  makes adding/maintaining chart types substantially simpler. `custom`
+  remains the escape hatch for hand-written code.
+
 ## [0.22.0] — 2026-05-29
 
 ### Added
