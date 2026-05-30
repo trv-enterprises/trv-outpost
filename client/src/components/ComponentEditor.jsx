@@ -1952,21 +1952,28 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             />
           </div>
           <div className="metadata-col metadata-col--half">
-            {/* Show-title toggle sits inline to the left of the Title
-                field. Toggling off hides the rendered title band on the
-                chart (reclaiming its vertical space) AND hides this
-                field, since the value is then unused. Default ON
-                (showTitle !== false). Stored on options.showTitle so it
-                persists / snapshots / dirty-tracks with the rest of
-                chartOptions. Honored uniformly by ChartShell + the
-                non-ECharts views (NumberView, DataViewGrid). */}
+            {/* Title field with the show-title toggle anchored in its
+                label row (label left, toggle right — no redundant "Show
+                title" text). Toggling off suppresses the rendered title
+                band on the chart (reclaiming its vertical space) AND
+                hides this input, since the value is then unused; the
+                label row stays so the toggle remains reachable to turn
+                it back on. Default ON (showTitle !== false). Stored on
+                options.showTitle so it persists / snapshots / dirty-
+                tracks with chartOptions. Honored uniformly by ChartShell
+                + the non-ECharts views (NumberView, DataViewGrid). */}
             <div className="title-with-toggle">
+              {/* No heading label — the toggle's inline state text carries
+                  the meaning: "Show title" when on, "Hide title" when off
+                  (labelB = checked/on, labelA = off). Dropping labelText
+                  keeps the toggle's own height stable and removes the
+                  redundant heading. The input drops below, label-less. */}
               <Toggle
                 id="chart-show-title"
                 size="sm"
-                labelText="Show title"
-                hideLabel
                 aria-label="Show title"
+                labelA="Hide title"
+                labelB="Show title"
                 toggled={chartOptions.showTitle !== false}
                 onToggle={(checked) => updateChartOption('showTitle', checked)}
               />
@@ -1974,6 +1981,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 <TextInput
                   id="chart-title"
                   labelText="Title"
+                  hideLabel
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
