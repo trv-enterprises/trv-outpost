@@ -171,3 +171,126 @@ current, correct option block, reshape our connection's rows into the
 "Data shape" column, and apply the house style (Carbon dark theme,
 injected helpers, title-bar wrapper). Tom can paste a snippet/screenshot
 if chasing a specific look.
+
+## Security: custom code runs as real JS in the app origin
+
+**Raised:** 2026-05-29 (Tom). This is the sharpest edge in the
+custom-chart feature and worth being explicit about.
+
+### What actually happens (verified, not assumed)
+
+`chart.custom` (`use_custom_code=true`) is not a sandboxed config — it
+is **arbitrary JavaScript that executes in the app's own origin.** The
+render path, in `client/src/components/DynamicComponentLoader.jsx`:
+
+1. The stored `component_code` (JSX source) is transformed at runtime by
+   `@babel/standalone` (`Babel.transform`).
+2. The result is executed via **`new Function(...)`** with React, hooks,
+   the data-fetch layer, transforms, and the viz libs injected into
+   scope. There is **no iframe, no sandbox** — it runs with the same
+   privileges as the rest of the SPA (same DOM, same `fetch`, same
+   `localStorage`, same auth context).
+
+So "it's all frontend" is true but not reassuring: frontend code in the
+app origin can read auth tokens / app state, call the backend API as the
+logged-in user, exfiltrate over the network, or tamper with the DOM. A
+malicious or buggy custom component is effectively stored XSS scoped to
+whoever opens the dashboard.
+
+### Persistence is the whole threat — so gate persistence
+
+The data flow (per Tom, reconciled with the code): raw `component_code`
+**is** stored in the DB (a string field on the component model,
+`server-go/internal/models/component.go`) and **is** re-`eval`'d on
+render — *but only if we let it persist.* The intended design is a
+**save-time gate**: when `use_custom_code` / `component_code` is present,
+run the code through a checker before accepting it. Reject → never
+stored → never served → never re-run by anyone. The rejected code's only
+execution was the author's own preview, which already happened in the
+author's own session.
+
+This gate is the **load-bearing control**, and the reason is the
+author-vs-other-viewer distinction:
+
+- **Author previewing / rendering their own code** — *no new threat.*
+  The realtime eval (`DynamicComponentLoader` → `Babel.transform` →
+  `new Function`, no sandbox) runs in the author's own browser with the
+  author's own privileges. They could already run anything in their
+  browser via DevTools; custom-code preview grants nothing extra. **Do
+  not sandbox to protect an author from themselves** — pointless. This
+  is why the realtime preview, though un-sandboxed, is *not* the problem.
+- **A second user viewing a component someone else authored** — *this is
+  the only real victim.* If raw code persists and is re-`eval`'d in their
+  session, it runs with **their** auth/tokens/data, which they never
+  consented to. That's stored XSS across a privilege boundary. The thing
+  that creates this victim is **persistence + reach** — and that is
+  exactly what the save-time gate denies. No persistence, no second
+  victim.
+
+So the control follows the threat precisely: the danger is *durable,
+reaching* code; the gate removes durability before reach can happen.
+
+### The AI is not a trust boundary (the concrete threat the gate catches)
+
+The author here is often the AI builder (`AIComponentPreview.jsx`,
+`AIBuilderPage.jsx`), and save is immediate. "The AI controls it" is not
+a safeguard: the AI writes what it's *prompted* to write. Tom's own
+example — *a user asks the AI to embed code that ships certain data to a
+specific IP* — is **prompt injection turning the AI into the delivery
+mechanism.** The save-time gate is what catches this regardless of
+whether a human or the AI typed it, because it inspects the *artifact*,
+not the author's intent. Because save fires right away on a known
+artifact, the gate has a clean, immediate point to act: detect → refuse
+the save → report back → the payload never acquires a lifetime.
+
+### How the gate should land
+
+- **Where to enforce.** **Backend-authoritative** — the gate must live
+  server-side on create/update so it can't be bypassed by hitting the
+  API directly; that's the boundary that actually decides whether code
+  is stored and served. A **client-side** check mirrors it for fast
+  feedback (and so the author sees the rejection inline), but is not the
+  authority. (Note: the realtime *preview* evals in-memory and does not
+  round-trip the backend, so a client check is also the only thing that
+  could vet the preview — but per the distinction above, the preview
+  only ever harms the author, so this is fast-feedback UX, not a
+  security boundary.)
+- **What kind of checker.** Static analysis with Babel (already a dep):
+  - *AST denylist* — reject `fetch`/`XMLHttpRequest`, `import()`,
+    `eval`/`new Function`, `localStorage`/`document.cookie`,
+    `window.parent`/`top`, raw DOM escape hatches. Cheap, but a denylist
+    is inherently leaky.
+  - *Identifier allowlist* — permit only the injected scope (React/hooks,
+    `data`, `config`, the helpers, `ReactECharts`) plus pure-JS builtins;
+    reject everything else. Stronger; more false-positives to tune.
+
+### Sandbox = deferred defense-in-depth, with a named trigger
+
+Static checking of arbitrary JS is **leaky by nature** — a determined
+payload can slip a gate. So an iframe/Worker sandbox (separate origin,
+no ambient auth, `postMessage` data bridge) is the only thing that
+actually *contains* what gets through. It is **not needed today** and is
+deliberately deferred; it is an architectural change — consult before
+building.
+
+Its trigger condition, stated plainly so the decision is revisited at
+the right moment: **the day a viewer can be served custom code authored
+by someone they don't fully trust** — multi-tenant deployments, public
+dashboard sharing, or untrusted import. Until then, a single trusted
+operator is effectively their own only viewer, the "second victim" is
+near-hypothetical, and the save-time gate carries the weight.
+
+(CSP is only a partial lever here anyway: a `Content-Security-Policy`
+exists today only on `electron/sidebar/index.html`, not the main viewer,
+and `new Function`/eval requires `script-src 'unsafe-eval'` — the very
+mechanism this feature depends on is what a strict CSP would block, so
+CSP can't be the sole control without changing the execution model.)
+
+**Bottom line / decision:** the feature trades safety for power
+(arbitrary ECharts/React), and that trade is acceptable *because*
+persistence is gated. **Required now:** a backend-authoritative
+save-time checker (client mirror for UX) — it is load-bearing, since
+persisted+served code is the only path to a non-consenting victim, and
+the AI-authoring path makes prompt-injected payloads a real input.
+**Deferred:** iframe/Worker isolation as defense-in-depth, triggered
+only if custom code is ever served across a trust boundary.
