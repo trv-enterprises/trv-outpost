@@ -1964,16 +1964,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 + the non-ECharts views (NumberView, DataViewGrid). */}
             <div className="title-with-toggle">
               {/* No heading label — the toggle's inline state text carries
-                  the meaning: "Show title" when on, "Hide title" when off
-                  (labelB = checked/on, labelA = off). Dropping labelText
-                  keeps the toggle's own height stable and removes the
-                  redundant heading. The input drops below, label-less. */}
+                  the meaning AND clarifies the effect is on the rendered
+                  dashboard (not just the editor): "Title shown on
+                  dashboard" when on, "Title hidden on dashboard" when off
+                  (labelB = checked/on, labelA = off). The input drops
+                  below, label-less; its helper text is dropped since the
+                  toggle label now states what it does. */}
               <Toggle
                 id="chart-show-title"
                 size="sm"
-                aria-label="Show title"
-                labelA="Hide title"
-                labelB="Show title"
+                aria-label="Show title on dashboard"
+                labelA="Title hidden on dashboard"
+                labelB="Title shown on dashboard"
                 toggled={chartOptions.showTitle !== false}
                 onToggle={(checked) => updateChartOption('showTitle', checked)}
               />
@@ -1986,7 +1988,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
                   size="md"
-                  helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
                 />
               )}
             </div>
