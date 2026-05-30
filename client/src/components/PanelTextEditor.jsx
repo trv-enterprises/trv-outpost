@@ -14,7 +14,11 @@ import { Close } from '@carbon/icons-react';
 import { DISPLAY_CONTENT_FORMATS } from './controls/ControlTextLabel';
 import './PanelTextEditor.scss';
 
-const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48];
+// Low end keeps the original fine cadence (2px to 20, then 4px to 48);
+// the large end mirrors the Number component's size steps
+// (56→400, see chart-spec/specs/number.json) so a Text-panel title can
+// be sized to match a giant Number, with no gap in resolution.
+const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400];
 
 const ALIGN_OPTIONS = [
   { id: 'left', text: 'Left' },
