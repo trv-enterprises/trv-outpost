@@ -764,6 +764,20 @@
           font-family: 'IBM Plex Mono', monospace;
         }
 
+        // Custom-code indicator — sits right of the size label. A passive
+        // marker (no hover/click affordance), so it's dimmed to match the
+        // size label (#6f6f6f) rather than the brighter action icons — it
+        // shouldn't read as a button.
+        .panel-custom-code-indicator {
+          display: inline-flex;
+          align-items: center;
+          color: #6f6f6f;
+
+          svg {
+            display: block;
+          }
+        }
+
         .panel-header-edit-menu {
           display: flex;
           align-items: center;

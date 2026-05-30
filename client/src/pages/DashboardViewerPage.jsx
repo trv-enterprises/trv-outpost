@@ -47,7 +47,8 @@ import {
   ChevronRight,
   Home,
   Download,
-  Notification
+  Notification,
+  Code
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -2132,6 +2133,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                           </span>
                         )}
                         <span className="panel-size-label">{panel.w}×{panel.h}</span>
+                        {/* Custom-code indicator: the panel's component renders
+                            from hand-written component_code, not the config form.
+                            Non-interactive marker (title tooltip on hover). */}
+                        {chart?.use_custom_code && (
+                          <span
+                            className="panel-custom-code-indicator"
+                            title="This component uses custom code"
+                            aria-label="Uses custom code"
+                          >
+                            <Code size={14} />
+                          </span>
+                        )}
                         <div className="panel-header-edit-menu" onMouseDown={(e) => e.stopPropagation()}>
                           {hasText ? (
                             <IconButton
