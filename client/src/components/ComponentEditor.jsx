@@ -2754,7 +2754,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3266,7 +3266,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -3336,6 +3336,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // thresholds
                       y_thresholds: Array.isArray(chartOptions.yThresholds) ? chartOptions.yThresholds : [],
                       y_threshold_render_mode: chartOptions.yThresholdRenderMode || 'line',
+                      // banded_bar field ids. Band columns map onto the
+                      // bandColumns state object; the visual style onto
+                      // bandedBarStyle. (x_axis_column / x_axis_format above
+                      // are reused by banded_bar's timestamp fields.)
+                      band_mean: bandColumns.mean || '',
+                      band_plus_1sd: bandColumns.plus_1sd || '',
+                      band_minus_1sd: bandColumns.minus_1sd || '',
+                      band_plus_2sd: bandColumns.plus_2sd || '',
+                      band_minus_2sd: bandColumns.minus_2sd || '',
+                      banded_bar_style: bandedBarStyle || 'time_series',
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -3460,6 +3470,28 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'y_threshold_render_mode':
                           updateChartOption('yThresholdRenderMode', value);
+                          break;
+                        // banded_bar: band column selectors write into the
+                        // bandColumns state object; the visual style into
+                        // bandedBarStyle. (x_axis_column / x_axis_format are
+                        // handled by the shared cases above.)
+                        case 'band_mean':
+                          setBandColumns((prev) => ({ ...prev, mean: value }));
+                          break;
+                        case 'band_plus_1sd':
+                          setBandColumns((prev) => ({ ...prev, plus_1sd: value }));
+                          break;
+                        case 'band_minus_1sd':
+                          setBandColumns((prev) => ({ ...prev, minus_1sd: value }));
+                          break;
+                        case 'band_plus_2sd':
+                          setBandColumns((prev) => ({ ...prev, plus_2sd: value }));
+                          break;
+                        case 'band_minus_2sd':
+                          setBandColumns((prev) => ({ ...prev, minus_2sd: value }));
+                          break;
+                        case 'banded_bar_style':
+                          setBandedBarStyle(value);
                           break;
                         default: break;
                       }
@@ -3877,8 +3909,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 </div>
                 )}
 
-                {/* Band Columns - banded_bar (Levey-Jennings) only */}
-                {!showCustomCode && chartType === 'banded_bar' && (
+                {/* Band Columns - banded_bar (Levey-Jennings) only.
+                    Suppressed when the spec-driven editor is on for
+                    banded_bar — the spec's Data Mapping section (timestamp
+                    + band column selectors) and Chart Options (visual
+                    style) replace this block. */}
+                {!showCustomCode && chartType === 'banded_bar' && !(chartSpecEditorEnabled && getChartTypeSpec('banded_bar')) && (
                   <div className="reference-levels-section">
                     <div className="section-header">
                       <h4>Band Columns</h4>
@@ -4174,8 +4210,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           // scatter reads these off data_mapping
                           y_axis_label: yAxisLabel || '',
                           size_column: chartOptions.sizeColumn || '',
+                          // banded_bar reads its per-row band column map off
+                          // data_mapping. Only meaningful when a mean column
+                          // is picked; undefined otherwise mirrors the save
+                          // path so the preview matches a saved record.
+                          band_columns: chartType === 'banded_bar' && bandColumns?.mean ? bandColumns : undefined,
                         } : undefined,
-                        options: chartOptions,
+                        // bandedBarStyle is a sibling state var (not inside
+                        // chartOptions); merge it into options for the
+                        // preview the same way the save payload does, so
+                        // banded_bar.buildOption sees options.bandedBarStyle.
+                        options: chartType === 'banded_bar' ? { ...chartOptions, bandedBarStyle } : chartOptions,
                       }}
                       connectionId={selectedConnectionId || null}
                       queryConfig={selectedConnectionId ? {

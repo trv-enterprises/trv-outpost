@@ -1,0 +1,131 @@
+{
+  "schema_version": "1",
+  "chart_type": "banded_bar",
+  "library": "echarts",
+  "display": {
+    "label": "Banded Bar Chart",
+    "icon": "ChartLineData",
+    "description": "Levey-Jennings / control-chart style — time-series with per-row mean + SD bands"
+  },
+  "capabilities": {
+    "requires_x_axis": true,
+    "requires_y_axis": false,
+    "multiple_y_axis": false,
+    "single_axis_n_columns": false,
+    "has_pivot_series": false,
+    "has_axis_labels": false,
+    "has_x_axis_format": true,
+    "has_time_bucket": false,
+    "has_sort_limit": false,
+    "has_visible_columns": false,
+    "has_filters": true,
+    "has_aggregation": false,
+    "has_sliding_window": false,
+    "has_legend_config": false,
+    "has_tooltip_config": false,
+    "has_axis_range": false,
+    "has_thresholds": false
+  },
+  "sections": [
+    {
+      "id": "data_mapping",
+      "label": "Data Mapping",
+      "subsections": [
+        {
+          "id": "timestamp_group",
+          "label": "Timestamp",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "x_axis_column",
+              "binds": "data_mapping.x_axis",
+              "type": "column_select",
+              "label": "Timestamp column",
+              "required": true,
+              "helperText": "The horizontal (time) axis. One column per row."
+            },
+            {
+              "id": "x_axis_format",
+              "binds": "data_mapping.x_axis_format",
+              "type": "enum",
+              "label": "Timestamp format",
+              "default": "chart",
+              "options": [
+                { "value": "chart", "label": "Auto (date + time)" },
+                { "value": "chart_time", "label": "Time only" },
+                { "value": "chart_date", "label": "Date only" },
+                { "value": "raw", "label": "Raw value" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "band_columns_group",
+          "label": "Band Columns",
+          "helperText": "Each row carries its own mean + SD columns; the renderer reads each row's values to draw a per-row envelope, so bands move with the data. Only Mean is required.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "band_mean",
+              "binds": "data_mapping.band_columns.mean",
+              "type": "column_select",
+              "label": "Mean column",
+              "required": true,
+              "helperText": "Primary value (required)."
+            },
+            {
+              "id": "band_plus_1sd",
+              "binds": "data_mapping.band_columns.plus_1sd",
+              "type": "column_select",
+              "label": "+1 SD column"
+            },
+            {
+              "id": "band_minus_1sd",
+              "binds": "data_mapping.band_columns.minus_1sd",
+              "type": "column_select",
+              "label": "-1 SD column"
+            },
+            {
+              "id": "band_plus_2sd",
+              "binds": "data_mapping.band_columns.plus_2sd",
+              "type": "column_select",
+              "label": "+2 SD column"
+            },
+            {
+              "id": "band_minus_2sd",
+              "binds": "data_mapping.band_columns.minus_2sd",
+              "type": "column_select",
+              "label": "-2 SD column"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chart_options",
+      "label": "Chart Options",
+      "subsections": [
+        {
+          "id": "style_group",
+          "label": "Visual style",
+          "layout": "single-column",
+          "fields": [
+            {
+              "id": "banded_bar_style",
+              "binds": "options.bandedBarStyle",
+              "type": "enum",
+              "label": "Visual style",
+              "default": "time_series",
+              "options": [
+                { "value": "time_series", "label": "Time Series — line + dots, full-width bands (default)" },
+                { "value": "column_filled", "label": "Column (filled) — vertical column per timestamp, no borders" },
+                { "value": "column_outlined", "label": "Column (outlined) — vertical column with band borders" },
+                { "value": "column_box", "label": "Column (box) — inner band only, line with tick at value" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
