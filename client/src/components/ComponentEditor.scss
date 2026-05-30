@@ -150,17 +150,21 @@
     // normal labeled form-item — rather than cramming it next to a plain
     // label span — keeps Carbon's own spacing intact, so the input lines
     // up with the sibling Chart Name field without manual tuning.
+    // Make the toggle header occupy the SAME reserved height as a Carbon
+    // field label slot — label-01 line (1rem) + $spacing-03 bottom gap
+    // (0.5rem) = 1.5rem — so the Title column is structurally identical
+    // to the Chart Name column and their inputs share a baseline with the
+    // row's default flex-start. (Bottom-aligning the row instead left a
+    // ~1px gap from sub-pixel helper-row rounding; matching the header
+    // height is exact.) The toggle centers within that 1.5rem slot.
     .title-with-toggle {
       display: flex;
       flex-direction: column;
 
-      // Collapse the space between the toggle and the input so the
-      // input's lower line aligns with the sibling Chart Name field's
-      // input. The toggle (a Carbon form-item) carries its own bottom
-      // margin; zero it and add no flex gap. The input sits flush under
-      // the toggle.
       > .cds--toggle {
         margin-bottom: 0;
+        min-block-size: 1.5rem;
+        justify-content: center;
       }
     }
 
