@@ -17,6 +17,7 @@ import { buildOption as buildGaugeOption } from './specs/gauge';
 import { buildOption as buildPieOption } from './specs/pie';
 import { buildOption as buildScatterOption } from './specs/scatter';
 import { buildOption as buildBandedBarOption } from './specs/banded_bar';
+import { buildOption as buildNumberOption } from './specs/number';
 
 const BUILD_OPTIONS = {
   line: buildLineOption,
@@ -43,7 +44,11 @@ const BUILD_OPTIONS = {
   // banded_bar has its own module — Levey-Jennings per-row mean + SD
   // envelope across four visual styles. Doesn't share line.
   banded_bar: buildBandedBarOption,
-  // number, dataview — added as each chart type's <type>.js lands.
+  // number is non-ECharts: its buildOption returns a { render: 'number' }
+  // descriptor that SpecDrivenChart renders via the view registry (not
+  // ChartShell/ReactECharts). See docs/design-notes/spec-driven-non-echarts-views.md.
+  number: buildNumberOption,
+  // dataview — added when its DataViewGrid view + column_manager field land.
 };
 
 /**

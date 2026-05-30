@@ -2754,7 +2754,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3082,8 +3082,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 </div>
                 )}
 
-                {/* Chart Options Section - Gauge */}
-                {!showCustomCode && chartType === 'number' && (
+                {/* Number Options (legacy). Suppressed when the spec-driven
+                    editor is on for number — number.json's Number Options
+                    section (size + unit) replaces this block. */}
+                {!showCustomCode && chartType === 'number' && !(chartSpecEditorEnabled && getChartTypeSpec('number')) && (
                   <div className="chart-options-section">
                     <h4>Number Options</h4>
                     <Grid narrow>
@@ -3266,7 +3268,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -3346,6 +3348,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       band_plus_2sd: bandColumns.plus_2sd || '',
                       band_minus_2sd: bandColumns.minus_2sd || '',
                       banded_bar_style: bandedBarStyle || 'time_series',
+                      // number field ids. value_column reuses the shared
+                      // case above (maps to yAxisColumns[0]). Size is an
+                      // enum (string-valued options) so stringify the
+                      // stored number; unit is free text.
+                      number_size: String(chartOptions.numberSize ?? 120),
+                      number_unit: chartOptions.numberUnit || '',
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -3492,6 +3500,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'banded_bar_style':
                           setBandedBarStyle(value);
+                          break;
+                        // number: size enum stores back as a Number (legacy
+                        // shape); unit is free text. (value_column is handled
+                        // by the shared case above.)
+                        case 'number_size':
+                          updateChartOption('numberSize', Number(value));
+                          break;
+                        case 'number_unit':
+                          updateChartOption('numberUnit', value);
                           break;
                         default: break;
                       }

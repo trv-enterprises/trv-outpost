@@ -10,10 +10,11 @@ import areaSpec from './specs/area.json';
 import pieSpec from './specs/pie.json';
 import scatterSpec from './specs/scatter.json';
 import bandedBarSpec from './specs/banded_bar.json';
+import numberSpec from './specs/number.json';
 
 // Validate every spec at module load so a malformed spec fails fast in
 // dev. Stage 1 shipped gauge; Stage 2: line, bar, area, pie, scatter,
-// banded_bar. Other chart types follow.
+// banded_bar, number. Other chart types follow.
 const SPECS = {
   gauge: assertValidChartTypeSpec(gaugeSpec, 'specs/gauge.json'),
   line: assertValidChartTypeSpec(lineSpec, 'specs/line.json'),
@@ -22,6 +23,7 @@ const SPECS = {
   pie: assertValidChartTypeSpec(pieSpec, 'specs/pie.json'),
   scatter: assertValidChartTypeSpec(scatterSpec, 'specs/scatter.json'),
   banded_bar: assertValidChartTypeSpec(bandedBarSpec, 'specs/banded_bar.json'),
+  number: assertValidChartTypeSpec(numberSpec, 'specs/number.json'),
 };
 
 /**

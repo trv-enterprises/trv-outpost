@@ -93,7 +93,12 @@
 // returned as a list so a single bad spec doesn't mask others.
 
 const SUPPORTED_SCHEMA_VERSIONS = new Set(['1']);
-const SUPPORTED_LIBRARIES = new Set(['echarts']);
+// 'echarts' = buildOption returns an ECharts option (the common case).
+// 'react'   = buildOption returns a tagged { render, props } view
+//             descriptor rendered by a registered non-ECharts React view
+//             (number, dataview, …). See
+//             docs/design-notes/spec-driven-non-echarts-views.md.
+const SUPPORTED_LIBRARIES = new Set(['echarts', 'react']);
 const SUPPORTED_FIELD_TYPES = new Set([
   // Stage 1
   'column_select',

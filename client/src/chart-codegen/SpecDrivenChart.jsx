@@ -7,6 +7,7 @@ import { DataContext, ComponentConfigContext } from '../components/DynamicCompon
 import { formatCellValue } from '../utils/dataTransforms';
 import { getBuildOptionForChartType, hasBuildOption } from '../chart-spec/build-options';
 import ChartShell from '../chart-spec/ChartShell';
+import { getView, isViewDescriptor } from '../chart-spec/views';
 
 /**
  * Thin adapter between the dynamic loader's contexts and a chart-type's
@@ -14,8 +15,13 @@ import ChartShell from '../chart-spec/ChartShell';
  *   - reads DataContext (data) + ComponentConfigContext (saved config),
  *   - picks the right buildOption for `specName`,
  *   - tracks legend visibility (for dual-axis dead-axis hiding),
- *   - hands the resulting option to <ChartShell>, which owns all the
- *     shared React/DOM treatment (title, loading/error/no-data, theme).
+ *   - dispatches on the build result:
+ *       • a plain ECharts option object → <ChartShell> → <ReactECharts>
+ *         (the common case: line/area/bar/banded_bar/scatter/pie/gauge),
+ *       • a tagged `{ render, props }` view descriptor → the matching
+ *         non-ECharts React view from the view registry (number,
+ *         dataview, …), which owns its own chrome.
+ *     See docs/design-notes/spec-driven-non-echarts-views.md.
  *
  * Wired into the codegen dispatch (`getDataDrivenChartCode`): when a
  * chart_type has a buildOption module, the emitted code is essentially
@@ -39,7 +45,9 @@ export default function SpecDrivenChart({ specName }) {
     legendselectchanged: handleLegendSelectChanged,
   }), [handleLegendSelectChanged]);
 
-  const option = useMemo(() => {
+  // The build result is EITHER an ECharts option object OR a tagged
+  // view descriptor `{ render, props }`. Disambiguated below.
+  const result = useMemo(() => {
     const build = getBuildOptionForChartType(specName);
     if (!build) {
       // eslint-disable-next-line no-console
@@ -59,11 +67,30 @@ export default function SpecDrivenChart({ specName }) {
     });
   }, [specName, config, dataCtx?.data, legendSelected]);
 
+  // Non-ECharts view: render the registered component directly (it owns
+  // its own title + loading/error/no-data chrome — not wrapped in
+  // ChartShell). config + dataCtx are passed alongside the descriptor's
+  // own props so the view can read the saved title and data state.
+  if (isViewDescriptor(result)) {
+    const View = getView(result.render);
+    if (!View) {
+      // eslint-disable-next-line no-console
+      console.warn(`[SpecDrivenChart] no view registered for render="${result.render}"`);
+      return (
+        <div style={{ color: '#da1e28', padding: '1rem' }}>
+          Spec-driven view misconfigured: no view for &quot;{result.render}&quot;
+        </div>
+      );
+    }
+    return <View {...result.props} config={config} dataCtx={dataCtx} />;
+  }
+
+  // ECharts option path (the common case).
   return (
     <ChartShell
       config={config}
       dataCtx={dataCtx}
-      option={option}
+      option={result}
       onEvents={onEvents}
       misconfiguredMessage={`Spec-driven chart misconfigured: no buildOption for chart_type "${specName}"`}
     />
