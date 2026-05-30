@@ -82,6 +82,22 @@
               ]
             },
             {
+              "id": "number_decimals",
+              "binds": "options.numberDecimals",
+              "type": "enum",
+              "label": "Decimal places",
+              "default": "auto",
+              "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals.",
+              "options": [
+                { "value": "auto", "label": "Auto" },
+                { "value": "0", "label": "0" },
+                { "value": "1", "label": "1" },
+                { "value": "2", "label": "2" },
+                { "value": "3", "label": "3" },
+                { "value": "4", "label": "4" }
+              ]
+            },
+            {
               "id": "number_unit",
               "binds": "options.numberUnit",
               "type": "text",
