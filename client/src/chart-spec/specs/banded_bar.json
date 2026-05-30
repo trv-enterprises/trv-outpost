@@ -21,7 +21,7 @@
     "has_filters": true,
     "has_aggregation": false,
     "has_sliding_window": false,
-    "has_legend_config": false,
+    "has_legend_config": true,
     "has_tooltip_config": false,
     "has_axis_range": false,
     "has_thresholds": false
@@ -122,6 +122,36 @@
                 { "value": "column_outlined", "label": "Column (outlined) — vertical column with band borders" },
                 { "value": "column_box", "label": "Column (box) — inner band only, line with tick at value" }
               ]
+            }
+          ]
+        },
+        {
+          "id": "legend_config",
+          "label": "Legend",
+          "helperText": "Shows a key for the Mean / ±1 SD / ±2 SD bands.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "legend_show",
+              "binds": "options.legend.show",
+              "type": "boolean",
+              "label": "Show legend",
+              "default": true
+            },
+            {
+              "id": "legend_position",
+              "binds": "options.legend.position",
+              "type": "enum",
+              "label": "Position",
+              "default": "top",
+              "helperText": "Left/right reserve ~135px of plot width for the legend column.",
+              "options": [
+                { "value": "top", "label": "Top" },
+                { "value": "bottom", "label": "Bottom" },
+                { "value": "left", "label": "Left" },
+                { "value": "right", "label": "Right" }
+              ],
+              "visibleWhen": { "field": "legend_show", "operator": "truthy" }
             }
           ]
         }

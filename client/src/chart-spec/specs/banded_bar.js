@@ -63,11 +63,40 @@ function computeYBounds({ meanVals, m1sd, p1sd, m2sd, p2sd, has1SD, has2SD }) {
   return { yMin: yLowData - pad, yMax: yHighData + pad };
 }
 
-/** Shared axis + tooltip frame for every style. */
-function baseOption(categories, yMin, yMax, extra = {}) {
+/**
+ * Build the ECharts legend block from options.legend. Defaults ON and
+ * positioned TOP (banded_bar always has named band series worth a key).
+ * Returns { legend, position } — position is null when the legend is
+ * hidden so the grid math below doesn't reserve space for it.
+ */
+function buildLegend(legend) {
+  const show = legend?.show != null ? Boolean(legend.show) : true;
+  if (!show) return { legend: undefined, position: null };
+  const pos = legend?.position || 'top';
+  const block = { type: 'scroll', textStyle: { color: COLOR_TEXT_SECONDARY } };
+  switch (pos) {
+    case 'bottom': block.bottom = 0; break;
+    case 'left': block.left = 0; block.orient = 'vertical'; break;
+    case 'right': block.right = 0; block.orient = 'vertical'; break;
+    case 'top':
+    default: block.top = 0; break;
+  }
+  return { legend: block, position: pos };
+}
+
+/**
+ * Shared axis + tooltip frame for every style. `legendPos` (null when the
+ * legend is hidden) bumps the grid edge on the legend's side so the plot
+ * doesn't run under it — side legends reserve ~135px, matching line.js.
+ */
+function baseOption(categories, yMin, yMax, legendPos, extra = {}) {
+  const gridTop = legendPos === 'top' ? 36 : 50;
+  const gridBottom = legendPos === 'bottom' ? 56 : 40;
+  const gridLeft = legendPos === 'left' ? 135 : 50;
+  const gridRight = legendPos === 'right' ? 135 : 20;
   return {
     backgroundColor: TRANSPARENT_BG,
-    grid: { left: 50, right: 20, top: 50, bottom: 40, containLabel: true },
+    grid: { top: gridTop, left: gridLeft, right: gridRight, bottom: gridBottom, containLabel: true },
     xAxis: {
       type: 'category',
       data: categories,
@@ -132,6 +161,9 @@ export function buildOption(values, data, helpers = {}) {
 
   const { yMin, yMax } = computeYBounds({ meanVals, m1sd, p1sd, m2sd, p2sd, has1SD, has2SD });
 
+  // Legend (show + position) — defaults on/top, applied to every style.
+  const { legend, position: legendPos } = buildLegend(opts.legend);
+
   // ── time_series: stacked-area SD envelope behind the mean line ──────
   if (style === 'time_series') {
     const baseLow = has2SD ? m2sd : has1SD ? m1sd : null;
@@ -170,12 +202,19 @@ export function buildOption(values, data, helpers = {}) {
       lineStyle: { color: COLOR_PRIMARY, width: 2 }, itemStyle: { color: COLOR_PRIMARY },
     });
 
-    return baseOption(categories, yMin, yMax, {
+    // Legend lists only the meaningful keys. ECharts filters series into
+    // the legend by `legend.data`; the transparent '_base' anchor and the
+    // duplicate '±2 SD hi' half are omitted (the remaining '±2 SD' entry
+    // toggles both halves since they share the name).
+    const tsLegend = legend
+      ? { ...legend, data: ['±2 SD', '±1 SD', 'Mean'].filter((n) => series.some((s) => s.name === n)) }
+      : undefined;
+    return baseOption(categories, yMin, yMax, legendPos, {
       tooltip: {
         trigger: 'axis', appendToBody: true,
         backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
       },
-      legend: { bottom: 6, textStyle: { color: COLOR_TEXT_SECONDARY } },
+      ...(tsLegend ? { legend: tsLegend } : {}),
       series,
     });
   }
@@ -254,7 +293,26 @@ export function buildOption(values, data, helpers = {}) {
     });
   }
 
-  return baseOption(categories, yMin, yMax, {
+  // Restrict the legend to meaningful entries — drop the transparent
+  // '_base' anchor and dedupe the split '±2 SD lo'/'±2 SD hi' bars into a
+  // single '±2 SD' key the user can toggle. (ECharts toggles every series
+  // whose name matches a clicked legend key, so both halves react.)
+  const columnLegend = legend
+    ? {
+        ...legend,
+        data: ['±2 SD', '±1 SD', 'Mean'].filter((n) =>
+          series.some((s) => s.name === n || (n === '±2 SD' && (s.name === '±2 SD lo' || s.name === '±2 SD hi')))),
+      }
+    : undefined;
+  // Rename the split outer-band bars to the shared '±2 SD' key so the
+  // single legend entry toggles both halves together.
+  if (columnLegend) {
+    series.forEach((s) => {
+      if (s.name === '±2 SD lo' || s.name === '±2 SD hi') s.name = '±2 SD';
+    });
+  }
+
+  return baseOption(categories, yMin, yMax, legendPos, {
     tooltip: {
       trigger: 'axis', appendToBody: true,
       backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
@@ -267,6 +325,7 @@ export function buildOption(values, data, helpers = {}) {
         return lines.join('<br/>');
       },
     },
+    ...(columnLegend ? { legend: columnLegend } : {}),
     series,
   });
 }
