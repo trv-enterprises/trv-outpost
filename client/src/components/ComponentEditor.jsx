@@ -764,9 +764,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         setTsstoreSinceDuration('1h');
         setTsstoreLimit(chart.query_config?.params?.limit || 100);
       }
-      // EdgeLake query config initialization
-      if (chart.query_config?.type === 'edgelake') {
-        setEdgelakeDatabase(chart.query_config?.params?.database || '');
+      // EdgeLake query config initialization. Like tsstore above, the
+      // type field is documentary, not authoritative: agent-built
+      // EdgeLake charts commonly save query_config.type:"sql" while
+      // still carrying the EdgeLake `database` param (EdgeLake speaks
+      // SQL against an edgelake connection). Keying restoration on
+      // type==='edgelake' missed those, so edgelakeDatabase stayed empty
+      // and handleSave's params builder then wrote params:{} — silently
+      // dropping the database on every save and breaking the query.
+      // Restore from the saved param whenever it's present, regardless
+      // of the documentary type.
+      if (chart.query_config?.params?.database) {
+        setEdgelakeDatabase(chart.query_config.params.database);
       }
       // MQTT initialization — restore selected topic and discover topics + schema
       if (chart.query_config?.type === 'mqtt') {
@@ -838,7 +847,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:') ? 'since' : (loadedTsRaw || 'since');
       const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
       const loadedTsstoreLimit = chart.query_config?.params?.limit || 100;
-      const loadedEdgelakeDatabase = loadedQueryType === 'edgelake' ? (chart.query_config?.params?.database || '') : '';
+      // Mirror the setEdgelakeDatabase restore above: the database param
+      // is the source of truth, not the documentary query_config.type
+      // (agent-built EdgeLake charts save type:"sql"). Snapshot must match
+      // the state set above or the form reads dirty on load.
+      const loadedEdgelakeDatabase = chart.query_config?.params?.database || '';
       const loadedControlConfigSnap = chart.control_config || null;
       if (loadedControlConfigSnap && chart.connection_id && !loadedControlConfigSnap.connection_id) {
         loadedControlConfigSnap.connection_id = chart.connection_id;
