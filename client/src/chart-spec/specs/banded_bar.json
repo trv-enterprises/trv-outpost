@@ -62,40 +62,14 @@
         {
           "id": "band_columns_group",
           "label": "Band Columns",
-          "helperText": "Each row carries its own mean + SD columns; the renderer reads each row's values to draw a per-row envelope, so bands move with the data. Only Mean is required.",
-          "layout": "row-4",
+          "helperText": "Pick a band scheme, then map each band to a per-row column. Each row carries its own band values, so the envelope moves with the data. Only the center column is required.",
+          "layout": "single-column",
           "fields": [
             {
-              "id": "band_mean",
-              "binds": "data_mapping.band_columns.mean",
-              "type": "column_select",
-              "label": "Mean column",
-              "required": true,
-              "helperText": "Primary value (required)."
-            },
-            {
-              "id": "band_plus_1sd",
-              "binds": "data_mapping.band_columns.plus_1sd",
-              "type": "column_select",
-              "label": "+1 SD column"
-            },
-            {
-              "id": "band_minus_1sd",
-              "binds": "data_mapping.band_columns.minus_1sd",
-              "type": "column_select",
-              "label": "-1 SD column"
-            },
-            {
-              "id": "band_plus_2sd",
-              "binds": "data_mapping.band_columns.plus_2sd",
-              "type": "column_select",
-              "label": "+2 SD column"
-            },
-            {
-              "id": "band_minus_2sd",
-              "binds": "data_mapping.band_columns.minus_2sd",
-              "type": "column_select",
-              "label": "-2 SD column"
+              "id": "band_scheme",
+              "binds": "data_mapping.band_columns",
+              "type": "band_scheme",
+              "label": "Band scheme"
             }
           ]
         }

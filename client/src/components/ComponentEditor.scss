@@ -1997,3 +1997,29 @@
     margin-top: spacing.$spacing-04;
   }
 }
+
+// banded_bar band-scheme widget: a scheme <Select> on its own row, then
+// the per-scheme column pickers laid out as quarter-width cells that wrap
+// (5-field schemes spill onto a second row). Quarter math matches
+// metadata-col--quarter so the cells line up with the rest of the editor.
+.band-scheme {
+  .band-scheme__fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: spacing.$spacing-05;
+    margin-top: spacing.$spacing-05;
+  }
+
+  .band-scheme__field {
+    flex: 0 0 calc(25% - #{spacing.$spacing-05} * 3 / 4);
+    min-width: 0;
+
+    // Let Carbon's Select wrapper fill its quarter cell rather than
+    // claiming an intrinsic min-width that would break the wrap.
+    .cds--form-item,
+    .cds--select {
+      width: 100%;
+      min-width: 0;
+    }
+  }
+}

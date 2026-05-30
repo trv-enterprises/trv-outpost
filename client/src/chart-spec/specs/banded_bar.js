@@ -2,20 +2,23 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-// banded_bar buildOption — end-state Stage 2 shape (replaces the legacy
-// string-template branch in ComponentEditor.getDataDrivenChartCode).
+// banded_bar buildOption — scheme-driven per-row band envelope.
 //
-// Levey-Jennings / control-chart style: a per-row envelope drawn from
-// each row's own mean + ±1/±2 SD columns. Four visual styles:
-//   - time_series     line + dots over stacked-area SD bands (default)
+// A "band scheme" (band-schemes.js) defines the SEMANTICS: a center
+// column + ordered inner→outer band pairs, each pair a region between a
+// lower and upper column, with display labels. The render here is
+// scheme-agnostic — it draws the center plus N stacked band regions the
+// same way for ±SD, Min/Mean/Max, SPC, or any future scheme.
+//
+// Four visual styles (options.bandedBarStyle):
+//   - time_series     center line + dots over stacked-area band regions (default)
 //   - column_filled   one vertical stacked-bar column per row, no borders
 //   - column_outlined column_filled + band borders
-//   - column_box      inner ±1 SD band only, with a mean tick
+//   - column_box      innermost band only, with a center tick
 //
-// Given current form values (data_mapping.band_columns + the chosen
-// timestamp column + options.bandedBarStyle) and the query rows, returns
-// an ECharts `option`. ChartShell renders it and owns the HTML title
-// header — there is no option.title here (matches line/gauge).
+// Bands are per-row: each row carries its own band columns, so the
+// envelope moves with the data. ChartShell renders the option and owns
+// the HTML title header — there is no option.title here (matches line/gauge).
 
 import {
   COLOR_PRIMARY,
@@ -24,16 +27,18 @@ import {
   TRANSPARENT_BG,
   columnIndex,
 } from '../option-helpers.js';
+import { getScheme } from './band-schemes.js';
 
-// Band fill/stroke colors. These are banded-bar-specific (teal inner,
-// purple outer, white mean tick) and not part of the shared palette, so
-// they live here. Kept byte-for-byte from the legacy template.
-const BAND_OUTER_FILL = 'rgba(190, 149, 255, 0.18)'; // ±2 SD — purple
-const BAND_OUTER_STROKE = '#be95ff';
-const BAND_INNER_FILL_AREA = 'rgba(8, 189, 186, 0.22)'; // ±1 SD — teal (area)
-const BAND_INNER_FILL_BAR = 'rgba(8, 189, 186, 0.30)'; // ±1 SD — teal (bar, denser)
-const BAND_INNER_STROKE = '#08bdba';
+// Band fill/stroke palette, indexed inner→outer. The innermost band is
+// teal (denser fill for the bar styles), outer bands purple. Schemes with
+// more than two pairs reuse the outer entry. Not part of the shared chart
+// palette — these are banded-bar-specific control-band tones.
 const MEAN_TICK_COLOR = COLOR_TEXT; // gray10
+const BAND_TONES = [
+  { areaFill: 'rgba(8, 189, 186, 0.22)', barFill: 'rgba(8, 189, 186, 0.30)', stroke: '#08bdba' }, // inner — teal
+  { areaFill: 'rgba(190, 149, 255, 0.18)', barFill: 'rgba(190, 149, 255, 0.18)', stroke: '#be95ff' }, // outer — purple
+];
+const toneFor = (i) => BAND_TONES[Math.min(i, BAND_TONES.length - 1)];
 
 const AXIS_LINE = '#525252';
 const SPLIT_LINE = '#262626';
@@ -43,24 +48,22 @@ const TOOLTIP_BORDER = '#393939';
 const round4 = (n) => Number(n.toFixed(4));
 
 /**
- * Compute padded y-axis bounds. Auto-scale puts the floor at 0 because
- * the stacked width-helper series carry small delta values, which makes
- * the bands look tiny against an empty panel. Instead bound to the wider
- * of ±3 SD (extrapolated from the available SD columns) or 10% of the
- * mean; fall back to the data extent + 10% when no SD info is present.
+ * Compute padded y-axis bounds from the center values plus every
+ * resolved band's lower/upper series. Auto-scale would floor at 0
+ * because the stacked width-helper series carry small delta values; we
+ * instead bound to the actual data extent (widest band) plus 10% of the
+ * center magnitude so the envelope sits comfortably in the panel.
  */
-function computeYBounds({ meanVals, m1sd, p1sd, m2sd, p2sd, has1SD, has2SD }) {
-  const yLowData = has2SD ? Math.min(...m2sd) : has1SD ? Math.min(...m1sd) : Math.min(...meanVals);
-  const yHighData = has2SD ? Math.max(...p2sd) : has1SD ? Math.max(...p1sd) : Math.max(...meanVals);
-  const meanAvg = meanVals.reduce((a, b) => a + b, 0) / meanVals.length;
-  // SD estimate: prefer the ±2 SD half-width / 2, fall back to ±1 SD half-width.
-  const sdEstimate = has2SD ? (p2sd[0] - m2sd[0]) / 4
-    : has1SD ? (p1sd[0] - m1sd[0]) / 2
-    : 0;
-  const padSD = sdEstimate > 0 ? sdEstimate * 3 : 0;
-  const padPct = Math.abs(meanAvg) * 0.10;
-  const pad = Math.max(padSD, padPct);
-  return { yMin: yLowData - pad, yMax: yHighData + pad };
+function computeYBounds(centerVals, resolvedPairs) {
+  let lo = Math.min(...centerVals);
+  let hi = Math.max(...centerVals);
+  for (const p of resolvedPairs) {
+    lo = Math.min(lo, ...p.lower);
+    hi = Math.max(hi, ...p.upper);
+  }
+  const centerAvg = centerVals.reduce((a, b) => a + b, 0) / centerVals.length;
+  const pad = Math.abs(centerAvg) * 0.10 || (hi - lo) * 0.10 || 1;
+  return { yMin: lo - pad, yMax: hi + pad };
 }
 
 /**
@@ -116,6 +119,27 @@ function baseOption(categories, yMin, yMax, legendPos, extra = {}) {
 }
 
 /**
+ * Resolve a scheme's pairs against the data: for each declared pair,
+ * pull the lower + upper column values when BOTH are mapped + present.
+ * Returns an ordered inner→outer list of { key, label, lower, upper }
+ * with numeric per-row arrays. Pairs missing a column are dropped (the
+ * chart degrades gracefully to whatever bands are mapped).
+ */
+function resolvePairs(scheme, bandCols, colVals) {
+  const out = [];
+  for (const pair of scheme.pairs) {
+    const lowerCol = bandCols[pair.lowerKey];
+    const upperCol = bandCols[pair.upperKey];
+    if (!lowerCol || !upperCol) continue;
+    const lower = colVals(lowerCol);
+    const upper = colVals(upperCol);
+    if (!lower || !upper) continue;
+    out.push({ key: pair.key, label: pair.label, lower, upper });
+  }
+  return out;
+}
+
+/**
  * @param {Object} values   { data_mapping, options }
  * @param {Object} data     { columns: string[], rows: any[][] }
  * @param {Object} helpers  { formatCellValue, xAxisFormat }
@@ -125,17 +149,17 @@ export function buildOption(values, data, helpers = {}) {
   const { formatCellValue, xAxisFormat: helperXAxisFormat = 'chart' } = helpers;
   const dm = values?.data_mapping || {};
   const opts = values?.options || {};
-  const bc = dm.band_columns || {};
+  const bandCols = dm.band_columns || {};
   const style = opts.bandedBarStyle || 'time_series';
+  const scheme = getScheme(bandCols.scheme);
 
   const xCol = dm.x_axis || '';
   const xAxisFormat = dm.x_axis_format || helperXAxisFormat;
-  const meanCol = bc.mean || '';
+  const centerCol = bandCols[scheme.center.key] || '';
 
   // Unconfigured → return null so ChartShell shows its placeholder
-  // instead of an empty canvas. (The editor also gates the preview, but
-  // a saved record missing the mapping should fail soft too.)
-  if (!xCol || !meanCol) return null;
+  // instead of an empty canvas. The center column is always required.
+  if (!xCol || !centerCol) return null;
 
   const rows = data?.rows || [];
   if (rows.length === 0) return null;
@@ -150,182 +174,178 @@ export function buildOption(values, data, helpers = {}) {
   const categories = xColIdx >= 0
     ? rows.map((r) => (formatCellValue ? formatCellValue(r[xColIdx], xCol, { timestampFormat: xAxisFormat }) : r[xColIdx]))
     : [];
-  const meanVals = rows.map((r) => Number.parseFloat(r[idx(meanCol)]));
+  const centerVals = rows.map((r) => Number.parseFloat(r[idx(centerCol)]));
 
-  const m1sd = bc.minus_1sd ? colVals(bc.minus_1sd) : null;
-  const p1sd = bc.plus_1sd ? colVals(bc.plus_1sd) : null;
-  const m2sd = bc.minus_2sd ? colVals(bc.minus_2sd) : null;
-  const p2sd = bc.plus_2sd ? colVals(bc.plus_2sd) : null;
-  const has1SD = Boolean(m1sd && p1sd);
-  const has2SD = Boolean(m2sd && p2sd);
+  // Inner→outer resolved pairs (each with per-row lower/upper arrays).
+  const pairs = resolvePairs(scheme, bandCols, colVals);
+  const centerLabel = scheme.center.label;
 
-  const { yMin, yMax } = computeYBounds({ meanVals, m1sd, p1sd, m2sd, p2sd, has1SD, has2SD });
-
-  // Legend (show + position) — defaults on/top, applied to every style.
+  const { yMin, yMax } = computeYBounds(centerVals, pairs);
   const { legend, position: legendPos } = buildLegend(opts.legend);
 
-  // ── time_series: stacked-area SD envelope behind the mean line ──────
-  if (style === 'time_series') {
-    const baseLow = has2SD ? m2sd : has1SD ? m1sd : null;
-    const wOuterLo = has2SD && has1SD ? rows.map((_, i) => round4(m1sd[i] - m2sd[i])) : null;
-    const wInner = has1SD ? rows.map((_, i) => round4(p1sd[i] - m1sd[i])) : null;
-    const wOuterHi = has2SD && has1SD ? rows.map((_, i) => round4(p2sd[i] - p1sd[i])) : null;
+  // Shared tooltip: header = x value, then center, then each pair's
+  // lower/upper readout labelled by the scheme.
+  const tooltipFormatter = (params) => {
+    const i = params[0]?.dataIndex;
+    if (i == null) return '';
+    const lines = [`<b>${categories[i]}</b>`, `${centerLabel}: ${centerVals[i].toFixed(3)}`];
+    for (const p of pairs) {
+      lines.push(`${p.label}: ${p.lower[i].toFixed(3)} / ${p.upper[i].toFixed(3)}`);
+    }
+    return lines.join('<br/>');
+  };
+  const tooltip = {
+    trigger: 'axis', appendToBody: true,
+    backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
+    formatter: tooltipFormatter,
+  };
 
+  // Legend lists each rendered pair's label plus the center, inner→outer.
+  // column_box draws only the innermost band, so its legend lists just
+  // that one pair (listing bands it doesn't draw would mislead).
+  const legendPairs = style === 'column_box' ? pairs.slice(0, 1) : pairs;
+  const legendData = [...legendPairs.map((p) => p.label), centerLabel];
+  const legendBlock = legend ? { ...legend, data: legendData } : undefined;
+
+  // ── time_series: stacked-area band regions behind the center line ───
+  // Two independent stacks anchored on the center line: an 'up' stack that
+  // fills upward through each pair's upper half, and a 'down' stack that
+  // fills downward through each pair's lower half. Within each stack the
+  // region widths are measured from the next-inner edge (the center for
+  // the innermost pair, the previous pair otherwise) so the areas tile the
+  // envelope exactly instead of overpainting. ECharts paints later series
+  // on top, so we add outer→inner to keep inner fills visually on top.
+  if (style === 'time_series') {
     const series = [];
-    if (baseLow) {
+
+    if (pairs.length > 0) {
+      // Transparent anchors lift each stack to the center line.
       series.push({
-        name: '_base', type: 'line', stack: 'band', data: baseLow, symbol: 'none',
-        lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true,
-        tooltip: { show: false }, showInLegend: false,
+        name: '_upbase', type: 'line', stack: 'up', data: centerVals, symbol: 'none',
+        lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, tooltip: { show: false },
       });
-    }
-    if (wOuterLo) {
       series.push({
-        name: '±2 SD', type: 'line', stack: 'band', data: wOuterLo, symbol: 'none',
-        lineStyle: { opacity: 0 }, areaStyle: { color: BAND_OUTER_FILL },
+        name: '_downbase', type: 'line', stack: 'down', data: centerVals, symbol: 'none',
+        lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, tooltip: { show: false },
       });
+      for (let k = pairs.length - 1; k >= 0; k--) {
+        const p = pairs[k];
+        const tone = toneFor(k);
+        const innerUpper = k === 0 ? centerVals : pairs[k - 1].upper;
+        const innerLower = k === 0 ? centerVals : pairs[k - 1].lower;
+        // Upper half — carries the legend entry for this pair.
+        series.push({
+          name: p.label, type: 'line', stack: 'up', symbol: 'none',
+          data: p.upper.map((u, i) => round4(u - innerUpper[i])),
+          lineStyle: { opacity: 0 }, areaStyle: { color: tone.areaFill },
+        });
+        // Lower half — same label so the one legend key toggles both, but
+        // kept out of the legend list to avoid a duplicate entry. Widths
+        // are negative so the 'down' stack fills BELOW the center anchor.
+        series.push({
+          name: p.label, type: 'line', stack: 'down', symbol: 'none',
+          data: p.lower.map((l, i) => round4(l - innerLower[i])),
+          lineStyle: { opacity: 0 }, areaStyle: { color: tone.areaFill }, showInLegend: false,
+        });
+      }
     }
-    if (wInner) {
-      series.push({
-        name: '±1 SD', type: 'line', stack: 'band', data: wInner, symbol: 'none',
-        lineStyle: { opacity: 0 }, areaStyle: { color: BAND_INNER_FILL_AREA },
-      });
-    }
-    if (wOuterHi) {
-      series.push({
-        name: '±2 SD', type: 'line', stack: 'band', data: wOuterHi, symbol: 'none',
-        lineStyle: { opacity: 0 }, areaStyle: { color: BAND_OUTER_FILL }, showInLegend: false,
-      });
-    }
+
     series.push({
-      name: 'Mean', type: 'line', data: meanVals, symbol: 'circle', symbolSize: 6,
+      name: centerLabel, type: 'line', data: centerVals, symbol: 'circle', symbolSize: 6,
       lineStyle: { color: COLOR_PRIMARY, width: 2 }, itemStyle: { color: COLOR_PRIMARY },
     });
 
-    // Legend lists only the meaningful keys. ECharts filters series into
-    // the legend by `legend.data`; the transparent '_base' anchor and the
-    // duplicate '±2 SD hi' half are omitted (the remaining '±2 SD' entry
-    // toggles both halves since they share the name).
-    const tsLegend = legend
-      ? { ...legend, data: ['±2 SD', '±1 SD', 'Mean'].filter((n) => series.some((s) => s.name === n)) }
-      : undefined;
     return baseOption(categories, yMin, yMax, legendPos, {
-      tooltip: {
-        trigger: 'axis', appendToBody: true,
-        backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
-      },
-      ...(tsLegend ? { legend: tsLegend } : {}),
+      tooltip,
+      ...(legendBlock ? { legend: legendBlock } : {}),
       series,
     });
   }
 
   // ── column_* : per-row vertical stacked-bar glyphs ──────────────────
   const showBorders = style === 'column_outlined';
-  const onlyInnerBand = style === 'column_box';
+  const onlyInner = style === 'column_box';
   const series = [];
 
-  if (onlyInnerBand) {
-    // column_box: inner ±1 SD band as a stacked bar with stroke, plus a
-    // mean tick (rect scatter) on top.
-    if (has1SD) {
+  // column_box: only the innermost band, drawn as a stacked bar with a
+  // border, plus a center tick.
+  if (onlyInner) {
+    const inner = pairs[0];
+    if (inner) {
+      const tone = toneFor(0);
       series.push({
-        name: '_base', type: 'bar', stack: 'box', data: m1sd,
+        name: '_base', type: 'bar', stack: 'box', data: inner.lower,
         itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false },
       });
       series.push({
-        name: '±1 SD', type: 'bar', stack: 'box',
-        data: rows.map((_, i) => round4(p1sd[i] - m1sd[i])),
-        itemStyle: { color: BAND_INNER_FILL_AREA, borderColor: BAND_INNER_STROKE, borderWidth: 1 },
+        name: inner.label, type: 'bar', stack: 'box',
+        data: inner.upper.map((u, i) => round4(u - inner.lower[i])),
+        itemStyle: { color: tone.barFill, borderColor: tone.stroke, borderWidth: 1 },
       });
     }
     series.push({
-      name: 'Mean', type: 'scatter', data: meanVals, symbolSize: 14,
+      name: centerLabel, type: 'scatter', data: centerVals, symbolSize: 14,
       symbol: 'rect', itemStyle: { color: MEAN_TICK_COLOR },
     });
-  } else {
+  } else if (pairs.length > 0) {
     // column_filled / column_outlined: stacked-bar rectangles per row.
-    // Transparent base lifts the stack to the lower bound; widths fill
-    // the band regions on top.
-    if (has2SD) {
+    // Transparent base lifts the stack to the outermost lower bound, then
+    // each successive region (outer→inner lower gap, innermost, inner→outer
+    // upper gap) stacks upward to tile the envelope.
+    const outer = pairs[pairs.length - 1];
+    series.push({
+      name: '_base', type: 'bar', stack: 'col', data: outer.lower,
+      itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false },
+    });
+    // Lower gaps, outer→inner: width from this pair's lower to the next
+    // inner pair's lower (or to the center for the innermost).
+    for (let k = pairs.length - 1; k >= 0; k--) {
+      const p = pairs[k];
+      const tone = toneFor(k);
+      const innerEdge = k === 0 ? centerVals : pairs[k - 1].lower;
       series.push({
-        name: '_base', type: 'bar', stack: 'col', data: m2sd,
-        itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false },
-      });
-    } else if (has1SD) {
-      series.push({
-        name: '_base', type: 'bar', stack: 'col', data: m1sd,
-        itemStyle: { color: 'transparent' }, silent: true, tooltip: { show: false },
-      });
-    }
-    if (has2SD && has1SD) {
-      series.push({
-        name: '±2 SD lo', type: 'bar', stack: 'col',
-        data: rows.map((_, i) => round4(m1sd[i] - m2sd[i])),
+        name: `${p.label} lo`, type: 'bar', stack: 'col',
+        data: p.lower.map((l, i) => round4(innerEdge[i] - l)),
         itemStyle: {
-          color: BAND_OUTER_FILL,
-          ...(showBorders ? { borderColor: BAND_OUTER_STROKE, borderWidth: 1 } : {}),
+          color: tone.barFill,
+          ...(showBorders ? { borderColor: tone.stroke, borderWidth: 1 } : {}),
         },
       });
     }
-    if (has1SD) {
+    // Upper gaps, inner→outer: width from the inner edge to this pair's upper.
+    for (let k = 0; k < pairs.length; k++) {
+      const p = pairs[k];
+      const tone = toneFor(k);
+      const innerEdge = k === 0 ? centerVals : pairs[k - 1].upper;
       series.push({
-        name: '±1 SD', type: 'bar', stack: 'col',
-        data: rows.map((_, i) => round4(p1sd[i] - m1sd[i])),
+        name: `${p.label} hi`, type: 'bar', stack: 'col',
+        data: p.upper.map((u, i) => round4(u - innerEdge[i])),
         itemStyle: {
-          color: BAND_INNER_FILL_BAR,
-          ...(showBorders ? { borderColor: BAND_INNER_STROKE, borderWidth: 1 } : {}),
-        },
-      });
-    }
-    if (has2SD && has1SD) {
-      series.push({
-        name: '±2 SD hi', type: 'bar', stack: 'col',
-        data: rows.map((_, i) => round4(p2sd[i] - p1sd[i])),
-        itemStyle: {
-          color: BAND_OUTER_FILL,
-          ...(showBorders ? { borderColor: BAND_OUTER_STROKE, borderWidth: 1 } : {}),
+          color: tone.barFill,
+          ...(showBorders ? { borderColor: tone.stroke, borderWidth: 1 } : {}),
         },
       });
     }
     series.push({
-      name: 'Mean', type: 'scatter', data: meanVals, symbolSize: 6,
+      name: centerLabel, type: 'scatter', data: centerVals, symbolSize: 6,
       itemStyle: { color: COLOR_PRIMARY },
     });
   }
 
-  // Restrict the legend to meaningful entries — drop the transparent
-  // '_base' anchor and dedupe the split '±2 SD lo'/'±2 SD hi' bars into a
-  // single '±2 SD' key the user can toggle. (ECharts toggles every series
-  // whose name matches a clicked legend key, so both halves react.)
-  const columnLegend = legend
-    ? {
-        ...legend,
-        data: ['±2 SD', '±1 SD', 'Mean'].filter((n) =>
-          series.some((s) => s.name === n || (n === '±2 SD' && (s.name === '±2 SD lo' || s.name === '±2 SD hi')))),
-      }
-    : undefined;
-  // Rename the split outer-band bars to the shared '±2 SD' key so the
-  // single legend entry toggles both halves together.
-  if (columnLegend) {
-    series.forEach((s) => {
-      if (s.name === '±2 SD lo' || s.name === '±2 SD hi') s.name = '±2 SD';
-    });
-  }
+  // Collapse the split ' lo'/' hi' bar names back to the pair label so a
+  // single legend entry toggles both halves (ECharts toggles every series
+  // sharing a name). The transparent '_base' anchor is dropped from the
+  // legend data already (legendData lists only pair labels + center).
+  series.forEach((s) => {
+    if (typeof s.name === 'string' && (s.name.endsWith(' lo') || s.name.endsWith(' hi'))) {
+      s.name = s.name.replace(/ (lo|hi)$/, '');
+      s.showInLegend = undefined;
+    }
+  });
 
   return baseOption(categories, yMin, yMax, legendPos, {
-    tooltip: {
-      trigger: 'axis', appendToBody: true,
-      backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
-      formatter: (params) => {
-        const i = params[0]?.dataIndex;
-        if (i == null) return '';
-        const lines = [`<b>${categories[i]}</b>`, `Mean: ${meanVals[i].toFixed(3)}`];
-        if (has1SD) lines.push(`±1 SD: ${m1sd[i].toFixed(3)} / ${p1sd[i].toFixed(3)}`);
-        if (has2SD) lines.push(`±2 SD: ${m2sd[i].toFixed(3)} / ${p2sd[i].toFixed(3)}`);
-        return lines.join('<br/>');
-      },
-    },
-    ...(columnLegend ? { legend: columnLegend } : {}),
+    tooltip,
+    ...(legendBlock ? { legend: legendBlock } : {}),
     series,
   });
 }
