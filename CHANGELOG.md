@@ -6,6 +6,50 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] — 2026-05-29
+
+### Added
+
+- **Spec-driven chart editor + renderer (Stage 2).** Line, area,
+  bar, banded-bar, scatter, pie, and gauge charts now derive their
+  editor fields and ECharts options from a JSON `ChartTypeSpec` plus
+  a small per-type `buildOption(values, data)` render function,
+  replacing the per-chart-type hand-written JSX and string-templated
+  codegen. New chart options surfaced along the way: per-column stack
+  + axis assignment, y-axis range (min/max/log scale), tooltip mode,
+  y-axis thresholds (markLine / visualMap), and sampling.
+- **Number chart type restored to the picker.** `chart.number` is
+  now registered in the backend type registry; it had been missing
+  since the registry was introduced, so the catalog filtered it out
+  of the selector.
+
+### Changed
+
+- **Chart type selector** redesigned to a card grid of icon-above-
+  label tiles (matching the control type selector), all types in one
+  flowing grid.
+- **Dual-axis is now an explicit choice.** Adding a second y-column
+  no longer auto-engages a second axis — the dual-axis toggle defaults
+  off and only turns on when the user flips it. (Pre-existing
+  two-column charts that relied on the old "2 columns ⇒ dual-axis"
+  convention render single-axis until the toggle is set.)
+
+### Fixed
+
+- **Inline chart editor closed silently while dirty.** The
+  discard-changes confirmation in `ComponentEditorModal` was wired up
+  but never triggered; cancelling/closing a dirty editor now prompts.
+- **Saved dual-axis charts could render single-axis.** The dual-axis
+  flag is persisted on `options.multipleYAxis` but the renderer only
+  read `data_mapping.multiple_y_axis`; the renderer now reads both, so
+  an explicit dual-axis toggle survives a save round-trip.
+- **Live data streams died silently on access-token expiry.** SSE and
+  WebSocket connections bake the token into their URL at open time and
+  can't refresh it in flight, so streams (MQTT, ts-store push, Frigate
+  alerts, AI chat) stopped ~15 min in. The API client now refreshes the
+  token proactively before expiry and reconnects open streams onto the
+  fresh token. (Regular requests already auto-refreshed and retried.)
+
 ## [0.20.1] — 2026-05-27
 
 ### Fixed

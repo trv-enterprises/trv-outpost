@@ -797,9 +797,9 @@ exhaustive, not prioritized except where noted.
 
 ---
 
-**Last Updated**: 2026-05-24
-**Build**: 1342
-**Version**: 0.19.0
+**Last Updated**: 2026-05-29
+**Build**: 1537
+**Version**: 0.21.0
 
 ## Simulator Services
 
