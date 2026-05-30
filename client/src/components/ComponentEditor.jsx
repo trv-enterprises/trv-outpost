@@ -29,7 +29,7 @@ import {
   ToggletipContent,
   Tooltip
 } from '@carbon/react';
-import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown, Information } from '@carbon/icons-react';
+import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, ChartLineData, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown, Information } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
 import { API_BASE } from '../api/client';
 import SQLQueryBuilder from './SQLQueryBuilder';
@@ -50,18 +50,21 @@ import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import './ComponentEditor.scss';
 
-// Chart types available
+// Chart types available. Array order is the render order in the
+// picker modal — all types flow into one grid. Sequence:
+// line → area → bar → banded_bar → scatter → pie → gauge → number →
+// dataview → custom.
 const CHART_TYPES = [
-  { id: 'bar', label: 'Bar Chart', description: 'Compare values across categories', icon: ChartBar },
   { id: 'line', label: 'Line Chart', description: 'Show trends over time', icon: ChartLine },
   { id: 'area', label: 'Area Chart', description: 'Line chart with filled area beneath', icon: ChartArea },
-  { id: 'pie', label: 'Pie Chart', description: 'Show proportions of a whole', icon: ChartPie },
+  { id: 'bar', label: 'Bar Chart', description: 'Compare values across categories', icon: ChartBar },
+  { id: 'banded_bar', label: 'Banded Bar Chart', description: 'Levey-Jennings / control-chart style — time-series with horizontal reference bands', icon: ChartLineData },
   { id: 'scatter', label: 'Scatter Plot', description: 'Plot data points on two axes', icon: ChartScatter },
+  { id: 'pie', label: 'Pie Chart', description: 'Show proportions of a whole', icon: ChartPie },
   { id: 'gauge', label: 'Gauge', description: 'Display a single value on a dial', icon: Meter },
   { id: 'number', label: 'Number', description: 'Display a single value as a large number with optional unit', icon: StringInteger },
   { id: 'dataview', label: 'Data Table', description: 'Tabular view of raw data', icon: TableSplit },
-  { id: 'banded_bar', label: 'Banded Bar Chart', description: 'Levey-Jennings / control-chart style — time-series with horizontal reference bands', icon: ChartBar },
-  { id: 'custom', label: 'Custom Component', description: 'Write custom React/ECharts code', icon: Code }
+  { id: 'custom', label: 'Custom Component', description: 'Write custom React/ECharts code', icon: Code },
 ];
 
 // Filter operators
@@ -2025,32 +2028,36 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           onRequestSubmit={() => setChartTypeModalOpen(false)}
           modalHeading="Select Chart Type"
           primaryButtonText="Close"
-          size="sm"
-          className="type-selection-modal"
+          size="md"
+          className="chart-type-modal"
         >
-          <div className="type-selection-grid">
-            {/* Disabled chart types are hidden, but the active type stays
-                visible so editing existing charts of that type still works. */}
-            {CHART_TYPES.filter(t => isChartTypeEnabled(t.id) || t.id === chartType).map(type => {
-              const TypeIcon = type.icon;
-              return (
-                <div
-                  key={type.id}
-                  className={`type-selection-item ${chartType === type.id ? 'selected' : ''}`}
-                  onClick={() => {
-                    handleChartTypeChange(type.id);
-                    setShowCustomCode(type.id === 'custom');
-                    setChartTypeModalOpen(false);
-                  }}
-                >
-                  {TypeIcon && <TypeIcon size={24} />}
-                  <div className="type-selection-info">
-                    <span className="type-selection-label">{type.label}</span>
-                    <span className="type-selection-description">{type.description}</span>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="chart-type-modal-body">
+            {/* All chart types in one flowing grid, in CHART_TYPES
+                order. Disabled types are hidden, but the active type
+                stays visible so editing existing charts of that type
+                still works. */}
+            <div className="category-grid">
+              {CHART_TYPES
+                .filter(t => isChartTypeEnabled(t.id) || t.id === chartType)
+                .map(type => {
+                  const TypeIcon = type.icon;
+                  return (
+                    <div
+                      key={type.id}
+                      className={`chart-type-option ${chartType === type.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        handleChartTypeChange(type.id);
+                        setShowCustomCode(type.id === 'custom');
+                        setChartTypeModalOpen(false);
+                      }}
+                    >
+                      {TypeIcon && <TypeIcon size={24} className="type-icon" />}
+                      <div className="type-label">{type.label}</div>
+                      <div className="type-description">{type.description}</div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         </Modal>,
         document.body
@@ -3264,19 +3271,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
                     formState={{
-                      // data_mapping. multipleYAxis read order:
-                      //   1. Capability gate (chart_type can be dual-axis)
-                      //   2. If chartOptions.multipleYAxis is set, use it
-                      //      (user's explicit persisted choice).
-                      //   3. Otherwise legacy fallback: a 2-column chart
-                      //      is dual-axis by convention. Keeps existing
-                      //      charts behaving as before until the user
-                      //      flips the toggle for the first time.
-                      multipleYAxis: chartTypeConfig.multipleYAxis && (
-                        chartOptions.multipleYAxis !== undefined
-                          ? Boolean(chartOptions.multipleYAxis)
-                          : yAxisColumns.length === 2
-                      ),
+                      // data_mapping. multipleYAxis is purely the user's
+                      // explicit choice (gated on the chart_type being
+                      // dual-axis capable). It defaults OFF and is only
+                      // turned on when the user flips the toggle — adding a
+                      // second column does NOT auto-engage dual-axis. (We
+                      // dropped the old "2 columns ⇒ dual-axis by
+                      // convention" fallback; any pre-existing 2-column
+                      // chart that relied on it now renders single-axis
+                      // until the toggle is flipped.)
+                      multipleYAxis: chartTypeConfig.multipleYAxis
+                        && Boolean(chartOptions.multipleYAxis),
                       y_axis_columns: yAxisColumns.map((col, i) => ({
                         column: col,
                         // Per-column user-facing label sourced from the
@@ -4160,13 +4165,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
                             }))
                             .filter((e) => e.column && e.column.length > 0),
-                          // Pass through undefined (not false) when the
-                          // user never flipped the toggle — line.js's
-                          // dualAxis logic uses undefined to mean "fall
-                          // back to 2-column convention," whereas an
-                          // explicit false forces single-axis with N
-                          // columns. Mirrors the formState builder.
-                          multiple_y_axis: chartOptions.multipleYAxis,
+                          // Dual-axis is the user's explicit choice only;
+                          // line.js treats anything other than `true` as
+                          // off (no 2-column auto-convention). Mirrors the
+                          // formState builder and the saved-record path.
+                          multiple_y_axis: chartOptions.multipleYAxis === true,
                           series: seriesColumn || '',
                           // scatter reads these off data_mapping
                           y_axis_label: yAxisLabel || '',

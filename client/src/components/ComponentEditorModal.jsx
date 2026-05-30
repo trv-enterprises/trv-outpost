@@ -108,6 +108,10 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
 
   const handleClose = () => {
     if (saving) return;
+    if (isDirty) {
+      setShowCancelConfirm(true);
+      return;
+    }
     onClose();
   };
 

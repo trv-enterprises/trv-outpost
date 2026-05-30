@@ -40,6 +40,32 @@ class StreamConnectionManager {
     // connection, producing an O(N) CORS-error storm at first paint.
     this.reconnectDebounceTimeouts = new Map();
     this.reconnectDebounceMs = 150;
+
+    // The access token is baked into each SSE URL as ?st= at open
+    // time and can't be updated on a live EventSource. When apiClient
+    // rotates the token (proactive pre-expiry refresh, or the 401
+    // refresh path), reopen every active connection so it rides the
+    // fresh token instead of dying when the old one lapses server-side.
+    // A token → null transition (session ended) reconnects with an
+    // empty ?st=, which the server 401s — the dashboard surface
+    // re-bootstraps and remounts us, so we don't special-case it here.
+    this._unsubscribeTokenChange = apiClient.onTokenChange(() => {
+      this._reconnectAllForTokenChange();
+    });
+  }
+
+  /**
+   * Reopen every active connection with its current topics so each
+   * picks up the freshly-rotated access token in its ?st= query.
+   * Reuses the topic-reconnect path (which rebuilds the EventSource
+   * via _createEventSource, reading apiClient.streamAuthQuery() anew).
+   */
+  _reconnectAllForTokenChange() {
+    if (this.connections.size === 0) return;
+    console.log('[StreamConnectionManager] Access token rotated — reconnecting active streams');
+    for (const [connectionId, connection] of this.connections) {
+      this._reconnectWithTopics(connectionId, connection.topics);
+    }
   }
 
   static getInstance() {

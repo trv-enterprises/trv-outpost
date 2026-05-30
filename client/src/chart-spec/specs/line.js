@@ -259,13 +259,23 @@ export function buildOption(values, data, helpers = {}) {
       return norm;
     })
     .filter((e) => e.column);
-  // Dual-axis trigger matches the legacy convention: explicit toggle
-  // wins; otherwise 2 columns = dual-axis by convention. Same fallback
-  // the editor's formState builder uses (ComponentEditor.jsx ~line 3139)
-  // so saved charts, AI agent, and the preview all render the same.
-  const explicitMultiYAxis = values?.data_mapping?.multiple_y_axis;
-  const dualAxis = explicitMultiYAxis === true
-    || (explicitMultiYAxis == null && yEntries.length === 2);
+  // Dual-axis is purely the user's explicit choice. Adding a second
+  // column does NOT auto-engage it; the toggle defaults off. (We dropped
+  // the old "2 columns ⇒ dual-axis by convention" fallback — it made the
+  // editor toggle and the preview disagree, and silently flipped on for
+  // any new 2-column chart. Matches the editor formState builder in
+  // ComponentEditor.jsx.) A pre-existing 2-column chart that relied on
+  // the convention now renders single-axis until the toggle is flipped.
+  //
+  // Read from BOTH locations because the two render paths carry the flag
+  // differently: the editor preview injects it on data_mapping
+  // (multiple_y_axis), while a saved record persists it on
+  // options.multipleYAxis (the data_mapping written to disk has no such
+  // field). Either being true means dual-axis. Without the options read,
+  // a saved chart with the toggle on would silently fall back to
+  // single-axis now that the column-count convention is gone.
+  const dualAxis = values?.data_mapping?.multiple_y_axis === true
+    || values?.options?.multipleYAxis === true;
   const xAxisCol = values?.data_mapping?.x_axis || '';
   const xAxisLabel = values?.data_mapping?.x_axis_label || '';
   // Prefer the spec-bound x_axis_format when present (Stage 2 line),

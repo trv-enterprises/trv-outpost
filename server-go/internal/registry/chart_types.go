@@ -157,6 +157,25 @@ func init() {
 	})
 
 	RegisterComponentType(ComponentTypeInfo{
+		TypeID:      "chart.number",
+		Category:    CategoryChart,
+		Subtype:     "number",
+		DisplayName: "Number",
+		Description: "Single value rendered as a large number with an optional unit suffix. Binds one numeric column, typically the latest reading.",
+		Capabilities: ComponentCapabilities{
+			CanRead:            true,
+			SupportsStreaming:  true,
+			RequiresConnection: true,
+		},
+		DataRequirements: &DataRequirements{
+			RequiresYAxis: true,
+			MultipleYAxis: false,
+			HasTimeBucket: true,
+			YAxisLabel:    "Value Column",
+		},
+	})
+
+	RegisterComponentType(ComponentTypeInfo{
 		TypeID:      "chart.dataview",
 		Category:    CategoryChart,
 		Subtype:     "dataview",

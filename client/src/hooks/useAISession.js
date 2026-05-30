@@ -321,6 +321,24 @@ export function useAISession(chartId = null, preflightContext = {}) {
     };
   }, [session?.id, connectWebSocket]);
 
+  // Reconnect the WebSocket when the access token rotates. The token
+  // is baked into the ws:// URL as ?st= at open time and can't be
+  // updated in flight, so an expired token would otherwise close the
+  // socket and the 5-attempt reconnect (which reuses the same stale
+  // token until a regular request happens to refresh it) could give
+  // up first. On rotation we reset the attempt counter and reconnect
+  // immediately with the fresh token. apiClient fires this on the
+  // proactive pre-expiry refresh, so it lands before the old token
+  // lapses server-side.
+  useEffect(() => {
+    const unsubscribe = apiClient.onTokenChange((token) => {
+      if (!sessionIdRef.current || !token) return;
+      reconnectAttemptsRef.current = 0;
+      connectWebSocket();
+    });
+    return unsubscribe;
+  }, [connectWebSocket]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {

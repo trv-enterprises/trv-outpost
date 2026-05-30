@@ -137,6 +137,19 @@ class APIClient {
     // Optional callback when refresh fails permanently — App.jsx
     // wires this to a re-bootstrap. Set via setSessionExpiredHandler.
     this.onSessionExpired = null;
+
+    // Token-rotation listeners. Streams (SSE/WebSocket) bake the
+    // access token into their URL (?st=) at open time and can't update
+    // it in flight, so they subscribe here and reconnect when the
+    // token VALUE changes. Set of callbacks; see onTokenChange().
+    this._tokenChangeListeners = new Set();
+
+    // Proactive-refresh timer handle. We refresh the access token a
+    // bit BEFORE it expires (see _scheduleProactiveRefresh) so the
+    // in-memory token is always fresh — regular requests rarely hit a
+    // 401, and streams get a fresh ?st= via the rotation listeners
+    // instead of dying silently when their baked-in token lapses.
+    this._refreshTimer = null;
   }
 
   // setAccessToken stamps the JWT and remembers its exp. Called by
@@ -150,6 +163,7 @@ class APIClient {
   // this. Browser-only — no-op in non-window contexts.
   setAccessToken(token, expiresAt) {
     const hadToken = !!this.accessToken;
+    const prevToken = this.accessToken;
     this.accessToken = token || null;
     this.accessExpiresAt = expiresAt ? new Date(expiresAt).getTime() : null;
     const hasToken = !!this.accessToken;
@@ -160,6 +174,76 @@ class APIClient {
         // window.Event missing in unusual environments — non-fatal.
       }
     }
+    // Schedule (or cancel) the proactive pre-expiry refresh for the
+    // new token.
+    this._scheduleProactiveRefresh();
+    // Notify stream consumers when the token VALUE actually changed
+    // (rotation or first-set), so they can reconnect with the fresh
+    // ?st=. The first-set case (null → token) is also a rotation from
+    // a stream's perspective — a stream opened pre-bootstrap with no
+    // token should rebuild once one exists. We skip notifying only
+    // when the value is unchanged (idempotent re-stamp).
+    if (this.accessToken !== prevToken) {
+      this._notifyTokenChange();
+    }
+  }
+
+  // onTokenChange subscribes a listener to access-token rotations.
+  // Returns an unsubscribe function. Stream consumers (SSE/WebSocket)
+  // use this to tear down and reopen with a fresh ?st= query token,
+  // since they can't mutate an already-open connection's URL. Listeners
+  // fire on rotation AND on a permanent refresh failure (token → null),
+  // so a consumer can also stop streaming when the session ends.
+  onTokenChange(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this._tokenChangeListeners.add(listener);
+    return () => { this._tokenChangeListeners.delete(listener); };
+  }
+
+  _notifyTokenChange() {
+    for (const listener of this._tokenChangeListeners) {
+      try {
+        listener(this.accessToken);
+      } catch (e) {
+        console.warn('apiClient: token-change listener threw', e);
+      }
+    }
+  }
+
+  // _scheduleProactiveRefresh arms a timer to refresh the access token
+  // shortly before it expires. This keeps the in-memory token fresh so
+  // (a) regular requests rarely hit a 401-refresh round-trip and (b)
+  // streams get rotated onto a fresh ?st= via the rotation listeners
+  // instead of silently dying when their baked-in token lapses (SSE
+  // can't read the 401 body to know to refresh).
+  //
+  // We refresh REFRESH_LEAD_MS before exp, clamped so a very short or
+  // already-past TTL still schedules a near-immediate (not negative)
+  // refresh. Only schedules when we actually hold a refreshable JWT —
+  // API-key sessions have no refresh path, and a null token means
+  // signed-out.
+  _scheduleProactiveRefresh() {
+    if (this._refreshTimer) {
+      clearTimeout(this._refreshTimer);
+      this._refreshTimer = null;
+    }
+    // No proactive refresh for API-key sessions (no refresh endpoint
+    // applies) or when there's no token / no known expiry.
+    if (this.apiKey || !this.accessToken || !this.accessExpiresAt) {
+      return;
+    }
+    if (typeof setTimeout !== 'function') return; // non-browser guard
+    const REFRESH_LEAD_MS = 60 * 1000;   // refresh 1 min before exp
+    const MIN_DELAY_MS = 5 * 1000;       // never busy-loop on a stale exp
+    const msUntilExp = this.accessExpiresAt - Date.now();
+    const delay = Math.max(MIN_DELAY_MS, msUntilExp - REFRESH_LEAD_MS);
+    this._refreshTimer = setTimeout(() => {
+      this._refreshTimer = null;
+      // Fire and forget — _refreshSession stamps the new token (which
+      // re-arms this timer and notifies stream listeners) or notifies
+      // the session-expired handler on permanent failure.
+      this._refreshSession();
+    }, delay);
   }
 
   getAccessToken() {
@@ -240,8 +324,9 @@ class APIClient {
           credentials: 'same-origin',
         });
         if (!response.ok) {
-          this.accessToken = null;
-          this.accessExpiresAt = null;
+          // Clear via setAccessToken(null) so the proactive timer is
+          // cancelled and stream listeners are told the session ended.
+          this.setAccessToken(null, null);
           if (this.onSessionExpired) {
             try { this.onSessionExpired(); } catch (e) { console.warn(e); }
           }
@@ -252,8 +337,7 @@ class APIClient {
         return true;
       } catch (err) {
         console.warn('apiClient: refresh failed', err);
-        this.accessToken = null;
-        this.accessExpiresAt = null;
+        this.setAccessToken(null, null);
         if (this.onSessionExpired) {
           try { this.onSessionExpired(); } catch (e) { console.warn(e); }
         }
@@ -277,8 +361,9 @@ class APIClient {
     } catch (err) {
       console.warn('apiClient: logout call failed', err);
     }
-    this.accessToken = null;
-    this.accessExpiresAt = null;
+    // Clear via setAccessToken so the proactive-refresh timer is
+    // cancelled and stream consumers tear down.
+    this.setAccessToken(null, null);
   }
 
   // setTokenProvider lets the Clerk integration plug in a

@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import apiClient from '../api/client';
 
 /**
@@ -22,6 +22,11 @@ import apiClient from '../api/client';
  * Reconnect: EventSource auto-reconnects on transport-level errors.
  * The server emits a `connected` event on (re)open so we can spot
  * reconnects in the console without surfacing them to the user.
+ * The ?st= access token is baked into the URL at open time and can't
+ * be updated in flight, so we also re-open the stream whenever
+ * apiClient rotates the token (a `tokenVersion` bump re-runs the
+ * effect) — otherwise the stream would silently stop once the
+ * baked-in token expires server-side.
  *
  * Args:
  *   ready          — boolean; only open the stream once true (e.g.
@@ -30,6 +35,16 @@ import apiClient from '../api/client';
  *                    ({ kind, title, subtitle }).
  */
 export function useEventStream({ ready, addNotification }) {
+  // Bumped whenever the access token rotates so the effect below tears
+  // down and reopens the EventSource with a fresh ?st=.
+  const [tokenVersion, setTokenVersion] = useState(0);
+  useEffect(() => {
+    const unsubscribe = apiClient.onTokenChange(() => {
+      setTokenVersion((v) => v + 1);
+    });
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     if (!ready || typeof addNotification !== 'function') return undefined;
 
@@ -75,5 +90,5 @@ export function useEventStream({ ready, addNotification }) {
     return () => {
       source.close();
     };
-  }, [ready, addNotification]);
+  }, [ready, addNotification, tokenVersion]);
 }
