@@ -1,0 +1,51 @@
+{
+  "schema_version": "1",
+  "chart_type": "dataview",
+  "library": "react",
+  "display": {
+    "label": "Data Table",
+    "icon": "TableSplit",
+    "description": "Tabular view of raw query results (AG Grid)"
+  },
+  "capabilities": {
+    "requires_x_axis": false,
+    "requires_y_axis": false,
+    "multiple_y_axis": false,
+    "single_axis_n_columns": false,
+    "has_pivot_series": false,
+    "has_axis_labels": false,
+    "has_x_axis_format": false,
+    "has_time_bucket": false,
+    "has_sort_limit": true,
+    "has_visible_columns": true,
+    "has_filters": true,
+    "has_aggregation": false,
+    "has_sliding_window": false,
+    "has_legend_config": false,
+    "has_tooltip_config": false,
+    "has_axis_range": false,
+    "has_thresholds": false
+  },
+  "sections": [
+    {
+      "id": "data_mapping",
+      "label": "Data Mapping",
+      "subsections": [
+        {
+          "id": "columns_group",
+          "label": "Columns",
+          "helperText": "Data tables display the columns below. Uncheck any column to hide it, reorder with the arrows, and set an optional display name to rename its header.",
+          "layout": "single-column",
+          "fields": [
+            {
+              "id": "column_manager",
+              "binds": "data_mapping.visible_columns",
+              "type": "column_manager",
+              "label": "Columns"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

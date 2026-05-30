@@ -305,6 +305,9 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // `config.chart_type`, and `config.transforms?.x_axis_format`. We
   // expose those additional fields here; legacy code ignores them.
   const config = useMemo(() => ({
+    // id is needed by spec-driven views that key per-user state on the
+    // component id (dataview's column layout via useDataviewLayout).
+    id: componentMeta?.id || '',
     title: componentMeta?.title || '',
     name: componentMeta?.name || '',
     description: componentMeta?.description || '',
@@ -316,6 +319,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     options: componentMeta?.options,
     transforms: componentMeta?.transforms,
   }), [
+    componentMeta?.id,
     componentMeta?.title,
     componentMeta?.name,
     componentMeta?.description,

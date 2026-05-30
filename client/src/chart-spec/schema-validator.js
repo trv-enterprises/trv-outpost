@@ -113,6 +113,7 @@ const SUPPORTED_FIELD_TYPES = new Set([
   'nullable_number',     // Carbon checkbox-inline-with-NumberInput; null = auto, number = manual
   'y_axis_columns_list', // free list of { column, stack, axis? } entries
   'threshold_list',      // free list of { value, color, label? } entries
+  'column_manager',      // dataview: visible-columns checklist + reorder + per-column alias
 ]);
 const SUPPORTED_LAYOUTS = new Set([
   'single-column',

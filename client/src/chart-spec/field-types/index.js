@@ -11,6 +11,7 @@ import SliderField from './SliderField';
 import NullableNumberField from './NullableNumber';
 import YAxisColumnsListField from './YAxisColumnsList';
 import ThresholdListField from './ThresholdList';
+import ColumnManagerField from './ColumnManager';
 
 const FIELD_RENDERERS = {
   // Stage 1
@@ -24,6 +25,7 @@ const FIELD_RENDERERS = {
   nullable_number: NullableNumberField,
   y_axis_columns_list: YAxisColumnsListField,
   threshold_list: ThresholdListField,
+  column_manager: ColumnManagerField,
   // column_multi_select + code stay deferred — no current spec uses
   // either. The schema validator permits them; renderers land when
   // a spec needs them.

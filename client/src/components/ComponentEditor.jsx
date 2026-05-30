@@ -2754,7 +2754,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     section (Dual Y-axis toggle, y_axis_columns list,
                     x-axis, pivot) replaces it. Bar/area/pie/etc. keep
                     this block until they migrate. */}
-                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
+                {!showCustomCode && !(['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number', 'dataview'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType)) && (
                 <div className="mapping-section">
                   <h4>Data Mapping</h4>
                   {/* Show column aliases UI for dataview type */}
@@ -3268,7 +3268,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number', 'dataview'].includes(chartType) && chartSpecEditorEnabled && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -3354,6 +3354,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // stored number; unit is free text.
                       number_size: String(chartOptions.numberSize ?? 120),
                       number_unit: chartOptions.numberUnit || '',
+                      // dataview: the column_manager widget reads these two
+                      // keys directly (visible_columns null = show all).
+                      visible_columns: visibleColumns,
+                      column_aliases: columnAliases,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -3509,6 +3513,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'number_unit':
                           updateChartOption('numberUnit', value);
+                          break;
+                        // dataview: the column_manager widget writes the
+                        // visible-columns whitelist (null = show all) and
+                        // the per-column alias map.
+                        case 'visible_columns':
+                          setVisibleColumns(value);
+                          break;
+                        case 'column_aliases':
+                          setColumnAliases(value);
                           break;
                         default: break;
                       }
@@ -4195,6 +4208,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         title,
                         name,
                         description,
+                        // id lets spec-driven views key per-user state on
+                        // the component (dataview's column layout). Empty
+                        // for an unsaved new chart — useDataviewLayout
+                        // no-ops on a blank id.
+                        id: chart?.id || '',
                         // Spec-driven shell (SpecDrivenChart) reads
                         // chart_type / data_mapping / options off the
                         // ComponentConfigContext. Mirror the viewer's
@@ -4232,6 +4250,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           // is picked; undefined otherwise mirrors the save
                           // path so the preview matches a saved record.
                           band_columns: chartType === 'banded_bar' && bandColumns?.mean ? bandColumns : undefined,
+                          // dataview reads its column config off data_mapping.
+                          // visible_columns is the working state directly
+                          // (null = show all); aliases as-is.
+                          visible_columns: Array.isArray(visibleColumns) ? visibleColumns : undefined,
+                          column_aliases: columnAliases,
                         } : undefined,
                         // bandedBarStyle is a sibling state var (not inside
                         // chartOptions); merge it into options for the

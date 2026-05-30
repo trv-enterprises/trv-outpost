@@ -18,6 +18,7 @@ import { buildOption as buildPieOption } from './specs/pie';
 import { buildOption as buildScatterOption } from './specs/scatter';
 import { buildOption as buildBandedBarOption } from './specs/banded_bar';
 import { buildOption as buildNumberOption } from './specs/number';
+import { buildOption as buildDataViewOption } from './specs/dataview';
 
 const BUILD_OPTIONS = {
   line: buildLineOption,
@@ -48,7 +49,9 @@ const BUILD_OPTIONS = {
   // descriptor that SpecDrivenChart renders via the view registry (not
   // ChartShell/ReactECharts). See docs/design-notes/spec-driven-non-echarts-views.md.
   number: buildNumberOption,
-  // dataview — added when its DataViewGrid view + column_manager field land.
+  // dataview is non-ECharts: returns a { render: 'dataview' } descriptor
+  // rendered by <DataViewGrid> (AG Grid) via the view registry.
+  dataview: buildDataViewOption,
 };
 
 /**

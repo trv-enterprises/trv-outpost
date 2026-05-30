@@ -16,9 +16,11 @@
 // See docs/design-notes/spec-driven-non-echarts-views.md.
 
 import NumberView from './NumberView';
+import DataViewGrid from './DataViewGrid';
 
 const VIEWS = {
   number: NumberView,
+  dataview: DataViewGrid,
 };
 
 /** React component for a descriptor's `render` tag, or null. */
