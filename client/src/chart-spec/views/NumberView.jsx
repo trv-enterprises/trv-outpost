@@ -21,9 +21,16 @@
  * @param {string} props.unit        optional unit suffix
  * @param {number} props.size        value font size in px
  * @param {string} props.title       centered title ('' to hide)
+ * @param {object} config            saved config (options.showTitle gate)
  * @param {object} dataCtx           { loading, error } for placeholders
  */
-export default function NumberView({ formatted, unit, size, title, dataCtx }) {
+export default function NumberView({ formatted, unit, size, title, config, dataCtx }) {
+  // Title is suppressible per-component via options.showTitle (default
+  // on) — same uniform guard as ChartShell / DataViewGrid. Off →
+  // reclaim the title's vertical space (the value centers in the full
+  // panel regardless, so nothing reflows).
+  const showTitle = config?.options?.showTitle !== false;
+  const titleText = showTitle ? title : '';
   if (dataCtx?.loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#c6c6c6' }}>
@@ -44,14 +51,14 @@ export default function NumberView({ formatted, unit, size, title, dataCtx }) {
   // title is shown (swapping titled/untitled doesn't reflow the number).
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-      {title ? (
+      {titleText ? (
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
           fontSize: '1rem', lineHeight: 1.5, fontWeight: 600,
           color: 'var(--cds-text-primary)', textAlign: 'center',
           padding: '0 0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {title}
+          {titleText}
         </div>
       ) : null}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -61,7 +61,13 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
     );
   }
 
-  const chartName = config?.title || config?.name || '';
+  // Title is suppressible per-component via options.showTitle (default
+  // on). Off → don't render the header band at all, so the chart body
+  // gets the full panel height (use a Text panel for a custom/giant
+  // title). Uniform across every chart type — see the same guard in
+  // NumberView / DataViewGrid.
+  const showTitle = config?.options?.showTitle !== false;
+  const chartName = showTitle ? (config?.title || config?.name || '') : '';
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {chartName ? (

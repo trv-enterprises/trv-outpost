@@ -1952,15 +1952,36 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             />
           </div>
           <div className="metadata-col metadata-col--half">
-            <TextInput
-              id="chart-title"
-              labelText="Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
-              size="md"
-              helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
-            />
+            {/* Show-title toggle sits inline to the left of the Title
+                field. Toggling off hides the rendered title band on the
+                chart (reclaiming its vertical space) AND hides this
+                field, since the value is then unused. Default ON
+                (showTitle !== false). Stored on options.showTitle so it
+                persists / snapshots / dirty-tracks with the rest of
+                chartOptions. Honored uniformly by ChartShell + the
+                non-ECharts views (NumberView, DataViewGrid). */}
+            <div className="title-with-toggle">
+              <Toggle
+                id="chart-show-title"
+                size="sm"
+                labelText="Show title"
+                hideLabel
+                aria-label="Show title"
+                toggled={chartOptions.showTitle !== false}
+                onToggle={(checked) => updateChartOption('showTitle', checked)}
+              />
+              {chartOptions.showTitle !== false && (
+                <TextInput
+                  id="chart-title"
+                  labelText="Title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={name || (componentType === 'control' ? 'Defaults to control name' : 'Defaults to chart name')}
+                  size="md"
+                  helperText={componentType === 'control' ? 'Title shown on dashboards (defaults to control name)' : 'Title shown on dashboards (defaults to chart name)'}
+                />
+              )}
+            </div>
           </div>
         </div>
         <div className="metadata-row">

@@ -197,7 +197,11 @@ export default function DataViewGrid({
     );
   }
 
-  const title = config?.title || config?.name || '';
+  // Title suppressible per-component via options.showTitle (default on)
+  // — same uniform guard as ChartShell / NumberView. Off → the grid gets
+  // the full panel height.
+  const showTitle = config?.options?.showTitle !== false;
+  const title = showTitle ? (config?.title || config?.name || '') : '';
   return (
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'transparent', overflow: 'hidden' }}>
       {title ? (

@@ -144,6 +144,27 @@
       }
     }
 
+    // Show-title toggle inline to the left of the Title field, sharing
+    // the Title half. The toggle is compact (flex-shrink:0); the field
+    // fills the remaining width. Bottom-aligned so the small toggle sits
+    // on the input's baseline rather than the label row. When the title
+    // is toggled off the field unmounts and the toggle sits alone.
+    .title-with-toggle {
+      display: flex;
+      align-items: flex-end;
+      gap: spacing.$spacing-04;
+
+      .cds--toggle {
+        flex-shrink: 0;
+        margin-bottom: spacing.$spacing-02;
+      }
+      .cds--text-input__field-wrapper,
+      .cds--form-item {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+    }
+
     // Narrow viewport / sidecard-open fallback: stack all columns.
     // ~720px is roughly the point where halves become unreadable
     // for a TextInput with a label + helper text.
