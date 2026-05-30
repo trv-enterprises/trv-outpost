@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -37,6 +39,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"strip_literal_secret_sentinels_v1", migrateStripLiteralSecretSentinels},
 		{"users_backfill_control_capability_v1", migrateBackfillControlCapability},
 		{"seed_global_snippets_v1", migrateSeedGlobalSnippetsV1},
+		{"spec_driven_chart_code_v1", migrateSpecDrivenChartCode},
 	}
 
 	coll := db.Collection("migrations")
@@ -478,6 +481,73 @@ func migrateRenameDatasourceIdInComponentCode(ctx context.Context, db *mongo.Dat
 	}
 
 	log.Printf("  components: rewrote datasourceId: → connectionId: in %d component_code blobs", updated)
+	return nil
+}
+
+// migrateSpecDrivenChartCode repairs chart components whose stored
+// component_code is a legacy hardcoded-column ECharts template (or empty)
+// rather than the spec-driven one-liner. Before v0.24 the server create
+// path (component_service.CreateComponent) injected a per-type template
+// with literal column names ('timestamp'/'value', 'day'/'mean', …) for
+// agent-built charts (chat agent, component agent, MCP). Those records
+// render "No data" against any schema whose columns differ from the
+// template's literals. The fix rewrites them to
+// `<SpecDrivenChart specName="..." />`, which draws from the saved
+// data_mapping / options config at runtime — identical to editor-built
+// charts.
+//
+// Scope: every version row of a chart component that is spec-driven
+// (registry.IsSpecDrivenChart) and not in custom-code mode, whose code
+// does not already defer to SpecDrivenChart. Custom-code charts and the
+// `custom` type are left untouched. Idempotent — already-converted rows
+// contain "SpecDrivenChart" and are skipped, and the migration framework
+// guards against re-running.
+func migrateSpecDrivenChartCode(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("components")
+
+	// Candidate set: chart components not flagged as custom-code whose
+	// code doesn't already reference SpecDrivenChart. The per-type
+	// spec-driven check happens in Go below (the registry is the source
+	// of truth for which chart_types are spec-driven).
+	filter := bson.M{
+		"component_type": "chart",
+		"use_custom_code": bson.M{"$ne": true},
+		"component_code":  bson.M{"$not": bson.M{"$regex": "SpecDrivenChart"}},
+	}
+	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("find chart components to repair: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	updated := 0
+	skipped := 0
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID        interface{} `bson:"_id"`
+			ChartType string      `bson:"chart_type"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			return fmt.Errorf("decode component: %w", err)
+		}
+		// Only rewrite chart types that actually have a spec-driven render
+		// path. A non-spec type with hand-or-template code is left alone.
+		if !registry.IsSpecDrivenChart(doc.ChartType) {
+			skipped++
+			continue
+		}
+		newCode := componenttemplates.SpecDrivenOneLiner(doc.ChartType)
+		_, err := coll.UpdateByID(ctx, doc.ID, bson.M{"$set": bson.M{"component_code": newCode}})
+		if err != nil {
+			return fmt.Errorf("update component %v: %w", doc.ID, err)
+		}
+		updated++
+	}
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("cursor: %w", err)
+	}
+
+	log.Printf("  components: rewrote %d chart rows to the spec-driven one-liner (%d non-spec rows left untouched)", updated, skipped)
 	return nil
 }
 

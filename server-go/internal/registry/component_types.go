@@ -126,6 +126,28 @@ func GetComponentType(typeID string) (ComponentTypeInfo, bool) {
 	return info, ok
 }
 
+// IsSpecDrivenChart reports whether a chart subtype (e.g. "line", "bar",
+// "banded_bar") renders via the client's spec-driven path rather than
+// hand-written custom code. A type is spec-driven iff it is a registered
+// canonical chart type and is NOT "custom" — every canonical chart type
+// now has a buildOption module on the frontend.
+//
+// This is the server-side contract for the render-side list. The
+// authoritative list of chart types that actually have a buildOption is
+// the frontend BUILD_OPTIONS map in
+// client/src/chart-spec/build-options.js; this registry must stay in
+// sync with it (chart_types.go already carries that "keep in sync"
+// obligation for every canonical type). Callers that emit component_code
+// (component_service create path, the spec-code migration) use this to
+// decide whether to write the <SpecDrivenChart> one-liner.
+func IsSpecDrivenChart(subtype string) bool {
+	if subtype == "" || subtype == "custom" {
+		return false
+	}
+	info, ok := GetComponentType("chart." + subtype)
+	return ok && info.Category == CategoryChart
+}
+
 // CodeSource is a ComponentSource backed by the compile-time component
 // registry. It's the default source used today; a MongoDB source can be
 // layered on later without changing consumers.
