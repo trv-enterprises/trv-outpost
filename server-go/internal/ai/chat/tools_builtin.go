@@ -389,24 +389,10 @@ func chartDataMappingSchema() map[string]interface{} {
 			"x_axis_format": map[string]interface{}{"type": "string", "description": "Format for X values: chart, chart_time, chart_date, chart_datetime, short, long."},
 			"y_axis": map[string]interface{}{
 				"type":        "array",
-				"description": "Column name(s) for the Y axis (values). Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0]. Each entry is EITHER a plain column-name string OR an object {column, label?, stack?, axis?} for per-column control: `label` overrides the legend name, `stack: true` adds the column to the stack group (columns left unstacked draw independently — e.g. a total line over stacked parts), `axis: \"left\"|\"right\"` assigns it to an axis on dual-axis charts. Mix forms freely, e.g. [\"cpu\", {\"column\":\"mem\",\"stack\":true,\"axis\":\"right\"}].",
-				"items": map[string]interface{}{
-					"oneOf": []interface{}{
-						map[string]interface{}{"type": "string"},
-						map[string]interface{}{
-							"type": "object",
-							"properties": map[string]interface{}{
-								"column": map[string]interface{}{"type": "string", "description": "Data column name."},
-								"label":  map[string]interface{}{"type": "string", "description": "Legend label override; empty = use column name."},
-								"stack":  map[string]interface{}{"type": "boolean", "description": "Add to the stack group."},
-								"axis":   map[string]interface{}{"type": "string", "enum": []string{"left", "right"}, "description": "Axis assignment (dual-axis charts)."},
-							},
-							"required": []string{"column"},
-						},
-					},
-				},
+				"items":       map[string]interface{}{"type": "string"},
+				"description": "Column name(s) for the Y axis (values), as plain strings. Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0]. For multiple series pass multiple column names (e.g. [\"cpu\", \"mem\"]). Per-column STACKING and dual-axis are set via options/multiple_y_axis, NOT by making entries objects: set multiple_y_axis=true for left/right split, and options.chartStacked=true to stack.",
 			},
-			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: columns split across left/right axes (capped at 2 columns); pair with each entry's `axis` and with options.yAxisRange.right."},
+			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: the first two y columns split across left/right axes; pair with options.yAxisRange.right."},
 			"y_axis_label":   map[string]interface{}{"type": "string", "description": "Display label for the Y axis (legacy single label; use y_axis_labels for dual-axis)."},
 			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels. [0] = left axis, [1] = right axis on dual-axis charts."},
 			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
