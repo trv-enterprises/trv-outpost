@@ -253,10 +253,10 @@ const Component = ({ config }) => {
 - **For charts with a ` + "`dataZoom`" + ` slider** (` + "`dataZoom: [{ type: 'slider' }, ...]`" + `): increase ` + "`grid.bottom`" + ` to ` + "`60`" + ` so the slider has room to render below the x-axis. The slider itself takes ~30 px; the rest accommodates its labels.
 - **xAxis time data:** prefer ` + "`type: 'category'`" + ` with timestamps already formatted by ` + "`formatTimestamp`" + ` in the ` + "`data`" + ` array, NOT ` + "`type: 'time'`" + ` with a custom ` + "`formatter`" + `. Category-axis with pre-formatted strings matches what the editor's data-driven generator emits and gives consistent rendering across siblings.
 
-**Backfill on ts-store streaming connections:** ` + "`useData`" + ` automatically fetches the latest 100 records before subscribing to the WebSocket push, so the chart paints immediately instead of sitting blank waiting for the next message. You don't have to do anything for the default case. Two times to override:
+**Backfill on ts-store streaming connections:** ` + "`useData`" + ` automatically fetches the latest 1000 records before subscribing to the WebSocket push (matching the live in-memory cap), so the chart paints meaningful history immediately instead of sitting blank waiting for the next message. You don't have to do anything for the default case. Two times to override:
 
-- **Single-value charts (gauge, number)** — only need the latest reading. Pass ` + "`backfill: { raw: 'newest', type: 'tsstore', params: { limit: 1 } }`" + ` to avoid pulling 100 unused rows.
-- **Sliding-window charts** — pass ` + "`backfill: { raw: 'since:5m', type: 'tsstore', params: {} }`" + ` (or whatever duration matches the window). This gives the chart its full historical context up front instead of leaving gaps until enough new pushes arrive.
+- **Single-value charts (gauge, number)** — only need the latest reading. Pass ` + "`backfill: { raw: 'newest', type: 'tsstore', params: { limit: 1 } }`" + ` to avoid pulling 1000 unused rows.
+- **Sliding-window charts** — pass ` + "`backfill: { raw: 'since:1h', type: 'tsstore', params: {} }`" + ` (or whatever duration matches the window). This gives the chart its full historical context up front instead of leaving gaps until enough new pushes arrive.
 
 To opt out entirely (rare — usually you want the default): pass ` + "`backfill: false`" + `.
 

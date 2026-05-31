@@ -319,15 +319,19 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
   //     gets one today; everything else stays empty).
   //   - false → explicit opt-out.
   //   - object → use as-is.
-  // Default: pull the latest 100 records so the chart paints immediately
-  // instead of sitting blank waiting for the next stream push. Charts
-  // that only need a single value (gauge, number) should pass an explicit
-  // backfill with `params: { limit: 1 }` to avoid the wasted fetch.
+  // Default: pull the latest 1000 records so an unwindowed streaming
+  // chart paints meaningful history immediately instead of sitting blank
+  // (or showing just a handful of points) until new pushes arrive. 1000
+  // matches maxBuffer — the live in-memory cap — so the initial paint and
+  // the steady-state buffer hold the same depth. A chart WITH a sliding
+  // window supersedes this with a since:<window> backfill (set by the
+  // editor codegen). Single-value charts (gauge, number) should pass an
+  // explicit backfill with `params: { limit: 1 }` to avoid the wasted fetch.
   const effectiveBackfill = useMemo(() => {
     if (backfill === false) return null;
     if (backfill) return backfill;
     if (datasourceType === 'tsstore' && datasourceTransport === 'streaming') {
-      return { raw: 'newest', type: 'tsstore', params: { limit: 100 } };
+      return { raw: 'newest', type: 'tsstore', params: { limit: 1000 } };
     }
     return null;
   }, [backfill, datasourceType, datasourceTransport]);

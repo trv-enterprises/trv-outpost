@@ -179,7 +179,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_sliding_window",
-			Description: anthropic.String("Configure a time-based sliding window to show only recent data. Essential for streaming/real-time charts to prevent unbounded data growth.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.sliding_window. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
+			Description: anthropic.String("Configure a time-based sliding window to show only recent data. Essential for streaming/real-time charts to prevent unbounded data growth — and you SHOULD set one on any streaming time-series chart (line/area/bar over time). Default to a 1-hour window (duration: 3600) using the stream's real timestamp column, UNLESS the user asked for a different span (e.g. \"last 15 minutes\" → 900, \"last day\" → 86400). The window also drives the historical backfill so the chart paints the full span up front. Do NOT compute a window from the stream's record rate — pick the duration from the user's intent or the 1-hour default.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.sliding_window. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"duration":      map[string]interface{}{"type": "integer", "description": "Window duration in seconds (e.g., 300 for last 5 minutes, 3600 for last hour)"},
