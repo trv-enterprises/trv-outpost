@@ -161,12 +161,20 @@ func NewAgent(sessionSvc SessionService, tools *ToolRegistry, config *Config) (*
 	if config == nil {
 		config = &Config{}
 	}
+	// Key resolution: explicit config (prod sets this from
+	// DASHBOARD_LLM_API_KEY) → ASSISTANT_ANTHROPIC_API_KEY → ANTHROPIC_API_KEY.
+	// ASSISTANT_ANTHROPIC_API_KEY is preferred for LOCAL DEV so the
+	// dashboard server uses a dedicated key, NOT the developer's
+	// ANTHROPIC_API_KEY (which Claude Code / other tooling also consumes).
 	apiKey := config.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("ASSISTANT_ANTHROPIC_API_KEY")
+	}
 	if apiKey == "" {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
+		return nil, fmt.Errorf("no Anthropic API key: set ASSISTANT_ANTHROPIC_API_KEY (preferred for local dev) or ANTHROPIC_API_KEY")
 	}
 
 	model := config.Model

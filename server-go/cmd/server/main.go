@@ -338,21 +338,28 @@ func main() {
 	agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
 	if err != nil {
 		log.Printf("⚠️  AI Agent disabled: %v", err)
-		log.Printf("   Set ANTHROPIC_API_KEY environment variable to enable AI features")
+		log.Printf("   Set ASSISTANT_ANTHROPIC_API_KEY (preferred for local dev) or ANTHROPIC_API_KEY to enable AI features")
 	} else {
 		aiAgent = agent
 		fmt.Println("✓ AI Agent enabled (Anthropic SDK)")
 	}
 
 	// Dashboard Assistant readiness — distinct from the Component AI
-	// agent above. Two switches: ANTHROPIC_API_KEY must be set (so the
-	// Anthropic SDK can reach the API) AND the admin setting
+	// agent above. Two switches: an Anthropic key must be available (so
+	// the SDK can reach the API) AND the admin setting
 	// `assistant.enabled` must be true. Read at boot only; flipping
 	// the setting takes effect on next server restart, same posture as
 	// the enabled_types ledger.
+	//
+	// Key presence mirrors the agents' resolution order:
+	// ASSISTANT_ANTHROPIC_API_KEY (preferred for local dev — keeps the
+	// server off the developer's shared ANTHROPIC_API_KEY) OR
+	// ANTHROPIC_API_KEY. Prod injects the key via config, not env, but in
+	// that path ANTHROPIC_API_KEY is also set so this gate still passes.
+	anthropicKeyAvailable := os.Getenv("ASSISTANT_ANTHROPIC_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != ""
 	chatAgentReady := false
 	var chatAgent *chat.Agent
-	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+	if anthropicKeyAvailable {
 		assistantEnabled, errAss := settingsService.GetSetting(ctx, "assistant.enabled")
 		if errAss != nil {
 			log.Printf("⚠️  assistant.enabled setting not found — Dashboard Assistant disabled: %v", errAss)
@@ -417,7 +424,7 @@ func main() {
 			fmt.Println("· Dashboard Assistant disabled by admin setting (assistant.enabled=false)")
 		}
 	} else {
-		fmt.Println("· Dashboard Assistant disabled (ANTHROPIC_API_KEY not set)")
+		fmt.Println("· Dashboard Assistant disabled (no Anthropic key — set ASSISTANT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY)")
 	}
 
 	// Initialize handlers
