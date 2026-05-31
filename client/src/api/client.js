@@ -1078,6 +1078,21 @@ class APIClient {
     return this.request('/api/ai/availability');
   }
 
+  // AI API Usage (admin) — per-user Dashboard Assistant token usage +
+  // per-user budget override. Manage-gated server-side.
+  async getAIUsage() {
+    return this.request('/api/ai/usage');
+  }
+
+  // Set or clear a user's Assistant budget override. Pass {clear:true}
+  // to remove it, or {input, output, scope:"today"|"ongoing"} to set.
+  async setAIBudgetOverride(guid, body) {
+    return this.request(`/api/ai/usage/${encodeURIComponent(guid)}/override`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
   // AI Session endpoints
   async createAISession(componentId = null, context = {}) {
     const payload = componentId ? { component_id: componentId } : {};

@@ -10,6 +10,24 @@ definitions:
       enabled:
         type: boolean
     type: object
+  handlers.AIUsageResponse:
+    properties:
+      global_input_cap:
+        type: integer
+      global_output_cap:
+        type: integer
+      history_days:
+        type: integer
+      metered_note:
+        description: |-
+          MeteredNote spells out that only the Assistant is counted, so the
+          frontend can surface it verbatim without hardcoding the caveat.
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/handlers.userUsage'
+        type: array
+    type: object
   handlers.CategoryInfo:
     properties:
       display_name:
@@ -190,6 +208,40 @@ definitions:
         type: string
       timestamp:
         description: nanoseconds since unix epoch
+        type: integer
+    type: object
+  handlers.usageDay:
+    properties:
+      date_utc:
+        type: string
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+    type: object
+  handlers.userUsage:
+    properties:
+      effective_input_cap:
+        type: integer
+      effective_output_cap:
+        type: integer
+      global_input_cap:
+        type: integer
+      global_output_cap:
+        type: integer
+      guid:
+        type: string
+      history:
+        items:
+          $ref: '#/definitions/handlers.usageDay'
+        type: array
+      name:
+        type: string
+      override:
+        $ref: '#/definitions/models.AssistantBudgetOverride'
+      today_input:
+        type: integer
+      today_output:
         type: integer
     type: object
   mcp.JSONRPCError:
@@ -469,22 +521,59 @@ definitions:
       visible:
         type: integer
     type: object
+  models.AssistantBudgetOverride:
+    properties:
+      effective_date:
+        description: UTC YYYY-MM-DD; required when Scope=="today"
+        type: string
+      input:
+        description: daily input-token cap; 0 = use global
+        type: integer
+      output:
+        description: daily output-token cap; 0 = use global
+        type: integer
+      scope:
+        description: '"today" | "ongoing"'
+        type: string
+      set_by:
+        description: admin GUID who set it (audit)
+        type: string
+    type: object
   models.BandColumns:
     properties:
+      lower_control:
+        type: string
+      lower_limit:
+        type: string
+      max:
+        type: string
       mean:
-        description: Primary value column (e.g. "mean")
+        description: sd / minmaxmean center
+        type: string
+      min:
+        description: minmaxmean bounds
         type: string
       minus_1sd:
-        description: Column carrying that row's -1 SD bound
+        description: -1 SD bound
         type: string
       minus_2sd:
-        description: Column carrying that row's -2 SD bound
+        description: -2 SD bound
         type: string
       plus_1sd:
-        description: Column carrying that row's +1 SD bound
+        description: sd bounds
         type: string
       plus_2sd:
-        description: Column carrying that row's +2 SD bound
+        description: +2 SD bound
+        type: string
+      scheme:
+        description: '"sd" (default) | "minmaxmean" | "spc"'
+        type: string
+      target:
+        description: spc center + bounds
+        type: string
+      upper_control:
+        type: string
+      upper_limit:
         type: string
     type: object
   models.CSVConfig:
@@ -2865,6 +2954,15 @@ definitions:
       active:
         description: Whether user is active
         type: boolean
+      assistant_budget_override:
+        allOf:
+        - $ref: '#/definitions/models.AssistantBudgetOverride'
+        description: |-
+          AssistantBudgetOverride raises (or lowers) this user's daily
+          Dashboard Assistant token caps relative to the global
+          assistant.daily_token_budget. Nil = no override (use global caps).
+          Set by an admin from the AI API Usage page. See the type for scope
+          semantics.
       capabilities:
         description: User capabilities
         items:
@@ -3665,9 +3763,9 @@ paths:
   /api/ai/availability:
     get:
       description: Returns per-surface availability flags. `enabled` is a legacy alias
-        for `component_agent_enabled`. The Component AI agent is enabled iff ANTHROPIC_API_KEY
-        was set at server start. The Dashboard Assistant additionally requires the
-        `assistant.enabled` admin setting to be true at boot.
+        for `component_agent_enabled`. Both AI surfaces require the unified `ai.enabled`
+        admin setting AND an Anthropic key at server start; they share that single
+        gate.
       produces:
       - application/json
       responses:
@@ -3706,6 +3804,43 @@ paths:
       summary: Get debug status
       tags:
       - debug
+  /api/ai/usage:
+    get:
+      description: 'Per-user Assistant token usage: today vs effective cap + a 30-day
+        history. Only the Dashboard Assistant is metered.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AIUsageResponse'
+      summary: AI API usage (Dashboard Assistant)
+      tags:
+      - ai
+  /api/ai/usage/{guid}/override:
+    put:
+      consumes:
+      - application/json
+      description: Admin-only. Raises (or clears) a user's daily Assistant token caps.
+        Scope "today" applies only for the current UTC day; "ongoing" persists.
+      parameters:
+      - description: User GUID
+        in: path
+        name: guid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Set/clear a user's Assistant budget override
+      tags:
+      - ai
   /api/api-keys:
     get:
       produces:

@@ -1,0 +1,108 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+.ai-usage-page {
+  padding: 1.5rem 2rem;
+  max-width: 1100px;
+
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      color: var(--cds-text-primary);
+    }
+  }
+
+  .caps-note {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .user-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .user-card {
+    background: var(--cds-layer-01);
+
+    &__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    &__name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      color: var(--cds-text-primary);
+    }
+
+    &__actions {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      flex-wrap: nowrap;
+      flex-shrink: 0;
+    }
+  }
+
+  .usage-axis {
+    margin-bottom: 0.75rem;
+
+    &__label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8125rem;
+      color: var(--cds-text-secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    &__nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    &__track {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--cds-layer-accent-01);
+      overflow: hidden;
+    }
+
+    &__fill {
+      height: 100%;
+      transition: width 0.2s ease;
+    }
+  }
+
+  .history-toggle {
+    margin-top: 0.25rem;
+  }
+
+  .history-list {
+    margin-top: 0.75rem;
+  }
+
+  .modal-note {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+  }
+
+  .empty {
+    color: var(--cds-text-secondary);
+  }
+}

@@ -233,6 +233,11 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/namespaces", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "DELETE", Required: models.CapabilityManage, WriteOnly: true},
 
+		// AI API Usage (admin page) — read usage + set per-user budget
+		// overrides. Both verbs require Manage; it's an admin surface.
+		{PathPrefix: "/api/ai/usage", Method: "GET", Required: models.CapabilityManage},
+		{PathPrefix: "/api/ai/usage", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
+
 		// API keys — every authenticated user can create/list/revoke
 		// their OWN keys (no capability required). The deployment-wide
 		// /api/api-keys/all view is admin-only, gated by a more specific

@@ -9,8 +9,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
+
+// OverrideLookup resolves a user's per-user Assistant budget override
+// by GUID. Satisfied by *repository.UserRepository (GetByGUID). Kept as
+// a narrow interface so budget.go doesn't depend on the whole user repo
+// surface and stays easy to fake in tests. May be nil — then no
+// per-user override is applied (global caps only).
+type OverrideLookup interface {
+	GetByGUID(ctx context.Context, guid string) (*models.User, error)
+}
 
 // Per-conversation context budget. Soft limit emits a banner event
 // to the client + a one-shot warning inserted into the model's next
@@ -43,15 +53,17 @@ const (
 // behaves as it did before step 7 (no caps). main.go always wires
 // it when the chat agent is enabled.
 type Budget struct {
-	repo            *repository.ChatUsageRepository
-	dailyInputCap   int64
-	dailyOutputCap  int64
+	repo           *repository.ChatUsageRepository
+	users          OverrideLookup
+	dailyInputCap  int64
+	dailyOutputCap int64
 }
 
 // NewBudget constructs a Budget. dailyInputCap and dailyOutputCap
 // of 0 mean "use the package defaults"; admins typically pass the
-// values from the assistant.daily_token_budget admin setting.
-func NewBudget(repo *repository.ChatUsageRepository, dailyInputCap, dailyOutputCap int64) *Budget {
+// values from the assistant.daily_token_budget admin setting. `users`
+// resolves per-user overrides (may be nil → global caps only).
+func NewBudget(repo *repository.ChatUsageRepository, users OverrideLookup, dailyInputCap, dailyOutputCap int64) *Budget {
 	if dailyInputCap <= 0 {
 		dailyInputCap = DefaultDailyInputBudget
 	}
@@ -60,9 +72,36 @@ func NewBudget(repo *repository.ChatUsageRepository, dailyInputCap, dailyOutputC
 	}
 	return &Budget{
 		repo:           repo,
+		users:          users,
 		dailyInputCap:  dailyInputCap,
 		dailyOutputCap: dailyOutputCap,
 	}
+}
+
+// effectiveCaps returns the input/output caps in force for this user
+// today: the global caps, with any applicable per-user override
+// substituted per axis. An override axis of 0 means "no override for
+// this axis" → keep the global cap.
+func (b *Budget) effectiveCaps(ctx context.Context, callerGUID string, now time.Time) (inputCap, outputCap int64) {
+	inputCap, outputCap = b.dailyInputCap, b.dailyOutputCap
+	if b.users == nil || callerGUID == "" {
+		return
+	}
+	user, err := b.users.GetByGUID(ctx, callerGUID)
+	if err != nil || user == nil || user.AssistantBudgetOverride == nil {
+		return
+	}
+	ov := user.AssistantBudgetOverride
+	if !ov.AppliesOn(now.UTC().Format("2006-01-02")) {
+		return
+	}
+	if ov.Input > 0 {
+		inputCap = ov.Input
+	}
+	if ov.Output > 0 {
+		outputCap = ov.Output
+	}
+	return
 }
 
 // CheckResult is the verdict the budget returns before each
@@ -123,7 +162,8 @@ func (b *Budget) CheckBeforeCall(ctx context.Context, callerGUID string, approxC
 	if b == nil || b.repo == nil || callerGUID == "" {
 		return res, nil
 	}
-	usage, err := b.repo.GetToday(ctx, callerGUID, time.Now())
+	now := time.Now()
+	usage, err := b.repo.GetToday(ctx, callerGUID, now)
 	if err != nil {
 		// Don't refuse the call on a repo read failure — fall open.
 		// Worst case the admin doesn't see usage; better than
@@ -134,22 +174,24 @@ func (b *Budget) CheckBeforeCall(ctx context.Context, callerGUID string, approxC
 		res.DailyInputUsed = usage.InputTokens
 		res.DailyOutputUsed = usage.OutputTokens
 	}
-	res.DailyInputCap = b.dailyInputCap
-	res.DailyOutputCap = b.dailyOutputCap
+	// Effective caps = global caps with any applicable per-user override.
+	inputCap, outputCap := b.effectiveCaps(ctx, callerGUID, now)
+	res.DailyInputCap = inputCap
+	res.DailyOutputCap = outputCap
 
-	if res.DailyInputUsed >= b.dailyInputCap {
+	if res.DailyInputUsed >= inputCap {
 		res.Allowed = false
 		res.Reason = fmt.Sprintf(
-			"Daily input-token budget exhausted (%d / %d). Resets at UTC midnight, or ask an admin to raise the assistant.daily_token_budget setting.",
-			res.DailyInputUsed, b.dailyInputCap,
+			"Daily input-token budget exhausted (%d / %d). Resets at UTC midnight, or ask an admin to raise your budget on the AI API Usage page.",
+			res.DailyInputUsed, inputCap,
 		)
 		return res, nil
 	}
-	if res.DailyOutputUsed >= b.dailyOutputCap {
+	if res.DailyOutputUsed >= outputCap {
 		res.Allowed = false
 		res.Reason = fmt.Sprintf(
-			"Daily output-token budget exhausted (%d / %d). Resets at UTC midnight, or ask an admin to raise the assistant.daily_token_budget setting.",
-			res.DailyOutputUsed, b.dailyOutputCap,
+			"Daily output-token budget exhausted (%d / %d). Resets at UTC midnight, or ask an admin to raise your budget on the AI API Usage page.",
+			res.DailyOutputUsed, outputCap,
 		)
 		return res, nil
 	}

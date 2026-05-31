@@ -105,17 +105,21 @@ settings:
     value: true
 
   # ─── AI Assistant (dashboard-wide chat assistant) ───────────────────
-  # A persistent chat assistant accessible from a header icon. Separate
-  # from the Component AI agent (which is scoped to one chart at a
-  # time) and from the Electron sidebar (which runs Claude Code as a
-  # subscription session). When disabled, the header icon does not
-  # render and the assistant routes return 404. Independent of the
-  # Component AI agent's availability — both gates apply only to their
-  # own surface. Both require ANTHROPIC_API_KEY to be set at server
-  # start; this setting is a soft kill-switch on top of that.
-  - key: assistant.enabled
+  # Single master switch for ALL AI agent surfaces — the Component AI
+  # agent (scoped to one chart at a time, reached via "Create/Edit with
+  # AI") AND the Dashboard Assistant (the header chat sidecar). One gate
+  # by design: there is no valid state where one is on and the other off.
+  # On top of this, an Anthropic API key must be present at server start
+  # (ASSISTANT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY) — this setting is
+  # the admin soft kill-switch layered over that. When off: the
+  # Create/Edit-with-AI entry points hide, the Assistant header icon does
+  # not render, and the AI routes are unavailable. Restart required for a
+  # change to take effect (read at boot, same posture as enabled_types).
+  # Migrated from the former `assistant.enabled` key (see
+  # migrations.go::migrateAssistantEnabledToAIEnabled).
+  - key: ai.enabled
     category: ai
-    description: "Dashboard Assistant — chat agent accessible from the app header. Requires ANTHROPIC_API_KEY at server start; this is a soft kill-switch independent of the Component AI agent. Restart required for changes to take effect."
+    description: "AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that. Restart required for changes to take effect."
     value: true
 
   - key: assistant.daily_token_budget

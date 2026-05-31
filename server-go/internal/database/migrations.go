@@ -41,6 +41,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"seed_global_snippets_v1", migrateSeedGlobalSnippetsV1},
 		{"spec_driven_chart_code_v1", migrateSpecDrivenChartCode},
 		{"refresh_assistant_model_description_v1", migrateRefreshAssistantModelDescription},
+		{"assistant_enabled_to_ai_enabled_v1", migrateAssistantEnabledToAIEnabled},
 	}
 
 	coll := db.Collection("migrations")
@@ -572,6 +573,66 @@ func migrateRefreshAssistantModelDescription(ctx context.Context, db *mongo.Data
 		return fmt.Errorf("refresh assistant.model description: %w", err)
 	}
 	log.Printf("  settings: refreshed assistant.model description (matched %d)", res.MatchedCount)
+	return nil
+}
+
+// migrateAssistantEnabledToAIEnabled folds the former
+// `assistant.enabled` admin setting into the new unified `ai.enabled`
+// master switch (which now governs BOTH the Component AI agent and the
+// Dashboard Assistant — see config/user-configurable.yaml). Runs BEFORE
+// the settings seed (migrations are applied at boot ahead of
+// SyncSettingsFromConfig), so:
+//   - If ai.enabled already exists → no-op (idempotent / already migrated).
+//   - Else if assistant.enabled exists → create ai.enabled carrying its
+//     value, so an admin who had explicitly turned the Assistant OFF
+//     keeps AI off after the merge (and the seed then skips it).
+//   - Else (fresh DB) → do nothing; the seed creates ai.enabled=true.
+// Finally removes the orphaned assistant.enabled doc.
+func migrateAssistantEnabledToAIEnabled(ctx context.Context, db *mongo.Database) error {
+	settings := db.Collection("settings")
+
+	existsAI, err := settings.CountDocuments(ctx, bson.M{"_id": "ai.enabled"})
+	if err != nil {
+		return fmt.Errorf("check ai.enabled: %w", err)
+	}
+	if existsAI == 0 {
+		var old struct {
+			Value interface{} `bson:"value"`
+		}
+		err := settings.FindOne(ctx, bson.M{"_id": "assistant.enabled"}).Decode(&old)
+		if err == nil {
+			// Carry the old value forward into the new key.
+			now := time.Now()
+			_, err = settings.UpdateByID(
+				ctx,
+				"ai.enabled",
+				bson.M{"$set": bson.M{
+					"key":         "ai.enabled",
+					"value":       old.Value,
+					"category":    "ai",
+					"description": "AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that. Restart required for changes to take effect.",
+					"updated":     now,
+				}, "$setOnInsert": bson.M{"created": now}},
+				options.Update().SetUpsert(true),
+			)
+			if err != nil {
+				return fmt.Errorf("create ai.enabled from assistant.enabled: %w", err)
+			}
+			log.Printf("  settings: migrated assistant.enabled (value=%v) → ai.enabled", old.Value)
+		} else if err != mongo.ErrNoDocuments {
+			return fmt.Errorf("read assistant.enabled: %w", err)
+		}
+		// err == ErrNoDocuments → fresh DB, leave ai.enabled for the seed.
+	}
+
+	// Remove the orphaned old key (no-op if already gone).
+	res, err := settings.DeleteOne(ctx, bson.M{"_id": "assistant.enabled"})
+	if err != nil {
+		return fmt.Errorf("delete assistant.enabled: %w", err)
+	}
+	if res.DeletedCount > 0 {
+		log.Printf("  settings: removed orphaned assistant.enabled")
+	}
 	return nil
 }
 

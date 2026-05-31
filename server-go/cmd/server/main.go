@@ -334,22 +334,12 @@ func main() {
 	// receive a pointer.
 	opsToolset := toolops.New(connectionService, componentService, dashboardService, namespaceService, userRepo, catalogProvider)
 
-	var aiAgent *ai.Agent
-	agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
-	if err != nil {
-		log.Printf("⚠️  AI Agent disabled: %v", err)
-		log.Printf("   Set ASSISTANT_ANTHROPIC_API_KEY (preferred for local dev) or ANTHROPIC_API_KEY to enable AI features")
-	} else {
-		aiAgent = agent
-		fmt.Println("✓ AI Agent enabled (Anthropic SDK)")
-	}
-
-	// Dashboard Assistant readiness — distinct from the Component AI
-	// agent above. Two switches: an Anthropic key must be available (so
-	// the SDK can reach the API) AND the admin setting
-	// `assistant.enabled` must be true. Read at boot only; flipping
-	// the setting takes effect on next server restart, same posture as
-	// the enabled_types ledger.
+	// Unified AI gate. `ai.enabled` is the single master switch
+	// governing BOTH the Component AI agent and the Dashboard Assistant
+	// (migrated from the former assistant.enabled — see
+	// migrations.go::migrateAssistantEnabledToAIEnabled). There is no
+	// valid state where one agent is on and the other off. On top of the
+	// setting, an Anthropic key must be available.
 	//
 	// Key presence mirrors the agents' resolution order:
 	// ASSISTANT_ANTHROPIC_API_KEY (preferred for local dev — keeps the
@@ -357,13 +347,38 @@ func main() {
 	// ANTHROPIC_API_KEY. Prod injects the key via config, not env, but in
 	// that path ANTHROPIC_API_KEY is also set so this gate still passes.
 	anthropicKeyAvailable := os.Getenv("ASSISTANT_ANTHROPIC_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != ""
+	aiEnabled := false
+	if s, errAI := settingsService.GetSetting(ctx, "ai.enabled"); errAI == nil && s != nil {
+		if v, ok := s.Value.(bool); ok {
+			aiEnabled = v
+		}
+	} else if errAI != nil {
+		log.Printf("⚠️  ai.enabled setting not found — AI features disabled: %v", errAI)
+	}
+
+	var aiAgent *ai.Agent
+	if !aiEnabled {
+		fmt.Println("· Component AI agent disabled (ai.enabled=false)")
+	} else if !anthropicKeyAvailable {
+		fmt.Println("· Component AI agent disabled (no Anthropic key — set ASSISTANT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY)")
+	} else {
+		agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
+		if err != nil {
+			log.Printf("⚠️  Component AI agent disabled: %v", err)
+		} else {
+			aiAgent = agent
+			fmt.Println("✓ Component AI agent enabled (Anthropic SDK)")
+		}
+	}
+
+	// Dashboard Assistant readiness — same ai.enabled + key gate as the
+	// Component agent above, plus its own construction. Read at boot
+	// only; flipping ai.enabled takes effect on next restart, same
+	// posture as the enabled_types ledger.
 	chatAgentReady := false
 	var chatAgent *chat.Agent
-	if anthropicKeyAvailable {
-		assistantEnabled, errAss := settingsService.GetSetting(ctx, "assistant.enabled")
-		if errAss != nil {
-			log.Printf("⚠️  assistant.enabled setting not found — Dashboard Assistant disabled: %v", errAss)
-		} else if v, ok := assistantEnabled.Value.(bool); ok && v {
+	if aiEnabled && anthropicKeyAvailable {
+		{
 			// Wire the chat-agent tool registry. Tier-A tools wrap
 			// the shared toolops layer so MCP and the chat agent
 			// share one truth about what each operation does.
@@ -393,7 +408,7 @@ func main() {
 				int64(chat.DefaultDailyInputBudget),
 				int64(chat.DefaultDailyOutputBudget),
 			)
-			chatBudget := chat.NewBudget(chatUsageRepo, inputCap, outputCap)
+			chatBudget := chat.NewBudget(chatUsageRepo, userRepo, inputCap, outputCap)
 			fmt.Printf("✓ Dashboard Assistant daily budget: %d input / %d output tokens/user\n", inputCap, outputCap)
 
 			// Model selection from admin setting. Sonnet is the
@@ -420,12 +435,23 @@ func main() {
 				chatAgentReady = true
 				fmt.Println("✓ Dashboard Assistant enabled")
 			}
-		} else {
-			fmt.Println("· Dashboard Assistant disabled by admin setting (assistant.enabled=false)")
 		}
 	} else {
-		fmt.Println("· Dashboard Assistant disabled (no Anthropic key — set ASSISTANT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY)")
+		// Reason already printed by the Component-agent gate above
+		// (ai.enabled=false or no key); the Assistant shares the same gate.
+		fmt.Println("· Dashboard Assistant disabled (shares the ai.enabled + key gate above)")
 	}
+
+	// AI API Usage handler (admin page). Reads the global daily caps
+	// from the same assistant.daily_token_budget setting the budget
+	// check uses, so the page and the enforcement agree. Computed here
+	// (not only inside the chat-agent block) so the page works whenever
+	// AI is enabled, independent of whether the chat agent constructed.
+	usageInputCap, usageOutputCap := extractBudgetCaps(
+		ctx, settingsService,
+		int64(chat.DefaultDailyInputBudget), int64(chat.DefaultDailyOutputBudget),
+	)
+	aiUsageHandler := handlers.NewAIUsageHandler(chatUsageRepo, userRepo, usageInputCap, usageOutputCap)
 
 	// Initialize handlers
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
@@ -863,6 +889,16 @@ func main() {
 		// AI availability — public so the app shell can gate AI
 		// menu items pre-login. Returns { enabled: bool }.
 		api.GET("/ai/availability", aiAvailabilityHandler.GetAvailability)
+
+		// AI API Usage (admin) — per-user Assistant token usage +
+		// per-user budget override. Manage-gated via buildRouteRules
+		// (/api/ai/usage GET + PUT). No reset endpoint in the shipped
+		// UI; local test reset is a one-line Mongo command.
+		aiUsage := api.Group("/ai/usage")
+		{
+			aiUsage.GET("", aiUsageHandler.GetUsage)
+			aiUsage.PUT("/:guid/override", aiUsageHandler.SetOverride)
+		}
 
 		// AI Debug routes
 		aiDebug := api.Group("/ai/debug")

@@ -40,6 +40,7 @@ udoc/node_modules/
 
 # Go binaries
 server-go/bin/
+server-go/server
 
 # Release artifacts
 dist/

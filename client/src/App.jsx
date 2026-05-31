@@ -58,6 +58,7 @@ import ManageModeNav from './components/navigation/ManageModeNav';
 import UsersListPage from './pages/UsersListPage';
 import UserDetailPage from './pages/UserDetailPage';
 import SettingsPage from './pages/SettingsPage';
+import AIUsagePage from './pages/AIUsagePage';
 import SystemUsersPage from './pages/SystemUsersPage';
 import DevicesPage from './pages/DevicesPage';
 import NamespacesPage from './pages/NamespacesPage';
@@ -711,8 +712,8 @@ function AppContent({ onDisconnect }) {
                   of the header-action cluster (NamespacePicker, Help,
                   Notifications, AccountMenu). Only renders when:
                     1. The chat agent is enabled at the deployment
-                       (ANTHROPIC_API_KEY set AND assistant.enabled
-                       is true), AND
+                       (Anthropic key set AND the unified ai.enabled
+                       setting is true), AND
                     2. The caller has Design capability. The
                        assistant is a builder; View-only users
                        wouldn't have anything actionable to ask, and
@@ -891,6 +892,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/manage/system-users" element={<SystemUsersPage />} />
           <Route path="/manage/devices" element={<DevicesPage />} />
           <Route path="/manage/settings" element={<SettingsPage />} />
+          <Route path="/manage/ai-usage" element={<AIUsagePage />} />
           <Route path="/manage/namespaces" element={<NamespacesPage />} />
 
           {/* API Keys is per-user account settings, not Manage Mode.

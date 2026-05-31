@@ -74,8 +74,55 @@ type User struct {
 	// Empty when the deployment isn't using Clerk or the user hasn't
 	// signed in via Clerk yet.
 	ClerkUserID  string       `json:"clerk_user_id,omitempty" bson:"clerk_user_id,omitempty"`
+	// AssistantBudgetOverride raises (or lowers) this user's daily
+	// Dashboard Assistant token caps relative to the global
+	// assistant.daily_token_budget. Nil = no override (use global caps).
+	// Set by an admin from the AI API Usage page. See the type for scope
+	// semantics.
+	AssistantBudgetOverride *AssistantBudgetOverride `json:"assistant_budget_override,omitempty" bson:"assistant_budget_override,omitempty"`
 	Created      time.Time    `json:"created" bson:"created"`
 	Updated      time.Time    `json:"updated" bson:"updated"`
+}
+
+// AssistantBudgetOverride is a per-user daily-token-cap override for the
+// Dashboard Assistant. When present and applicable, its Input/Output
+// values replace the global assistant.daily_token_budget caps for that
+// user (per axis; a zero axis falls back to the global cap for that axis).
+//
+// Scope controls how long it applies:
+//   - "ongoing": applies every day until an admin changes/removes it.
+//   - "today":   applies only on the UTC date in EffectiveDate; once the
+//     date rolls past, the override is inert (the user reverts to global
+//     caps). The stale record is harmless and can be cleared lazily.
+type AssistantBudgetOverride struct {
+	Input         int64  `json:"input" bson:"input"`                                       // daily input-token cap; 0 = use global
+	Output        int64  `json:"output" bson:"output"`                                     // daily output-token cap; 0 = use global
+	Scope         string `json:"scope" bson:"scope"`                                       // "today" | "ongoing"
+	EffectiveDate string `json:"effective_date,omitempty" bson:"effective_date,omitempty"` // UTC YYYY-MM-DD; required when Scope=="today"
+	SetBy         string `json:"set_by,omitempty" bson:"set_by,omitempty"`                 // admin GUID who set it (audit)
+}
+
+// Budget-override scope constants.
+const (
+	BudgetScopeToday   = "today"
+	BudgetScopeOngoing = "ongoing"
+)
+
+// AppliesOn reports whether this override is in force on the given UTC
+// day (format "2006-01-02"). Ongoing always applies; today-scoped
+// applies only on its EffectiveDate.
+func (o *AssistantBudgetOverride) AppliesOn(utcDay string) bool {
+	if o == nil {
+		return false
+	}
+	switch o.Scope {
+	case BudgetScopeOngoing:
+		return true
+	case BudgetScopeToday:
+		return o.EffectiveDate == utcDay
+	default:
+		return false
+	}
 }
 
 // IsSystem reports whether this user is a non-interactive service

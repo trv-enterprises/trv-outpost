@@ -16,11 +16,15 @@ import (
 // this deployment?" — currently two flags:
 //
 //   - `component_agent_enabled`: derived from whether the Component
-//     AI agent constructor succeeded at boot (i.e. ANTHROPIC_API_KEY
-//     was set).
-//   - `chat_agent_enabled`: same env precondition AND the admin
-//     setting `assistant.enabled` evaluating to true. Restart is
-//     required for changes to take effect.
+//     AI agent constructor succeeded at boot — which now requires BOTH
+//     the unified `ai.enabled` admin setting AND an Anthropic key.
+//   - `chat_agent_enabled`: same `ai.enabled` + key gate AND a
+//     successful Dashboard Assistant construction. Restart is required
+//     for changes to take effect.
+//
+// Both surfaces share the single `ai.enabled` master switch by design,
+// so in practice these two flags move together (modulo a constructor
+// error on one surface).
 //
 // Exposed unauthenticated so the app shell can decide whether to
 // render AI menu items / the assistant header icon before the user
@@ -65,7 +69,7 @@ type AIAvailabilityResponse struct {
 
 // GetAvailability godoc
 // @Summary      AI availability
-// @Description  Returns per-surface availability flags. `enabled` is a legacy alias for `component_agent_enabled`. The Component AI agent is enabled iff ANTHROPIC_API_KEY was set at server start. The Dashboard Assistant additionally requires the `assistant.enabled` admin setting to be true at boot.
+// @Description  Returns per-surface availability flags. `enabled` is a legacy alias for `component_agent_enabled`. Both AI surfaces require the unified `ai.enabled` admin setting AND an Anthropic key at server start; they share that single gate.
 // @Tags         ai
 // @Produce      json
 // @Success      200  {object}  AIAvailabilityResponse
