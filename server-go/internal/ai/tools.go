@@ -238,6 +238,24 @@ Otherwise: configure via the structured tools and let the editor's generator pro
 						"description": "Visual style for chart_type='banded_bar'. Ignored for other types. 'time_series' = horizontal time x-axis, line + dots, full-width horizontal reference bands (default — best for multi-reading trends). 'column_filled' = single vertical column per timestamp, filled bands no borders, dot at value. 'column_outlined' = same but with band borders. 'column_box' = only inner band drawn, vertical line with tick at value (box-plot style).",
 						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
 					},
+					// number chart (chart_type='number') display options.
+					"number_format": map[string]interface{}{
+						"type":        "string",
+						"enum":        []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"},
+						"description": "number chart value format. The format implies the raw value's unit — map y_axis to a raw column and pick a format, no query math. 'auto' (source precision), 'plain' (1,234.5), 'compact' (1.2M/3.4K), 'duration' (value is SECONDS → '2d 3h 4m', e.g. uptime.sec), 'duration_clock' (seconds → HH:MM:SS), 'datetime' (value is a timestamp → date/time via number_date_format).",
+					},
+					"number_date_format": map[string]interface{}{
+						"type":        "string",
+						"enum":        []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"},
+						"description": "Date/time style when number_format='datetime'. Ignored otherwise.",
+					},
+					"number_decimals": map[string]interface{}{
+						"type":        "string",
+						"enum":        []string{"auto", "0", "1", "2", "3", "4"},
+						"description": "number chart decimal places. 'auto' = source precision; '0'–'4' forces that many. Applies to auto/plain/compact.",
+					},
+					"number_unit": map[string]interface{}{"type": "string", "description": "number chart unit suffix rendered after the value (e.g. '%', '°C', 'GB')."},
+					"number_size": map[string]interface{}{"type": "integer", "description": "number chart value font size in px (e.g. 80, 120, 200)."},
 				},
 			},
 		},
@@ -447,7 +465,11 @@ func controlTypeEnum(cat *registry.Catalog) []string {
 // chartTypeEnum returns the chart_type enum for update_component_config.
 func chartTypeEnum(cat *registry.Catalog) []string {
 	if cat == nil {
-		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "heatmap", "radar", "funnel", "dataview", "custom"}
+		// Fallback when no catalog is wired — the canonical spec-driven
+		// chart types + custom. (heatmap/radar/funnel are not real spec
+		// types; number was previously missing here, so a catalog-less
+		// agent couldn't create number charts.)
+		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "number", "banded_bar", "dataview", "custom"}
 	}
 	out := make([]string, 0, len(cat.ChartTypes))
 	for _, t := range cat.ChartTypes {

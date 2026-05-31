@@ -828,6 +828,12 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 		SmoothLines    *bool     `json:"smooth_lines,omitempty"`
 		ShowDataLabels *bool     `json:"show_data_labels,omitempty"`
 		BandedBarStyle *string   `json:"banded_bar_style,omitempty"`
+		// number chart (chart_type="number") display options.
+		NumberFormat     *string `json:"number_format,omitempty"`
+		NumberDateFormat *string `json:"number_date_format,omitempty"`
+		NumberDecimals   *string `json:"number_decimals,omitempty"`
+		NumberUnit       *string `json:"number_unit,omitempty"`
+		NumberSize       *int    `json:"number_size,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -875,6 +881,23 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 	}
 	if params.BandedBarStyle != nil {
 		chart.Options["bandedBarStyle"] = *params.BandedBarStyle
+	}
+	// number chart options — keys match what the spec-driven number view
+	// reads (client chart-spec/specs/number.js + number-formats.js).
+	if params.NumberFormat != nil {
+		chart.Options["numberFormat"] = *params.NumberFormat
+	}
+	if params.NumberDateFormat != nil {
+		chart.Options["numberDateFormat"] = *params.NumberDateFormat
+	}
+	if params.NumberDecimals != nil {
+		chart.Options["numberDecimals"] = *params.NumberDecimals
+	}
+	if params.NumberUnit != nil {
+		chart.Options["numberUnit"] = *params.NumberUnit
+	}
+	if params.NumberSize != nil {
+		chart.Options["numberSize"] = *params.NumberSize
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
