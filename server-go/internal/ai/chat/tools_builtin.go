@@ -486,7 +486,7 @@ func chartOptionsSchema() map[string]interface{} {
 func dashboardPanelsSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":        "array",
-		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells. Use a mix of component panels (set component_id) and text-header panels (set text_config, leave component_id unset) to give the dashboard visual hierarchy. Section-header text panels are typically full-width × 2-cells-tall and sit above each logical group of charts.",
+		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells. Use a mix of component panels (set component_id) and text-header panels (set text_config, leave component_id unset) to give the dashboard visual hierarchy. Section-header text panels are typically full-width × 2-cells-tall and sit above each logical group of charts.\n\nPACK ROWS CONTIGUOUSLY — NO EMPTY GAPS. Each row of panels must start at the y where the previous row ended: a panel's y = the previous row's y + that row's h, with NO blank rows between. A section-header text panel abuts the charts below it (header at y, charts at y+header.h), and the next section header abuts the bottom of the row above it. Do not leave 1-2 empty cell rows between sections or rows — that produces dark dead strips. Panels in the same row share the same y and tile left-to-right (x advances by each panel's w). The whole layout should be a gap-free vertical stack of rows from y=0 down.",
 		"items": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
