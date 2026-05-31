@@ -33,6 +33,7 @@ import {
 } from '@carbon/icons-react';
 import apiClient, { API_BASE } from './api/client';
 import { isElectron } from './utils/electron';
+import { setStreamBufferSize } from './utils/streamBufferConfig';
 import { getCredentials, clearCredentials } from './utils/secureStorage';
 import { hydrateListPrefs } from './utils/listPrefs';
 import LoginPage from './pages/LoginPage';
@@ -612,6 +613,24 @@ function AppContent({ onDisconnect }) {
     };
     loadDefaultDashboard();
   }, [identityResolved, currentUser]);
+
+  // Load the deployment-wide streaming buffer depth (admin setting
+  // stream_buffer_size) once identity resolves, and push it into the
+  // shared stream-buffer config so every streaming chart (spec-driven
+  // and custom-code) and the StreamConnectionManager use it. Read at
+  // load only — a change applies on the next page load, matching the
+  // setting's "applies on next page load" semantics.
+  useEffect(() => {
+    if (!identityResolved) return;
+    (async () => {
+      try {
+        const s = await apiClient.getSetting('stream_buffer_size');
+        if (s?.value != null) setStreamBufferSize(s.value);
+      } catch {
+        // Older deployments may not have the setting — keep the 1000 default.
+      }
+    })();
+  }, [identityResolved]);
 
   // Render navigation based on current mode
   const renderNavigation = () => {

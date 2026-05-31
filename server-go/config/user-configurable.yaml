@@ -37,6 +37,11 @@ settings:
     description: "Default viewer fit mode for dashboards a user has not explicitly set. One of: actual, window, width, stretch."
     value: "stretch"
 
+  - key: stream_buffer_size
+    category: dashboard
+    description: "Max data points a streaming chart keeps in memory (the client-side buffer / backfill depth). Higher shows more history per live chart at the cost of browser memory. Default 1000; raise (e.g. 10000) for power users with high-resolution streams. Applies on next page load."
+    value: 1000
+
   - key: dashboard_command_topic
     category: dashboard
     description: "MQTT topic for dashboard commands (voice control, kiosk integration)"

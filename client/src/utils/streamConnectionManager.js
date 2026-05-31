@@ -18,6 +18,7 @@
 
 import { API_BASE } from '../api/client';
 import apiClient from '../api/client';
+import { getStreamBufferSize } from './streamBufferConfig';
 
 class StreamConnectionManager {
   static instance = null;
@@ -29,8 +30,10 @@ class StreamConnectionManager {
     this.subscribers = new Map();
     // Map of connectionId -> data buffer (for late subscribers)
     this.buffers = new Map();
-    // Max buffer size per connection
-    this.maxBufferSize = 1000;
+    // Max buffer size per connection — read live from the shared
+    // stream-buffer config (admin setting stream_buffer_size) at trim
+    // time, so a deployment override applies without reconstructing the
+    // singleton. Default 1000 via getStreamBufferSize().
     // Grace period: defer cleanup when last subscriber leaves
     this.gracePeriodTimeouts = new Map();
     this.gracePeriodMs = 30000; // 30 seconds
@@ -331,7 +334,8 @@ class StreamConnectionManager {
         // Buffer the record (unfiltered — all topics)
         const buffer = this.buffers.get(connectionId) || [];
         buffer.push(record);
-        if (buffer.length > this.maxBufferSize) buffer.shift();
+        const maxBufferSize = getStreamBufferSize();
+        if (buffer.length > maxBufferSize) buffer.shift();
         this.buffers.set(connectionId, buffer);
 
         // Distribute to matching subscribers only
