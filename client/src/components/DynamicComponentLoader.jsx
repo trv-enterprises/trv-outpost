@@ -411,12 +411,22 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // Show overlay error when reconnecting but we have existing data
   const showReconnectOverlay = shouldFetchData && dataError && transformedFetchedData && reconnecting;
 
+  // Data the context exposes to spec-driven children (SpecDrivenChart
+  // reads DataContext, not props). When the loader fetches its own data
+  // (shouldFetchData), that's transformedFetchedData. When the caller
+  // supplies data as a prop instead — the AI Builder preview path, which
+  // runs its own query and passes props.data — fall back to that, else a
+  // spec chart sees null and hangs on "loading". With prop-supplied data
+  // there's no fetch in flight, so loading is false.
+  const contextData = shouldFetchData ? transformedFetchedData : (props.data ?? null);
+  const contextLoading = shouldFetchData ? dataLoading : false;
+
   return (
     <TransformsContext.Provider value={transforms}>
       <ComponentConfigContext.Provider value={config}>
       <DataContext.Provider value={{
-        data: transformedFetchedData,
-        loading: dataLoading,
+        data: contextData,
+        loading: contextLoading,
         error: dataError,
         isStreaming,
         reconnecting,
