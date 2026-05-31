@@ -317,6 +317,57 @@ const data = {
   check('case 16: values.data_mapping.x_axis_format wins over helper', observed === 'chart_time_seconds');
 }
 
+// --- Case 17: auto-upgrade minute format → seconds when labels collide ---
+{
+  // A formatCellValue stand-in that mimics the real one's two presets:
+  // chart_time → HH:MM (minute resolution), chart_time_seconds → HH:MM:SS.
+  const fmt = (val, _col, opts) => {
+    const d = new Date(val);
+    const hh = d.getUTCHours(), mm = d.getUTCMinutes(), ss = d.getUTCSeconds();
+    const p = (n) => String(n).padStart(2, '0');
+    return opts?.timestampFormat === 'chart_time_seconds'
+      ? `${p(hh)}:${p(mm)}:${p(ss)}`
+      : `${p(hh)}:${p(mm)}`;
+  };
+
+  // All four readings in the SAME minute (14:06:xx) → minute labels collide.
+  const sameMinute = {
+    columns: ['ts', 'cpu'],
+    rows: [
+      [Date.UTC(2026, 0, 1, 14, 6, 5), 1],
+      [Date.UTC(2026, 0, 1, 14, 6, 20), 2],
+      [Date.UTC(2026, 0, 1, 14, 6, 40), 3],
+      [Date.UTC(2026, 0, 1, 14, 6, 55), 4],
+    ],
+  };
+  const optSame = buildOption(
+    { data_mapping: { x_axis: 'ts', x_axis_format: 'chart_time', y_axis: [{ column: 'cpu' }] }, options: {} },
+    sameMinute,
+    { formatCellValue: fmt, chartType: 'line' },
+  );
+  const sameLabels = optSame.xAxis.data;
+  check('case 17: same-minute series upgrades to seconds (labels distinct)',
+    new Set(sameLabels).size === 4 && sameLabels[0].split(':').length === 3);
+
+  // Readings spanning multiple minutes → minute labels already distinct,
+  // so NO upgrade (stays HH:MM).
+  const multiMinute = {
+    columns: ['ts', 'cpu'],
+    rows: [
+      [Date.UTC(2026, 0, 1, 14, 6, 0), 1],
+      [Date.UTC(2026, 0, 1, 14, 7, 0), 2],
+      [Date.UTC(2026, 0, 1, 14, 8, 0), 3],
+    ],
+  };
+  const optMulti = buildOption(
+    { data_mapping: { x_axis: 'ts', x_axis_format: 'chart_time', y_axis: [{ column: 'cpu' }] }, options: {} },
+    multiMinute,
+    { formatCellValue: fmt, chartType: 'line' },
+  );
+  check('case 17: multi-minute series stays minute resolution (no seconds)',
+    optMulti.xAxis.data.every((l) => l.split(':').length === 2));
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

@@ -43,6 +43,49 @@ const RIGHT_AXIS_COLOR = COLOR_SECONDARY;
 // model expansion (see chart-spec-driven-editor design doc).
 const STACK_GROUP = 'stack0';
 
+// Minute-resolution time formats and the seconds-bearing variant to
+// upgrade each to when labels collide within a minute. Only these get
+// auto-upgraded; a format that already includes seconds, or a non-time
+// format, is left as-is.
+const TIME_FORMAT_SECONDS_UPGRADE = {
+  chart: 'chart_datetime_seconds',
+  chart_time: 'chart_time_seconds',
+  chart_datetime: 'chart_datetime_seconds',
+};
+
+// upgradeTimeFormatForResolution returns a seconds-bearing format when
+// the requested minute-resolution format would render duplicate labels
+// for the given x-values (several readings in the same minute), and the
+// seconds variant resolves them. Otherwise returns the format unchanged.
+//
+// Data-driven, not range-math: we compare the actual rendered label sets
+// so it triggers exactly when there's a visible collision and stays off
+// for normal charts and non-timestamp axes (where formatCellValue
+// returns non-time strings and the two formats produce the same output).
+function upgradeTimeFormatForResolution(xValues, xAxisCol, format, formatCellValue) {
+  const upgraded = TIME_FORMAT_SECONDS_UPGRADE[format];
+  if (!upgraded || !formatCellValue || xValues.length < 2) return format;
+
+  const base = new Set();
+  let baseDupes = false;
+  for (const v of xValues) {
+    const label = formatCellValue(v, xAxisCol, { timestampFormat: format });
+    if (base.has(label)) { baseDupes = true; break; }
+    base.add(label);
+  }
+  if (!baseDupes) return format; // no collision → keep minute resolution
+
+  // Collision exists. Only upgrade if seconds actually disambiguates
+  // (i.e. the values really differ at sub-minute resolution — they do
+  // for distinct timestamps, but guard against e.g. an all-identical
+  // category column that happens to match a time format).
+  const withSeconds = new Set();
+  for (const v of xValues) {
+    withSeconds.add(formatCellValue(v, xAxisCol, { timestampFormat: upgraded }));
+  }
+  return withSeconds.size > base.size ? upgraded : format;
+}
+
 /**
  * Normalize a y_axis entry from any of these shapes into the canonical
  * { column, label, stack, axis } shape:
@@ -299,7 +342,16 @@ export function buildOption(values, data, helpers = {}) {
   // chosen formatter (auto-detect timestamps).
   const xColIdx = columnIndex(xAxisCol);
   const xValues = xColIdx >= 0 ? rows.map((r) => r[xColIdx]) : [];
-  const categories = xValues.map((v) => formatCellValue ? formatCellValue(v, xAxisCol, { timestampFormat: xAxisFormat }) : v);
+  // Auto-granularity: a minute-resolution time format (chart / chart_time
+  // / chart_datetime) renders identical labels when several points fall
+  // in the same minute — e.g. a streamed series where every reading is
+  // "2:06 PM". When that happens, upgrade to the seconds-bearing variant
+  // so adjacent labels are distinguishable. Purely data-driven: it only
+  // upgrades if the no-seconds format actually collides AND seconds
+  // resolves the collision, so normal minute-spanning charts and
+  // non-time axes are untouched.
+  const effectiveXFormat = upgradeTimeFormatForResolution(xValues, xAxisCol, xAxisFormat, formatCellValue);
+  const categories = xValues.map((v) => formatCellValue ? formatCellValue(v, xAxisCol, { timestampFormat: effectiveXFormat }) : v);
 
   // Compose series. When seriesCol is set, partition rows by that
   // column's values; the first y entry's column supplies the value.
