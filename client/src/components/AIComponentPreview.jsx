@@ -19,6 +19,7 @@ import { ControlRenderer, CONTROL_TYPE_INFO } from './controls';
 import { transformData } from '../utils/dataTransforms';
 import apiClient from '../api/client';
 import { getDataDrivenChartCode, getStaticChartCode } from './ComponentEditor';
+import { hasBuildOption } from '../chart-spec/build-options';
 import './AIComponentPreview.scss';
 
 // Build component_code from the structured fields on a component when
@@ -64,9 +65,18 @@ function generateComponentCodeFromConfig(component) {
     visibleColumns: dataMapping.visible_columns || null,
     chartName: component.title || component.name || '',
   };
-  // No connection set yet → use the static placeholder template so
-  // there's still something visible while the user is mid-configuration.
+  // No connection set yet. For a SPEC-DRIVEN chart type, still emit the
+  // <SpecDrivenChart> one-liner — it renders from the real saved config
+  // (full multi-series data_mapping + options) and shows its own "no
+  // data" state, which is faithful to the chart being edited. The static
+  // placeholder (getStaticChartCode) is a hardcoded SINGLE-series Jan–May
+  // demo — using it for an existing multi-series chart misrepresents it
+  // (a multi-series line showed up as a plain one-line demo). Reserve the
+  // static placeholder for non-spec types (custom) with nothing to render.
   if (!connectionId || !queryRaw) {
+    if (hasBuildOption(chartType)) {
+      return `const Component = () => {\n  return <SpecDrivenChart specName="${chartType}" />;\n};`;
+    }
     return getStaticChartCode(chartType);
   }
   return getDataDrivenChartCode(
