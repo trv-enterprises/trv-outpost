@@ -788,7 +788,7 @@ function ComponentsListPage() {
                               );
                             }
                             if (cell.info.header === 'dashboards') {
-                              const names = dashboardNames[chart.id] || [];
+                              const names = (chart && dashboardNames[chart.id]) || [];
                               const label = names.length === 0
                                 ? 'Not used by any dashboard'
                                 : names.join('\n');
