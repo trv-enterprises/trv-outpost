@@ -409,72 +409,13 @@ func chartDataMappingSchema() map[string]interface{} {
 	}
 }
 
-// chartOptionsSchema returns the inline JSON-schema for the chart
-// `options` overlay. options is stored as a free-form map on the
-// component, but the spec-driven renderer reads a known set of keys —
-// enumerating them here is what lets the agent configure axis ranges,
-// tooltips, thresholds, etc. via config instead of falling to custom
-// code (the configure-first goal). These keys are the authoritative
-// `binds: "options.*"` paths from the client chart specs
-// (client/src/chart-spec/specs/*.json); keep them in sync when the
-// specs gain fields. Not every chart type honors every key (a gauge
-// ignores yThresholds); unknown keys are harmless.
+// chartOptionsSchema delegates to the shared toolops definition so the
+// Dashboard Assistant and the in-editor Component agent advertise the
+// exact same `options.*` overlay (the keys the client chart specs
+// actually read). The schema + apply both live in toolops.ChartOptions*
+// — see internal/ai/toolops/chart_options.go.
 func chartOptionsSchema() map[string]interface{} {
-	return map[string]interface{}{
-		"type":        "object",
-		"description": "Spec-driven chart options overlay. Set these to configure an existing chart rather than rewriting it as custom code. Field names are exact (camelCase) and match the editor's Chart Options form.",
-		"properties": map[string]interface{}{
-			"yAxisRange": map[string]interface{}{
-				"type":        "object",
-				"description": "Manual Y-axis bounds + scale. Shape: {left: {min, max, scale}, right: {min, max, scale}}. min/max are numbers or null (null = auto-scale to data). scale is \"linear\" (default) or \"log\". `right` is only used when data_mapping.multiple_y_axis is true (dual-axis).",
-			},
-			"tooltip": map[string]interface{}{
-				"type":        "object",
-				"description": "Tooltip config. Shape: {mode, decimals, units}. mode: \"multi\" (all series, default), \"single\" (hovered series only), or \"hidden\". decimals: integer 0-10 or null. units: suffix string like \"%\" or \"°C\".",
-			},
-			"yThresholds": map[string]interface{}{
-				"type":        "array",
-				"items":       map[string]interface{}{"type": "object"},
-				"description": "Reference lines / color stops at specific Y values. Each: {value: number, color: hex string, label?: string}. Pair with yThresholdRenderMode.",
-			},
-			"yThresholdRenderMode": map[string]interface{}{
-				"type":        "string",
-				"enum":        []string{"line", "color_segments", "both"},
-				"description": "How yThresholds render: \"line\" (reference line at value, default), \"color_segments\" (color the series by value), or \"both\".",
-			},
-			"sampling": map[string]interface{}{
-				"type":        "string",
-				"enum":        []string{"off", "lttb", "average", "max"},
-				"description": "Downsampling for dense (≥10k-point) series. \"lttb\" preserves visual shape; average/max preserve statistics. Default \"off\".",
-			},
-			"legend": map[string]interface{}{
-				"type":        "object",
-				"description": "Legend config. Shape: {show: bool (default true), position: \"top\"|\"bottom\"|\"left\"|\"right\" (default \"top\")}. Left/right reserve ~135px of plot width.",
-			},
-			"chartSmooth":          map[string]interface{}{"type": "boolean", "description": "Smooth (curved) line segments. line/area only."},
-			"showSymbol":           map[string]interface{}{"type": "boolean", "description": "Show point markers on the line. Turn off for dense time series. line/area only."},
-			"chartShowDataLabels":  map[string]interface{}{"type": "boolean", "description": "Render the value next to each data point."},
-			"chartShowZoomSlider":  map[string]interface{}{"type": "boolean", "description": "Show the bottom zoom/pan slider."},
-			// number chart (chart_type="number") options.
-			"numberFormat": map[string]interface{}{
-				"type":        "string",
-				"enum":        []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"},
-				"description": "number chart value format. The format IMPLIES the raw value's unit, so map a raw column and pick the format — do NOT do unit math in the query. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K), \"duration\" (value is SECONDS → \"2d 3h 4m\" — e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (value is a timestamp → date/time via numberDateFormat). For bytes→GB there's no built-in scale yet; use compact or a custom-code number.",
-			},
-			"numberDateFormat": map[string]interface{}{
-				"type":        "string",
-				"enum":        []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"},
-				"description": "Date/time style when numberFormat=\"datetime\". Ignored otherwise.",
-			},
-			"numberDecimals": map[string]interface{}{
-				"type":        "string",
-				"enum":        []string{"auto", "0", "1", "2", "3", "4"},
-				"description": "number chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats.",
-			},
-			"numberUnit": map[string]interface{}{"type": "string", "description": "number chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\")."},
-			"numberSize": map[string]interface{}{"type": "integer", "description": "number chart: value font size in px (e.g. 80, 120, 200)."},
-		},
-	}
+	return toolops.ChartOptionsSchema()
 }
 
 // dashboardPanelsSchema returns the inline JSON-schema for the

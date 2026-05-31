@@ -6,6 +6,7 @@ package ai
 
 import (
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
@@ -222,40 +223,13 @@ Otherwise: configure via the structured tools and let the editor's generator pro
 		},
 		{
 			Name:        "update_chart_options",
-			Description: anthropic.String("Update ECharts-specific options for the chart.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
+			Description: anthropic.String("Update spec-driven chart options for the chart. Field names are the exact camelCase keys the renderer reads (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, numberFormat, …) — the SAME set the Dashboard Assistant uses, so configure-first works identically on both surfaces. This covers threshold coloring (yThresholds + yThresholdRenderMode=\"color_segments\" → change line color above/below a value), axis ranges, log scale, downsampling, and the zoom slider.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
+			// Shared schema with the Dashboard Assistant — see
+			// internal/ai/toolops/chart_options.go. Replaced the former
+			// hand-rolled snake_case set, several keys of which the
+			// spec-driven renderer never read (showLegend/smoothLines/…).
 			InputSchema: anthropic.ToolInputSchemaParam{
-				Properties: map[string]interface{}{
-					"title":            map[string]interface{}{"type": "string", "description": "Chart title rendered inside the ECharts canvas. MUST equal the component title set via update_component_config — never the component name."},
-					"show_legend":      map[string]interface{}{"type": "boolean", "description": "Whether to show the legend"},
-					"legend_position":  map[string]interface{}{"type": "string", "description": "Legend position", "enum": []string{"top", "bottom", "left", "right"}},
-					"show_tooltip":     map[string]interface{}{"type": "boolean", "description": "Whether to show tooltips on hover"},
-					"stack_series":     map[string]interface{}{"type": "boolean", "description": "Whether to stack series (bar/area charts)"},
-					"smooth_lines":     map[string]interface{}{"type": "boolean", "description": "Whether to smooth line charts"},
-					"show_data_labels": map[string]interface{}{"type": "boolean", "description": "Whether to show data labels on chart"},
-					"banded_bar_style": map[string]interface{}{
-						"type":        "string",
-						"description": "Visual style for chart_type='banded_bar'. Ignored for other types. 'time_series' = horizontal time x-axis, line + dots, full-width horizontal reference bands (default — best for multi-reading trends). 'column_filled' = single vertical column per timestamp, filled bands no borders, dot at value. 'column_outlined' = same but with band borders. 'column_box' = only inner band drawn, vertical line with tick at value (box-plot style).",
-						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
-					},
-					// number chart (chart_type='number') display options.
-					"number_format": map[string]interface{}{
-						"type":        "string",
-						"enum":        []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"},
-						"description": "number chart value format. The format implies the raw value's unit — map y_axis to a raw column and pick a format, no query math. 'auto' (source precision), 'plain' (1,234.5), 'compact' (1.2M/3.4K), 'duration' (value is SECONDS → '2d 3h 4m', e.g. uptime.sec), 'duration_clock' (seconds → HH:MM:SS), 'datetime' (value is a timestamp → date/time via number_date_format).",
-					},
-					"number_date_format": map[string]interface{}{
-						"type":        "string",
-						"enum":        []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"},
-						"description": "Date/time style when number_format='datetime'. Ignored otherwise.",
-					},
-					"number_decimals": map[string]interface{}{
-						"type":        "string",
-						"enum":        []string{"auto", "0", "1", "2", "3", "4"},
-						"description": "number chart decimal places. 'auto' = source precision; '0'–'4' forces that many. Applies to auto/plain/compact.",
-					},
-					"number_unit": map[string]interface{}{"type": "string", "description": "number chart unit suffix rendered after the value (e.g. '%', '°C', 'GB')."},
-					"number_size": map[string]interface{}{"type": "integer", "description": "number chart value font size in px (e.g. 80, 120, 200)."},
-				},
+				Properties: toolops.ChartOptionsSchema()["properties"].(map[string]interface{}),
 			},
 		},
 		{

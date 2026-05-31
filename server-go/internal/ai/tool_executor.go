@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
@@ -816,25 +817,15 @@ func (e *ToolExecutor) executeSetCustomCode(ctx context.Context, chartID string,
 	}, nil
 }
 
-// executeUpdateChartOptions updates ECharts-specific options
+// executeUpdateChartOptions merges spec-driven chart options. The tool
+// advertises the shared camelCase schema (toolops.ChartOptionsSchema);
+// the patch is merged onto the component's Options map via the shared
+// toolops.ApplyChartOptions — the SAME apply path the Dashboard
+// Assistant uses, so a given options key behaves identically on both
+// surfaces and there's no per-agent translation to drift.
 func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID string, chartVersion int, input json.RawMessage) (*ToolResult, error) {
-	var params struct {
-		Title          *string   `json:"title,omitempty"`
-		ShowLegend     *bool     `json:"show_legend,omitempty"`
-		LegendPosition *string   `json:"legend_position,omitempty"`
-		ShowTooltip    *bool     `json:"show_tooltip,omitempty"`
-		StackSeries    *bool     `json:"stack_series,omitempty"`
-		SmoothLines    *bool     `json:"smooth_lines,omitempty"`
-		ShowDataLabels *bool     `json:"show_data_labels,omitempty"`
-		BandedBarStyle *string   `json:"banded_bar_style,omitempty"`
-		// number chart (chart_type="number") display options.
-		NumberFormat     *string `json:"number_format,omitempty"`
-		NumberDateFormat *string `json:"number_date_format,omitempty"`
-		NumberDecimals   *string `json:"number_decimals,omitempty"`
-		NumberUnit       *string `json:"number_unit,omitempty"`
-		NumberSize       *int    `json:"number_size,omitempty"`
-	}
-	if err := json.Unmarshal(input, &params); err != nil {
+	var patch map[string]interface{}
+	if err := json.Unmarshal(input, &patch); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
 	}
 
@@ -854,46 +845,11 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 		chart.Options = make(map[string]interface{})
 	}
 
-	if params.Title != nil {
-		chart.Options["title"] = *params.Title
-	}
-	if params.ShowLegend != nil {
-		chart.Options["showLegend"] = *params.ShowLegend
-	}
-	if params.LegendPosition != nil {
-		chart.Options["legendPosition"] = *params.LegendPosition
-	}
-	if params.ShowTooltip != nil {
-		chart.Options["showTooltip"] = *params.ShowTooltip
-	}
-	if params.StackSeries != nil {
-		chart.Options["stackSeries"] = *params.StackSeries
-	}
-	if params.SmoothLines != nil {
-		chart.Options["smoothLines"] = *params.SmoothLines
-	}
-	if params.ShowDataLabels != nil {
-		chart.Options["showDataLabels"] = *params.ShowDataLabels
-	}
-	if params.BandedBarStyle != nil {
-		chart.Options["bandedBarStyle"] = *params.BandedBarStyle
-	}
-	// number chart options — keys match what the spec-driven number view
-	// reads (client chart-spec/specs/number.js + number-formats.js).
-	if params.NumberFormat != nil {
-		chart.Options["numberFormat"] = *params.NumberFormat
-	}
-	if params.NumberDateFormat != nil {
-		chart.Options["numberDateFormat"] = *params.NumberDateFormat
-	}
-	if params.NumberDecimals != nil {
-		chart.Options["numberDecimals"] = *params.NumberDecimals
-	}
-	if params.NumberUnit != nil {
-		chart.Options["numberUnit"] = *params.NumberUnit
-	}
-	if params.NumberSize != nil {
-		chart.Options["numberSize"] = *params.NumberSize
+	// Merge the camelCase options patch via the shared apply (only
+	// known keys are copied). Keys match exactly what the spec-driven
+	// renderer reads (client chart-spec/specs/*.{json,js}).
+	if applied := toolops.ApplyChartOptions(chart.Options, patch); applied == 0 {
+		return &ToolResult{Success: false, Error: "no recognized chart options in input — see the update_chart_options schema for valid keys (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, numberFormat, …)"}, nil
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
