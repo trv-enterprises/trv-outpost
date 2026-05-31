@@ -43,6 +43,68 @@ const RIGHT_AXIS_COLOR = COLOR_SECONDARY;
 // model expansion (see chart-spec-driven-editor design doc).
 const STACK_GROUP = 'stack0';
 
+// resolveAutoXFormat turns the special "auto" x-axis format into a
+// concrete preset BASED ON THE DATA. It runs ONLY for "auto" — every
+// explicit preset (chart, chart_time, chart_time_seconds, …) is honored
+// verbatim by returning it unchanged, so a user's deliberate choice is
+// never overridden.
+//
+// Auto's bounded job (it is a smart default, not a cure-all):
+//   1. Non-timestamp x-axis → passthrough. If the values don't parse as
+//      timestamps, formatting is meaningless; return 'raw' so the caller
+//      shows them as-is. (No guessing categories/numbers into dates.)
+//   2. Span ≥ ~1 day → date+time ('chart'); else time-only ('chart_time').
+//   3. If the chosen minute-resolution labels COLLIDE (several points in
+//      one minute) and seconds disambiguates → add seconds.
+// What auto does NOT do (by design — pick a fixed preset for these):
+// sub-second data (it tops out at seconds), or density-vs-clarity
+// tradeoffs (it optimizes disambiguation, not label length).
+//
+// 'raw' is a sentinel meaning "don't run a timestamp formatter" — the
+// caller maps it to no-format passthrough.
+function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
+  if (xValues.length === 0 || !formatCellValue) return 'chart_time';
+
+  // (1) Non-timestamp detection: a timestamp format and a non-format
+  // produce DIFFERENT output for real timestamps; for non-timestamps
+  // formatCellValue passes the value through unchanged, so the two match.
+  // Sample the first non-null value.
+  const sample = xValues.find((v) => v != null);
+  if (sample == null) return 'chart_time';
+  const asTime = formatCellValue(sample, xAxisCol, { timestampFormat: 'chart_time' });
+  const asRaw = String(sample);
+  if (asTime === asRaw) {
+    // Formatter didn't transform it → not a timestamp column. Passthrough.
+    return 'raw';
+  }
+
+  // (2) Span: parse to epoch ms via Date; ≥ 24h → include the date.
+  const times = xValues
+    .map((v) => {
+      const t = v instanceof Date ? v.getTime() : Date.parse(v) || Number(v);
+      return Number.isFinite(t) ? t : null;
+    })
+    .filter((t) => t != null);
+  let base = 'chart_time';
+  if (times.length >= 2) {
+    const span = Math.max(...times) - Math.min(...times);
+    if (span >= 24 * 60 * 60 * 1000) base = 'chart'; // ≥ 1 day → date + time
+  }
+
+  // (3) Collision → add seconds, but only if seconds actually resolves it.
+  const secondsVariant = base === 'chart' ? 'chart_datetime_seconds' : 'chart_time_seconds';
+  const baseLabels = new Set();
+  let collides = false;
+  for (const v of xValues) {
+    const lbl = formatCellValue(v, xAxisCol, { timestampFormat: base });
+    if (baseLabels.has(lbl)) { collides = true; break; }
+    baseLabels.add(lbl);
+  }
+  if (!collides) return base;
+  const secLabels = new Set(xValues.map((v) => formatCellValue(v, xAxisCol, { timestampFormat: secondsVariant })));
+  return secLabels.size > baseLabels.size ? secondsVariant : base;
+}
+
 /**
  * Normalize a y_axis entry from any of these shapes into the canonical
  * { column, label, stack, axis } shape:
@@ -247,7 +309,9 @@ function buildThresholds(thresholds, mode) {
  * @returns {Object} an ECharts `option` literal
  */
 export function buildOption(values, data, helpers = {}) {
-  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'chart', chartName = '', legendSelected } = helpers;
+  // x-axis format default is 'auto' (resolves granularity from the data;
+  // see resolveAutoXFormat). An explicit stored x_axis_format wins.
+  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'auto', chartName = '', legendSelected } = helpers;
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
   // Legacy save shape parks per-column labels in a parallel array
@@ -295,11 +359,21 @@ export function buildOption(values, data, helpers = {}) {
   const rows = data?.rows || [];
   const columnIndex = (name) => columns.indexOf(name);
 
-  // Build categories from the x-axis column, using the editor's
-  // chosen formatter (auto-detect timestamps).
+  // Build categories from the x-axis column. The 'auto' format resolves
+  // to a concrete preset from the data (span → time-only/date+time,
+  // collision → add seconds, non-timestamp → 'raw' passthrough); every
+  // explicit preset is honored unchanged.
   const xColIdx = columnIndex(xAxisCol);
   const xValues = xColIdx >= 0 ? rows.map((r) => r[xColIdx]) : [];
-  const categories = xValues.map((v) => formatCellValue ? formatCellValue(v, xAxisCol, { timestampFormat: xAxisFormat }) : v);
+  const resolvedXFormat = xAxisFormat === 'auto'
+    ? resolveAutoXFormat(xValues, xAxisCol, formatCellValue)
+    : xAxisFormat;
+  const categories = xValues.map((v) => {
+    if (!formatCellValue) return v;
+    // 'raw' (auto-detected non-timestamp) → show the value as-is.
+    if (resolvedXFormat === 'raw') return v;
+    return formatCellValue(v, xAxisCol, { timestampFormat: resolvedXFormat });
+  });
 
   // Compose series. When seriesCol is set, partition rows by that
   // column's values; the first y entry's column supplies the value.
@@ -438,9 +512,13 @@ export function buildOption(values, data, helpers = {}) {
   if (visualMap) option.visualMap = visualMap;
 
   if (opts.chartShowZoomSlider) {
+    // Default to the FULL range (start 0 → end 100), not the last 30%.
+    // NOTE: ChartShell must merge (notMerge:false) on data updates so a
+    // user's pan/zoom isn't snapped back to these defaults every time a
+    // streaming point arrives — see ChartShell's setOption call.
     option.dataZoom = [
       {
-        type: 'slider', show: true, xAxisIndex: [0], start: 70, end: 100,
+        type: 'slider', show: true, xAxisIndex: [0], start: 0, end: 100,
         bottom: 8, height: 24,
         backgroundColor: '#262626',
         dataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.3 } },
@@ -448,7 +526,7 @@ export function buildOption(values, data, helpers = {}) {
         handleStyle: { color: COLOR_PRIMARY },
         textStyle: { color: COLOR_TEXT_SECONDARY },
       },
-      { type: 'inside', xAxisIndex: [0], start: 70, end: 100 },
+      { type: 'inside', xAxisIndex: [0], start: 0, end: 100 },
     ];
   }
 

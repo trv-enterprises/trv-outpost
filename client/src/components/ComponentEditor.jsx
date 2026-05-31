@@ -415,7 +415,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Data mapping
   const [xAxisColumn, setXAxisColumn] = useState('');
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
-  const [xAxisFormat, setXAxisFormat] = useState('chart'); // Default format for timestamp display
+  const [xAxisFormat, setXAxisFormat] = useState('auto'); // Default timestamp format; 'auto' fits granularity to the data
   const [yAxisColumns, setYAxisColumns] = useState([]);
   const [yAxisLabel, setYAxisLabel] = useState(''); // Legacy single y-axis label — kept for back-compat; use yAxisLabels for new code.
   const [yAxisLabels, setYAxisLabels] = useState([]); // Per-column y-axis labels. Index matches yAxisColumns. Empty entries fall back to column name.
@@ -950,7 +950,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
-        xAxisFormat: 'chart',
+        xAxisFormat: 'auto',
         yAxisColumns: [],
         yAxisLabel: '',
         yAxisLabels: [],
@@ -1606,7 +1606,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       sortBy,
       sortOrder,
       limit: limitRows || 0,
-      xAxisFormat: xAxisFormat || 'chart',
+      xAxisFormat: xAxisFormat || 'auto',
       xAxisLabel: xAxisLabel || '',
       yAxisLabel: yAxisLabel || '',
       yAxisLabels: yAxisLabels || [],
@@ -1713,7 +1713,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       data_mapping: selectedConnectionId ? {
         x_axis: xAxisColumn,
         x_axis_label: xAxisLabel || '',
-        x_axis_format: xAxisFormat || 'chart',
+        x_axis_format: xAxisFormat || 'auto',
         // Strip empty-column placeholders before saving. The spec-driven
         // y_axis_columns_list keeps unfilled new rows around so the user
         // can pick a column, but they shouldn't reach the wire — same for
@@ -2855,7 +2855,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       })),
                       x_axis_column: xAxisColumn,
                       x_axis_label: xAxisLabel || '',
-                      x_axis_format: xAxisFormat || 'chart',
+                      x_axis_format: xAxisFormat || 'auto',
                       series_column: seriesColumn,
                       // pie field ids — label binds to x_axis, value to
                       // y_axis[0]; map the shared state onto pie's ids so
@@ -3707,7 +3707,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         data_mapping: selectedConnectionId ? {
                           x_axis: xAxisColumn,
                           x_axis_label: xAxisLabel || '',
-                          x_axis_format: xAxisFormat || 'chart',
+                          x_axis_format: xAxisFormat || 'auto',
                           y_axis: yAxisColumns
                             .map((column, i) => ({
                               column,
@@ -3758,7 +3758,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         connection_id: selectedConnectionId,
                         x_axis: xAxisColumn,
                         x_axis_label: xAxisLabel || '',
-                        x_axis_format: xAxisFormat || 'chart',
+                        x_axis_format: xAxisFormat || 'auto',
                         y_axis: yAxisColumns,
                         y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
                         y_axis_labels: yAxisLabels && yAxisLabels.length > 0 ? yAxisLabels : undefined,

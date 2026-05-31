@@ -57,8 +57,9 @@
               "binds": "data_mapping.x_axis_format",
               "type": "enum",
               "label": "Timestamp format",
-              "default": "chart",
+              "default": "auto",
               "options": [
+                { "value": "auto", "label": "Auto (fits the data)" },
                 { "value": "chart", "label": "Date + Time (1/15 10:30)" },
                 { "value": "chart_time", "label": "Time Only (10:30 AM)" },
                 { "value": "chart_time_seconds", "label": "Time + Seconds (10:30:05 AM)" },
