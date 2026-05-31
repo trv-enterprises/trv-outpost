@@ -495,7 +495,13 @@ export function buildOption(values, data, helpers = {}) {
   // steer toward top unless the user explicitly asks otherwise.
   const legendPos = legend ? (opts?.legend?.position || 'top') : null;
   const gridTop = legendPos === 'top' ? 36 : 10;
-  const gridBottomBase = opts.chartShowZoomSlider ? 50 : 30;
+  // grid.bottom is the gap BELOW the x-axis labels (containLabel:true
+  // auto-reserves the label height on top of this). Without a slider,
+  // only a small flush gap (8px) so the labels sit at the bottom of the
+  // panel. With a slider: the slider occupies bottom:8 → 8+24=32px from
+  // the floor; grid.bottom 43 puts the x-axis labels ~11px above the
+  // slider top (a little breathing room). 50 left an ~18px dead band.
+  const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
   const gridLeft = legendPos === 'left' ? 135 : 50;
   const gridRight = legendPos === 'right' ? 135 : 20;

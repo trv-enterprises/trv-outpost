@@ -488,6 +488,17 @@
           height: 100%;
           position: relative;
 
+          // When a title band renders at the top (charts/dataviews with a
+          // title, and datatable's external header), drop the wrapper's
+          // TOP padding — the 2.5rem title band is the top spacing, so the
+          // 0.5rem above it was wasted margin. Title-OFF wrappers keep the
+          // top inset so the absolutely-positioned hover action icons
+          // (top:4px) sit in a margin, not on the plot. Sides/bottom keep
+          // the 0.5rem either way.
+          &.has-title {
+            padding-top: 0;
+          }
+
           &.with-header {
             height: calc(100% - 40px);
           }
@@ -497,18 +508,13 @@
             padding: 0;
           }
 
-          // Dataview (AG Grid) renders its own title strip. The generic
-          // component-wrapper padding on top leaves a visible gap above
-          // the title; strip only the TOP padding (both on the wrapper
-          // itself and the inner div) and keep left/right/bottom so the
-          // panel still has breathing room on the sides.
-          &.dataview-wrapper {
-            padding-top: 0;
-
-            > div {
-              padding-top: 0;
-            }
-          }
+          // Dataview (AG Grid) renders its OWN title strip (DataViewGrid),
+          // unlike charts whose title comes from ChartShell — but both use
+          // identical 2.5rem title markup. No special-case needed now: the
+          // single .component-wrapper 0.5rem inset (the inner > div no
+          // longer adds padding) puts the dataview title at the same
+          // 0.5rem top offset as a chart title, so they align. (Previously
+          // this zeroed the top to fight the doubled inner padding.)
 
           // Control components — centered, extra right padding for slider labels
           &.control-wrapper {
@@ -524,14 +530,18 @@
             }
           }
 
-          // Wrapper div from DynamicComponentLoader
+          // Wrapper div from DynamicComponentLoader. No padding here —
+          // the parent .component-wrapper already provides the single
+          // 0.5rem inset. (Previously this ALSO had spacing-03, stacking
+          // a second 0.5rem for a 1rem total inset and a visibly large
+          // margin around charts — especially the dead band below the
+          // x-axis. One inset is enough.)
           > div {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            padding: spacing.$spacing-03;
           }
 
           // Hover-only action icons on chart panels (view-as-table,

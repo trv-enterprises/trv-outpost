@@ -52,9 +52,14 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       {titleText ? (
+        // 2.5rem title band — matches ChartShell / DataViewGrid exactly so
+        // a number tile's title sits at the same height as a chart's, and
+        // the dashboard's has-title top-padding reclaim lines up. (Was a
+        // 1.5-line-height overlay; bumped to the shared 2.5rem band.)
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
-          fontSize: '1rem', lineHeight: 1.5, fontWeight: 600,
+          height: '2.5rem', lineHeight: '2.5rem',
+          fontSize: '1rem', fontWeight: 600,
           color: 'var(--cds-text-primary)', textAlign: 'center',
           padding: '0 0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>

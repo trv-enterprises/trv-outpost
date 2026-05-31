@@ -94,7 +94,12 @@ function buildLegend(legend) {
  */
 function baseOption(categories, yMin, yMax, legendPos, extra = {}) {
   const gridTop = legendPos === 'top' ? 36 : 50;
-  const gridBottom = legendPos === 'bottom' ? 56 : 40;
+  // grid.bottom: containLabel:true reserves the label height, so this is
+  // the extra gap below. Flush (8px) so labels sit at the panel bottom;
+  // +26 for a bottom legend. (Was a flat 40 → dead band, matching the
+  // line/area/bar + scatter flush-bottom fix. banded_bar's x-axis has no
+  // axis name, so no name-room branch is needed.)
+  const gridBottom = legendPos === 'bottom' ? 34 : 8;
   const gridLeft = legendPos === 'left' ? 135 : 50;
   const gridRight = legendPos === 'right' ? 135 : 20;
   return {

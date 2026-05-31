@@ -2221,7 +2221,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                               <span className="chart-name">{chart.title || chart.name || 'Untitled Chart'}</span>
                             </div>
                           )}
-                          <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''}`}>
+                          {/* has-title → a title band actually renders at the
+                              top (datatable's external header, or the
+                              ChartShell/DataViewGrid 2.5rem title when showTitle
+                              isn't disabled AND there's a title/name). When set,
+                              the SCSS drops the wrapper's TOP padding so the band
+                              sits flush — reclaiming the otherwise-wasted top
+                              margin. When NOT set (title off), the top inset
+                              stays so the hover action icons don't land on the
+                              plot. */}
+                          <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''} ${(chart.chart_type === 'datatable' || (chart.options?.showTitle !== false && (chart.title || chart.name))) ? 'has-title' : ''}`}>
                             <ComponentPanelWithActions
                               // Key includes chart.updated so a config-refresh poll
                               // that picks up a server-side chart edit forces this
