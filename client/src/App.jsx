@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 // BrowserRouter derives routes from window.location.pathname, which
 // is "/" on a webserver-hosted install but "/Applications/.../app/
 // index.html" (the literal file path) when Electron loads the bundle
@@ -467,7 +467,19 @@ function AppContent({ onDisconnect }) {
     }
   }, [identityResolved, currentUser, hydrateNotifications]);
 
-  // Fetch default dashboard (user preference or first alphabetically)
+  // One-shot guard so the "your default was deleted" notice fires at
+  // most once per session — fetchDefaultDashboard runs on initial load
+  // AND on every mode-switch to VIEW, so a naive notify would repeat.
+  const staleDefaultNotifiedRef = useRef(false);
+
+  // Fetch default dashboard (user preference or first alphabetically).
+  //
+  // If the user has a configured default_dashboard_id but that dashboard
+  // no longer exists (it was deleted out from under the pointer), we do
+  // NOT clear the stale pointer — it's harmless — but we surface a notice
+  // telling the user to set a new default, and fall through to the
+  // alphabetical-first dashboard so they still land somewhere instead of
+  // a 404.
   const fetchDefaultDashboard = async () => {
     try {
       // First check if user has a configured default dashboard
@@ -475,8 +487,25 @@ function AppContent({ onDisconnect }) {
       if (userGuid) {
         try {
           const userConfig = await apiClient.getUserConfig(userGuid);
-          if (userConfig.settings?.default_dashboard_id) {
-            return userConfig.settings.default_dashboard_id;
+          const configuredId = userConfig.settings?.default_dashboard_id;
+          if (configuredId) {
+            // Validate it still exists before handing it back — a deleted
+            // dashboard leaves a dangling pointer here.
+            try {
+              await apiClient.getDashboard(configuredId);
+              return configuredId;
+            } catch {
+              // Configured default is gone. Notify once, then fall
+              // through to the alphabetical-first fallback below.
+              if (!staleDefaultNotifiedRef.current) {
+                staleDefaultNotifiedRef.current = true;
+                addNotification({
+                  kind: 'warning',
+                  title: 'Default dashboard was deleted',
+                  subtitle: 'Your default dashboard no longer exists. Open Dashboards and choose "Set as Default" to pick a new one.',
+                });
+              }
+            }
           }
         } catch {
           // Ignore errors - user may not have config yet
