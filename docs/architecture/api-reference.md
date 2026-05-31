@@ -16,7 +16,7 @@ precedence order:
 
 1. **`Authorization: Bearer <token>`** — dispatched by token shape:
    - `trve_<base32>` → API key (validated against the api_keys
-     collection). Used by Electron, kiosk, dashboard-agent, and
+     collection). Used by Electron, kiosk, external MCP clients, and
      mcp-proxy.
    - anything else → JWT, validated against the configured identity
      provider (Clerk today). Used by browser users when Clerk is

@@ -97,7 +97,7 @@ class APIClient {
     // Clerk-disabled deployments — no async overhead in that case.
     this.tokenProvider = null;
     // API key (`trve_…`) for non-browser clients (Electron, kiosk,
-    // dashboard-agent, mcp-proxy). Persisted to localStorage so it
+    // MCP clients, mcp-proxy). Persisted to localStorage so it
     // survives page reload. The auth header path prefers Clerk JWT
     // when one is available, then this API key, then the legacy
     // X-User-ID header.
@@ -1373,8 +1373,8 @@ class APIClient {
   }
 
   // ── API Keys ──────────────────────────────────────────────────────
-  // Per-user authentication tokens for non-browser callers (the
-  // dashboard-agent CLI, MCP clients, scripts). The plaintext token
+  // Per-user authentication tokens for non-browser callers (MCP
+  // clients, kiosks, scripts). The plaintext token
   // is returned exactly once on creation — the UI must surface it
   // immediately and warn that it can't be recovered.
   async getAPIKeys() {

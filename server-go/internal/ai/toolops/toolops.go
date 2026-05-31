@@ -200,11 +200,9 @@ func (t *Toolset) GetConnection(ctx context.Context, in GetConnectionInput) (*Ge
 //
 // Intentionally minimal: no Prometheus metric_prefix / contains /
 // max_metrics filters here. The MCP schema tool has inline metric
-// filtering today and there's discussion about moving the MCP
-// surface into a separate dashboard-agent codebase — pre-coupling
-// that helper into toolops would freeze a transitional shape.
-// When the time comes, lift the filter from wherever it lives into
-// a shared helper and call it from both consumers.
+// filtering today; that filter still lives only in the MCP layer.
+// When a second consumer needs it, lift it into a shared helper and
+// call it from both rather than duplicating.
 type GetConnectionSchemaInput struct {
 	ConnectionID string `json:"connection_id"`
 }

@@ -51,28 +51,29 @@ testing, and documentation.
   AI clients like Claude Desktop (via [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy))
   can introspect connections, create components, and build whole
   dashboards via a single tool surface
-- **Dashboard-builder agent** (`cmd/dashboard-agent`) — a reference
-  CLI agent that drives the same MCP tools as an external client
-  would, producing a complete dashboard from a one-line natural-
-  language prompt. See [examples/dashboard-agent](examples/dashboard-agent/)
-  for a walkthrough of a 14-panel Prometheus monitoring dashboard
-  built in 12 turns.
+- **Dashboard Assistant** — an in-app chat agent that builds whole
+  dashboards from a one-line natural-language prompt: it probes the
+  connection, plans the layout, creates the components, and assembles
+  the dashboard. The same capability is available to external agents
+  through the MCP server. See [examples/dashboards](examples/dashboards/)
+  for a walkthrough of a multi-panel Prometheus monitoring dashboard
+  built from a single prompt.
 
 ## High-level architecture
 
 ```
-┌─────────────────────────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
-│      React frontend (Vite, :5173)       │  │  cmd/dashboard-agent │  │  External AI agents  │
-│  Carbon · ECharts · React Router        │  │  (CLI, ships in repo)│  │  (Claude Desktop +   │
-│ Design mode  │ View mode  │ Manage mode │  │                      │  │   other MCP clients  │
-│ - Conns      │ - Viewer   │ - Users     │  │  inputs:             │  │   via mcp-proxy)     │
-│ - Components │ - Live data│ - Settings  │  │  --user, --prompt,   │  │                      │
-│ - Dashboards │ - Fit modes│ - Devices   │  │  [--connection-id],  │  │  inputs:             │
-│ - AI Builder │            │             │  │  [--dimensions], ... │  │  user-driven chat    │
-│              │            │             │  │  + ANTHROPIC_API_KEY │  │  + ANTHROPIC_API_KEY │
-└──────────────────┬──────────────────────┘  └──────────┬───────────┘  └──────────┬───────────┘
-                   │  REST · SSE · WebSocket            │  MCP / SSE              │  MCP / SSE
-                   ▼                                    ▼                         ▼
+┌───────────────────────────────────────────────────┐  ┌──────────────────────┐
+│            React frontend (Vite, :5173)            │  │  External AI agents  │
+│       Carbon · ECharts · React Router              │  │  (Claude Desktop +   │
+│  Design mode  │ View mode  │ Manage mode           │  │   other MCP clients  │
+│  - Conns      │ - Viewer   │ - Users               │  │   via mcp-proxy)     │
+│  - Components │ - Live data│ - Settings            │  │                      │
+│  - Dashboards │ - Fit modes│ - Devices             │  │  inputs:             │
+│  - AI Builder + Dashboard Assistant (chat)         │  │  agent-driven        │
+│  - Component "Edit with AI"                        │  │  + deployment key    │
+└────────────────────────┬───────────────────────────┘  └──────────┬───────────┘
+                         │  REST · SSE · WebSocket                  │  MCP / SSE
+                         ▼                                          ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                Go backend (port 3001)                                       │
 │                       Gin · Eclipse Paho · Anthropic SDK · Swaggo                           │
@@ -93,12 +94,12 @@ testing, and documentation.
                        └────────────┘
 ```
 
-`cmd/dashboard-agent` is a reference MCP client we ship with the
-repo — it consumes the same `/mcp/sse` surface as Claude Desktop. The
-agent calls Anthropic directly for its LLM turns, then issues tool
-calls back through MCP to build connections, components, and
-dashboards. See [examples/dashboard-agent](examples/dashboard-agent/)
-for a full end-to-end run.
+AI-assisted building runs server-side: the **Dashboard Assistant**
+(in-app chat) and the in-editor **Component AI agent** call Anthropic
+with a tool surface over `/api/ai/sessions`, while **external agents**
+(Claude Desktop, etc.) reach the same component/dashboard tools through
+the MCP endpoints. See [examples/dashboards](examples/dashboards/) for a
+full end-to-end run.
 
 For the full architecture — data model, streaming internals,
 connection adapters, grid system, API reference, etc. — see the
@@ -178,8 +179,8 @@ source, backup + restore).
 - [MCP server](docs/mcp.md) — tool inventory, agent flow, and
   Claude Desktop setup via `mcp-proxy`
 - [Examples](examples/) — reference runs and demos
-  ([dashboard-agent](examples/dashboard-agent/) shows the CLI agent
-  building a 14-panel Prometheus dashboard end-to-end)
+  ([dashboards](examples/dashboards/) shows a multi-panel Prometheus
+  dashboard built from a single natural-language prompt)
 - [Deployment guide](docs/DEPLOYMENT.md) — production deployment
 - [Test plan](docs/TEST_PLAN.md)
 - [Project CLAUDE.md](CLAUDE.md) — conventions for contributors

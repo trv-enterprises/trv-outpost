@@ -53,7 +53,7 @@ These can be modified but not deleted.
 ## System Users
 
 A second user kind, **system users**, exists for non-interactive
-integrations (inbound webhooks, dashboard-agent, MCP clients, etc.).
+integrations (inbound webhooks, MCP clients, scripts, etc.).
 They live at **Manage → System Users**, own API keys, and cannot
 sign in interactively. System users default to read-only with an
 opt-in **Webhook** capability when creating one; admins can also

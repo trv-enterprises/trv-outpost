@@ -1,10 +1,10 @@
 # MCP server
 
 The dashboard backend exposes a Model Context Protocol (MCP) server so
-external agents — Claude Code, Claude Desktop, the project's own
-`dashboard-agent` CLI — can introspect and build dashboards end-to-end.
-The endpoints are mounted on the same process that serves the REST
-API; there is no second binary to run.
+external agents — Claude Code, Claude Desktop, mcp-proxy clients — can
+introspect and build dashboards end-to-end. The endpoints are mounted
+on the same process that serves the REST API; there is no second binary
+to run.
 
 ## Endpoints
 
@@ -12,7 +12,7 @@ API; there is no second binary to run.
 POST /mcp           Streamable HTTP — canonical, spec-compliant. Use this URL.
 POST /mcp/message   Legacy JSON-RPC URL from the SSE-era two-endpoint shape.
                     Still functional; logs a deprecation warning per call.
-                    Existing clients (dashboard-agent CLI < latest) speak this.
+                    Older clients may still speak this.
 GET  /mcp/sse       Legacy SSE event stream. Deprecated by the 2025-03-26
                     MCP spec; SSE-only clients have been refused since
                     ~April 2026. Kept as a soft-landing surface.
@@ -77,11 +77,11 @@ The agent's typical "build me a dashboard" flow:
 
 ## Prompts
 
-The server advertises one MCP **prompt** — `dashboard-builder` — pulled
-from the same role-and-conventions text the standalone `dashboard-agent`
-CLI uses. Clients that support `prompts/get` (Claude Code, Claude
-Desktop) surface this as a slash command and inject the persona into
-the conversation when picked.
+The server advertises one MCP **prompt** — `dashboard-builder` — a
+role-and-conventions persona for building dashboards end-to-end (text
+in `internal/mcp/dashboard_builder_prompt.go`). Clients that support
+`prompts/get` (Claude Code, Claude Desktop) surface this as a slash
+command and inject the persona into the conversation when picked.
 
 ## Claude Code setup
 

@@ -57,7 +57,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Automation & Integration',
-      items: ['mcp', 'dashboard-agent'],
+      items: ['mcp'],
     },
     {
       type: 'category',

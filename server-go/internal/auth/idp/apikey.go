@@ -16,7 +16,7 @@ import (
 // APIKeyIdP resolves `Authorization: Bearer trve_<base32>` API keys.
 // These are the long-lived credentials we issue to non-interactive
 // principals: system users (ts-store webhooks), kiosk displays
-// (Kitchen Dashboard), and dashboard-agent. The API key remains the
+// (Kitchen Dashboard), and external MCP clients. The API key remains the
 // inbound bootstrap credential after the session-token refactor —
 // it just gets traded for a JWT pair on the way in.
 type APIKeyIdP struct {

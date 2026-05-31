@@ -76,12 +76,8 @@ MongoDB at all.
 ```
 server-go/
 ├── cmd/
-│   ├── server/               Main HTTP server binary — also serves
-│   │                         the MCP SSE endpoint at /mcp/sse
-│   └── dashboard-agent/      CLI reference agent that drives the MCP
-│                             server end-to-end; ships as a separate
-│                             binary so the server stays free of
-│                             Anthropic SDK dependencies at runtime
+│   └── server/               Main HTTP server binary — also serves
+│                             the MCP SSE endpoint at /mcp/sse
 ├── config/
 │   ├── config.go             Viper loader
 │   └── config.yaml           Base config (env-override-able)

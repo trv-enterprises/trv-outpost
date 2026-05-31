@@ -102,8 +102,8 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 // the legacy `POST /mcp/message` path (the SSE-era two-endpoint shape)
 // and the new `POST /mcp` Streamable HTTP path. The dispatch logic is
 // identical; the two routes exist only so we can deprecate the
-// legacy URL without breaking existing clients (dashboard-agent CLI,
-// older Claude Desktop bridges).
+// legacy URL without breaking existing clients (older Claude Desktop
+// bridges and other legacy MCP clients).
 //
 // Notifications (JSON-RPC requests with no `id`, e.g.
 // `notifications/initialized`) are dispatched silently and answered
@@ -469,9 +469,9 @@ func toJSON(v interface{}) string {
 //                         this URL exclusively.
 //   - POST /mcp/message   Legacy JSON-RPC ingress from the SSE-era
 //                         two-endpoint shape. Identical behavior to
-//                         POST /mcp; kept for back-compat with the
-//                         dashboard-agent CLI and any older clients
-//                         until they're updated. Logs a one-time
+//                         POST /mcp; kept for back-compat with any
+//                         older MCP clients until they're updated.
+//                         Logs a one-time
 //                         deprecation notice on first call.
 //   - GET /mcp/sse        Legacy SSE event stream. Deprecated by
 //                         the 2025-03-26 spec; SSE-only clients have

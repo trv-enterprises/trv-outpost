@@ -321,7 +321,7 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 		//               request, no bootstrap dance, no refresh.
 		//               Used by ANY principal calling from outside
 		//               a browser: ts-store webhook (system user),
-		//               dashboard-agent CLI (system or human),
+		//               external MCP clients (system or human),
 		//               kiosks, the user's own cron job script.
 		//               Both human-minted keys (POST /api/api-keys)
 		//               and admin-minted system-user keys (Manage →

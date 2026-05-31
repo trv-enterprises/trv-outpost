@@ -85,7 +85,7 @@
         <mxCell id="ext-clerk" value="Clerk&lt;br&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;SSO + JWT issuer&lt;br&gt;(public JWKS endpoint)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=12;fontStyle=1;" parent="1" vertex="1">
           <mxGeometry x="650" y="665" width="140" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="ext-anthropic" value="Anthropic API&lt;br&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;(Claude — AI Builder + dashboard-agent)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+        <mxCell id="ext-anthropic" value="Anthropic API&lt;br&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;(Claude — AI Builder + Assistant)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" parent="1" vertex="1">
           <mxGeometry x="1400" y="399.5" width="250" height="55" as="geometry" />
         </mxCell>
         <mxCell id="wire-extdata" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6E7F44;strokeWidth=2;" parent="1" source="ext-data" target="srv-8" edge="1">
@@ -112,7 +112,7 @@
         <mxCell id="wire-ws-label" value="WebSocket&#xa;(AI session, full-duplex)" style="text;html=1;align=center;fontSize=10;fontColor=#9B59B6;fontStyle=1;" parent="1" vertex="1">
           <mxGeometry x="640" y="298" width="160" height="34" as="geometry" />
         </mxCell>
-        <mxCell id="ext-mcp" value="External MCP clients&#xa;(Claude Desktop · mcp-proxy ·&#xa;dashboard-agent CLI)" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#9B59B6;strokeColor=#6B3F86;" parent="1" vertex="1">
+        <mxCell id="ext-mcp" value="External MCP clients&#xa;(Claude Desktop · mcp-proxy ·&#xa;other MCP clients)" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;html=1;fontSize=11;fillColor=#9B59B6;strokeColor=#6B3F86;" parent="1" vertex="1">
           <mxGeometry x="1540" y="272" width="30" height="60" as="geometry" />
         </mxCell>
         <mxCell id="wire-mcp" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6B3F86;strokeWidth=2;" parent="1" source="ext-mcp" target="srv-5" edge="1">

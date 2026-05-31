@@ -6,8 +6,6 @@ package mcp
 
 import (
 	"fmt"
-
-	dashboardagent "github.com/trv-enterprises/trve-dashboard/internal/agent/dashboard"
 )
 
 // Prompt names. The slash-command the user sees in Claude Desktop
@@ -27,11 +25,11 @@ func buildPromptCatalog() []Prompt {
 			Name: PromptDashboardBuilder,
 			Description: "Persona that builds dashboards end-to-end: " +
 				"discover connections and their data shape, create components " +
-				"(charts/controls/displays), then assemble a dashboard. Mirrors " +
-				"the in-app dashboard-agent's behavior — opinionated about " +
-				"naming, namespace stamping, the create-component-then-template " +
-				"flow, and grid-fit. Pick this when you want the model to act as " +
-				"a builder rather than a free-form assistant.",
+				"(charts/controls/displays), then assemble a dashboard. " +
+				"Opinionated about naming, namespace stamping, the " +
+				"create-component-then-template flow, and grid-fit. Pick this " +
+				"when you want the model to act as a builder rather than a " +
+				"free-form assistant.",
 		},
 	}
 }
@@ -53,7 +51,7 @@ func (h *Handler) handlePromptsGet(params map[string]interface{}) (PromptsGetRes
 
 	switch name {
 	case PromptDashboardBuilder:
-		text := dashboardagent.RoleAndConventions + "\n\n" + dashboardagent.BuildFlowAndGuidelines
+		text := dashboardBuilderRole + "\n\n" + dashboardBuilderFlow
 		return PromptsGetResult{
 			Description: "Dashboard-builder persona for trve-dashboard.",
 			Messages: []PromptMessage{

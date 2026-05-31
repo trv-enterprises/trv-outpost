@@ -15,7 +15,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standa
 The MCP server is part of the main dashboard server — there is no second binary to run.
 
 - **`POST /mcp`** — the canonical Streamable HTTP endpoint. JSON-RPC 2.0 bodies in, JSON-RPC responses out. New clients should use this URL.
-- `POST /mcp/message` — legacy JSON-RPC path from the SSE-era two-endpoint shape. Still functional; logs a deprecation warning on each call. Older clients (and the dashboard-agent CLI prior to its update) speak this path.
+- `POST /mcp/message` — legacy JSON-RPC path from the SSE-era two-endpoint shape. Still functional; logs a deprecation warning on each call. Older MCP clients may speak this path.
 - `GET /mcp/sse` — legacy SSE event stream. The 2025-03-26 MCP spec replaced HTTP+SSE with Streamable HTTP and SSE-only clients started being refused around April 2026. Kept as a soft-landing surface; do not depend on it.
 
 When you log in to the dashboard UI, the MCP session preamble is wired up automatically — the live type catalog, grid contract, and discovery flow are returned by `initialize`. Any agent that connects gets enough context to start building immediately, and can fetch per-connection-type query envelope shapes on demand via `get_connection_type_guidance`.
@@ -134,7 +134,7 @@ A typical "build me a dashboard" agent flow:
 
 ## Prompts (slash commands)
 
-The server advertises one MCP **prompt** — `dashboard-builder` — which Claude Code and Claude Desktop both surface as a slash command. Picking it injects an opinionated builder persona: it's the same role-and-conventions text the standalone `dashboard-agent` CLI uses, so a Claude Code or Desktop user can opt into the autonomous-builder behavior without the framing polluting other MCP sessions.
+The server advertises one MCP **prompt** — `dashboard-builder` — which Claude Code and Claude Desktop both surface as a slash command. Picking it injects an opinionated builder persona (role + conventions + build flow), so a Claude Code or Desktop user can opt into the autonomous-builder behavior without the framing polluting other MCP sessions.
 
 Use the slash command when you want the model to act as a *dashboard builder* (multi-step, namespace-disciplined, one-component-per-chart). Skip it for ad-hoc questions and free-form exploration.
 
@@ -149,6 +149,5 @@ API keys are what you want for both Claude Code and Claude Desktop. Generate one
 
 ## See Also
 
-- [Dashboard Agent](dashboard-agent.md) — the standalone CLI client (`cmd/dashboard-agent`) that builds whole dashboards from a one-line natural-language prompt.
 - [`docs/mcp.md`](https://github.com/trv-enterprises/trve-dashboard/blob/main/docs/mcp.md) — the developer-facing reference with the full tool inventory, schema details, and contributor notes.
 - [Connection Types](connection-types.md) — what each adapter expects in `query_config`.

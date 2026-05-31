@@ -1304,8 +1304,8 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 	// Handle TSStore schema separately. ts-store has three flavours of
 	// store (json / schema / text); only `schema` stores have a formal
 	// schema endpoint. For `json` and unset, fall back to sampling the
-	// most recent records and unioning their keys — the same pattern the
-	// dashboard-agent had to do manually before this path existed. Works
+	// most recent records and unioning their keys — the same pattern an
+	// agent would otherwise have to do manually. Works
 	// for both WS-transport and REST-transport tsstore connections since
 	// the schema fetch hits the same REST endpoint either way.
 	if ds.Type == models.ConnectionTypeTSStore {

@@ -11,8 +11,7 @@
 // Two consumers today:
 //
 //  1. The MCP server's `get_connection_type_guidance` tool, served
-//     to external agents like Claude Desktop or the dashboard-agent
-//     CLI.
+//     to external agents like Claude Desktop and other MCP clients.
 //  2. The in-server component-builder agent's `get_connection_type_guidance`
 //     tool, served to the AI Builder surface in the dashboard UI.
 //

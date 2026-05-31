@@ -78,7 +78,7 @@ type Capabilities struct {
 // opt-in slash commands. Picking a prompt injects its content as the
 // system/role framing for the conversation. We use this for the
 // `dashboard-builder` persona — Claude Desktop users who want the
-// in-app dashboard-agent behavior can opt into it explicitly without
+// autonomous builder behavior can opt into it explicitly without
 // the framing polluting other MCP consumers' base experience.
 type Prompt struct {
 	Name        string           `json:"name"`

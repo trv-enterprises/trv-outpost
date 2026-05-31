@@ -881,8 +881,8 @@ func main() {
 	}
 
 	// MCP routes — gated by the same Authenticate middleware as /api so
-	// external agents (Claude Desktop via mcp-proxy, the dashboard-agent
-	// CLI) must present a valid API key in `Authorization: Bearer
+	// external agents (Claude Desktop via mcp-proxy, other MCP clients)
+	// must present a valid API key in `Authorization: Bearer
 	// trve_...`. Routes intentionally stay at the top-level `/mcp/*` path
 	// (not under /api) because mcp-proxy / Claude Desktop expect them
 	// there. Authorization runs after Authenticate so the route
