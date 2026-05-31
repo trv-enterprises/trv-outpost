@@ -564,8 +564,13 @@ function formatRelativeTime(date) {
 export function formatCellValue(value, columnName = '', options = {}) {
   if (value === null || value === undefined) return '';
 
-  // Check if column name suggests it's a timestamp
-  const isTimestampColumn = /timestamp|time|date|created|updated|ts$/i.test(columnName);
+  // Check if column name suggests it's a timestamp. Match the time-ish
+  // word only as a WHOLE SEGMENT (bounded by start/end or a . _ -
+  // delimiter), not as any substring — otherwise `uptime.sec`,
+  // `downtime`, `update_count`, etc. falsely match "time"/"update" and
+  // get rendered as dates. `timestamp` and real time columns
+  // (start_time, event.timestamp, created_at, ts, date, …) still match.
+  const isTimestampColumn = /(^|[._-])(timestamp|datetime|time|date|created|updated|ts)([._-]|$)/i.test(columnName);
 
   // Check if value looks like a timestamp
   const timestampType = detectTimestampType(value);

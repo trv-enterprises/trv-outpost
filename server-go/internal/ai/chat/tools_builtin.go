@@ -189,7 +189,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"namespace":       map[string]interface{}{"type": "string", "description": "Namespace slug; empty = \"default\""},
 				"name":            map[string]interface{}{"type": "string", "description": "Unique component name (per namespace)"},
 				"title":           map[string]interface{}{"type": "string", "description": "Display title (defaults to name when empty)"},
-				"description":     map[string]interface{}{"type": "string"},
+				"description":     map[string]interface{}{"type": "string", "description": "Short human-readable description of what this component shows and its data source — ALWAYS set it (e.g. \"CPU utilization % over time from the TRV-SRV-001 system-stats stream\"). Surfaces on the components list + helps future users/agents understand the component."},
 				"chart_type":      map[string]interface{}{"type": "string", "description": "For charts: bar, line, pie, scatter, gauge, area, banded_bar, dataview, custom"},
 				"connection_id":   map[string]interface{}{"type": "string", "description": "Connection ID this component reads from (omit for connection-less components)"},
 				"query_config":    chartQueryConfigSchema(),
