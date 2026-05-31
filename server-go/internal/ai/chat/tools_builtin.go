@@ -868,7 +868,20 @@ func wrapGetCatalog(ops *toolops.Toolset) ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		return jsonResult(out)
+		// Return the compact markdown rendering, not the raw catalog
+		// JSON. The agent reads the catalog wholesale when planning a
+		// build — it's a reference doc, not a "find X by name" list — so
+		// summarizing the JSON (it trips the 8KB result-store threshold
+		// at ~32KB) was pure waste: the summary couldn't answer the
+		// question, so the agent always followed up with get_full_result
+		// and re-inlined the same 32KB. RenderMarkdown drops the verbose
+		// per-field JSON schemas in favor of compact field-name lists +
+		// includes the layout_dimensions cols/rows the build flow needs,
+		// landing well under the threshold so it inlines in one shot.
+		if out == nil || out.Catalog == nil {
+			return jsonResult(out)
+		}
+		return out.Catalog.RenderMarkdown(), nil
 	}
 }
 

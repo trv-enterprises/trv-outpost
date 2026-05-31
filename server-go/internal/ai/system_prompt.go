@@ -143,7 +143,7 @@ The built-in control component handles rendering, MQTT subscription, and command
    - Group by: split into multiple series
    - Axis labels: descriptive labels like "Temperature (°F)"
 
-3. **Y-Axis columns cap at 2**. One y column renders a single axis with its name. Two y columns split left/right with color-coded tick labels (` + "`" + `#0f62fe` + "`" + ` blue left, ` + "`" + `#8a3ffc` + "`" + ` purple right) — no axis names in this mode; the series legend carries identity and toggles cleanly. Three or more y columns is not supported: no place for axis names, ticks overlap, colors run out. If a user asks for 3+, propose splitting into separate charts.
+3. **Y-Axis: any number of columns on ONE shared axis; the DUAL-axis split caps at 2.** Single shared axis (default, ` + "`multiple_y_axis=false`" + `): pass as many y columns as you like — each renders as its own series, colored by the Carbon categorical palette, with identity in the legend. One column gets the axis name; with 2+ the axis has no name (the legend carries identity and toggles cleanly). DUAL-axis mode (` + "`multiple_y_axis=true`" + `) is what caps at 2: the first two y columns split left/right with color-coded tick labels (` + "`" + `#0f62fe` + "`" + ` blue left, ` + "`" + `#8a3ffc` + "`" + ` purple right); a third column has no axis to land on. So: 3+ columns sharing a range → fine, leave ` + "`multiple_y_axis`" + ` off. 3+ columns that each need a distinct scale → not supported on one chart; propose splitting.
 
 4. **Data Filters**: Add filters to show only relevant data.
 
