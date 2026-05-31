@@ -92,7 +92,7 @@ func ChartOptionsSchema() map[string]interface{} {
 				"description": "number chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats.",
 			},
 			"numberUnit": map[string]interface{}{"type": "string", "description": "number chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\")."},
-			"numberSize": map[string]interface{}{"type": "integer", "description": "number chart: value font size in px (e.g. 80, 120, 200)."},
+			"numberSize": map[string]interface{}{"type": "integer", "description": "number chart: value font size in px. Size it to the tile HEIGHT, not the default — a good fit is ≈ 13px per cell of the panel's height (a 6-cell-tall tile → ~80px; an 8-cell → ~105px; 10-cell → ~130px). The default of 120 overflows a typical 6-cell tile. Also check WIDTH: the value must fit the tile at this size — size for the WIDEST value the tile will show (a percentage ≈ 6 chars \"100.0 %\"; a duration ≈ 11 chars \"000D 00H 00M\"); narrow tiles need a smaller size. **Give every number tile the SAME tile height and ONE shared numberSize across the dashboard** so they read uniformly — uniform heights let a single font size fit them all; pick the size for that height and the narrowest value, then apply it to every number component in the build. Decimals: use engineering judgment — decimals on a value >99 are usually noise (\"100 %\", not \"100.0 %\") and also widen the value; set numberDecimals accordingly."},
 			// title is a real spec key (rendered inside the canvas for some
 			// chart types). Kept here so the Component agent's old `title`
 			// param has a home in the shared schema.
