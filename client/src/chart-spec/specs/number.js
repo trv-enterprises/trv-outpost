@@ -11,6 +11,7 @@
 // first (post-aggregation) row.
 
 import { columnIndex, toNumber } from '../option-helpers.js';
+import { formatNumberValue } from './number-formats.js';
 
 /**
  * @param {Object} values   { data_mapping, options }
@@ -36,13 +37,13 @@ export function buildOption(values, data, helpers = {}) {
   const idx = columnIndex(data, valueColumn);
   const raw = idx >= 0 && rows.length > 0 ? rows[0][idx] : null;
 
-  // Decimal places: 'auto' (or unset) keeps the default formatCellValue
-  // behavior (≤2 fraction digits, locale grouping) so existing charts
-  // are unchanged. An explicit 0–N forces exactly that many fraction
-  // digits with thousands grouping — but only when the value is numeric;
-  // a non-numeric value (string/timestamp) falls through to the default
-  // formatter so we never coerce a label into "NaN".
-  const formatted = formatNumberValue(raw, valueColumn, opts.numberDecimals, formatCellValue);
+  // Value formatting: options.numberFormat picks how the raw value is
+  // rendered (auto / plain / compact / duration / duration_clock /
+  // datetime), with numberDecimals + numberDateFormat as sub-options. The
+  // format implies the value's unit (duration→seconds, etc.), so no query
+  // math is needed. Defaults to 'auto' (the prior behavior). See
+  // number-formats.js.
+  const formatted = formatNumberValue(raw, valueColumn, opts, formatCellValue);
 
   // numberSize is stored as a number on the legacy path but the enum
   // field writes a string; coerce and floor at a sane minimum. >0 guard
@@ -59,33 +60,4 @@ export function buildOption(values, data, helpers = {}) {
       title: chartName || '',
     },
   };
-}
-
-/**
- * Format the value for display, honoring the optional decimal-places
- * override (options.numberDecimals).
- *
- * @param {*} raw                  the cell value (may be null/string/number)
- * @param {string} valueColumn     column name (passed to formatCellValue)
- * @param {*} decimals             'auto' | undefined | '0'..'4' | 0..4
- * @param {Function} formatCellValue  the auto-formatter fallback
- * @returns {string}
- */
-function formatNumberValue(raw, valueColumn, decimals, formatCellValue) {
-  if (raw == null) return '';
-
-  // Explicit decimal places: only meaningful for a numeric value.
-  if (decimals != null && decimals !== 'auto') {
-    const places = toNumber(decimals, NaN);
-    const n = Number(raw);
-    if (Number.isFinite(places) && Number.isFinite(n)) {
-      return n.toLocaleString('en-US', {
-        minimumFractionDigits: places,
-        maximumFractionDigits: places,
-      });
-    }
-    // places invalid or value non-numeric → fall through to auto.
-  }
-
-  return formatCellValue ? formatCellValue(raw, valueColumn) : String(raw);
 }

@@ -469,6 +469,24 @@ func chartOptionsSchema() map[string]interface{} {
 			"showSymbol":           map[string]interface{}{"type": "boolean", "description": "Show point markers on the line. Turn off for dense time series. line/area only."},
 			"chartShowDataLabels":  map[string]interface{}{"type": "boolean", "description": "Render the value next to each data point."},
 			"chartShowZoomSlider":  map[string]interface{}{"type": "boolean", "description": "Show the bottom zoom/pan slider."},
+			// number chart (chart_type="number") options.
+			"numberFormat": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"},
+				"description": "number chart value format. The format IMPLIES the raw value's unit, so map a raw column and pick the format — do NOT do unit math in the query. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K), \"duration\" (value is SECONDS → \"2d 3h 4m\" — e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (value is a timestamp → date/time via numberDateFormat). For bytes→GB there's no built-in scale yet; use compact or a custom-code number.",
+			},
+			"numberDateFormat": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"},
+				"description": "Date/time style when numberFormat=\"datetime\". Ignored otherwise.",
+			},
+			"numberDecimals": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"auto", "0", "1", "2", "3", "4"},
+				"description": "number chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats.",
+			},
+			"numberUnit": map[string]interface{}{"type": "string", "description": "number chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\")."},
+			"numberSize": map[string]interface{}{"type": "integer", "description": "number chart: value font size in px (e.g. 80, 120, 200)."},
 		},
 	}
 }

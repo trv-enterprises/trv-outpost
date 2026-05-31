@@ -270,6 +270,8 @@ const DEFAULT_CHART_OPTIONS = {
   numberSize: null,
   numberUnit: '',
   numberDecimals: 'auto',     // 'auto' (≤2 places) | '0'..'4' (forced)
+  numberFormat: 'auto',       // auto | plain | compact | duration | duration_clock | datetime
+  numberDateFormat: 'datetime', // sub-option when numberFormat=datetime
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -2912,6 +2914,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // Decimal places enum. Stored as a string ('auto' |
                       // '0'..'4'); default 'auto' keeps the auto formatter.
                       number_decimals: chartOptions.numberDecimals ?? 'auto',
+                      // Value-format enum + date sub-format (number-formats.js).
+                      number_format: chartOptions.numberFormat ?? 'auto',
+                      number_date_format: chartOptions.numberDateFormat ?? 'datetime',
                       // dataview: the column_manager widget reads these two
                       // keys directly (visible_columns null = show all).
                       visible_columns: visibleColumns,
@@ -3067,6 +3072,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         // spec options are string-valued, so stay consistent).
                         case 'number_decimals':
                           updateChartOption('numberDecimals', value);
+                          break;
+                        case 'number_format':
+                          updateChartOption('numberFormat', value);
+                          break;
+                        case 'number_date_format':
+                          updateChartOption('numberDateFormat', value);
                           break;
                         // dataview: the column_manager widget writes the
                         // visible-columns whitelist (null = show all) and
