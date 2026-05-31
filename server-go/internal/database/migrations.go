@@ -40,6 +40,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"users_backfill_control_capability_v1", migrateBackfillControlCapability},
 		{"seed_global_snippets_v1", migrateSeedGlobalSnippetsV1},
 		{"spec_driven_chart_code_v1", migrateSpecDrivenChartCode},
+		{"refresh_assistant_model_description_v1", migrateRefreshAssistantModelDescription},
 	}
 
 	coll := db.Collection("migrations")
@@ -548,6 +549,29 @@ func migrateSpecDrivenChartCode(ctx context.Context, db *mongo.Database) error {
 	}
 
 	log.Printf("  components: rewrote %d chart rows to the spec-driven one-liner (%d non-spec rows left untouched)", updated, skipped)
+	return nil
+}
+
+// migrateRefreshAssistantModelDescription updates the stored description
+// for the assistant.model setting. The settings sync only INSERTS missing
+// keys (DB values take precedence and are never overwritten), so when the
+// help text changes in user-configurable.yaml an already-seeded deployment
+// keeps the stale description in its Manage → Settings UI. This refreshes
+// it to match the YAML (the sonnet/opus aliases now track latest, plus the
+// pin-a-specific-model-id option). Value is left untouched — only the
+// human-facing description changes. Idempotent: $set to the current text.
+func migrateRefreshAssistantModelDescription(ctx context.Context, db *mongo.Database) error {
+	const desc = "Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Takes effect on next server restart. Per-deployment choice; not per-user."
+
+	res, err := db.Collection("settings").UpdateOne(
+		ctx,
+		bson.M{"_id": "assistant.model"},
+		bson.M{"$set": bson.M{"description": desc}},
+	)
+	if err != nil {
+		return fmt.Errorf("refresh assistant.model description: %w", err)
+	}
+	log.Printf("  settings: refreshed assistant.model description (matched %d)", res.MatchedCount)
 	return nil
 }
 
