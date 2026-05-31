@@ -92,7 +92,12 @@ const data = {
   const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
   check('case 3: yAxis stays single (not array)', !Array.isArray(opt.yAxis));
   check('case 3: three series', opt.series?.length === 3);
-  check('case 3: no forced color on series (uses palette)', opt.series.every((s) => !s?.itemStyle?.color));
+  // Multi-series single-axis walks the Carbon categorical palette by
+  // index (purple70, cyan50, teal70 …) — on-brand and distinct, not the
+  // ECharts default and not all-unset.
+  check('case 3: series 0 categorical purple70', opt.series[0]?.itemStyle?.color === '#6929c4');
+  check('case 3: series 1 categorical cyan50', opt.series[1]?.itemStyle?.color === '#1192e8');
+  check('case 3: series 2 categorical teal70', opt.series[2]?.itemStyle?.color === '#005d5d');
 }
 
 // --- Case 4: stacked subset (3 cols, two stacked, one not) ---
@@ -233,6 +238,10 @@ const data = {
   const opt = buildOption(values, pivotData, { formatCellValue, chartType: 'line' });
   check('case 11: pivot creates one series per distinct value', opt.series?.length === 2);
   check('case 11: series named after pivot values', opt.series[0]?.name === 'A' && opt.series[1]?.name === 'B');
+  // Each pivot series walks the categorical palette by its own index —
+  // regression guard: they previously all shared idx 0 (same color).
+  check('case 11: pivot series 0 categorical purple70', opt.series[0]?.itemStyle?.color === '#6929c4');
+  check('case 11: pivot series 1 categorical cyan50', opt.series[1]?.itemStyle?.color === '#1192e8');
 }
 
 // --- Case 12: area chart type ---

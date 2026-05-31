@@ -204,7 +204,7 @@ Control types and their UI config:
 			Name: "set_custom_code",
 			Description: anthropic.String(`Enable custom-code mode and replace the chart's React component with hand-written code. **Last-resort tool — prefer the configuration tools.**
 
-Configuration tools (update_data_mapping, update_chart_options, update_filters, update_aggregation, update_sliding_window, update_time_bucket) cover almost every chart change a user asks for: column choices, axis formats, legend placement, color, sorting, banded-bar styles, sliding windows, banded-bar band columns, etc. The chart's auto-generated code regenerates from those settings whenever any of them change, so the chart stays in sync with the editor's UI form.
+Configuration tools (update_data_mapping, update_chart_options, update_filters, update_aggregation, update_sliding_window, update_time_bucket) cover almost every chart change a user asks for: column choices, axis formats, legend placement, sorting, banded-bar styles, sliding windows, banded-bar band columns, etc. The chart's auto-generated code regenerates from those settings whenever any of them change, so the chart stays in sync with the editor's UI form. NOTE: series/line color is NOT a configuration option — spec-driven charts pick colors automatically (single series = Carbon blue; dual-axis = blue left / purple right; 3+ series = the Carbon categorical palette). To set a specific series color you must use set_custom_code.
 
 Calling set_custom_code is **destructive and one-way**: it freezes the chart at the current generated code (or whatever you write here), the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent configuration tool calls no longer affect rendering. Switching styles, columns, or axis formats afterward requires re-writing the code by hand each time.
 
@@ -229,7 +229,6 @@ Otherwise: configure via the structured tools and let the editor's generator pro
 					"show_legend":      map[string]interface{}{"type": "boolean", "description": "Whether to show the legend"},
 					"legend_position":  map[string]interface{}{"type": "string", "description": "Legend position", "enum": []string{"top", "bottom", "left", "right"}},
 					"show_tooltip":     map[string]interface{}{"type": "boolean", "description": "Whether to show tooltips on hover"},
-					"color_palette":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Array of color hex codes for series"},
 					"stack_series":     map[string]interface{}{"type": "boolean", "description": "Whether to stack series (bar/area charts)"},
 					"smooth_lines":     map[string]interface{}{"type": "boolean", "description": "Whether to smooth line charts"},
 					"show_data_labels": map[string]interface{}{"type": "boolean", "description": "Whether to show data labels on chart"},

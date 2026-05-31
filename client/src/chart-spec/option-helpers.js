@@ -23,6 +23,45 @@ export const COLOR_DANGER = '#da1e28'; // red60
 export const COLOR_TEXT = '#f4f4f4';
 export const COLOR_TEXT_SECONDARY = '#c6c6c6';
 
+// ── Carbon categorical (multi-series) palette ────────────────────────
+// The canonical Carbon Charts 14-color qualitative sequence, in the
+// exact order IBM curates for maximum contrast between neighboring
+// categories. Used whenever a chart has 3+ series and there's no
+// per-axis color rule to apply — previously this fell through to
+// ECharts' own default palette (off-brand). Resolve series colors by
+// position into this array (wrapping past 14).
+//
+// Source: @carbon/colors via carbon-charts'
+// scss/_color-palette.scss "14" map. Token name kept in the trailing
+// comment so the mapping back to Carbon stays auditable; the renderer
+// references CATEGORICAL_COLORS by index, never raw hex.
+export const CATEGORICAL_COLORS = [
+  '#6929c4', // purple70
+  '#1192e8', // cyan50
+  '#005d5d', // teal70
+  '#9f1853', // magenta70
+  '#fa4d56', // red50
+  '#520408', // red90
+  '#198038', // green60
+  '#002d9c', // blue80
+  '#ee5396', // magenta50
+  '#b28600', // yellow50
+  '#009d9a', // teal50
+  '#012749', // cyan90
+  '#8a3800', // orange70
+  '#a56eff', // purple50
+];
+
+/**
+ * Color for the Nth series (0-based) from the Carbon categorical
+ * palette, wrapping when there are more series than palette entries.
+ * @param {number} i 0-based series index
+ * @returns {string} hex color
+ */
+export function categoricalColor(i) {
+  return CATEGORICAL_COLORS[((i % CATEGORICAL_COLORS.length) + CATEGORICAL_COLORS.length) % CATEGORICAL_COLORS.length];
+}
+
 // CARBON_COLORS is the same palette as a single named object. Spec-driven
 // charts import the COLOR_* constants directly; custom-code charts can't
 // import, so the dynamic loader injects THIS object into their eval scope

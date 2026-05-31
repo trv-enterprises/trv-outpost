@@ -823,7 +823,6 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 		ShowLegend     *bool     `json:"show_legend,omitempty"`
 		LegendPosition *string   `json:"legend_position,omitempty"`
 		ShowTooltip    *bool     `json:"show_tooltip,omitempty"`
-		ColorPalette   *[]string `json:"color_palette,omitempty"`
 		StackSeries    *bool     `json:"stack_series,omitempty"`
 		SmoothLines    *bool     `json:"smooth_lines,omitempty"`
 		ShowDataLabels *bool     `json:"show_data_labels,omitempty"`
@@ -866,9 +865,6 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 	}
 	if params.ShowTooltip != nil {
 		chart.Options["showTooltip"] = *params.ShowTooltip
-	}
-	if params.ColorPalette != nil {
-		chart.Options["colorPalette"] = *params.ColorPalette
 	}
 	if params.StackSeries != nil {
 		chart.Options["stackSeries"] = *params.StackSeries

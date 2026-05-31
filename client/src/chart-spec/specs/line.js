@@ -27,12 +27,14 @@ import {
   COLOR_SECONDARY,
   COLOR_TEXT_SECONDARY,
   TRANSPARENT_BG,
+  categoricalColor,
   makeValueFormatter,
 } from '../option-helpers.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
-// (matches legacy). N-series single-axis mode uses ECharts' default
-// palette by leaving series.itemStyle.color unset.
+// (matches legacy). N-series single-axis mode uses the Carbon
+// categorical palette (categoricalColor by series index) instead of
+// ECharts' off-brand default.
 const LEFT_AXIS_COLOR = COLOR_PRIMARY;
 const RIGHT_AXIS_COLOR = COLOR_SECONDARY;
 
@@ -88,9 +90,14 @@ function buildSeriesForColumn(entry, idx, ctx) {
     series.itemStyle = { color: sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR };
   } else if (stackedCount === 1 && idx === 0 && !entry.stack) {
     // Single-axis, single-column, unstacked → force blue for parity
-    // with the legacy single-series default. With ≥2 columns we let
-    // ECharts pick the palette so columns visually distinguish.
+    // with the legacy single-series default.
     series.itemStyle = { color: LEFT_AXIS_COLOR };
+  } else {
+    // Single-axis, multi-column (or stacked) → walk the Carbon
+    // categorical palette by series index so columns stay on-brand and
+    // visually distinct. (Previously left unset → ECharts' default
+    // off-brand palette.)
+    series.itemStyle = { color: categoricalColor(idx) };
   }
   if (entry.stack) series.stack = STACK_GROUP;
   return series;
@@ -315,11 +322,13 @@ export function buildOption(values, data, helpers = {}) {
         const v = r[seriesIdx];
         if (v != null && !seen.has(v)) { seen.add(v); seriesValues.push(v); }
       });
-      series = seriesValues.map((sv) => {
+      series = seriesValues.map((sv, svIdx) => {
         const seriesRows = rows.filter((r) => r[seriesIdx] === sv);
         return buildSeriesForColumn(
           { column: yCol, stack: yEntries[0]?.stack || false, axis: 'left' },
-          0,
+          // Pass the pivot index so each split series walks the
+          // categorical palette (svIdx), not all sharing idx 0.
+          svIdx,
           {
             columnIndex,
             rows: seriesRows,
