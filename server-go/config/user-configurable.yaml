@@ -127,5 +127,5 @@ settings:
 
   - key: assistant.model
     category: ai
-    description: "Anthropic model the Dashboard Assistant runs. Allowed values: `sonnet` (faster + cheaper, default) or `opus` (more capable, more expensive). Switching takes effect on next server restart. Per-deployment choice; not per-user."
+    description: "Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Takes effect on next server restart. Per-deployment choice; not per-user."
     value: "sonnet"

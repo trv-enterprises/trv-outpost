@@ -45,26 +45,39 @@ import (
 // These are concrete model IDs rather than the latest-aliases so
 // the assistant's behavior is stable across Anthropic releases —
 // admins can opt into newer models by bumping the constant.
+// Aliases resolve to the current latest of each family — bump these on
+// each Anthropic release and every deployment using the alias moves
+// forward. Admins who need a pinned snapshot pass a concrete model ID
+// instead (see ResolveModelID), which is passed through untouched.
 const (
-	ModelSonnet = "claude-sonnet-4-20250514"
-	ModelOpus   = "claude-opus-4-20250514"
+	ModelSonnet = "claude-sonnet-4-6" // alias "sonnet" → latest Sonnet
+	ModelOpus   = "claude-opus-4-8"   // alias "opus"   → latest Opus
 )
 
 // Default model. Sonnet by design — broader scope means lower bar
 // per turn. Opus opt-in via the assistant.model admin setting.
 const defaultChatModel = ModelSonnet
 
-// ResolveModelID maps the admin setting's short value to the full
-// Anthropic model ID. Empty / unknown inputs fall back to Sonnet
-// so a typo in the admin setting can't break the agent.
+// ResolveModelID maps the assistant.model admin setting to a concrete
+// Anthropic model ID. Two input shapes:
+//   - the aliases "sonnet" / "opus" → the current latest of that family
+//     (the constants above; bumped per release).
+//   - any other non-empty value is treated as an explicit model ID and
+//     passed through verbatim (e.g. "claude-sonnet-4-20250514" to pin an
+//     older snapshot for A/B testing, or a future ID before an alias bump).
+// Empty falls back to the Sonnet default so a blank setting can't break
+// the agent.
 func ResolveModelID(adminValue string) string {
 	switch adminValue {
-	case "opus":
-		return ModelOpus
+	case "":
+		return defaultChatModel
 	case "sonnet":
 		return ModelSonnet
+	case "opus":
+		return ModelOpus
+	default:
+		return adminValue // explicit, pinned model ID — pass through
 	}
-	return defaultChatModel
 }
 
 // CallerCtx carries per-message context the chat agent needs from
