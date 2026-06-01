@@ -42,10 +42,32 @@
     cursor: pointer;
     color: var(--cds-icon-secondary, #c6c6c6);
 
-    &:hover,
-    &:focus {
+    // Hover brightens the icon — but do NOT paint a background box on
+    // click/focus. This is a Toggletip trigger: clicking it just opens
+    // the tooltip, and the tooltip itself is plenty of feedback. A
+    // mouse click was leaving a persistent highlight box. Keep the
+    // brightened color (and a keyboard :focus-visible ring) for a11y,
+    // drop the mouse-click background.
+    &:hover {
       background-color: var(--cds-header-hover, #333333);
       color: var(--cds-icon-primary, #f4f4f4);
+    }
+
+    // Carbon paints a box-shadow focus ring on .cds--toggletip-button:focus
+    // (utilities/focus-outline). Because clicking opens the toggletip and
+    // leaves DOM focus on the button, that ring persists after release —
+    // the "highlight box" the user sees. Kill the ring (and any bg) on
+    // plain :focus; restore a real ring only for keyboard :focus-visible.
+    &:focus {
+      background-color: transparent;
+      box-shadow: none;
+      outline: none;
+    }
+
+    &:focus-visible {
+      color: var(--cds-icon-primary, #f4f4f4);
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
     }
   }
 }

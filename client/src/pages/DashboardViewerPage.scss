@@ -203,6 +203,14 @@
           flex-shrink: 0;
         }
 
+        // Dotted underline signals the word is hoverable (it carries a
+        // Carbon Tooltip explaining what Scale does). help cursor reinforces.
+        .scale-label--tooltip {
+          text-decoration: underline dotted;
+          text-underline-offset: 2px;
+          cursor: help;
+        }
+
         // Width must hold a 3-digit value AND both steppers without
         // clipping the number. ~7.5rem = value field (~3rem) + two 1.5rem
         // stepper buttons + Carbon's internal borders.
@@ -273,6 +281,40 @@
           &:hover {
             background-color: #393939;
             color: #f4f4f4;
+          }
+        }
+
+        // The zoom % is now an OverflowMenu trigger (100% / Zoom to fit).
+        // Style the Carbon trigger button to read like the old .zoom-reset
+        // text button so the [-] [100% ▾] [+] row stays compact and visually
+        // unchanged apart from the caret.
+        .zoom-menu.cds--overflow-menu {
+          width: auto;
+          min-width: 56px;
+          height: 28px;
+
+          .zoom-menu__trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: spacing.$spacing-01;
+            color: #c6c6c6;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+          }
+
+          .zoom-menu__caret {
+            fill: #c6c6c6;
+            flex-shrink: 0;
+          }
+
+          &:hover {
+            background-color: #393939;
+
+            .zoom-menu__trigger,
+            .zoom-menu__caret {
+              color: #f4f4f4;
+              fill: #f4f4f4;
+            }
           }
         }
       }
@@ -1049,6 +1091,21 @@
 }
 
 .fit-mode-check {
+  display: inline-block;
+  width: 1.1rem;
+  flex-shrink: 0;
+  color: var(--cds-icon-primary);
+  font-weight: 600;
+}
+
+// Zoom menu items (100% / Zoom to fit) — same ✓-prefix pattern as the
+// fit-mode menu so the active zoom choice is marked and labels align.
+.zoom-menu__item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.zoom-menu__check {
   display: inline-block;
   width: 1.1rem;
   flex-shrink: 0;
