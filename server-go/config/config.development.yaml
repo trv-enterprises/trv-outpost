@@ -14,6 +14,16 @@ auth:
   # full reasoning.
   allow_legacy_guid: true
 
+  # Stable DEV signing secret. config.yaml leaves jwt_secret empty,
+  # which makes the server mint a fresh random secret EVERY boot — so
+  # every restart invalidates all outstanding access/refresh tokens
+  # (and the ?st= baked into open streaming panels → "Invalid access
+  # token" after a dev restart). A fixed dev value lets sessions +
+  # streams survive `go run` restarts. DEV ONLY — production sets its
+  # own secret via config.production.yaml / DASHBOARD_AUTH_JWT_SECRET;
+  # this value is meaningless there and never used.
+  jwt_secret: "dev-only-insecure-jwt-secret-do-not-use-in-prod-32b+"
+
 api:
   # Local dev only — honors per-connection `insecure_skip_verify`
   # toggles so homelab endpoints with self-signed certs (Proxmox UI,

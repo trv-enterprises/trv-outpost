@@ -375,6 +375,31 @@ class StreamConnectionManager {
       connection.reconnecting = true;
       connection.reconnectAttempts++;
 
+      // On the FIRST error of an episode, the cause is often a stale/
+      // expired access token in the ?st= query (the token is frozen into
+      // the URL at open time and can't update on a live EventSource). A
+      // plain backoff-reconnect would just reopen with the SAME stale
+      // token and 401 again. So proactively refresh the access token
+      // first: on success apiClient rotates it, which fires the
+      // onTokenChange listener → _reconnectAllForTokenChange reopens this
+      // stream with a FRESH ?st= immediately (and we cancel the pending
+      // backoff to avoid a double-open). On failure (session truly ended)
+      // the backoff reconnect still runs as before. Coalesced in
+      // apiClient, so concurrent panels share one refresh. Gated to the
+      // first attempt so we don't refresh on every backoff tick.
+      if (connection.reconnectAttempts === 1 && apiClient.accessToken && typeof apiClient._refreshSession === 'function') {
+        apiClient._refreshSession().then((ok) => {
+          if (ok && this.connections.has(connectionId)) {
+            // Token rotated → the rotation listener handles the reopen.
+            // Cancel the redundant backoff timer queued below.
+            if (connection.reconnectTimeout) {
+              clearTimeout(connection.reconnectTimeout);
+              connection.reconnectTimeout = null;
+            }
+          }
+        }).catch(() => {});
+      }
+
       const delay = Math.min(1000 * Math.pow(2, connection.reconnectAttempts - 1), 30000);
 
       if (connection.reconnectAttempts <= 1) {
