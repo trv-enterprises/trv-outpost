@@ -44,7 +44,7 @@ func ChartOptionsSchema() map[string]interface{} {
 			},
 			"tooltip": map[string]interface{}{
 				"type":        "object",
-				"description": "Tooltip config. Shape: {mode, decimals, units}. mode: \"multi\" (all series, default), \"single\" (hovered series only), or \"hidden\". decimals: integer 0-10 or null. units: suffix string like \"%\" or \"°C\".",
+				"description": "Tooltip config. Shape: {mode, decimals, units}. mode: \"multi\" (axis-trigger, reads all series at the hovered x — the DEFAULT and the right choice for line/area/bar/time-series), \"single\" (item-trigger, only the directly-hovered point), or \"hidden\". PREFER \"multi\" for line/area/bar: they often have no visible point markers, so \"single\" forces the user to hover an invisible point and feels unresponsive — and area is just line+fill, so it should match line. Reserve \"single\" for scatter/pie or when the user explicitly asks for per-point hover. Best of all: omit mode entirely to get the multi default. decimals: integer 0-10 or null. units: suffix string like \"%\" or \"°C\".",
 			},
 			"yThresholds": map[string]interface{}{
 				"type":        "array",
