@@ -203,29 +203,27 @@
           flex-shrink: 0;
         }
 
-        // Fixed, self-contained width INCLUDING the +/- steppers so the
-        // control never overflows into the build-size hint beside it.
-        // 5.5rem fits a 3-digit value + both stepper buttons at sm size.
+        // Width must hold a 3-digit value AND both steppers without
+        // clipping the number. ~7.5rem = value field (~3rem) + two 1.5rem
+        // stepper buttons + Carbon's internal borders.
         .cds--number {
-          width: 5.5rem;
+          width: 7.5rem;
           flex-shrink: 0;
         }
         .cds--number input {
           background-color: #393939;
           color: #f4f4f4;
           height: 2rem;
-          min-width: 0; // let the input shrink within the fixed wrapper
+          min-width: 2.75rem; // ensure the 3-digit value is fully visible
         }
-        // Tighten Carbon's sm steppers so they don't bloat the control.
+        // Tighten Carbon's sm steppers so they don't bloat the control,
+        // and kill the trailing gap Carbon leaves after the + button.
         .cds--number__control-btn {
           width: 1.5rem;
         }
-
-        .scale-design-hint {
-          color: var(--cds-text-secondary);
-          font-size: 0.75rem;
-          white-space: nowrap;
-          flex-shrink: 0;
+        .cds--number__controls,
+        .cds--number {
+          margin-right: 0;
         }
       }
 
@@ -748,20 +746,6 @@
     left: 0;
     height: 2px;
     background: repeating-linear-gradient(90deg, #da1e28 0px, #da1e28 4px, transparent 4px, transparent 8px);
-  }
-
-  // Target boundary — the OUTER bound the build canvas renders to at full
-  // target size (the red line is the inner DESIGN bound you build within).
-  // Teal to distinguish from the red design line. Sits behind the design
-  // line (lower z) since it's the outer reference.
-  .grid-boundary-target {
-    z-index: 19;
-    &.grid-boundary-right {
-      background: repeating-linear-gradient(180deg, #009d9a 0px, #009d9a 4px, transparent 4px, transparent 8px);
-    }
-    &.grid-boundary-bottom {
-      background: repeating-linear-gradient(90deg, #009d9a 0px, #009d9a 4px, transparent 4px, transparent 8px);
-    }
   }
 
   .dashboard-grid .panel-container.edit-mode {

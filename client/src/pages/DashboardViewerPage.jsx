@@ -311,10 +311,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // and transform:scales it up, so a higher % enlarges fonts+lines+layout
   // uniformly. 100 = build at target. Persisted as settings.scale_percent.
   const [scalePercent, setScalePercent] = useState(100);
-  // Edit-mode preview toggle: false = show the BUILD (design) canvas you
-  // edit on; true = preview at the end-display (target) size. Independent
-  // of the separate zoom control.
-  const [showTargetPreview, setShowTargetPreview] = useState(false);
 
   // Load the persisted scale in BOTH view and edit mode (it drives the
   // view-mode "actual size" zoom-up and the fit math, not just the editor
@@ -397,22 +393,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const availableHeight = designDimension.max_height - VIEWER_CHROME_V;
     return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
   }, [designDimension]);
-
-  // TARGET cell budget — the cols/rows the design canvas maps to at the
-  // full target size. Used only to draw the target boundary line (the
-  // outer bound things render to); building is constrained to the DESIGN
-  // budget (gridCols/gridRows) above. When scale=100 the two coincide.
-  const targetCols = useMemo(() => {
-    if (!layoutDimension) return null;
-    const availableWidth = layoutDimension.max_width - VIEWER_CHROME_H;
-    return Math.floor((availableWidth + VIEWER_GAP) / (CELL_WIDTH + VIEWER_GAP));
-  }, [layoutDimension]);
-
-  const targetRows = useMemo(() => {
-    if (!layoutDimension) return null;
-    const availableHeight = layoutDimension.max_height - VIEWER_CHROME_V;
-    return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
-  }, [layoutDimension]);
 
   // Load fit mode for the *current* dashboard. Resolution order:
   //   1. user's dashboard_fit_modes[id] — explicit per-user per-dashboard
@@ -1945,7 +1925,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           )}
           {isEditMode && layoutDimension && (
             <div className="scale-controls">
-              <span className="scale-label" title="Build scale — higher % builds on a smaller canvas so everything renders larger at the target size">Scale</span>
+              <span className="scale-label" title="Scale the dashboard's component text and line sizes. You design at this scale directly — 100% = actual size; higher % renders everything bigger.">Scale</span>
               <NumberInput
                 id="viewer-scale-percent"
                 size="sm"
@@ -1957,20 +1937,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 value={scalePercent}
                 onChange={(e, { value }) => handleScaleChange(value ?? e?.target?.value)}
               />
-              {designDimension && (
-                <span className="scale-design-hint" title="Design canvas you build on = target ÷ scale">
-                  {designDimension.max_width}×{designDimension.max_height}
-                </span>
-              )}
-              <IconButton
-                kind={showTargetPreview ? 'primary' : 'ghost'}
-                size="sm"
-                label={showTargetPreview ? 'Showing end-display (target) size — click for build size' : 'Showing build size — click to preview end-display (target) size'}
-                align="bottom"
-                onClick={() => setShowTargetPreview((v) => !v)}
-              >
-                <FitToScreen size={16} />
-              </IconButton>
             </div>
           )}
           {isEditMode && (
@@ -2113,6 +2079,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </IconButton>
               <OverflowMenu
+                // key on fitMode forces the menu to remount when the mode
+                // changes, so Carbon re-renders the trigger with the new
+                // renderIcon. Without it, Carbon caches the initial icon
+                // component and the button kept showing the default
+                // (Actual) regardless of the active mode.
+                key={fitMode}
                 size="lg"
                 renderIcon={
                   fitMode === 'window' ? FitModeWindowIcon
@@ -2131,22 +2103,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 className="fit-mode-menu"
               >
                 <OverflowMenuItem
-                  itemText="Actual size"
+                  itemText={`${fitMode === 'actual' ? '✓ ' : '  '}Actual size`}
                   onClick={() => selectFitMode('actual')}
                   isDelete={false}
                 />
                 <OverflowMenuItem
-                  itemText="Fit to window"
+                  itemText={`${fitMode === 'window' ? '✓ ' : '  '}Fit to window`}
                   onClick={() => selectFitMode('window')}
                 />
                 <OverflowMenuItem
-                  itemText="Fit to width"
+                  itemText={`${fitMode === 'width' ? '✓ ' : '  '}Fit to width`}
                   onClick={() => selectFitMode('width')}
                 />
                 <OverflowMenuItem
                   itemText={
                     <span className="fit-mode-item-with-info">
-                      Stretch to fill
+                      {fitMode === 'stretch' ? '✓ ' : '  '}Stretch to fill
                       <Information
                         size={16}
                         className="fit-mode-info-icon"
@@ -2222,15 +2194,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           */}
           <div
             className="dashboard-grid-scale-wrapper"
-            style={
+            style={{
               // Reserve the post-transform size whenever there IS one — now
               // includes "actual" at scale>100% (scaledW>0 there), so the
               // scaled-up content scrolls correctly. At 100% actual,
               // scaledW is 0 → no reserved size, native flow as before.
-              !isEditMode && fitTransform.scaledW > 0
+              ...(!isEditMode && fitTransform.scaledW > 0
                 ? { width: fitTransform.scaledW, height: fitTransform.scaledH }
-                : undefined
-            }
+                : {}),
+              // Edit-mode manual ZOOM lives HERE (wrapper level) so it scales
+              // EVERYTHING in the scene — the grid AND the target (blue)
+              // boundary line that sits in this wrapper. Zoom = "magnify the
+              // whole view to see it." The build/display toggle's scaleFactor
+              // is applied on the inner .dashboard-grid only (below), so the
+              // blue line stays fixed for the toggle (content grows to meet
+              // it) but DOES scale with zoom.
+              ...(isEditMode && zoom !== 100 ? {
+                transform: `scale(${zoom / 100})`,
+                transformOrigin: 'top left'
+              } : {})
+            }}
           >
           <div
             ref={gridRef}
@@ -2244,13 +2227,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 transform: fitTransform.transform,
                 transformOrigin: 'top left'
               } : {}),
-              // Edit mode: manual zoom (mutually exclusive with fit-mode transform
-              // because fitTransform returns empty string when isEditMode is true).
-              // showTargetPreview multiplies by the scaleFactor so you see the
-              // dashboard at its end-display (target) size — the same uniform
-              // enlargement the viewer applies — on top of the manual zoom.
-              ...(isEditMode && (zoom !== 100 || showTargetPreview) ? {
-                transform: `scale(${(zoom / 100) * (showTargetPreview ? scaleFactor : 1)})`,
+              // Edit mode: ALWAYS design at the display (scaled) size — the
+              // content is scaled by scaleFactor so what you place is what
+              // renders (100% = actual size). No build-vs-display toggle.
+              // The manual zoom (wrapper above) is a separate view magnifier.
+              ...(isEditMode && scaleFactor !== 1 ? {
+                transform: `scale(${scaleFactor})`,
                 transformOrigin: 'top left'
               } : {})
             }}
@@ -2480,14 +2462,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </div>
             )}
 
-            {/* DESIGN (inner / red) boundary — lives INSIDE the scaled
-                grid so it tracks the build canvas. Hidden when expanded
-                (showTargetPreview): the content has grown out to meet the
-                fixed target line, so the inner line would just cut through
-                the middle of the content. The TARGET (blue) line is drawn
-                in the un-scaled wrapper (sibling of .dashboard-grid) so it
-                stays fixed while the content scales. */}
-            {isEditMode && gridCols && !showTargetPreview && (
+            {/* CANVAS boundary — the single edge of the design grid. It
+                lives INSIDE the always-scaled .dashboard-grid, so at
+                scale>100% it renders at the display extent automatically,
+                marking exactly where the dashboard ends at the scale
+                you're designing at. (We design at display size directly,
+                so there's no separate target line.) */}
+            {isEditMode && gridCols && (
               <>
                 <div
                   className="grid-boundary-right"
@@ -2506,34 +2487,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </>
             )}
           </div>
-          {/* TARGET (outer / blue) boundary — drawn OUTSIDE the scaled
-              .dashboard-grid (sibling, in the un-scaled wrapper) so it
-              stays FIXED at the target pixel extent while the content
-              scales. At build size it previews where the dashboard
-              renders to; on expand the content grows out to meet it.
-              Only meaningful when scaled up (target > design). */}
-          {isEditMode && targetCols && targetRows && (targetCols > gridCols || targetRows > gridRows) && (
-            <>
-              <div
-                className="grid-boundary-right grid-boundary-target"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP,
-                  height: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP
-                }}
-              />
-              <div
-                className="grid-boundary-bottom grid-boundary-target"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP,
-                  width: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP
-                }}
-              />
-            </>
-          )}
           </div>
         </div>
       ) : (
