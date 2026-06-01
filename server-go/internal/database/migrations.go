@@ -42,6 +42,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"spec_driven_chart_code_v1", migrateSpecDrivenChartCode},
 		{"refresh_assistant_model_description_v1", migrateRefreshAssistantModelDescription},
 		{"assistant_enabled_to_ai_enabled_v1", migrateAssistantEnabledToAIEnabled},
+		{"refresh_tile_font_size_description_v1", migrateRefreshTileFontSizeDescription},
 	}
 
 	coll := db.Collection("migrations")
@@ -573,6 +574,26 @@ func migrateRefreshAssistantModelDescription(ctx context.Context, db *mongo.Data
 		return fmt.Errorf("refresh assistant.model description: %w", err)
 	}
 	log.Printf("  settings: refreshed assistant.model description (matched %d)", res.MatchedCount)
+	return nil
+}
+
+// migrateRefreshTileFontSizeDescription updates the tile_font_size
+// setting's description in existing DBs to the current wording (the
+// settings sync never overwrites an existing doc, so a YAML edit alone
+// doesn't reach deployments that already seeded it). Same shape as
+// migrateRefreshAssistantModelDescription — a no-op when the setting is
+// absent (fresh DBs seed the new text directly).
+func migrateRefreshTileFontSizeDescription(ctx context.Context, db *mongo.Database) error {
+	const desc = "Font size for compact tile control titles (xs, sm, md, lg). Applies to control components of the tile_* control types."
+	res, err := db.Collection("settings").UpdateOne(
+		ctx,
+		bson.M{"_id": "tile_font_size"},
+		bson.M{"$set": bson.M{"description": desc}},
+	)
+	if err != nil {
+		return fmt.Errorf("refresh tile_font_size description: %w", err)
+	}
+	log.Printf("  settings: refreshed tile_font_size description (matched %d)", res.MatchedCount)
 	return nil
 }
 

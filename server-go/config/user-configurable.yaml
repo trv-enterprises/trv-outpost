@@ -24,7 +24,7 @@ settings:
 
   - key: tile_font_size
     category: appearance
-    description: "Font size for compact tile control labels (xs, sm, md, lg)"
+    description: "Font size for compact tile control titles (xs, sm, md, lg). Applies to control components of the tile_* control types."
     value: "sm"
 
   - key: title_font_size
