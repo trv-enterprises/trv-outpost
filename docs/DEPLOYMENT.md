@@ -19,8 +19,8 @@ git clone https://github.com/trv-enterprises/trve-dashboard
 cd trve-dashboard
 
 # Optional: copy and edit .env to set DOMAIN, IMAGE_TAG,
-# ANTHROPIC_API_KEY (for AI Builder), CLERK_SECRET_KEY +
-# CLERK_PUBLISHABLE_KEY (for sign-in), or non-default ports.
+# ASSISTANT_ANTHROPIC_API_KEY (for AI; falls back to ANTHROPIC_API_KEY),
+# CLERK_SECRET_KEY + CLERK_PUBLISHABLE_KEY (for sign-in), or non-default ports.
 # The defaults work for `http://localhost` evaluation as-is.
 cp .env.example .env
 
@@ -43,7 +43,7 @@ Pin a specific release with `IMAGE_TAG=v0.10.0` in `.env`; otherwise
 ```bash
 # 1. Copy and configure environment
 cp .env.example .env
-# Edit .env with your ANTHROPIC_API_KEY and DOMAIN
+# Edit .env with your ASSISTANT_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) and DOMAIN
 
 # 2. Build and start all services
 docker compose -f docker-compose.prod.yml up -d --build
@@ -87,7 +87,8 @@ local code change.
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | API key for AI features |
+| `ASSISTANT_ANTHROPIC_API_KEY` | API key for AI features (**preferred**). Falls back to `ANTHROPIC_API_KEY`. Preferred for local dev so you can keep `ANTHROPIC_API_KEY` pointed at Claude Code / other tooling and the server at a different key. |
+| `ANTHROPIC_API_KEY` | Legacy fallback for the AI API key, used when `ASSISTANT_ANTHROPIC_API_KEY` is unset. |
 | `DOMAIN` | Domain for HTTPS (e.g., `dashboard.example.com` or `localhost`) |
 
 ### Optional
