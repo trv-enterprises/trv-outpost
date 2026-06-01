@@ -2132,6 +2132,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   : fitMode === 'stretch' ? 'Stretch to fill'
                   : 'Actual size') + ' — change view fit'
                 }
+                // align="bottom" puts the iconDescription tooltip BELOW the
+                // trigger, matching the surrounding IconButtons. Without it
+                // Carbon's OverflowMenu defaults to a side (right) tooltip.
+                align="bottom"
                 flipped
                 direction="bottom"
                 className="fit-mode-menu"
@@ -2198,6 +2202,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 renderIcon={() => <OverflowMenuVertical size={20} />}
                 flipped
                 direction="bottom"
+                // bottom-end: this is the last icon on the right edge of the
+                // header, so a centered ("bottom") tooltip overhangs the edge.
+                // Anchor it right so the tooltip opens leftward. (Matches the
+                // Dashboard-settings gear's reasoning.)
+                align="bottom-end"
                 iconDescription="Dashboard actions"
               >
                 {canDesign && (
