@@ -13,8 +13,22 @@
 // credentials load, so this default only matters for the brief window
 // between module load and credential restore.
 const getApiBaseUrl = () => {
+  // Explicit override always wins (e.g. pointing the SPA at a remote API).
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
+  }
+  // Vite dev: use a RELATIVE base ('') so /api/* rides Vite's dev proxy
+  // (vite.config.js proxies /api → :3001). That keeps requests SAME-ORIGIN
+  // with the :5173 app, which is required for the httpOnly refresh cookie
+  // (SameSite=Lax, credentials:'same-origin') to be stored on
+  // /api/auth/session and sent on /api/auth/refresh. With the previous
+  // absolute http://host:3001 base, the cookie-bearing auth calls were
+  // cross-origin from :5173, the refresh cookie was never stored, and the
+  // session went dead ~15 min later (access-token TTL) → blank dashboard.
+  // This mirrors how the homelab serves it: Caddy reverse-proxies /api to
+  // the server, so the browser sees a single origin there too.
+  if (import.meta.env.DEV) {
+    return '';
   }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
