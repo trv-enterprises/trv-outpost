@@ -6,6 +6,76 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] — 2026-06-01
+
+### Added
+
+- **Dashboard build-scale.** Each dashboard can be designed at a scale
+  (50–200%): you author against `target ÷ scale` and the viewer
+  CSS-transforms the whole canvas back up to the target dimension, so
+  every chart's text and lines enlarge uniformly with proportions
+  preserved. Edit mode shows a live scale control and a single boundary
+  line; at 100% you see actual size. The scale travels with the
+  dashboard and the AI understands it.
+- **Per-dimension default scale.** A new Manage → dimension setting lets
+  admins say e.g. "4K boards default to 120%." New dashboards seed their
+  scale from the dimension's default (then become independent); the
+  designer and the AI can override. The AI catalog reports each preset's
+  cols×rows *already at its default scale*, so the agent plans to the
+  adjusted budget without doing fragile rate-math.
+- **AI API Usage admin page** with a unified `ai.enabled` gate and a
+  per-user budget override.
+- **"Measure screen size" helper** in the viewer overflow menu —
+  requests fullscreen and reports the real usable width/height, since
+  published dimensions overstate the area the OS actually leaves for the
+  dashboard.
+- **`title_font_size` admin setting** — scales component title font and
+  title-band height.
+- **`stream_buffer_size` admin setting** (default 1000) — client-side
+  streaming buffer depth.
+- **Number chart value formatting** — duration / compact / datetime
+  formats and a decimal-places option, exposed to both AI agents.
+- **banded_bar band-scheme selector** (±SD / Min-Mean-Max / SPC).
+- **Custom-code indicator** on the dashboard edit-mode panel header.
+
+### Changed
+
+- **Streaming time-series default to a 1h sliding window** with a
+  higher backfill paint (1000 points); the zoom slider no longer resets
+  on each incoming point.
+- **Auto x-axis timestamp format** for line/area/bar — granularity
+  resolves from the data; explicit formats are never overridden.
+- **Grid chrome corrected 109→57px** so dashboards fill the fullscreen
+  viewer (no app header above a displayed dashboard — only the toolbar
+  is reserved). "Actual" size is now pixel-accurate.
+- **Dashboard Assistant** updated to current Claude models, reads
+  connection guidance before building queries, plans the full dashboard
+  before creating components, tags what it creates, and packs rows
+  contiguously. Catalog now returned as markdown (no extra round-trip).
+- **Both AI agents share a chart-options schema** (toolops layer) and a
+  config-first / custom-only template stance aligned with spec-driven
+  charts.
+- **The dashboard-agent CLI was removed** — superseded by the in-app
+  Dashboard Assistant.
+
+### Fixed
+
+- Stray focus-box on the first item of every OverflowMenu (fit-mode,
+  pencil, dashboard-actions, account) when opened with the mouse — it
+  was our own `:focus` override painting a ring on Carbon's programmatic
+  open-focus; now scoped to `:focus-visible` (keyboard only).
+- Streaming "Invalid access token" — stable dev `jwt_secret` plus a
+  token refresh on the first stream error before reconnecting.
+- Dev session dying after ~15 min — proxy `/api` through Vite so the
+  refresh cookie is same-origin.
+- AI Builder spec-driven chart previews: number-chart blank preview,
+  stuck-loading, and static single-series demo.
+- Spec-driven chart create regression in server codegen.
+- EdgeLake database param dropped on chart save in ComponentEditor.
+- Stale default-dashboard pointer now cleared (and the user notified)
+  when the referenced dashboard was deleted.
+- Delete-component crash from an undefined chart in a dashboard cell.
+
 ## [0.23.0] — 2026-05-29
 
 ### Changed
