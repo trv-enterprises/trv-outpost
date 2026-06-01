@@ -12,6 +12,7 @@ import NullableNumberField from './NullableNumber';
 import YAxisColumnsListField from './YAxisColumnsList';
 import ThresholdListField from './ThresholdList';
 import ColumnManagerField from './ColumnManager';
+import BandSchemeField from './BandScheme';
 
 const FIELD_RENDERERS = {
   // Stage 1
@@ -26,6 +27,7 @@ const FIELD_RENDERERS = {
   y_axis_columns_list: YAxisColumnsListField,
   threshold_list: ThresholdListField,
   column_manager: ColumnManagerField,
+  band_scheme: BandSchemeField,
   // column_multi_select + code stay deferred — no current spec uses
   // either. The schema validator permits them; renderers land when
   // a spec needs them.

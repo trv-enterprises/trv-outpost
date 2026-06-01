@@ -14,10 +14,12 @@ import {
 import { Play, Edit, Checkmark, Close } from '@carbon/icons-react';
 import Icon from '@mdi/react';
 import DynamicComponentLoader from './DynamicComponentLoader';
+import PreviewErrorBoundary from './shared/PreviewErrorBoundary';
 import { ControlRenderer, CONTROL_TYPE_INFO } from './controls';
 import { transformData } from '../utils/dataTransforms';
 import apiClient from '../api/client';
 import { getDataDrivenChartCode, getStaticChartCode } from './ComponentEditor';
+import { hasBuildOption } from '../chart-spec/build-options';
 import './AIComponentPreview.scss';
 
 // Build component_code from the structured fields on a component when
@@ -63,9 +65,18 @@ function generateComponentCodeFromConfig(component) {
     visibleColumns: dataMapping.visible_columns || null,
     chartName: component.title || component.name || '',
   };
-  // No connection set yet → use the static placeholder template so
-  // there's still something visible while the user is mid-configuration.
+  // No connection set yet. For a SPEC-DRIVEN chart type, still emit the
+  // <SpecDrivenChart> one-liner — it renders from the real saved config
+  // (full multi-series data_mapping + options) and shows its own "no
+  // data" state, which is faithful to the chart being edited. The static
+  // placeholder (getStaticChartCode) is a hardcoded SINGLE-series Jan–May
+  // demo — using it for an existing multi-series chart misrepresents it
+  // (a multi-series line showed up as a plain one-line demo). Reserve the
+  // static placeholder for non-spec types (custom) with nothing to render.
   if (!connectionId || !queryRaw) {
+    if (hasBuildOption(chartType)) {
+      return `const Component = () => {\n  return <SpecDrivenChart specName="${chartType}" />;\n};`;
+    }
     return getStaticChartCode(chartType);
   }
   return getDataDrivenChartCode(
@@ -85,6 +96,16 @@ function generateComponentCodeFromConfig(component) {
     parserConfig,
     component.id || '',
     isTSStoreStreaming,
+    // useSpecCodegen: emit the <SpecDrivenChart specName="…" /> one-liner
+    // for spec-driven chart types (line/bar/area/pie/gauge/scatter/
+    // banded_bar/number/dataview). Without this the helper falls through
+    // to the legacy ECharts category/series template, which has no
+    // number/dataview branch — it renders nonsense for number charts and
+    // can throw at runtime, blanking the whole AI Builder preview pane
+    // (and, with no error boundary, the prompt input alongside it). The
+    // manual editor and the server's CreateComponent both emit the same
+    // one-liner; this keeps the AI preview consistent with them.
+    true,
   );
 }
 
@@ -555,11 +576,17 @@ function AIComponentPreview({ component, onNameChange }) {
                     </div>
                   ) : effectiveCode ? (
                     <div className="chart-preview-container">
-                      <DynamicComponentLoader
-                        code={effectiveCode}
-                        componentMeta={component}
-                        props={componentFetchesOwnData ? {} : { data: transformedData }}
-                      />
+                      {/* Boundary contains a render-time throw in the
+                          eval'd component to this pane so the chat prompt
+                          stays usable. resetKey retries when the AI emits
+                          a new version (id + code change). */}
+                      <PreviewErrorBoundary resetKey={`${component.id || ''}:${effectiveCode.length}`}>
+                        <DynamicComponentLoader
+                          code={effectiveCode}
+                          componentMeta={component}
+                          props={componentFetchesOwnData ? {} : { data: transformedData }}
+                        />
+                      </PreviewErrorBoundary>
                     </div>
                   ) : (
                     <div className="no-preview">

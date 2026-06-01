@@ -8,7 +8,7 @@ example with its own README + any supporting artifacts.
 
 | Example                                    | What it shows                                                                  |
 | ------------------------------------------ | ------------------------------------------------------------------------------ |
-| [`dashboard-agent/`](./dashboard-agent/)   | The CLI agent (`cmd/dashboard-agent`) building a 14-panel Prometheus dashboard end-to-end via MCP |
+| [`dashboards/`](./dashboards/)   | A multi-panel Prometheus monitoring dashboard built end-to-end from a single natural-language prompt (via the Dashboard Assistant / MCP) |
 
 Have a run worth preserving? Add it here with a screenshot + a README
 describing inputs, outputs, and what was surprising.

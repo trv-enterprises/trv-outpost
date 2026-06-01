@@ -7,7 +7,7 @@ package models
 import "time"
 
 // APIKey is a per-user authentication token used by non-browser
-// callers (the dashboard-agent CLI, MCP clients, scripts). The
+// callers (MCP clients, kiosks, scripts). The
 // plaintext token is shown to the user exactly once at creation
 // and never persisted; only the bcrypt hash lives in the database,
 // alongside a short plaintext prefix for the auth middleware to

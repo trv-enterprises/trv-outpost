@@ -189,7 +189,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"namespace":       map[string]interface{}{"type": "string", "description": "Namespace slug; empty = \"default\""},
 				"name":            map[string]interface{}{"type": "string", "description": "Unique component name (per namespace)"},
 				"title":           map[string]interface{}{"type": "string", "description": "Display title (defaults to name when empty)"},
-				"description":     map[string]interface{}{"type": "string"},
+				"description":     map[string]interface{}{"type": "string", "description": "Short human-readable description of what this component shows and its data source — ALWAYS set it (e.g. \"CPU utilization % over time from the TRV-SRV-001 system-stats stream\"). Surfaces on the components list + helps future users/agents understand the component."},
 				"chart_type":      map[string]interface{}{"type": "string", "description": "For charts: bar, line, pie, scatter, gauge, area, banded_bar, dataview, custom"},
 				"connection_id":   map[string]interface{}{"type": "string", "description": "Connection ID this component reads from (omit for connection-less components)"},
 				"query_config":    chartQueryConfigSchema(),
@@ -198,12 +198,38 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"display_config":  map[string]interface{}{"type": "object", "description": "Display-specific config — only for component_type=display"},
 				"component_code":  map[string]interface{}{"type": "string", "description": "Inline React component code; only set with use_custom_code=true"},
 				"use_custom_code": map[string]interface{}{"type": "boolean", "description": "true = use component_code; false (default) = let the server's codegen produce code from the structured fields"},
-				"options":         map[string]interface{}{"type": "object", "description": "ECharts options overlay (passed through to ECharts as-is; use this for axis ranges, colors, etc.)"},
-				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"options":         chartOptionsSchema(),
+				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Lowercase hyphenated tags for findability — ALWAYS set these. Cover the data source/integration (e.g. \"edgelake\", \"node-exporter\", \"system-stats\"), the host/dataset (e.g. \"trv-srv-001\", \"machine-telemetry\"), and the metric/topic shown (e.g. \"cpu\", \"memory\", \"temperature\"). Share the source/host tags across all components in one build so they group."},
 			},
 			"required": []string{"name"},
 		},
 		Handler: wrapCreateComponent(ops),
+	})
+
+	reg.Register(Tool{
+		Name: "update_component",
+		Description: "Modify an existing component in place (charts, controls, displays). PREFER THIS over rewriting a chart as custom code: get_component first to see its current config, then patch only the fields that change. Only the fields you set are touched — omit the rest. For charts, changing chart_type / data_mapping / query_config / options keeps the component spec-driven and re-renders automatically; you do NOT need to (and should not) set component_code for a config chart. Set use_custom_code=true + component_code only when the structured config genuinely cannot express the request. Do not call this on a component the user is actively editing (see the active-edit rule).",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id":              map[string]interface{}{"type": "string", "description": "Component ID to update (required)."},
+				"title":           map[string]interface{}{"type": "string", "description": "Display title."},
+				"description":     map[string]interface{}{"type": "string"},
+				"chart_type":      map[string]interface{}{"type": "string", "description": "For charts: bar, line, pie, scatter, gauge, area, banded_bar, dataview, custom. Changing this re-syncs the rendered chart."},
+				"connection_id":   map[string]interface{}{"type": "string", "description": "Connection ID this component reads from."},
+				"query_config":    chartQueryConfigSchema(),
+				"data_mapping":    chartDataMappingSchema(),
+				"control_config":  map[string]interface{}{"type": "object", "description": "Control-specific config — only for component_type=control"},
+				"display_config":  map[string]interface{}{"type": "object", "description": "Display-specific config — only for component_type=display"},
+				"component_code":  map[string]interface{}{"type": "string", "description": "Inline React component code; only set together with use_custom_code=true"},
+				"use_custom_code": map[string]interface{}{"type": "boolean", "description": "Set true to switch this chart into custom-code mode (destructive: config fields stop driving the render). Leave unset to keep it spec-driven."},
+				"options":         chartOptionsSchema(),
+				"tags":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Lowercase hyphenated tags (source/integration + host/dataset + metric/topic). Set when creating tagged content or when the user asks to retag."},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapUpdateComponent(ops),
 	})
 
 	// ─── Dashboards ───
@@ -241,7 +267,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"description": map[string]interface{}{"type": "string"},
 				"panels":      dashboardPanelsSchema(),
 				"settings":    dashboardSettingsSchema(),
-				"tags":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"tags":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Lowercase hyphenated tags for findability — ALWAYS set these, mirroring the source/host tags you put on the dashboard's components (e.g. [\"system-stats\", \"trv-srv-001\"]) so the dashboard groups with its components on the list pages."},
 				"metadata":    map[string]interface{}{"type": "object"},
 			},
 			"required": []string{"name"},
@@ -364,8 +390,9 @@ func chartDataMappingSchema() map[string]interface{} {
 			"y_axis": map[string]interface{}{
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
-				"description": "Column name(s) for the Y axis (values). Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0].",
+				"description": "Column name(s) for the Y axis (values), as plain strings. Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0]. For multiple series pass multiple column names (e.g. [\"cpu\", \"mem\"]). Per-column STACKING and dual-axis are set via options/multiple_y_axis, NOT by making entries objects: set multiple_y_axis=true for left/right split, and options.chartStacked=true to stack.",
 			},
+			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: the first two y columns split across left/right axes; pair with options.yAxisRange.right."},
 			"y_axis_label":   map[string]interface{}{"type": "string", "description": "Display label for the Y axis (legacy single label; use y_axis_labels for dual-axis)."},
 			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels. [0] = left axis, [1] = right axis on dual-axis charts."},
 			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
@@ -382,6 +409,15 @@ func chartDataMappingSchema() map[string]interface{} {
 	}
 }
 
+// chartOptionsSchema delegates to the shared toolops definition so the
+// Dashboard Assistant and the in-editor Component agent advertise the
+// exact same `options.*` overlay (the keys the client chart specs
+// actually read). The schema + apply both live in toolops.ChartOptions*
+// — see internal/ai/toolops/chart_options.go.
+func chartOptionsSchema() map[string]interface{} {
+	return toolops.ChartOptionsSchema()
+}
+
 // dashboardPanelsSchema returns the inline JSON-schema for the
 // DashboardPanel array. Inlining the {x, y, w, h} cell-unit
 // convention here prevents the model from guessing pixel coords
@@ -395,7 +431,7 @@ func chartDataMappingSchema() map[string]interface{} {
 func dashboardPanelsSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":        "array",
-		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells. Use a mix of component panels (set component_id) and text-header panels (set text_config, leave component_id unset) to give the dashboard visual hierarchy. Section-header text panels are typically full-width × 2-cells-tall and sit above each logical group of charts.",
+		"description": "Panels placed on the dashboard grid. Each panel occupies a rectangle of 32×32-px cells. Use a mix of component panels (set component_id) and text-header panels (set text_config, leave component_id unset) to give the dashboard visual hierarchy. Section-header text panels are typically full-width × 2-cells-tall and sit above each logical group of charts.\n\nPACK ROWS CONTIGUOUSLY — NO EMPTY GAPS. Each row of panels must start at the y where the previous row ended: a panel's y = the previous row's y + that row's h, with NO blank rows between. A section-header text panel abuts the charts below it (header at y, charts at y+header.h), and the next section header abuts the bottom of the row above it. Do not leave 1-2 empty cell rows between sections or rows — that produces dark dead strips. Panels in the same row share the same y and tile left-to-right (x advances by each panel's w). The whole layout should be a gap-free vertical stack of rows from y=0 down.",
 		"items": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -452,6 +488,10 @@ func dashboardSettingsSchema() map[string]interface{} {
 				"description": "Canvas size preset name. Must exactly match one of the `name` values from `get_type_catalog`'s `layout_dimensions` array — preset names are deployment-specific (e.g. \"2560x1440-2K\", \"1920x1080-HD\"). Use the entry's `cols` × `rows` to plan panel coordinates. Empty = server default.",
 			},
 			"title_scale": map[string]interface{}{"type": "integer", "description": "Title font scale percent (50-200, default 100)."},
+			"scale_percent": map[string]interface{}{
+				"type":        "integer",
+				"description": "Display scale % (50-200). Scales the whole dashboard's component text + line sizes up at render. LEAVE UNSET to inherit the chosen layout_dimension's default scale (the cols × rows in get_type_catalog are already at that default — plan to them directly). ONLY set this when the user explicitly asks for a different scale (e.g. \"build it at 150%\"); then the usable grid is SMALLER than the catalog's cols × rows by roughly (default_scale ÷ requested_scale), so reduce your panel budget accordingly.",
+			},
 			"is_public":   map[string]interface{}{"type": "boolean"},
 			"allow_export": map[string]interface{}{"type": "boolean"},
 		},
@@ -631,6 +671,31 @@ func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
 	}
 }
 
+func wrapUpdateComponent(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		// id rides alongside the patch fields in the tool args; pull it
+		// out, then unmarshal the rest as the partial-update request.
+		var idHolder struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(args, &idHolder); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if idHolder.ID == "" {
+			return "", fmt.Errorf("id is required")
+		}
+		var req models.UpdateComponentRequest
+		if err := json.Unmarshal(args, &req); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.UpdateComponent(ctx, toolops.UpdateComponentInput{ID: idHolder.ID, Request: req})
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
 func wrapGetDashboard(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		var in toolops.GetDashboardInput
@@ -748,7 +813,20 @@ func wrapGetCatalog(ops *toolops.Toolset) ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		return jsonResult(out)
+		// Return the compact markdown rendering, not the raw catalog
+		// JSON. The agent reads the catalog wholesale when planning a
+		// build — it's a reference doc, not a "find X by name" list — so
+		// summarizing the JSON (it trips the 8KB result-store threshold
+		// at ~32KB) was pure waste: the summary couldn't answer the
+		// question, so the agent always followed up with get_full_result
+		// and re-inlined the same 32KB. RenderMarkdown drops the verbose
+		// per-field JSON schemas in favor of compact field-name lists +
+		// includes the layout_dimensions cols/rows the build flow needs,
+		// landing well under the threshold so it inlines in one shot.
+		if out == nil || out.Catalog == nil {
+			return jsonResult(out)
+		}
+		return out.Catalog.RenderMarkdown(), nil
 	}
 }
 

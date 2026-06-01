@@ -24,7 +24,32 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',  // Listen on all interfaces for Tailscale access
     port: 5173,
+    // Proxy the API (and friends) to the Go server so the dev app is
+    // SAME-ORIGIN with /api — required for the httpOnly refresh cookie
+    // (SameSite=Lax, credentials:'same-origin') to be stored on
+    // /api/auth/session and sent on /api/auth/refresh. The client uses a
+    // relative API base in dev (see getApiBaseUrl) so these paths land
+    // here. ws:true covers the streaming SSE/WebSocket endpoints
+    // (/api/.../ws, ?st=...). Mirrors the homelab Caddyfile's /api proxy.
     proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true
+      },
+      '/health': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      },
+      '/mcp': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true
+      },
+      '/swagger': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      },
       '/docs': {
         target: 'http://localhost:3001',
         changeOrigin: true

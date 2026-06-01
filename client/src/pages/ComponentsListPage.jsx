@@ -225,10 +225,20 @@ function ComponentsListPage() {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = (result) => {
     setDeleteDialogOpen(false);
     setChartToDelete(null);
-    fetchCharts();
+    // The delete already succeeded server-side. When the whole component
+    // was removed, drop just its row from local state — no full re-fetch
+    // (re-fetching components + connections + dashboards and replacing the
+    // arrays regenerated the entire list on a single delete). When only a
+    // version/draft was removed the component still exists; re-fetch so the
+    // row's version metadata stays accurate.
+    if (result?.removedComponent) {
+      setCharts((prev) => prev.filter((c) => c.id !== result.id));
+    } else {
+      fetchCharts();
+    }
   };
 
   const handleDeleteClose = () => {
@@ -778,7 +788,7 @@ function ComponentsListPage() {
                               );
                             }
                             if (cell.info.header === 'dashboards') {
-                              const names = dashboardNames[chart.id] || [];
+                              const names = (chart && dashboardNames[chart.id]) || [];
                               const label = names.length === 0
                                 ? 'Not used by any dashboard'
                                 : names.join('\n');

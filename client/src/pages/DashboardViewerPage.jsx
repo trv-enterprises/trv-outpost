@@ -30,8 +30,6 @@ import {
   Time,
   OverflowMenuVertical,
   FitToScreen,
-  FitToWidth,
-  CenterToFit,
   Information,
   StarFilled,
   Edit,
@@ -47,7 +45,8 @@ import {
   ChevronRight,
   Home,
   Download,
-  Notification
+  Notification,
+  Code
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -100,35 +99,16 @@ import './DashboardViewerPage.scss';
 // Carbon calls `React.createElement(renderIcon, { className, aria-label })`
 // without passing a size, and the raw Carbon icons default to size=16.
 // These wrappers lock the size at 20 to match the surrounding toolbar
-// controls. They are defined at module scope so the component identity is
-// stable across re-renders — passing an inline function to `renderIcon`
-// causes Carbon to unmount/remount the trigger icon every render, which
-// produced a visible "revert to old icon" flicker when the fit mode changed.
-const FitModeActualIcon = (props) => <CenterToFit size={20} {...props} />;
+// Defined at module scope so the component identity is stable across
+// re-renders — passing an inline function to `renderIcon` causes Carbon
+// to unmount/remount the trigger icon every render.
+//
+// The fit-mode menu uses a SINGLE fixed trigger icon (this one): Carbon
+// caches the trigger's renderIcon and won't reliably swap it per mode,
+// so we no longer try to convey the active mode via the icon. The active
+// mode is shown by the ✓ on the menu items instead. FitToScreen reads as
+// a generic "fit options" glyph for the trigger.
 const FitModeWindowIcon = (props) => <FitToScreen size={20} {...props} />;
-const FitModeWidthIcon = (props) => <FitToWidth size={20} {...props} />;
-
-// "Stretch to fill" uses a custom SVG because Carbon's `Maximize` (four
-// corner arrows) is already used by the adjacent fullscreen button, and
-// having two identical icons side-by-side was confusing. This SVG shows
-// a double-headed horizontal arrow crossed with a double-headed vertical
-// arrow — the "stretch both axes" metaphor — visually distinct from
-// `Maximize`'s corner arrows.
-const FitModeStretchIcon = ({ size = 20, ...rest }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 32 32"
-    width={size}
-    height={size}
-    fill="currentColor"
-    {...rest}
-  >
-    {/* Horizontal double-headed arrow: left arrowhead + bar + right arrowhead */}
-    <path d="M3 16 L8 11 L8 15 L24 15 L24 11 L29 16 L24 21 L24 17 L8 17 L8 21 Z" />
-    {/* Vertical double-headed arrow: top arrowhead + bar + bottom arrowhead */}
-    <path d="M16 3 L21 8 L17 8 L17 24 L21 24 L16 29 L11 24 L15 24 L15 8 L11 8 Z" />
-  </svg>
-);
 
 /**
  * DashboardViewerPage Component
@@ -155,6 +135,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [dashboardCommand, setDashboardCommand] = useState(null); // Latest command: { target, action, ... }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  // "Measure screen size" helper. The published dimension names (2K, 4K)
+  // overstate the usable area — the OS steals top space (menu bar / notch
+  // / window chrome), so a dashboard built to a nominal dimension won't
+  // fill the real screen. This captures the ACTUAL fullscreen viewport so
+  // an admin can set a preset's real geometry in Manage → Settings →
+  // Layout Dimensions (keeping the published name, fixing the numbers).
+  const [screenMeasure, setScreenMeasure] = useState(null); // { w, h } or null = dialog closed
   // refreshTick: refetch-without-remount signal (used when only the
   // *data* should refresh — manual Refresh button, dashboard navigation).
   // Preserves streaming buffers and dynamic-component state. Server-side
@@ -169,6 +156,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Initial state is "stretch" to avoid a visible flicker before the
   // async load completes.
   const [fitMode, setFitMode] = useState('stretch');
+
   // Cadence (seconds) for the slow-poll refresh of the dashboard
   // record itself — picks up edits made by another author so an
   // unattended kiosk display reflects them without manual reload.
@@ -298,6 +286,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Layout dimension presets — defines the hard grid boundary
   const [dimensions, setDimensions] = useState([]);
   const [currentDimension, setCurrentDimension] = useState('');
+  // "Everything bigger" zoom. The dashboard is BUILT on a design canvas
+  // of target/(scalePercent/100); the viewer renders at the target dim
+  // and transform:scales it up, so a higher % enlarges fonts+lines+layout
+  // uniformly. 100 = build at target. Persisted as settings.scale_percent.
+  const [scalePercent, setScalePercent] = useState(100);
+
+  // Load the persisted scale in BOTH view and edit mode (it drives the
+  // view-mode "actual size" zoom-up and the fit math, not just the editor
+  // controls). The dimension-preset fetch below is edit-only, but the
+  // scale value is needed everywhere.
+  useEffect(() => {
+    if (!dashboard) return;
+    const savedScale = Number(dashboard.settings?.scale_percent);
+    setScalePercent(Number.isFinite(savedScale) && savedScale > 0 ? savedScale : 100);
+  }, [dashboard]);
 
   // Fetch all dimension presets and resolve the dashboard's current one
   useEffect(() => {
@@ -320,31 +323,56 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         } else if (list.length > 0) {
           setCurrentDimension(list[0].name);
         }
+        // (scale_percent is loaded by the mode-agnostic effect above.)
       })
       .catch(() => {});
   }, [isEditMode, dashboard]);
 
-  // Resolved current dimension object
+  // Resolved current dimension object = the render TARGET.
   const layoutDimension = useMemo(() => {
     return dimensions.find(d => d.name === currentDimension) || null;
   }, [dimensions, currentDimension]);
 
-  // Grid bounds from layout dimension
-  const VIEWER_CHROME_V = 109; // 48px app header + 57px toolbar + 4px padding
+  // Grid bounds from layout dimension.
+  // Vertical chrome = the 57px viewer toolbar (56px + 1px border) that
+  // sits above the grid in view/fullscreen. The dashboard is designed for
+  // and displayed at the TARGET dimension minus this toolbar — there is
+  // no app-header in the displayed (view/fullscreen) dashboard, so the
+  // budget reserves only the toolbar. This makes "actual size" in the
+  // editor a pixel-perfect preview of the fullscreen render. Kept in sync
+  // with the server's gridChromeV (registry/catalog.go) so the AI plans
+  // to the same cell budget.
+  const VIEWER_CHROME_V = 57;
   const VIEWER_CHROME_H = 4;
   const VIEWER_GAP = 4;
 
-  const gridCols = useMemo(() => {
+  // DESIGN dimension = target / (scale/100). The grid budget (cell
+  // cols/rows) is computed against the DESIGN canvas, so a higher scale
+  // shrinks the build area → fewer cells → everything renders bigger when
+  // the viewer transform:scales the design canvas up to the target. The
+  // chrome subtraction stays applied to the design dim (same formula +
+  // constants the server's computeCells uses), so building rules are
+  // unchanged — they just operate on the smaller canvas.
+  const scaleFactor = (Number.isFinite(scalePercent) && scalePercent > 0 ? scalePercent : 100) / 100;
+  const designDimension = useMemo(() => {
     if (!layoutDimension) return null;
-    const availableWidth = layoutDimension.max_width - VIEWER_CHROME_H;
+    return {
+      max_width: Math.round(layoutDimension.max_width / scaleFactor),
+      max_height: Math.round(layoutDimension.max_height / scaleFactor),
+    };
+  }, [layoutDimension, scaleFactor]);
+
+  const gridCols = useMemo(() => {
+    if (!designDimension) return null;
+    const availableWidth = designDimension.max_width - VIEWER_CHROME_H;
     return Math.floor((availableWidth + VIEWER_GAP) / (CELL_WIDTH + VIEWER_GAP));
-  }, [layoutDimension]);
+  }, [designDimension]);
 
   const gridRows = useMemo(() => {
-    if (!layoutDimension) return null;
-    const availableHeight = layoutDimension.max_height - VIEWER_CHROME_V;
+    if (!designDimension) return null;
+    const availableHeight = designDimension.max_height - VIEWER_CHROME_V;
     return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
-  }, [layoutDimension]);
+  }, [designDimension]);
 
   // Load fit mode for the *current* dashboard. Resolution order:
   //   1. user's dashboard_fit_modes[id] — explicit per-user per-dashboard
@@ -567,39 +595,58 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const GAP = 4; // spacing.$spacing-02
   const CONTAINER_PADDING = 4;
   const fitTransform = useMemo(() => {
-    // Skip fit transform entirely in edit mode (edit mode uses its own zoom).
-    if (isEditMode || fitMode === 'actual' || !containerSize.width || !containerSize.height) {
+    if (isEditMode) {
       return { transform: '', scaledW: 0, scaledH: 0 };
     }
+    // The panels are BUILT at the design canvas (gridNative px), but the
+    // dashboard's true render size is the TARGET = gridNative * scaleFactor
+    // (scale_percent). So the content the viewer presents/fits is the
+    // target-sized version, not the raw built size.
     const gridNativeW = maxGridCol * CELL_WIDTH + (maxGridCol - 1) * GAP;
     const gridNativeH = maxGridRow * CELL_HEIGHT + (maxGridRow - 1) * GAP;
+    const targetW = gridNativeW * scaleFactor;
+    const targetH = gridNativeH * scaleFactor;
+
+    // "actual" = native TARGET size, no fit-to-window. With a scale > 100%
+    // this is the zoomed-up render (the "everything bigger" result); at
+    // 100% scaleFactor is 1 so it's the plain native size as before.
+    if (fitMode === 'actual') {
+      if (scaleFactor === 1) return { transform: '', scaledW: 0, scaledH: 0 };
+      return { transform: `scale(${scaleFactor})`, scaledW: targetW, scaledH: targetH };
+    }
+
+    if (!containerSize.width || !containerSize.height) {
+      return { transform: '', scaledW: 0, scaledH: 0 };
+    }
     const availW = containerSize.width - 2 * CONTAINER_PADDING;
     const availH = containerSize.height - 2 * CONTAINER_PADDING;
-    const sx = availW / gridNativeW;
-    const sy = availH / gridNativeH;
-
+    // Fit ratios computed against the TARGET-sized content...
+    const sx = availW / targetW;
+    const sy = availH / targetH;
+    // ...and the applied transform is fitRatio * scaleFactor, since the
+    // untransformed content is still at the smaller built (design) size.
     if (fitMode === 'stretch') {
       return {
-        transform: `scale(${sx}, ${sy})`,
-        scaledW: gridNativeW * sx,
-        scaledH: gridNativeH * sy,
+        transform: `scale(${sx * scaleFactor}, ${sy * scaleFactor})`,
+        scaledW: targetW * sx,
+        scaledH: targetH * sy,
       };
     }
     if (fitMode === 'width') {
       return {
-        transform: `scale(${sx})`,
-        scaledW: gridNativeW * sx,
-        scaledH: gridNativeH * sx,
+        transform: `scale(${sx * scaleFactor})`,
+        scaledW: targetW * sx,
+        scaledH: targetH * sx,
       };
     }
     // "window" — uniform, both axes fit
     const s = Math.min(sx, sy);
     return {
-      transform: `scale(${s})`,
-      scaledW: gridNativeW * s,
-      scaledH: gridNativeH * s,
+      transform: `scale(${s * scaleFactor})`,
+      scaledW: targetW * s,
+      scaledH: targetH * s,
     };
-  }, [isEditMode, fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT]);
+  }, [isEditMode, fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, scaleFactor]);
 
   // Fetch dashboard data and referenced charts
   const fetchDashboard = useCallback(async () => {
@@ -984,6 +1031,38 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Measure the REAL fullscreen viewport. If not already fullscreen,
+  // request it first and measure once the browser has applied it
+  // (fullscreenchange + a frame), since innerWidth/Height only reflect
+  // the true usable area in fullscreen. Opens the result dialog.
+  const measureScreenSize = async () => {
+    const capture = () => {
+      // Two rAFs so the fullscreen layout has settled before we read.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        setScreenMeasure({ w: window.innerWidth, h: window.innerHeight });
+      }));
+    };
+    if (!document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+        // requestFullscreen resolves before the resize fully applies on
+        // some browsers; wait for the next fullscreenchange to measure.
+        const once = () => {
+          document.removeEventListener('fullscreenchange', once);
+          capture();
+        };
+        document.addEventListener('fullscreenchange', once);
+      } catch {
+        // Fullscreen denied/unavailable — measure the current viewport so
+        // the user still gets a (less accurate) number rather than nothing.
+        capture();
+      }
+    } else {
+      capture();
+    }
+  };
+
   const handleManualRefresh = () => {
     // Trigger an out-of-band refetch on every polling chart by bumping
     // the refresh-tick. Polling charts watch the tick and call
@@ -1175,6 +1254,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditHasChanges(true);
   };
 
+  // Scale % is persisted in the dashboard record, so changing it marks
+  // the dashboard dirty (same as a dimension/panel edit). Clamp 50–200.
+  const handleScaleChange = (next) => {
+    const v = Number(next);
+    if (!Number.isFinite(v)) return;
+    const clamped = Math.min(200, Math.max(50, Math.round(v)));
+    setScalePercent(clamped);
+    setEditHasChanges(true);
+  };
+
   // saveEditMode persists current edits and returns the resolved
   // dashboard ID (existing or freshly-minted for a new dashboard).
   // Callers that don't care can ignore the return; the mode-switch
@@ -1191,6 +1280,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       const updatedSettings = {
         ...dashboard.settings,
         layout_dimension: currentDimension,
+        scale_percent: scalePercent,
         refresh_interval: editableRefreshInterval,
       };
       const payload = {
@@ -1813,6 +1903,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </Select>
             </div>
           )}
+          {isEditMode && layoutDimension && (
+            <div className="scale-controls">
+              <span className="scale-label" title="Scale the dashboard's component text and line sizes. You design at this scale directly — 100% = actual size; higher % renders everything bigger.">Scale</span>
+              <NumberInput
+                id="viewer-scale-percent"
+                size="sm"
+                hideLabel
+                label="Scale %"
+                min={50}
+                max={200}
+                step={5}
+                value={scalePercent}
+                onChange={(e, { value }) => handleScaleChange(value ?? e?.target?.value)}
+              />
+            </div>
+          )}
           {isEditMode && (
             <div className="zoom-controls">
               <IconButton
@@ -1953,39 +2059,57 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </IconButton>
               <OverflowMenu
+                // FIXED trigger icon — it just opens the fit-mode menu.
+                // We do NOT swap renderIcon per mode: Carbon caches the
+                // trigger icon component and won't reliably re-render it,
+                // so a per-mode icon kept showing the wrong glyph. The
+                // ACTIVE mode is conveyed by the ✓ on the menu items
+                // below instead. iconDescription names the current mode
+                // for the tooltip/aria so it's still discoverable.
                 size="lg"
-                renderIcon={
-                  fitMode === 'window' ? FitModeWindowIcon
-                  : fitMode === 'width' ? FitModeWidthIcon
-                  : fitMode === 'stretch' ? FitModeStretchIcon
-                  : FitModeActualIcon
-                }
+                renderIcon={FitModeWindowIcon}
                 iconDescription={
-                  fitMode === 'window' ? 'Fit to window'
+                  (fitMode === 'window' ? 'Fit to window'
                   : fitMode === 'width' ? 'Fit to width'
                   : fitMode === 'stretch' ? 'Stretch to fill'
-                  : 'Actual size'
+                  : 'Actual size') + ' — change view fit'
                 }
                 flipped
                 direction="bottom"
                 className="fit-mode-menu"
               >
                 <OverflowMenuItem
-                  itemText="Actual size"
+                  itemText={
+                    <span className="fit-mode-item">
+                      <span className="fit-mode-check">{fitMode === 'actual' ? '✓' : ''}</span>
+                      Actual size
+                    </span>
+                  }
                   onClick={() => selectFitMode('actual')}
                   isDelete={false}
                 />
                 <OverflowMenuItem
-                  itemText="Fit to window"
+                  itemText={
+                    <span className="fit-mode-item">
+                      <span className="fit-mode-check">{fitMode === 'window' ? '✓' : ''}</span>
+                      Fit to window
+                    </span>
+                  }
                   onClick={() => selectFitMode('window')}
                 />
                 <OverflowMenuItem
-                  itemText="Fit to width"
+                  itemText={
+                    <span className="fit-mode-item">
+                      <span className="fit-mode-check">{fitMode === 'width' ? '✓' : ''}</span>
+                      Fit to width
+                    </span>
+                  }
                   onClick={() => selectFitMode('width')}
                 />
                 <OverflowMenuItem
                   itemText={
-                    <span className="fit-mode-item-with-info">
+                    <span className="fit-mode-item fit-mode-item-with-info">
+                      <span className="fit-mode-check">{fitMode === 'stretch' ? '✓' : ''}</span>
                       Stretch to fill
                       <Information
                         size={16}
@@ -2025,6 +2149,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     disabled={savingThumbnail}
                   />
                 )}
+                {canDesign && (
+                  <OverflowMenuItem
+                    itemText="Measure screen size…"
+                    onClick={measureScreenSize}
+                  />
+                )}
                 <OverflowMenuItem
                   itemText={isDefaultDashboard ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -2056,11 +2186,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           */}
           <div
             className="dashboard-grid-scale-wrapper"
-            style={
-              !isEditMode && fitMode !== 'actual' && fitTransform.scaledW > 0
+            style={{
+              // Reserve the post-transform size whenever there IS one — now
+              // includes "actual" at scale>100% (scaledW>0 there), so the
+              // scaled-up content scrolls correctly. At 100% actual,
+              // scaledW is 0 → no reserved size, native flow as before.
+              ...(!isEditMode && fitTransform.scaledW > 0
                 ? { width: fitTransform.scaledW, height: fitTransform.scaledH }
-                : undefined
-            }
+                : {}),
+              // Edit-mode manual ZOOM lives HERE (wrapper level) so it scales
+              // EVERYTHING in the scene — the grid AND the target (blue)
+              // boundary line that sits in this wrapper. Zoom = "magnify the
+              // whole view to see it." The build/display toggle's scaleFactor
+              // is applied on the inner .dashboard-grid only (below), so the
+              // blue line stays fixed for the toggle (content grows to meet
+              // it) but DOES scale with zoom.
+              ...(isEditMode && zoom !== 100 ? {
+                transform: `scale(${zoom / 100})`,
+                transformOrigin: 'top left'
+              } : {})
+            }}
           >
           <div
             ref={gridRef}
@@ -2074,10 +2219,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 transform: fitTransform.transform,
                 transformOrigin: 'top left'
               } : {}),
-              // Edit mode: manual zoom (mutually exclusive with fit-mode transform
-              // because fitTransform returns empty string when isEditMode is true).
-              ...(isEditMode && zoom !== 100 ? {
-                transform: `scale(${zoom / 100})`,
+              // Edit mode: ALWAYS design at the display (scaled) size — the
+              // content is scaled by scaleFactor so what you place is what
+              // renders (100% = actual size). No build-vs-display toggle.
+              // The manual zoom (wrapper above) is a separate view magnifier.
+              ...(isEditMode && scaleFactor !== 1 ? {
+                transform: `scale(${scaleFactor})`,
                 transformOrigin: 'top left'
               } : {})
             }}
@@ -2132,6 +2279,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                           </span>
                         )}
                         <span className="panel-size-label">{panel.w}×{panel.h}</span>
+                        {/* Custom-code indicator: the panel's component renders
+                            from hand-written component_code, not the config form.
+                            Non-interactive marker (title tooltip on hover). */}
+                        {chart?.use_custom_code && (
+                          <span
+                            className="panel-custom-code-indicator"
+                            title="This component uses custom code"
+                            aria-label="Uses custom code"
+                          >
+                            <Code size={14} />
+                          </span>
+                        )}
                         <div className="panel-header-edit-menu" onMouseDown={(e) => e.stopPropagation()}>
                           {hasText ? (
                             <IconButton
@@ -2208,7 +2367,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                               <span className="chart-name">{chart.title || chart.name || 'Untitled Chart'}</span>
                             </div>
                           )}
-                          <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''}`}>
+                          {/* has-title → a title band actually renders at the
+                              top (datatable's external header, or the
+                              ChartShell/DataViewGrid 2.5rem title when showTitle
+                              isn't disabled AND there's a title/name). When set,
+                              the SCSS drops the wrapper's TOP padding so the band
+                              sits flush — reclaiming the otherwise-wasted top
+                              margin. When NOT set (title off), the top inset
+                              stays so the hover action icons don't land on the
+                              plot. */}
+                          <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''} ${(chart.chart_type === 'datatable' || (chart.options?.showTitle !== false && (chart.title || chart.name))) ? 'has-title' : ''}`}>
                             <ComponentPanelWithActions
                               // Key includes chart.updated so a config-refresh poll
                               // that picks up a server-side chart edit forces this
@@ -2286,7 +2454,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </div>
             )}
 
-            {/* Dimension boundary lines — rendered as real elements to paint above grid items */}
+            {/* CANVAS boundary — the single edge of the design grid. It
+                lives INSIDE the always-scaled .dashboard-grid, so at
+                scale>100% it renders at the display extent automatically,
+                marking exactly where the dashboard ends at the scale
+                you're designing at. (We design at display size directly,
+                so there's no separate target line.) */}
             {isEditMode && gridCols && (
               <>
                 <div
@@ -2428,6 +2601,43 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         onDiscard={confirmDiscard}
         body="You have unsaved layout changes. Are you sure you want to discard them?"
       />
+
+      {/* Measure-screen-size helper result. Reports the REAL fullscreen
+          viewport so an admin can correct a layout-dimension preset's
+          geometry (the published name overstates usable space because the
+          OS reserves the top). Read-only here; the preset edit lives in
+          Manage → Settings → Layout Dimensions. */}
+      {screenMeasure && (
+        <Modal
+          open
+          modalHeading="Measured screen size"
+          passiveModal
+          onRequestClose={() => setScreenMeasure(null)}
+          size="sm"
+        >
+          <p style={{ marginBottom: '1rem' }}>
+            Actual usable fullscreen area on this display:
+          </p>
+          <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
+            <div>
+              <div style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem' }}>Max Width</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{screenMeasure.w}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem' }}>Max Height</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{screenMeasure.h}</div>
+            </div>
+          </div>
+          <p style={{ color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>
+            The published resolution (e.g. 2560×1440) overstates this — the OS
+            reserves space at the top (menu bar / notch / window chrome). To make
+            a dashboard fill this screen, note these numbers and set the matching
+            layout-dimension preset to this Max Width and Max Height in Manage →
+            Settings → Layout Dimensions (keep its published name; just fix the
+            numbers). Requires Manage capability.
+          </p>
+        </Modal>
+      )}
 
       {/* Mode-switch interception: three options so "cancel" can't be
           misread as either "abandon edits" or "abandon the mode switch". */}

@@ -404,7 +404,21 @@ button.cds--overflow-menu {
     background-color: var(--cds-layer-hover-02, #4c4c4c);
   }
 
+  // Only show the focus ring for KEYBOARD focus. Carbon's FloatingMenu
+  // programmatically calls .focus() on the first menu item when the menu
+  // opens (a11y: move focus into the menu). With a plain :focus rule that
+  // painted a stray focus-box on the first item for MOUSE users too —
+  // and because the item keeps real DOM focus, the ring tracked WINDOW
+  // focus (vanished on app blur, returned on focus). :focus-visible is
+  // not applied by browsers when an element is focused programmatically
+  // after a mouse interaction, so mouse users see no ring while keyboard
+  // users (tab/arrow) still get one. Affects every OverflowMenu: fit-mode,
+  // pencil/edit, dashboard-actions, and the account menu.
   &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
     outline: 2px solid var(--cds-focus);
     outline-offset: -2px;
   }

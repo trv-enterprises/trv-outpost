@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -37,6 +39,10 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"strip_literal_secret_sentinels_v1", migrateStripLiteralSecretSentinels},
 		{"users_backfill_control_capability_v1", migrateBackfillControlCapability},
 		{"seed_global_snippets_v1", migrateSeedGlobalSnippetsV1},
+		{"spec_driven_chart_code_v1", migrateSpecDrivenChartCode},
+		{"refresh_assistant_model_description_v1", migrateRefreshAssistantModelDescription},
+		{"assistant_enabled_to_ai_enabled_v1", migrateAssistantEnabledToAIEnabled},
+		{"refresh_tile_font_size_description_v1", migrateRefreshTileFontSizeDescription},
 	}
 
 	coll := db.Collection("migrations")
@@ -478,6 +484,176 @@ func migrateRenameDatasourceIdInComponentCode(ctx context.Context, db *mongo.Dat
 	}
 
 	log.Printf("  components: rewrote datasourceId: → connectionId: in %d component_code blobs", updated)
+	return nil
+}
+
+// migrateSpecDrivenChartCode repairs chart components whose stored
+// component_code is a legacy hardcoded-column ECharts template (or empty)
+// rather than the spec-driven one-liner. Before v0.24 the server create
+// path (component_service.CreateComponent) injected a per-type template
+// with literal column names ('timestamp'/'value', 'day'/'mean', …) for
+// agent-built charts (chat agent, component agent, MCP). Those records
+// render "No data" against any schema whose columns differ from the
+// template's literals. The fix rewrites them to
+// `<SpecDrivenChart specName="..." />`, which draws from the saved
+// data_mapping / options config at runtime — identical to editor-built
+// charts.
+//
+// Scope: every version row of a chart component that is spec-driven
+// (registry.IsSpecDrivenChart) and not in custom-code mode, whose code
+// does not already defer to SpecDrivenChart. Custom-code charts and the
+// `custom` type are left untouched. Idempotent — already-converted rows
+// contain "SpecDrivenChart" and are skipped, and the migration framework
+// guards against re-running.
+func migrateSpecDrivenChartCode(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("components")
+
+	// Candidate set: chart components not flagged as custom-code whose
+	// code doesn't already reference SpecDrivenChart. The per-type
+	// spec-driven check happens in Go below (the registry is the source
+	// of truth for which chart_types are spec-driven).
+	filter := bson.M{
+		"component_type": "chart",
+		"use_custom_code": bson.M{"$ne": true},
+		"component_code":  bson.M{"$not": bson.M{"$regex": "SpecDrivenChart"}},
+	}
+	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("find chart components to repair: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	updated := 0
+	skipped := 0
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID        interface{} `bson:"_id"`
+			ChartType string      `bson:"chart_type"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			return fmt.Errorf("decode component: %w", err)
+		}
+		// Only rewrite chart types that actually have a spec-driven render
+		// path. A non-spec type with hand-or-template code is left alone.
+		if !registry.IsSpecDrivenChart(doc.ChartType) {
+			skipped++
+			continue
+		}
+		newCode := componenttemplates.SpecDrivenOneLiner(doc.ChartType)
+		_, err := coll.UpdateByID(ctx, doc.ID, bson.M{"$set": bson.M{"component_code": newCode}})
+		if err != nil {
+			return fmt.Errorf("update component %v: %w", doc.ID, err)
+		}
+		updated++
+	}
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("cursor: %w", err)
+	}
+
+	log.Printf("  components: rewrote %d chart rows to the spec-driven one-liner (%d non-spec rows left untouched)", updated, skipped)
+	return nil
+}
+
+// migrateRefreshAssistantModelDescription updates the stored description
+// for the assistant.model setting. The settings sync only INSERTS missing
+// keys (DB values take precedence and are never overwritten), so when the
+// help text changes in user-configurable.yaml an already-seeded deployment
+// keeps the stale description in its Manage → Settings UI. This refreshes
+// it to match the YAML (the sonnet/opus aliases now track latest, plus the
+// pin-a-specific-model-id option). Value is left untouched — only the
+// human-facing description changes. Idempotent: $set to the current text.
+func migrateRefreshAssistantModelDescription(ctx context.Context, db *mongo.Database) error {
+	const desc = "Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Takes effect on next server restart. Per-deployment choice; not per-user."
+
+	res, err := db.Collection("settings").UpdateOne(
+		ctx,
+		bson.M{"_id": "assistant.model"},
+		bson.M{"$set": bson.M{"description": desc}},
+	)
+	if err != nil {
+		return fmt.Errorf("refresh assistant.model description: %w", err)
+	}
+	log.Printf("  settings: refreshed assistant.model description (matched %d)", res.MatchedCount)
+	return nil
+}
+
+// migrateRefreshTileFontSizeDescription updates the tile_font_size
+// setting's description in existing DBs to the current wording (the
+// settings sync never overwrites an existing doc, so a YAML edit alone
+// doesn't reach deployments that already seeded it). Same shape as
+// migrateRefreshAssistantModelDescription — a no-op when the setting is
+// absent (fresh DBs seed the new text directly).
+func migrateRefreshTileFontSizeDescription(ctx context.Context, db *mongo.Database) error {
+	const desc = "Font size for compact tile control titles (xs, sm, md, lg). Applies to control components of the tile_* control types."
+	res, err := db.Collection("settings").UpdateOne(
+		ctx,
+		bson.M{"_id": "tile_font_size"},
+		bson.M{"$set": bson.M{"description": desc}},
+	)
+	if err != nil {
+		return fmt.Errorf("refresh tile_font_size description: %w", err)
+	}
+	log.Printf("  settings: refreshed tile_font_size description (matched %d)", res.MatchedCount)
+	return nil
+}
+
+// migrateAssistantEnabledToAIEnabled folds the former
+// `assistant.enabled` admin setting into the new unified `ai.enabled`
+// master switch (which now governs BOTH the Component AI agent and the
+// Dashboard Assistant — see config/user-configurable.yaml). Runs BEFORE
+// the settings seed (migrations are applied at boot ahead of
+// SyncSettingsFromConfig), so:
+//   - If ai.enabled already exists → no-op (idempotent / already migrated).
+//   - Else if assistant.enabled exists → create ai.enabled carrying its
+//     value, so an admin who had explicitly turned the Assistant OFF
+//     keeps AI off after the merge (and the seed then skips it).
+//   - Else (fresh DB) → do nothing; the seed creates ai.enabled=true.
+// Finally removes the orphaned assistant.enabled doc.
+func migrateAssistantEnabledToAIEnabled(ctx context.Context, db *mongo.Database) error {
+	settings := db.Collection("settings")
+
+	existsAI, err := settings.CountDocuments(ctx, bson.M{"_id": "ai.enabled"})
+	if err != nil {
+		return fmt.Errorf("check ai.enabled: %w", err)
+	}
+	if existsAI == 0 {
+		var old struct {
+			Value interface{} `bson:"value"`
+		}
+		err := settings.FindOne(ctx, bson.M{"_id": "assistant.enabled"}).Decode(&old)
+		if err == nil {
+			// Carry the old value forward into the new key.
+			now := time.Now()
+			_, err = settings.UpdateByID(
+				ctx,
+				"ai.enabled",
+				bson.M{"$set": bson.M{
+					"key":         "ai.enabled",
+					"value":       old.Value,
+					"category":    "ai",
+					"description": "AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that. Restart required for changes to take effect.",
+					"updated":     now,
+				}, "$setOnInsert": bson.M{"created": now}},
+				options.Update().SetUpsert(true),
+			)
+			if err != nil {
+				return fmt.Errorf("create ai.enabled from assistant.enabled: %w", err)
+			}
+			log.Printf("  settings: migrated assistant.enabled (value=%v) → ai.enabled", old.Value)
+		} else if err != mongo.ErrNoDocuments {
+			return fmt.Errorf("read assistant.enabled: %w", err)
+		}
+		// err == ErrNoDocuments → fresh DB, leave ai.enabled for the seed.
+	}
+
+	// Remove the orphaned old key (no-op if already gone).
+	res, err := settings.DeleteOne(ctx, bson.M{"_id": "assistant.enabled"})
+	if err != nil {
+		return fmt.Errorf("delete assistant.enabled: %w", err)
+	}
+	if res.DeletedCount > 0 {
+		log.Printf("  settings: removed orphaned assistant.enabled")
+	}
 	return nil
 }
 

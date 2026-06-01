@@ -233,6 +233,11 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/namespaces", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "DELETE", Required: models.CapabilityManage, WriteOnly: true},
 
+		// AI API Usage (admin page) — read usage + set per-user budget
+		// overrides. Both verbs require Manage; it's an admin surface.
+		{PathPrefix: "/api/ai/usage", Method: "GET", Required: models.CapabilityManage},
+		{PathPrefix: "/api/ai/usage", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
+
 		// API keys — every authenticated user can create/list/revoke
 		// their OWN keys (no capability required). The deployment-wide
 		// /api/api-keys/all view is admin-only, gated by a more specific
@@ -321,7 +326,7 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 		//               request, no bootstrap dance, no refresh.
 		//               Used by ANY principal calling from outside
 		//               a browser: ts-store webhook (system user),
-		//               dashboard-agent CLI (system or human),
+		//               external MCP clients (system or human),
 		//               kiosks, the user's own cron job script.
 		//               Both human-minted keys (POST /api/api-keys)
 		//               and admin-minted system-user keys (Manage →

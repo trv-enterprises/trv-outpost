@@ -424,7 +424,7 @@ const docTemplate = `{
         },
         "/api/ai/availability": {
             "get": {
-                "description": "Returns per-surface availability flags. ` + "`" + `enabled` + "`" + ` is a legacy alias for ` + "`" + `component_agent_enabled` + "`" + `. The Component AI agent is enabled iff ANTHROPIC_API_KEY was set at server start. The Dashboard Assistant additionally requires the ` + "`" + `assistant.enabled` + "`" + ` admin setting to be true at boot.",
+                "description": "Returns per-surface availability flags. ` + "`" + `enabled` + "`" + ` is a legacy alias for ` + "`" + `component_agent_enabled` + "`" + `. Both AI surfaces require the unified ` + "`" + `ai.enabled` + "`" + ` admin setting AND an Anthropic key at server start; they share that single gate.",
                 "produces": [
                     "application/json"
                 ],
@@ -472,6 +472,59 @@ const docTemplate = `{
                     "debug"
                 ],
                 "summary": "Get debug status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/ai/usage": {
+            "get": {
+                "description": "Per-user Assistant token usage: today vs effective cap + a 30-day history. Only the Dashboard Assistant is metered.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "AI API usage (Dashboard Assistant)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AIUsageResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/ai/usage/{guid}/override": {
+            "put": {
+                "description": "Admin-only. Raises (or clears) a user's daily Assistant token caps. Scope \"today\" applies only for the current UTC day; \"ongoing\" persists.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Set/clear a user's Assistant budget override",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User GUID",
+                        "name": "guid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -6002,6 +6055,30 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.AIUsageResponse": {
+            "type": "object",
+            "properties": {
+                "global_input_cap": {
+                    "type": "integer"
+                },
+                "global_output_cap": {
+                    "type": "integer"
+                },
+                "history_days": {
+                    "type": "integer"
+                },
+                "metered_note": {
+                    "description": "MeteredNote spells out that only the Assistant is counted, so the\nfrontend can surface it verbatim without hardcoding the caveat.",
+                    "type": "string"
+                },
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.userUsage"
+                    }
+                }
+            }
+        },
         "handlers.CategoryInfo": {
             "type": "object",
             "properties": {
@@ -6271,6 +6348,58 @@ const docTemplate = `{
                 },
                 "timestamp": {
                     "description": "nanoseconds since unix epoch",
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.usageDay": {
+            "type": "object",
+            "properties": {
+                "date_utc": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.userUsage": {
+            "type": "object",
+            "properties": {
+                "effective_input_cap": {
+                    "type": "integer"
+                },
+                "effective_output_cap": {
+                    "type": "integer"
+                },
+                "global_input_cap": {
+                    "type": "integer"
+                },
+                "global_output_cap": {
+                    "type": "integer"
+                },
+                "guid": {
+                    "type": "string"
+                },
+                "history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.usageDay"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "override": {
+                    "$ref": "#/definitions/models.AssistantBudgetOverride"
+                },
+                "today_input": {
+                    "type": "integer"
+                },
+                "today_output": {
                     "type": "integer"
                 }
             }
@@ -6616,27 +6745,79 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AssistantBudgetOverride": {
+            "type": "object",
+            "properties": {
+                "effective_date": {
+                    "description": "UTC YYYY-MM-DD; required when Scope==\"today\"",
+                    "type": "string"
+                },
+                "input": {
+                    "description": "daily input-token cap; 0 = use global",
+                    "type": "integer"
+                },
+                "output": {
+                    "description": "daily output-token cap; 0 = use global",
+                    "type": "integer"
+                },
+                "scope": {
+                    "description": "\"today\" | \"ongoing\"",
+                    "type": "string"
+                },
+                "set_by": {
+                    "description": "admin GUID who set it (audit)",
+                    "type": "string"
+                }
+            }
+        },
         "models.BandColumns": {
             "type": "object",
             "properties": {
+                "lower_control": {
+                    "type": "string"
+                },
+                "lower_limit": {
+                    "type": "string"
+                },
+                "max": {
+                    "type": "string"
+                },
                 "mean": {
-                    "description": "Primary value column (e.g. \"mean\")",
+                    "description": "sd / minmaxmean center",
+                    "type": "string"
+                },
+                "min": {
+                    "description": "minmaxmean bounds",
                     "type": "string"
                 },
                 "minus_1sd": {
-                    "description": "Column carrying that row's -1 SD bound",
+                    "description": "-1 SD bound",
                     "type": "string"
                 },
                 "minus_2sd": {
-                    "description": "Column carrying that row's -2 SD bound",
+                    "description": "-2 SD bound",
                     "type": "string"
                 },
                 "plus_1sd": {
-                    "description": "Column carrying that row's +1 SD bound",
+                    "description": "sd bounds",
                     "type": "string"
                 },
                 "plus_2sd": {
-                    "description": "Column carrying that row's +2 SD bound",
+                    "description": "+2 SD bound",
+                    "type": "string"
+                },
+                "scheme": {
+                    "description": "\"sd\" (default) | \"minmaxmean\" | \"spc\"",
+                    "type": "string"
+                },
+                "target": {
+                    "description": "spc center + bounds",
+                    "type": "string"
+                },
+                "upper_control": {
+                    "type": "string"
+                },
+                "upper_limit": {
                     "type": "string"
                 }
             }
@@ -7790,6 +7971,10 @@ const docTemplate = `{
                 "refresh_interval": {
                     "type": "integer"
                 },
+                "scale_percent": {
+                    "description": "ScalePercent is the \"everything bigger\" zoom. LayoutDimension is the\nrender TARGET; the dashboard is BUILT on a derived DESIGN canvas of\ntarget/(scale/100), so at render the viewer's transform:scale blows\nit back up to target — uniformly enlarging fonts, lines, and layout\nwhile preserving proportions. 100 = build at target (no enlargement);\n120 = build on target/1.2 so everything renders 20% bigger. Default\n100. Empty/0 is treated as 100 by readers.",
+                    "type": "integer"
+                },
                 "theme": {
                     "type": "string"
                 },
@@ -8575,6 +8760,10 @@ const docTemplate = `{
         "models.LayoutDimensionDTO": {
             "type": "object",
             "properties": {
+                "default_scale": {
+                    "description": "DefaultScale is the default display-scale % for dashboards created\nat this dimension (e.g. 120 = \"our 4K screens look best at 120%\").\nNew dashboards seed scale_percent from this; designer can override.\n0/absent = 100 (no scaling).",
+                    "type": "integer"
+                },
                 "max_height": {
                     "type": "integer"
                 },
@@ -9965,6 +10154,14 @@ const docTemplate = `{
                     "description": "Whether user is active",
                     "type": "boolean"
                 },
+                "assistant_budget_override": {
+                    "description": "AssistantBudgetOverride raises (or lowers) this user's daily\nDashboard Assistant token caps relative to the global\nassistant.daily_token_budget. Nil = no override (use global caps).\nSet by an admin from the AI API Usage page. See the type for scope\nsemantics.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AssistantBudgetOverride"
+                        }
+                    ]
+                },
                 "capabilities": {
                     "description": "User capabilities",
                     "type": "array",
@@ -10384,6 +10581,11 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "cols": {
+                    "description": "Cols/Rows are the cell budget AT this dimension's DefaultScale —\ni.e. the grid an agent should plan to when building at this\ndimension's normal scale. (Higher scale → smaller budget, since the\ndesign canvas = dimension / scale.)",
+                    "type": "integer"
+                },
+                "default_scale": {
+                    "description": "% (0/absent → 100)",
                     "type": "integer"
                 },
                 "is_default": {

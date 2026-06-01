@@ -164,10 +164,16 @@ export function buildOption(values, data) {
         },
       };
 
+  // grid.bottom: containLabel:true auto-reserves the axis-label height,
+  // so this is the EXTRA gap below the labels. Flush (8px) by default;
+  // bump to ~38 only when an x-axis NAME is set (nameGap 30 places the
+  // name below the labels). Previously a flat 40 left a dead band under
+  // label-less scatters, matching the line/area/bar fix.
+  const gridBottom = dm.x_axis_label ? 38 : 8;
   const option = {
     backgroundColor: TRANSPARENT_BG,
     tooltip,
-    grid: { top: 30, left: 50, right: 20, bottom: 40, containLabel: true },
+    grid: { top: 30, left: 50, right: 20, bottom: gridBottom, containLabel: true },
     xAxis: withAxisName(buildValueAxis(opts.xAxisRange), dm.x_axis_label || '', true),
     yAxis: withAxisName(buildValueAxis(opts.yAxisRange?.left), dm.y_axis_label || '', false),
     series,

@@ -43,9 +43,8 @@ Skip Clerk when:
   non-Clerk IdP is wired up.
 
 API keys are unaffected by Clerk. Whether Clerk is enabled or not,
-the [dashboard-agent](dashboard-agent.md) CLI, [MCP](mcp.md) clients,
-and any script using `Authorization: Bearer trve_…` continue to work
-the same way.
+[MCP](mcp.md) clients and any script using
+`Authorization: Bearer trve_…` continue to work the same way.
 
 ## Supported sign-in methods
 

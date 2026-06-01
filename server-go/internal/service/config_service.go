@@ -122,7 +122,7 @@ func parseDimensionEntry(entry interface{}) *models.LayoutDimensionDTO {
 		maxWidth := toInt(fields["max_width"])
 		maxHeight := toInt(fields["max_height"])
 		if maxWidth > 0 && maxHeight > 0 {
-			return &models.LayoutDimensionDTO{Name: name, MaxWidth: maxWidth, MaxHeight: maxHeight}
+			return &models.LayoutDimensionDTO{Name: name, MaxWidth: maxWidth, MaxHeight: maxHeight, DefaultScale: toInt(fields["default_scale"])}
 		}
 		return nil
 	}
@@ -157,7 +157,7 @@ func parseDimensionEntry(entry interface{}) *models.LayoutDimensionDTO {
 	maxWidth := toInt(fields["max_width"])
 	maxHeight := toInt(fields["max_height"])
 	if maxWidth > 0 && maxHeight > 0 {
-		return &models.LayoutDimensionDTO{Name: name, MaxWidth: maxWidth, MaxHeight: maxHeight}
+		return &models.LayoutDimensionDTO{Name: name, MaxWidth: maxWidth, MaxHeight: maxHeight, DefaultScale: toInt(fields["default_scale"])}
 	}
 	return nil
 }
@@ -321,12 +321,28 @@ func (s *ConfigService) ListLayoutDimensionsForCatalog(ctx context.Context) ([]r
 	entries := make([]registry.LayoutDimensionEntry, 0, len(dimensions))
 	for _, d := range dimensions {
 		entries = append(entries, registry.LayoutDimensionEntry{
-			Name:      d.Name,
-			MaxWidth:  d.MaxWidth,
-			MaxHeight: d.MaxHeight,
+			Name:         d.Name,
+			MaxWidth:     d.MaxWidth,
+			MaxHeight:    d.MaxHeight,
+			DefaultScale: d.DefaultScale,
 		})
 	}
 	return entries, defaultName, nil
+}
+
+// DefaultScaleForDimension returns the default display-scale % configured
+// for the named layout-dimension preset, or 0 when the preset is unknown
+// or has no default (caller treats 0 as "no seed / 100%"). Used by
+// DashboardService to seed a new dashboard's scale_percent.
+func (s *ConfigService) DefaultScaleForDimension(ctx context.Context, name string) int {
+	if name == "" {
+		return 0
+	}
+	dims, _ := s.getLayoutDimensions(ctx)
+	if d, ok := dims[name]; ok {
+		return d.DefaultScale
+	}
+	return 0
 }
 
 // GetUserConfig retrieves user-specific configuration

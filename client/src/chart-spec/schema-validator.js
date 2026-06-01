@@ -114,6 +114,7 @@ const SUPPORTED_FIELD_TYPES = new Set([
   'y_axis_columns_list', // free list of { column, stack, axis? } entries
   'threshold_list',      // free list of { value, color, label? } entries
   'column_manager',      // dataview: visible-columns checklist + reorder + per-column alias
+  'band_scheme',         // banded_bar: scheme selector + per-scheme band-column mappings
 ]);
 const SUPPORTED_LAYOUTS = new Set([
   'single-column',

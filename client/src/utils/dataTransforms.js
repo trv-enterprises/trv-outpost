@@ -477,8 +477,14 @@ export function formatTimestamp(value, format = 'short', options = {}) {
   if (format === 'relative') return formatRelativeTime(date);
   if (format === 'iso') return date.toISOString();
 
-  // chart_auto picks time-vs-date based on age of the value.
-  if (format === 'chart_auto') {
+  // chart_auto (and the bare 'auto' alias) picks time-vs-date based on
+  // the age of the value. The line/area/bar specs resolve 'auto' to a
+  // concrete preset at the series level (resolveAutoXFormat) before
+  // calling here; this branch is the graceful fallback for any other
+  // path that passes 'auto' straight through (legacy codegen, custom
+  // code) — it degrades to a sensible single-value format rather than
+  // hitting the unknown-preset warning.
+  if (format === 'chart_auto' || format === 'auto') {
     const now = Date.now();
     const diffHours = Math.abs(now - date.getTime()) / (1000 * 60 * 60);
     const sub = diffHours < 24 ? '__chart_auto_time' : '__chart_auto_date';
@@ -564,8 +570,13 @@ function formatRelativeTime(date) {
 export function formatCellValue(value, columnName = '', options = {}) {
   if (value === null || value === undefined) return '';
 
-  // Check if column name suggests it's a timestamp
-  const isTimestampColumn = /timestamp|time|date|created|updated|ts$/i.test(columnName);
+  // Check if column name suggests it's a timestamp. Match the time-ish
+  // word only as a WHOLE SEGMENT (bounded by start/end or a . _ -
+  // delimiter), not as any substring — otherwise `uptime.sec`,
+  // `downtime`, `update_count`, etc. falsely match "time"/"update" and
+  // get rendered as dates. `timestamp` and real time columns
+  // (start_time, event.timestamp, created_at, ts, date, …) still match.
+  const isTimestampColumn = /(^|[._-])(timestamp|datetime|time|date|created|updated|ts)([._-]|$)/i.test(columnName);
 
   // Check if value looks like a timestamp
   const timestampType = detectTimestampType(value);

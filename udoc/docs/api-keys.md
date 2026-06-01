@@ -4,10 +4,10 @@ sidebar_position: 19
 
 # API Keys
 
-API keys are personal authentication tokens for non-browser callers — the
-[dashboard-agent](dashboard-agent.md) CLI, [MCP](mcp.md) clients, and
-scripts. Browser users don't need a key (the SPA's identity flow covers
-those); anything calling the API from outside a browser session does.
+API keys are personal authentication tokens for non-browser callers —
+[MCP](mcp.md) clients, kiosks, and scripts. Browser users don't need a key
+(the SPA's identity flow covers those); anything calling the API from
+outside a browser session does.
 
 Manage your keys from **Manage Mode → API Keys**. Every authenticated
 user can create their own keys; admins (Manage capability) can also see
@@ -36,8 +36,6 @@ owner's full session credentials.
    plaintext prefix, so once the modal closes the plaintext can't be
    recovered.
 5. Paste the token into your tool's configuration:
-   - dashboard-agent: `export DASHBOARD_API_KEY=trve_…` (or
-     `--api-key trve_…`)
    - mcp-proxy / Claude Desktop: see [MCP](mcp.md#authentication) for
      the full launcher snippet.
    - curl: `curl -H "Authorization: Bearer trve_…" …`
@@ -81,7 +79,5 @@ Keys are stored in MongoDB's `api_keys` collection:
 
 - [MCP](mcp.md#authentication) — using a key with Claude Desktop
   via mcp-proxy.
-- [Dashboard Agent](dashboard-agent.md) — using a key with the
-  dashboard-agent CLI.
 - [Logging In & User Selection](getting-started.md) — the browser
   identity model (separate from API keys).

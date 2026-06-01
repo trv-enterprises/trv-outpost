@@ -3,7 +3,8 @@
 // See LICENSE file for details.
 
 import { SideNavItems, SideNavLink } from '@carbon/react';
-import { Settings, SettingsAdjust, UserMultiple, IotPlatform, Tag, Password } from '@carbon/icons-react';
+import { Settings, SettingsAdjust, UserMultiple, IotPlatform, Tag, Password, ChartLineData } from '@carbon/icons-react';
+import { useAIAvailability } from '../../context/AIAvailabilityContext';
 import './ManageModeNav.scss';
 
 /**
@@ -12,6 +13,11 @@ import './ManageModeNav.scss';
  * Navigation for Manage Mode - system administration and monitoring.
  */
 function ManageModeNav({ location, navigate }) {
+  // AI API Usage only makes sense when AI is enabled in this deployment
+  // (the unified ai.enabled gate, surfaced via the availability flags).
+  const { enabled: aiEnabled, chatAgentEnabled } = useAIAvailability();
+  const showAIUsage = aiEnabled || chatAgentEnabled;
+
   const manageNavItems = [
     {
       path: '/manage/users',
@@ -42,7 +48,13 @@ function ManageModeNav({ location, navigate }) {
       icon: SettingsAdjust,
       label: 'Settings',
       description: 'System administration'
-    }
+    },
+    ...(showAIUsage ? [{
+      path: '/manage/ai-usage',
+      icon: ChartLineData,
+      label: 'AI API Usage',
+      description: 'Dashboard Assistant token usage + per-user budgets'
+    }] : [])
   ];
 
   return (

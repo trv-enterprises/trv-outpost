@@ -315,6 +315,33 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*models
 // User but the User has no ClerkUserID yet, we persist the link so
 // future sign-ins resolve via the (more stable) ClerkUserID lookup.
 // Pass "" to clear the link (admin override).
+// SetAssistantBudgetOverride sets (or clears, when override is nil) a
+// user's per-user Assistant budget override, keyed by GUID. Mirrors the
+// SetClerkID targeted-update pattern — $unset when clearing so the field
+// disappears cleanly rather than persisting a null.
+func (r *UserRepository) SetAssistantBudgetOverride(ctx context.Context, guid string, override *models.AssistantBudgetOverride) error {
+	if override == nil {
+		_, err := r.collection.UpdateOne(
+			ctx,
+			bson.M{"guid": guid},
+			bson.M{
+				"$set":   bson.M{"updated": time.Now()},
+				"$unset": bson.M{"assistant_budget_override": ""},
+			},
+		)
+		return err
+	}
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"guid": guid},
+		bson.M{"$set": bson.M{
+			"assistant_budget_override": override,
+			"updated":                   time.Now(),
+		}},
+	)
+	return err
+}
+
 func (r *UserRepository) SetClerkID(ctx context.Context, userID, clerkID string) error {
 	update := bson.M{"updated": time.Now()}
 	if clerkID == "" {

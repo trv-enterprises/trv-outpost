@@ -24,8 +24,13 @@ settings:
 
   - key: tile_font_size
     category: appearance
-    description: "Font size for compact tile control labels (xs, sm, md, lg)"
+    description: "Font size for compact tile control titles (xs, sm, md, lg). Applies to control components of the tile_* control types."
     value: "sm"
+
+  - key: title_font_size
+    category: appearance
+    description: "Component title size as a percentage of the 1rem base (50–200). Scales BOTH the title font and the title band's height across charts, number tiles, data views, and data tables, so the band always fits the text. 100 = default. Applies on next page load."
+    value: 100
 
   - key: default_numeric_chart_number_size
     category: appearance
@@ -36,6 +41,11 @@ settings:
     category: dashboard
     description: "Default viewer fit mode for dashboards a user has not explicitly set. One of: actual, window, width, stretch."
     value: "stretch"
+
+  - key: stream_buffer_size
+    category: dashboard
+    description: "Max data points a streaming chart keeps in memory (the client-side buffer / backfill depth). Higher shows more history per live chart at the cost of browser memory. Default 1000; raise (e.g. 10000) for power users with high-resolution streams. Applies on next page load."
+    value: 1000
 
   - key: dashboard_command_topic
     category: dashboard
@@ -105,17 +115,21 @@ settings:
     value: true
 
   # ─── AI Assistant (dashboard-wide chat assistant) ───────────────────
-  # A persistent chat assistant accessible from a header icon. Separate
-  # from the Component AI agent (which is scoped to one chart at a
-  # time) and from the Electron sidebar (which runs Claude Code as a
-  # subscription session). When disabled, the header icon does not
-  # render and the assistant routes return 404. Independent of the
-  # Component AI agent's availability — both gates apply only to their
-  # own surface. Both require ANTHROPIC_API_KEY to be set at server
-  # start; this setting is a soft kill-switch on top of that.
-  - key: assistant.enabled
+  # Single master switch for ALL AI agent surfaces — the Component AI
+  # agent (scoped to one chart at a time, reached via "Create/Edit with
+  # AI") AND the Dashboard Assistant (the header chat sidecar). One gate
+  # by design: there is no valid state where one is on and the other off.
+  # On top of this, an Anthropic API key must be present at server start
+  # (ASSISTANT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY) — this setting is
+  # the admin soft kill-switch layered over that. When off: the
+  # Create/Edit-with-AI entry points hide, the Assistant header icon does
+  # not render, and the AI routes are unavailable. Restart required for a
+  # change to take effect (read at boot, same posture as enabled_types).
+  # Migrated from the former `assistant.enabled` key (see
+  # migrations.go::migrateAssistantEnabledToAIEnabled).
+  - key: ai.enabled
     category: ai
-    description: "Dashboard Assistant — chat agent accessible from the app header. Requires ANTHROPIC_API_KEY at server start; this is a soft kill-switch independent of the Component AI agent. Restart required for changes to take effect."
+    description: "AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that. Restart required for changes to take effect."
     value: true
 
   - key: assistant.daily_token_budget
@@ -127,5 +141,5 @@ settings:
 
   - key: assistant.model
     category: ai
-    description: "Anthropic model the Dashboard Assistant runs. Allowed values: `sonnet` (faster + cheaper, default) or `opus` (more capable, more expensive). Switching takes effect on next server restart. Per-deployment choice; not per-user."
+    description: "Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Takes effect on next server restart. Per-deployment choice; not per-user."
     value: "sonnet"

@@ -45,26 +45,39 @@ import (
 // These are concrete model IDs rather than the latest-aliases so
 // the assistant's behavior is stable across Anthropic releases —
 // admins can opt into newer models by bumping the constant.
+// Aliases resolve to the current latest of each family — bump these on
+// each Anthropic release and every deployment using the alias moves
+// forward. Admins who need a pinned snapshot pass a concrete model ID
+// instead (see ResolveModelID), which is passed through untouched.
 const (
-	ModelSonnet = "claude-sonnet-4-20250514"
-	ModelOpus   = "claude-opus-4-20250514"
+	ModelSonnet = "claude-sonnet-4-6" // alias "sonnet" → latest Sonnet
+	ModelOpus   = "claude-opus-4-8"   // alias "opus"   → latest Opus
 )
 
 // Default model. Sonnet by design — broader scope means lower bar
 // per turn. Opus opt-in via the assistant.model admin setting.
 const defaultChatModel = ModelSonnet
 
-// ResolveModelID maps the admin setting's short value to the full
-// Anthropic model ID. Empty / unknown inputs fall back to Sonnet
-// so a typo in the admin setting can't break the agent.
+// ResolveModelID maps the assistant.model admin setting to a concrete
+// Anthropic model ID. Two input shapes:
+//   - the aliases "sonnet" / "opus" → the current latest of that family
+//     (the constants above; bumped per release).
+//   - any other non-empty value is treated as an explicit model ID and
+//     passed through verbatim (e.g. "claude-sonnet-4-20250514" to pin an
+//     older snapshot for A/B testing, or a future ID before an alias bump).
+// Empty falls back to the Sonnet default so a blank setting can't break
+// the agent.
 func ResolveModelID(adminValue string) string {
 	switch adminValue {
-	case "opus":
-		return ModelOpus
+	case "":
+		return defaultChatModel
 	case "sonnet":
 		return ModelSonnet
+	case "opus":
+		return ModelOpus
+	default:
+		return adminValue // explicit, pinned model ID — pass through
 	}
-	return defaultChatModel
 }
 
 // CallerCtx carries per-message context the chat agent needs from
@@ -148,12 +161,20 @@ func NewAgent(sessionSvc SessionService, tools *ToolRegistry, config *Config) (*
 	if config == nil {
 		config = &Config{}
 	}
+	// Key resolution: explicit config (prod sets this from
+	// DASHBOARD_LLM_API_KEY) → ASSISTANT_ANTHROPIC_API_KEY → ANTHROPIC_API_KEY.
+	// ASSISTANT_ANTHROPIC_API_KEY is preferred for LOCAL DEV so the
+	// dashboard server uses a dedicated key, NOT the developer's
+	// ANTHROPIC_API_KEY (which Claude Code / other tooling also consumes).
 	apiKey := config.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("ASSISTANT_ANTHROPIC_API_KEY")
+	}
 	if apiKey == "" {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
+		return nil, fmt.Errorf("no Anthropic API key: set ASSISTANT_ANTHROPIC_API_KEY (preferred for local dev) or ANTHROPIC_API_KEY")
 	}
 
 	model := config.Model

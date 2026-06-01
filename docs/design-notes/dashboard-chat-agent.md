@@ -33,10 +33,11 @@ crisp.
 | **Electron sidebar** | Electron desktop shell only | Whole filesystem + dashboard via MCP | Claude Code's full toolset; runs as a subscription session in a separate `node-pty` process |
 | **Dashboard Assistant** *(this doc)* | Dashboard app shell — web AND Electron | Whole deployment (connections, components, dashboards, namespaces) | Broad in-process tool registry; runs server-side, uses deployment Anthropic key |
 
-The Dashboard Assistant does **not** go through MCP. It does **not**
-use the `dashboard-agent` CLI. Its architecture is a sibling of the
-existing Component AI agent in the `internal/ai/` package — see the
-Architecture section.
+The Dashboard Assistant does **not** go through MCP. Its architecture
+is a sibling of the existing Component AI agent in the `internal/ai/`
+package — see the Architecture section. (A standalone `dashboard-agent`
+CLI was an earlier learning step — an external MCP client that built
+dashboards end-to-end — now retired; the Assistant supersedes it.)
 
 ---
 
@@ -687,15 +688,15 @@ based on observed failure modes.
 
 ### Hard rules the prompt must encode
 
-Some lessons are already in hand from the parallel `dashboard-agent`
-CLI work — bake them in from day 1 so we don't repeat:
+Some lessons are already in hand from the earlier (now-retired)
+`dashboard-agent` CLI work — bake them in from day 1 so we don't repeat:
 
 - **Always prefer structured component config over `use_custom_code`.**
   When creating a chart, set `component_type`, `chart_type`,
   `connection_id`, `data_mapping`, `query_config` etc. and let
   server-side codegen produce `component_code`. Only fall back to
   custom code when the structured config genuinely cannot represent
-  what the user asked for. The dashboard-agent CLI defaulted to
+  what the user asked for. The retired dashboard-agent CLI defaulted to
   custom code (likely because it wanted to set y-axis range / log
   scale / tooltip formatter fields that weren't in the structured
   config); the result was charts that wouldn't open cleanly in the

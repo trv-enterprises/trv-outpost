@@ -18,7 +18,6 @@ import (
 func (e *ToolExecutor) executeGetComponentTemplate(input json.RawMessage) (*ToolResult, error) {
 	var params struct {
 		ChartType string `json:"chart_type"`
-		Style     string `json:"style,omitempty"` // banded_bar only — time_series/column_filled/column_outlined/column_box
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -28,25 +27,20 @@ func (e *ToolExecutor) executeGetComponentTemplate(input json.RawMessage) (*Tool
 		return &ToolResult{Success: false, Error: "chart_type is required"}, nil
 	}
 
-	template, exists := componenttemplates.GetStyled(params.ChartType, params.Style)
+	// Only the custom template remains — canonical chart types are
+	// spec-driven and configured via update_data_mapping /
+	// update_chart_options, not scaffolded from a template.
+	template, exists := componenttemplates.Get(params.ChartType)
 	if !exists {
 		return &ToolResult{
 			Success: false,
-			Error:   fmt.Sprintf("No template for chart type '%s'. Use 'custom' for general guidelines.", params.ChartType),
+			Error:   fmt.Sprintf("No template for chart type '%s'. Only 'custom' exists; canonical chart types are spec-driven — configure them with update_data_mapping / update_chart_options instead.", params.ChartType),
 		}, nil
-	}
-
-	message := fmt.Sprintf("Template for %s chart. Replace column names (timestamp, value, etc.) with actual columns from get_schema.", params.ChartType)
-	if params.ChartType == "custom" {
-		message = "Custom component template with Carbon g100 colors and formatting guidelines."
-	}
-	if params.ChartType == "banded_bar" && params.Style != "" {
-		message = fmt.Sprintf("Template for banded_bar (%s style). Replace column names with the real ones from get_schema; for the per-row envelope path read SD columns from each row, not as scalars.", params.Style)
 	}
 
 	return &ToolResult{
 		Success: true,
-		Message: message,
+		Message: "Custom component template with the CARBON_COLORS palette and formatting guidelines. Use only when configuration can't express the request; pair with set_custom_code.",
 		Data: map[string]string{
 			"template": template,
 		},

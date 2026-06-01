@@ -51,7 +51,6 @@ Welcome to TRVE Dashboards, a full-stack application for creating, managing, and
 ## Automation & Integration
 
 - [MCP Server (External Agents)](mcp.md)
-- [Dashboard-Builder Agent](dashboard-agent.md)
 
 ## Reference
 

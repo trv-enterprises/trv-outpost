@@ -27,12 +27,14 @@ import {
   COLOR_SECONDARY,
   COLOR_TEXT_SECONDARY,
   TRANSPARENT_BG,
+  categoricalColor,
   makeValueFormatter,
 } from '../option-helpers.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
-// (matches legacy). N-series single-axis mode uses ECharts' default
-// palette by leaving series.itemStyle.color unset.
+// (matches legacy). N-series single-axis mode uses the Carbon
+// categorical palette (categoricalColor by series index) instead of
+// ECharts' off-brand default.
 const LEFT_AXIS_COLOR = COLOR_PRIMARY;
 const RIGHT_AXIS_COLOR = COLOR_SECONDARY;
 
@@ -40,6 +42,68 @@ const RIGHT_AXIS_COLOR = COLOR_SECONDARY;
 // one stack group per chart for now. Multi-group would be a future
 // model expansion (see chart-spec-driven-editor design doc).
 const STACK_GROUP = 'stack0';
+
+// resolveAutoXFormat turns the special "auto" x-axis format into a
+// concrete preset BASED ON THE DATA. It runs ONLY for "auto" — every
+// explicit preset (chart, chart_time, chart_time_seconds, …) is honored
+// verbatim by returning it unchanged, so a user's deliberate choice is
+// never overridden.
+//
+// Auto's bounded job (it is a smart default, not a cure-all):
+//   1. Non-timestamp x-axis → passthrough. If the values don't parse as
+//      timestamps, formatting is meaningless; return 'raw' so the caller
+//      shows them as-is. (No guessing categories/numbers into dates.)
+//   2. Span ≥ ~1 day → date+time ('chart'); else time-only ('chart_time').
+//   3. If the chosen minute-resolution labels COLLIDE (several points in
+//      one minute) and seconds disambiguates → add seconds.
+// What auto does NOT do (by design — pick a fixed preset for these):
+// sub-second data (it tops out at seconds), or density-vs-clarity
+// tradeoffs (it optimizes disambiguation, not label length).
+//
+// 'raw' is a sentinel meaning "don't run a timestamp formatter" — the
+// caller maps it to no-format passthrough.
+function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
+  if (xValues.length === 0 || !formatCellValue) return 'chart_time';
+
+  // (1) Non-timestamp detection: a timestamp format and a non-format
+  // produce DIFFERENT output for real timestamps; for non-timestamps
+  // formatCellValue passes the value through unchanged, so the two match.
+  // Sample the first non-null value.
+  const sample = xValues.find((v) => v != null);
+  if (sample == null) return 'chart_time';
+  const asTime = formatCellValue(sample, xAxisCol, { timestampFormat: 'chart_time' });
+  const asRaw = String(sample);
+  if (asTime === asRaw) {
+    // Formatter didn't transform it → not a timestamp column. Passthrough.
+    return 'raw';
+  }
+
+  // (2) Span: parse to epoch ms via Date; ≥ 24h → include the date.
+  const times = xValues
+    .map((v) => {
+      const t = v instanceof Date ? v.getTime() : Date.parse(v) || Number(v);
+      return Number.isFinite(t) ? t : null;
+    })
+    .filter((t) => t != null);
+  let base = 'chart_time';
+  if (times.length >= 2) {
+    const span = Math.max(...times) - Math.min(...times);
+    if (span >= 24 * 60 * 60 * 1000) base = 'chart'; // ≥ 1 day → date + time
+  }
+
+  // (3) Collision → add seconds, but only if seconds actually resolves it.
+  const secondsVariant = base === 'chart' ? 'chart_datetime_seconds' : 'chart_time_seconds';
+  const baseLabels = new Set();
+  let collides = false;
+  for (const v of xValues) {
+    const lbl = formatCellValue(v, xAxisCol, { timestampFormat: base });
+    if (baseLabels.has(lbl)) { collides = true; break; }
+    baseLabels.add(lbl);
+  }
+  if (!collides) return base;
+  const secLabels = new Set(xValues.map((v) => formatCellValue(v, xAxisCol, { timestampFormat: secondsVariant })));
+  return secLabels.size > baseLabels.size ? secondsVariant : base;
+}
 
 /**
  * Normalize a y_axis entry from any of these shapes into the canonical
@@ -88,9 +152,14 @@ function buildSeriesForColumn(entry, idx, ctx) {
     series.itemStyle = { color: sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR };
   } else if (stackedCount === 1 && idx === 0 && !entry.stack) {
     // Single-axis, single-column, unstacked → force blue for parity
-    // with the legacy single-series default. With ≥2 columns we let
-    // ECharts pick the palette so columns visually distinguish.
+    // with the legacy single-series default.
     series.itemStyle = { color: LEFT_AXIS_COLOR };
+  } else {
+    // Single-axis, multi-column (or stacked) → walk the Carbon
+    // categorical palette by series index so columns stay on-brand and
+    // visually distinct. (Previously left unset → ECharts' default
+    // off-brand palette.)
+    series.itemStyle = { color: categoricalColor(idx) };
   }
   if (entry.stack) series.stack = STACK_GROUP;
   return series;
@@ -240,7 +309,9 @@ function buildThresholds(thresholds, mode) {
  * @returns {Object} an ECharts `option` literal
  */
 export function buildOption(values, data, helpers = {}) {
-  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'chart', chartName = '', legendSelected } = helpers;
+  // x-axis format default is 'auto' (resolves granularity from the data;
+  // see resolveAutoXFormat). An explicit stored x_axis_format wins.
+  const { formatCellValue, chartType = 'line', xAxisFormat: helperXAxisFormat = 'auto', chartName = '', legendSelected } = helpers;
 
   const rawYAxis = Array.isArray(values?.data_mapping?.y_axis) ? values.data_mapping.y_axis : [];
   // Legacy save shape parks per-column labels in a parallel array
@@ -288,11 +359,21 @@ export function buildOption(values, data, helpers = {}) {
   const rows = data?.rows || [];
   const columnIndex = (name) => columns.indexOf(name);
 
-  // Build categories from the x-axis column, using the editor's
-  // chosen formatter (auto-detect timestamps).
+  // Build categories from the x-axis column. The 'auto' format resolves
+  // to a concrete preset from the data (span → time-only/date+time,
+  // collision → add seconds, non-timestamp → 'raw' passthrough); every
+  // explicit preset is honored unchanged.
   const xColIdx = columnIndex(xAxisCol);
   const xValues = xColIdx >= 0 ? rows.map((r) => r[xColIdx]) : [];
-  const categories = xValues.map((v) => formatCellValue ? formatCellValue(v, xAxisCol, { timestampFormat: xAxisFormat }) : v);
+  const resolvedXFormat = xAxisFormat === 'auto'
+    ? resolveAutoXFormat(xValues, xAxisCol, formatCellValue)
+    : xAxisFormat;
+  const categories = xValues.map((v) => {
+    if (!formatCellValue) return v;
+    // 'raw' (auto-detected non-timestamp) → show the value as-is.
+    if (resolvedXFormat === 'raw') return v;
+    return formatCellValue(v, xAxisCol, { timestampFormat: resolvedXFormat });
+  });
 
   // Compose series. When seriesCol is set, partition rows by that
   // column's values; the first y entry's column supplies the value.
@@ -315,11 +396,13 @@ export function buildOption(values, data, helpers = {}) {
         const v = r[seriesIdx];
         if (v != null && !seen.has(v)) { seen.add(v); seriesValues.push(v); }
       });
-      series = seriesValues.map((sv) => {
+      series = seriesValues.map((sv, svIdx) => {
         const seriesRows = rows.filter((r) => r[seriesIdx] === sv);
         return buildSeriesForColumn(
           { column: yCol, stack: yEntries[0]?.stack || false, axis: 'left' },
-          0,
+          // Pass the pivot index so each split series walks the
+          // categorical palette (svIdx), not all sharing idx 0.
+          svIdx,
           {
             columnIndex,
             rows: seriesRows,
@@ -412,7 +495,13 @@ export function buildOption(values, data, helpers = {}) {
   // steer toward top unless the user explicitly asks otherwise.
   const legendPos = legend ? (opts?.legend?.position || 'top') : null;
   const gridTop = legendPos === 'top' ? 36 : 10;
-  const gridBottomBase = opts.chartShowZoomSlider ? 50 : 30;
+  // grid.bottom is the gap BELOW the x-axis labels (containLabel:true
+  // auto-reserves the label height on top of this). Without a slider,
+  // only a small flush gap (8px) so the labels sit at the bottom of the
+  // panel. With a slider: the slider occupies bottom:8 → 8+24=32px from
+  // the floor; grid.bottom 43 puts the x-axis labels ~11px above the
+  // slider top (a little breathing room). 50 left an ~18px dead band.
+  const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
   const gridLeft = legendPos === 'left' ? 135 : 50;
   const gridRight = legendPos === 'right' ? 135 : 20;
@@ -429,9 +518,13 @@ export function buildOption(values, data, helpers = {}) {
   if (visualMap) option.visualMap = visualMap;
 
   if (opts.chartShowZoomSlider) {
+    // Default to the FULL range (start 0 → end 100), not the last 30%.
+    // NOTE: ChartShell must merge (notMerge:false) on data updates so a
+    // user's pan/zoom isn't snapped back to these defaults every time a
+    // streaming point arrives — see ChartShell's setOption call.
     option.dataZoom = [
       {
-        type: 'slider', show: true, xAxisIndex: [0], start: 70, end: 100,
+        type: 'slider', show: true, xAxisIndex: [0], start: 0, end: 100,
         bottom: 8, height: 24,
         backgroundColor: '#262626',
         dataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.3 } },
@@ -439,7 +532,7 @@ export function buildOption(values, data, helpers = {}) {
         handleStyle: { color: COLOR_PRIMARY },
         textStyle: { color: COLOR_TEXT_SECONDARY },
       },
-      { type: 'inside', xAxisIndex: [0], start: 70, end: 100 },
+      { type: 'inside', xAxisIndex: [0], start: 0, end: 100 },
     ];
   }
 

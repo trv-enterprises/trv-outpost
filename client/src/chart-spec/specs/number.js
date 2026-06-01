@@ -11,6 +11,7 @@
 // first (post-aggregation) row.
 
 import { columnIndex, toNumber } from '../option-helpers.js';
+import { formatNumberValue } from './number-formats.js';
 
 /**
  * @param {Object} values   { data_mapping, options }
@@ -35,9 +36,14 @@ export function buildOption(values, data, helpers = {}) {
   const rows = data?.rows || [];
   const idx = columnIndex(data, valueColumn);
   const raw = idx >= 0 && rows.length > 0 ? rows[0][idx] : null;
-  const formatted = raw == null
-    ? ''
-    : (formatCellValue ? formatCellValue(raw, valueColumn) : String(raw));
+
+  // Value formatting: options.numberFormat picks how the raw value is
+  // rendered (auto / plain / compact / duration / duration_clock /
+  // datetime), with numberDecimals + numberDateFormat as sub-options. The
+  // format implies the value's unit (duration→seconds, etc.), so no query
+  // math is needed. Defaults to 'auto' (the prior behavior). See
+  // number-formats.js.
+  const formatted = formatNumberValue(raw, valueColumn, opts, formatCellValue);
 
   // numberSize is stored as a number on the legacy path but the enum
   // field writes a string; coerce and floor at a sane minimum. >0 guard

@@ -107,12 +107,32 @@ type ChartDataMapping struct {
 // data adapter pulls each row's own value from the named column at
 // render time; this is the per-row Levey-Jennings envelope contract.
 // Columns referenced here must exist in every row of the data stream.
+//
+// Scheme drives which fields are meaningful (client band-schemes.js):
+//   - "sd" (default / legacy): Mean + ±1/±2 SD
+//   - "minmaxmean":            Mean + Min/Max
+//   - "spc":                   Target + Lower/Upper Control + Lower/Upper Limit
+// Records written before the scheme selector have no Scheme set; the
+// client defaults them to "sd", matching the original fixed structure.
 type BandColumns struct {
-	Mean    string `json:"mean,omitempty" bson:"mean,omitempty"`         // Primary value column (e.g. "mean")
-	Plus1SD string `json:"plus_1sd,omitempty" bson:"plus_1sd,omitempty"` // Column carrying that row's +1 SD bound
-	Minus1SD string `json:"minus_1sd,omitempty" bson:"minus_1sd,omitempty"` // Column carrying that row's -1 SD bound
-	Plus2SD string `json:"plus_2sd,omitempty" bson:"plus_2sd,omitempty"` // Column carrying that row's +2 SD bound
-	Minus2SD string `json:"minus_2sd,omitempty" bson:"minus_2sd,omitempty"` // Column carrying that row's -2 SD bound
+	Scheme string `json:"scheme,omitempty" bson:"scheme,omitempty"` // "sd" (default) | "minmaxmean" | "spc"
+
+	// sd / minmaxmean center
+	Mean string `json:"mean,omitempty" bson:"mean,omitempty"` // Primary value column (e.g. "mean")
+	// sd bounds
+	Plus1SD  string `json:"plus_1sd,omitempty" bson:"plus_1sd,omitempty"`   // +1 SD bound
+	Minus1SD string `json:"minus_1sd,omitempty" bson:"minus_1sd,omitempty"` // -1 SD bound
+	Plus2SD  string `json:"plus_2sd,omitempty" bson:"plus_2sd,omitempty"`   // +2 SD bound
+	Minus2SD string `json:"minus_2sd,omitempty" bson:"minus_2sd,omitempty"` // -2 SD bound
+	// minmaxmean bounds
+	Min string `json:"min,omitempty" bson:"min,omitempty"`
+	Max string `json:"max,omitempty" bson:"max,omitempty"`
+	// spc center + bounds
+	Target       string `json:"target,omitempty" bson:"target,omitempty"`
+	LowerControl string `json:"lower_control,omitempty" bson:"lower_control,omitempty"`
+	UpperControl string `json:"upper_control,omitempty" bson:"upper_control,omitempty"`
+	LowerLimit   string `json:"lower_limit,omitempty" bson:"lower_limit,omitempty"`
+	UpperLimit   string `json:"upper_limit,omitempty" bson:"upper_limit,omitempty"`
 }
 
 // ReferenceLevel is the legacy scalar marker type. Retained only so the
@@ -174,6 +194,14 @@ type DashboardSettings struct {
 	AllowExport     bool   `json:"allow_export" bson:"allow_export"`
 	LayoutDimension string `json:"layout_dimension,omitempty" bson:"layout_dimension,omitempty"`
 	TitleScale      int    `json:"title_scale,omitempty" bson:"title_scale,omitempty"` // Title font scale % (default 100, range 50-200)
+	// ScalePercent is the "everything bigger" zoom. LayoutDimension is the
+	// render TARGET; the dashboard is BUILT on a derived DESIGN canvas of
+	// target/(scale/100), so at render the viewer's transform:scale blows
+	// it back up to target — uniformly enlarging fonts, lines, and layout
+	// while preserving proportions. 100 = build at target (no enlargement);
+	// 120 = build on target/1.2 so everything renders 20% bigger. Default
+	// 100. Empty/0 is treated as 100 by readers.
+	ScalePercent int `json:"scale_percent,omitempty" bson:"scale_percent,omitempty"`
 }
 
 // CreateDashboardRequest represents a request to create a dashboard

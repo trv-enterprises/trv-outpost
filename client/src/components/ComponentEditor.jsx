@@ -48,6 +48,16 @@ import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
+import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
+
+// A banded_bar is "configured enough to save" once its scheme's center
+// column is mapped (mean / target). Schemes have different center keys,
+// so resolve it rather than hardcoding `mean`.
+const hasBandCenter = (bandColumns) => {
+  if (!bandColumns) return false;
+  const centerKey = getBandScheme(bandColumns.scheme).center.key;
+  return Boolean(bandColumns[centerKey]);
+};
 import './ComponentEditor.scss';
 
 // Chart types available. Array order is the render order in the
@@ -259,6 +269,9 @@ const DEFAULT_CHART_OPTIONS = {
   // once the user saves/edits it's always a concrete number.
   numberSize: null,
   numberUnit: '',
+  numberDecimals: 'auto',     // 'auto' (≤2 places) | '0'..'4' (forced)
+  numberFormat: 'auto',       // auto | plain | compact | duration | duration_clock | datetime
+  numberDateFormat: 'datetime', // sub-option when numberFormat=datetime
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -402,7 +415,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Data mapping
   const [xAxisColumn, setXAxisColumn] = useState('');
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
-  const [xAxisFormat, setXAxisFormat] = useState('chart'); // Default format for timestamp display
+  const [xAxisFormat, setXAxisFormat] = useState('auto'); // Default timestamp format; 'auto' fits granularity to the data
   const [yAxisColumns, setYAxisColumns] = useState([]);
   const [yAxisLabel, setYAxisLabel] = useState(''); // Legacy single y-axis label — kept for back-compat; use yAxisLabels for new code.
   const [yAxisLabels, setYAxisLabels] = useState([]); // Per-column y-axis labels. Index matches yAxisColumns. Empty entries fall back to column name.
@@ -430,7 +443,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // The chart is per-row only: each row carries its own mean + SD columns
   // and the renderer draws a per-row envelope. This object maps each
   // band role to a row-column name.
-  const [bandColumns, setBandColumns] = useState({ mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' });
+  // band_columns: { scheme, ...per-scheme column mappings }. Default to
+  // the ±SD scheme. The BandScheme field type owns the per-scheme fields.
+  const [bandColumns, setBandColumns] = useState({ scheme: 'sd' });
   const [bandedBarStyle, setBandedBarStyle] = useState('time_series');
 
   // Time bucket aggregation for streaming data (socket datasources only)
@@ -702,17 +717,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // still has reference_levels: keep it loaded so the chart keeps
       // rendering; the new editor section just shows empty pickers,
       // which is a clean prompt to re-pick.
+      // band_columns now carries a `scheme` id plus that scheme's column
+      // mappings. Old ±SD records have no `scheme` key — default to 'sd'
+      // so they keep rendering as before.
       const savedBandCols = chart.data_mapping?.band_columns;
       if (savedBandCols && typeof savedBandCols === 'object') {
-        setBandColumns({
-          mean: savedBandCols.mean || '',
-          plus_1sd: savedBandCols.plus_1sd || '',
-          minus_1sd: savedBandCols.minus_1sd || '',
-          plus_2sd: savedBandCols.plus_2sd || '',
-          minus_2sd: savedBandCols.minus_2sd || '',
-        });
+        setBandColumns({ scheme: 'sd', ...savedBandCols });
       } else {
-        setBandColumns({ mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' });
+        setBandColumns({ scheme: 'sd' });
       }
       setBandedBarStyle(chart.options?.bandedBarStyle || 'time_series');
       // Time bucket initialization (for socket datasources)
@@ -764,9 +776,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         setTsstoreSinceDuration('1h');
         setTsstoreLimit(chart.query_config?.params?.limit || 100);
       }
-      // EdgeLake query config initialization
-      if (chart.query_config?.type === 'edgelake') {
-        setEdgelakeDatabase(chart.query_config?.params?.database || '');
+      // EdgeLake query config initialization. Like tsstore above, the
+      // type field is documentary, not authoritative: agent-built
+      // EdgeLake charts commonly save query_config.type:"sql" while
+      // still carrying the EdgeLake `database` param (EdgeLake speaks
+      // SQL against an edgelake connection). Keying restoration on
+      // type==='edgelake' missed those, so edgelakeDatabase stayed empty
+      // and handleSave's params builder then wrote params:{} — silently
+      // dropping the database on every save and breaking the query.
+      // Restore from the saved param whenever it's present, regardless
+      // of the documentary type.
+      if (chart.query_config?.params?.database) {
+        setEdgelakeDatabase(chart.query_config.params.database);
       }
       // MQTT initialization — restore selected topic and discover topics + schema
       if (chart.query_config?.type === 'mqtt') {
@@ -838,7 +859,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:') ? 'since' : (loadedTsRaw || 'since');
       const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
       const loadedTsstoreLimit = chart.query_config?.params?.limit || 100;
-      const loadedEdgelakeDatabase = loadedQueryType === 'edgelake' ? (chart.query_config?.params?.database || '') : '';
+      // Mirror the setEdgelakeDatabase restore above: the database param
+      // is the source of truth, not the documentary query_config.type
+      // (agent-built EdgeLake charts save type:"sql"). Snapshot must match
+      // the state set above or the form reads dirty on load.
+      const loadedEdgelakeDatabase = chart.query_config?.params?.database || '';
       const loadedControlConfigSnap = chart.control_config || null;
       if (loadedControlConfigSnap && chart.connection_id && !loadedControlConfigSnap.connection_id) {
         loadedControlConfigSnap.connection_id = chart.connection_id;
@@ -887,7 +912,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         parserDataPath: loadedParser?.data_path || '',
         parserTimestampField: loadedParser?.timestamp_field || '',
         parserTimestampScale: loadedParser?.timestamp_scale || '',
-        bandColumns: chart.data_mapping?.band_columns || { mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' },
+        bandColumns: chart.data_mapping?.band_columns ? { scheme: 'sd', ...chart.data_mapping.band_columns } : { scheme: 'sd' },
         bandedBarStyle: chart.options?.bandedBarStyle || 'time_series',
         // Capture chartOptions snapshot AS MERGED with defaults so it
         // matches whatever the state ends up holding after the
@@ -925,7 +950,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
-        xAxisFormat: 'chart',
+        xAxisFormat: 'auto',
         yAxisColumns: [],
         yAxisLabel: '',
         yAxisLabels: [],
@@ -950,7 +975,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         parserDataPath: '',
         parserTimestampField: '',
         parserTimestampScale: '',
-        bandColumns: { mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' },
+        bandColumns: { scheme: 'sd' },
         bandedBarStyle: 'time_series',
         // Snapshot current chartOptions state so the diff doesn't read
         // as dirty before the user touches anything. The lazy load of
@@ -1219,12 +1244,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     });
     if (timeBucketTimestampCol && !has(timeBucketTimestampCol)) setTimeBucketTimestampCol('');
 
-    // Banded-bar column map — clear any member not in the new schema.
+    // Banded-bar column map — clear any mapped column not in the new data
+    // schema. `scheme` is the scheme id, not a column, so skip it.
     setBandColumns((prev) => {
       if (!prev) return prev;
       const next = { ...prev };
       let changed = false;
       for (const k of Object.keys(next)) {
+        if (k === 'scheme') continue;
         if (next[k] && !has(next[k])) { next[k] = ''; changed = true; }
       }
       return changed ? next : prev;
@@ -1313,7 +1340,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
     setSlidingWindowTimestampCol('');
-    setBandColumns({ mean: '', plus_1sd: '', minus_1sd: '', plus_2sd: '', minus_2sd: '' });
+    setBandColumns({ scheme: 'sd' });
     setBandedBarStyle('time_series');
     setTimeBucketEnabled(false);
     setTimeBucketInterval(60);
@@ -1579,7 +1606,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       sortBy,
       sortOrder,
       limit: limitRows || 0,
-      xAxisFormat: xAxisFormat || 'chart',
+      xAxisFormat: xAxisFormat || 'auto',
       xAxisLabel: xAxisLabel || '',
       yAxisLabel: yAxisLabel || '',
       yAxisLabels: yAxisLabels || [],
@@ -1686,7 +1713,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       data_mapping: selectedConnectionId ? {
         x_axis: xAxisColumn,
         x_axis_label: xAxisLabel || '',
-        x_axis_format: xAxisFormat || 'chart',
+        x_axis_format: xAxisFormat || 'auto',
         // Strip empty-column placeholders before saving. The spec-driven
         // y_axis_columns_list keeps unfilled new rows around so the user
         // can pick a column, but they shouldn't reach the wire — same for
@@ -1749,7 +1776,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // Banded-bar column mapping — only persisted for chart_type 'banded_bar'.
         // Each row in the data must carry the named columns; the renderer
         // reads each row's own values to draw a per-row envelope.
-        band_columns: chartType === 'banded_bar' && bandColumns?.mean ? bandColumns : undefined
+        band_columns: chartType === 'banded_bar' && hasBandCenter(bandColumns) ? bandColumns : undefined
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
@@ -2828,7 +2855,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       })),
                       x_axis_column: xAxisColumn,
                       x_axis_label: xAxisLabel || '',
-                      x_axis_format: xAxisFormat || 'chart',
+                      x_axis_format: xAxisFormat || 'auto',
                       series_column: seriesColumn,
                       // pie field ids — label binds to x_axis, value to
                       // y_axis[0]; map the shared state onto pie's ids so
@@ -2870,15 +2897,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // thresholds
                       y_thresholds: Array.isArray(chartOptions.yThresholds) ? chartOptions.yThresholds : [],
                       y_threshold_render_mode: chartOptions.yThresholdRenderMode || 'line',
-                      // banded_bar field ids. Band columns map onto the
-                      // bandColumns state object; the visual style onto
-                      // bandedBarStyle. (x_axis_column / x_axis_format above
-                      // are reused by banded_bar's timestamp fields.)
-                      band_mean: bandColumns.mean || '',
-                      band_plus_1sd: bandColumns.plus_1sd || '',
-                      band_minus_1sd: bandColumns.minus_1sd || '',
-                      band_plus_2sd: bandColumns.plus_2sd || '',
-                      band_minus_2sd: bandColumns.minus_2sd || '',
+                      // banded_bar: the band_scheme field type owns the
+                      // scheme selector + per-scheme column pickers, fed the
+                      // whole bandColumns object ({ scheme, ...mappings }).
+                      // The visual style maps onto bandedBarStyle.
+                      // (x_axis_column / x_axis_format above are reused by
+                      // banded_bar's timestamp fields.)
+                      band_scheme: bandColumns,
                       banded_bar_style: bandedBarStyle || 'time_series',
                       // number field ids. value_column reuses the shared
                       // case above (maps to yAxisColumns[0]). Size is an
@@ -2886,6 +2911,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // stored number; unit is free text.
                       number_size: String(chartOptions.numberSize ?? 120),
                       number_unit: chartOptions.numberUnit || '',
+                      // Decimal places enum. Stored as a string ('auto' |
+                      // '0'..'4'); default 'auto' keeps the auto formatter.
+                      number_decimals: chartOptions.numberDecimals ?? 'auto',
+                      // Value-format enum + date sub-format (number-formats.js).
+                      number_format: chartOptions.numberFormat ?? 'auto',
+                      number_date_format: chartOptions.numberDateFormat ?? 'datetime',
                       // dataview: the column_manager widget reads these two
                       // keys directly (visible_columns null = show all).
                       visible_columns: visibleColumns,
@@ -3015,24 +3046,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'y_threshold_render_mode':
                           updateChartOption('yThresholdRenderMode', value);
                           break;
-                        // banded_bar: band column selectors write into the
-                        // bandColumns state object; the visual style into
-                        // bandedBarStyle. (x_axis_column / x_axis_format are
-                        // handled by the shared cases above.)
-                        case 'band_mean':
-                          setBandColumns((prev) => ({ ...prev, mean: value }));
-                          break;
-                        case 'band_plus_1sd':
-                          setBandColumns((prev) => ({ ...prev, plus_1sd: value }));
-                          break;
-                        case 'band_minus_1sd':
-                          setBandColumns((prev) => ({ ...prev, minus_1sd: value }));
-                          break;
-                        case 'band_plus_2sd':
-                          setBandColumns((prev) => ({ ...prev, plus_2sd: value }));
-                          break;
-                        case 'band_minus_2sd':
-                          setBandColumns((prev) => ({ ...prev, minus_2sd: value }));
+                        // banded_bar: the band_scheme widget writes the whole
+                        // bandColumns object ({ scheme, ...mappings }) in one
+                        // shot; the visual style writes bandedBarStyle.
+                        // (x_axis_column / x_axis_format are handled by the
+                        // shared cases above.)
+                        case 'band_scheme':
+                          setBandColumns(value || { scheme: 'sd' });
                           break;
                         case 'banded_bar_style':
                           setBandedBarStyle(value);
@@ -3045,6 +3065,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'number_unit':
                           updateChartOption('numberUnit', value);
+                          break;
+                        // decimals enum stored as the raw string ('auto' |
+                        // '0'..'4'); number.js coerces. Keep it a string so
+                        // '0' round-trips (Number('0')→0 would be fine but the
+                        // spec options are string-valued, so stay consistent).
+                        case 'number_decimals':
+                          updateChartOption('numberDecimals', value);
+                          break;
+                        case 'number_format':
+                          updateChartOption('numberFormat', value);
+                          break;
+                        case 'number_date_format':
+                          updateChartOption('numberDateFormat', value);
                           break;
                         // dataview: the column_manager widget writes the
                         // visible-columns whitelist (null = show all) and
@@ -3674,7 +3707,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         data_mapping: selectedConnectionId ? {
                           x_axis: xAxisColumn,
                           x_axis_label: xAxisLabel || '',
-                          x_axis_format: xAxisFormat || 'chart',
+                          x_axis_format: xAxisFormat || 'auto',
                           y_axis: yAxisColumns
                             .map((column, i) => ({
                               column,
@@ -3696,7 +3729,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           // data_mapping. Only meaningful when a mean column
                           // is picked; undefined otherwise mirrors the save
                           // path so the preview matches a saved record.
-                          band_columns: chartType === 'banded_bar' && bandColumns?.mean ? bandColumns : undefined,
+                          band_columns: chartType === 'banded_bar' && hasBandCenter(bandColumns) ? bandColumns : undefined,
                           // dataview reads its column config off data_mapping.
                           // visible_columns is the working state directly
                           // (null = show all); aliases as-is.
@@ -3725,7 +3758,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         connection_id: selectedConnectionId,
                         x_axis: xAxisColumn,
                         x_axis_label: xAxisLabel || '',
-                        x_axis_format: xAxisFormat || 'chart',
+                        x_axis_format: xAxisFormat || 'auto',
                         y_axis: yAxisColumns,
                         y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
                         y_axis_labels: yAxisLabels && yAxisLabels.length > 0 ? yAxisLabels : undefined,

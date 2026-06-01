@@ -26,6 +26,17 @@ type DashboardService struct {
 	db              *mongo.Database
 	chartRepo       *repository.ComponentRepository
 	connectionRepo  *repository.ConnectionRepository
+	// scaleLookup resolves a layout-dimension's default scale % by name,
+	// used to SEED a new dashboard's scale_percent when the request
+	// doesn't set one. Optional (nil → no seeding); wired from
+	// ConfigService via SetScaleLookup to avoid a hard dependency / cycle.
+	scaleLookup func(ctx context.Context, dimensionName string) int
+}
+
+// SetScaleLookup wires the per-dimension default-scale resolver. Called
+// once at startup after both services exist.
+func (s *DashboardService) SetScaleLookup(fn func(ctx context.Context, dimensionName string) int) {
+	s.scaleLookup = fn
 }
 
 // NewDashboardService creates a new dashboard service. Pass nil for
@@ -58,6 +69,16 @@ func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.Crea
 
 	// Normalize tags before persistence.
 	req.Tags = models.NormalizeTags(req.Tags)
+
+	// Seed scale_percent from the chosen dimension's default scale when
+	// the caller didn't set one (designer/AI override wins). Seeded once
+	// at create; the dashboard then owns its value independent of later
+	// changes to the dimension's default.
+	if s.scaleLookup != nil && req.Settings.ScalePercent == 0 && req.Settings.LayoutDimension != "" {
+		if def := s.scaleLookup(ctx, req.Settings.LayoutDimension); def > 0 {
+			req.Settings.ScalePercent = def
+		}
+	}
 
 	dashboard, err := s.repo.Create(ctx, req)
 	if err != nil {

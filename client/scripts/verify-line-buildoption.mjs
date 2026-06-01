@@ -92,7 +92,12 @@ const data = {
   const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
   check('case 3: yAxis stays single (not array)', !Array.isArray(opt.yAxis));
   check('case 3: three series', opt.series?.length === 3);
-  check('case 3: no forced color on series (uses palette)', opt.series.every((s) => !s?.itemStyle?.color));
+  // Multi-series single-axis walks the Carbon categorical palette by
+  // index (purple70, cyan50, teal70 …) — on-brand and distinct, not the
+  // ECharts default and not all-unset.
+  check('case 3: series 0 categorical purple70', opt.series[0]?.itemStyle?.color === '#6929c4');
+  check('case 3: series 1 categorical cyan50', opt.series[1]?.itemStyle?.color === '#1192e8');
+  check('case 3: series 2 categorical teal70', opt.series[2]?.itemStyle?.color === '#005d5d');
 }
 
 // --- Case 4: stacked subset (3 cols, two stacked, one not) ---
@@ -233,6 +238,10 @@ const data = {
   const opt = buildOption(values, pivotData, { formatCellValue, chartType: 'line' });
   check('case 11: pivot creates one series per distinct value', opt.series?.length === 2);
   check('case 11: series named after pivot values', opt.series[0]?.name === 'A' && opt.series[1]?.name === 'B');
+  // Each pivot series walks the categorical palette by its own index —
+  // regression guard: they previously all shared idx 0 (same color).
+  check('case 11: pivot series 0 categorical purple70', opt.series[0]?.itemStyle?.color === '#6929c4');
+  check('case 11: pivot series 1 categorical cyan50', opt.series[1]?.itemStyle?.color === '#1192e8');
 }
 
 // --- Case 12: area chart type ---
@@ -306,6 +315,60 @@ const data = {
   const recording = (val, col, opts) => { observed = opts?.timestampFormat; return String(val ?? ''); };
   buildOption(values, data, { formatCellValue: recording, chartType: 'line', xAxisFormat: 'chart' /* helper says 'chart' */ });
   check('case 16: values.data_mapping.x_axis_format wins over helper', observed === 'chart_time_seconds');
+}
+
+// --- Case 18: x_axis_format "auto" resolves granularity from the data ---
+{
+  // Realistic formatter: chart_time → HH:MM, *_seconds → HH:MM:SS,
+  // chart → M/D HH:MM; non-timestamp values pass through unchanged.
+  const p = (n) => String(n).padStart(2, '0');
+  const fmt = (val, _col, opts) => {
+    const t = typeof val === 'number' ? val : Date.parse(val);
+    if (!Number.isFinite(t)) return String(val ?? ''); // passthrough (non-timestamp)
+    const d = new Date(t);
+    const f = opts?.timestampFormat;
+    if (f === 'chart_time_seconds') return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+    if (f === 'chart_time') return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+    if (f === 'chart' || f === 'chart_datetime') return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+    if (f === 'chart_datetime_seconds') return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+    return String(val);
+  };
+  const mk = (rows) => ({ columns: ['ts', 'cpu'], rows });
+  const run = (rows) => buildOption(
+    { data_mapping: { x_axis: 'ts', x_axis_format: 'auto', y_axis: [{ column: 'cpu' }] }, options: {} },
+    mk(rows), { formatCellValue: fmt, chartType: 'line' },
+  ).xAxis.data;
+
+  // Same-minute → auto adds seconds (HH:MM:SS, all distinct).
+  const sameMin = run([
+    [Date.UTC(2026, 0, 1, 14, 6, 5), 1],
+    [Date.UTC(2026, 0, 1, 14, 6, 25), 2],
+    [Date.UTC(2026, 0, 1, 14, 6, 50), 3],
+  ]);
+  check('case 18: auto + same-minute → seconds', new Set(sameMin).size === 3 && sameMin[0].split(':').length === 3);
+
+  // Minutes apart, same day → time-only (HH:MM), no date, no seconds.
+  const minutesApart = run([
+    [Date.UTC(2026, 0, 1, 14, 6, 0), 1],
+    [Date.UTC(2026, 0, 1, 14, 8, 0), 2],
+    [Date.UTC(2026, 0, 1, 14, 10, 0), 3],
+  ]);
+  check('case 18: auto + minutes-apart → time-only', minutesApart.every((l) => /^\d{1,2}:\d{2}$/.test(l)));
+
+  // Spanning >1 day → includes the date.
+  const daysApart = run([
+    [Date.UTC(2026, 0, 1, 14, 0, 0), 1],
+    [Date.UTC(2026, 0, 3, 14, 0, 0), 2],
+  ]);
+  check('case 18: auto + multi-day → includes date', daysApart.every((l) => l.includes('/')));
+
+  // Non-timestamp x-axis → passthrough (values shown as-is, untouched).
+  const catData = buildOption(
+    { data_mapping: { x_axis: 'region', x_axis_format: 'auto', y_axis: [{ column: 'cpu' }] }, options: {} },
+    { columns: ['region', 'cpu'], rows: [['us-east', 1], ['us-west', 2]] },
+    { formatCellValue: fmt, chartType: 'line' },
+  ).xAxis.data;
+  check('case 18: auto + non-timestamp → passthrough', catData[0] === 'us-east' && catData[1] === 'us-west');
 }
 
 if (FAILURES.length > 0) {

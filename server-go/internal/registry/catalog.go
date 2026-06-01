@@ -42,9 +42,14 @@ type LayoutDimensionSummary struct {
 	Name      string `json:"name"`
 	MaxWidth  int    `json:"max_width"`
 	MaxHeight int    `json:"max_height"`
-	Cols      int    `json:"cols"`
-	Rows      int    `json:"rows"`
-	IsDefault bool   `json:"is_default,omitempty"`
+	// Cols/Rows are the cell budget AT this dimension's DefaultScale —
+	// i.e. the grid an agent should plan to when building at this
+	// dimension's normal scale. (Higher scale → smaller budget, since the
+	// design canvas = dimension / scale.)
+	Cols         int `json:"cols"`
+	Rows         int `json:"rows"`
+	DefaultScale int `json:"default_scale,omitempty"` // % (0/absent → 100)
+	IsDefault    bool `json:"is_default,omitempty"`
 }
 
 // LayoutDimensionLister supplies the deployment's layout-dimension
@@ -59,9 +64,10 @@ type LayoutDimensionLister interface {
 // lister. The catalog runs the cell-grid math on these to produce
 // LayoutDimensionSummary.
 type LayoutDimensionEntry struct {
-	Name      string
-	MaxWidth  int
-	MaxHeight int
+	Name         string
+	MaxWidth     int
+	MaxHeight    int
+	DefaultScale int // default display-scale % (0/absent → 100)
 }
 
 // Grid math constants — must agree with the React viewer
@@ -69,7 +75,12 @@ type LayoutDimensionEntry struct {
 //
 //	cell pitch  = 32 px
 //	gap         = 4 px
-//	viewer chrome (vertical)   = 109 px (header + toolbar + padding)
+//	viewer chrome (vertical)   = 57 px (the viewer toolbar: 56px + 1px
+//	                             border). The displayed dashboard (view /
+//	                             fullscreen) has NO app header above the
+//	                             toolbar, so the budget reserves only the
+//	                             toolbar — matching the pixel-perfect
+//	                             "actual size" preview in the editor.
 //	viewer chrome (horizontal) = 4 px  (border)
 //
 //	available = canvas - chrome
@@ -86,7 +97,7 @@ type LayoutDimensionEntry struct {
 const (
 	gridCellPx  = 32
 	gridGapPx   = 4
-	gridChromeV = 109
+	gridChromeV = 57
 	gridChromeH = 4
 )
 
@@ -172,14 +183,24 @@ func BuildCatalogWithLayout(ctx context.Context, deviceTypes DeviceTypeLister, l
 		}
 		summaries := make([]LayoutDimensionSummary, 0, len(entries))
 		for _, e := range entries {
-			cols, rows := computeCells(e.MaxWidth, e.MaxHeight)
+			// Cell budget at the dimension's default scale: the design
+			// canvas an agent builds on is dimension / (scale/100), so a
+			// higher default scale yields a smaller budget. scale ≤ 0 → 100.
+			scale := e.DefaultScale
+			if scale <= 0 {
+				scale = 100
+			}
+			dw := e.MaxWidth * 100 / scale
+			dh := e.MaxHeight * 100 / scale
+			cols, rows := computeCells(dw, dh)
 			summaries = append(summaries, LayoutDimensionSummary{
-				Name:      e.Name,
-				MaxWidth:  e.MaxWidth,
-				MaxHeight: e.MaxHeight,
-				Cols:      cols,
-				Rows:      rows,
-				IsDefault: e.Name == defaultName,
+				Name:         e.Name,
+				MaxWidth:     e.MaxWidth,
+				MaxHeight:    e.MaxHeight,
+				Cols:         cols,
+				Rows:         rows,
+				DefaultScale: scale,
+				IsDefault:    e.Name == defaultName,
 			})
 		}
 		// Sort by canvas width so the chat-agent surface matches the
@@ -300,14 +321,15 @@ func (c *Catalog) RenderMarkdown() string {
 
 	if len(c.LayoutDimensions) > 0 {
 		sb.WriteString("## Layout dimensions\n\n")
-		sb.WriteString("Dashboard canvas presets configured for this deployment. Set `settings.layout_dimension` on a dashboard to the exact `name` of one of these entries. `cols` × `rows` is the cell-grid budget for panel placement.\n\n")
+		sb.WriteString("Dashboard canvas presets. Set `settings.layout_dimension` on a dashboard to the exact `name` of one of these. `cols` × `rows` is the cell-grid budget for panel placement — and it is ALREADY computed at the preset's default scale, so plan panels directly to those cols × rows; no scale math needed for the normal case.\n\n")
+		sb.WriteString("`default scale` is the display zoom dashboards at this dimension use by default (it scales component text/line sizes up; the budget shrinks as scale rises because the design canvas = dimension ÷ scale). A new dashboard inherits it. If the user asks to build at a DIFFERENT scale, set `settings.scale_percent` on the dashboard to that value — and note the usable grid is smaller than the cols × rows shown here by roughly (default_scale ÷ requested_scale).\n\n")
 		for _, d := range c.LayoutDimensions {
 			marker := ""
 			if d.IsDefault {
 				marker = " (default)"
 			}
-			fmt.Fprintf(&sb, "- **`%s`** — %d×%d px, grid %d × %d cells%s\n",
-				d.Name, d.MaxWidth, d.MaxHeight, d.Cols, d.Rows, marker)
+			fmt.Fprintf(&sb, "- **`%s`** — %d×%d px, grid %d × %d cells @ %d%% default scale%s\n",
+				d.Name, d.MaxWidth, d.MaxHeight, d.Cols, d.Rows, d.DefaultScale, marker)
 		}
 		sb.WriteString("\n")
 	}

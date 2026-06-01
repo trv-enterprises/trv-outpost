@@ -33,6 +33,7 @@ import {
 } from '@carbon/icons-react';
 import apiClient, { API_BASE } from './api/client';
 import { isElectron } from './utils/electron';
+import { setStreamBufferSize } from './utils/streamBufferConfig';
 import { getCredentials, clearCredentials } from './utils/secureStorage';
 import { hydrateListPrefs } from './utils/listPrefs';
 import LoginPage from './pages/LoginPage';
@@ -58,6 +59,7 @@ import ManageModeNav from './components/navigation/ManageModeNav';
 import UsersListPage from './pages/UsersListPage';
 import UserDetailPage from './pages/UserDetailPage';
 import SettingsPage from './pages/SettingsPage';
+import AIUsagePage from './pages/AIUsagePage';
 import SystemUsersPage from './pages/SystemUsersPage';
 import DevicesPage from './pages/DevicesPage';
 import NamespacesPage from './pages/NamespacesPage';
@@ -466,7 +468,14 @@ function AppContent({ onDisconnect }) {
     }
   }, [identityResolved, currentUser, hydrateNotifications]);
 
-  // Fetch default dashboard (user preference or first alphabetically)
+  // Fetch default dashboard (user preference or first alphabetically).
+  //
+  // If the user has a configured default_dashboard_id but that dashboard
+  // no longer exists (it was deleted out from under the pointer), we
+  // CLEAR the stale pointer (set it to "") so the config self-heals and
+  // the detection runs only once, surface a notice telling the user to
+  // set a new default, and fall through to the alphabetical-first
+  // dashboard so they still land somewhere instead of a 404.
   const fetchDefaultDashboard = async () => {
     try {
       // First check if user has a configured default dashboard
@@ -474,8 +483,26 @@ function AppContent({ onDisconnect }) {
       if (userGuid) {
         try {
           const userConfig = await apiClient.getUserConfig(userGuid);
-          if (userConfig.settings?.default_dashboard_id) {
-            return userConfig.settings.default_dashboard_id;
+          const configuredId = userConfig.settings?.default_dashboard_id;
+          if (configuredId) {
+            // Validate it still exists before handing it back — a deleted
+            // dashboard leaves a dangling pointer here.
+            try {
+              await apiClient.getDashboard(configuredId);
+              return configuredId;
+            } catch {
+              // Configured default is gone. Clear the stale pointer
+              // (best-effort — a failed clear must not break the
+              // redirect), notify the user, then fall through to the
+              // alphabetical-first fallback below. Clearing makes this
+              // self-limiting: next load there's no pointer to detect.
+              apiClient.updateUserConfig(userGuid, { default_dashboard_id: '' }).catch(() => {});
+              addNotification({
+                kind: 'warning',
+                title: 'Default dashboard was deleted',
+                subtitle: 'Your default dashboard no longer exists, so it has been cleared. Open Dashboards and choose "Set as Default" to pick a new one.',
+              });
+            }
           }
         } catch {
           // Ignore errors - user may not have config yet
@@ -586,6 +613,48 @@ function AppContent({ onDisconnect }) {
     };
     loadDefaultDashboard();
   }, [identityResolved, currentUser]);
+
+  // Load the deployment-wide streaming buffer depth (admin setting
+  // stream_buffer_size) once identity resolves, and push it into the
+  // shared stream-buffer config so every streaming chart (spec-driven
+  // and custom-code) and the StreamConnectionManager use it. Read at
+  // load only — a change applies on the next page load, matching the
+  // setting's "applies on next page load" semantics.
+  useEffect(() => {
+    if (!identityResolved) return;
+    (async () => {
+      try {
+        const s = await apiClient.getSetting('stream_buffer_size');
+        if (s?.value != null) setStreamBufferSize(s.value);
+      } catch {
+        // Older deployments may not have the setting — keep the 1000 default.
+      }
+    })();
+  }, [identityResolved]);
+
+  // Load the component title scale (admin setting title_font_size, a
+  // percentage of the 1rem base) once identity resolves and set the
+  // --title-scale CSS variable on :root. The spec title bands (ChartShell
+  // / NumberView / DataViewGrid) and the datatable header all multiply
+  // their font + band height by var(--title-scale, 1), so one variable
+  // scales every component title consistently. Clamped 50–200%. Read at
+  // load only (applies on next page load), matching the setting's note.
+  useEffect(() => {
+    if (!identityResolved) return;
+    (async () => {
+      try {
+        const s = await apiClient.getSetting('title_font_size');
+        const pct = Number(s?.value);
+        if (Number.isFinite(pct) && pct > 0) {
+          const clamped = Math.min(200, Math.max(50, pct));
+          document.documentElement.style.setProperty('--title-scale', String(clamped / 100));
+        }
+      } catch {
+        // Older deployments may not have the setting — --title-scale
+        // falls back to 1 (the default in every calc()).
+      }
+    })();
+  }, [identityResolved]);
 
   // Render navigation based on current mode
   const renderNavigation = () => {
@@ -711,8 +780,8 @@ function AppContent({ onDisconnect }) {
                   of the header-action cluster (NamespacePicker, Help,
                   Notifications, AccountMenu). Only renders when:
                     1. The chat agent is enabled at the deployment
-                       (ANTHROPIC_API_KEY set AND assistant.enabled
-                       is true), AND
+                       (Anthropic key set AND the unified ai.enabled
+                       setting is true), AND
                     2. The caller has Design capability. The
                        assistant is a builder; View-only users
                        wouldn't have anything actionable to ask, and
@@ -891,6 +960,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/manage/system-users" element={<SystemUsersPage />} />
           <Route path="/manage/devices" element={<DevicesPage />} />
           <Route path="/manage/settings" element={<SettingsPage />} />
+          <Route path="/manage/ai-usage" element={<AIUsagePage />} />
           <Route path="/manage/namespaces" element={<NamespacesPage />} />
 
           {/* API Keys is per-user account settings, not Manage Mode.

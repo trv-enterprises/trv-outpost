@@ -6,6 +6,7 @@ package ai
 
 import (
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
@@ -95,15 +96,22 @@ Control types and their UI config:
 					"group_by":       map[string]interface{}{"type": "string", "description": "Column to group data by"},
 					"band_columns": map[string]interface{}{
 						"type":        "object",
-						"description": "Banded-bar (Levey-Jennings) per-row column mapping. Each row in the data stream must carry all five columns; the renderer reads each row's own values to draw a per-row envelope (the band moves with the data). Only used by chart_type 'banded_bar'; ignored elsewhere. There is no scalar/fixed-band convention — every band value is per-row.",
+						"description": "Banded-bar per-row band mapping. Only used by chart_type 'banded_bar'; ignored elsewhere. Pick a `scheme`, then map that scheme's columns. Each row carries its own band values (per-row envelope that moves with the data) — there is no scalar/fixed-band convention. Schemes: 'sd' (±SD: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd), 'minmaxmean' (range: mean + min/max), 'spc' (control: target + lower_control/upper_control/lower_limit/upper_limit). Provide only the keys for the chosen scheme; the center column is required.",
 						"properties": map[string]interface{}{
-							"mean":      map[string]interface{}{"type": "string", "description": "Column carrying the row's primary value (e.g. 'mean')"},
-							"plus_1sd":  map[string]interface{}{"type": "string", "description": "Column carrying the row's +1 SD bound"},
-							"minus_1sd": map[string]interface{}{"type": "string", "description": "Column carrying the row's -1 SD bound"},
-							"plus_2sd":  map[string]interface{}{"type": "string", "description": "Column carrying the row's +2 SD bound"},
-							"minus_2sd": map[string]interface{}{"type": "string", "description": "Column carrying the row's -2 SD bound"},
+							"scheme":        map[string]interface{}{"type": "string", "description": "Band scheme.", "enum": []string{"sd", "minmaxmean", "spc"}},
+							"mean":          map[string]interface{}{"type": "string", "description": "sd/minmaxmean center column (required for those schemes)"},
+							"plus_1sd":      map[string]interface{}{"type": "string", "description": "sd: +1 SD bound"},
+							"minus_1sd":     map[string]interface{}{"type": "string", "description": "sd: -1 SD bound"},
+							"plus_2sd":      map[string]interface{}{"type": "string", "description": "sd: +2 SD bound"},
+							"minus_2sd":     map[string]interface{}{"type": "string", "description": "sd: -2 SD bound"},
+							"min":           map[string]interface{}{"type": "string", "description": "minmaxmean: lower bound"},
+							"max":           map[string]interface{}{"type": "string", "description": "minmaxmean: upper bound"},
+							"target":        map[string]interface{}{"type": "string", "description": "spc center column (required for spc)"},
+							"lower_control": map[string]interface{}{"type": "string", "description": "spc: lower control limit"},
+							"upper_control": map[string]interface{}{"type": "string", "description": "spc: upper control limit"},
+							"lower_limit":   map[string]interface{}{"type": "string", "description": "spc: lower spec limit"},
+							"upper_limit":   map[string]interface{}{"type": "string", "description": "spc: upper spec limit"},
 						},
-						"required": []string{"mean"},
 					},
 				},
 			},
@@ -171,7 +179,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_sliding_window",
-			Description: anthropic.String("Configure a time-based sliding window to show only recent data. Essential for streaming/real-time charts to prevent unbounded data growth.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.sliding_window. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
+			Description: anthropic.String("Configure a time-based sliding window to show only recent data. Essential for streaming/real-time charts to prevent unbounded data growth — and you SHOULD set one on any streaming time-series chart (line/area/bar over time). Default to a 1-hour window (duration: 3600) using the stream's real timestamp column, UNLESS the user asked for a different span (e.g. \"last 15 minutes\" → 900, \"last day\" → 86400). The window also drives the historical backfill so the chart paints the full span up front. Do NOT compute a window from the stream's record rate — pick the duration from the user's intent or the 1-hour default.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping.sliding_window. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"duration":      map[string]interface{}{"type": "integer", "description": "Window duration in seconds (e.g., 300 for last 5 minutes, 3600 for last hour)"},
@@ -197,7 +205,7 @@ Control types and their UI config:
 			Name: "set_custom_code",
 			Description: anthropic.String(`Enable custom-code mode and replace the chart's React component with hand-written code. **Last-resort tool — prefer the configuration tools.**
 
-Configuration tools (update_data_mapping, update_chart_options, update_filters, update_aggregation, update_sliding_window, update_time_bucket) cover almost every chart change a user asks for: column choices, axis formats, legend placement, color, sorting, banded-bar styles, sliding windows, banded-bar band columns, etc. The chart's auto-generated code regenerates from those settings whenever any of them change, so the chart stays in sync with the editor's UI form.
+Configuration tools (update_data_mapping, update_chart_options, update_filters, update_aggregation, update_sliding_window, update_time_bucket) cover almost every chart change a user asks for: column choices, axis formats, legend placement, sorting, banded-bar styles, sliding windows, banded-bar band columns, etc. The chart's auto-generated code regenerates from those settings whenever any of them change, so the chart stays in sync with the editor's UI form. NOTE: series/line color is NOT a configuration option — spec-driven charts pick colors automatically (single series = Carbon blue; dual-axis = blue left / purple right; 3+ series = the Carbon categorical palette). To set a specific series color you must use set_custom_code.
 
 Calling set_custom_code is **destructive and one-way**: it freezes the chart at the current generated code (or whatever you write here), the editor switches to "Custom Code Mode" where the data-mapping form is bypassed, and subsequent configuration tool calls no longer affect rendering. Switching styles, columns, or axis formats afterward requires re-writing the code by hand each time.
 
@@ -215,23 +223,13 @@ Otherwise: configure via the structured tools and let the editor's generator pro
 		},
 		{
 			Name:        "update_chart_options",
-			Description: anthropic.String("Update ECharts-specific options for the chart.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
+			Description: anthropic.String("Update spec-driven chart options for the chart. Field names are the exact camelCase keys the renderer reads (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, numberFormat, …) — the SAME set the Dashboard Assistant uses, so configure-first works identically on both surfaces. This covers threshold coloring (yThresholds + yThresholdRenderMode=\"color_segments\" → change line color above/below a value), axis ranges, log scale, downsampling, and the zoom slider.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
+			// Shared schema with the Dashboard Assistant — see
+			// internal/ai/toolops/chart_options.go. Replaced the former
+			// hand-rolled snake_case set, several keys of which the
+			// spec-driven renderer never read (showLegend/smoothLines/…).
 			InputSchema: anthropic.ToolInputSchemaParam{
-				Properties: map[string]interface{}{
-					"title":            map[string]interface{}{"type": "string", "description": "Chart title rendered inside the ECharts canvas. MUST equal the component title set via update_component_config — never the component name."},
-					"show_legend":      map[string]interface{}{"type": "boolean", "description": "Whether to show the legend"},
-					"legend_position":  map[string]interface{}{"type": "string", "description": "Legend position", "enum": []string{"top", "bottom", "left", "right"}},
-					"show_tooltip":     map[string]interface{}{"type": "boolean", "description": "Whether to show tooltips on hover"},
-					"color_palette":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Array of color hex codes for series"},
-					"stack_series":     map[string]interface{}{"type": "boolean", "description": "Whether to stack series (bar/area charts)"},
-					"smooth_lines":     map[string]interface{}{"type": "boolean", "description": "Whether to smooth line charts"},
-					"show_data_labels": map[string]interface{}{"type": "boolean", "description": "Whether to show data labels on chart"},
-					"banded_bar_style": map[string]interface{}{
-						"type":        "string",
-						"description": "Visual style for chart_type='banded_bar'. Ignored for other types. 'time_series' = horizontal time x-axis, line + dots, full-width horizontal reference bands (default — best for multi-reading trends). 'column_filled' = single vertical column per timestamp, filled bands no borders, dot at value. 'column_outlined' = same but with band borders. 'column_box' = only inner band drawn, vertical line with tick at value (box-plot style).",
-						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
-					},
-				},
+				Properties: toolops.ChartOptionsSchema()["properties"].(map[string]interface{}),
 			},
 		},
 		{
@@ -336,27 +334,15 @@ Use this BEFORE configuring data mapping to understand the data structure.`),
 		},
 		{
 			Name: "get_component_template",
-			Description: anthropic.String(`Get a React component template for a chart type.
-Call AFTER setting chart_type with update_component_config.
-Returns Carbon g100 dark theme styled code to customize with your column names.
-For non-standard charts, use "custom" to get general formatting guidelines and color tokens.
+			Description: anthropic.String(`Get the custom-code starting template — a React/ECharts skeleton with Carbon g100 styling, the CARBON_COLORS palette, and the data helpers (toObjects, getValue, formatTimestamp, formatCellValue) already wired.
 
-For chart_type "banded_bar" pass an optional "style" arg to fetch the
-template for a specific visual variant — time_series (default), column_filled,
-column_outlined, or column_box. Without "style" the time_series template is
-returned. To switch an existing banded_bar from one style to another in custom
-code, fetch the target style's template here and re-implement from it.`),
+ONLY use this for hand-written custom code, paired with set_custom_code. The canonical chart types (line, bar, area, pie, scatter, gauge, number, dataview, banded_bar) are spec-driven and render from configuration — do NOT fetch a template for them; configure them with update_data_mapping / update_chart_options instead. There is exactly one template, "custom"; there are no per-type or styled templates anymore.`),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"chart_type": map[string]interface{}{
 						"type":        "string",
-						"description": "Chart type to get template for",
+						"description": "Always \"custom\" — the only available template.",
 						"enum":        templateEnum,
-					},
-					"style": map[string]interface{}{
-						"type":        "string",
-						"description": "Banded-bar visual style. Only meaningful when chart_type is 'banded_bar'; ignored otherwise. Defaults to 'time_series'.",
-						"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
 					},
 				},
 				Required: []string{"chart_type"},
@@ -452,7 +438,11 @@ func controlTypeEnum(cat *registry.Catalog) []string {
 // chartTypeEnum returns the chart_type enum for update_component_config.
 func chartTypeEnum(cat *registry.Catalog) []string {
 	if cat == nil {
-		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "heatmap", "radar", "funnel", "dataview", "custom"}
+		// Fallback when no catalog is wired — the canonical spec-driven
+		// chart types + custom. (heatmap/radar/funnel are not real spec
+		// types; number was previously missing here, so a catalog-less
+		// agent couldn't create number charts.)
+		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "number", "banded_bar", "dataview", "custom"}
 	}
 	out := make([]string, 0, len(cat.ChartTypes))
 	for _, t := range cat.ChartTypes {
@@ -468,9 +458,13 @@ func chartTypeEnum(cat *registry.Catalog) []string {
 }
 
 // chartTemplateEnum returns the chart_type enum for get_component_template.
-// Same set as chartTypeEnum today, but isolated so we can diverge if needed.
-func chartTemplateEnum(cat *registry.Catalog) []string {
-	return chartTypeEnum(cat)
+// Only "custom" remains — canonical chart types are spec-driven and
+// configured via update_data_mapping / update_chart_options, not
+// scaffolded from a template. The cat arg is unused now but kept so the
+// call site (which threads the filtered catalog through every enum) stays
+// uniform.
+func chartTemplateEnum(_ *registry.Catalog) []string {
+	return []string{"custom"}
 }
 
 // IsComponentUpdateTool returns true if the tool modifies the component

@@ -76,6 +76,11 @@ function generateComponentCodeFromConfig(component) {
     chartType, connectionId, queryRaw, queryType, xAxis, yAxisCols,
     transforms, options, queryParams, seriesCol, columnAliases,
     isStreaming, slidingWindow, parserConfig, component.id || '', isTSStoreStreaming,
+    // useSpecCodegen=true — emit the <SpecDrivenChart> one-liner for
+    // spec-driven types so the save flow persists the same renderable
+    // code the editor/server emit (and number/dataview don't fall through
+    // to the broken legacy ECharts template). See AIComponentPreview.
+    true,
   );
 }
 

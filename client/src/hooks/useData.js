@@ -32,6 +32,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { queryData } from '../api/dataClient';
 import apiClient, { API_BASE } from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
+import { getStreamBufferSize } from '../utils/streamBufferConfig';
 import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
 
 /**
@@ -95,7 +96,11 @@ function applyParser(record, parser) {
   return result;
 }
 
-export function useData({ connectionId, query, refreshInterval = null, useCache = true, maxBuffer = 1000, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
+export function useData({ connectionId, query, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
+  // A per-call maxBuffer wins; otherwise use the deployment-wide default
+  // (admin setting stream_buffer_size, set at bootstrap). Applies to both
+  // spec-driven and eval'd custom-code charts.
+  const effectiveMaxBuffer = (Number.isFinite(maxBuffer) && maxBuffer > 0) ? maxBuffer : getStreamBufferSize();
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -231,13 +236,13 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
       const newRows = batch.map(record => columns.map(col => record[col] ?? null));
 
       let allRows = [...paddedPrevRows, ...newRows];
-      if (allRows.length > maxBuffer) {
-        allRows = allRows.slice(allRows.length - maxBuffer);
+      if (allRows.length > effectiveMaxBuffer) {
+        allRows = allRows.slice(allRows.length - effectiveMaxBuffer);
       }
 
       return { columns, rows: allRows };
     });
-  }, [maxBuffer]);
+  }, [effectiveMaxBuffer]);
 
   const processStreamRecord = useCallback((record) => {
     if (!mountedRef.current) return;
@@ -319,15 +324,19 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
   //     gets one today; everything else stays empty).
   //   - false → explicit opt-out.
   //   - object → use as-is.
-  // Default: pull the latest 100 records so the chart paints immediately
-  // instead of sitting blank waiting for the next stream push. Charts
-  // that only need a single value (gauge, number) should pass an explicit
-  // backfill with `params: { limit: 1 }` to avoid the wasted fetch.
+  // Default: pull the latest 1000 records so an unwindowed streaming
+  // chart paints meaningful history immediately instead of sitting blank
+  // (or showing just a handful of points) until new pushes arrive. 1000
+  // matches maxBuffer — the live in-memory cap — so the initial paint and
+  // the steady-state buffer hold the same depth. A chart WITH a sliding
+  // window supersedes this with a since:<window> backfill (set by the
+  // editor codegen). Single-value charts (gauge, number) should pass an
+  // explicit backfill with `params: { limit: 1 }` to avoid the wasted fetch.
   const effectiveBackfill = useMemo(() => {
     if (backfill === false) return null;
     if (backfill) return backfill;
     if (datasourceType === 'tsstore' && datasourceTransport === 'streaming') {
-      return { raw: 'newest', type: 'tsstore', params: { limit: 100 } };
+      return { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
     }
     return null;
   }, [backfill, datasourceType, datasourceTransport]);

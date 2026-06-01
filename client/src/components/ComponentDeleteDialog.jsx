@@ -55,18 +55,24 @@ function ComponentDeleteDialog({ open, chart, onClose, onDelete }) {
       const isDraft = versionInfo?.status === 'draft';
       const hasMultipleVersions = versionInfo?.version_count > 1;
 
+      // `removedComponent` distinguishes "the whole component is gone"
+      // (drop its row from the list) from "only a version/draft was
+      // removed but the component still exists" (keep the row). The list
+      // page uses this to update local state instead of re-fetching.
+      let removedComponent = false;
       if (isDraft) {
-        // Delete draft
+        // Delete draft — the component itself remains.
         await apiClient.deleteComponentDraft(chart.id);
       } else if (deleteOption === 'all' || !hasMultipleVersions) {
-        // Delete all versions (or the only version)
+        // Delete all versions (or the only version) — component is gone.
         await apiClient.deleteComponent(chart.id);
+        removedComponent = true;
       } else {
-        // Delete specific version
+        // Delete one specific version — the component remains.
         await apiClient.deleteComponentVersion(chart.id, versionInfo.version);
       }
 
-      onDelete();
+      onDelete({ id: chart.id, removedComponent });
       onClose();
     } catch (err) {
       // 409 means dashboards still reference this component. Build a

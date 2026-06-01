@@ -841,10 +841,12 @@
       margin: 0;
     }
 
-    // Dataview config section
-    .dataview-config {
-      .column-aliases-section {
-        margin-top: spacing.$spacing-05;
+    // Dataview column manager. Rendered by the spec-driven ColumnManager
+    // field type inside .mapping-section.spec-section — NOT under the
+    // legacy .dataview-config wrapper (deleted in the Stage 3 spec
+    // refactor), so these styles hang directly off .mapping-section.
+    .column-aliases-section {
+      margin-top: spacing.$spacing-05;
         padding-top: spacing.$spacing-04;
         border-top: 1px solid var(--cds-border-subtle-01);
 
@@ -862,23 +864,51 @@
         }
 
         .aliases-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          // One row per line (no side-by-side tiling) so each row reads
+          // as a vertical list entry capped at the 3/4 row width below.
+          display: flex;
+          flex-direction: column;
           gap: spacing.$spacing-03;
           max-height: 300px;
           overflow-y: auto;
 
-          // 4-column grid: checkbox | reorder arrows | column name |
-          // rename input.
+          // Packed-left layout: [checkbox ↕] hug their content (auto),
+          // then a name cell and a rename cell each ~1/4 of the row. The
+          // grid is justify-start so leftover width pools on the RIGHT
+          // instead of spreading the cells apart — keeps the arrows tight
+          // to the name (no big gap).
           .alias-row {
             display: grid;
-            grid-template-columns: auto auto 6rem 1fr;
+            grid-template-columns: auto minmax(0, 14rem) minmax(0, 14rem);
+            justify-content: start;
             align-items: center;
             gap: spacing.$spacing-03;
             background-color: var(--cds-layer-02);
             padding: spacing.$spacing-03;
             border-radius: 4px;
             min-width: 0;
+
+            // Controls cell: checkbox at the left edge, reorder arrows
+            // immediately to its right (not stretched/centered).
+            .alias-row__controls {
+              display: flex;
+              align-items: center;
+              gap: spacing.$spacing-02;
+              min-width: 0;
+
+              .cds--checkbox-wrapper,
+              .cds--form-item {
+                flex: 0 0 auto; // checkbox hugs the left edge
+                min-width: 0;
+              }
+
+              .alias-row__reorder {
+                flex: 0 0 auto;        // hug the checkbox, don't expand
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+            }
 
             .column-name {
               font-size: 0.75rem;
@@ -903,7 +933,6 @@
             }
           }
         }
-      }
     }
 
     // Grid should use full width - remove Carbon Grid padding
@@ -1966,5 +1995,31 @@
 
   .spec-threshold-list__add {
     margin-top: spacing.$spacing-04;
+  }
+}
+
+// banded_bar band-scheme widget: a scheme <Select> on its own row, then
+// the per-scheme column pickers laid out as quarter-width cells that wrap
+// (5-field schemes spill onto a second row). Quarter math matches
+// metadata-col--quarter so the cells line up with the rest of the editor.
+.band-scheme {
+  .band-scheme__fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: spacing.$spacing-05;
+    margin-top: spacing.$spacing-05;
+  }
+
+  .band-scheme__field {
+    flex: 0 0 calc(25% - #{spacing.$spacing-05} * 3 / 4);
+    min-width: 0;
+
+    // Let Carbon's Select wrapper fill its quarter cell rather than
+    // claiming an intrinsic min-width that would break the wrap.
+    .cds--form-item,
+    .cds--select {
+      width: 100%;
+      min-width: 0;
+    }
   }
 }

@@ -94,13 +94,12 @@ Topic-focused sub-docs. Start wherever matches your question.
 | [AI Component Editor](AI_COMPONENT_EDITOR_ARCHITECTURE.md)  | AI Builder session lifecycle, tools, system prompt                           |
 | [MCP server](../mcp.md)                             | External-agent tool surface: endpoints, tool inventory, `mcp-proxy` setup     |
 
-External reference implementations:
-
-- [`cmd/dashboard-agent`](../../server-go/cmd/dashboard-agent) — CLI
-  agent that drives the MCP server end-to-end; see
-  [examples/dashboard-agent](../../examples/dashboard-agent/) for a
-  full walkthrough of a 14-panel Prometheus dashboard built in 12
-  turns against a minimal natural-language prompt.
+AI-assisted dashboard building lives in two places: the in-app
+**Dashboard Assistant** (chat sidecar) and the in-editor **Component AI
+agent** — see [AI Component Editor](AI_COMPONENT_EDITOR_ARCHITECTURE.md)
+and [MCP server](../mcp.md). See [examples/dashboards](../../examples/dashboards/)
+for a walkthrough of a multi-panel dashboard built from a
+natural-language prompt.
 
 ## Application modes
 

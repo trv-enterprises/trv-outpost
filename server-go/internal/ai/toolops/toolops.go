@@ -200,11 +200,9 @@ func (t *Toolset) GetConnection(ctx context.Context, in GetConnectionInput) (*Ge
 //
 // Intentionally minimal: no Prometheus metric_prefix / contains /
 // max_metrics filters here. The MCP schema tool has inline metric
-// filtering today and there's discussion about moving the MCP
-// surface into a separate dashboard-agent codebase — pre-coupling
-// that helper into toolops would freeze a transitional shape.
-// When the time comes, lift the filter from wherever it lives into
-// a shared helper and call it from both consumers.
+// filtering today; that filter still lives only in the MCP layer.
+// When a second consumer needs it, lift it into a shared helper and
+// call it from both rather than duplicating.
 type GetConnectionSchemaInput struct {
 	ConnectionID string `json:"connection_id"`
 }
@@ -401,6 +399,31 @@ func (t *Toolset) CreateComponent(ctx context.Context, in CreateComponentInput) 
 		return nil, fmt.Errorf("component service not wired")
 	}
 	return t.Components.CreateComponent(ctx, &in.Request)
+}
+
+type UpdateComponentInput struct {
+	ID      string
+	Request models.UpdateComponentRequest
+}
+
+// UpdateComponent patches an existing component in place (same version).
+// Only the fields set in the request are changed — UpdateComponentRequest
+// uses pointer fields, so a nil field leaves the stored value untouched.
+// The underlying service re-syncs the spec-driven one-liner when
+// chart_type changes on a config (non-custom) chart, so callers patch
+// chart_type / data_mapping / options and the rendered chart stays in
+// sync without ever touching component_code.
+//
+// Shared by the Assistant and (eventually) MCP so both modify components
+// through one code path — see GetComponent/CreateComponent above.
+func (t *Toolset) UpdateComponent(ctx context.Context, in UpdateComponentInput) (*models.Component, error) {
+	if t.Components == nil {
+		return nil, fmt.Errorf("component service not wired")
+	}
+	if in.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	return t.Components.UpdateComponent(ctx, in.ID, &in.Request)
 }
 
 // ─── Dashboards ───────────────────────────────────────────────────

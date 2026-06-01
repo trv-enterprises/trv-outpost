@@ -191,6 +191,42 @@
         }
       }
 
+      .scale-controls {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-03;
+
+        .scale-label {
+          color: var(--cds-text-secondary);
+          font-size: 0.75rem;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        // Width must hold a 3-digit value AND both steppers without
+        // clipping the number. ~7.5rem = value field (~3rem) + two 1.5rem
+        // stepper buttons + Carbon's internal borders.
+        .cds--number {
+          width: 7.5rem;
+          flex-shrink: 0;
+        }
+        .cds--number input {
+          background-color: #393939;
+          color: #f4f4f4;
+          height: 2rem;
+          min-width: 2.75rem; // ensure the 3-digit value is fully visible
+        }
+        // Tighten Carbon's sm steppers so they don't bloat the control,
+        // and kill the trailing gap Carbon leaves after the + button.
+        .cds--number__control-btn {
+          width: 1.5rem;
+        }
+        .cds--number__controls,
+        .cds--number {
+          margin-right: 0;
+        }
+      }
+
       .zoom-controls {
         display: flex;
         align-items: center;
@@ -426,6 +462,10 @@
     // native size; in the other modes the inline style sets width/height.
     .dashboard-grid-scale-wrapper {
       flex-shrink: 0;
+      // Anchor for the un-scaled TARGET (blue) boundary lines, which are
+      // absolutely positioned here (siblings of .dashboard-grid) so they
+      // stay fixed at the target extent while the grid content scales.
+      position: relative;
     }
 
     .dashboard-grid {
@@ -467,7 +507,11 @@
           background-color: #1a1a1a;
           border-bottom: 1px solid #393939;
           flex-shrink: 0;
-          height: 40px;
+          // Height scales with --title-scale (admin title_font_size) to
+          // match the spec title bands' calc(2.5rem * scale) ≈ 40px base.
+          // The .with-header height deduction below uses the same calc so
+          // the body still fits exactly.
+          height: calc(40px * var(--title-scale, 1));
 
           .chart-name {
             color: #f4f4f4;
@@ -488,8 +532,21 @@
           height: 100%;
           position: relative;
 
+          // When a title band renders at the top (charts/dataviews with a
+          // title, and datatable's external header), drop the wrapper's
+          // TOP padding — the 2.5rem title band is the top spacing, so the
+          // 0.5rem above it was wasted margin. Title-OFF wrappers keep the
+          // top inset so the absolutely-positioned hover action icons
+          // (top:4px) sit in a margin, not on the plot. Sides/bottom keep
+          // the 0.5rem either way.
+          &.has-title {
+            padding-top: 0;
+          }
+
           &.with-header {
-            height: calc(100% - 40px);
+            // Matches the scaled .chart-header height above so the body
+            // fills the remaining panel exactly at any --title-scale.
+            height: calc(100% - (40px * var(--title-scale, 1)));
           }
 
           // Display components fill the panel edge-to-edge
@@ -497,18 +554,13 @@
             padding: 0;
           }
 
-          // Dataview (AG Grid) renders its own title strip. The generic
-          // component-wrapper padding on top leaves a visible gap above
-          // the title; strip only the TOP padding (both on the wrapper
-          // itself and the inner div) and keep left/right/bottom so the
-          // panel still has breathing room on the sides.
-          &.dataview-wrapper {
-            padding-top: 0;
-
-            > div {
-              padding-top: 0;
-            }
-          }
+          // Dataview (AG Grid) renders its OWN title strip (DataViewGrid),
+          // unlike charts whose title comes from ChartShell — but both use
+          // identical 2.5rem title markup. No special-case needed now: the
+          // single .component-wrapper 0.5rem inset (the inner > div no
+          // longer adds padding) puts the dataview title at the same
+          // 0.5rem top offset as a chart title, so they align. (Previously
+          // this zeroed the top to fight the doubled inner padding.)
 
           // Control components — centered, extra right padding for slider labels
           &.control-wrapper {
@@ -524,14 +576,18 @@
             }
           }
 
-          // Wrapper div from DynamicComponentLoader
+          // Wrapper div from DynamicComponentLoader. No padding here —
+          // the parent .component-wrapper already provides the single
+          // 0.5rem inset. (Previously this ALSO had spacing-03, stacking
+          // a second 0.5rem for a 1rem total inset and a visibly large
+          // margin around charts — especially the dead band below the
+          // x-axis. One inset is enough.)
           > div {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            padding: spacing.$spacing-03;
           }
 
           // Hover-only action icons on chart panels (view-as-table,
@@ -764,6 +820,20 @@
           font-family: 'IBM Plex Mono', monospace;
         }
 
+        // Custom-code indicator — sits right of the size label. A passive
+        // marker (no hover/click affordance), so it's dimmed to match the
+        // size label (#6f6f6f) rather than the brighter action icons — it
+        // shouldn't read as a button.
+        .panel-custom-code-indicator {
+          display: inline-flex;
+          align-items: center;
+          color: #6f6f6f;
+
+          svg {
+            display: block;
+          }
+        }
+
         .panel-header-edit-menu {
           display: flex;
           align-items: center;
@@ -970,6 +1040,22 @@
 // caveat. This rule is at global scope (not under .dashboard-viewer-page)
 // because Carbon's OverflowMenu renders its items in a portal appended to
 // document.body, outside the page component's DOM subtree.
+// Fit-mode menu items: a fixed-width check column so labels align
+// whether or not the row is the active mode. The ✓ marks the active
+// fit mode (the trigger icon is fixed — see the OverflowMenu comment).
+.fit-mode-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.fit-mode-check {
+  display: inline-block;
+  width: 1.1rem;
+  flex-shrink: 0;
+  color: var(--cds-icon-primary);
+  font-weight: 600;
+}
+
 .fit-mode-item-with-info {
   display: inline-flex;
   align-items: center;

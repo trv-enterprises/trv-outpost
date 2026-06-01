@@ -11,6 +11,7 @@ import (
 
 	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
 
@@ -80,20 +81,23 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 
 	// Auto-codegen for structured charts: when the caller asks for a
 	// canonical chart_type with use_custom_code=false and didn't supply
-	// component_code, fall back to the registered template so the
-	// component renders something instead of "No chart" / Add-button.
+	// component_code, emit the spec-driven one-liner so the component
+	// renders identically to one built in the editor.
 	//
-	// Today this is the only server-side codegen step — the React
-	// editor does richer transforms on save (column substitution, etc.)
-	// but the raw template at least produces a viewable chart. External
-	// callers (MCP, Dashboard Assistant) that don't run the React save
-	// path get a chart they can refine; the previous behavior was a
-	// silently-broken record.
+	// Spec-driven charts carry NO render code in component_code — just
+	// `<SpecDrivenChart specName="..." />`. The client draws them at
+	// runtime from the saved data_mapping / options config via the chart
+	// type's buildOption function, so the chart stays in sync with the
+	// config and never hardcodes column names. This is the SAME string
+	// the React editor emits on save, so charts created by the agents
+	// (chat agent, component agent, MCP) match editor-built ones.
+	//
+	// (Pre-v0.24 this injected a legacy hardcoded-column ECharts template
+	// here, which rendered "No data" for any schema whose columns weren't
+	// the template's literals — the regression this replaces.)
 	componentCode := req.ComponentCode
-	if !req.UseCustomCode && componentType == models.ComponentTypeChart && componentCode == "" && req.ChartType != "" && req.ChartType != "custom" {
-		if tpl, ok := componenttemplates.Get(req.ChartType); ok {
-			componentCode = tpl
-		}
+	if !req.UseCustomCode && componentType == models.ComponentTypeChart && componentCode == "" && registry.IsSpecDrivenChart(req.ChartType) {
+		componentCode = componenttemplates.SpecDrivenOneLiner(req.ChartType)
 	}
 
 	component := &models.Component{
@@ -316,6 +320,20 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 	}
 	if req.Tags != nil {
 		component.Tags = models.NormalizeTags(*req.Tags)
+	}
+
+	// Keep the spec-driven one-liner in sync with chart_type. The stored
+	// code pins specName (e.g. <SpecDrivenChart specName="line" />), so a
+	// chart_type change must rewrite it or the chart renders as the old
+	// type. Only when the component is a spec-driven chart that isn't in
+	// custom-code mode and the caller didn't supply its own code this
+	// request — a custom chart or an explicit component_code edit is left
+	// untouched.
+	if component.ComponentType == models.ComponentTypeChart &&
+		!component.UseCustomCode &&
+		req.ComponentCode == nil &&
+		registry.IsSpecDrivenChart(component.ChartType) {
+		component.ComponentCode = componenttemplates.SpecDrivenOneLiner(component.ChartType)
 	}
 
 	// Update in place (same version)

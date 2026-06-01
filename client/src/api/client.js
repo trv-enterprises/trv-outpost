@@ -13,8 +13,22 @@
 // credentials load, so this default only matters for the brief window
 // between module load and credential restore.
 const getApiBaseUrl = () => {
+  // Explicit override always wins (e.g. pointing the SPA at a remote API).
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
+  }
+  // Vite dev: use a RELATIVE base ('') so /api/* rides Vite's dev proxy
+  // (vite.config.js proxies /api → :3001). That keeps requests SAME-ORIGIN
+  // with the :5173 app, which is required for the httpOnly refresh cookie
+  // (SameSite=Lax, credentials:'same-origin') to be stored on
+  // /api/auth/session and sent on /api/auth/refresh. With the previous
+  // absolute http://host:3001 base, the cookie-bearing auth calls were
+  // cross-origin from :5173, the refresh cookie was never stored, and the
+  // session went dead ~15 min later (access-token TTL) → blank dashboard.
+  // This mirrors how the homelab serves it: Caddy reverse-proxies /api to
+  // the server, so the browser sees a single origin there too.
+  if (import.meta.env.DEV) {
+    return '';
   }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
@@ -97,7 +111,7 @@ class APIClient {
     // Clerk-disabled deployments — no async overhead in that case.
     this.tokenProvider = null;
     // API key (`trve_…`) for non-browser clients (Electron, kiosk,
-    // dashboard-agent, mcp-proxy). Persisted to localStorage so it
+    // MCP clients, mcp-proxy). Persisted to localStorage so it
     // survives page reload. The auth header path prefers Clerk JWT
     // when one is available, then this API key, then the legacy
     // X-User-ID header.
@@ -1078,6 +1092,21 @@ class APIClient {
     return this.request('/api/ai/availability');
   }
 
+  // AI API Usage (admin) — per-user Dashboard Assistant token usage +
+  // per-user budget override. Manage-gated server-side.
+  async getAIUsage() {
+    return this.request('/api/ai/usage');
+  }
+
+  // Set or clear a user's Assistant budget override. Pass {clear:true}
+  // to remove it, or {input, output, scope:"today"|"ongoing"} to set.
+  async setAIBudgetOverride(guid, body) {
+    return this.request(`/api/ai/usage/${encodeURIComponent(guid)}/override`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
   // AI Session endpoints
   async createAISession(componentId = null, context = {}) {
     const payload = componentId ? { component_id: componentId } : {};
@@ -1373,8 +1402,8 @@ class APIClient {
   }
 
   // ── API Keys ──────────────────────────────────────────────────────
-  // Per-user authentication tokens for non-browser callers (the
-  // dashboard-agent CLI, MCP clients, scripts). The plaintext token
+  // Per-user authentication tokens for non-browser callers (MCP
+  // clients, kiosks, scripts). The plaintext token
   // is returned exactly once on creation — the UI must surface it
   // immediately and warn that it can't be recovered.
   async getAPIKeys() {

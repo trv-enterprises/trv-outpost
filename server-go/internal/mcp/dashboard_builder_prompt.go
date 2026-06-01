@@ -2,148 +2,14 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-package dashboard
+package mcp
 
-import (
-	"context"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-)
+// The dashboard-builder MCP persona prompt. Originally lived in the
+// (now-removed) dashboard-agent CLI; moved here verbatim when that CLI
+// was retired, since the MCP "dashboard-builder" prompt is the only
+// remaining consumer. prompts.go concatenates the two blocks.
 
-// PromptBuilder assembles the system prompt for a dashboard-builder
-// run. Sections: role + conventions, a type catalog (either the
-// preamble returned by MCP initialize or a direct fetch from
-// /api/registry/catalog.md as fallback), a runtime context block,
-// and the build flow guidelines.
-type PromptBuilder struct {
-	// CatalogURL is the fallback URL of /api/registry/catalog.md on
-	// the main server. Only used when MCP initialize didn't return an
-	// Instructions preamble.
-	CatalogURL string
-
-	// HTTPClient is used for the fallback catalog fetch. Defaults to
-	// a 30-second client if nil.
-	HTTPClient *http.Client
-
-	// UserGUID is stamped into the X-User-ID header for the fallback
-	// fetch when APIKey is empty.
-	UserGUID string
-
-	// APIKey, when set, is sent as `Authorization: Bearer <APIKey>`
-	// for the fallback catalog fetch. Takes precedence over UserGUID.
-	APIKey string
-}
-
-// Build assembles the final system prompt. If mcpInstructions is
-// non-empty, it is used as the catalog section (this is what the
-// server's MCP initialize already composed for us). Otherwise the
-// builder falls back to fetching catalog.md directly.
-func (b *PromptBuilder) Build(ctx context.Context, rc *RequestContext, mcpInstructions string) (string, error) {
-	var catalogSection string
-	if mcpInstructions != "" {
-		catalogSection = mcpInstructions
-	} else {
-		cat, err := b.fetchCatalog(ctx)
-		if err != nil {
-			return "", fmt.Errorf("fetch catalog markdown: %w", err)
-		}
-		catalogSection = "# Type catalog (live from this server)\n\n" + cat
-	}
-
-	var sb strings.Builder
-	sb.WriteString(roleAndConventions)
-	sb.WriteString("\n\n")
-	sb.WriteString(catalogSection)
-	sb.WriteString("\n\n# Runtime context for this build\n\n")
-	sb.WriteString(b.runtimeContext(rc))
-	sb.WriteString("\n\n")
-	sb.WriteString(buildFlowAndGuidelines)
-	return sb.String(), nil
-}
-
-func (b *PromptBuilder) fetchCatalog(ctx context.Context) (string, error) {
-	hc := b.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 30 * time.Second}
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.CatalogURL, nil)
-	if err != nil {
-		return "", err
-	}
-	if b.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+b.APIKey)
-	} else if b.UserGUID != "" {
-		req.Header.Set("X-User-ID", b.UserGUID)
-	}
-	resp, err := hc.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("catalog fetch returned %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
-}
-
-func (b *PromptBuilder) runtimeContext(rc *RequestContext) string {
-	var sb strings.Builder
-	if rc.UserGUID != "" {
-		fmt.Fprintf(&sb, "- Acting user GUID: %s\n", rc.UserGUID)
-	} else {
-		// API-key-only run — server resolves the calling user from the
-		// Bearer token. The agent doesn't need to know the GUID.
-		sb.WriteString("- Acting user: resolved server-side from API key\n")
-	}
-	if rc.Namespace != "" {
-		fmt.Fprintf(&sb, "- Target namespace: %s\n", rc.Namespace)
-	} else {
-		sb.WriteString("- Target namespace: (unset — default to \"default\" unless told otherwise)\n")
-	}
-	if rc.ConnectionID != "" {
-		fmt.Fprintf(&sb, "- Preferred connection ID: %s\n", rc.ConnectionID)
-		sb.WriteString("  (call get_connection first to confirm type and shape)\n")
-	} else {
-		sb.WriteString("- Preferred connection ID: (unset)\n")
-		sb.WriteString("  (use list_connections to find candidates, or call request_clarification if the choice isn't obvious)\n")
-	}
-	if rc.DashboardName != "" {
-		fmt.Fprintf(&sb, "- Dashboard name: %q\n", rc.DashboardName)
-	} else {
-		sb.WriteString("- Dashboard name: (unset — pick one based on the prompt; must be unique within the namespace)\n")
-	}
-	if rc.DimensionsWidth > 0 {
-		rows, cols := rc.GridRowsCols()
-		fmt.Fprintf(&sb, "- Canvas: %dx%d pixels → %d cols × %d rows grid (32x32 px cells)\n",
-			rc.DimensionsWidth, rc.DimensionsHeight, cols, rows)
-		sb.WriteString("  (see the MCP preamble's \"Grid contract\" section for panel-sizing math)\n")
-	} else {
-		sb.WriteString("- Canvas: unspecified — if the prompt doesn't pin this, ask via request_clarification\n")
-	}
-	fmt.Fprintf(&sb, "\nUser request:\n\n    %s\n", rc.Prompt)
-	return sb.String()
-}
-
-// RoleAndConventions is the role-framing + conventions block shared
-// between the standalone dashboard-agent CLI and the MCP-served
-// `dashboard-builder` prompt. Exported so the MCP package can read
-// it without duplicating the text. Concatenate with
-// BuildFlowAndGuidelines to get the full builder persona.
-const RoleAndConventions = roleAndConventions
-
-// BuildFlowAndGuidelines is the step-by-step build flow + the
-// chart-template / time-axis / things-to-avoid guidance. Exported
-// alongside RoleAndConventions.
-const BuildFlowAndGuidelines = buildFlowAndGuidelines
-
-const roleAndConventions = `# Role
+const dashboardBuilderRole = `# Role
 
 You are a dashboard-builder agent for TRVE Dashboards. You build data
 visualization dashboards end-to-end by invoking MCP tools on the main
@@ -201,7 +67,7 @@ create a dashboard whose panels reference those components.
 - If the user's request is ambiguous *and* there's no safe default,
   ` + "`" + `request_clarification` + "`" + `.`
 
-const buildFlowAndGuidelines = `# Build flow
+const dashboardBuilderFlow = `# Build flow
 
 1. Confirm the target connection exists and is the type you expected
    (` + "`" + `get_connection` + "`" + `). If the runtime context didn't specify one,

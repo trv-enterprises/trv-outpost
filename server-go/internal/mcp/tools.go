@@ -952,17 +952,13 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 	r.registerTool(
 		Tool{
 			Name: "get_component_template",
-			Description: "Return the raw React component-code template (skeleton) for a chart type. After creating a chart component and learning the data schema, fetch the template, substitute real column names into it (e.g. replace `d.value` / `d.timestamp` with your actual fields), and then call update_component with the filled-in code in the `component_code` field. Templates use a small set of runtime helpers the viewer injects: toObjects(data), getValue(data, col), formatTimestamp(ts, format), formatCellValue(value, column) — do not import them. Use chart_type='custom' for a freeform ECharts skeleton when no specific template fits. For chart_type='banded_bar' pass an optional `style` arg (time_series default, column_filled, column_outlined, column_box) to fetch the template for a specific visual variant — each style returns a working ECharts skeleton scoped to that variant. To switch a custom-coded banded_bar between styles, fetch the new style's template here and re-implement.",
+			Description: "Return the custom-code starting template — a freeform React/ECharts skeleton with Carbon g100 styling, the CARBON_COLORS palette, and the viewer's data helpers (toObjects, getValue, formatTimestamp, formatCellValue — do not import them) already wired. ONLY for hand-written custom code: set use_custom_code=true and pass the filled-in code in update_component's `component_code` field. The canonical chart types (line, bar, area, pie, scatter, gauge, number, dataview, banded_bar) are spec-driven — configure them via create_component / update_component structured fields (chart_type + data_mapping + options); do NOT fetch a template and hand-write code for them. There is exactly one template, 'custom'.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"chart_type": {
 						Type:        "string",
-						Description: "Chart type whose template to return (line, bar, area, pie, scatter, number, gauge, heatmap, radar, funnel, dataview, banded_bar, custom).",
-					},
-					"style": {
-						Type:        "string",
-						Description: "Banded-bar visual style. Only meaningful when chart_type='banded_bar'; ignored otherwise. One of time_series, column_filled, column_outlined, column_box.",
+						Description: "Always 'custom' — the only available template. Canonical chart types are spec-driven and have no template.",
 					},
 				},
 				Required: []string{"chart_type"},
@@ -973,14 +969,12 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 			if ct == "" {
 				return nil, fmt.Errorf("chart_type is required")
 			}
-			style := getString(args, "style")
-			tmpl, ok := componenttemplates.GetStyled(ct, style)
+			tmpl, ok := componenttemplates.Get(ct)
 			if !ok {
-				return nil, fmt.Errorf("no template for chart type %q — try one of: %v", ct, componenttemplates.List())
+				return nil, fmt.Errorf("no template for chart type %q — only 'custom' exists; canonical chart types are spec-driven and configured via create_component / update_component", ct)
 			}
 			return map[string]interface{}{
 				"chart_type": ct,
-				"style":      style,
 				"template":   tmpl,
 			}, nil
 		},

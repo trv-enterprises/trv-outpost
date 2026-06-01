@@ -54,6 +54,45 @@
       "label": "Number Options",
       "subsections": [
         {
+          "id": "number_value_format",
+          "label": "Value format",
+          "helperText": "How to render the value. The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "number_format",
+              "binds": "options.numberFormat",
+              "type": "enum",
+              "label": "Format",
+              "default": "auto",
+              "options": [
+                { "value": "auto", "label": "Auto (source precision)" },
+                { "value": "plain", "label": "Plain number (1,234.5)" },
+                { "value": "compact", "label": "Compact (1.2M, 3.4K)" },
+                { "value": "duration", "label": "Duration from seconds (2d 3h 4m)" },
+                { "value": "duration_clock", "label": "Duration clock (HH:MM:SS)" },
+                { "value": "datetime", "label": "Date / time (value is a timestamp)" }
+              ]
+            },
+            {
+              "id": "number_date_format",
+              "binds": "options.numberDateFormat",
+              "type": "enum",
+              "label": "Date/time style",
+              "default": "datetime",
+              "helperText": "Only used when Format is Date / time.",
+              "visibleWhen": { "field": "number_format", "operator": "eq", "value": "datetime" },
+              "options": [
+                { "value": "date", "label": "Date (Jan 15)" },
+                { "value": "time", "label": "Time (10:30 AM)" },
+                { "value": "time_seconds", "label": "Time + seconds (10:30:05 AM)" },
+                { "value": "datetime", "label": "Date + time (Jan 15, 10:30 AM)" },
+                { "value": "datetime_seconds", "label": "Date + time + seconds" }
+              ]
+            }
+          ]
+        },
+        {
           "id": "number_style",
           "label": "Display",
           "layout": "row-4",
@@ -79,6 +118,22 @@
                 { "value": "240", "label": "240 px" },
                 { "value": "300", "label": "300 px" },
                 { "value": "400", "label": "400 px" }
+              ]
+            },
+            {
+              "id": "number_decimals",
+              "binds": "options.numberDecimals",
+              "type": "enum",
+              "label": "Decimal places",
+              "default": "auto",
+              "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals.",
+              "options": [
+                { "value": "auto", "label": "Auto" },
+                { "value": "0", "label": "0" },
+                { "value": "1", "label": "1" },
+                { "value": "2", "label": "2" },
+                { "value": "3", "label": "3" },
+                { "value": "4", "label": "4" }
               ]
             },
             {

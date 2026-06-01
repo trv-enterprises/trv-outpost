@@ -2,6 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 
 /**
@@ -32,6 +33,12 @@ import ReactECharts from 'echarts-for-react';
  * @param {string}   [props.misconfiguredMessage]  Shown when option is null.
  */
 export default function ChartShell({ config, dataCtx, option, onEvents, misconfiguredMessage }) {
+  // Tracks whether the chart canvas has rendered at least once (past the
+  // loading/error/no-data early returns). Used to preserve the user's
+  // zoom/pan across data updates — see the dataZoom handling at the
+  // ReactECharts render below.
+  const chartPaintedRef = useRef(false);
+
   if (dataCtx?.loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -68,16 +75,40 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
   // NumberView / DataViewGrid.
   const showTitle = config?.options?.showTitle !== false;
   const chartName = showTitle ? (config?.title || config?.name || '') : '';
+
+  // Zoom-preservation: on the FIRST canvas paint, pass the option as-is
+  // (its dataZoom carries the full-range start/end default). On every
+  // SUBSEQUENT render — e.g. a streaming point arriving — drop
+  // start/end from dataZoom so echarts-for-react's merge keeps the
+  // user's current zoom window instead of snapping it back. Clone
+  // shallowly so we never mutate the caller's option object.
+  let renderOption = option;
+  if (chartPaintedRef.current && Array.isArray(option.dataZoom)) {
+    renderOption = {
+      ...option,
+      dataZoom: option.dataZoom.map((dz) => {
+        const next = { ...dz };
+        delete next.start;
+        delete next.end;
+        return next;
+      }),
+    };
+  }
+  chartPaintedRef.current = true;
+
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {chartName ? (
+        // Title band — font AND height scale by --title-scale (admin
+        // setting title_font_size, default 1) so the band always fits the
+        // text. Shared 2.5rem base with NumberView / DataViewGrid.
         <div style={{
           display: 'block',
-          height: '2.5rem',
-          lineHeight: '2.5rem',
+          height: 'calc(2.5rem * var(--title-scale, 1))',
+          lineHeight: 'calc(2.5rem * var(--title-scale, 1))',
           flexShrink: 0,
           padding: '0 0.75rem',
-          fontSize: '1rem',
+          fontSize: 'calc(1rem * var(--title-scale, 1))',
           fontWeight: 600,
           color: 'var(--cds-text-primary)',
           textAlign: 'center',
@@ -90,7 +121,7 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
       ) : null}
       <div style={{ flex: 1, minHeight: 0 }}>
         <ReactECharts
-          option={option}
+          option={renderOption}
           style={{ height: '100%', width: '100%' }}
           theme="carbon-dark"
           onEvents={onEvents}
