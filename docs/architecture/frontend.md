@@ -212,6 +212,69 @@ chart                                 → <DynamicComponentLoader />
 panel.text_config                    → <PanelText />
 ```
 
+## Component title sizing and chart text (the `textStyle` gotcha)
+
+There are **two independent font systems** in a rendered chart panel, and
+they don't share a size — a recurring source of confusion, so it's worth
+being explicit.
+
+**1. The component title band — HTML, scalable.** Every spec-driven
+component renders its title in an HTML band *outside* the ECharts canvas:
+`ChartShell.jsx` (line/bar/area/pie/gauge/scatter), `NumberView.jsx`
+(number tiles), `DataViewGrid.jsx` (data views), and the
+`.chart-name`/`.chart-header` path in `DashboardViewerPage.scss`
+(datatable). The font size is:
+
+```
+fontSize: calc(0.875rem * var(--title-scale, 1))
+```
+
+- **Base = `0.875rem` = 14px.** Hardcoded in those four places (kept in
+  sync deliberately). This is the *default* title size.
+- **`--title-scale`** is set on `:root` by `App.jsx` from the admin
+  setting **`title_font_size`** (50–200%, default 100 → multiplier 1.0).
+  One variable scales every component title consistently. It applies on
+  next page load (read once when identity resolves).
+
+So a title renders at `14px × (title_font_size / 100)` — 14px at 100%,
+12.6px at 90%, 28px at 200%. The band *height* (`2.5rem` ≈ 40px) scales
+by the same `--title-scale` so the band always fits the text.
+
+**2. ECharts in-canvas text (axis labels, legend, tooltip) — fixed 12px,
+NOT theme-controlled.** This is the gotcha. The `carbon-dark` theme
+(`theme/carbonEchartsTheme.js`) sets a global `textStyle.fontSize: 14`,
+which *reads* like "all chart text is 14px." **It is not.** ECharts does
+**not** cascade the global `textStyle.fontSize` into `axisLabel`,
+`legend.textStyle`, or `tooltip.textStyle` — each of those carries its
+own built-in default of **12px** (see `echarts/lib/coord/axisDefault.js`,
+`lib/component/legend/LegendModel.js`, `lib/model/globalDefault.js`), and
+the component-level default wins. The theme only changes a font size
+where it sets one *explicitly* — which is just the ECharts `title` (16px,
+**unused** because we render the title in HTML) and the gauge detail
+(24px, set in `chart-spec/specs/gauge.js`). So the theme's
+`textStyle.fontSize: 14` is effectively inert for the text you actually
+see on a chart.
+
+**Net rendered sizes:**
+
+| Text | Renders at | Set by |
+|------|-----------|--------|
+| Component title band (HTML) | 14px × `title_font_size`% | `0.875rem` base + `--title-scale` |
+| ECharts axis labels | **12px** | ECharts default (theme's 14 ignored) |
+| ECharts legend | **12px** | ECharts default (theme's 14 ignored) |
+| ECharts tooltip | 12px | ECharts default |
+| ECharts `title` | 16px | theme — but unused (HTML band instead) |
+| Gauge detail value | 24px | `specs/gauge.js` |
+
+The 14px title base was chosen to sit proportionately with the 12px
+in-canvas text. If you ever want the chart's axis/legend text to honor
+the theme's stated 14, you must set `axisLabel.fontSize` /
+`legend.textStyle.fontSize` **explicitly** in *both* theme blocks
+(`carbonLightTheme` and `carbonDarkTheme`) — the global `textStyle`
+won't do it. That's a visual change to every chart in every deployment
+(denser tick labels, possible rotation/skip), so it's a deliberate
+product decision, not an inheritance fix.
+
 ## Dashboard commands (MQTT)
 
 The viewer subscribes to a single MQTT topic for "dashboard

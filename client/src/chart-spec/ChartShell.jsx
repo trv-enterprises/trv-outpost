@@ -101,14 +101,17 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
       {chartName ? (
         // Title band — font AND height scale by --title-scale (admin
         // setting title_font_size, default 1) so the band always fits the
-        // text. Shared 2.5rem base with NumberView / DataViewGrid.
+        // text. Shared 2.5rem band base + 0.875rem (14px) font base with
+        // NumberView / DataViewGrid. 14px default keeps the title in
+        // proportion with ECharts' 12px axis/legend text (ECharts ignores
+        // the theme's textStyle:14 and uses its own 12 default).
         <div style={{
           display: 'block',
           height: 'calc(2.5rem * var(--title-scale, 1))',
           lineHeight: 'calc(2.5rem * var(--title-scale, 1))',
           flexShrink: 0,
           padding: '0 0.75rem',
-          fontSize: 'calc(1rem * var(--title-scale, 1))',
+          fontSize: 'calc(0.875rem * var(--title-scale, 1))',
           fontWeight: 600,
           color: 'var(--cds-text-primary)',
           textAlign: 'center',
