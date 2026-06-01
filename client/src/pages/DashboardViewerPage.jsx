@@ -156,6 +156,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [dashboardCommand, setDashboardCommand] = useState(null); // Latest command: { target, action, ... }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  // "Measure screen size" helper. The published dimension names (2K, 4K)
+  // overstate the usable area — the OS steals top space (menu bar / notch
+  // / window chrome), so a dashboard built to a nominal dimension won't
+  // fill the real screen. This captures the ACTUAL fullscreen viewport so
+  // an admin can set a preset's real geometry in Manage → Settings →
+  // Layout Dimensions (keeping the published name, fixing the numbers).
+  const [screenMeasure, setScreenMeasure] = useState(null); // { w, h } or null = dialog closed
   // refreshTick: refetch-without-remount signal (used when only the
   // *data* should refresh — manual Refresh button, dashboard navigation).
   // Preserves streaming buffers and dynamic-component state. Server-side
@@ -1063,6 +1070,38 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Measure the REAL fullscreen viewport. If not already fullscreen,
+  // request it first and measure once the browser has applied it
+  // (fullscreenchange + a frame), since innerWidth/Height only reflect
+  // the true usable area in fullscreen. Opens the result dialog.
+  const measureScreenSize = async () => {
+    const capture = () => {
+      // Two rAFs so the fullscreen layout has settled before we read.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        setScreenMeasure({ w: window.innerWidth, h: window.innerHeight });
+      }));
+    };
+    if (!document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+        // requestFullscreen resolves before the resize fully applies on
+        // some browsers; wait for the next fullscreenchange to measure.
+        const once = () => {
+          document.removeEventListener('fullscreenchange', once);
+          capture();
+        };
+        document.addEventListener('fullscreenchange', once);
+      } catch {
+        // Fullscreen denied/unavailable — measure the current viewport so
+        // the user still gets a (less accurate) number rather than nothing.
+        capture();
+      }
+    } else {
+      capture();
+    }
+  };
 
   const handleManualRefresh = () => {
     // Trigger an out-of-band refetch on every polling chart by bumping
@@ -2146,6 +2185,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     disabled={savingThumbnail}
                   />
                 )}
+                {canDesign && (
+                  <OverflowMenuItem
+                    itemText="Measure screen size…"
+                    onClick={measureScreenSize}
+                  />
+                )}
                 <OverflowMenuItem
                   itemText={isDefaultDashboard ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -2611,6 +2656,42 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         onDiscard={confirmDiscard}
         body="You have unsaved layout changes. Are you sure you want to discard them?"
       />
+
+      {/* Measure-screen-size helper result. Reports the REAL fullscreen
+          viewport so an admin can correct a layout-dimension preset's
+          geometry (the published name overstates usable space because the
+          OS reserves the top). Read-only here; the preset edit lives in
+          Manage → Settings → Layout Dimensions. */}
+      {screenMeasure && (
+        <Modal
+          open
+          modalHeading="Measured screen size"
+          primaryButtonText="Copy"
+          secondaryButtonText="Close"
+          onRequestClose={() => setScreenMeasure(null)}
+          onRequestSubmit={() => {
+            const text = `${screenMeasure.w}x${screenMeasure.h}`;
+            if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
+            setScreenMeasure(null);
+          }}
+          size="sm"
+        >
+          <p style={{ marginBottom: '1rem' }}>
+            Actual usable fullscreen area on this display:
+          </p>
+          <p style={{ fontSize: '1.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginBottom: '1rem' }}>
+            {screenMeasure.w} × {screenMeasure.h}
+          </p>
+          <p style={{ color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>
+            The published resolution (e.g. 2560×1440) overstates this — the OS
+            reserves space at the top (menu bar / notch / window chrome). To
+            make a dashboard fill this screen, set the matching layout-dimension
+            preset to <strong>{screenMeasure.w}×{screenMeasure.h}</strong> in
+            Manage → Settings → Layout Dimensions (keep its published name; just
+            fix the numbers). Requires Manage capability.
+          </p>
+        </Modal>
+      )}
 
       {/* Mode-switch interception: three options so "cancel" can't be
           misread as either "abandon edits" or "abandon the mode switch". */}
