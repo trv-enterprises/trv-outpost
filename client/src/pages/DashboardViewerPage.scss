@@ -450,6 +450,10 @@
     // native size; in the other modes the inline style sets width/height.
     .dashboard-grid-scale-wrapper {
       flex-shrink: 0;
+      // Anchor for the un-scaled TARGET (blue) boundary lines, which are
+      // absolutely positioned here (siblings of .dashboard-grid) so they
+      // stay fixed at the target extent while the grid content scales.
+      position: relative;
     }
 
     .dashboard-grid {

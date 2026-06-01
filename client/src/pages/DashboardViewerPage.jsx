@@ -309,6 +309,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // of the separate zoom control.
   const [showTargetPreview, setShowTargetPreview] = useState(false);
 
+  // Load the persisted scale in BOTH view and edit mode (it drives the
+  // view-mode "actual size" zoom-up and the fit math, not just the editor
+  // controls). The dimension-preset fetch below is edit-only, but the
+  // scale value is needed everywhere.
+  useEffect(() => {
+    if (!dashboard) return;
+    const savedScale = Number(dashboard.settings?.scale_percent);
+    setScalePercent(Number.isFinite(savedScale) && savedScale > 0 ? savedScale : 100);
+  }, [dashboard]);
+
   // Fetch all dimension presets and resolve the dashboard's current one
   useEffect(() => {
     if (!isEditMode || !dashboard) return;
@@ -330,10 +340,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         } else if (list.length > 0) {
           setCurrentDimension(list[0].name);
         }
-
-        // Load the persisted scale (default 100 when unset/0).
-        const savedScale = Number(dashboard.settings?.scale_percent);
-        setScalePercent(Number.isFinite(savedScale) && savedScale > 0 ? savedScale : 100);
+        // (scale_percent is loaded by the mode-agnostic effect above.)
       })
       .catch(() => {});
   }, [isEditMode, dashboard]);
@@ -613,39 +620,58 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const GAP = 4; // spacing.$spacing-02
   const CONTAINER_PADDING = 4;
   const fitTransform = useMemo(() => {
-    // Skip fit transform entirely in edit mode (edit mode uses its own zoom).
-    if (isEditMode || fitMode === 'actual' || !containerSize.width || !containerSize.height) {
+    if (isEditMode) {
       return { transform: '', scaledW: 0, scaledH: 0 };
     }
+    // The panels are BUILT at the design canvas (gridNative px), but the
+    // dashboard's true render size is the TARGET = gridNative * scaleFactor
+    // (scale_percent). So the content the viewer presents/fits is the
+    // target-sized version, not the raw built size.
     const gridNativeW = maxGridCol * CELL_WIDTH + (maxGridCol - 1) * GAP;
     const gridNativeH = maxGridRow * CELL_HEIGHT + (maxGridRow - 1) * GAP;
+    const targetW = gridNativeW * scaleFactor;
+    const targetH = gridNativeH * scaleFactor;
+
+    // "actual" = native TARGET size, no fit-to-window. With a scale > 100%
+    // this is the zoomed-up render (the "everything bigger" result); at
+    // 100% scaleFactor is 1 so it's the plain native size as before.
+    if (fitMode === 'actual') {
+      if (scaleFactor === 1) return { transform: '', scaledW: 0, scaledH: 0 };
+      return { transform: `scale(${scaleFactor})`, scaledW: targetW, scaledH: targetH };
+    }
+
+    if (!containerSize.width || !containerSize.height) {
+      return { transform: '', scaledW: 0, scaledH: 0 };
+    }
     const availW = containerSize.width - 2 * CONTAINER_PADDING;
     const availH = containerSize.height - 2 * CONTAINER_PADDING;
-    const sx = availW / gridNativeW;
-    const sy = availH / gridNativeH;
-
+    // Fit ratios computed against the TARGET-sized content...
+    const sx = availW / targetW;
+    const sy = availH / targetH;
+    // ...and the applied transform is fitRatio * scaleFactor, since the
+    // untransformed content is still at the smaller built (design) size.
     if (fitMode === 'stretch') {
       return {
-        transform: `scale(${sx}, ${sy})`,
-        scaledW: gridNativeW * sx,
-        scaledH: gridNativeH * sy,
+        transform: `scale(${sx * scaleFactor}, ${sy * scaleFactor})`,
+        scaledW: targetW * sx,
+        scaledH: targetH * sy,
       };
     }
     if (fitMode === 'width') {
       return {
-        transform: `scale(${sx})`,
-        scaledW: gridNativeW * sx,
-        scaledH: gridNativeH * sx,
+        transform: `scale(${sx * scaleFactor})`,
+        scaledW: targetW * sx,
+        scaledH: targetH * sx,
       };
     }
     // "window" — uniform, both axes fit
     const s = Math.min(sx, sy);
     return {
-      transform: `scale(${s})`,
-      scaledW: gridNativeW * s,
-      scaledH: gridNativeH * s,
+      transform: `scale(${s * scaleFactor})`,
+      scaledW: targetW * s,
+      scaledH: targetH * s,
     };
-  }, [isEditMode, fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT]);
+  }, [isEditMode, fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, scaleFactor]);
 
   // Fetch dashboard data and referenced charts
   const fetchDashboard = useCallback(async () => {
@@ -2144,7 +2170,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           <div
             className="dashboard-grid-scale-wrapper"
             style={
-              !isEditMode && fitMode !== 'actual' && fitTransform.scaledW > 0
+              // Reserve the post-transform size whenever there IS one — now
+              // includes "actual" at scale>100% (scaledW>0 there), so the
+              // scaled-up content scrolls correctly. At 100% actual,
+              // scaledW is 0 → no reserved size, native flow as before.
+              !isEditMode && fitTransform.scaledW > 0
                 ? { width: fitTransform.scaledW, height: fitTransform.scaledH }
                 : undefined
             }
@@ -2397,8 +2427,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </div>
             )}
 
-            {/* Dimension boundary lines — rendered as real elements to paint above grid items */}
-            {isEditMode && gridCols && (
+            {/* DESIGN (inner / red) boundary — lives INSIDE the scaled
+                grid so it tracks the build canvas. Hidden when expanded
+                (showTargetPreview): the content has grown out to meet the
+                fixed target line, so the inner line would just cut through
+                the middle of the content. The TARGET (blue) line is drawn
+                in the un-scaled wrapper (sibling of .dashboard-grid) so it
+                stays fixed while the content scales. */}
+            {isEditMode && gridCols && !showTargetPreview && (
               <>
                 <div
                   className="grid-boundary-right"
@@ -2414,32 +2450,37 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     width: gridCols * CELL_WIDTH + (gridCols - 1) * VIEWER_GAP
                   }}
                 />
-                {/* TARGET boundary (outer) — where the design canvas
-                    renders to at full target size. Only meaningful when
-                    scaled up (target > design); at 100% it coincides with
-                    the design line so we skip it. Build stays constrained
-                    to the design (red) line above. */}
-                {targetCols && targetRows && (targetCols > gridCols || targetRows > gridRows) && (
-                  <>
-                    <div
-                      className="grid-boundary-right grid-boundary-target"
-                      style={{
-                        left: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP,
-                        height: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP
-                      }}
-                    />
-                    <div
-                      className="grid-boundary-bottom grid-boundary-target"
-                      style={{
-                        top: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP,
-                        width: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP
-                      }}
-                    />
-                  </>
-                )}
               </>
             )}
           </div>
+          {/* TARGET (outer / blue) boundary — drawn OUTSIDE the scaled
+              .dashboard-grid (sibling, in the un-scaled wrapper) so it
+              stays FIXED at the target pixel extent while the content
+              scales. At build size it previews where the dashboard
+              renders to; on expand the content grows out to meet it.
+              Only meaningful when scaled up (target > design). */}
+          {isEditMode && targetCols && targetRows && (targetCols > gridCols || targetRows > gridRows) && (
+            <>
+              <div
+                className="grid-boundary-right grid-boundary-target"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP,
+                  height: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP
+                }}
+              />
+              <div
+                className="grid-boundary-bottom grid-boundary-target"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP,
+                  width: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP
+                }}
+              />
+            </>
+          )}
           </div>
         </div>
       ) : (
