@@ -7971,6 +7971,10 @@ const docTemplate = `{
                 "refresh_interval": {
                     "type": "integer"
                 },
+                "scale_percent": {
+                    "description": "ScalePercent is the \"everything bigger\" zoom. LayoutDimension is the\nrender TARGET; the dashboard is BUILT on a derived DESIGN canvas of\ntarget/(scale/100), so at render the viewer's transform:scale blows\nit back up to target — uniformly enlarging fonts, lines, and layout\nwhile preserving proportions. 100 = build at target (no enlargement);\n120 = build on target/1.2 so everything renders 20% bigger. Default\n100. Empty/0 is treated as 100 by readers.",
+                    "type": "integer"
+                },
                 "theme": {
                     "type": "string"
                 },

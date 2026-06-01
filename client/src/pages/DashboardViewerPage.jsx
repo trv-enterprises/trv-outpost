@@ -299,6 +299,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Layout dimension presets — defines the hard grid boundary
   const [dimensions, setDimensions] = useState([]);
   const [currentDimension, setCurrentDimension] = useState('');
+  // "Everything bigger" zoom. The dashboard is BUILT on a design canvas
+  // of target/(scalePercent/100); the viewer renders at the target dim
+  // and transform:scales it up, so a higher % enlarges fonts+lines+layout
+  // uniformly. 100 = build at target. Persisted as settings.scale_percent.
+  const [scalePercent, setScalePercent] = useState(100);
+  // Edit-mode preview toggle: false = show the BUILD (design) canvas you
+  // edit on; true = preview at the end-display (target) size. Independent
+  // of the separate zoom control.
+  const [showTargetPreview, setShowTargetPreview] = useState(false);
 
   // Fetch all dimension presets and resolve the dashboard's current one
   useEffect(() => {
@@ -321,11 +330,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         } else if (list.length > 0) {
           setCurrentDimension(list[0].name);
         }
+
+        // Load the persisted scale (default 100 when unset/0).
+        const savedScale = Number(dashboard.settings?.scale_percent);
+        setScalePercent(Number.isFinite(savedScale) && savedScale > 0 ? savedScale : 100);
       })
       .catch(() => {});
   }, [isEditMode, dashboard]);
 
-  // Resolved current dimension object
+  // Resolved current dimension object = the render TARGET.
   const layoutDimension = useMemo(() => {
     return dimensions.find(d => d.name === currentDimension) || null;
   }, [dimensions, currentDimension]);
@@ -335,13 +348,45 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const VIEWER_CHROME_H = 4;
   const VIEWER_GAP = 4;
 
+  // DESIGN dimension = target / (scale/100). The grid budget (cell
+  // cols/rows) is computed against the DESIGN canvas, so a higher scale
+  // shrinks the build area → fewer cells → everything renders bigger when
+  // the viewer transform:scales the design canvas up to the target. The
+  // chrome subtraction stays applied to the design dim (same formula +
+  // constants the server's computeCells uses), so building rules are
+  // unchanged — they just operate on the smaller canvas.
+  const scaleFactor = (Number.isFinite(scalePercent) && scalePercent > 0 ? scalePercent : 100) / 100;
+  const designDimension = useMemo(() => {
+    if (!layoutDimension) return null;
+    return {
+      max_width: Math.round(layoutDimension.max_width / scaleFactor),
+      max_height: Math.round(layoutDimension.max_height / scaleFactor),
+    };
+  }, [layoutDimension, scaleFactor]);
+
   const gridCols = useMemo(() => {
+    if (!designDimension) return null;
+    const availableWidth = designDimension.max_width - VIEWER_CHROME_H;
+    return Math.floor((availableWidth + VIEWER_GAP) / (CELL_WIDTH + VIEWER_GAP));
+  }, [designDimension]);
+
+  const gridRows = useMemo(() => {
+    if (!designDimension) return null;
+    const availableHeight = designDimension.max_height - VIEWER_CHROME_V;
+    return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
+  }, [designDimension]);
+
+  // TARGET cell budget — the cols/rows the design canvas maps to at the
+  // full target size. Used only to draw the target boundary line (the
+  // outer bound things render to); building is constrained to the DESIGN
+  // budget (gridCols/gridRows) above. When scale=100 the two coincide.
+  const targetCols = useMemo(() => {
     if (!layoutDimension) return null;
     const availableWidth = layoutDimension.max_width - VIEWER_CHROME_H;
     return Math.floor((availableWidth + VIEWER_GAP) / (CELL_WIDTH + VIEWER_GAP));
   }, [layoutDimension]);
 
-  const gridRows = useMemo(() => {
+  const targetRows = useMemo(() => {
     if (!layoutDimension) return null;
     const availableHeight = layoutDimension.max_height - VIEWER_CHROME_V;
     return Math.floor((availableHeight + VIEWER_GAP) / (CELL_HEIGHT + VIEWER_GAP));
@@ -1176,6 +1221,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditHasChanges(true);
   };
 
+  // Scale % is persisted in the dashboard record, so changing it marks
+  // the dashboard dirty (same as a dimension/panel edit). Clamp 50–200.
+  const handleScaleChange = (next) => {
+    const v = Number(next);
+    if (!Number.isFinite(v)) return;
+    const clamped = Math.min(200, Math.max(50, Math.round(v)));
+    setScalePercent(clamped);
+    setEditHasChanges(true);
+  };
+
   // saveEditMode persists current edits and returns the resolved
   // dashboard ID (existing or freshly-minted for a new dashboard).
   // Callers that don't care can ignore the return; the mode-switch
@@ -1192,6 +1247,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       const updatedSettings = {
         ...dashboard.settings,
         layout_dimension: currentDimension,
+        scale_percent: scalePercent,
         refresh_interval: editableRefreshInterval,
       };
       const payload = {
@@ -1814,6 +1870,36 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </Select>
             </div>
           )}
+          {isEditMode && layoutDimension && (
+            <div className="scale-controls" title="Build scale — higher % builds on a smaller canvas so everything renders larger at the target size">
+              <NumberInput
+                id="viewer-scale-percent"
+                size="sm"
+                hideLabel
+                label="Scale %"
+                min={50}
+                max={200}
+                step={5}
+                value={scalePercent}
+                onChange={(e, { value }) => handleScaleChange(value ?? e?.target?.value)}
+              />
+              <span className="scale-suffix">%</span>
+              {designDimension && (
+                <span className="scale-design-hint" title="Design canvas you build on = target ÷ scale">
+                  build {designDimension.max_width}×{designDimension.max_height}
+                </span>
+              )}
+              <IconButton
+                kind={showTargetPreview ? 'primary' : 'ghost'}
+                size="sm"
+                label={showTargetPreview ? 'Showing end-display (target) size — click for build size' : 'Showing build size — click to preview end-display (target) size'}
+                align="bottom"
+                onClick={() => setShowTargetPreview((v) => !v)}
+              >
+                <FitToScreen size={16} />
+              </IconButton>
+            </div>
+          )}
           {isEditMode && (
             <div className="zoom-controls">
               <IconButton
@@ -2077,8 +2163,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               } : {}),
               // Edit mode: manual zoom (mutually exclusive with fit-mode transform
               // because fitTransform returns empty string when isEditMode is true).
-              ...(isEditMode && zoom !== 100 ? {
-                transform: `scale(${zoom / 100})`,
+              // showTargetPreview multiplies by the scaleFactor so you see the
+              // dashboard at its end-display (target) size — the same uniform
+              // enlargement the viewer applies — on top of the manual zoom.
+              ...(isEditMode && (zoom !== 100 || showTargetPreview) ? {
+                transform: `scale(${(zoom / 100) * (showTargetPreview ? scaleFactor : 1)})`,
                 transformOrigin: 'top left'
               } : {})
             }}
@@ -2325,6 +2414,29 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     width: gridCols * CELL_WIDTH + (gridCols - 1) * VIEWER_GAP
                   }}
                 />
+                {/* TARGET boundary (outer) — where the design canvas
+                    renders to at full target size. Only meaningful when
+                    scaled up (target > design); at 100% it coincides with
+                    the design line so we skip it. Build stays constrained
+                    to the design (red) line above. */}
+                {targetCols && targetRows && (targetCols > gridCols || targetRows > gridRows) && (
+                  <>
+                    <div
+                      className="grid-boundary-right grid-boundary-target"
+                      style={{
+                        left: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP,
+                        height: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP
+                      }}
+                    />
+                    <div
+                      className="grid-boundary-bottom grid-boundary-target"
+                      style={{
+                        top: targetRows * CELL_HEIGHT + (targetRows - 1) * VIEWER_GAP,
+                        width: targetCols * CELL_WIDTH + (targetCols - 1) * VIEWER_GAP
+                      }}
+                    />
+                  </>
+                )}
               </>
             )}
           </div>

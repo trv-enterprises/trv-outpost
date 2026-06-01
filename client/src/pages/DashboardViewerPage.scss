@@ -191,6 +191,30 @@
         }
       }
 
+      .scale-controls {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-02;
+
+        .cds--number {
+          width: 6rem;
+        }
+        .cds--number input {
+          background-color: #393939;
+          color: #f4f4f4;
+          height: 2rem;
+        }
+        .scale-suffix {
+          color: var(--cds-text-secondary);
+          font-size: 0.75rem;
+        }
+        .scale-design-hint {
+          color: var(--cds-text-secondary);
+          font-size: 0.75rem;
+          white-space: nowrap;
+        }
+      }
+
       .zoom-controls {
         display: flex;
         align-items: center;
@@ -706,6 +730,20 @@
     left: 0;
     height: 2px;
     background: repeating-linear-gradient(90deg, #da1e28 0px, #da1e28 4px, transparent 4px, transparent 8px);
+  }
+
+  // Target boundary — the OUTER bound the build canvas renders to at full
+  // target size (the red line is the inner DESIGN bound you build within).
+  // Teal to distinguish from the red design line. Sits behind the design
+  // line (lower z) since it's the outer reference.
+  .grid-boundary-target {
+    z-index: 19;
+    &.grid-boundary-right {
+      background: repeating-linear-gradient(180deg, #009d9a 0px, #009d9a 4px, transparent 4px, transparent 8px);
+    }
+    &.grid-boundary-bottom {
+      background: repeating-linear-gradient(90deg, #009d9a 0px, #009d9a 4px, transparent 4px, transparent 8px);
+    }
   }
 
   .dashboard-grid .panel-container.edit-mode {

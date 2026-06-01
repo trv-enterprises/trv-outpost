@@ -194,6 +194,14 @@ type DashboardSettings struct {
 	AllowExport     bool   `json:"allow_export" bson:"allow_export"`
 	LayoutDimension string `json:"layout_dimension,omitempty" bson:"layout_dimension,omitempty"`
 	TitleScale      int    `json:"title_scale,omitempty" bson:"title_scale,omitempty"` // Title font scale % (default 100, range 50-200)
+	// ScalePercent is the "everything bigger" zoom. LayoutDimension is the
+	// render TARGET; the dashboard is BUILT on a derived DESIGN canvas of
+	// target/(scale/100), so at render the viewer's transform:scale blows
+	// it back up to target — uniformly enlarging fonts, lines, and layout
+	// while preserving proportions. 100 = build at target (no enlargement);
+	// 120 = build on target/1.2 so everything renders 20% bigger. Default
+	// 100. Empty/0 is treated as 100 by readers.
+	ScalePercent int `json:"scale_percent,omitempty" bson:"scale_percent,omitempty"`
 }
 
 // CreateDashboardRequest represents a request to create a dashboard
