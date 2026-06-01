@@ -61,6 +61,11 @@ type LayoutDimensionDTO struct {
 	Name      string `json:"name"`
 	MaxWidth  int    `json:"max_width"`
 	MaxHeight int    `json:"max_height"`
+	// DefaultScale is the default display-scale % for dashboards created
+	// at this dimension (e.g. 120 = "our 4K screens look best at 120%").
+	// New dashboards seed scale_percent from this; designer can override.
+	// 0/absent = 100 (no scaling).
+	DefaultScale int `json:"default_scale,omitempty"`
 }
 
 // UpdateConfigRequest is the request body for updating configuration

@@ -1951,6 +1951,13 @@ definitions:
     type: object
   models.LayoutDimensionDTO:
     properties:
+      default_scale:
+        description: |-
+          DefaultScale is the default display-scale % for dashboards created
+          at this dimension (e.g. 120 = "our 4K screens look best at 120%").
+          New dashboards seed scale_percent from this; designer can override.
+          0/absent = 100 (no scaling).
+        type: integer
       max_height:
         type: integer
       max_width:
@@ -3281,6 +3288,14 @@ definitions:
   registry.LayoutDimensionSummary:
     properties:
       cols:
+        description: |-
+          Cols/Rows are the cell budget AT this dimension's DefaultScale —
+          i.e. the grid an agent should plan to when building at this
+          dimension's normal scale. (Higher scale → smaller budget, since the
+          design canvas = dimension / scale.)
+        type: integer
+      default_scale:
+        description: '% (0/absent → 100)'
         type: integer
       is_default:
         type: boolean

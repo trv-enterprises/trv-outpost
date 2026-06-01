@@ -488,6 +488,10 @@ func dashboardSettingsSchema() map[string]interface{} {
 				"description": "Canvas size preset name. Must exactly match one of the `name` values from `get_type_catalog`'s `layout_dimensions` array — preset names are deployment-specific (e.g. \"2560x1440-2K\", \"1920x1080-HD\"). Use the entry's `cols` × `rows` to plan panel coordinates. Empty = server default.",
 			},
 			"title_scale": map[string]interface{}{"type": "integer", "description": "Title font scale percent (50-200, default 100)."},
+			"scale_percent": map[string]interface{}{
+				"type":        "integer",
+				"description": "Display scale % (50-200). Scales the whole dashboard's component text + line sizes up at render. LEAVE UNSET to inherit the chosen layout_dimension's default scale (the cols × rows in get_type_catalog are already at that default — plan to them directly). ONLY set this when the user explicitly asks for a different scale (e.g. \"build it at 150%\"); then the usable grid is SMALLER than the catalog's cols × rows by roughly (default_scale ÷ requested_scale), so reduce your panel budget accordingly.",
+			},
 			"is_public":   map[string]interface{}{"type": "boolean"},
 			"allow_export": map[string]interface{}{"type": "boolean"},
 		},

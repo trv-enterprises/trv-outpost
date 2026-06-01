@@ -234,6 +234,10 @@ func main() {
 	dashboardService := service.NewDashboardService(dashboardRepo, mongodb.Database, componentRepo, connectionRepo)
 	aiSessionService := service.NewAISessionService(aiSessionRepo, componentRepo, dashboardRepo)
 	configService := service.NewConfigService(configRepo, settingsRepo, cfg, clerkPublishable)
+	// Seed new dashboards' scale_percent from the chosen dimension's
+	// default scale (designer/AI override wins). Wired here now that both
+	// services exist.
+	dashboardService.SetScaleLookup(configService.DefaultScaleForDimension)
 	userService := service.NewUserService(userRepo, apiKeyRepo, configRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, connectionRepo)

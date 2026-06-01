@@ -8760,6 +8760,10 @@ const docTemplate = `{
         "models.LayoutDimensionDTO": {
             "type": "object",
             "properties": {
+                "default_scale": {
+                    "description": "DefaultScale is the default display-scale % for dashboards created\nat this dimension (e.g. 120 = \"our 4K screens look best at 120%\").\nNew dashboards seed scale_percent from this; designer can override.\n0/absent = 100 (no scaling).",
+                    "type": "integer"
+                },
                 "max_height": {
                     "type": "integer"
                 },
@@ -10577,6 +10581,11 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "cols": {
+                    "description": "Cols/Rows are the cell budget AT this dimension's DefaultScale —\ni.e. the grid an agent should plan to when building at this\ndimension's normal scale. (Higher scale → smaller budget, since the\ndesign canvas = dimension / scale.)",
+                    "type": "integer"
+                },
+                "default_scale": {
+                    "description": "% (0/absent → 100)",
                     "type": "integer"
                 },
                 "is_default": {

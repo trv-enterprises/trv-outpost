@@ -30,8 +30,8 @@ import './LayoutDimensionsEditorModal.scss';
 function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
   const [localDimensions, setLocalDimensions] = useState([]);
   const [editingIndex, setEditingIndex] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', max_width: 0, max_height: 0 });
-  const [newForm, setNewForm] = useState({ name: '', max_width: 1920, max_height: 1080 });
+  const [editForm, setEditForm] = useState({ name: '', max_width: 0, max_height: 0, default_scale: 100 });
+  const [newForm, setNewForm] = useState({ name: '', max_width: 1920, max_height: 1080, default_scale: 100 });
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Initialize local state when modal opens
@@ -45,12 +45,13 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
 
   const handleEdit = (index) => {
     setEditingIndex(index);
-    setEditForm({ ...localDimensions[index] });
+    // Default scale to 100 for presets saved before the field existed.
+    setEditForm({ default_scale: 100, ...localDimensions[index] });
   };
 
   const handleCancelEdit = () => {
     setEditingIndex(null);
-    setEditForm({ name: '', max_width: 0, max_height: 0 });
+    setEditForm({ name: '', max_width: 0, max_height: 0, default_scale: 100 });
   };
 
   const handleSaveEdit = () => {
@@ -68,7 +69,7 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
   const handleAddNew = () => {
     if (!newForm.name.trim()) return;
     setLocalDimensions([...localDimensions, { ...newForm }]);
-    setNewForm({ name: '', max_width: 1920, max_height: 1080 });
+    setNewForm({ name: '', max_width: 1920, max_height: 1080, default_scale: 100 });
     setShowAddForm(false);
   };
 
@@ -80,6 +81,7 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
     { key: 'name', header: 'Name' },
     { key: 'max_width', header: 'Max Width' },
     { key: 'max_height', header: 'Max Height' },
+    { key: 'default_scale', header: 'Default Scale %' },
     { key: 'actions', header: '' }
   ];
 
@@ -88,6 +90,7 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
     name: dim.name,
     max_width: dim.max_width,
     max_height: dim.max_height,
+    default_scale: dim.default_scale || 100,
     _index: index
   }));
 
@@ -165,6 +168,19 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
                               />
                             </TableCell>
                             <TableCell>
+                              <NumberInput
+                                id={`edit-scale-${index}`}
+                                size="sm"
+                                value={editForm.default_scale ?? 100}
+                                onChange={(e, { value }) => setEditForm({ ...editForm, default_scale: value })}
+                                min={50}
+                                max={200}
+                                step={5}
+                                hideLabel
+                                label=""
+                              />
+                            </TableCell>
+                            <TableCell>
                               <div className="action-buttons">
                                 <IconButton
                                   kind="ghost"
@@ -190,6 +206,7 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
                             <TableCell>{row.cells.find(c => c.info.header === 'name')?.value}</TableCell>
                             <TableCell>{row.cells.find(c => c.info.header === 'max_width')?.value}px</TableCell>
                             <TableCell>{row.cells.find(c => c.info.header === 'max_height')?.value}px</TableCell>
+                            <TableCell>{row.cells.find(c => c.info.header === 'default_scale')?.value}%</TableCell>
                             <TableCell>
                               <div className="action-buttons">
                                 <IconButton
@@ -249,6 +266,16 @@ function LayoutDimensionsEditorModal({ open, onClose, dimensions, onSave }) {
                 onChange={(e, { value }) => setNewForm({ ...newForm, max_height: value })}
                 min={100}
                 max={10000}
+              />
+              <NumberInput
+                id="new-scale"
+                size="sm"
+                label="Default Scale %"
+                value={newForm.default_scale}
+                onChange={(e, { value }) => setNewForm({ ...newForm, default_scale: value })}
+                min={50}
+                max={200}
+                step={5}
               />
             </div>
             <div className="add-form-actions">
