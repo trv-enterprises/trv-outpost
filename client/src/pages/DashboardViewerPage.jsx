@@ -30,8 +30,6 @@ import {
   Time,
   OverflowMenuVertical,
   FitToScreen,
-  FitToWidth,
-  CenterToFit,
   Information,
   StarFilled,
   Edit,
@@ -101,35 +99,16 @@ import './DashboardViewerPage.scss';
 // Carbon calls `React.createElement(renderIcon, { className, aria-label })`
 // without passing a size, and the raw Carbon icons default to size=16.
 // These wrappers lock the size at 20 to match the surrounding toolbar
-// controls. They are defined at module scope so the component identity is
-// stable across re-renders — passing an inline function to `renderIcon`
-// causes Carbon to unmount/remount the trigger icon every render, which
-// produced a visible "revert to old icon" flicker when the fit mode changed.
-const FitModeActualIcon = (props) => <CenterToFit size={20} {...props} />;
+// Defined at module scope so the component identity is stable across
+// re-renders — passing an inline function to `renderIcon` causes Carbon
+// to unmount/remount the trigger icon every render.
+//
+// The fit-mode menu uses a SINGLE fixed trigger icon (this one): Carbon
+// caches the trigger's renderIcon and won't reliably swap it per mode,
+// so we no longer try to convey the active mode via the icon. The active
+// mode is shown by the ✓ on the menu items instead. FitToScreen reads as
+// a generic "fit options" glyph for the trigger.
 const FitModeWindowIcon = (props) => <FitToScreen size={20} {...props} />;
-const FitModeWidthIcon = (props) => <FitToWidth size={20} {...props} />;
-
-// "Stretch to fill" uses a custom SVG because Carbon's `Maximize` (four
-// corner arrows) is already used by the adjacent fullscreen button, and
-// having two identical icons side-by-side was confusing. This SVG shows
-// a double-headed horizontal arrow crossed with a double-headed vertical
-// arrow — the "stretch both axes" metaphor — visually distinct from
-// `Maximize`'s corner arrows.
-const FitModeStretchIcon = ({ size = 20, ...rest }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 32 32"
-    width={size}
-    height={size}
-    fill="currentColor"
-    {...rest}
-  >
-    {/* Horizontal double-headed arrow: left arrowhead + bar + right arrowhead */}
-    <path d="M3 16 L8 11 L8 15 L24 15 L24 11 L29 16 L24 21 L24 17 L8 17 L8 21 Z" />
-    {/* Vertical double-headed arrow: top arrowhead + bar + bottom arrowhead */}
-    <path d="M16 3 L21 8 L17 8 L17 24 L21 24 L16 29 L11 24 L15 24 L15 8 L11 8 Z" />
-  </svg>
-);
 
 /**
  * DashboardViewerPage Component
@@ -2079,46 +2058,58 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </IconButton>
               <OverflowMenu
-                // key on fitMode forces the menu to remount when the mode
-                // changes, so Carbon re-renders the trigger with the new
-                // renderIcon. Without it, Carbon caches the initial icon
-                // component and the button kept showing the default
-                // (Actual) regardless of the active mode.
-                key={fitMode}
+                // FIXED trigger icon — it just opens the fit-mode menu.
+                // We do NOT swap renderIcon per mode: Carbon caches the
+                // trigger icon component and won't reliably re-render it,
+                // so a per-mode icon kept showing the wrong glyph. The
+                // ACTIVE mode is conveyed by the ✓ on the menu items
+                // below instead. iconDescription names the current mode
+                // for the tooltip/aria so it's still discoverable.
                 size="lg"
-                renderIcon={
-                  fitMode === 'window' ? FitModeWindowIcon
-                  : fitMode === 'width' ? FitModeWidthIcon
-                  : fitMode === 'stretch' ? FitModeStretchIcon
-                  : FitModeActualIcon
-                }
+                renderIcon={FitModeWindowIcon}
                 iconDescription={
-                  fitMode === 'window' ? 'Fit to window'
+                  (fitMode === 'window' ? 'Fit to window'
                   : fitMode === 'width' ? 'Fit to width'
                   : fitMode === 'stretch' ? 'Stretch to fill'
-                  : 'Actual size'
+                  : 'Actual size') + ' — change view fit'
                 }
                 flipped
                 direction="bottom"
                 className="fit-mode-menu"
               >
                 <OverflowMenuItem
-                  itemText={`${fitMode === 'actual' ? '✓ ' : '  '}Actual size`}
+                  itemText={
+                    <span className="fit-mode-item">
+                      <span className="fit-mode-check">{fitMode === 'actual' ? '✓' : ''}</span>
+                      Actual size
+                    </span>
+                  }
                   onClick={() => selectFitMode('actual')}
                   isDelete={false}
                 />
                 <OverflowMenuItem
-                  itemText={`${fitMode === 'window' ? '✓ ' : '  '}Fit to window`}
+                  itemText={
+                    <span className="fit-mode-item">
+                      <span className="fit-mode-check">{fitMode === 'window' ? '✓' : ''}</span>
+                      Fit to window
+                    </span>
+                  }
                   onClick={() => selectFitMode('window')}
                 />
                 <OverflowMenuItem
-                  itemText={`${fitMode === 'width' ? '✓ ' : '  '}Fit to width`}
+                  itemText={
+                    <span className="fit-mode-item">
+                      <span className="fit-mode-check">{fitMode === 'width' ? '✓' : ''}</span>
+                      Fit to width
+                    </span>
+                  }
                   onClick={() => selectFitMode('width')}
                 />
                 <OverflowMenuItem
                   itemText={
-                    <span className="fit-mode-item-with-info">
-                      {fitMode === 'stretch' ? '✓ ' : '  '}Stretch to fill
+                    <span className="fit-mode-item fit-mode-item-with-info">
+                      <span className="fit-mode-check">{fitMode === 'stretch' ? '✓' : ''}</span>
+                      Stretch to fill
                       <Information
                         size={16}
                         className="fit-mode-info-icon"

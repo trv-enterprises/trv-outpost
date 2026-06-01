@@ -1040,6 +1040,22 @@
 // caveat. This rule is at global scope (not under .dashboard-viewer-page)
 // because Carbon's OverflowMenu renders its items in a portal appended to
 // document.body, outside the page component's DOM subtree.
+// Fit-mode menu items: a fixed-width check column so labels align
+// whether or not the row is the active mode. The ✓ marks the active
+// fit mode (the trigger icon is fixed — see the OverflowMenu comment).
+.fit-mode-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.fit-mode-check {
+  display: inline-block;
+  width: 1.1rem;
+  flex-shrink: 0;
+  color: var(--cds-icon-primary);
+  font-weight: 600;
+}
+
 .fit-mode-item-with-info {
   display: inline-flex;
   align-items: center;
