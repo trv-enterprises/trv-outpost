@@ -83,13 +83,8 @@ server-go/
 │   └── config.yaml           Base config (env-override-able)
 ├── docs/                     Generated swagger docs
 └── internal/
-    ├── agent/
-    │   └── dashboard/        Dashboard-builder agent core: loop,
-    │                         MCP client, prompt assembly, runtime
-    │                         tools (request_clarification,
-    │                         yield_final_answer), typed request
-    │                         context
     ├── ai/                   AI Builder (in-process component agent)
+    │                         + the Dashboard Assistant (internal/ai/chat)
     ├── componenttemplates/   React chart-skeleton templates shared
     │                         by internal/ai and the MCP
     │                         get_component_template tool
@@ -102,7 +97,10 @@ server-go/
     │                         WebSocket, TCP)
     ├── handlers/             HTTP + SSE + WebSocket handlers
     ├── hub/                  ComponentHub — real-time component broadcasts
-    ├── mcp/                  MCP server tool registry + handlers
+    ├── mcp/                  MCP server tool registry + handlers, plus
+    │                         the shared dashboard-builder prompt (the
+    │                         standalone dashboard-agent CLI was removed;
+    │                         in-app Dashboard Assistant supersedes it)
     ├── middleware/           Auth middleware (X-User-ID resolver)
     ├── models/               Data model structs + request/response DTOs
     ├── registry/             Connection type registry (TypeID system)

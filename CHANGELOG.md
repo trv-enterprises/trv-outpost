@@ -6,6 +6,35 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.24.1] — 2026-06-01
+
+### Added
+
+- **Editor "Zoom to fit."** The edit-mode zoom `100%` control is now a
+  dropdown (100% / Zoom to fit). "Zoom to fit" shrinks the design canvas
+  so the whole dashboard fits the editor's visible area (shrink-only).
+- **Scale control tooltip** explaining build-scale and how it differs
+  from the editor's Zoom (Scale is saved and enlarges the rendered
+  dashboard; Zoom only magnifies your editing view).
+
+### Changed
+
+- **Component title default lowered 16px → 14px** so titles sit in
+  proportion with ECharts axis/legend text (which renders at 12px). The
+  `title_font_size` admin setting still scales from this new base.
+- **AI prefers tooltip mode `multi` for line/area/bar charts** — the
+  agent was setting `single` (per-point hover) on area charts, which
+  feels unresponsive on marker-less charts.
+
+### Fixed
+
+- Settings changes could appear not to take effect until a second
+  reload — the settings API now sends `Cache-Control: no-store`, so a
+  change applies on the next page load (surfaced via `title_font_size`).
+- Stray focus box on the namespace `(i)` info button after clicking it.
+- "Dashboard settings" gear tooltip clipping off the right edge of the
+  screen.
+
 ## [0.24.0] — 2026-06-01
 
 ### Added

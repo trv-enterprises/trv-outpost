@@ -525,8 +525,8 @@ launcher in `client/src/App.jsx`.
 
 ### P.1 Prerequisites
 
-- [ ] `ANTHROPIC_API_KEY` env var is set on the server.
-- [ ] `assistant.enabled` admin setting is `true` (default).
+- [ ] `ASSISTANT_ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY` fallback) env var is set on the server.
+- [ ] `ai.enabled` admin setting is `true` (default). Unified gate for both the Component AI agent and the Dashboard Assistant.
 - [ ] `assistant.model` is set (`sonnet` by default).
 - [ ] `GET /api/ai/availability` returns `chat_agent_enabled: true`.
 

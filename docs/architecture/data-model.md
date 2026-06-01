@@ -81,6 +81,7 @@ text label onto grid cells.
     "theme": "dark",
     "refresh_interval": 30,
     "title_scale": 100,
+    "scale_percent": 100,
     "is_public": false,
     "allow_export": true,
     "layout_dimension": "default-12col"
@@ -94,6 +95,17 @@ Panels without `chart_id` and without `text_config` are placeholder
 empty panels (common during authoring). The `thumbnail` field is a
 captured preview used on list pages. `settings.layout_dimension`
 names a preset from the `layouts` collection.
+
+`settings.scale_percent` is the dashboard's **build-scale** (50–200,
+default 100). `layout_dimension` is the render *target*; the dashboard
+is authored on a derived *design* canvas of `target ÷ (scale/100)`, and
+the viewer's `transform: scale()` blows it back up to the target —
+uniformly enlarging fonts, lines, and layout while preserving
+proportions. 100 = build at target (no enlargement); 120 = build on
+`target/1.2` so everything renders 20% bigger. (Distinct from
+`title_scale`, which scales only the component title font.) New
+dashboards seed `scale_percent` from the chosen preset's
+`default_scale` (see Layout presets below).
 
 - **Collection**: `dashboards`
 - **Name**: case-insensitive unique within a namespace
@@ -364,9 +376,17 @@ a dashboard's `settings.layout_dimension` picks from. Example preset
 keyed by a human name:
 
 ```yaml
-1920x1080-HD: {max_width: 1920, max_height: 1080}
-2560x1440-2k: {max_width: 2560, max_height: 1440}
+1920x1080-HD: {max_width: 1920, max_height: 1080, default_scale: 100}
+2560x1440-2k: {max_width: 2560, max_height: 1440, default_scale: 120}
 ```
+
+Each preset may carry an optional `default_scale` (50–200, default
+100). New dashboards seed their `settings.scale_percent` from the
+chosen preset's `default_scale` (then become independent — editing the
+preset later doesn't retroactively re-scale existing dashboards). This
+lets an admin say e.g. "4K boards default to 120%." The AI catalog
+reports each preset's cols × rows *already computed at its default
+scale*, so the agent plans to the adjusted budget without rate-math.
 
 The cell-count grid (cols × rows) is not preset-specific; it's
 derived from the canvas dimensions minus a fixed viewer-chrome

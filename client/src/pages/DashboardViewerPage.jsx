@@ -46,7 +46,8 @@ import {
   Home,
   Download,
   Notification,
-  Code
+  Code,
+  ChevronDown
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -242,6 +243,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const zoomIn = () => setZoom(z => Math.min(z + 10, 100));
   const zoomOut = () => setZoom(z => Math.max(z - 10, 10));
   const zoomReset = () => setZoom(100);
+  // Zoom-to-fit: shrink the design canvas so it fits inside the editor's
+  // visible area. Mirrors the view-mode "window" fit, but for the editor's
+  // manual zoom (which only scales DOWN — never above 100%). Defined later,
+  // after the design-canvas + container sizes are computed; see zoomToFit.
 
   // Fit-to-screen scale calculation
   const containerRef = useRef(null);
@@ -647,6 +652,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       scaledH: targetH * s,
     };
   }, [isEditMode, fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, scaleFactor]);
+
+  // Zoom-to-fit (edit mode): pick the zoom % that makes the whole design
+  // canvas fit inside the editor's visible area. The editor zoom scales the
+  // grid-scale-wrapper, whose unscaled size IS the design canvas
+  // (gridNative px), so fit% = min(containerW/gridNativeW, containerH/
+  // gridNativeH) × 100. Clamped to the same 10–100 range as the +/- buttons
+  // (zoom only ever shrinks the big canvas to fit — never magnifies past
+  // actual). No-op until the container has been measured.
+  const zoomToFit = useCallback(() => {
+    const gridNativeW = maxGridCol * CELL_WIDTH + (maxGridCol - 1) * GAP;
+    const gridNativeH = maxGridRow * CELL_HEIGHT + (maxGridRow - 1) * GAP;
+    if (!containerSize.width || !containerSize.height || !gridNativeW || !gridNativeH) return;
+    const ratio = Math.min(containerSize.width / gridNativeW, containerSize.height / gridNativeH);
+    const fitPct = Math.max(10, Math.min(100, Math.floor(ratio * 100)));
+    setZoom(fitPct);
+  }, [containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, GAP]);
 
   // Fetch dashboard data and referenced charts
   const fetchDashboard = useCallback(async () => {
@@ -1905,7 +1926,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           )}
           {isEditMode && layoutDimension && (
             <div className="scale-controls">
-              <span className="scale-label" title="Scale the dashboard's component text and line sizes. You design at this scale directly — 100% = actual size; higher % renders everything bigger.">Scale</span>
+              <Tooltip
+                align="bottom"
+                label="Builds the dashboard bigger for large displays. You design at this scale directly: 100% = actual size; higher % makes every component's text, lines, and layout render uniformly larger (proportions are preserved). Distinct from the Zoom control, which only magnifies your editing view and isn't saved."
+              >
+                <span className="scale-label scale-label--tooltip">Scale</span>
+              </Tooltip>
               <NumberInput
                 id="viewer-scale-percent"
                 size="sm"
@@ -1931,14 +1957,43 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               >
                 <ZoomOut size={16} />
               </IconButton>
-              <button
-                type="button"
-                className="zoom-reset"
-                onClick={zoomReset}
-                title="Reset to 100%"
+              <OverflowMenu
+                size="sm"
+                className="zoom-menu"
+                iconDescription="Zoom options"
+                // align="bottom" places the trigger's iconDescription tooltip
+                // BELOW the button — the default (top) clips under the app
+                // header. (direction="bottom" governs the dropdown menu, not
+                // the tooltip, so both are set.)
+                align="bottom"
+                renderIcon={() => (
+                  <span className="zoom-menu__trigger">
+                    {zoom}%
+                    <ChevronDown size={12} className="zoom-menu__caret" />
+                  </span>
+                )}
+                flipped
+                direction="bottom"
               >
-                {zoom}%
-              </button>
+                <OverflowMenuItem
+                  itemText={
+                    <span className="zoom-menu__item">
+                      <span className="zoom-menu__check">{zoom === 100 ? '✓' : ''}</span>
+                      100%
+                    </span>
+                  }
+                  onClick={zoomReset}
+                />
+                <OverflowMenuItem
+                  itemText={
+                    <span className="zoom-menu__item">
+                      <span className="zoom-menu__check">{zoom !== 100 ? '✓' : ''}</span>
+                      Zoom to fit
+                    </span>
+                  }
+                  onClick={zoomToFit}
+                />
+              </OverflowMenu>
               <IconButton
                 kind="ghost"
                 size="sm"
@@ -2005,7 +2060,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 kind="secondary"
                 size="sm"
                 label="Dashboard settings"
-                align="bottom"
+                // bottom-end: this sits near the right edge of the header, so
+                // a centered (plain "bottom") tooltip overhangs the right side
+                // of the screen. Anchor it right so it opens leftward.
+                align="bottom-end"
                 onClick={() => setSettingsModalOpen(true)}
               >
                 <Settings size={20} />

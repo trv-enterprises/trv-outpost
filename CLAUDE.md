@@ -338,7 +338,7 @@ dashboard/
 │   │   ├── database/         # MongoDB connection
 │   │   ├── connection/       # SQL, API, CSV, Socket adapters (runtime adapter implementations)
 │   │   ├── handlers/         # HTTP handlers
-│   │   ├── mcp/              # MCP SSE endpoint
+│   │   ├── mcp/              # MCP endpoint + shared dashboard-builder prompt
 │   │   ├── models/           # Data models
 │   │   ├── repository/       # Database operations
 │   │   └── service/          # Business logic
@@ -458,7 +458,10 @@ Global settings managed by administrators through the Settings page in Manage mo
 |-----|----------|-------------|
 | `default_layout_dimension` | layout | Default dimension preset for new dashboards |
 | `layout_dimensions` | layout | Array of available dashboard dimension presets |
-| `tile_font_size` | appearance | Font size for compact tile controls (xs/sm/md/lg) |
+| `tile_font_size` | appearance | Font size for compact tile control titles (xs/sm/md/lg). Applies to `tile_*` control components. |
+| `title_font_size` | appearance | Component title size as a percentage of the 1rem base (50–200). Scales BOTH the title font and the title-band height across charts, number tiles, data views, and data tables. 100 = default. Applies on next page load. |
+| `stream_buffer_size` | dashboard | Max data points a streaming chart keeps in client memory (the backfill/buffer depth). Higher = more history per live chart at the cost of browser memory. Default 1000. Applies on next page load. |
+| `ai.enabled` | ai | Unified gate for both AI surfaces (the in-editor Component agent and the Dashboard Assistant). When off, both are hidden/disabled regardless of API key. Both surfaces also require an Anthropic key at server start. |
 | `dashboard_command_topic` | dashboard | MQTT topic the dashboard subscribes to for voice/kiosk commands. Messages are JSON `{target, action, ...}`. Only `target: "frigate-alert"` is wired up today (see `docs/architecture/frontend.md`). Single global topic — every open viewer receives every command. |
 | `dashboard_command_connection` | dashboard | MQTT connection ID used for dashboard commands |
 | `enabled_types` | availability | Allowlist of integrations + connection / chart / control / display types available in this deployment. Edited via the hierarchical Type Availability modal; see the type-availability gating section. |
@@ -798,9 +801,9 @@ exhaustive, not prioritized except where noted.
 
 ---
 
-**Last Updated**: 2026-05-29
-**Build**: 1558
-**Version**: 0.23.0
+**Last Updated**: 2026-06-01
+**Build**: 1634
+**Version**: 0.24.0
 
 ## Simulator Services
 
