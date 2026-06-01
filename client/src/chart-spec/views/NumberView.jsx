@@ -58,8 +58,8 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
         // 1.5-line-height overlay; bumped to the shared 2.5rem band.)
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
-          height: '2.5rem', lineHeight: '2.5rem',
-          fontSize: '1rem', fontWeight: 600,
+          height: 'calc(2.5rem * var(--title-scale, 1))', lineHeight: 'calc(2.5rem * var(--title-scale, 1))',
+          fontSize: 'calc(1rem * var(--title-scale, 1))', fontWeight: 600,
           color: 'var(--cds-text-primary)', textAlign: 'center',
           padding: '0 0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>

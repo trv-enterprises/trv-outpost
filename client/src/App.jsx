@@ -632,6 +632,30 @@ function AppContent({ onDisconnect }) {
     })();
   }, [identityResolved]);
 
+  // Load the component title scale (admin setting title_font_size, a
+  // percentage of the 1rem base) once identity resolves and set the
+  // --title-scale CSS variable on :root. The spec title bands (ChartShell
+  // / NumberView / DataViewGrid) and the datatable header all multiply
+  // their font + band height by var(--title-scale, 1), so one variable
+  // scales every component title consistently. Clamped 50–200%. Read at
+  // load only (applies on next page load), matching the setting's note.
+  useEffect(() => {
+    if (!identityResolved) return;
+    (async () => {
+      try {
+        const s = await apiClient.getSetting('title_font_size');
+        const pct = Number(s?.value);
+        if (Number.isFinite(pct) && pct > 0) {
+          const clamped = Math.min(200, Math.max(50, pct));
+          document.documentElement.style.setProperty('--title-scale', String(clamped / 100));
+        }
+      } catch {
+        // Older deployments may not have the setting — --title-scale
+        // falls back to 1 (the default in every calc()).
+      }
+    })();
+  }, [identityResolved]);
+
   // Render navigation based on current mode
   const renderNavigation = () => {
     switch (currentMode) {

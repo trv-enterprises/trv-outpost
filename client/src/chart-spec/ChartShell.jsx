@@ -99,13 +99,16 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {chartName ? (
+        // Title band — font AND height scale by --title-scale (admin
+        // setting title_font_size, default 1) so the band always fits the
+        // text. Shared 2.5rem base with NumberView / DataViewGrid.
         <div style={{
           display: 'block',
-          height: '2.5rem',
-          lineHeight: '2.5rem',
+          height: 'calc(2.5rem * var(--title-scale, 1))',
+          lineHeight: 'calc(2.5rem * var(--title-scale, 1))',
           flexShrink: 0,
           padding: '0 0.75rem',
-          fontSize: '1rem',
+          fontSize: 'calc(1rem * var(--title-scale, 1))',
           fontWeight: 600,
           color: 'var(--cds-text-primary)',
           textAlign: 'center',

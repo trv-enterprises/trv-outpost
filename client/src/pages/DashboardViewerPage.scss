@@ -467,7 +467,11 @@
           background-color: #1a1a1a;
           border-bottom: 1px solid #393939;
           flex-shrink: 0;
-          height: 40px;
+          // Height scales with --title-scale (admin title_font_size) to
+          // match the spec title bands' calc(2.5rem * scale) ≈ 40px base.
+          // The .with-header height deduction below uses the same calc so
+          // the body still fits exactly.
+          height: calc(40px * var(--title-scale, 1));
 
           .chart-name {
             color: #f4f4f4;
@@ -500,7 +504,9 @@
           }
 
           &.with-header {
-            height: calc(100% - 40px);
+            // Matches the scaled .chart-header height above so the body
+            // fills the remaining panel exactly at any --title-scale.
+            height: calc(100% - (40px * var(--title-scale, 1)));
           }
 
           // Display components fill the panel edge-to-edge

@@ -205,9 +205,11 @@ export default function DataViewGrid({
   return (
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'transparent', overflow: 'hidden' }}>
       {title ? (
+        // Title band — scales by --title-scale (font + height), shared
+        // 2.5rem base with ChartShell / NumberView.
         <div style={{
-          display: 'block', height: '2.5rem', lineHeight: '2.5rem', flexShrink: 0,
-          padding: '0 0.75rem', fontSize: '1rem', fontWeight: 600, color: 'var(--cds-text-primary)',
+          display: 'block', height: 'calc(2.5rem * var(--title-scale, 1))', lineHeight: 'calc(2.5rem * var(--title-scale, 1))', flexShrink: 0,
+          padding: '0 0.75rem', fontSize: 'calc(1rem * var(--title-scale, 1))', fontWeight: 600, color: 'var(--cds-text-primary)',
           textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {title}
