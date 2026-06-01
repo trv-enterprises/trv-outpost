@@ -86,6 +86,12 @@ func (h *SettingsHandler) GetAllSettings(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// Settings are config the client reads on load and acts on immediately
+	// (e.g. title_font_size → --title-scale). With no cache directive the
+	// browser applies heuristic caching to these 200 GETs and can serve a
+	// just-changed value stale on the next reload. Forbid caching so a
+	// settings change always takes effect on the next page load.
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, models.SettingsListResponse{Settings: settings})
 }
 
@@ -112,6 +118,9 @@ func (h *SettingsHandler) GetSetting(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// No caching — see GetAllSettings. A freshly-changed setting must not
+	// be served stale from the browser cache on the next reload.
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, setting)
 }
 
