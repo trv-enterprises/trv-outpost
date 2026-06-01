@@ -156,6 +156,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Initial state is "stretch" to avoid a visible flicker before the
   // async load completes.
   const [fitMode, setFitMode] = useState('stretch');
+
   // Cadence (seconds) for the slow-poll refresh of the dashboard
   // record itself — picks up edits made by another author so an
   // unattended kiosk display reflects them without manual reload.
@@ -2610,29 +2611,30 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         <Modal
           open
           modalHeading="Measured screen size"
-          primaryButtonText="Copy"
-          secondaryButtonText="Close"
+          passiveModal
           onRequestClose={() => setScreenMeasure(null)}
-          onRequestSubmit={() => {
-            const text = `${screenMeasure.w}x${screenMeasure.h}`;
-            if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
-            setScreenMeasure(null);
-          }}
           size="sm"
         >
           <p style={{ marginBottom: '1rem' }}>
             Actual usable fullscreen area on this display:
           </p>
-          <p style={{ fontSize: '1.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginBottom: '1rem' }}>
-            {screenMeasure.w} × {screenMeasure.h}
-          </p>
+          <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
+            <div>
+              <div style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem' }}>Max Width</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{screenMeasure.w}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem' }}>Max Height</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{screenMeasure.h}</div>
+            </div>
+          </div>
           <p style={{ color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>
             The published resolution (e.g. 2560×1440) overstates this — the OS
-            reserves space at the top (menu bar / notch / window chrome). To
-            make a dashboard fill this screen, set the matching layout-dimension
-            preset to <strong>{screenMeasure.w}×{screenMeasure.h}</strong> in
-            Manage → Settings → Layout Dimensions (keep its published name; just
-            fix the numbers). Requires Manage capability.
+            reserves space at the top (menu bar / notch / window chrome). To make
+            a dashboard fill this screen, note these numbers and set the matching
+            layout-dimension preset to this Max Width and Max Height in Manage →
+            Settings → Layout Dimensions (keep its published name; just fix the
+            numbers). Requires Manage capability.
           </p>
         </Modal>
       )}
