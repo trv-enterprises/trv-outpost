@@ -350,8 +350,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return dimensions.find(d => d.name === currentDimension) || null;
   }, [dimensions, currentDimension]);
 
-  // Grid bounds from layout dimension
-  const VIEWER_CHROME_V = 109; // 48px app header + 57px toolbar + 4px padding
+  // Grid bounds from layout dimension.
+  // Vertical chrome = the 57px viewer toolbar (56px + 1px border) that
+  // sits above the grid in view/fullscreen. The dashboard is designed for
+  // and displayed at the TARGET dimension minus this toolbar — there is
+  // no app-header in the displayed (view/fullscreen) dashboard, so the
+  // budget reserves only the toolbar. This makes "actual size" in the
+  // editor a pixel-perfect preview of the fullscreen render. Kept in sync
+  // with the server's gridChromeV (registry/catalog.go) so the AI plans
+  // to the same cell budget.
+  const VIEWER_CHROME_V = 57;
   const VIEWER_CHROME_H = 4;
   const VIEWER_GAP = 4;
 
@@ -1897,7 +1905,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             </div>
           )}
           {isEditMode && layoutDimension && (
-            <div className="scale-controls" title="Build scale — higher % builds on a smaller canvas so everything renders larger at the target size">
+            <div className="scale-controls">
+              <span className="scale-label" title="Build scale — higher % builds on a smaller canvas so everything renders larger at the target size">Scale</span>
               <NumberInput
                 id="viewer-scale-percent"
                 size="sm"
@@ -1909,10 +1918,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 value={scalePercent}
                 onChange={(e, { value }) => handleScaleChange(value ?? e?.target?.value)}
               />
-              <span className="scale-suffix">%</span>
               {designDimension && (
                 <span className="scale-design-hint" title="Design canvas you build on = target ÷ scale">
-                  build {designDimension.max_width}×{designDimension.max_height}
+                  {designDimension.max_width}×{designDimension.max_height}
                 </span>
               )}
               <IconButton

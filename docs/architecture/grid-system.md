@@ -11,19 +11,22 @@ fit-mode preference.
   `$spacing-08`), hardcoded in `DashboardViewerPage.jsx` as
   `CELL_WIDTH = CELL_HEIGHT = 32`.
 - **Gap**: 4 px between cells (`$spacing-02`).
-- **Chrome**: 109 px vertical (48 app header + 57 toolbar + 4 padding),
-  4 px horizontal (padding). Subtracted from the canvas before the
-  cell count is computed.
+- **Chrome**: 57 px vertical (the viewer toolbar: 56 px + 1 px border),
+  4 px horizontal (padding). Subtracted from the canvas before the cell
+  count is computed. The displayed dashboard (view / fullscreen) has no
+  app header above the toolbar, so the budget reserves only the toolbar —
+  this is what makes the editor's "actual size" a pixel-perfect preview
+  of the fullscreen render.
 
 The available cell grid for a given canvas is:
 
 ```
 cols = floor( canvas_width                  / 36 )
-rows = floor( (canvas_height - 105)         / 36 )
+rows = floor( (canvas_height - 53)          / 36 )
 ```
 
-(The stride is `cell + gap = 36`; the `-105` is
-`chrome_v - gap = 109 - 4`; the horizontal chrome and gap cancel.)
+(The stride is `cell + gap = 36`; the `-53` is
+`chrome_v - gap = 57 - 4`; the horizontal chrome and gap cancel.)
 
 Worked examples:
 

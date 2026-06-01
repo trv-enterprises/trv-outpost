@@ -633,15 +633,16 @@ Tiles (`tile_*`) and `text_label` skip the top `.control-title` entirely — the
 
 32 × 32 px cells in both axes (cell size = Carbon `$spacing-08`),
 4 px gaps between cells. Column and row counts derive from canvas
-size minus a fixed viewer-chrome budget (109 px vertical, 4 px
-horizontal):
+size minus a fixed viewer-chrome budget (57 px vertical = the viewer
+toolbar; the displayed dashboard has no app header above it, so only
+the toolbar is reserved — and 4 px horizontal):
 
 ```
 cols = floor( canvas_width            / 36 )
-rows = floor( (canvas_height - 105)   / 36 )
+rows = floor( (canvas_height - 53)    / 36 )
 ```
 
-A 2560 × 1440 canvas is **71 cols × 37 rows**. Panel geometry is
+A 2560 × 1440 canvas is **71 cols × 38 rows**. Panel geometry is
 stored as `{x, y, w, h}` in cell units. See
 [docs/architecture/grid-system.md](docs/architecture/grid-system.md)
 for fit-mode behavior and layout-dimension presets.

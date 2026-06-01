@@ -69,7 +69,12 @@ type LayoutDimensionEntry struct {
 //
 //	cell pitch  = 32 px
 //	gap         = 4 px
-//	viewer chrome (vertical)   = 109 px (header + toolbar + padding)
+//	viewer chrome (vertical)   = 57 px (the viewer toolbar: 56px + 1px
+//	                             border). The displayed dashboard (view /
+//	                             fullscreen) has NO app header above the
+//	                             toolbar, so the budget reserves only the
+//	                             toolbar — matching the pixel-perfect
+//	                             "actual size" preview in the editor.
 //	viewer chrome (horizontal) = 4 px  (border)
 //
 //	available = canvas - chrome
@@ -86,7 +91,7 @@ type LayoutDimensionEntry struct {
 const (
 	gridCellPx  = 32
 	gridGapPx   = 4
-	gridChromeV = 109
+	gridChromeV = 57
 	gridChromeH = 4
 )
 

@@ -194,24 +194,38 @@
       .scale-controls {
         display: flex;
         align-items: center;
-        gap: spacing.$spacing-02;
+        gap: spacing.$spacing-03;
 
+        .scale-label {
+          color: var(--cds-text-secondary);
+          font-size: 0.75rem;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        // Fixed, self-contained width INCLUDING the +/- steppers so the
+        // control never overflows into the build-size hint beside it.
+        // 5.5rem fits a 3-digit value + both stepper buttons at sm size.
         .cds--number {
-          width: 6rem;
+          width: 5.5rem;
+          flex-shrink: 0;
         }
         .cds--number input {
           background-color: #393939;
           color: #f4f4f4;
           height: 2rem;
+          min-width: 0; // let the input shrink within the fixed wrapper
         }
-        .scale-suffix {
-          color: var(--cds-text-secondary);
-          font-size: 0.75rem;
+        // Tighten Carbon's sm steppers so they don't bloat the control.
+        .cds--number__control-btn {
+          width: 1.5rem;
         }
+
         .scale-design-hint {
           color: var(--cds-text-secondary);
           font-size: 0.75rem;
           white-space: nowrap;
+          flex-shrink: 0;
         }
       }
 

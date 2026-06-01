@@ -20,10 +20,13 @@ func TestComputeCells_CanonicalSizes(t *testing.T) {
 		maxW, maxH       int
 		wantCols, wantRs int
 	}{
-		{"2K", 2560, 1440, 71, 37},
-		{"4K", 3840, 2160, 106, 57},
-		{"1080p", 1920, 1080, 53, 27},
-		{"KIOSK", 1366, 768, 37, 18},
+		// Rows reflect the 57px vertical chrome (toolbar only — no app
+		// header in the displayed dashboard). Each is +1 vs the old 109px
+		// (header+toolbar) budget.
+		{"2K", 2560, 1440, 71, 38},
+		{"4K", 3840, 2160, 106, 58},
+		{"1080p", 1920, 1080, 53, 28},
+		{"KIOSK", 1366, 768, 37, 19},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,9 +76,9 @@ func TestBuildCatalogWithLayout_SortsByWidth(t *testing.T) {
 	if cat.LayoutDimensions[0].IsDefault || cat.LayoutDimensions[2].IsDefault {
 		t.Errorf("only the named default should have IsDefault=true")
 	}
-	// Cell counts attached
-	if cat.LayoutDimensions[1].Cols != 71 || cat.LayoutDimensions[1].Rows != 37 {
-		t.Errorf("2K cells: got %d×%d want 71×37", cat.LayoutDimensions[1].Cols, cat.LayoutDimensions[1].Rows)
+	// Cell counts attached (2K = 71×38 with the 57px toolbar chrome)
+	if cat.LayoutDimensions[1].Cols != 71 || cat.LayoutDimensions[1].Rows != 38 {
+		t.Errorf("2K cells: got %d×%d want 71×38", cat.LayoutDimensions[1].Cols, cat.LayoutDimensions[1].Rows)
 	}
 }
 
