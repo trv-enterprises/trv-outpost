@@ -728,13 +728,24 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // (zoom only ever shrinks the big canvas to fit — never magnifies past
   // actual). No-op until the container has been measured.
   const zoomToFit = useCallback(() => {
-    const gridNativeW = maxGridCol * CELL_WIDTH + (maxGridCol - 1) * GAP;
-    const gridNativeH = maxGridRow * CELL_HEIGHT + (maxGridRow - 1) * GAP;
-    if (!containerSize.width || !containerSize.height || !gridNativeW || !gridNativeH) return;
-    const ratio = Math.min(containerSize.width / gridNativeW, containerSize.height / gridNativeH);
+    // Fit the DESIGN CANVAS (the dimension boundary the user sees — drawn at
+    // gridCols/gridRows), NOT maxGridCol/maxGridRow. The latter is
+    // max(dimension, panelExtent), so a panel placed past the boundary would
+    // shrink the fit below what the visible canvas needs (the reported 74% vs
+    // 84%). Fall back to maxGrid* when the dimension isn't known (no preset).
+    const cols = gridCols || maxGridCol;
+    const rows = gridRows || maxGridRow;
+    const canvasW = cols * CELL_WIDTH + (cols - 1) * GAP;
+    const canvasH = rows * CELL_HEIGHT + (rows - 1) * GAP;
+    if (!containerSize.width || !containerSize.height || !canvasW || !canvasH) return;
+    // Subtract container padding so the fit matches the actual usable area
+    // (consistent with the view-mode fitTransform).
+    const availW = containerSize.width - 2 * CONTAINER_PADDING;
+    const availH = containerSize.height - 2 * CONTAINER_PADDING;
+    const ratio = Math.min(availW / canvasW, availH / canvasH);
     const fitPct = Math.max(10, Math.min(100, Math.floor(ratio * 100)));
     setZoom(fitPct);
-  }, [containerSize.width, containerSize.height, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, GAP]);
+  }, [containerSize.width, containerSize.height, gridCols, gridRows, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, GAP, CONTAINER_PADDING]);
 
   // Fetch dashboard data and referenced charts
   const fetchDashboard = useCallback(async () => {
