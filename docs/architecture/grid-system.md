@@ -18,6 +18,14 @@ fit-mode preference.
   this is what makes the editor's "actual size" a pixel-perfect preview
   of the fullscreen render.
 
+> **Kiosk caveat.** The `/kiosk` surface ([frontend.md](frontend.md)) has
+> **no toolbar**, so a dashboard laid out against the 57 px budget has a
+> proportional gap there. As a stopgap the kiosk renders in **stretch**
+> fit (fill both axes). The proper fix is a per-dashboard "kiosk mode"
+> that builds against a different chrome budget (0, or kiosk-specific) —
+> when that lands, keep this client constant in sync with the server's
+> `gridChromeV` (registry/catalog.go) as noted below.
+
 The available cell grid for a given canvas is:
 
 ```

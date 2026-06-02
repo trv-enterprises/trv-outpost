@@ -55,6 +55,7 @@ import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
 import ComponentPanelWithActions from '../components/ComponentPanelWithActions';
 import ComponentExpandModal from '../components/ComponentExpandModal';
+import DashboardGrid from '../components/DashboardGrid';
 import { ControlRenderer } from '../components/controls';
 import FrigateCameraViewer from '../components/frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
@@ -789,7 +790,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     // Kiosk mode trumps everything: a kiosk URL payload locks the
     // dashboard set + order. URL is consumed (query string cleaned)
     // and cached so reloads without the query string keep working.
-    const kioskIds = syncKioskFromUrl() || getKioskDashboardIds();
+    // The regular viewer only needs the flat dashboard-id lock (filter + order);
+    // the entry/connection/rotation richness is the /kiosk surface's concern.
+    // syncKioskFromUrl() now returns the full config object, so derive ids from
+    // it (or the cached flat list) and dedupe — the viewer can't repeat ids.
+    const kioskConfig = syncKioskFromUrl();
+    const kioskIds = kioskConfig
+      ? [...new Set(kioskConfig.entries.map((e) => e.dashboardId))]
+      : getKioskDashboardIds();
 
     // For non-kiosk sessions: read filter from route state first
     // (this navigation); fall back to sessionStorage (page reload of
@@ -1182,8 +1190,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // crisp full-res image). Temporarily neutralizes the fit-mode transform and
   // container clipping so the whole grid is captured, then restores them.
   const captureGridCanvas = async (scale) => {
-    const grid = gridRef.current;
-    const container = containerRef.current;
+    // Resolve by selector rather than gridRef/containerRef: in view mode the
+    // grid now lives inside the shared <DashboardGrid> component (which doesn't
+    // expose the page's refs), while in edit mode the page renders its own.
+    // Either way there is exactly one .dashboard-grid on screen.
+    const grid = document.querySelector('.dashboard-grid');
+    const container = document.querySelector('.dashboard-grid-container');
     if (!grid || !container) return null;
 
     const origGridTransform = grid.style.transform;
@@ -2386,8 +2398,25 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         </div>
       </div>
 
-      {/* Dashboard grid */}
-      {(panels && panels.length > 0) || isEditMode ? (
+      {/* Dashboard grid. View mode delegates to the shared presentational
+          <DashboardGrid> (also used by the kiosk surface); edit mode keeps its
+          own inline grid with drag/resize/hover chrome below. */}
+      {!isEditMode && panels && panels.length > 0 ? (
+        <DashboardGrid
+          panels={panels}
+          chartsMap={chartsMap}
+          dashboard={dashboard}
+          resolveConnectionId={resolveConnectionId}
+          dashboardVariableText={dashboardVariableText}
+          dashboardCommand={dashboardCommand}
+          canControl={canControl}
+          refreshTick={refreshTick}
+          fitMode={fitMode}
+          scalePercent={scalePercent}
+          isFullscreen={isFullscreen}
+          onExpandPanel={setExpandedPanelId}
+        />
+      ) : isEditMode ? (
         <div
           ref={containerRef}
           className={`dashboard-grid-container fit-mode-${isEditMode ? 'edit' : fitMode}`}

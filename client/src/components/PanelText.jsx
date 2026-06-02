@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { DISPLAY_CONTENT_FORMATS } from './controls/ControlTextLabel';
+import './PanelText.scss';
 
 // Map legacy named sizes to pixel values
 const LEGACY_SIZE_MAP = { sm: 14, md: 20, lg: 28, xl: 36 };

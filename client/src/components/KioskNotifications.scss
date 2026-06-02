@@ -1,0 +1,34 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Passive notification overlay for the kiosk board. Toasts top-right (transient,
+// age out), pinned top-left (persistent). Pointer-events disabled — display only,
+// nothing on the board is interactive.
+.kiosk-notifications {
+  pointer-events: none;
+
+  .kiosk-toast-stack {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 9500;
+  }
+
+  .kiosk-pinned-stack {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 9500;
+  }
+
+  .cds--toast-notification {
+    margin: 0;
+  }
+}
