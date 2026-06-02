@@ -778,6 +778,13 @@ class APIClient {
     return this.request(`/api/dashboards/${id}`);
   }
 
+  // List candidate connections for a connection_swap dashboard variable.
+  // Returns { variable, candidates: [{ id, name, namespace, type_id, compatible, reason }] }.
+  async getDashboardVariableCandidates(id, variableName) {
+    const q = encodeURIComponent(variableName);
+    return this.request(`/api/dashboards/${id}/variable-candidates?variable=${q}`);
+  }
+
   async createDashboard(dashboard) {
     return this.request('/api/dashboards', {
       method: 'POST',

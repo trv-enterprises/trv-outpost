@@ -101,23 +101,24 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 	}
 
 	component := &models.Component{
-		Version:       1,
-		Status:        models.ComponentStatusFinal,
-		ComponentType: componentType,
-		Namespace:     namespace,
-		Name:          req.Name,
-		Title:         title,
-		Description:   req.Description,
-		ChartType:     req.ChartType,
-		ConnectionID:  req.ConnectionID,
-		QueryConfig:   req.QueryConfig,
-		DataMapping:   req.DataMapping,
-		ControlConfig: req.ControlConfig,
-		DisplayConfig: req.DisplayConfig,
-		ComponentCode: componentCode,
-		UseCustomCode: req.UseCustomCode,
-		Options:       req.Options,
-		Tags:          models.NormalizeTags(req.Tags),
+		Version:               1,
+		Status:                models.ComponentStatusFinal,
+		ComponentType:         componentType,
+		Namespace:             namespace,
+		Name:                  req.Name,
+		Title:                 title,
+		Description:           req.Description,
+		ChartType:             req.ChartType,
+		ConnectionID:          req.ConnectionID,
+		QueryConfig:           req.QueryConfig,
+		DataMapping:           req.DataMapping,
+		ControlConfig:         req.ControlConfig,
+		DisplayConfig:         req.DisplayConfig,
+		ComponentCode:         componentCode,
+		UseCustomCode:         req.UseCustomCode,
+		UsesDashboardVariable: req.UsesDashboardVariable,
+		Options:               req.Options,
+		Tags:                  models.NormalizeTags(req.Tags),
 	}
 
 	if err := s.repo.Create(ctx, component); err != nil {
@@ -314,6 +315,9 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 	}
 	if req.UseCustomCode != nil {
 		component.UseCustomCode = *req.UseCustomCode
+	}
+	if req.UsesDashboardVariable != nil {
+		component.UsesDashboardVariable = *req.UsesDashboardVariable
 	}
 	if req.Options != nil {
 		component.Options = *req.Options

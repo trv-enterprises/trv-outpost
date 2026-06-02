@@ -20,7 +20,6 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
 	"github.com/trv-enterprises/trve-dashboard/config"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
@@ -32,16 +31,18 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/mcp"
 	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
+	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 	"github.com/trv-enterprises/trve-dashboard/internal/streaming"
 	"github.com/trv-enterprises/trve-dashboard/internal/version"
+	"go.mongodb.org/mongo-driver/bson"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	_ "github.com/trv-enterprises/trve-dashboard/docs"       // Swagger docs
+	_ "github.com/trv-enterprises/trve-dashboard/docs"              // Swagger docs
 	"github.com/trv-enterprises/trve-dashboard/internal/connection" // Registers adapters via init() and exposes SetAllowInsecureTLS for deployment policy
 )
 
@@ -238,6 +239,17 @@ func main() {
 	// default scale (designer/AI override wins). Wired here now that both
 	// services exist.
 	dashboardService.SetScaleLookup(configService.DefaultScaleForDimension)
+	// Wire the connection-discovery + schema helpers used by the
+	// dashboard-variable candidate endpoint. Closures keep the
+	// dashboard→connection dependency loose (mirrors SetScaleLookup).
+	dashboardService.SetVariableHelpers(
+		func(ctx context.Context, namespace string, tags []string) ([]*models.Connection, error) {
+			conns, _, err := connectionService.ListConnectionsFiltered(ctx, namespace, "", tags, 1000, 0)
+			return conns, err
+		},
+		connectionService.GetConnection,
+		connectionService.GetSchema,
+	)
 	userService := service.NewUserService(userRepo, apiKeyRepo, configRepo)
 	deviceTypeService := service.NewDeviceTypeService(deviceTypeRepo)
 	deviceService := service.NewDeviceService(deviceRepo, deviceTypeRepo, connectionRepo)
@@ -733,17 +745,17 @@ func main() {
 			connections.POST("/:id/query", connectionHandler.QueryConnection)
 			connections.GET("/:id/schema", connectionHandler.GetConnectionSchema)
 			connections.GET("/:id/prometheus/labels/:label/values", connectionHandler.GetPrometheusLabelValues) // Prometheus label values
-			connections.GET("/:id/edgelake/databases", connectionHandler.GetEdgeLakeDatabases)                     // EdgeLake databases
-			connections.GET("/:id/edgelake/tables", connectionHandler.GetEdgeLakeTables)                           // EdgeLake tables
-			connections.GET("/:id/edgelake/schema", connectionHandler.GetEdgeLakeSchema)                           // EdgeLake table schema
+			connections.GET("/:id/edgelake/databases", connectionHandler.GetEdgeLakeDatabases)                  // EdgeLake databases
+			connections.GET("/:id/edgelake/tables", connectionHandler.GetEdgeLakeTables)                        // EdgeLake tables
+			connections.GET("/:id/edgelake/schema", connectionHandler.GetEdgeLakeSchema)                        // EdgeLake table schema
 			connections.GET("/:id/mqtt/topics", connectionHandler.GetMQTTTopics)                                // MQTT topic discovery
 			connections.GET("/:id/mqtt/sample", connectionHandler.SampleMQTTTopic)                              // MQTT topic schema sample
 			connections.GET("/:id/stream", streamHandler.StreamConnection)                                      // SSE streaming
-			connections.GET("/:id/stream/status", streamHandler.GetStreamStatus)                 // Stream status
-			connections.POST("/:id/stream/aggregated", streamHandler.StreamAggregatedConnection) // SSE aggregated streaming
-			connections.GET("/aggregators", streamHandler.GetAggregatorStats)                    // Aggregator stats
-			connections.POST("/:id/command", commandHandler.ExecuteCommand)                     // Bidirectional command execution
-			connections.POST("/:id/discover-devices", deviceHandler.DiscoverDevices)              // Device discovery
+			connections.GET("/:id/stream/status", streamHandler.GetStreamStatus)                                // Stream status
+			connections.POST("/:id/stream/aggregated", streamHandler.StreamAggregatedConnection)                // SSE aggregated streaming
+			connections.GET("/aggregators", streamHandler.GetAggregatorStats)                                   // Aggregator stats
+			connections.POST("/:id/command", commandHandler.ExecuteCommand)                                     // Bidirectional command execution
+			connections.POST("/:id/discover-devices", deviceHandler.DiscoverDevices)                            // Device discovery
 		}
 
 		// Registry routes - unified type catalog (connection types, component
@@ -866,6 +878,7 @@ func main() {
 			dashboards.POST("", dashboardHandler.CreateDashboard)
 			dashboards.GET("", dashboardHandler.ListDashboards)
 			dashboards.GET("/:id", dashboardHandler.GetDashboard)
+			dashboards.GET("/:id/variable-candidates", dashboardHandler.GetVariableCandidates)
 			dashboards.PUT("/:id", dashboardHandler.UpdateDashboard)
 			dashboards.DELETE("/:id", dashboardHandler.DeleteDashboard)
 
@@ -1106,8 +1119,8 @@ func resolveDocsPath() string {
 	}
 	exeDir := filepath.Dir(exe)
 	candidates := []string{
-		filepath.Join(exeDir, "udoc", "build"),          // container: /app/udoc/build
-		filepath.Join(exeDir, "..", "udoc", "build"),    // dev: server-go/bin -> server-go/udoc (unused today)
+		filepath.Join(exeDir, "udoc", "build"),             // container: /app/udoc/build
+		filepath.Join(exeDir, "..", "udoc", "build"),       // dev: server-go/bin -> server-go/udoc (unused today)
 		filepath.Join(exeDir, "..", "..", "udoc", "build"), // dev: server-go/bin/server -> repo/udoc
 	}
 	for _, p := range candidates {

@@ -31,7 +31,7 @@ import {
   Close,
   AiLaunch,
 } from '@carbon/icons-react';
-import apiClient, { API_BASE } from './api/client';
+import apiClient from './api/client';
 import { isElectron } from './utils/electron';
 import { setStreamBufferSize } from './utils/streamBufferConfig';
 import { getCredentials, clearCredentials } from './utils/secureStorage';
@@ -509,13 +509,12 @@ function AppContent({ onDisconnect }) {
         }
       }
 
-      // Fall back to first dashboard alphabetically
-      const response = await fetch(`${API_BASE}/api/dashboards?page=1&page_size=1`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.dashboards && data.dashboards.length > 0) {
-          return data.dashboards[0].id;
-        }
+      // Fall back to first dashboard alphabetically. Use apiClient (not raw
+      // fetch) so the request carries auth — a bare fetch here 401s and the
+      // fallback silently fails.
+      const data = await apiClient.getDashboards({ page: 1, page_size: 1 });
+      if (data?.dashboards && data.dashboards.length > 0) {
+        return data.dashboards[0].id;
       }
     } catch (err) {
       console.error('Failed to fetch default dashboard:', err);

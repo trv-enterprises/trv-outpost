@@ -27,6 +27,12 @@ type DashboardPanel struct {
 	H           int              `json:"h" bson:"h"`
 	ComponentID string           `json:"component_id,omitempty" bson:"component_id,omitempty"` // Reference to a component (chart, control, or display)
 	TextConfig  *PanelTextConfig `json:"text_config,omitempty" bson:"text_config,omitempty"`   // Native text panel config
+	// PinConnection opts this panel OUT of dashboard-variable connection-swap.
+	// When a connection_swap variable is active, every panel follows the
+	// selected connection by default; a pinned panel keeps its component's own
+	// connection. Per-panel (not per-component) so the same component can
+	// follow on one dashboard and be pinned on another.
+	PinConnection bool `json:"pin_connection,omitempty" bson:"pin_connection,omitempty"`
 }
 
 // ChartQueryConfig defines how to query data for a chart
@@ -73,27 +79,27 @@ type DataAggregation struct {
 // ChartDataMapping defines how to map query results to chart elements
 // @Description Mapping configuration from data columns to chart axes/series
 type ChartDataMapping struct {
-	XAxis         string           `json:"x_axis" bson:"x_axis"`                     // Column for X axis (categories)
-	XAxisLabel    string           `json:"x_axis_label" bson:"x_axis_label"`         // Label for X axis (e.g., "Time", "Date"). Empty = render no x-axis name; most charts are time-based and don't need one.
-	XAxisFormat   string           `json:"x_axis_format" bson:"x_axis_format"`       // Format for X axis values: chart, chart_time, chart_date, chart_datetime, short, long, etc.
-	YAxis         []string         `json:"y_axis" bson:"y_axis"`                     // Columns for Y axis (values/series)
-	YAxisLabel    string           `json:"y_axis_label" bson:"y_axis_label"`         // Legacy single y-axis label — kept for backwards compat. Prefer YAxisLabels (plural) going forward; this is populated from YAxisLabels[0] on save.
-	YAxisLabels   []string         `json:"y_axis_labels,omitempty" bson:"y_axis_labels,omitempty"` // Per-column y-axis labels. When shorter than YAxis, missing entries fall back to the column name. Dual-axis charts use [0] for the left axis and [1] for the right. Three+ y-columns suppress axis names entirely (series legend carries the identity).
-	Series        string           `json:"series" bson:"series"`                     // Column that identifies each series (e.g., "location") - used for time bucket partitioning
-	GroupBy       string           `json:"group_by" bson:"group_by"`                 // Column to group/split series by (client-side grouping)
-	LabelCol      string           `json:"label_col" bson:"label_col"`               // Column for labels
-	Filters       []DataFilter     `json:"filters" bson:"filters"`                   // Client-side filters applied after data fetch
-	Aggregation   *DataAggregation `json:"aggregation" bson:"aggregation"`           // Aggregation to apply (first, last, avg, etc.)
-	SlidingWindow *SlidingWindow   `json:"sliding_window" bson:"sliding_window"`     // Time-based sliding window (e.g., last 5 minutes)
-	TimeBucket    *TimeBucket      `json:"time_bucket" bson:"time_bucket"`           // Time-bucketed aggregation for streaming data
-	SortBy        string            `json:"sort_by" bson:"sort_by"`                   // Column to sort by
-	SortOrder     string            `json:"sort_order" bson:"sort_order"`             // asc or desc
-	Limit         int               `json:"limit" bson:"limit"`                       // Max rows to return
-	ColumnAliases map[string]string `json:"column_aliases" bson:"column_aliases"`     // Display names for columns (column name -> display name), primarily for dataview
-	VisibleColumns []string         `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
-	ColumnWidths  map[string]int    `json:"column_widths,omitempty" bson:"column_widths,omitempty"` // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
-	Parser        *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"` // Per-component data extraction for streaming (MQTT, ts-store MQTT)
-	BandColumns   *BandColumns        `json:"band_columns,omitempty" bson:"band_columns,omitempty"` // Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.
+	XAxis          string              `json:"x_axis" bson:"x_axis"`                                       // Column for X axis (categories)
+	XAxisLabel     string              `json:"x_axis_label" bson:"x_axis_label"`                           // Label for X axis (e.g., "Time", "Date"). Empty = render no x-axis name; most charts are time-based and don't need one.
+	XAxisFormat    string              `json:"x_axis_format" bson:"x_axis_format"`                         // Format for X axis values: chart, chart_time, chart_date, chart_datetime, short, long, etc.
+	YAxis          []string            `json:"y_axis" bson:"y_axis"`                                       // Columns for Y axis (values/series)
+	YAxisLabel     string              `json:"y_axis_label" bson:"y_axis_label"`                           // Legacy single y-axis label — kept for backwards compat. Prefer YAxisLabels (plural) going forward; this is populated from YAxisLabels[0] on save.
+	YAxisLabels    []string            `json:"y_axis_labels,omitempty" bson:"y_axis_labels,omitempty"`     // Per-column y-axis labels. When shorter than YAxis, missing entries fall back to the column name. Dual-axis charts use [0] for the left axis and [1] for the right. Three+ y-columns suppress axis names entirely (series legend carries the identity).
+	Series         string              `json:"series" bson:"series"`                                       // Column that identifies each series (e.g., "location") - used for time bucket partitioning
+	GroupBy        string              `json:"group_by" bson:"group_by"`                                   // Column to group/split series by (client-side grouping)
+	LabelCol       string              `json:"label_col" bson:"label_col"`                                 // Column for labels
+	Filters        []DataFilter        `json:"filters" bson:"filters"`                                     // Client-side filters applied after data fetch
+	Aggregation    *DataAggregation    `json:"aggregation" bson:"aggregation"`                             // Aggregation to apply (first, last, avg, etc.)
+	SlidingWindow  *SlidingWindow      `json:"sliding_window" bson:"sliding_window"`                       // Time-based sliding window (e.g., last 5 minutes)
+	TimeBucket     *TimeBucket         `json:"time_bucket" bson:"time_bucket"`                             // Time-bucketed aggregation for streaming data
+	SortBy         string              `json:"sort_by" bson:"sort_by"`                                     // Column to sort by
+	SortOrder      string              `json:"sort_order" bson:"sort_order"`                               // asc or desc
+	Limit          int                 `json:"limit" bson:"limit"`                                         // Max rows to return
+	ColumnAliases  map[string]string   `json:"column_aliases" bson:"column_aliases"`                       // Display names for columns (column name -> display name), primarily for dataview
+	VisibleColumns []string            `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
+	ColumnWidths   map[string]int      `json:"column_widths,omitempty" bson:"column_widths,omitempty"`     // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
+	Parser         *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"`                   // Per-component data extraction for streaming (MQTT, ts-store MQTT)
+	BandColumns    *BandColumns        `json:"band_columns,omitempty" bson:"band_columns,omitempty"`       // Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.
 
 	// ReferenceLevels was the original scalar (Westgard) reference-marker
 	// list. Banded-bar moved to a per-row-only convention (BandColumns
@@ -112,6 +118,7 @@ type ChartDataMapping struct {
 //   - "sd" (default / legacy): Mean + ±1/±2 SD
 //   - "minmaxmean":            Mean + Min/Max
 //   - "spc":                   Target + Lower/Upper Control + Lower/Upper Limit
+//
 // Records written before the scheme selector have no Scheme set; the
 // client defaults them to "sd", matching the original fixed structure.
 type BandColumns struct {
@@ -148,7 +155,7 @@ type ReferenceLevel struct {
 // Used when messages arrive in an envelope format (e.g., ts-store MQTT sink publishes
 // {"type": "data", "timestamp": nanoseconds, "data": {...actual fields...}}).
 type StreamParserConfig struct {
-	DataPath       string `json:"data_path,omitempty" bson:"data_path,omitempty"`           // Dot-notation path to data object (e.g., "data", "payload.readings")
+	DataPath       string `json:"data_path,omitempty" bson:"data_path,omitempty"`             // Dot-notation path to data object (e.g., "data", "payload.readings")
 	TimestampField string `json:"timestamp_field,omitempty" bson:"timestamp_field,omitempty"` // Field containing timestamp (extracted before data_path)
 	TimestampScale string `json:"timestamp_scale,omitempty" bson:"timestamp_scale,omitempty"` // "s", "ms", "ns" — auto-detected if empty
 }
@@ -174,8 +181,8 @@ type Dashboard struct {
 	Namespace   string                 `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 	Name        string                 `json:"name" bson:"name" binding:"required"`
 	Description string                 `json:"description" bson:"description"`
-	Panels      []DashboardPanel       `json:"panels" bson:"panels"`           // Panels with component_id references
-	Thumbnail   string                 `json:"thumbnail" bson:"thumbnail"`     // Base64 encoded thumbnail image
+	Panels      []DashboardPanel       `json:"panels" bson:"panels"`       // Panels with component_id references
+	Thumbnail   string                 `json:"thumbnail" bson:"thumbnail"` // Base64 encoded thumbnail image
 	Settings    DashboardSettings      `json:"settings" bson:"settings"`
 	Tags        []string               `json:"tags,omitempty" bson:"tags,omitempty"` // User-defined tags for filtering/grouping
 	Metadata    map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
@@ -202,6 +209,63 @@ type DashboardSettings struct {
 	// 120 = build on target/1.2 so everything renders 20% bigger. Default
 	// 100. Empty/0 is treated as 100 by readers.
 	ScalePercent int `json:"scale_percent,omitempty" bson:"scale_percent,omitempty"`
+
+	// VariablesEnabled is the per-dashboard on/off gate for the dashboard-variable
+	// feature (the header dropdown that re-scopes panels). When false the viewer
+	// ignores Variables entirely and behaves as if the feature did not exist.
+	VariablesEnabled bool `json:"variables_enabled,omitempty" bson:"variables_enabled,omitempty"`
+	// Variables holds the dashboard-variable definitions. v1 implements a single
+	// connection-swap variable (index 0); the array shape is forward-compatible
+	// with multiple/filter-value variables.
+	Variables []DashboardVariable `json:"variables,omitempty" bson:"variables,omitempty"`
+}
+
+// DashboardVariable defines a single dashboard-level variable whose value, set
+// by a header dropdown, re-scopes panels at view time. The binding Mode decides
+// what the value drives. v1 implements connection_swap only; filter_value is a
+// designed-but-unbuilt seam.
+type DashboardVariable struct {
+	Name           string                `json:"name" bson:"name"`   // stable key (v1: the fixed token "dashboard-variable")
+	Label          string                `json:"label" bson:"label"` // UI label, e.g. "Site"
+	Mode           string                `json:"mode" bson:"mode"`   // "connection_swap" | "filter_value"
+	ConnectionSwap *ConnectionSwapConfig `json:"connection_swap,omitempty" bson:"connection_swap,omitempty"`
+	FilterValue    *FilterValueConfig    `json:"filter_value,omitempty" bson:"filter_value,omitempty"`
+}
+
+// ConnectionSwapConfig configures a connection_swap variable: the dropdown lists
+// connections discovered by tag match (within the dashboard's namespace) and
+// selecting one repoints every variable-driven panel's effective connection_id.
+type ConnectionSwapConfig struct {
+	Tags         []string `json:"tags" bson:"tags"`                   // OR-matched discovery tags
+	SchemaStrict string   `json:"schema_strict" bson:"schema_strict"` // "type_only" (default) | "superset" | "exact"
+	// SameNamespace restricts candidate discovery to the dashboard's own
+	// namespace. Default false (cross-namespace by tag), so a dashboard whose
+	// source connections live in a different namespace can still find them.
+	SameNamespace bool `json:"same_namespace,omitempty" bson:"same_namespace,omitempty"`
+}
+
+// FilterValueConfig is a forward-compatibility seam for filter_value mode (the
+// value substituted into a SQL WHERE clause or a client-side filter). Empty in
+// v1; adding fields later is a non-breaking JSON change.
+type FilterValueConfig struct{}
+
+// VariableCandidate is one selectable option for a connection_swap variable:
+// a connection discovered by tag match, annotated with whether it is
+// schema-compatible with the dashboard's reference connection.
+type VariableCandidate struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace"`
+	TypeID     string `json:"type_id"`
+	Compatible bool   `json:"compatible"`          // passes the variable's SchemaStrict check
+	Reason     string `json:"reason,omitempty"`    // why incompatible (empty when compatible)
+	Reference  bool   `json:"reference,omitempty"` // the connection the panels currently use (the baseline)
+}
+
+// VariableCandidatesResponse is the payload for the variable-candidates endpoint.
+type VariableCandidatesResponse struct {
+	Variable   string              `json:"variable"`
+	Candidates []VariableCandidate `json:"candidates"`
 }
 
 // CreateDashboardRequest represents a request to create a dashboard
@@ -241,7 +305,7 @@ type DashboardListResponse struct {
 // DashboardQueryParams defines query parameters for listing dashboards
 // @Description Query parameters for filtering and pagination
 type DashboardQueryParams struct {
-	Namespace          string   `form:"namespace"`           // Empty = all namespaces; non-empty = exact match
+	Namespace          string   `form:"namespace"` // Empty = all namespaces; non-empty = exact match
 	Name               string   `form:"name"`
 	IsPublic           *bool    `form:"is_public"`
 	ComponentID        string   `form:"component_id"`        // Filter dashboards using a specific component

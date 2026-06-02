@@ -82,6 +82,45 @@ func (h *DashboardHandler) GetDashboard(c *gin.Context) {
 	c.JSON(http.StatusOK, dashboard)
 }
 
+// GetVariableCandidates lists the selectable connections for a dashboard's
+// connection_swap variable (discovered by tag, annotated with schema
+// compatibility).
+// @Summary Get dashboard variable candidates
+// @Description List candidate connections for a connection_swap dashboard variable
+// @Tags dashboards
+// @Produce json
+// @Param id path string true "Dashboard ID"
+// @Param variable query string true "Variable name"
+// @Success 200 {object} models.VariableCandidatesResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /dashboards/{id}/variable-candidates [get]
+func (h *DashboardHandler) GetVariableCandidates(c *gin.Context) {
+	id := c.Param("id")
+	variable := c.Query("variable")
+	if variable == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "variable query parameter is required"})
+		return
+	}
+
+	resp, err := h.service.GetVariableCandidates(c.Request.Context(), id, variable)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.Contains(err.Error(), "not a connection_swap") || strings.Contains(err.Error(), "not available") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // ListDashboards retrieves a list of dashboards with pagination
 // @Summary List dashboards
 // @Description Get a paginated list of dashboards with optional filtering. Use include_datasources=true to get data source names for each dashboard.

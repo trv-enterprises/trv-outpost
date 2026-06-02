@@ -12,7 +12,7 @@ const LEGACY_SIZE_MAP = { sm: 14, md: 20, lg: 28, xl: 36 };
  * PanelText — renders native text panel content.
  * Reuses DISPLAY_CONTENT_FORMATS for date/time formatting.
  */
-function PanelText({ config }) {
+function PanelText({ config, dashboardVariableText = '' }) {
   const displayContent = config?.display_content || 'title';
   const content = config?.content || '';
   const align = config?.align || 'center';
@@ -30,7 +30,16 @@ function PanelText({ config }) {
     return () => clearInterval(interval);
   }, [isDateTime]);
 
-  const displayText = isDateTime ? formatDef.format(now) : content;
+  let displayText;
+  if (formatDef?.dashboardVariable) {
+    // Live value supplied by the viewer (selected connection name, or the
+    // baseline connection when nothing is selected).
+    displayText = dashboardVariableText;
+  } else if (isDateTime) {
+    displayText = formatDef.format(now);
+  } else {
+    displayText = content;
+  }
 
   return (
     <div className={`panel-text panel-text--${align}`} style={{ fontSize: `${fontSize}px` }}>

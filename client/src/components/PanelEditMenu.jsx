@@ -5,7 +5,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@carbon/react';
-import { ChevronDown, Edit, Add, Catalog, TextFont } from '@carbon/icons-react';
+import { ChevronDown, Edit, Add, Catalog, TextFont, Pin, PinFilled } from '@carbon/icons-react';
 import AiIcon from './icons/AiIcon';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './PanelEditMenu.scss';
@@ -43,7 +43,13 @@ function PanelEditMenu({
   onNew,
   onNewWithAI,
   onSelectExisting,
-  onText
+  onText,
+  // Connection-swap pin (dashboard-variable). When showPinOption is true the
+  // menu offers a per-panel "Pin connection" toggle: pinned panels keep their
+  // own connection instead of following the dashboard variable.
+  showPinOption = false,
+  pinned = false,
+  onTogglePin,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState({});
@@ -205,6 +211,21 @@ function PanelEditMenu({
         <TextFont size={16} />
         <span>Text</span>
       </button>
+
+      {/* Connection-swap pin (only when the dashboard has an active
+          connection_swap variable and this panel has a component). */}
+      {showPinOption && (
+        <>
+          <div className="panel-edit-menu-divider" />
+          <button
+            className="panel-edit-menu-item"
+            onClick={() => handleAction(onTogglePin)}
+          >
+            {pinned ? <PinFilled size={16} /> : <Pin size={16} />}
+            <span>{pinned ? 'Unpin (follow variable)' : 'Pin connection'}</span>
+          </button>
+        </>
+      )}
     </div>
   ) : null;
 
