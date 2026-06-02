@@ -4346,6 +4346,63 @@
                 }
             }
         },
+        "/dashboards/{id}/variable-candidates": {
+            "get": {
+                "description": "List candidate connections for a connection_swap dashboard variable",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Get dashboard variable candidates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Variable name",
+                        "name": "variable",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.VariableCandidatesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/datasources": {
             "get": {
                 "description": "Retrieve all datasources with pagination and optional namespace/type/tag filters",
@@ -7183,6 +7240,10 @@
                     "description": "Whether custom code mode is enabled",
                     "type": "boolean"
                 },
+                "uses_dashboard_variable": {
+                    "description": "UsesDashboardVariable marks this component as accepting dashboard-variable\nVALUE SUBSTITUTION: its query/filter is authored with the `dashboard-variable`\ntoken, substituted at view time (filter_value mode — SQL WHERE or client-side\nfilter; future). It does NOT gate connection_swap — swap is a per-panel\nconcern (DashboardPanel.PinConnection): the connection itself is the\nvariable, so any panel can be repointed without the component opting in.",
+                    "type": "boolean"
+                },
                 "version": {
                     "description": "Version number (1, 2, 3...)",
                     "type": "integer"
@@ -7396,6 +7457,26 @@
                 }
             }
         },
+        "models.ConnectionSwapConfig": {
+            "type": "object",
+            "properties": {
+                "same_namespace": {
+                    "description": "SameNamespace restricts candidate discovery to the dashboard's own\nnamespace. Default false (cross-namespace by tag), so a dashboard whose\nsource connections live in a different namespace can still find them.",
+                    "type": "boolean"
+                },
+                "schema_strict": {
+                    "description": "\"type_only\" (default) | \"superset\" | \"exact\"",
+                    "type": "string"
+                },
+                "tags": {
+                    "description": "OR-matched discovery tags",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "models.ConnectionType": {
             "type": "string",
             "enum": [
@@ -7577,6 +7658,9 @@
                     "type": "string"
                 },
                 "use_custom_code": {
+                    "type": "boolean"
+                },
+                "uses_dashboard_variable": {
                     "type": "boolean"
                 }
             }
@@ -7926,6 +8010,10 @@
                 "id": {
                     "type": "string"
                 },
+                "pin_connection": {
+                    "description": "PinConnection opts this panel OUT of dashboard-variable connection-swap.\nWhen a connection_swap variable is active, every panel follows the\nselected connection by default; a pinned panel keeps its component's own\nconnection. Per-panel (not per-component) so the same component can\nfollow on one dashboard and be pinned on another.",
+                    "type": "boolean"
+                },
                 "text_config": {
                     "description": "Native text panel config",
                     "allOf": [
@@ -7977,6 +8065,17 @@
                 "title_scale": {
                     "description": "Title font scale % (default 100, range 50-200)",
                     "type": "integer"
+                },
+                "variables": {
+                    "description": "Variables holds the dashboard-variable definitions. v1 implements a single\nconnection-swap variable (index 0); the array shape is forward-compatible\nwith multiple/filter-value variables.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DashboardVariable"
+                    }
+                },
+                "variables_enabled": {
+                    "description": "VariablesEnabled is the per-dashboard on/off gate for the dashboard-variable\nfeature (the header dropdown that re-scopes panels). When false the viewer\nignores Variables entirely and behaves as if the feature did not exist.",
+                    "type": "boolean"
                 }
             }
         },
@@ -8044,6 +8143,29 @@
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "models.DashboardVariable": {
+            "type": "object",
+            "properties": {
+                "connection_swap": {
+                    "$ref": "#/definitions/models.ConnectionSwapConfig"
+                },
+                "filter_value": {
+                    "$ref": "#/definitions/models.FilterValueConfig"
+                },
+                "label": {
+                    "description": "UI label, e.g. \"Site\"",
+                    "type": "string"
+                },
+                "mode": {
+                    "description": "\"connection_swap\" | \"filter_value\"",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "stable key (v1: the fixed token \"dashboard-variable\")",
+                    "type": "string"
                 }
             }
         },
@@ -8485,6 +8607,9 @@
                     }
                 }
             }
+        },
+        "models.FilterValueConfig": {
+            "type": "object"
         },
         "models.FrigateConfig": {
             "type": "object",
@@ -9886,6 +10011,9 @@
                 },
                 "use_custom_code": {
                     "type": "boolean"
+                },
+                "uses_dashboard_variable": {
+                    "type": "boolean"
                 }
             }
         },
@@ -10274,6 +10402,49 @@
                     "items": {
                         "$ref": "#/definitions/models.User"
                     }
+                }
+            }
+        },
+        "models.VariableCandidate": {
+            "type": "object",
+            "properties": {
+                "compatible": {
+                    "description": "passes the variable's SchemaStrict check",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "why incompatible (empty when compatible)",
+                    "type": "string"
+                },
+                "reference": {
+                    "description": "the connection the panels currently use (the baseline)",
+                    "type": "boolean"
+                },
+                "type_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.VariableCandidatesResponse": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.VariableCandidate"
+                    }
+                },
+                "variable": {
+                    "type": "string"
                 }
             }
         },

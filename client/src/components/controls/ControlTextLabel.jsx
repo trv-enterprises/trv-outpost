@@ -17,6 +17,11 @@ export const DISPLAY_CONTENT_FORMATS = {
   time_24:        { label: '24-Hour Time',        isDateTime: true, format: (d) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) },
   datetime_short: { label: 'Short Date + Time',  isDateTime: true, format: (d) => `${d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}` },
   datetime_long:  { label: 'Long Date + Time',   isDateTime: true, format: (d) => `${d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}` },
+  // Dashboard-variable content: shows the currently-selected connection's name
+  // (falls back to the baseline connection when nothing is selected). Only
+  // meaningful in dashboard text PANELS (the viewer supplies the live value);
+  // controls don't have a dashboard variable, so the control editor omits it.
+  dashboard_variable: { label: 'Dashboard Variable (connection)', isDateTime: false, dashboardVariable: true },
 };
 
 function ControlTextLabel({ control }) {

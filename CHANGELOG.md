@@ -6,6 +6,44 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.25.0] — 2026-06-01
+
+### Added
+
+- **Dashboard Variable (connection-swap).** A dashboard can define a
+  variable — a dropdown in the viewer header, next to the dashboard
+  name — that re-scopes every panel to a selected connection at view
+  time. One "system dashboard" can then serve many hosts/systems: pick
+  a host and all panels read from that host's connection. Enabled per
+  dashboard (Dashboard Settings → Dashboard Variable toggle) on top of a
+  global admin switch (`dashboard_variable.enabled`).
+- **Candidate discovery by tag.** The dropdown lists connections that
+  carry *all* of the variable's configured tags (AND match), discovered
+  across namespaces by default (a "Same namespace only" toggle restricts
+  it). The connection the panels currently use is always offered. A
+  schema-compatibility check annotates candidates (defaults to matching
+  connection type).
+- **Per-panel connection pin.** Every panel follows the variable by
+  default; a panel can opt out via "Pin connection" in its edit menu
+  (e.g. a shared overview panel that shouldn't swap).
+- **"Dashboard Variable" text-panel content type** — a native text panel
+  can display the currently-selected connection's name, updating live as
+  the host changes.
+- **Selection persistence** — the chosen host is remembered per user per
+  dashboard, and is shareable via a `?var_…` URL parameter (URL wins).
+- New endpoint `GET /api/dashboards/:id/variable-candidates`.
+
+### Changed
+
+- The default-dashboard lookup now goes through the authenticated API
+  client instead of a bare `fetch` (the old path 401'd silently).
+
+### Fixed
+
+- **Dashboard name field in edit mode** no longer stretches its focus
+  underline across the whole header or force-wraps the edit toolbar — the
+  input now sizes to its content.
+
 ## [0.24.1] — 2026-06-01
 
 ### Added

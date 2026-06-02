@@ -541,6 +541,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [componentCode, setComponentCode] = useState('');
   const [showCustomCode, setShowCustomCode] = useState(false);
 
+  // Dashboard-variable opt-in. When true, a dashboard's variable can override
+  // this component's connection (connection-swap) at view time. Gated in the
+  // UI by the global dashboard_variable.enabled admin setting.
+  const [usesDashboardVariable, setUsesDashboardVariable] = useState(false);
+  const [dashboardVariableEnabled, setDashboardVariableEnabled] = useState(false);
+  useEffect(() => {
+    apiClient.getSetting('dashboard_variable.enabled')
+      .then((s) => setDashboardVariableEnabled((s?.value ?? s) !== false))
+      .catch(() => setDashboardVariableEnabled(false));
+  }, []);
+
   // Chart-specific options (gauge thresholds, pie radius, etc.).
   // Initialized from the module-scope DEFAULT_CHART_OPTIONS via a fresh
   // copy so per-instance edits never mutate the shared default, and so
@@ -818,6 +829,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         }
       }
       setComponentCode(chart.component_code || '');
+      setUsesDashboardVariable(!!chart.uses_dashboard_variable);
       const usingCustomCode = chart.use_custom_code ?? (chart.chart_type === 'custom');
       setShowCustomCode(usingCustomCode);
       // Land on the Code tab for custom-code charts — that's the only meaningful
@@ -922,6 +934,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         chartOptions: { ...DEFAULT_CHART_OPTIONS, ...(chart.options || {}) },
         componentCode: chart.component_code || '',
         showCustomCode: chart.use_custom_code ?? (chart.chart_type === 'custom' || !!chart.component_code),
+        usesDashboardVariable: !!chart.uses_dashboard_variable,
       }));
     } else {
       // New chart - reset to defaults; snapshot mirrors them. chartOptions
@@ -985,6 +998,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         chartOptions,
         componentCode: '',
         showCustomCode: false,
+        usesDashboardVariable: false,
       }));
     }
     setHasChanges(false);
@@ -1050,6 +1064,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       chartOptions,
       componentCode,
       showCustomCode,
+      usesDashboardVariable,
     });
     const dirty = currentState !== initialState;
     setHasChanges(dirty);
@@ -1065,7 +1080,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     sortBy, sortOrder, limitRows, columnAliases, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
     bandColumns, bandedBarStyle, chartOptions,
-    componentCode, showCustomCode, initialState, onDirtyChange,
+    componentCode, showCustomCode, usesDashboardVariable, initialState, onDirtyChange,
   ]);
 
   // Notify parent of validity changes
@@ -1357,6 +1372,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setParserTimestampScale('');
     setComponentCode('');
     setShowCustomCode(false);
+    setUsesDashboardVariable(false);
     // Wholesale replace — a fresh copy of the defaults, NOT a merge over
     // the prior chartOptions state, so spec-driven keys (xAxisRange,
     // sizeColumn, tooltip, …) can't bleed from a previously-edited chart.
@@ -1780,6 +1796,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
+      uses_dashboard_variable: usesDashboardVariable,
       options: (() => {
         if (chartType === 'banded_bar') {
           return { ...chartOptions, bandedBarStyle };
@@ -2029,6 +2046,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               value={tags}
               onChange={setTags}
             />
+            {/* Variable-substitution opt-in. Marks this component's query/filter
+                as authored with the `dashboard-variable` token, for value
+                substitution at view time (SQL WHERE / client-side filter; future).
+                This is NOT connection-swap — swap is per-panel and needs no flag.
+                Gated by the global dashboard_variable.enabled admin setting. */}
+            {dashboardVariableEnabled && (
+              <Toggle
+                id="chart-uses-dashboard-variable"
+                size="sm"
+                labelText="Accepts dashboard-variable substitution"
+                labelA="No"
+                labelB="Yes"
+                toggled={usesDashboardVariable}
+                onToggle={setUsesDashboardVariable}
+              />
+            )}
           </div>
         </div>
       </div>

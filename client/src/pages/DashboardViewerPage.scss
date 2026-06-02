@@ -127,9 +127,18 @@
       gap: spacing.$spacing-03;
       flex: 1;
       min-width: 0;
-      overflow: hidden;
+      // visible (not hidden) so the variable-picker dropdown menu can overflow
+      // the toolbar instead of being clipped. The title still ellipsizes via
+      // its own `h1 { overflow: hidden }` rule below.
+      overflow: visible;
 
       .dashboard-info {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-04;
+        min-width: 0;
+        flex: 1;
+
         h1 {
           color: #f4f4f4;
           font-size: 2rem;
@@ -138,12 +147,57 @@
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          // Allow the title to shrink so the variable picker keeps its width
+          // instead of being squeezed out / overlapping.
+          flex: 0 1 auto;
+          min-width: 3rem;
         }
 
         p {
           color: #c6c6c6;
           font-size: 0.75rem;
           margin: 0;
+        }
+
+        // Dashboard-variable picker — dropdown after the title that re-scopes
+        // panels (connection-swap). Compact, fixed width so it reads as a
+        // header affordance. The field label is hidden (the header gives
+        // context) but kept in the DOM for screen readers.
+        .dashboard-variable-picker {
+          flex-shrink: 0;
+          width: 15rem;
+
+          // The OPEN menu is a normal absolutely-positioned child of the
+          // trigger (left-aligned under it). Widen it past the compact trigger
+          // so long connection names ("TS-STORE WS - TRV-SRV-001 system-stats")
+          // show in full, and layer it above the dashboard grid below.
+          .cds--list-box__menu {
+            width: max-content;
+            min-width: 100%;
+            max-width: 24rem;
+            z-index: 8000;
+          }
+
+          // Don't ellipsize the option labels in the (now wider) menu.
+          .cds--list-box__menu-item__option {
+            white-space: nowrap;
+            overflow: visible;
+            text-overflow: clip;
+          }
+
+          // Hide the field label visually (header gives context) but keep it
+          // in the DOM for screen readers.
+          .cds--label {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+          }
         }
       }
     }
@@ -699,20 +753,19 @@
       display: flex;
       align-items: center;
       gap: spacing.$spacing-03;
-      // Take up available toolbar width so the inline input can grow
-      // toward its max-width instead of shrinking to its min-width.
-      // min-width: 0 lets the flex child honor the wrapper's min as
-      // it competes with the toolbar's right-side controls.
-      flex: 1;
+      // Don't grow to fill the toolbar — that's what stretched the input's
+      // focus underline across the whole header. Size to the input instead.
+      flex: 0 1 auto;
       min-width: 0;
     }
 
     .dashboard-name-input {
       background: transparent;
-      // Without an explicit width, the bare <input> reverts to its UA
-      // default ~150px regardless of how much room the wrapper offers.
-      // 100% lets it fill the wrapper up to its own max-width cap.
-      width: 100%;
+      // Sized to a sensible editing width (not 100% of a greedy wrapper), so
+      // the bottom-border / blue focus underline hugs the field instead of
+      // spanning the entire header. Long names scroll within the input.
+      width: 22ch;
+      max-width: 28rem;
       border: none;
       border-bottom: 1px solid #525252;
       color: #f4f4f4;
@@ -720,13 +773,7 @@
       font-weight: 600;
       outline: none;
       padding: 0 spacing.$spacing-02;
-      min-width: 200px;
-      // Cap so the input never starves the toolbar's right-side
-      // controls (dimensions + zoom). The wrapper's flex chain is
-      // already set up to honor min-width: 0 and ellipsize, so this
-      // bound is just to keep the toolbar visually balanced when the
-      // page is wide.
-      max-width: 720px;
+      min-width: 8rem;
 
       &:focus {
         border-bottom-color: #0f62fe;

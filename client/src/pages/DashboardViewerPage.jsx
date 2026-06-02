@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Loading,
@@ -20,6 +20,8 @@ import {
   SelectItem,
   TextInput,
   NumberInput,
+  Toggle,
+  Dropdown,
   Tooltip
 } from '@carbon/react';
 import {
@@ -64,6 +66,7 @@ import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient from '../api/client';
+import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
@@ -125,6 +128,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isNewDashboard = id === 'new';
 
   const [dashboard, setDashboard] = useState(null);
@@ -157,6 +161,55 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Initial state is "stretch" to avoid a visible flicker before the
   // async load completes.
   const [fitMode, setFitMode] = useState('stretch');
+
+  // Dashboard-variable feature: global admin gate (dashboard_variable.enabled).
+  // The per-dashboard toggle + variable definitions live in dashboard.settings;
+  // the hook below combines both gates with the component-level flag.
+  const [dashboardVariableEnabled, setDashboardVariableEnabled] = useState(false);
+  useEffect(() => {
+    apiClient.getSetting('dashboard_variable.enabled')
+      .then((s) => setDashboardVariableEnabled((s?.value ?? s) !== false))
+      .catch(() => setDashboardVariableEnabled(false));
+  }, []);
+
+  // Keep a ref to the latest searchParams so the hook's callbacks read current
+  // URL state without re-subscribing on every navigation.
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+  const getSearchParam = useCallback(() => searchParamsRef.current, []);
+  const setSearchParam = useCallback((key, value) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value == null || value === '') next.delete(key);
+      else next.set(key, value);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const {
+    variable: dashVariable,
+    candidates: dashVariableCandidates,
+    selectedConnId: dashVariableValue,
+    setValue: setDashVariableValue,
+    resolveConnectionId,
+  } = useDashboardVariable({
+    dashboard,
+    globalEnabled: dashboardVariableEnabled,
+    getSearchParam,
+    setSearchParam,
+  });
+
+  // Live text for "Dashboard Variable" text panels: the selected connection's
+  // name, falling back to the reference (baseline) connection when nothing is
+  // selected. Empty when the feature is inactive.
+  const dashboardVariableText = useMemo(() => {
+    if (!dashVariable) return '';
+    const cands = dashVariableCandidates || [];
+    const selected = cands.find((c) => c.id === dashVariableValue);
+    if (selected) return selected.name || '';
+    const reference = cands.find((c) => c.reference);
+    return reference?.name || '';
+  }, [dashVariable, dashVariableCandidates, dashVariableValue]);
 
   // Cadence (seconds) for the slow-poll refresh of the dashboard
   // record itself — picks up edits made by another author so an
@@ -234,6 +287,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [editableDescription, setEditableDescription] = useState('');
   const [editableTags, setEditableTags] = useState([]);
   const [editableRefreshInterval, setEditableRefreshInterval] = useState(30);
+  // Dashboard-variable authoring (connection-swap, v1). The single variable
+  // uses the fixed token name "dashboard-variable"; the designer sets its
+  // display label, discovery tags, and schema-strictness.
+  const [editableVariablesEnabled, setEditableVariablesEnabled] = useState(false);
+  const [editableVariableLabel, setEditableVariableLabel] = useState('');
+  const [editableVariableTags, setEditableVariableTags] = useState([]);
+  const [editableVariableSchemaStrict, setEditableVariableSchemaStrict] = useState('type_only');
+  const [editableVariableSameNamespace, setEditableVariableSameNamespace] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [expandedPanelId, setExpandedPanelId] = useState(null);
@@ -1207,6 +1268,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditableRefreshInterval(
       dashboard?.settings?.refresh_interval == null ? 30 : dashboard.settings.refresh_interval
     );
+    // Dashboard-variable authoring state (connection-swap variable, index 0).
+    setEditableVariablesEnabled(!!dashboard?.settings?.variables_enabled);
+    {
+      const v0 = (dashboard?.settings?.variables || []).find((v) => v?.mode === 'connection_swap') || null;
+      setEditableVariableLabel(v0?.label || '');
+      setEditableVariableTags(v0?.connection_swap?.tags || []);
+      setEditableVariableSchemaStrict(v0?.connection_swap?.schema_strict || 'type_only');
+      setEditableVariableSameNamespace(!!v0?.connection_swap?.same_namespace);
+    }
     setEditHasChanges(false);
     setZoom(100);
     setIsEditMode(true);
@@ -1303,6 +1373,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         layout_dimension: currentDimension,
         scale_percent: scalePercent,
         refresh_interval: editableRefreshInterval,
+        variables_enabled: editableVariablesEnabled,
+        // Persist the single connection-swap variable (fixed token name) when
+        // the feature is enabled; clear it otherwise so a disabled dashboard
+        // carries no stale variable definition.
+        variables: editableVariablesEnabled ? [{
+          name: 'dashboard-variable',
+          label: editableVariableLabel || 'Variable',
+          mode: 'connection_swap',
+          connection_swap: {
+            tags: editableVariableTags || [],
+            schema_strict: editableVariableSchemaStrict || 'type_only',
+            same_namespace: editableVariableSameNamespace,
+          },
+        }] : [],
       };
       const payload = {
         name: editableName,
@@ -1866,6 +1950,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             ) : (
               <h1>{dashboard?.name}</h1>
             )}
+            {/* Dashboard-variable picker (connection-swap). Renders only in
+                view mode when the feature is active for this dashboard. */}
+            {!isEditMode && dashVariable && (() => {
+              const items = (dashVariableCandidates || []).filter((c) => c.compatible);
+              const selected = items.find((c) => c.id === dashVariableValue) || null;
+              return (
+                <div className="dashboard-variable-picker">
+                  <Dropdown
+                    id="dashboard-variable-picker"
+                    size="sm"
+                    titleText={dashVariable.label || 'Variable'}
+                    label={`${dashVariable.label || 'Variable'}: select…`}
+                    items={items}
+                    itemToString={(item) => (item ? (item.name || item.id) : '')}
+                    selectedItem={selected}
+                    onChange={({ selectedItem }) => setDashVariableValue(selectedItem?.id || null)}
+                  />
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -2384,6 +2488,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                               onNewWithAI={() => openAIPreflightModal(panel.id)}
                               onSelectExisting={() => openComponentPicker(panel.id, 'all')}
                               onText={() => setTextPanel(panel.id)}
+                              showPinOption={!!dashVariable && hasChart}
+                              pinned={!!panel.pin_connection}
+                              onTogglePin={() => updateEditablePanel(panel.id, { pin_connection: !panel.pin_connection })}
                             />
                           )}
                         </div>
@@ -2407,7 +2514,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   {/* Panel content */}
                   {hasText ? (
                     <div className="component-wrapper text-wrapper">
-                      <PanelText config={panel.text_config} />
+                      <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} />
                     </div>
                   ) : hasChart ? (
                     <>
@@ -2459,7 +2566,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                                 props: {},
                                 componentMeta: chart,
                                 dataMapping: chart.data_mapping,
-                                connectionId: chart.connection_id,
+                                // Dashboard-variable connection-swap: override the
+                                // component's design-time connection when the feature
+                                // is active, the component opts in, and a value is
+                                // selected. Otherwise returns chart.connection_id.
+                                connectionId: resolveConnectionId(chart, panel),
                                 queryConfig: chart.query_config,
                                 dataRefreshInterval: !isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                                 refreshTick,
@@ -2603,8 +2714,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       />
       {expandedPanelId && (() => {
         const expandedPanel = panels.find(p => p.id === expandedPanelId);
-        const expandedChart = expandedPanel?.component_id ? chartsMap[expandedPanel.component_id] : null;
-        if (!expandedChart) return null;
+        const rawExpandedChart = expandedPanel?.component_id ? chartsMap[expandedPanel.component_id] : null;
+        if (!rawExpandedChart) return null;
+        // Apply the dashboard-variable connection-swap to the expanded chart too,
+        // so an expanded panel reads from the selected connection like the grid.
+        const resolvedConnId = resolveConnectionId(rawExpandedChart, expandedPanel);
+        const expandedChart = resolvedConnId === rawExpandedChart.connection_id
+          ? rawExpandedChart
+          : { ...rawExpandedChart, connection_id: resolvedConnId };
         return (
           <ComponentExpandModal
             open={!!expandedPanelId}
@@ -2658,6 +2775,60 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             step={5}
             helperText="Polling pauses while the browser tab is hidden. Set to 0 to disable auto refresh entirely."
           />
+
+          {/* Dashboard Variable — only offered when the deployment has the
+              feature enabled (admin gate). The toggle reveals the config. */}
+          {dashboardVariableEnabled && (
+            <div className="dashboard-variable-settings">
+              <Toggle
+                id="settings-variable-enabled"
+                size="sm"
+                labelText="Dashboard Variable"
+                labelA="Off"
+                labelB="On"
+                toggled={editableVariablesEnabled}
+                onToggle={(checked) => { setEditableVariablesEnabled(checked); setEditHasChanges(true); }}
+              />
+              {editableVariablesEnabled && (
+                <>
+                  <TextInput
+                    id="settings-variable-label"
+                    labelText="Variable label"
+                    value={editableVariableLabel}
+                    onChange={(e) => { setEditableVariableLabel(e.target.value); setEditHasChanges(true); }}
+                    placeholder="e.g. Site"
+                    helperText="Shown next to the dashboard name in the header dropdown."
+                  />
+                  <TagInput
+                    id="settings-variable-tags"
+                    label="Connection tags"
+                    value={editableVariableTags}
+                    onChange={(t) => { setEditableVariableTags(t); setEditHasChanges(true); }}
+                  />
+                  <Select
+                    id="settings-variable-schema-strict"
+                    labelText="Compatibility check"
+                    value={editableVariableSchemaStrict}
+                    onChange={(e) => { setEditableVariableSchemaStrict(e.target.value); setEditHasChanges(true); }}
+                    helperText="How strictly candidate connections must match. Type only is recommended (one store per site)."
+                  >
+                    <SelectItem value="type_only" text="Type only (recommended)" />
+                    <SelectItem value="superset" text="Columns: superset of reference" />
+                    <SelectItem value="exact" text="Columns: exact match" />
+                  </Select>
+                  <Toggle
+                    id="settings-variable-same-namespace"
+                    size="sm"
+                    labelText="Same namespace only"
+                    labelA="Off (any namespace)"
+                    labelB="On"
+                    toggled={editableVariableSameNamespace}
+                    onToggle={(checked) => { setEditableVariableSameNamespace(checked); setEditHasChanges(true); }}
+                  />
+                </>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
 

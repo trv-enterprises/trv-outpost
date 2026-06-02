@@ -913,10 +913,14 @@ function ControlEditor({
           {controlType === CONTROL_TYPES.TEXT_LABEL && (() => {
             const now = new Date();
             const titlePreview = displayTitle || '(empty)';
-            const contentItems = Object.entries(DISPLAY_CONTENT_FORMATS).map(([id, def]) => ({
-              id,
-              text: def.isDateTime ? def.format(now) : titlePreview
-            }));
+            const contentItems = Object.entries(DISPLAY_CONTENT_FORMATS)
+              // dashboard_variable is a dashboard-panel-only content type; a
+              // control has no dashboard variable, so don't offer it here.
+              .filter(([, def]) => !def.dashboardVariable)
+              .map(([id, def]) => ({
+                id,
+                text: def.isDateTime ? def.format(now) : titlePreview
+              }));
             return (
               <>
                 <Column lg={4} md={4} sm={4}>

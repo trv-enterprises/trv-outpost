@@ -67,6 +67,11 @@ settings:
     description: "How often (seconds) viewers re-fetch the dashboard record from the server to pick up edits made by another user. Applies to ALL dashboards in the deployment; hidden from authors to avoid per-dashboard cognitive load. Polling is paused while a user is editing the dashboard they're viewing, gated on browser-tab visibility, and only triggers a re-render when the server reports an actual change. Set to 0 to disable. Default 300 (5 min) is light enough that an unattended kiosk picks up edits within a few minutes without measurable load."
     value: 300
 
+  - key: dashboard_variable.enabled
+    category: dashboard
+    description: "Dashboard Variable feature master switch. When on, a dashboard can define a variable (a header dropdown) that re-scopes its panels at view time — v1 repoints every variable-driven panel to a selected connection (connection-swap). When off for the deployment: the per-dashboard enable toggle is hidden in Dashboard Settings, the component editor's 'uses dashboard variable' option is hidden, and the viewer dropdown never renders. Existing dashboards keep their stored settings but the feature stays inert until re-enabled. Applies on next page load."
+    value: true
+
   - key: enabled_types
     category: availability
     description: "Types/subtypes/integrations available for creation, AI suggestions, and MCP catalog. Existing dashboard components remain functional regardless. Empty arrays are populated from the registry on first boot. Managed via Manage → Settings → Type Availability."

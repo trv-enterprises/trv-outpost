@@ -798,7 +798,7 @@
             "description": "Create a new component\n\nCreate a new component (chart, control, or display) with optional data source binding and visualization config. Creates as version 1 with status \"final\".\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"band_columns\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"reference_levels\": [\n      null\n    ],\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false\n}",
+              "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"band_columns\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"reference_levels\": [\n      null\n    ],\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false,\n  \"uses_dashboard_variable\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1246,7 +1246,7 @@
             "description": "Update a component\n\nUpdate the latest version of a component in-place (for manual edits)\n\n\nResponses: 200, 400, 404, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"band_columns\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"reference_levels\": [\n      null\n    ],\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false\n}",
+              "raw": "{\n  \"chart_type\": \"\",\n  \"component_code\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_config\": {\n    \"command_config\": null,\n    \"control_type\": \"\",\n    \"device_type_id\": \"\",\n    \"target\": \"\",\n    \"ui_config\": {}\n  },\n  \"data_mapping\": {\n    \"aggregation\": null,\n    \"band_columns\": null,\n    \"column_aliases\": {\n      \"<key>\": \"\"\n    },\n    \"column_widths\": {\n      \"<key>\": 0\n    },\n    \"filters\": [\n      null\n    ],\n    \"group_by\": \"\",\n    \"label_col\": \"\",\n    \"limit\": 0,\n    \"parser\": null,\n    \"reference_levels\": [\n      null\n    ],\n    \"series\": \"\",\n    \"sliding_window\": null,\n    \"sort_by\": \"\",\n    \"sort_order\": \"\",\n    \"time_bucket\": null,\n    \"visible_columns\": [\n      \"\"\n    ],\n    \"x_axis\": \"\",\n    \"x_axis_format\": \"\",\n    \"x_axis_label\": \"\",\n    \"y_axis\": [\n      \"\"\n    ],\n    \"y_axis_label\": \"\",\n    \"y_axis_labels\": [\n      \"\"\n    ]\n  },\n  \"description\": \"\",\n  \"display_config\": {\n    \"alert_severity\": \"\",\n    \"alert_topic\": \"\",\n    \"default_camera\": \"\",\n    \"display_type\": \"\",\n    \"frigate_connection_id\": \"\",\n    \"max_thumbnails\": 0,\n    \"mqtt_connection_id\": \"\",\n    \"snapshot_interval\": 0,\n    \"weather_location\": \"\",\n    \"weather_topic_prefix\": \"\"\n  },\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"options\": {},\n  \"query_config\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": \"\"\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"title\": \"\",\n  \"use_custom_code\": false,\n  \"uses_dashboard_variable\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1650,7 +1650,7 @@
     },
     {
       "name": "Dashboards",
-      "description": "dashboards endpoints (9).",
+      "description": "dashboards endpoints (10).",
       "item": [
         {
           "name": "Apply an import bundle",
@@ -1722,7 +1722,7 @@
             "description": "Create a new dashboard\n\nCreate a new dashboard with panels and embedded charts\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0\n  },\n  \"tags\": [\n    \"\"\n  ]\n}",
+              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"pin_connection\": false,\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0,\n    \"variables\": [\n      null\n    ],\n    \"variables_enabled\": false\n  },\n  \"tags\": [\n    \"\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1837,6 +1837,49 @@
               ]
             },
             "description": "Get a dashboard\n\nGet a dashboard by ID (includes panels and charts)\n\n\nResponses: 200, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get dashboard variable candidates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/{id}/variable-candidates?variable=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                ":id",
+                "variable-candidates"
+              ],
+              "query": [
+                {
+                  "key": "variable",
+                  "value": "",
+                  "description": "Variable name",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Dashboard ID"
+                }
+              ]
+            },
+            "description": "Get dashboard variable candidates\n\nList candidate connections for a connection_swap dashboard variable\n\n\nResponses: 200, 400, 404, 500"
           },
           "response": []
         },
@@ -2017,7 +2060,7 @@
             "description": "Update a dashboard\n\nUpdate an existing dashboard\n\n\nResponses: 200, 400, 404, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"thumbnail\": \"\"\n}",
+              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"pin_connection\": false,\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0,\n    \"variables\": [\n      null\n    ],\n    \"variables_enabled\": false\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"thumbnail\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

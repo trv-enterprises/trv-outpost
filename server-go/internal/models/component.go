@@ -29,20 +29,20 @@ const (
 
 // Control type constants
 const (
-	ControlTypeButton    = "button"      // Simple action button
-	ControlTypeToggle    = "toggle"      // On/off toggle switch
-	ControlTypeSlider    = "slider"      // Numeric slider
-	ControlTypeTextInput = "text_input"  // Text input field
-	ControlTypeSwitch    = "switch"      // On/off switch (HomeKit-style pill)
-	ControlTypePlug      = "plug"        // Alias for switch (backward compat)
-	ControlTypeDimmer     = "dimmer"      // Light dimmer
-	ControlTypeGarageDoor = "garage_door" // Full-size animated garage door status
+	ControlTypeButton         = "button"           // Simple action button
+	ControlTypeToggle         = "toggle"           // On/off toggle switch
+	ControlTypeSlider         = "slider"           // Numeric slider
+	ControlTypeTextInput      = "text_input"       // Text input field
+	ControlTypeSwitch         = "switch"           // On/off switch (HomeKit-style pill)
+	ControlTypePlug           = "plug"             // Alias for switch (backward compat)
+	ControlTypeDimmer         = "dimmer"           // Light dimmer
+	ControlTypeGarageDoor     = "garage_door"      // Full-size animated garage door status
 	ControlTypeTileSwitch     = "tile_switch"      // Compact tile switch
 	ControlTypeTilePlug       = "tile_plug"        // Alias for tile_switch (backward compat)
 	ControlTypeTileDimmer     = "tile_dimmer"      // Compact tile dimmer
-	ControlTypeTileGarageDoor = "tile_garage_door"  // Compact garage door status tile
-	ControlTypeTextLabel      = "text_label"        // Static text/label display
-	ControlTypeMqttPublish    = "mqtt_publish"      // Fire-and-forget MQTT JSON publish
+	ControlTypeTileGarageDoor = "tile_garage_door" // Compact garage door status tile
+	ControlTypeTextLabel      = "text_label"       // Static text/label display
+	ControlTypeMqttPublish    = "mqtt_publish"     // Fire-and-forget MQTT JSON publish
 )
 
 // ControlConfig defines configuration for control components
@@ -64,8 +64,8 @@ type ControlConfig struct {
 // CommandConfig defines how a control sends commands to a connection
 // @Description Configuration for sending commands via a connection
 type CommandConfig struct {
-	Action          string                 `json:"action" bson:"action"`                       // Command action name
-	Target          string                 `json:"target,omitempty" bson:"target,omitempty"`   // Optional target identifier
+	Action          string                 `json:"action" bson:"action"`                                         // Command action name
+	Target          string                 `json:"target,omitempty" bson:"target,omitempty"`                     // Optional target identifier
 	PayloadTemplate map[string]interface{} `json:"payload_template,omitempty" bson:"payload_template,omitempty"` // Template with {{value}} placeholder
 }
 
@@ -79,11 +79,11 @@ type DisplayConfig struct {
 	DefaultCamera       string `json:"default_camera,omitempty" bson:"default_camera,omitempty"`               // Pre-selected camera name (frigate_camera) or camera filter (frigate_alerts)
 	MqttConnectionID    string `json:"mqtt_connection_id,omitempty" bson:"mqtt_connection_id,omitempty"`       // MQTT connection for alert/weather subscription
 	AlertTopic          string `json:"alert_topic,omitempty" bson:"alert_topic,omitempty"`                     // MQTT topic for alerts (default: "frigate/reviews")
-	SnapshotInterval    int    `json:"snapshot_interval,omitempty" bson:"snapshot_interval,omitempty"`          // Polling interval in ms (default 10000)
+	SnapshotInterval    int    `json:"snapshot_interval,omitempty" bson:"snapshot_interval,omitempty"`         // Polling interval in ms (default 10000)
 
 	// Frigate alerts grid fields (only used when display_type = "frigate_alerts")
-	MaxThumbnails  int    `json:"max_thumbnails,omitempty" bson:"max_thumbnails,omitempty"`   // Max number of alert thumbnails to display (default 8)
-	AlertSeverity  string `json:"alert_severity,omitempty" bson:"alert_severity,omitempty"`   // Filter by severity: "alert" (default), "detection", or "" for all
+	MaxThumbnails int    `json:"max_thumbnails,omitempty" bson:"max_thumbnails,omitempty"` // Max number of alert thumbnails to display (default 8)
+	AlertSeverity string `json:"alert_severity,omitempty" bson:"alert_severity,omitempty"` // Filter by severity: "alert" (default), "detection", or "" for all
 
 	// Weather-specific fields (only used when display_type = "weather")
 	WeatherTopicPrefix string `json:"weather_topic_prefix,omitempty" bson:"weather_topic_prefix,omitempty"` // MQTT topic prefix (default: "weather")
@@ -96,67 +96,76 @@ type DisplayConfig struct {
 // Primary key is composite (id, version) — id stays same across versions.
 // @Description Component (chart, control, or display) with optional data source binding, query config, and visualization settings
 type Component struct {
-	ID            string                 `json:"id" bson:"id"`                           // UUID - same across versions
-	Version       int                    `json:"version" bson:"version"`                 // Version number (1, 2, 3...)
-	Status        string                 `json:"status" bson:"status"`                   // "draft" | "final"
-	ComponentType string                 `json:"component_type" bson:"component_type"`   // "chart" | "control" | "display"
-	Namespace     string                 `json:"namespace" bson:"namespace"`             // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
-	Name          string                 `json:"name" bson:"name" binding:"required"`    // Unique identifier within namespace
-	Title         string                 `json:"title" bson:"title"`                     // Display title (defaults to Name if empty)
-	Description   string                 `json:"description" bson:"description"`
-	ChartType     string                 `json:"chart_type" bson:"chart_type"`           // bar, line, pie, gauge, etc. (charts only)
-	ConnectionID  string                 `json:"connection_id" bson:"connection_id"`     // Reference to connection
-	QueryConfig   *ChartQueryConfig      `json:"query_config" bson:"query_config"`       // How to query data (charts only)
-	DataMapping   *ChartDataMapping      `json:"data_mapping" bson:"data_mapping"`       // How to map data to chart (charts only)
-	ControlConfig *ControlConfig         `json:"control_config,omitempty" bson:"control_config,omitempty"` // Control configuration (controls only)
-	DisplayConfig *DisplayConfig         `json:"display_config,omitempty" bson:"display_config,omitempty"` // Display configuration (displays only)
-	ComponentCode string                 `json:"component_code" bson:"component_code"`   // React component code
-	UseCustomCode bool                   `json:"use_custom_code" bson:"use_custom_code"` // Whether custom code mode is enabled
-	Options       map[string]interface{} `json:"options" bson:"options"`                 // ECharts options overrides (charts only)
-	Tags          []string               `json:"tags,omitempty" bson:"tags,omitempty"`   // Searchable tags
-	AISessionID   string                 `json:"ai_session_id,omitempty" bson:"ai_session_id,omitempty"` // Active AI session (drafts only)
-	Created       time.Time              `json:"created" bson:"created"`
-	Updated       time.Time              `json:"updated" bson:"updated"`
+	ID            string            `json:"id" bson:"id"`                         // UUID - same across versions
+	Version       int               `json:"version" bson:"version"`               // Version number (1, 2, 3...)
+	Status        string            `json:"status" bson:"status"`                 // "draft" | "final"
+	ComponentType string            `json:"component_type" bson:"component_type"` // "chart" | "control" | "display"
+	Namespace     string            `json:"namespace" bson:"namespace"`           // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
+	Name          string            `json:"name" bson:"name" binding:"required"`  // Unique identifier within namespace
+	Title         string            `json:"title" bson:"title"`                   // Display title (defaults to Name if empty)
+	Description   string            `json:"description" bson:"description"`
+	ChartType     string            `json:"chart_type" bson:"chart_type"`                             // bar, line, pie, gauge, etc. (charts only)
+	ConnectionID  string            `json:"connection_id" bson:"connection_id"`                       // Reference to connection
+	QueryConfig   *ChartQueryConfig `json:"query_config" bson:"query_config"`                         // How to query data (charts only)
+	DataMapping   *ChartDataMapping `json:"data_mapping" bson:"data_mapping"`                         // How to map data to chart (charts only)
+	ControlConfig *ControlConfig    `json:"control_config,omitempty" bson:"control_config,omitempty"` // Control configuration (controls only)
+	DisplayConfig *DisplayConfig    `json:"display_config,omitempty" bson:"display_config,omitempty"` // Display configuration (displays only)
+	ComponentCode string            `json:"component_code" bson:"component_code"`                     // React component code
+	UseCustomCode bool              `json:"use_custom_code" bson:"use_custom_code"`                   // Whether custom code mode is enabled
+	// UsesDashboardVariable marks this component as accepting dashboard-variable
+	// VALUE SUBSTITUTION: its query/filter is authored with the `dashboard-variable`
+	// token, substituted at view time (filter_value mode — SQL WHERE or client-side
+	// filter; future). It does NOT gate connection_swap — swap is a per-panel
+	// concern (DashboardPanel.PinConnection): the connection itself is the
+	// variable, so any panel can be repointed without the component opting in.
+	UsesDashboardVariable bool                   `json:"uses_dashboard_variable,omitempty" bson:"uses_dashboard_variable,omitempty"`
+	Options               map[string]interface{} `json:"options" bson:"options"`                                 // ECharts options overrides (charts only)
+	Tags                  []string               `json:"tags,omitempty" bson:"tags,omitempty"`                   // Searchable tags
+	AISessionID           string                 `json:"ai_session_id,omitempty" bson:"ai_session_id,omitempty"` // Active AI session (drafts only)
+	Created               time.Time              `json:"created" bson:"created"`
+	Updated               time.Time              `json:"updated" bson:"updated"`
 }
 
 // CreateComponentRequest represents a request to create a chart, control, or display
 // @Description Request body for creating a new component
 type CreateComponentRequest struct {
-	ComponentType string                 `json:"component_type"` // "chart" (default) | "control" | "display"
-	Namespace     string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
-	Name          string                 `json:"name" binding:"required"`
-	Title         string                 `json:"title"`
-	Description   string                 `json:"description"`
-	ChartType     string                 `json:"chart_type"`
-	ConnectionID  string                 `json:"connection_id"`
-	QueryConfig   *ChartQueryConfig      `json:"query_config"`
-	DataMapping   *ChartDataMapping      `json:"data_mapping"`
-	ControlConfig *ControlConfig         `json:"control_config"`
-	DisplayConfig *DisplayConfig         `json:"display_config"`
-	ComponentCode string                 `json:"component_code"`
-	UseCustomCode bool                   `json:"use_custom_code"`
-	Options       map[string]interface{} `json:"options"`
-	Tags          []string               `json:"tags"`
+	ComponentType         string                 `json:"component_type"`      // "chart" (default) | "control" | "display"
+	Namespace             string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
+	Name                  string                 `json:"name" binding:"required"`
+	Title                 string                 `json:"title"`
+	Description           string                 `json:"description"`
+	ChartType             string                 `json:"chart_type"`
+	ConnectionID          string                 `json:"connection_id"`
+	QueryConfig           *ChartQueryConfig      `json:"query_config"`
+	DataMapping           *ChartDataMapping      `json:"data_mapping"`
+	ControlConfig         *ControlConfig         `json:"control_config"`
+	DisplayConfig         *DisplayConfig         `json:"display_config"`
+	ComponentCode         string                 `json:"component_code"`
+	UseCustomCode         bool                   `json:"use_custom_code"`
+	UsesDashboardVariable bool                   `json:"uses_dashboard_variable"`
+	Options               map[string]interface{} `json:"options"`
+	Tags                  []string               `json:"tags"`
 }
 
 // UpdateComponentRequest represents a request to update a component
 // @Description Request body for updating an existing component
 type UpdateComponentRequest struct {
-	ComponentType *string                 `json:"component_type,omitempty"`
-	Namespace     *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
-	Name          *string                 `json:"name,omitempty"`
-	Title         *string                 `json:"title,omitempty"`
-	Description   *string                 `json:"description,omitempty"`
-	ChartType     *string                 `json:"chart_type,omitempty"`
-	ConnectionID  *string                 `json:"connection_id,omitempty"`
-	QueryConfig   *ChartQueryConfig       `json:"query_config,omitempty"`
-	DataMapping   *ChartDataMapping       `json:"data_mapping,omitempty"`
-	ControlConfig *ControlConfig          `json:"control_config,omitempty"`
-	DisplayConfig *DisplayConfig          `json:"display_config,omitempty"`
-	ComponentCode *string                 `json:"component_code,omitempty"`
-	UseCustomCode *bool                   `json:"use_custom_code,omitempty"`
-	Options       *map[string]interface{} `json:"options,omitempty"`
-	Tags          *[]string               `json:"tags,omitempty"`
+	ComponentType         *string                 `json:"component_type,omitempty"`
+	Namespace             *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
+	Name                  *string                 `json:"name,omitempty"`
+	Title                 *string                 `json:"title,omitempty"`
+	Description           *string                 `json:"description,omitempty"`
+	ChartType             *string                 `json:"chart_type,omitempty"`
+	ConnectionID          *string                 `json:"connection_id,omitempty"`
+	QueryConfig           *ChartQueryConfig       `json:"query_config,omitempty"`
+	DataMapping           *ChartDataMapping       `json:"data_mapping,omitempty"`
+	ControlConfig         *ControlConfig          `json:"control_config,omitempty"`
+	DisplayConfig         *DisplayConfig          `json:"display_config,omitempty"`
+	ComponentCode         *string                 `json:"component_code,omitempty"`
+	UseCustomCode         *bool                   `json:"use_custom_code,omitempty"`
+	UsesDashboardVariable *bool                   `json:"uses_dashboard_variable,omitempty"`
+	Options               *map[string]interface{} `json:"options,omitempty"`
+	Tags                  *[]string               `json:"tags,omitempty"`
 }
 
 // ComponentListResponse represents a paginated list of components
@@ -171,7 +180,7 @@ type ComponentListResponse struct {
 // ComponentQueryParams defines query parameters for listing components
 // @Description Query parameters for filtering and pagination
 type ComponentQueryParams struct {
-	Namespace     string   `form:"namespace"`      // Empty = all namespaces; non-empty = exact match
+	Namespace     string   `form:"namespace"` // Empty = all namespaces; non-empty = exact match
 	Name          string   `form:"name"`
 	ChartType     string   `form:"chart_type"`
 	ComponentType string   `form:"component_type"` // "chart", "control", "display"

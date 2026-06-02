@@ -188,6 +188,29 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
   const flushRAFRef = useRef(null);
   const backfillDoneRef = useRef(false); // Backfill once per useData lifecycle, not per reconnect
 
+  // Reset accumulated data when the connection changes (e.g. a dashboard
+  // connection-swap repoints this panel to a different connection). Without
+  // this, the old connection's rows linger, the new connection never
+  // re-backfills (backfillDoneRef stays true), and the panel only updates on a
+  // full page reload. Skip the very first mount — there's nothing to clear and
+  // the normal load path handles it.
+  const prevConnIdRef = useRef(connectionId);
+  useEffect(() => {
+    if (prevConnIdRef.current === connectionId) return;
+    prevConnIdRef.current = connectionId;
+    // Clear streaming buffers + displayed data so the new connection starts clean.
+    pendingRecordsRef.current = [];
+    if (flushRAFRef.current) {
+      cancelAnimationFrame(flushRAFRef.current);
+      flushRAFRef.current = null;
+    }
+    columnsRef.current = [];
+    backfillDoneRef.current = false;
+    setData(null);
+    setError(null);
+    setLoading(true);
+  }, [connectionId]);
+
   const flushPendingRecords = useCallback(() => {
     flushRAFRef.current = null;
     if (!mountedRef.current || pendingRecordsRef.current.length === 0) return;
