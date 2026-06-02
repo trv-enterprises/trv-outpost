@@ -1,0 +1,40 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Chromeless full-bleed status board. No app header, no toolbar — just the grid
+// filling the viewport, with the passive notification overlay on top.
+.kiosk-page {
+  position: fixed;
+  inset: 0;
+  background-color: #161616;
+  overflow: hidden;
+  z-index: 9000; // above the normal app shell, which we don't render anyway
+
+  // The shared grid container fills the board.
+  .dashboard-grid-container {
+    width: 100%;
+    height: 100%;
+  }
+
+  .kiosk-loading,
+  .kiosk-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--cds-text-primary, #f4f4f4);
+  }
+
+  &.kiosk-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cds-text-secondary, #c6c6c6);
+
+    code {
+      color: var(--cds-text-primary, #f4f4f4);
+    }
+  }
+}

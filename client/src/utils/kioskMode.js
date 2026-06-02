@@ -5,42 +5,89 @@
 /**
  * Kiosk mode utilities.
  *
- * A kiosk is a deployment where a (typically system) user is locked
- * to a specific set of dashboards, in a specific order, via a URL
- * payload. Example URLs:
+ * A kiosk is a deployment where a (typically system) user is locked to an
+ * ordered list of dashboards, shown on a chromeless status-board surface
+ * (/kiosk), optionally auto-rotating. Each ENTRY is a dashboard plus an optional
+ * dashboard-variable selection (v1: a connection — the connection-swap feature),
+ * and the SAME dashboard may appear multiple times with different connections
+ * (e.g. system-stats@SRV-001 → @PI-001 → @SRV-002).
  *
- *   /view/dashboards/abc?dashboards=abc,def,ghi
- *   /view/dashboards          ?dashboards=abc,def,ghi
- *   /view/dashboards?clearKiosk=1
+ * URL payload (all on the /kiosk route, or legacy on /view):
+ *
+ *   ?dashboards=<entry>,<entry>,...   ordered entry list (see entry syntax)
+ *   ?rotate=<seconds>                 auto-advance interval; absent/0 = manual
+ *   ?show-notifications=T|F           passive incoming-alert toasts (default F)
+ *   ?show-pinned=T|F                  show globally-pinned alerts (default F)
+ *   ?clearKiosk=1                     explicit reset
+ *
+ * Entry syntax (compact, backward-compatible):
+ *
+ *   <dashboardId>                      no variable (legacy flat list)
+ *   <dashboardId>:connection=<connId>  pre-select connection-swap to <connId>
+ *   <dashboardId>:<vartype>=<value>    generic — forward-compat (only
+ *                                      `connection` is honored today)
+ *
+ * Parsed config shape (also the sessionStorage cache shape):
+ *
+ *   {
+ *     entries: [{ dashboardId, variable: { type, value } | null }],
+ *     rotateSeconds: number,        // 0 = no auto-rotate
+ *     showNotifications: boolean,
+ *     showPinned: boolean,
+ *   }
  *
  * Semantics:
- *
- * - `?dashboards=<id>,<id>,...` — sets the kiosk dashboard list.
- *   Order is preserved. Cached to sessionStorage under
- *   KIOSK_STORAGE_KEY so reloads without the query string keep the
- *   lock (a power glitch on a TV shouldn't lose the kiosk config).
- *
- * - `?clearKiosk=1` — explicit reset for an operator switching a
- *   kiosk to a different profile or unlocking it.
- *
- * - Neither present — fall through to sessionStorage. If that's
- *   empty too, there is no active kiosk.
- *
- * - When kiosk mode is active, callers should:
- *   - Filter the dashboard list to only the kiosk IDs.
- *   - Order it by the kiosk IDs (the URL's order is authoritative).
- *   - Disable filter controls; locking the surface is the point.
+ * - The URL is authoritative; it's parsed, cached to sessionStorage, and the
+ *   query params are stripped so the address bar stays clean.
+ * - Neither `dashboards` nor cache present → no active kiosk (null).
+ * - `?dashboards=` with empty value, or `?clearKiosk=1`, clears the kiosk.
  */
 
 const KIOSK_STORAGE_KEY = 'kiosk:dashboards';
 
+function parseBoolFlag(raw, fallback) {
+  if (raw == null) return fallback;
+  const v = String(raw).trim().toLowerCase();
+  if (v === 't' || v === 'true' || v === '1' || v === 'yes') return true;
+  if (v === 'f' || v === 'false' || v === '0' || v === 'no' || v === '') return false;
+  return fallback;
+}
+
 /**
- * Parse + apply the kiosk payload from the current URL. Side effect:
- * strips the kiosk query params from the URL after reading so the
- * address bar stays clean (no double-applying on subsequent navs).
+ * Parse the `dashboards` param value into entry objects. Each comma-separated
+ * token is a dashboardId with an optional `:vartype=value` suffix.
+ */
+function parseEntries(raw) {
+  return (raw || '')
+    .split(',')
+    .map((tok) => tok.trim())
+    .filter(Boolean)
+    .map((tok) => {
+      const colon = tok.indexOf(':');
+      if (colon === -1) {
+        return { dashboardId: tok, variable: null };
+      }
+      const dashboardId = tok.slice(0, colon).trim();
+      const spec = tok.slice(colon + 1).trim(); // e.g. "connection=<connId>"
+      const eq = spec.indexOf('=');
+      if (!dashboardId) return null;
+      if (eq === -1) {
+        // malformed suffix — treat as a plain id
+        return { dashboardId, variable: null };
+      }
+      const type = spec.slice(0, eq).trim();
+      const value = spec.slice(eq + 1).trim();
+      if (!type || !value) return { dashboardId, variable: null };
+      return { dashboardId, variable: { type, value } };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Parse + apply the kiosk payload from the current URL. Side effect: strips the
+ * consumed kiosk query params via history.replaceState.
  *
- * Returns the active kiosk dashboard IDs, or `null` if no kiosk mode
- * is active for this session.
+ * Returns the active kiosk config object, or `null` if no kiosk is active.
  */
 export function syncKioskFromUrl() {
   if (typeof window === 'undefined') return null;
@@ -58,24 +105,29 @@ export function syncKioskFromUrl() {
   }
 
   if (params.has('dashboards')) {
-    const raw = params.get('dashboards');
-    const ids = (raw || '').split(',').map((s) => s.trim()).filter(Boolean);
-    if (ids.length > 0) {
-      writeKioskToStorage(ids);
-      active = ids;
+    const entries = parseEntries(params.get('dashboards'));
+    if (entries.length > 0) {
+      const config = {
+        entries,
+        rotateSeconds: parseRotate(params.get('rotate')),
+        showNotifications: parseBoolFlag(params.get('show-notifications'), false),
+        showPinned: parseBoolFlag(params.get('show-pinned'), false),
+      };
+      writeKioskToStorage(config);
+      active = config;
     } else {
       // `?dashboards=` with empty value clears.
       clearKiosk();
       active = null;
     }
     params.delete('dashboards');
+    params.delete('rotate');
+    params.delete('show-notifications');
+    params.delete('show-pinned');
     urlChanged = true;
   }
 
   if (urlChanged) {
-    // history.replaceState avoids a navigation entry — the kiosk
-    // lands on the same route URL, just without the consumed query
-    // params, and back-button still works as the user expects.
     const cleaned = url.pathname + (params.toString() ? `?${params.toString()}` : '') + url.hash;
     window.history.replaceState(window.history.state, '', cleaned);
   }
@@ -83,27 +135,37 @@ export function syncKioskFromUrl() {
   return active;
 }
 
+function parseRotate(raw) {
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 /**
- * Returns the current kiosk dashboard IDs from sessionStorage, or
- * `null` if no kiosk is active. Does not consult the URL.
+ * Returns the current kiosk config from sessionStorage, or `null` if no kiosk
+ * is active. Does not consult the URL.
  */
-export function getKioskDashboardIds() {
+export function getKioskConfig() {
   return readKioskFromStorage();
 }
 
 /**
- * True iff a kiosk lock is currently in effect. Cheap helper for
- * gating UI affordances.
+ * Flat list of the kiosk's dashboard IDs (derived from entries), or `null`.
+ * Kept for callers that only need the id set; new callers should use
+ * getKioskConfig() for the full entry/flag data.
  */
-export function isKioskActive() {
-  const ids = readKioskFromStorage();
-  return Array.isArray(ids) && ids.length > 0;
+export function getKioskDashboardIds() {
+  const config = readKioskFromStorage();
+  if (!config) return null;
+  return config.entries.map((e) => e.dashboardId);
 }
 
-/**
- * Clear the kiosk lock. Used by `?clearKiosk=1` and by any future
- * admin affordance.
- */
+/** True iff a kiosk lock is currently in effect. */
+export function isKioskActive() {
+  const config = readKioskFromStorage();
+  return !!config && Array.isArray(config.entries) && config.entries.length > 0;
+}
+
+/** Clear the kiosk lock. */
 export function clearKiosk() {
   try {
     sessionStorage.removeItem(KIOSK_STORAGE_KEY);
@@ -117,18 +179,37 @@ function readKioskFromStorage() {
     const raw = sessionStorage.getItem(KIOSK_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+
+    // Back-compat: old cache was a flat array of id strings. Migrate to the
+    // entry/config shape on read.
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 0) return null;
+      return {
+        entries: parsed.map((id) => ({ dashboardId: id, variable: null })),
+        rotateSeconds: 0,
+        showNotifications: false,
+        showPinned: false,
+      };
+    }
+
+    if (parsed && Array.isArray(parsed.entries) && parsed.entries.length > 0) {
+      return {
+        entries: parsed.entries,
+        rotateSeconds: parsed.rotateSeconds || 0,
+        showNotifications: !!parsed.showNotifications,
+        showPinned: !!parsed.showPinned,
+      };
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-function writeKioskToStorage(ids) {
+function writeKioskToStorage(config) {
   try {
-    sessionStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(ids));
+    sessionStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(config));
   } catch {
-    // sessionStorage disabled / over quota. Kiosk mode is then
-    // active for the current page only — better than silently
-    // dropping the lock entirely.
+    // sessionStorage disabled / over quota — kiosk active for this page only.
   }
 }

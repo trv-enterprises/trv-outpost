@@ -52,6 +52,7 @@ import DashboardsListPage from './pages/DashboardsListPage';
 // Dashboard design/edit lives in DashboardViewerPage edit mode
 import DashboardViewerPage from './pages/DashboardViewerPage';
 import DashboardTileViewPage from './pages/DashboardTileViewPage';
+import KioskPage from './pages/KioskPage';
 import ModeToggle from './components/mode/ModeToggle';
 import DesignModeNav from './components/navigation/DesignModeNav';
 import ViewModeNav from './components/navigation/ViewModeNav';
@@ -951,6 +952,8 @@ function AppContent({ onDisconnect }) {
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage />} />
           <Route path="/view/dashboards/:id" element={<DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />} />
+          {/* Kiosk status board — chromeless, full-bleed overlay surface. */}
+          <Route path="/kiosk" element={<KioskPage />} />
 
           {/* Manage Mode Routes */}
           <Route path="/manage" element={<Navigate to="/manage/users" replace />} />
