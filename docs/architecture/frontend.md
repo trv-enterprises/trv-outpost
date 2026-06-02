@@ -93,10 +93,21 @@ src/pages/
 │                                 has been folded in
 ├── DashboardTileViewPage        Tile-layout variant
 ├── ViewDashboardsPage            Sidebar-driven view-mode shell
+├── KioskPage                     Chromeless status-board surface
+│                                 (/kiosk) — rotates dashboards, no
+│                                 app shell. See "Kiosk surface" below
 ├── Users / Settings / Devices / DeviceTypes   Manage mode
 ├── AIBuilderPage                 Standalone AI session page
 └── LoginPage
 ```
+
+`DashboardViewerPage` (view mode) and `KioskPage` both render the
+shared presentational `components/DashboardGrid.jsx` — the read-only
+panel grid + fit-mode transform, extracted from the viewer so the
+kiosk reuses it without the editor chrome. Panel-grid styling lives in
+`DashboardGrid.scss` and native text-panel styling in `PanelText.scss`
+(co-located with their components, not the viewer page), so both
+surfaces style identically.
 
 Most pages call `apiClient` directly for their data, but a few
 (dashboards, components) use shared hooks (`useData`, `useComponents`,
@@ -211,6 +222,49 @@ chart.component_type === 'display'   → one of:
 chart                                 → <DynamicComponentLoader />
 panel.text_config                    → <PanelText />
 ```
+
+## Kiosk surface (`/kiosk`)
+
+A dedicated **chromeless, display-only** status board. Unlike the
+viewer, `KioskPage.jsx` bypasses the app shell entirely (an early
+return in `App.jsx`'s `AppContent` renders only `<KioskPage>` — no
+Header, SideNav, or Content wrapper), and renders the shared
+`<DashboardGrid>` full-bleed.
+
+Configured entirely from the URL (parsed + cached to sessionStorage by
+`utils/kioskMode.js`):
+
+```
+/kiosk?dashboards=<entry>,<entry>,…&rotate=<sec>&show-notifications=T&show-pinned=T
+```
+
+- **`dashboards`** — an ordered list of **entries**. Each entry is a
+  dashboard id with an optional variable: `id` (plain) or
+  `id:connection=<connId>` (pre-selects the connection-swap variable —
+  see the dashboard-variable feature). The **same dashboard may repeat**
+  with different connections, so a single board can rotate one layout
+  across hosts (`stats@SRV-001 → @PI-001 → @SRV-002`). Back-compatible
+  with the legacy flat id list.
+- **`rotate=<seconds>`** — auto-advance interval; the timer pauses when
+  the tab is hidden. Absent/0 = manual (no rotation).
+- **`show-notifications` / `show-pinned`** — two orthogonal flags for a
+  passive notification layer (`KioskNotifications.jsx`): incoming alerts
+  toast and age out; globally-pinned alerts persist. Display-only —
+  nothing is clickable and it never navigates. `show-notifications=F &
+  show-pinned=T` is intentional (a quiet board that still surfaces an
+  operator-pinned unresolved issue).
+
+`KioskPage` owns the entry list, the current entry index, and the
+rotation; for the active entry it loads the dashboard via
+`useDashboardData(id)` and forces that entry's connection onto every
+variable-driven panel. It defaults to **stretch** fit (fill the whole
+screen) because the dashboard is laid out against the viewer's toolbar
+budget that the kiosk doesn't have — see the kiosk caveat in
+[grid-system.md](grid-system.md).
+
+> **Auth:** `/kiosk` works under a normal authenticated session today.
+> A truly unattended board (system user / secret URL, no human) depends
+> on the kiosk-auth strategy — see [auth-modes.md](auth-modes.md).
 
 ## Component title sizing and chart text (the `textStyle` gotcha)
 
