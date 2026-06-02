@@ -1170,19 +1170,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Save thumbnail — captures the live grid at native resolution
   const [savingThumbnail, setSavingThumbnail] = useState(false);
-  const saveThumbnail = async () => {
+  const [downloadingPng, setDownloadingPng] = useState(false);
+
+  // Render the full dashboard grid to a PNG canvas via html2canvas at the
+  // given scale (thumbnails use a small scale; the PNG download uses 1 for a
+  // crisp full-res image). Temporarily neutralizes the fit-mode transform and
+  // container clipping so the whole grid is captured, then restores them.
+  const captureGridCanvas = async (scale) => {
     const grid = gridRef.current;
     const container = containerRef.current;
-    if (!grid || !container) return;
+    if (!grid || !container) return null;
 
-    setSavingThumbnail(true);
+    const origGridTransform = grid.style.transform;
+    const origGridOrigin = grid.style.transformOrigin;
+    const origContainerOverflow = container.style.overflow;
+
     try {
-      // Save original styles
-      const origGridTransform = grid.style.transform;
-      const origGridOrigin = grid.style.transformOrigin;
-      const origContainerOverflow = container.style.overflow;
-
-      // Remove transform and allow overflow so html2canvas can see the full grid
       grid.style.transform = 'none';
       grid.style.transformOrigin = '';
       container.style.overflow = 'visible';
@@ -1190,13 +1193,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       // Wait for paint
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      // Calculate the native grid size from panel extent
       const gridNativeW = maxGridCol * CELL_WIDTH + (maxGridCol - 1) * GAP;
       const gridNativeH = maxGridRow * CELL_HEIGHT + (maxGridRow - 1) * GAP;
 
-      const canvas = await html2canvas(grid, {
+      return await html2canvas(grid, {
         backgroundColor: '#161616',
-        scale: 0.25,
+        scale,
         useCORS: true,
         allowTaint: true,
         width: gridNativeW,
@@ -1225,27 +1227,51 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           });
         }
       });
-
-      // Restore styles
+    } finally {
+      // Always restore, even on error
       grid.style.transform = origGridTransform;
       grid.style.transformOrigin = origGridOrigin;
       container.style.overflow = origContainerOverflow;
+    }
+  };
 
+  const saveThumbnail = async () => {
+    setSavingThumbnail(true);
+    try {
+      const canvas = await captureGridCanvas(0.25);
+      if (!canvas) return;
       const thumbnailDataUrl = canvas.toDataURL('image/png');
       await apiClient.updateDashboard(id, { ...dashboard, thumbnail: thumbnailDataUrl });
       fetchDashboard();
     } catch (err) {
       console.error('Failed to save thumbnail:', err);
-      // Restore styles on error
-      if (grid) {
-        grid.style.transform = '';
-        grid.style.transformOrigin = '';
-      }
-      if (container) {
-        container.style.overflow = '';
-      }
     } finally {
       setSavingThumbnail(false);
+    }
+  };
+
+  // Capture the dashboard grid at full resolution and trigger a browser
+  // download as a PNG file named after the dashboard.
+  const downloadPng = async () => {
+    setDownloadingPng(true);
+    try {
+      const canvas = await captureGridCanvas(1);
+      if (!canvas) return;
+      const dataUrl = canvas.toDataURL('image/png');
+      const safeName = (dashboard?.name || 'dashboard')
+        .trim()
+        .replace(/[^\w.-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'dashboard';
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `${safeName}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to download PNG:', err);
+    } finally {
+      setDownloadingPng(false);
     }
   };
 
@@ -2320,6 +2346,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     disabled={savingThumbnail}
                   />
                 )}
+                <OverflowMenuItem
+                  itemText={downloadingPng ? "Downloading…" : "Download PNG"}
+                  onClick={downloadPng}
+                  disabled={downloadingPng}
+                />
                 {canDesign && (
                   <OverflowMenuItem
                     itemText="Measure screen size…"
