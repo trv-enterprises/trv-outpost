@@ -292,7 +292,26 @@
       .zoom-controls {
         display: flex;
         align-items: center;
-        gap: spacing.$spacing-01;
+        gap: 0;
+        // Group the four zoom pieces into one visual unit (subtle pill) and
+        // separate them from the Scale control to the left with a divider +
+        // margin, so "zoom" doesn't read as part of "scale".
+        margin-left: spacing.$spacing-04;
+        padding: 2px;
+        border-radius: 6px;
+        background-color: rgba(255, 255, 255, 0.04);
+        position: relative;
+
+        &::before {
+          content: '';
+          position: absolute;
+          left: calc(-1 * #{spacing.$spacing-03});
+          top: 50%;
+          transform: translateY(-50%);
+          width: 1px;
+          height: 18px;
+          background-color: #525252;
+        }
 
         .cds--btn--icon-only {
           min-height: 28px;
@@ -338,37 +357,23 @@
           }
         }
 
-        // The zoom % is now an OverflowMenu trigger (100% / Zoom to fit).
-        // Style the Carbon trigger button to read like the old .zoom-reset
-        // text button so the [-] [100% ▾] [+] row stays compact and visually
-        // unchanged apart from the caret.
-        .zoom-menu.cds--overflow-menu {
-          width: auto;
-          min-width: 56px;
+        // Live zoom % readout (click = reset to 100%). Replaces the old
+        // dropdown trigger; sits between the −/+ buttons next to the Fit icon.
+        .zoom-pct {
+          min-width: 44px;
           height: 28px;
-
-          .zoom-menu__trigger {
-            display: inline-flex;
-            align-items: center;
-            gap: spacing.$spacing-01;
-            color: #c6c6c6;
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.75rem;
-          }
-
-          .zoom-menu__caret {
-            fill: #c6c6c6;
-            flex-shrink: 0;
-          }
+          padding: 0 spacing.$spacing-02;
+          border: none;
+          background: transparent;
+          color: #c6c6c6;
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 0.75rem;
+          cursor: pointer;
+          border-radius: 4px;
 
           &:hover {
             background-color: #393939;
-
-            .zoom-menu__trigger,
-            .zoom-menu__caret {
-              color: #f4f4f4;
-              fill: #f4f4f4;
-            }
+            color: #f4f4f4;
           }
         }
       }
@@ -894,21 +899,6 @@
 }
 
 .fit-mode-check {
-  display: inline-block;
-  width: 1.1rem;
-  flex-shrink: 0;
-  color: var(--cds-icon-primary);
-  font-weight: 600;
-}
-
-// Zoom menu items (100% / Zoom to fit) — same ✓-prefix pattern as the
-// fit-mode menu so the active zoom choice is marked and labels align.
-.zoom-menu__item {
-  display: inline-flex;
-  align-items: center;
-}
-
-.zoom-menu__check {
   display: inline-block;
   width: 1.1rem;
   flex-shrink: 0;

@@ -48,8 +48,7 @@ import {
   Home,
   Download,
   Notification,
-  Code,
-  ChevronDown
+  Code
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -2125,43 +2124,25 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               >
                 <ZoomOut size={16} />
               </IconButton>
-              <OverflowMenu
-                size="sm"
-                className="zoom-menu"
-                iconDescription="Zoom options"
-                // align="bottom" places the trigger's iconDescription tooltip
-                // BELOW the button — the default (top) clips under the app
-                // header. (direction="bottom" governs the dropdown menu, not
-                // the tooltip, so both are set.)
-                align="bottom"
-                renderIcon={() => (
-                  <span className="zoom-menu__trigger">
-                    {zoom}%
-                    <ChevronDown size={12} className="zoom-menu__caret" />
-                  </span>
-                )}
-                flipped
-                direction="bottom"
+              {/* Live zoom % readout. Click to reset to 100% (keeps that
+                  affordance now that the dropdown is gone). */}
+              <button
+                type="button"
+                className="zoom-pct"
+                onClick={zoomReset}
+                title="Reset to 100%"
               >
-                <OverflowMenuItem
-                  itemText={
-                    <span className="zoom-menu__item">
-                      <span className="zoom-menu__check">{zoom === 100 ? '✓' : ''}</span>
-                      100%
-                    </span>
-                  }
-                  onClick={zoomReset}
-                />
-                <OverflowMenuItem
-                  itemText={
-                    <span className="zoom-menu__item">
-                      <span className="zoom-menu__check">{zoom !== 100 ? '✓' : ''}</span>
-                      Zoom to fit
-                    </span>
-                  }
-                  onClick={zoomToFit}
-                />
-              </OverflowMenu>
+                {zoom}%
+              </button>
+              <IconButton
+                kind="ghost"
+                size="sm"
+                label="Zoom to fit"
+                align="bottom"
+                onClick={zoomToFit}
+              >
+                <FitToScreen size={16} />
+              </IconButton>
               <IconButton
                 kind="ghost"
                 size="sm"
