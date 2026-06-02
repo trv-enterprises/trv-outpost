@@ -6,6 +6,33 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.26.1] — 2026-06-02
+
+### Fixed
+
+- **Kiosk timeouts/crashes when rotating through a slow connection.** The
+  kiosk remounted the entire grid on every rotation, which crashed
+  ECharts' resize cleanup and fired a burst of simultaneous per-panel
+  requests that timed out against slow backends. The grid now updates in
+  place (a different dashboard still remounts; the same dashboard with a
+  different connection re-subscribes per panel). Concurrent
+  `getConnection` calls for one connection are also coalesced + briefly
+  cached, so N panels on one connection make one type-fetch, not N
+  (benefits the viewer too).
+- **Editor "Zoom to fit" undershoot.** It measured the extended grid
+  (dimension boundary *or* panel extent) rather than the design canvas,
+  so a panel placed past the boundary shrank the fit below what fit.
+- **"Zoom to fit" used a stale canvas size.** It read cached container
+  dimensions, so collapsing the left nav (to reclaim width) before
+  clicking fit didn't use the new size; it now measures live.
+
+### Changed
+
+- **Editor zoom control** — replaced the `100% / Zoom to fit` dropdown
+  with an inline `{zoom}%` readout (click to reset to 100%) plus a
+  dedicated Fit button, grouped as one unit and separated from the Scale
+  control.
+
 ## [0.26.0] — 2026-06-02
 
 ### Added
