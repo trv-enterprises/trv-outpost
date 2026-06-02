@@ -106,7 +106,12 @@ function KioskPage() {
     if (entryIndex >= entryCount && entryCount > 0) setEntryIndex(0);
   }, [entryIndex, entryCount]);
 
-  const fitMode = useMemo(() => 'window', []); // boards fit the whole screen
+  // Stretch to fill the entire board — a status display should use the whole
+  // screen. (The dashboard was designed against the viewer's ~57px toolbar
+  // budget; the kiosk has no toolbar, so "window" would leave proportional
+  // gaps. Stretch fills both axes. A per-dashboard "kiosk mode" that adjusts
+  // the design-time chrome budget is the proper fix — see kiosk TODO.)
+  const fitMode = useMemo(() => 'stretch', []);
 
   if (!config || entries.length === 0) {
     return (
