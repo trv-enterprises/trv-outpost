@@ -114,6 +114,11 @@ import './DashboardViewerPage.scss';
 // a generic "fit options" glyph for the trigger.
 const FitModeWindowIcon = (props) => <FitToScreen size={20} {...props} />;
 
+// Download-PNG action is built but disabled — html2canvas capture is not yet
+// faithful (text letter-spacing, occasional dropped chart panel). Flip to true
+// once capture quality is fixed. See dashboard-png-download-todo.
+const PNG_DOWNLOAD_ENABLED = false;
+
 /**
  * DashboardViewerPage Component
  *
@@ -2346,11 +2351,19 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     disabled={savingThumbnail}
                   />
                 )}
-                <OverflowMenuItem
-                  itemText={downloadingPng ? "Downloading…" : "Download PNG"}
-                  onClick={downloadPng}
-                  disabled={downloadingPng}
-                />
+                {/* Download PNG — DISABLED pending capture-quality fixes.
+                    html2canvas mangles letter-spacing in text panels and
+                    occasionally drops a chart panel (e.g. temperatures). The
+                    downloadPng/captureGridCanvas code is kept; flip
+                    PNG_DOWNLOAD_ENABLED to re-enable once capture is faithful.
+                    See dashboard-png-download-todo. */}
+                {PNG_DOWNLOAD_ENABLED && (
+                  <OverflowMenuItem
+                    itemText={downloadingPng ? "Downloading…" : "Download PNG"}
+                    onClick={downloadPng}
+                    disabled={downloadingPng}
+                  />
+                )}
                 {canDesign && (
                   <OverflowMenuItem
                     itemText="Measure screen size…"
