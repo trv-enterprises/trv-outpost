@@ -732,6 +732,18 @@ function AppContent({ onDisconnect }) {
     );
   }
 
+  // Kiosk surface bypasses the entire app shell (no Header, SideNav, or
+  // Content wrapper) — it's a chromeless full-bleed status board. It still sits
+  // under the app-root providers (Notification, etc.) wrapped around AppContent,
+  // and we keep NamespaceProvider for namespace-scoped data.
+  if (location.pathname === '/kiosk') {
+    return (
+      <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
+        <KioskPage />
+      </NamespaceProvider>
+    );
+  }
+
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
     <AssistantSurfaceProvider>
@@ -952,8 +964,8 @@ function AppContent({ onDisconnect }) {
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage />} />
           <Route path="/view/dashboards/:id" element={<DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />} />
-          {/* Kiosk status board — chromeless, full-bleed overlay surface. */}
-          <Route path="/kiosk" element={<KioskPage />} />
+          {/* /kiosk is handled by an early return above (it bypasses the app
+              shell entirely), so no Route entry is needed here. */}
 
           {/* Manage Mode Routes */}
           <Route path="/manage" element={<Navigate to="/manage/users" replace />} />

@@ -8,6 +8,7 @@ import { RefreshableComponentsProvider } from '../context/RefreshableComponentsC
 import DashboardGrid from '../components/DashboardGrid';
 import KioskNotifications from '../components/KioskNotifications';
 import { useDashboardData } from '../hooks/useDashboardData';
+import apiClient from '../api/client';
 import { syncKioskFromUrl, getKioskConfig } from '../utils/kioskMode';
 import './KioskPage.scss';
 
@@ -54,9 +55,18 @@ function KioskPage() {
   );
 
   // Text for "Dashboard Variable (connection)" text panels: the active
-  // connection name. The kiosk doesn't fetch the candidate list, so fall back
-  // to the forced id (best-effort; the connection name isn't loaded here).
-  const dashboardVariableText = forcedConnId || '';
+  // connection's NAME. Fetch it for the forced connection (the kiosk doesn't
+  // load the candidate list); fall back to the id until it resolves.
+  const [connName, setConnName] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    if (!forcedConnId) { setConnName(''); return undefined; }
+    apiClient.getConnection(forcedConnId)
+      .then((c) => { if (!cancelled) setConnName(c?.name || ''); })
+      .catch(() => { if (!cancelled) setConnName(''); });
+    return () => { cancelled = true; };
+  }, [forcedConnId]);
+  const dashboardVariableText = connName || forcedConnId || '';
 
   // ── Auto-rotate (Phase 4) ──────────────────────────────────────────
   // Advance the entry index on the interval; pause while the tab is hidden so

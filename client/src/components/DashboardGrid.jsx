@@ -10,6 +10,7 @@ import FrigateCameraViewer from './frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from './frigate/FrigateAlertsGrid';
 import WeatherDisplay from './weather/WeatherDisplay';
 import PanelText from './PanelText';
+import './DashboardGrid.scss';
 
 const CELL_WIDTH = 32;
 const CELL_HEIGHT = 32;
