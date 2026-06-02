@@ -753,20 +753,19 @@
       display: flex;
       align-items: center;
       gap: spacing.$spacing-03;
-      // Take up available toolbar width so the inline input can grow
-      // toward its max-width instead of shrinking to its min-width.
-      // min-width: 0 lets the flex child honor the wrapper's min as
-      // it competes with the toolbar's right-side controls.
-      flex: 1;
+      // Don't grow to fill the toolbar — that's what stretched the input's
+      // focus underline across the whole header. Size to the input instead.
+      flex: 0 1 auto;
       min-width: 0;
     }
 
     .dashboard-name-input {
       background: transparent;
-      // Without an explicit width, the bare <input> reverts to its UA
-      // default ~150px regardless of how much room the wrapper offers.
-      // 100% lets it fill the wrapper up to its own max-width cap.
-      width: 100%;
+      // Sized to a sensible editing width (not 100% of a greedy wrapper), so
+      // the bottom-border / blue focus underline hugs the field instead of
+      // spanning the entire header. Long names scroll within the input.
+      width: 22ch;
+      max-width: 28rem;
       border: none;
       border-bottom: 1px solid #525252;
       color: #f4f4f4;
@@ -774,13 +773,7 @@
       font-weight: 600;
       outline: none;
       padding: 0 spacing.$spacing-02;
-      min-width: 200px;
-      // Cap so the input never starves the toolbar's right-side
-      // controls (dimensions + zoom). The wrapper's flex chain is
-      // already set up to honor min-width: 0 and ellipsize, so this
-      // bound is just to keep the toolbar visually balanced when the
-      // page is wide.
-      max-width: 720px;
+      min-width: 8rem;
 
       &:focus {
         border-bottom-color: #0f62fe;
