@@ -6,6 +6,35 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.26.0] — 2026-06-02
+
+### Added
+
+- **Kiosk status board (`/kiosk`).** A dedicated chromeless, display-only
+  surface for wall monitors and unattended displays — no app header,
+  toolbar, or controls, just the dashboard grid full-bleed. Configured
+  entirely from the URL:
+  - **Rotation** — `?dashboards=<entry>,<entry>,…` is an ordered list of
+    entries; `?rotate=<seconds>` auto-advances through them (pausing when
+    the browser tab is hidden). Manual when `rotate` is absent.
+  - **Per-entry connection** — an entry can pin a connection
+    (`id:connection=<connId>`), and the **same dashboard may repeat** with
+    different connections, so one layout rotates across hosts
+    (`stats@SRV-001 → @PI-001 → @SRV-002`). Reuses the dashboard-variable
+    connection-swap. Back-compatible with a plain id list.
+  - **Passive notifications** — `?show-notifications=T` pops incoming
+    alerts as auto-dismissing toasts; `?show-pinned=T` keeps
+    globally-pinned alerts visible. Both orthogonal and display-only
+    (nothing is clickable, the board never navigates).
+
+### Changed
+
+- **Extracted a shared `<DashboardGrid>`** — the read-only panel grid (and
+  its fit-mode math) is now a standalone component used by both the
+  dashboard viewer and the kiosk, with its styling co-located in
+  `DashboardGrid.scss` / `PanelText.scss` instead of scoped to the viewer
+  page. No behavior change for the viewer.
+
 ## [0.25.0] — 2026-06-01
 
 ### Added
