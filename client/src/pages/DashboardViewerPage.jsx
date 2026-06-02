@@ -737,11 +737,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const rows = gridRows || maxGridRow;
     const canvasW = cols * CELL_WIDTH + (cols - 1) * GAP;
     const canvasH = rows * CELL_HEIGHT + (rows - 1) * GAP;
-    if (!containerSize.width || !containerSize.height || !canvasW || !canvasH) return;
+    if (!canvasW || !canvasH) return;
+    // Measure the container LIVE at click time, not from the containerSize
+    // state — that's only refreshed by the ResizeObserver/resize effect, so a
+    // layout change just before the click (e.g. collapsing the left nav to
+    // reclaim width) may not have propagated to state yet, and zoom-to-fit
+    // would use the stale (narrower) size. clientWidth/Height reflect the
+    // current DOM.
+    const el = containerRef.current;
+    const measuredW = el ? el.clientWidth : containerSize.width;
+    const measuredH = el ? el.clientHeight : containerSize.height;
+    if (!measuredW || !measuredH) return;
     // Subtract container padding so the fit matches the actual usable area
     // (consistent with the view-mode fitTransform).
-    const availW = containerSize.width - 2 * CONTAINER_PADDING;
-    const availH = containerSize.height - 2 * CONTAINER_PADDING;
+    const availW = measuredW - 2 * CONTAINER_PADDING;
+    const availH = measuredH - 2 * CONTAINER_PADDING;
     const ratio = Math.min(availW / canvasW, availH / canvasH);
     const fitPct = Math.max(10, Math.min(100, Math.floor(ratio * 100)));
     setZoom(fitPct);
