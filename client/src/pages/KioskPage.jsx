@@ -130,9 +130,15 @@ function KioskPage() {
           <div className="kiosk-error">Failed to load dashboard: {error}</div>
         ) : (
           <DashboardGrid
-            // Remount on entry change so a repeated dashboard re-initializes
-            // cleanly with the new forced connection.
-            key={`${entryIndex}:${activeId}`}
+            // Key on the dashboard id ONLY, not the entry index. Rotating to a
+            // DIFFERENT dashboard remounts (different panels); rotating to the
+            // SAME dashboard with a different connection (repeats) updates in
+            // place — resolveConnectionId changes flow as props and useData
+            // re-subscribes the stream per panel. Keying on entryIndex caused a
+            // full grid unmount/remount every rotation: an ECharts ResizeObserver
+            // cleanup crash + a burst of simultaneous per-panel REST refetches
+            // that timed out against slow backends.
+            key={activeId || 'none'}
             panels={dashboard?.panels || []}
             chartsMap={chartsMap}
             dashboard={dashboard}

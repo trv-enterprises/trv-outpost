@@ -131,6 +131,13 @@ class APIClient {
     // / getConnection responses come back. Used to render
     // "Connection unreachable — <name>" instead of a UUID.
     this.connectionNameCache = new Map();
+    // Coalesce concurrent getConnection(id) calls: many panels on one
+    // connection (e.g. a kiosk board) otherwise each fire their own
+    // /api/connections/:id type-fetch, hammering a slow backend until they
+    // time out. In-flight requests are shared; resolved records are cached
+    // briefly so a burst of mounts hits the network once.
+    this._connectionInflight = new Map(); // id → Promise
+    this._connectionCache = new Map();    // id → { record, expires }
     // key → epoch ms of last fired notification. Key is connection_id
     // for connection failures, '__server__' for connectionless server
     // failures (network down / 5xx from a non-connection endpoint).
@@ -817,10 +824,33 @@ class APIClient {
     return result;
   }
 
-  async getConnection(id) {
-    const result = await this.request(`/api/connections/${id}`, { connectionId: id });
-    this._cacheConnectionName(result);
-    return result;
+  async getConnection(id, { force = false } = {}) {
+    const CONN_TTL_MS = 5000;
+    if (!force) {
+      const cached = this._connectionCache.get(id);
+      if (cached && cached.expires > Date.now()) return cached.record;
+      const inflight = this._connectionInflight.get(id);
+      if (inflight) return inflight;
+    }
+    const p = this.request(`/api/connections/${id}`, { connectionId: id })
+      .then((result) => {
+        this._cacheConnectionName(result);
+        this._connectionCache.set(id, { record: result, expires: Date.now() + CONN_TTL_MS });
+        return result;
+      })
+      .finally(() => {
+        // Clear in-flight only if it's still this promise.
+        if (this._connectionInflight.get(id) === p) this._connectionInflight.delete(id);
+      });
+    this._connectionInflight.set(id, p);
+    return p;
+  }
+
+  // Invalidate the cached connection record (call after create/update/delete
+  // so editors don't read stale config). Cheap: name cache is left intact.
+  _invalidateConnectionCache(id) {
+    this._connectionCache.delete(id);
+    this._connectionInflight.delete(id);
   }
 
   async queryConnection(id, query) {
@@ -843,6 +873,7 @@ class APIClient {
   }
 
   async updateConnection(id, updates) {
+    this._invalidateConnectionCache(id);
     return this.request(`/api/connections/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
@@ -850,6 +881,7 @@ class APIClient {
   }
 
   async deleteConnection(id) {
+    this._invalidateConnectionCache(id);
     return this.request(`/api/connections/${id}`, {
       method: 'DELETE',
     });
