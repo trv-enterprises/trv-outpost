@@ -641,14 +641,26 @@ export function formatDataForDisplay(data, options = {}) {
 }
 
 /**
+ * The fixed sentinel a component author writes into a filter's value to mark
+ * where the active dashboard-variable value should be substituted at view time.
+ * Mirrors the server-side token used for SQL/EdgeLake query substitution, so
+ * authoring is uniform: "write the token where you want the variable."
+ */
+export const DASHBOARD_VARIABLE_TOKEN = '{{dashboard-variable}}';
+
+/**
  * Build transforms configuration from chart data_mapping
  * This converts the database data_mapping format to the transforms format
  * used by transformData()
  *
  * @param {Object} dataMapping - Chart data_mapping object
+ * @param {string} [dashboardVariableValue] - active dashboard-variable value;
+ *   when set, any filter whose value is the {{dashboard-variable}} token is
+ *   substituted with it. When the token is present but no value is supplied,
+ *   the filter is dropped (no filter applied → show all).
  * @returns {Object|null} - Transforms config or null if no transforms needed
  */
-export function buildTransformsFromMapping(dataMapping) {
+export function buildTransformsFromMapping(dataMapping, dashboardVariableValue = null) {
   if (!dataMapping) return null;
 
   const { filters, aggregation, sort_by, sort_order, limit, sliding_window } = dataMapping;
@@ -657,12 +669,27 @@ export function buildTransformsFromMapping(dataMapping) {
 
   if (!hasTransforms) return null;
 
+  // Resolve the dashboard-variable token in filter values before the in/notIn
+  // comma-split, so a substituted "a,b,c" becomes a multi-value match for free.
+  // A token with no active value drops the filter (show-all) rather than
+  // filtering on the literal token string.
+  const hasVarValue = dashboardVariableValue != null && dashboardVariableValue !== '';
+  const resolvedFilters = (filters || []).reduce((acc, f) => {
+    let value = f.value;
+    if (typeof value === 'string' && value.trim() === DASHBOARD_VARIABLE_TOKEN) {
+      if (!hasVarValue) return acc; // token present, no value → omit filter
+      value = dashboardVariableValue;
+    }
+    acc.push({ ...f, value });
+    return acc;
+  }, []);
+
   return {
     slidingWindow: hasSlidingWindow ? {
       duration: sliding_window.duration,
       timestampCol: sliding_window.timestamp_col
     } : null,
-    filters: (filters || []).map(f => ({
+    filters: resolvedFilters.map(f => ({
       field: f.field,
       op: f.op,
       value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'

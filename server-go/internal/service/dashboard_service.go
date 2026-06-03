@@ -88,6 +88,11 @@ func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.Crea
 		return nil, fmt.Errorf("dashboard with name '%s' already exists in namespace '%s'", req.Name, req.Namespace)
 	}
 
+	// v1 allows at most one filter-mode variable (single fixed token).
+	if err := models.ValidateVariables(req.Settings.Variables); err != nil {
+		return nil, err
+	}
+
 	// Normalize tags before persistence.
 	req.Tags = models.NormalizeTags(req.Tags)
 
@@ -207,6 +212,13 @@ func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *
 		}
 		if duplicate != nil && duplicate.ID != existing.ID {
 			return nil, fmt.Errorf("dashboard with name '%s' already exists in namespace '%s'", newName, newNamespace)
+		}
+	}
+
+	// v1 allows at most one filter-mode variable (single fixed token).
+	if req.Settings != nil {
+		if err := models.ValidateVariables(req.Settings.Variables); err != nil {
+			return nil, err
 		}
 	}
 

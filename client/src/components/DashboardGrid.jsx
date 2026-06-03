@@ -41,6 +41,7 @@ function DashboardGrid({
   dashboard,
   resolveConnectionId,
   dashboardVariableText = '',
+  dashboardVariableValue = null,
   dashboardCommand = null,
   canControl = false,
   refreshTick = 0,
@@ -219,6 +220,7 @@ function DashboardGrid({
                               queryConfig: chart.query_config,
                               dataRefreshInterval: dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                               refreshTick,
+                              dashboardVariableValue,
                             }}
                           />
                         </div>
@@ -245,6 +247,7 @@ DashboardGrid.propTypes = {
   dashboard: PropTypes.object,
   resolveConnectionId: PropTypes.func,
   dashboardVariableText: PropTypes.string,
+  dashboardVariableValue: PropTypes.string,
   dashboardCommand: PropTypes.object,
   canControl: PropTypes.bool,
   refreshTick: PropTypes.number,

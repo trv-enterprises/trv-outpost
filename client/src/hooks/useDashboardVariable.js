@@ -46,10 +46,27 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
 
   const variableName = variable?.name || null;
 
+  // The single filter-mode variable (v1 allows at most one). Independent of the
+  // connection_swap variable — the two may coexist (different mechanisms). The
+  // filter variable holds a free string VALUE substituted server-side into the
+  // query ({{dashboard-variable}} token) and client-side into filters.
+  const filterVariable = useMemo(() => {
+    if (!globalEnabled || !settings.variables_enabled) return null;
+    const list = Array.isArray(settings.variables) ? settings.variables : [];
+    return list.find((v) => v && v.mode === 'filter') || null;
+  }, [globalEnabled, settings.variables_enabled, settings.variables]);
+
+  const filterVariableName = filterVariable?.name || null;
+
   const [candidates, setCandidates] = useState([]);
   // The selected connection_id for the active variable (null = none selected).
   const [selectedConnId, setSelectedConnId] = useState(null);
   const loadedForRef = useRef(null);
+
+  // The active value for the filter-mode variable (null = none/unset). A plain
+  // string, persisted the same way as the connection value (URL + userConfig).
+  const [filterValue, setFilterValueState] = useState(null);
+  const filterLoadedForRef = useRef(null);
 
   // Fetch candidate connections whenever the active variable changes.
   useEffect(() => {
@@ -144,6 +161,79 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     [dashboardId, variableName, setSearchParam],
   );
 
+  // Resolve the initial filter value once, when the filter variable is known.
+  // URL param wins, then the per-user saved value, then the variable's
+  // DefaultValue. No candidate validation — options are author-defined (static
+  // list or free text), so any saved/URL value is accepted as-is.
+  useEffect(() => {
+    if (!dashboardId || !filterVariableName) {
+      setFilterValueState(null);
+      return;
+    }
+    const resolveKey = `${dashboardId}::${filterVariableName}`;
+    if (filterLoadedForRef.current === resolveKey) return;
+    filterLoadedForRef.current = resolveKey;
+
+    const fromUrl = getSearchParam?.()?.get(`var_${filterVariableName}`);
+    if (fromUrl) {
+      setFilterValueState(fromUrl);
+      return;
+    }
+
+    const fallback = filterVariable?.filter_value?.default_value || null;
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) {
+      setFilterValueState(fallback);
+      return;
+    }
+    apiClient
+      .getUserConfig(userGuid)
+      .then((cfg) => {
+        const saved = cfg?.settings?.dashboard_variable_values?.[dashboardId]?.[filterVariableName];
+        setFilterValueState(saved != null ? saved : fallback);
+      })
+      .catch(() => setFilterValueState(fallback));
+  }, [dashboardId, filterVariableName, filterVariable, getSearchParam]);
+
+  // Set + persist the filter value (pass null/'' to clear). Same persistence
+  // path as the connection setter (URL param + userConfig, stale-id pruning).
+  const setFilterValue = useCallback(
+    (value) => {
+      if (!dashboardId || !filterVariableName) return;
+      const v = value || null;
+      setFilterValueState(v);
+
+      setSearchParam?.(`var_${filterVariableName}`, v);
+
+      const userGuid = apiClient.getCurrentUserGuid();
+      if (!userGuid) return; // anonymous → URL-only persistence
+
+      Promise.all([
+        apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
+        apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+      ]).then(([cfg, dashboardsRes]) => {
+        const existing = cfg?.settings?.dashboard_variable_values || {};
+        const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];
+        const liveIds = new Set(liveList.map((d) => d.id).filter(Boolean));
+        liveIds.add(dashboardId);
+
+        const pruned = {};
+        for (const [dashId, vals] of Object.entries(existing)) {
+          if (liveIds.has(dashId)) pruned[dashId] = vals;
+        }
+        const dashVals = { ...(pruned[dashboardId] || {}) };
+        if (v) dashVals[filterVariableName] = v;
+        else delete dashVals[filterVariableName];
+        pruned[dashboardId] = dashVals;
+
+        apiClient
+          .updateUserConfig(userGuid, { dashboard_variable_values: pruned })
+          .catch(() => {});
+      });
+    },
+    [dashboardId, filterVariableName, setSearchParam],
+  );
+
   // Resolve a panel's effective connection_id for connection-swap. When the
   // variable is active and a connection is selected, EVERY panel follows it by
   // default — the connection IS the variable, so any panel can be repointed.
@@ -172,8 +262,14 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     setValue,
     /** (component, panel) => effective connection_id */
     resolveConnectionId,
-    /** true when the feature is active for this dashboard */
-    active: !!variable,
+    /** the active filter-mode variable definition, or null when inactive */
+    filterVariable,
+    /** the active filter value (string), or null when unset */
+    filterValue,
+    /** set + persist the filter value (pass null/'' to clear) */
+    setFilterValue,
+    /** true when EITHER variable mode is active for this dashboard */
+    active: !!variable || !!filterVariable,
   };
 }
 

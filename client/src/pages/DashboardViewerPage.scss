@@ -135,9 +135,20 @@
       .dashboard-info {
         display: flex;
         align-items: center;
-        gap: spacing.$spacing-04;
+        gap: spacing.$spacing-03;
         min-width: 0;
         flex: 1;
+
+        // Variables button hugs the name; matches the Cancel/secondary button.
+        // Only the horizontal padding is overridden to a symmetric 20px (Carbon's
+        // default is asymmetric — left-aligned text with a wide trailing pad);
+        // vertical padding/height is left to Carbon so it aligns with neighbors.
+        .variables-button {
+          flex-shrink: 0;
+          padding-inline: 20px;
+          justify-content: center;
+          text-align: center;
+        }
 
         h1 {
           color: #f4f4f4;
@@ -202,29 +213,32 @@
       }
     }
 
+    // Dashboard prev / home / next nav. Lives in the right-side toolbar (view
+    // mode) but kept at toolbar scope so it isn't tied to one section.
+    .dashboard-nav-buttons {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+
+      .cds--btn--icon-only {
+        color: #c6c6c6;
+
+        &:hover:not(:disabled) {
+          color: #f4f4f4;
+        }
+
+        &:disabled {
+          color: #525252;
+        }
+      }
+    }
+
     .toolbar-center {
       display: flex;
       align-items: center;
       gap: spacing.$spacing-03;
       flex-shrink: 0;
-
-      .dashboard-nav-buttons {
-        display: flex;
-        align-items: center;
-        gap: 0;
-
-        .cds--btn--icon-only {
-          color: #c6c6c6;
-
-          &:hover:not(:disabled) {
-            color: #f4f4f4;
-          }
-
-          &:disabled {
-            color: #525252;
-          }
-        }
-      }
 
       .cds--tag {
         display: flex;
@@ -234,7 +248,9 @@
 
       .dimension-selector {
         .cds--select {
-          min-width: 180px;
+          // Width fits the dimension NAME only (the WxH suffix was dropped),
+          // so it no longer needs the old 180px reservation.
+          min-width: 0;
         }
 
         .cds--select-input--sm {
@@ -387,12 +403,12 @@
       flex: 1;
       min-width: 0;
 
-      // Edit-mode toolbar: View ✕ Save │ ⚙. A subtle vertical divider
-      // formalizes the separation between the action cluster and the
-      // settings action (Carbon's group-separation pattern), and the
-      // gear gets a bordered secondary hit target so it doesn't read as
-      // a floating ghost icon next to the bordered Cancel/Save buttons.
-      .edit-toolbar-divider {
+      // Subtle vertical divider used to formalize group separation in the
+      // right-side toolbar (Carbon's group-separation pattern):
+      //  - edit mode: View ✕ Save │ ⚙
+      //  - view mode: ‹ ⌂ › │ refresh / fullscreen / fit
+      .edit-toolbar-divider,
+      .toolbar-divider {
         width: 1px;
         align-self: stretch;
         margin: spacing.$spacing-02 spacing.$spacing-02;

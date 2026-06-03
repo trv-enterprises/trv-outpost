@@ -744,6 +744,7 @@ func main() {
 			connections.POST("/:id/health", connectionHandler.CheckConnectionHealth)
 			connections.POST("/:id/query", connectionHandler.QueryConnection)
 			connections.GET("/:id/schema", connectionHandler.GetConnectionSchema)
+			connections.GET("/:id/variable-values", connectionHandler.GetVariableValues) // Dashboard-variable distinct value discovery
 			connections.GET("/:id/prometheus/labels/:label/values", connectionHandler.GetPrometheusLabelValues) // Prometheus label values
 			connections.GET("/:id/edgelake/databases", connectionHandler.GetEdgeLakeDatabases)                  // EdgeLake databases
 			connections.GET("/:id/edgelake/tables", connectionHandler.GetEdgeLakeTables)                        // EdgeLake tables

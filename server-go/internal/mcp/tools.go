@@ -782,8 +782,9 @@ func (r *ToolRegistry) registerComponentTools() {
 					"display_config":  {Type: "object", Description: "Display config: {display_type, ...display-specific fields}"},
 					"component_code":  {Type: "string", Description: "React component code (for chart_type=custom or use_custom_code=true)"},
 					"use_custom_code": {Type: "boolean", Description: "Render via custom React code instead of ECharts options"},
-					"options":         {Type: "object", Description: "ECharts options overrides"},
-					"tags":            {Type: "array", Description: "Tags"},
+					"options":                {Type: "object", Description: "ECharts options overrides"},
+					"tags":                   {Type: "array", Description: "Tags"},
+					"uses_dashboard_variable": {Type: "boolean", Description: "Marks this component as accepting dashboard-variable substitution (the {{dashboard-variable}} token in its query or a filter value)."},
 				},
 				Required: []string{"name"},
 			},
@@ -798,6 +799,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				ConnectionID:  getString(args, "connection_id"),
 				ComponentCode: getString(args, "component_code"),
 				UseCustomCode: getBool(args, "use_custom_code"),
+				UsesDashboardVariable: getBool(args, "uses_dashboard_variable"),
 			}
 			if qc, ok := args["query_config"].(map[string]interface{}); ok {
 				req.QueryConfig = parseQueryConfig(qc)
@@ -847,8 +849,9 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 					"display_config":  {Type: "object", Description: "New display config"},
 					"component_code":  {Type: "string", Description: "New component code. Last-resort field — prefer changing data_mapping / options / chart_type instead. Setting this with use_custom_code=true freezes the chart at this code; subsequent config tool calls won't update the rendering."},
 					"use_custom_code": {Type: "boolean", Description: "New custom-code flag. Setting true is destructive and one-way (per the description above). Only enable when configuration fields can't express the request."},
-					"options":         {Type: "object", Description: "New options"},
-					"tags":            {Type: "array", Description: "New tags"},
+					"options":                {Type: "object", Description: "New options"},
+					"tags":                   {Type: "array", Description: "New tags"},
+					"uses_dashboard_variable": {Type: "boolean", Description: "Marks this component as accepting dashboard-variable substitution: the {{dashboard-variable}} token may appear in its query (substituted server-side as a bound param) or in a client-side filter value (substituted at view time). Drives the editor's substitution UI hints."},
 				},
 				Required: []string{"id"},
 			},
@@ -893,6 +896,10 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				tags := parseStringArray(tagsRaw)
 				req.Tags = &tags
+			}
+			if _, ok := args["uses_dashboard_variable"]; ok {
+				v := getBool(args, "uses_dashboard_variable")
+				req.UsesDashboardVariable = &v
 			}
 			out, err := r.componentService.UpdateComponent(context.Background(), id, req)
 			if err != nil {

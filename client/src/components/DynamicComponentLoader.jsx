@@ -18,7 +18,7 @@ import ReactECharts from 'echarts-for-react';
 // in their option block directly (system prompt instructs this).
 import { carbonLightTheme, carbonDarkTheme } from '../theme/carbonEchartsTheme';
 import { useData as useDataOriginal } from '../hooks/useData';
-import { transformData, toObjects, getValue, formatTimestamp, formatCellValue, buildTransformsFromMapping } from '../utils/dataTransforms';
+import { transformData, toObjects, getValue, formatTimestamp, formatCellValue, buildTransformsFromMapping, DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import * as Babel from '@babel/standalone';
 import {
   DataTable,
@@ -126,15 +126,42 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, children = null }) {
+export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, dashboardVariableValue = null, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
   // Get datasource ID from prop or dataMapping
   const effectiveDatasourceId = connectionId || dataMapping?.connection_id;
 
-  // Build transforms from dataMapping (memoized)
-  const transforms = useMemo(() => buildTransformsFromMapping(dataMapping), [dataMapping]);
+  // Build transforms from dataMapping (memoized). The active dashboard-variable
+  // value is threaded in so a {{dashboard-variable}} filter value resolves and
+  // recomputes when the value changes (live re-filter for streaming panels).
+  const transforms = useMemo(
+    () => buildTransformsFromMapping(dataMapping, dashboardVariableValue),
+    [dataMapping, dashboardVariableValue]
+  );
+
+  // Pass the active dashboard-variable value to the server in
+  // query.params.dashboard_variable whenever the query's raw text contains the
+  // {{dashboard-variable}} token. The TOKEN's presence — not the component's
+  // uses_dashboard_variable flag — is the runtime signal: the flag is an
+  // authoring hint that drives editor affordances, while the actual binding is
+  // wherever the author wrote the token. Substitution happens server-side,
+  // per-adapter (SQL → bound param, EdgeLake → escaped literal); leaving the
+  // token in raw with no value set lets the server return a structured "not
+  // set" state. The query identity changes only when the value changes, so
+  // useData's effect re-runs on selection.
+  const effectiveQuery = useMemo(() => {
+    const base = queryConfig || dataMapping?.query_config || { raw: '', type: 'sql' };
+    if (typeof base.raw !== 'string' || !base.raw.includes(DASHBOARD_VARIABLE_TOKEN)) return base;
+    return {
+      ...base,
+      params: {
+        ...(base.params || {}),
+        dashboard_variable: dashboardVariableValue ?? '',
+      },
+    };
+  }, [queryConfig, dataMapping?.query_config, dashboardVariableValue]);
 
   // Determine if we need to fetch data ourselves
   // Fetch data when: connectionId is available AND no data prop was provided
@@ -178,7 +205,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     disconnectedSince
   } = useDataOriginal({
     connectionId: shouldFetchData ? effectiveDatasourceId : null,
-    query: queryConfig || dataMapping?.query_config || { raw: '', type: 'sql' },
+    query: effectiveQuery,
     refreshInterval: dataRefreshInterval,
     useCache: true,
     timeBucket: timeBucketConfig,

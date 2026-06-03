@@ -202,15 +202,25 @@ func (a *SQLAdapter) Query(ctx context.Context, query registry.Query) (*registry
 		}
 	}
 
-	// Build parameter slice from map
-	var args []interface{}
-	if query.Params != nil {
-		for _, v := range query.Params {
-			args = append(args, v)
+	// Substitute the dashboard-variable token (if any) into the SQL as a
+	// driver-correct bound parameter — injection-safe and dialect-correct.
+	// The token scan builds args in occurrence order, which is what makes
+	// positional binding deterministic (any pre-existing param-map iteration
+	// is random-order; today the only such param is a single `limit`,
+	// order-irrelevant, so appending it after the substituted args is safe).
+	value, hasValue := dashboardVariableValue(query.Params)
+	raw, args, err := substituteSQLToken(a.driver, query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range query.Params {
+		if k == DashboardVariableParam {
+			continue // consumed by token substitution above
 		}
+		args = append(args, v)
 	}
 
-	rows, err := a.db.QueryContext(ctx, query.Raw, args...)
+	rows, err := a.db.QueryContext(ctx, raw, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
 	}
@@ -269,15 +279,21 @@ func (a *SQLAdapter) Stream(ctx context.Context, query registry.Query) (<-chan r
 		}
 	}
 
-	// Build parameter slice from map
-	var args []interface{}
-	if query.Params != nil {
-		for _, v := range query.Params {
-			args = append(args, v)
+	// Substitute the dashboard-variable token (if any) as a bound parameter,
+	// matching the batch Query path. Args are built in occurrence order.
+	value, hasValue := dashboardVariableValue(query.Params)
+	raw, args, err := substituteSQLToken(a.driver, query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range query.Params {
+		if k == DashboardVariableParam {
+			continue // consumed by token substitution above
 		}
+		args = append(args, v)
 	}
 
-	rows, err := a.db.QueryContext(ctx, query.Raw, args...)
+	rows, err := a.db.QueryContext(ctx, raw, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
 	}
@@ -525,14 +541,23 @@ func NewSQLDataSource(config *models.SQLConfig) (*SQLDataSource, error) {
 
 // Query executes a SQL query and returns normalized results
 func (s *SQLDataSource) Query(ctx context.Context, query models.Query) (*models.ResultSet, error) {
-	var args []interface{}
-	if query.Params != nil {
-		for _, v := range query.Params {
-			args = append(args, v)
+	// Substitute the dashboard-variable token (if any) into the SQL as a
+	// driver-correct bound parameter — injection-safe, dialect-correct, and
+	// built in occurrence order. (This is the live SQL path the factory wires
+	// for ConnectionTypeSQL — see CreateFromConfig → NewSQLDataSource.)
+	value, hasValue := dashboardVariableValue(query.Params)
+	raw, args, err := substituteSQLToken(s.config.Driver, query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range query.Params {
+		if k == DashboardVariableParam {
+			continue // consumed by token substitution above
 		}
+		args = append(args, v)
 	}
 
-	rows, err := s.db.QueryContext(ctx, query.Raw, args...)
+	rows, err := s.db.QueryContext(ctx, raw, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
 	}
@@ -581,14 +606,21 @@ func (s *SQLDataSource) Query(ctx context.Context, query models.Query) (*models.
 
 // Stream executes a SQL query and streams results
 func (s *SQLDataSource) Stream(ctx context.Context, query models.Query) (<-chan models.Record, error) {
-	var args []interface{}
-	if query.Params != nil {
-		for _, v := range query.Params {
-			args = append(args, v)
+	// Substitute the dashboard-variable token (if any) as a bound parameter,
+	// matching the batch Query path.
+	value, hasValue := dashboardVariableValue(query.Params)
+	raw, args, err := substituteSQLToken(s.config.Driver, query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range query.Params {
+		if k == DashboardVariableParam {
+			continue // consumed by token substitution above
 		}
+		args = append(args, v)
 	}
 
-	rows, err := s.db.QueryContext(ctx, query.Raw, args...)
+	rows, err := s.db.QueryContext(ctx, raw, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
 	}

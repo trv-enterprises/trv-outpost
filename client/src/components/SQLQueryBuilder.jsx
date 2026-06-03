@@ -19,6 +19,7 @@ import {
 import { Add, TrashCan, Play, Copy } from '@carbon/icons-react';
 import api from '../api/client';
 import { copyTextToClipboard } from '../utils/clipboard';
+import { DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import './SQLQueryBuilder.scss';
 
 /**
@@ -39,7 +40,11 @@ const SQLQueryBuilder = ({
   onQueryChange,
   onExecute,
   initialQuery: _initialQuery = '',
-  disabled = false
+  disabled = false,
+  // When true, each WHERE condition can bind to the dashboard variable instead
+  // of a literal — emitting the bare {{dashboard-variable}} token UNQUOTED so
+  // the server substitutes it as a bound parameter at view time.
+  allowDashboardVariable = false,
 }) => {
   // Schema state
   const [schema, setSchema] = useState(null);
@@ -118,11 +123,21 @@ const SQLQueryBuilder = ({
 
     // WHERE clause
     if (whereConditions.length > 0) {
-      const validConditions = whereConditions.filter(c => c.column && c.operator && c.value !== '');
+      const validConditions = whereConditions.filter(c => {
+        if (!c.column || !c.operator) return false;
+        // Variable-bound and null-check conditions don't need a literal value.
+        if (c.valueSource === 'variable') return true;
+        if (c.operator === 'IS NULL' || c.operator === 'IS NOT NULL') return true;
+        return c.value !== '';
+      });
       if (validConditions.length > 0) {
         const whereParts = validConditions.map((c, idx) => {
           const prefix = idx > 0 ? ` ${c.logic || 'AND'} ` : '';
-          const value = c.operator === 'IN' || c.operator === 'NOT IN'
+          // Dashboard-variable binding: emit the bare token UNQUOTED so the
+          // server substitutes it as a bound parameter (NOT a quoted literal).
+          const value = c.valueSource === 'variable'
+            ? DASHBOARD_VARIABLE_TOKEN
+            : c.operator === 'IN' || c.operator === 'NOT IN'
             ? `(${c.value})`
             : c.operator === 'IS NULL' || c.operator === 'IS NOT NULL'
             ? ''
@@ -311,30 +326,36 @@ const SQLQueryBuilder = ({
       <div className="builder-sections">
         {/* Table Selection */}
         <div className="builder-section">
-          <h4>Table</h4>
-          <Select
-            id="table-select"
-            labelText="Select table"
-            value={selectedTable}
-            onChange={handleTableChange}
-            disabled={disabled}
-          >
-            <SelectItem value="" text="Choose a table..." />
-            {schema.tables.map(table => (
-              <SelectItem
-                key={table.name}
-                value={table.name}
-                text={table.schema ? `${table.schema}.${table.name}` : table.name}
-              />
-            ))}
-          </Select>
+          <h5>Table</h5>
+          {/* Label hidden — the "Table" section header gives the context, and
+              this keeps it consistent with the COLUMNS "Add column…" field
+              (also hideLabel). Wrapper caps width to match that field. */}
+          <div className="table-select-row">
+            <Select
+              id="table-select"
+              labelText="Select table"
+              hideLabel
+              value={selectedTable}
+              onChange={handleTableChange}
+              disabled={disabled}
+            >
+              <SelectItem value="" text="Choose a table..." />
+              {schema.tables.map(table => (
+                <SelectItem
+                  key={table.name}
+                  value={table.name}
+                  text={table.schema ? `${table.schema}.${table.name}` : table.name}
+                />
+              ))}
+            </Select>
+          </div>
         </div>
 
         {/* Column Selection with Aggregates */}
         {selectedTable && (
           <div className="builder-section">
             <div className="section-header">
-              <h4>Columns</h4>
+              <h5>Columns</h5>
               <span className="section-hint">
                 {selectedColumns.length === 0 ? 'All columns (*)' : `${selectedColumns.length} selected`}
               </span>
@@ -447,7 +468,7 @@ const SQLQueryBuilder = ({
         {selectedTable && (
           <div className="builder-section">
             <div className="section-header">
-              <h4>WHERE Conditions</h4>
+              <h5>WHERE Conditions</h5>
               <Button
                 kind="ghost"
                 size="sm"
@@ -490,33 +511,67 @@ const SQLQueryBuilder = ({
                     <SelectItem key={col.name} value={col.name} text={col.name} />
                   ))}
                 </Select>
-                <Select
-                  id={`operator-${index}`}
-                  labelText=""
-                  hideLabel
-                  size="sm"
-                  value={condition.operator}
-                  onChange={(e) => updateWhereCondition(index, 'operator', e.target.value)}
-                  disabled={disabled}
-                  className="operator-select"
-                >
-                  {operators.map(op => (
-                    <SelectItem key={op.id} value={op.id} text={op.label} />
-                  ))}
-                </Select>
-                {condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
-                  <TextInput
-                    id={`value-${index}`}
+                {/* Operator + value-source group: each sizes to its content
+                    and the pair wraps together (never a staircase), leaving the
+                    value field to take the remaining row width. */}
+                <div className="condition-ops">
+                  <Select
+                    id={`operator-${index}`}
                     labelText=""
                     hideLabel
                     size="sm"
-                    placeholder="Value..."
-                    value={condition.value}
-                    onChange={(e) => updateWhereCondition(index, 'value', e.target.value)}
+                    value={condition.operator}
+                    onChange={(e) => updateWhereCondition(index, 'operator', e.target.value)}
                     disabled={disabled}
-                    className="value-input"
-                  />
+                    className="operator-select"
+                  >
+                    {operators.map(op => (
+                      <SelectItem key={op.id} value={op.id} text={op.label} />
+                    ))}
+                  </Select>
+                  {/* Value-source picker: a literal the author types, or the
+                      dashboard variable (bound at view time). Only offered when
+                      the deployment has dashboard variables enabled, and not for
+                      null-checks (which take no value). */}
+                  {allowDashboardVariable && condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
+                    <Select
+                      id={`value-source-${index}`}
+                      labelText=""
+                      hideLabel
+                      size="sm"
+                      value={condition.valueSource || 'literal'}
+                      onChange={(e) => updateWhereCondition(index, 'valueSource', e.target.value)}
+                      disabled={disabled}
+                      className="value-source-select"
+                    >
+                      <SelectItem value="literal" text="Value" />
+                      <SelectItem value="variable" text="Dashboard variable" />
+                    </Select>
+                  )}
+                </div>
+                {condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
+                  condition.valueSource === 'variable' ? (
+                    <Tag type="purple" size="sm" className="value-variable-chip" title="Bound to the dashboard variable at view time">
+                      {DASHBOARD_VARIABLE_TOKEN}
+                    </Tag>
+                  ) : (
+                    <TextInput
+                      id={`value-${index}`}
+                      labelText=""
+                      hideLabel
+                      size="sm"
+                      placeholder="Value..."
+                      value={condition.value}
+                      onChange={(e) => updateWhereCondition(index, 'value', e.target.value)}
+                      disabled={disabled}
+                      className="value-input"
+                    />
+                  )
                 )}
+                {/* Flexible spacer absorbs all freed row width as EMPTY space,
+                    so no control balloons (esp. on null-checks with no value
+                    field). Keeps the trash button anchored at the right. */}
+                <div className="condition-spacer" aria-hidden="true" />
                 <IconButton
                   kind="ghost"
                   size="sm"
@@ -534,7 +589,7 @@ const SQLQueryBuilder = ({
         {/* ORDER BY */}
         {selectedTable && (
           <div className="builder-section">
-            <h4>ORDER BY</h4>
+            <h5>ORDER BY</h5>
             <div className="order-by-row">
               <Select
                 id="orderby-column"
@@ -569,7 +624,7 @@ const SQLQueryBuilder = ({
         {/* LIMIT / OFFSET */}
         {selectedTable && (
           <div className="builder-section">
-            <h4>LIMIT</h4>
+            <h5>LIMIT</h5>
             <div className="limit-row">
               <NumberInput
                 id="limit"

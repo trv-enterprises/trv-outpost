@@ -680,7 +680,44 @@ type QueryResponse struct {
 	Success   bool       `json:"success"`
 	ResultSet *ResultSet `json:"result_set,omitempty"`
 	Error     string     `json:"error,omitempty"`
-	Duration  int64      `json:"duration"` // milliseconds
+	// ErrorCode is a stable machine-readable classifier for the error, when
+	// one applies (empty otherwise). Lets the client distinguish recoverable
+	// states (e.g. "dashboard_variable_not_set" → render a friendly
+	// select-a-value empty-state) from genuine query failures without
+	// string-matching the human-readable Error message.
+	ErrorCode string `json:"error_code,omitempty"`
+	Duration  int64  `json:"duration"` // milliseconds
+}
+
+// Query error codes for QueryResponse.ErrorCode.
+const (
+	// QueryErrorVariableNotSet indicates the query references the dashboard
+	// variable token but no value was supplied. The panel should prompt the
+	// user to pick a value rather than showing an error.
+	QueryErrorVariableNotSet = "dashboard_variable_not_set"
+)
+
+// VariableValuesRequest asks for the distinct values of a column on a
+// connection, used to populate a dashboard-variable picker. Column/Table may be
+// supplied explicitly by the caller or derived from a component's query.
+type VariableValuesRequest struct {
+	Column         string `json:"column"`                    // column whose distinct values to list (required)
+	Table          string `json:"table,omitempty"`           // source table (required for SQL/EdgeLake)
+	Database       string `json:"database,omitempty"`        // EdgeLake routes queries by database name (taken from the component's query params)
+	Field          string `json:"field,omitempty"`           // record field for streaming/record-based sources (defaults to Column)
+	Limit          int    `json:"limit,omitempty"`           // max distinct values (default 1000)
+	CaptureSeconds int    `json:"capture_seconds,omitempty"` // streaming capture window (default applied server-side)
+}
+
+// VariableValuesResponse is the distinct-value list for a variable picker.
+type VariableValuesResponse struct {
+	Success bool     `json:"success"`
+	Values  []string `json:"values"`
+	Count   int      `json:"count"`
+	// Partial is true when a streaming capture was cut short (timeout / client
+	// stop / cap) and the list may be incomplete.
+	Partial bool   `json:"partial,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // SchemaProvider is an optional interface for datasources that support schema discovery

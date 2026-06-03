@@ -38,7 +38,8 @@ import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
 import MQTTTopicSelector from './MQTTTopicSelector';
 import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
-import { transformData, formatCellValue } from '../utils/dataTransforms';
+import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { deriveVariableColumn } from '../utils/deriveVariableColumn';
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -46,6 +47,7 @@ import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from './shared/NamespaceSelect';
 import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
+import VariableValuePickerModal from './VariableValuePickerModal';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
@@ -93,6 +95,40 @@ const FILTER_OPERATORS = [
   { id: 'isNull', label: 'Is Null' },
   { id: 'isNotNull', label: 'Is Not Null' }
 ];
+
+// Dashboard-variable substitution tokens offered as insertable pills when the
+// component's "Accepts dashboard-variable substitution" flag is on. Each entry
+// is { label, token }. v1 has a single string/filter variable; this is a LIST
+// so the future range type (which contributes two tokens — {{range_from}} /
+// {{range_to}}) drops in as additional entries with no structural change.
+const DASHBOARD_VARIABLE_TOKENS = [
+  { label: 'Variable', token: DASHBOARD_VARIABLE_TOKEN },
+];
+
+// VariablePills — a row of clickable pills, one per available substitution
+// token. Clicking a pill calls onInsert(token); the caller decides where the
+// token lands (cursor position in the SQL field, or the whole value of a filter
+// row). Rendered only when the substitution flag is on.
+function VariablePills({ tokens, onInsert, hint }) {
+  if (!tokens || tokens.length === 0) return null;
+  return (
+    <div className="variable-pills">
+      {hint && <span className="variable-pills__hint">{hint}</span>}
+      {tokens.map((t) => (
+        <Tag
+          key={t.token}
+          type="purple"
+          size="sm"
+          onClick={() => onInsert(t.token)}
+          title={`Insert ${t.token}`}
+          style={{ cursor: 'pointer' }}
+        >
+          {t.label}
+        </Tag>
+      ))}
+    </div>
+  );
+}
 
 // Aggregation types
 const AGGREGATION_TYPES = [
@@ -411,6 +447,43 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Query configuration
   const [queryRaw, setQueryRaw] = useState('');
   const [queryType, setQueryType] = useState('sql');
+  // Ref to the raw-query TextArea so a variable pill can insert its token at the
+  // cursor position rather than only appending.
+  const queryRawRef = useRef(null);
+
+  // Preview value for the dashboard-variable token. The editor has no dashboard
+  // context to supply the runtime value, so when the query/filter uses the
+  // {{dashboard-variable}} token the author types a sample value here; it is
+  // sent as query.params.dashboard_variable for the preview fetch (and the live
+  // preview render) so the query resolves instead of failing "variable not set".
+  const [previewVariableValue, setPreviewVariableValue] = useState('');
+  const [valuePickerOpen, setValuePickerOpen] = useState(false);
+
+  // Insert a substitution token into the raw query at the current cursor
+  // position (falls back to appending). Keeps focus + caret after the inserted
+  // token so the author can keep typing.
+  const insertTokenIntoQuery = useCallback((token) => {
+    const el = queryRawRef.current?.input || queryRawRef.current?.textarea || queryRawRef.current;
+    setQueryRaw((prev) => {
+      const start = el?.selectionStart ?? prev.length;
+      const end = el?.selectionEnd ?? prev.length;
+      const next = prev.slice(0, start) + token + prev.slice(end);
+      // Restore caret just after the inserted token on the next tick.
+      requestAnimationFrame(() => {
+        if (el && typeof el.setSelectionRange === 'function') {
+          const pos = start + token.length;
+          el.focus();
+          el.setSelectionRange(pos, pos);
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  // Best-effort derivation of the column/table the dashboard variable filters
+  // on, for the value-picker. Shared with the dashboard runtime discovery so
+  // both behave identically. Ambiguity → empty (picker asks the user to choose).
+  const derivedVariableColumn = useMemo(() => deriveVariableColumn(queryRaw), [queryRaw]);
 
   // Data mapping
   const [xAxisColumn, setXAxisColumn] = useState('');
@@ -1396,7 +1469,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   };
 
-  const fetchPreviewData = async () => {
+  // fetchPreviewData runs the preview query. variableValueOverride lets the
+  // value-picker re-invoke it with the chosen value directly (state updates are
+  // async, so we can't rely on previewVariableValue being set yet on re-entry).
+  const fetchPreviewData = async (variableValueOverride = undefined) => {
+    // Buttons wire onClick={fetchPreviewData}, so React passes a click EVENT as
+    // the first arg. Only honor a real string override (the value picker passes
+    // one); ignore anything else so an event never lands in query.params and
+    // breaks JSON.stringify ("cyclic object value").
+    if (typeof variableValueOverride !== 'string') variableValueOverride = undefined;
     if (!selectedConnectionId) {
       setPreviewError('Please select a connection');
       return;
@@ -1405,6 +1486,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Socket, API, and TSStore datasources don't require manual query entry
     if (!isSocket && !isMQTT && !isAPI && !isTSStore && !queryRaw.trim()) {
       setPreviewError('Please enter a query');
+      return;
+    }
+
+    // Intercept: a query that uses the dashboard-variable token can't run
+    // without a value. Rather than a separate "set a preview value" step, the
+    // Fetch action opens the value picker; the user picks a value and the
+    // picker re-invokes this fetch with it. The chosen value is transient —
+    // the returned data makes the selection self-evident, so we don't surface
+    // a "current value" field.
+    const effectiveVarValue = variableValueOverride !== undefined ? variableValueOverride : previewVariableValue;
+    if (
+      typeof queryRaw === 'string' &&
+      queryRaw.includes(DASHBOARD_VARIABLE_TOKEN) &&
+      !effectiveVarValue
+    ) {
+      setValuePickerOpen(true);
       return;
     }
 
@@ -1551,6 +1648,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // empty raw as "newest" + default cap, so flat payloads got back
       // ANY result on tsstore connections — masking the bug for SQL /
       // EdgeLake / Prometheus / API users who hit "query is required."
+      // Supply the dashboard-variable value (from the picker) when the query
+      // uses the token, so the server substitutes it instead of erroring.
+      if (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) {
+        queryParams = { ...queryParams, dashboard_variable: effectiveVarValue };
+      }
+
       const data = await apiClient.queryConnection(selectedConnectionId, {
         query: {
           raw: rawQuery,
@@ -1616,6 +1719,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       queryParams = { database: edgelakeDatabase };
     }
 
+    // Inject the preview value so the rendered preview's own useData fetch
+    // resolves the {{dashboard-variable}} token (same as the preview-fetch path).
+    if (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) {
+      queryParams = { ...queryParams, dashboard_variable: previewVariableValue };
+    }
+
     const transforms = {
       filters,
       aggregation: aggregation.type ? aggregation : null,
@@ -1641,7 +1750,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1658,13 +1767,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     const hasTransforms = completeFilters.length > 0 || aggregation?.type || sortBy || limitRows > 0;
     if (!hasTransforms) return previewData;
 
-    const parsedFilters = completeFilters.map(f => ({
-      field: f.field,
-      op: f.op,
-      value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'
-        ? f.value.split(',').map(v => v.trim())
-        : f.value
-    }));
+    const parsedFilters = completeFilters.map(f => {
+      // Resolve the dashboard-variable token to the preview value so a
+      // variable-driven filter previews against the sample value.
+      const rawValue = (typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN)
+        ? previewVariableValue
+        : f.value;
+      return {
+        field: f.field,
+        op: f.op,
+        value: (f.op === 'in' || f.op === 'notIn') && typeof rawValue === 'string'
+          ? rawValue.split(',').map(v => v.trim())
+          : rawValue
+      };
+    });
 
     const transforms = {
       filters: parsedFilters,
@@ -1685,7 +1801,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         filtered: completeFilters.length > 0
       }
     };
-  }, [previewData, filters, aggregation, sortBy, sortOrder, limitRows]);
+  }, [previewData, filters, aggregation, sortBy, sortOrder, limitRows, previewVariableValue]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -1796,7 +1912,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
-      uses_dashboard_variable: usesDashboardVariable,
+      // Derive from token presence (query or a filter value) rather than a
+      // toggle — the field reflects whether this component actually uses the
+      // {{dashboard-variable}} token, however it was authored.
+      uses_dashboard_variable:
+        usesDashboardVariable ||
+        (typeof queryRaw === 'string' && queryRaw.includes(DASHBOARD_VARIABLE_TOKEN)) ||
+        filters.some((f) => typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN),
       options: (() => {
         if (chartType === 'banded_bar') {
           return { ...chartOptions, bandedBarStyle };
@@ -2038,6 +2160,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               value={namespace}
               onChange={setNamespace}
             />
+            {/* The per-component "accepts substitution" toggle was removed —
+                substitution capabilities (the query pill + visual-builder
+                "Dashboard variable" value type) now show whenever the
+                deployment has dashboard variables enabled. The runtime keys on
+                the {{dashboard-variable}} token's presence, not a flag; the
+                stored uses_dashboard_variable field is still set on save (auto)
+                for any future surface that wants the authoring-intent signal. */}
           </div>
           <div className="metadata-col metadata-col--three-quarters">
             <TagInput
@@ -2046,22 +2175,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               value={tags}
               onChange={setTags}
             />
-            {/* Variable-substitution opt-in. Marks this component's query/filter
-                as authored with the `dashboard-variable` token, for value
-                substitution at view time (SQL WHERE / client-side filter; future).
-                This is NOT connection-swap — swap is per-panel and needs no flag.
-                Gated by the global dashboard_variable.enabled admin setting. */}
-            {dashboardVariableEnabled && (
-              <Toggle
-                id="chart-uses-dashboard-variable"
-                size="sm"
-                labelText="Accepts dashboard-variable substitution"
-                labelA="No"
-                labelB="Yes"
-                toggled={usesDashboardVariable}
-                onToggle={setUsesDashboardVariable}
-              />
-            )}
           </div>
         </div>
       </div>
@@ -2132,6 +2245,32 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             </div>
           </div>
         </Modal>,
+        document.body
+      )}
+
+      {/* Dashboard-variable value picker — distinct values from the connection.
+          Portaled to escape the parent editor modal. On select, sets the
+          preview value and remembers the column/table for the variable's
+          runtime discovery config. */}
+      {valuePickerOpen && createPortal(
+        <VariableValuePickerModal
+          open
+          onClose={() => setValuePickerOpen(false)}
+          onSelect={(value) => {
+            // Remember the value for the live-preview render path, auto-enable
+            // the substitution flag (the author clearly intends it), close the
+            // picker, and run the real query with the chosen value.
+            setPreviewVariableValue(value);
+            setUsesDashboardVariable(true);
+            setValuePickerOpen(false);
+            fetchPreviewData(value);
+          }}
+          connectionId={selectedConnectionId}
+          column={derivedVariableColumn.column}
+          table={derivedVariableColumn.table}
+          database={edgelakeDatabase}
+          schemaColumns={availableColumns}
+        />,
         document.body
       )}
 
@@ -2624,6 +2763,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   ) : selectedDatasource.type === 'sql' && queryMode === 'visual' ? (
                     <SQLQueryBuilder
                       connectionId={selectedConnectionId}
+                      allowDashboardVariable={dashboardVariableEnabled}
                       onQueryChange={(query) => setQueryRaw(query)}
                       onExecute={(response) => {
                         if (response.success && response.result_set) {
@@ -2764,6 +2904,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       )}
                       <TextArea
                         id="query-raw"
+                        ref={queryRawRef}
                         labelText={getQueryLabelForType(selectedDatasource.type)}
                         value={queryRaw}
                         onChange={(e) => setQueryRaw(e.target.value)}
@@ -2771,6 +2912,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         rows={selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 1 : 6}
                         className={`query-textarea ${selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 'query-textarea--compact' : ''}`}
                       />
+                      {/* Substitution pills — click to drop a dashboard-variable
+                          token into the query at the cursor. Shown when the
+                          deployment has dashboard variables enabled, so the
+                          author can author a variable-driven query. Fetching a
+                          query that contains the token opens the value picker
+                          automatically (no separate "set a value" step). */}
+                      {dashboardVariableEnabled && (
+                        <VariablePills
+                          tokens={DASHBOARD_VARIABLE_TOKENS}
+                          onInsert={insertTokenIntoQuery}
+                          hint="Insert variable:"
+                        />
+                      )}
                     </>
                   )}
                 </div>
@@ -3194,14 +3348,27 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               ))}
                             </Select>
                             {!['isNull', 'isNotNull'].includes(filter.op) && (
-                              <TextInput
-                                id={`filter-value-${index}`}
-                                labelText="Value"
-                                value={filter.value}
-                                onChange={(e) => updateFilter(index, 'value', e.target.value)}
-                                placeholder={filter.op === 'in' || filter.op === 'notIn' ? 'val1, val2, val3' : 'Enter value'}
-                                size="sm"
-                              />
+                              <div className="filter-value-cell">
+                                <TextInput
+                                  id={`filter-value-${index}`}
+                                  labelText="Value"
+                                  value={filter.value}
+                                  onChange={(e) => updateFilter(index, 'value', e.target.value)}
+                                  placeholder={filter.op === 'in' || filter.op === 'notIn' ? 'val1, val2, val3' : 'Enter value'}
+                                  size="sm"
+                                />
+                                {/* Click a pill to bind this filter to a
+                                    dashboard variable — sets the value to the
+                                    token, substituted live at view time. Shown
+                                    whenever the deployment has dashboard
+                                    variables enabled (no per-component flag). */}
+                                {dashboardVariableEnabled && (
+                                  <VariablePills
+                                    tokens={DASHBOARD_VARIABLE_TOKENS}
+                                    onInsert={(token) => updateFilter(index, 'value', token)}
+                                  />
+                                )}
+                              </div>
                             )}
                             <IconButton
                               label="Remove filter"
@@ -3810,6 +3977,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           timestamp_scale: parserTimestampScale || undefined
                         } : null
                       } : null}
+                      // The author's picked preview value (from the fetch-time
+                      // value picker) drives the live preview's token
+                      // substitution — both the server query param and any
+                      // client-side filter using the token.
+                      dashboardVariableValue={previewVariableValue || null}
                       props={{}}
                     />
                   </div>

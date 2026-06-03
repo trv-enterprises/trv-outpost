@@ -1270,10 +1270,15 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 	duration := time.Since(startTime).Milliseconds()
 
 	if err != nil {
+		errorCode := ""
+		if errors.Is(err, connection.ErrDashboardVariableNotSet) {
+			errorCode = models.QueryErrorVariableNotSet
+		}
 		return &models.QueryResponse{
-			Success:  false,
-			Error:    err.Error(),
-			Duration: duration,
+			Success:   false,
+			Error:     err.Error(),
+			ErrorCode: errorCode,
+			Duration:  duration,
 		}, nil
 	}
 
@@ -1358,6 +1363,111 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 		Schema:   schema,
 		Duration: duration,
 	}, nil
+}
+
+// GetVariableValues returns the distinct values of a column on a connection,
+// used to populate a dashboard-variable picker. Dispatches per connection type
+// (mirrors GetSchema). Step 1 implements SQL + EdgeLake via a generated GROUP BY
+// query; streaming/record-based capture and the API/CSV dedupe path land next.
+func (s *ConnectionService) GetVariableValues(ctx context.Context, id string, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	ds, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
+	}
+	if ds == nil {
+		return nil, fmt.Errorf("connection not found")
+	}
+	if req == nil || req.Column == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "column is required"}, nil
+	}
+
+	switch ds.Type {
+	case models.ConnectionTypeSQL:
+		return s.getSQLVariableValues(ctx, ds, req)
+	case models.ConnectionTypeEdgeLake:
+		return s.getEdgeLakeVariableValues(ctx, ds, req)
+	default:
+		return &models.VariableValuesResponse{
+			Success: false,
+			Error:   fmt.Sprintf("variable value discovery not yet supported for connection type: %s", ds.Type),
+		}, nil
+	}
+}
+
+// getSQLVariableValues runs a dialect-correct GROUP BY distinct query against a
+// SQL connection and returns the first column's values.
+func (s *ConnectionService) getSQLVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	if ds.Config.SQL == nil {
+		return &models.VariableValuesResponse{Success: false, Error: "SQL configuration missing"}, nil
+	}
+	if req.Table == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "table is required for SQL value discovery"}, nil
+	}
+	sqlText, err := connection.BuildDistinctQuery(ds.Config.SQL.Driver, req.Column, req.Table, req.Limit)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+	return s.runDistinctQuery(ctx, ds, models.Query{Raw: sqlText, Type: models.QueryTypeSQL}, false)
+}
+
+// getEdgeLakeVariableValues runs a GROUP BY distinct query (no DISTINCT, no
+// ORDER BY — EdgeLake parser limits) and sorts the values server-side.
+func (s *ConnectionService) getEdgeLakeVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	if req.Table == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "table is required for EdgeLake value discovery"}, nil
+	}
+	if req.Database == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "database is required for EdgeLake value discovery"}, nil
+	}
+	sqlText, err := connection.BuildDistinctQuery("edgelake", req.Column, req.Table, req.Limit)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+	query := models.Query{
+		Raw:    sqlText,
+		Type:   models.QueryTypeEdgeLake,
+		Params: map[string]interface{}{"database": req.Database},
+	}
+	return s.runDistinctQuery(ctx, ds, query, true) // sort server-side
+}
+
+// runDistinctQuery executes a single-column query through the connection's
+// adapter and flattens the first column into a de-duplicated string slice.
+// When sortValues is true the result is sorted (for adapters that can't order
+// server-side, e.g. EdgeLake).
+func (s *ConnectionService) runDistinctQuery(ctx context.Context, ds *models.Connection, query models.Query, sortValues bool) (*models.VariableValuesResponse, error) {
+	factory := connection.NewConnectionFactory()
+	adapter, err := factory.CreateFromConfig(ds)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: fmt.Sprintf("failed to create connection: %v", err)}, nil
+	}
+	defer adapter.Close()
+
+	rs, err := adapter.Query(ctx, query)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	seen := make(map[string]struct{})
+	values := make([]string, 0, len(rs.Rows))
+	for _, row := range rs.Rows {
+		if len(row) == 0 || row[0] == nil {
+			continue
+		}
+		v := fmt.Sprintf("%v", row[0])
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		values = append(values, v)
+	}
+	if sortValues {
+		sort.Strings(values)
+	}
+	return &models.VariableValuesResponse{Success: true, Values: values, Count: len(values)}, nil
 }
 
 // getPrometheusSchema retrieves schema information from a Prometheus connection
