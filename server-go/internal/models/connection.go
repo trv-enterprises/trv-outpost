@@ -106,8 +106,29 @@ type Connection struct {
 	// Control schema support - which control schemas this connection supports
 	SupportedSchemas []string `json:"supported_schemas,omitempty" bson:"supported_schemas,omitempty"`
 
+	// DiscoveredValues caches the distinct values of a column for the
+	// dashboard-variable dropdown, keyed by column name. Populated by an
+	// authoring-side capture (the editor's Fetch flow) for connection types
+	// that have no engine-side DISTINCT (streams/sockets) — the connection
+	// defines the API/topic and therefore the value domain, so the list lives
+	// here, not on the component or dashboard. Additive + nil-safe: absent on
+	// older records, no migration needed. A connection may filter on several
+	// columns over time, hence a map.
+	DiscoveredValues map[string]DiscoveredValueList `json:"discovered_values,omitempty" bson:"discovered_values,omitempty"`
+
 	CreatedAt time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+}
+
+// DiscoveredValueList is one column's cached distinct values for the
+// dashboard-variable dropdown. Partial is true when the capture was cut short
+// (record cap hit or the user stopped early), so consumers can label the list
+// "may be incomplete". CapturedAt records when it was harvested so a stale list
+// can be regenerated.
+type DiscoveredValueList struct {
+	Values     []string  `json:"values" bson:"values"`
+	Partial    bool      `json:"partial,omitempty" bson:"partial,omitempty"`
+	CapturedAt time.Time `json:"captured_at" bson:"captured_at"`
 }
 
 // IsRegistryBased returns true if this datasource uses the new registry-based type system
@@ -718,6 +739,16 @@ type VariableValuesResponse struct {
 	// stop / cap) and the list may be incomplete.
 	Partial bool   `json:"partial,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+
+// SaveDiscoveredValuesRequest persists a client-side-captured distinct-value
+// list onto a connection (one column), for the dashboard-variable dropdown.
+// The route is design-gated, so only authors can write; viewers keep a
+// session-only override on the client.
+type SaveDiscoveredValuesRequest struct {
+	Column  string   `json:"column" binding:"required"` // the column the list is for
+	Values  []string `json:"values"`                    // distinct values
+	Partial bool     `json:"partial,omitempty"`         // true when capture was cut short
 }
 
 // SchemaProvider is an optional interface for datasources that support schema discovery

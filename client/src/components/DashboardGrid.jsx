@@ -41,6 +41,7 @@ function DashboardGrid({
   dashboard,
   resolveConnectionId,
   dashboardVariableText = '',
+  variableValues = {},
   dashboardVariableValue = null,
   dashboardCommand = null,
   canControl = false,
@@ -180,7 +181,7 @@ function DashboardGrid({
               >
                 {hasText ? (
                   <div className="component-wrapper text-wrapper">
-                    <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} />
+                    <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
                   </div>
                 ) : hasChart ? (
                   <>
@@ -247,6 +248,7 @@ DashboardGrid.propTypes = {
   dashboard: PropTypes.object,
   resolveConnectionId: PropTypes.func,
   dashboardVariableText: PropTypes.string,
+  variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,
   dashboardCommand: PropTypes.object,
   canControl: PropTypes.bool,

@@ -380,6 +380,7 @@ func (s *DashboardService) GetVariableCandidates(ctx context.Context, dashboardI
 			Namespace: c.Namespace,
 			TypeID:    c.GetEffectiveTypeID(),
 			Reference: c.ID == refID,
+			Tags:      c.Tags, // carried so the client can derive a label from a prefixed tag
 		}
 
 		switch {

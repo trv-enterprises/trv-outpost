@@ -883,6 +883,18 @@ class APIClient {
     return this.request(`/api/connections/${connectionId}/variable-values?${params.toString()}`, reqOpts);
   }
 
+  // Persist a client-captured distinct-value list onto a connection (one
+  // column), for the dashboard-variable dropdown. Design capability required
+  // (the route is design-gated). Invalidates the connection cache so the next
+  // getConnection reads the updated discovered_values.
+  async saveDiscoveredValues(connectionId, { column, values, partial = false } = {}) {
+    this._invalidateConnectionCache(connectionId);
+    return this.request(`/api/connections/${connectionId}/discovered-values`, {
+      method: 'PUT',
+      body: JSON.stringify({ column, values, partial }),
+    });
+  }
+
   async createConnection(connection) {
     return this.request('/api/connections', {
       method: 'POST',

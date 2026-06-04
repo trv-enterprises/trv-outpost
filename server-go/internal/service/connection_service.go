@@ -123,6 +123,41 @@ func (s *ConnectionService) GetConnection(ctx context.Context, id string) (*mode
 	return connection, nil
 }
 
+// SaveDiscoveredValues persists a column's distinct-value list onto the
+// connection (merged into DiscoveredValues by column), for the dashboard-
+// variable dropdown. Used for connection types with no engine-side DISTINCT
+// (streams/sockets), where the values are captured client-side at authoring
+// time. The route is design-gated (PUT /api/connections/* requires Design), so
+// only authors persist; viewers keep a session-only override on the client.
+//
+// We read the stored connection and mutate only DiscoveredValues, so secrets in
+// the record are preserved (we never touch a client-supplied config here).
+func (s *ConnectionService) SaveDiscoveredValues(ctx context.Context, id, column string, list models.DiscoveredValueList) (*models.Connection, error) {
+	column = strings.TrimSpace(column)
+	if column == "" {
+		return nil, fmt.Errorf("column is required")
+	}
+	connection, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
+	}
+	if connection == nil {
+		return nil, fmt.Errorf("connection not found")
+	}
+	if list.CapturedAt.IsZero() {
+		list.CapturedAt = time.Now()
+	}
+	if connection.DiscoveredValues == nil {
+		connection.DiscoveredValues = map[string]models.DiscoveredValueList{}
+	}
+	connection.DiscoveredValues[column] = list
+
+	if err := s.repo.Update(ctx, id, connection); err != nil {
+		return nil, fmt.Errorf("error saving discovered values: %w", err)
+	}
+	return connection, nil
+}
+
 // ListConnections retrieves all connections with pagination
 func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {

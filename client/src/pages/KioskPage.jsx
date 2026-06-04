@@ -10,6 +10,7 @@ import KioskNotifications from '../components/KioskNotifications';
 import { useDashboardData } from '../hooks/useDashboardData';
 import apiClient from '../api/client';
 import { syncKioskFromUrl, getKioskConfig } from '../utils/kioskMode';
+import { tagValueByPrefix } from '../utils/tagValueByPrefix';
 import './KioskPage.scss';
 
 /**
@@ -54,19 +55,43 @@ function KioskPage() {
     [forcedConnId],
   );
 
-  // Text for "Dashboard Variable (connection)" text panels: the active
-  // connection's NAME. Fetch it for the forced connection (the kiosk doesn't
-  // load the candidate list); fall back to the id until it resolves.
-  const [connName, setConnName] = useState('');
+  // The dashboard's connection-swap variable definition (name, label,
+  // label_tag_prefix) — drives both the legacy "Dashboard Variable" content
+  // type and {{variable:NAME}} tokens in text panels.
+  const connVariable = useMemo(() => {
+    const list = dashboard?.settings?.variables || [];
+    return list.find((v) => v && v.mode === 'connection_swap') || null;
+  }, [dashboard]);
+
+  // Forced connection's name + tags, fetched once (the kiosk doesn't load the
+  // candidate list). Falls back to the id until it resolves.
+  const [forcedConn, setForcedConn] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    if (!forcedConnId) { setConnName(''); return undefined; }
+    if (!forcedConnId) { setForcedConn(null); return undefined; }
     apiClient.getConnection(forcedConnId)
-      .then((c) => { if (!cancelled) setConnName(c?.name || ''); })
-      .catch(() => { if (!cancelled) setConnName(''); });
+      .then((c) => { if (!cancelled) setForcedConn(c || null); })
+      .catch(() => { if (!cancelled) setForcedConn(null); });
     return () => { cancelled = true; };
   }, [forcedConnId]);
-  const dashboardVariableText = connName || forcedConnId || '';
+
+  // The connection variable's display value: tag-prefix label when configured,
+  // else the connection name (else its id).
+  const dashboardVariableText = useMemo(() => {
+    if (!forcedConnId) return '';
+    const prefix = connVariable?.connection_swap?.label_tag_prefix || '';
+    if (prefix) {
+      const v = tagValueByPrefix(forcedConn?.tags, prefix);
+      if (v) return v;
+    }
+    return forcedConn?.name || forcedConnId || '';
+  }, [forcedConnId, forcedConn, connVariable]);
+
+  // name → value map for {{variable:NAME}} tokens in text panels.
+  const variableValues = useMemo(() => {
+    if (!connVariable?.name) return {};
+    return { [connVariable.name]: dashboardVariableText };
+  }, [connVariable, dashboardVariableText]);
 
   // ── Auto-rotate (Phase 4) ──────────────────────────────────────────
   // Advance the entry index on the interval; pause while the tab is hidden so
@@ -144,6 +169,7 @@ function KioskPage() {
             dashboard={dashboard}
             resolveConnectionId={resolveConnectionId}
             dashboardVariableText={dashboardVariableText}
+            variableValues={variableValues}
             dashboardCommand={null}
             canControl={false}
             refreshTick={0}

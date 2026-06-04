@@ -61,15 +61,16 @@ import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
 import WeatherDisplay from '../components/weather/WeatherDisplay';
 import PanelEditMenu from '../components/PanelEditMenu';
 import PanelText from '../components/PanelText';
-import PanelTextEditor from '../components/PanelTextEditor';
+import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
-import apiClient from '../api/client';
+import apiClient, { API_BASE } from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
 import { DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { candidateLabel } from '../utils/tagValueByPrefix';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
@@ -209,17 +210,39 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setSearchParam,
   });
 
-  // Live text for "Dashboard Variable" text panels: the selected connection's
-  // name, falling back to the reference (baseline) connection when nothing is
+  // Resolved display value of the connection-swap variable: the selected
+  // connection's label (tag-prefix label when configured, else its name),
+  // falling back to the reference (baseline) connection when nothing is
   // selected. Empty when the feature is inactive.
   const dashboardVariableText = useMemo(() => {
     if (!dashVariable) return '';
     const cands = dashVariableCandidates || [];
+    const prefix = dashVariable.connection_swap?.label_tag_prefix || '';
     const selected = cands.find((c) => c.id === dashVariableValue);
-    if (selected) return selected.name || '';
+    if (selected) return candidateLabel(selected, prefix);
     const reference = cands.find((c) => c.reference);
-    return reference?.name || '';
+    return reference ? candidateLabel(reference, prefix) : '';
   }, [dashVariable, dashVariableCandidates, dashVariableValue]);
+
+  // Map of variable NAME → resolved display value, for {{variable:NAME}} tokens
+  // embedded in text-panel content. Covers both variable kinds: the
+  // connection-swap variable (its label/tag-prefix value) and the filter
+  // variable (its chosen string value). Keyed on each variable's stable name.
+  const variableValues = useMemo(() => {
+    const map = {};
+    if (dashVariable?.name) map[dashVariable.name] = dashboardVariableText;
+    if (dashFilterVariable?.name) map[dashFilterVariable.name] = dashFilterValue || '';
+    return map;
+  }, [dashVariable, dashboardVariableText, dashFilterVariable, dashFilterValue]);
+
+  // The variables a text-panel editor can offer as insertable pills: every
+  // defined variable, by name + label. Empty when the feature is inactive.
+  const definedVariables = useMemo(() => {
+    const list = [];
+    if (dashVariable?.name) list.push({ name: dashVariable.name, label: dashVariable.label || dashVariable.name });
+    if (dashFilterVariable?.name) list.push({ name: dashFilterVariable.name, label: dashFilterVariable.label || dashFilterVariable.name });
+    return list;
+  }, [dashVariable, dashFilterVariable]);
 
   // Cadence (seconds) for the slow-poll refresh of the dashboard
   // record itself — picks up edits made by another author so an
@@ -311,6 +334,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [editableVariableTags, setEditableVariableTags] = useState([]);
   const [editableVariableSchemaStrict, setEditableVariableSchemaStrict] = useState('type_only');
   const [editableVariableSameNamespace, setEditableVariableSameNamespace] = useState(false);
+  // Optional tag prefix whose matched value labels each connection in the
+  // dropdown (e.g. "host" → show "trv-srv-001" from a "host:trv-srv-001" tag),
+  // falling back to the connection name. Connection-swap only.
+  const [editableVariableLabelTagPrefix, setEditableVariableLabelTagPrefix] = useState('');
   // Filter-type fields: how the header sources the value, and (for static) the
   // option list + default. Data-driven discovery (query the connection for valid
   // values) is a deferred seam — see the dashboard-variable-picker TODO.
@@ -352,6 +379,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         tags: editableVariableTags,
         schemaStrict: editableVariableSchemaStrict,
         sameNamespace: editableVariableSameNamespace,
+        labelTagPrefix: editableVariableLabelTagPrefix,
         valueSource: editableVariableValueSource,
         options: editableVariableOptions,
         defaultValue: editableVariableDefault,
@@ -399,9 +427,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
   const [aiPreflightPanelId, setAiPreflightPanelId] = useState(null);
 
-  // Text panel editor state
+  // Text panel editor state — the panel whose text_config the modal is editing
+  // (null = closed).
   const [textEditorPanelId, setTextEditorPanelId] = useState(null);
-  const [textEditorAnchorRect, setTextEditorAnchorRect] = useState(null);
 
   // Close all SSE connections when leaving the dashboard viewer
   // (frees browser connection slots so other pages load instantly)
@@ -629,35 +657,122 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   }, [discoveryTarget, dashboard?.id, pushToast, addNotification]);
 
   // Discovered options + fetch state for the connection-sourced filter variable.
+  // Dispatch by connection type:
+  //   - SQL/EdgeLake/API → getVariableValues (server-side DISTINCT / one-shot;
+  //     low latency, no storage).
+  //   - stream/socket → read the connection's persisted discovered_values[column]
+  //     (captured at authoring time; view-time stream capture is too slow). A
+  //     session-only "regenerate" (below) can override this list for this user.
   const [discoveredOptions, setDiscoveredOptions] = useState(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  // Session-only override the viewer's "regenerate" sets; wins over the stored
+  // list but is NOT persisted (persistence needs design authority in the editor).
+  const [sessionDiscoveredOverride, setSessionDiscoveredOverride] = useState(null);
+  // The connection type backing discovery (drives path + whether regenerate is
+  // offered). Set by the discovery effect.
+  const [discoveryConnType, setDiscoveryConnType] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
+    setSessionDiscoveredOverride(null); // clear stale session override on target change
     if (!discoveryTarget || !discoveryTarget.connId || !discoveryTarget.column) {
       setDiscoveredOptions(null);
       setDiscoveryLoading(false);
+      setDiscoveryConnType(null);
       return undefined;
     }
     setDiscoveryLoading(true);
-    apiClient
-      .getVariableValues(discoveryTarget.connId, {
-        column: discoveryTarget.column,
-        table: discoveryTarget.table,
-        database: discoveryTarget.database,
-      })
-      .then((res) => {
+    (async () => {
+      try {
+        // Resolve the connection type (cached) to choose the discovery path.
+        const conn = await apiClient.getConnection(discoveryTarget.connId).catch(() => null);
         if (cancelled) return;
-        setDiscoveredOptions(res?.success && Array.isArray(res.values) ? res.values : null);
-      })
-      .catch(() => {
+        const type = conn?.type || conn?.config?.type || null;
+        setDiscoveryConnType(type);
+        const isStreamLike = type === 'socket' || type === 'mqtt'
+          || (type === 'tsstore' && conn?.config?.tsstore?.transport === 'streaming');
+
+        if (isStreamLike) {
+          // Stream/socket: read the authoring-time captured list off the
+          // connection record. No view-time capture (too slow).
+          const stored = conn?.discovered_values?.[discoveryTarget.column];
+          setDiscoveredOptions(Array.isArray(stored?.values) ? stored.values : null);
+        } else {
+          // SQL/EdgeLake/API: server-side discovery (DISTINCT / one-shot).
+          const res = await apiClient.getVariableValues(discoveryTarget.connId, {
+            column: discoveryTarget.column,
+            table: discoveryTarget.table,
+            database: discoveryTarget.database,
+          });
+          if (cancelled) return;
+          setDiscoveredOptions(res?.success && Array.isArray(res.values) ? res.values : null);
+        }
+      } catch {
         if (!cancelled) setDiscoveredOptions(null); // fall back to static options
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setDiscoveryLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
     // Key on the resolved triple so it doesn't refire on unrelated renders.
   }, [discoveryTarget?.connId, discoveryTarget?.column, discoveryTarget?.table, discoveryTarget?.database]);
+
+  // Session-only regenerate for a stream/socket variable: live-capture records
+  // via the connection's SSE stream, unique the bound column, and override the
+  // dropdown list for THIS session (not persisted — a designer makes it
+  // permanent via the editor). Mirrors the editor's capture-with-stop.
+  const regenerateCaptureRef = useRef(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const startSessionRegenerate = useCallback(() => {
+    const target = discoveryTarget;
+    if (!target?.connId || !target.column) return;
+    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+    setRegenerating(true);
+    const authParam = apiClient.streamAuthQuery();
+    const sseUrl = `${API_BASE}/api/connections/${target.connId}/stream?${authParam}`;
+    const es = new EventSource(sseUrl);
+    regenerateCaptureRef.current = es;
+    const seen = new Set();
+    const values = [];
+    const CAP = 1000;
+    const finish = () => {
+      if (regenerateCaptureRef.current !== es) return;
+      es.close();
+      regenerateCaptureRef.current = null;
+      setRegenerating(false);
+      setSessionDiscoveredOverride([...values]);
+    };
+    es.addEventListener('record', (event) => {
+      try {
+        const rec = JSON.parse(event.data);
+        const v = rec?.[target.column];
+        if (v != null) {
+          const s = String(v);
+          if (s !== '' && !seen.has(s)) { seen.add(s); values.push(s); }
+        }
+        if (values.length >= CAP) finish();
+      } catch { /* ignore parse errors */ }
+    });
+    es.onerror = () => { if (regenerateCaptureRef.current === es) finish(); };
+    // Safety cap: stop after 30s if the stream is quiet.
+    setTimeout(() => { if (regenerateCaptureRef.current === es) finish(); }, 30000);
+  }, [discoveryTarget]);
+
+  const stopSessionRegenerate = useCallback(() => {
+    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+    setRegenerating(false);
+  }, []);
+
+  // Tear down any in-flight capture on unmount.
+  useEffect(() => () => {
+    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+  }, []);
+
+  // The list the dropdown actually uses: session override wins, else discovered.
+  const effectiveDiscoveredOptions = sessionDiscoveredOverride ?? discoveredOptions;
+  // Regenerate is only meaningful for stream/socket variables (where the list is
+  // stored, not live-queried).
+  const discoveryIsStream = discoveryConnType === 'socket' || discoveryConnType === 'mqtt' || discoveryConnType === 'tsstore';
 
   const panelExtentCol = useMemo(() => {
     if (!panels || panels.length === 0) return 0;
@@ -1484,6 +1599,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setEditableVariableTags(v0?.connection_swap?.tags || []);
       setEditableVariableSchemaStrict(v0?.connection_swap?.schema_strict || 'type_only');
       setEditableVariableSameNamespace(!!v0?.connection_swap?.same_namespace);
+      setEditableVariableLabelTagPrefix(v0?.connection_swap?.label_tag_prefix || '');
       setEditableVariableValueSource(v0?.filter_value?.value_source || 'static');
       setEditableVariableOptions(v0?.filter_value?.options || []);
       setEditableVariableDefault(v0?.filter_value?.default_value || '');
@@ -1621,6 +1737,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   tags: editableVariableTags || [],
                   schema_strict: editableVariableSchemaStrict || 'type_only',
                   same_namespace: editableVariableSameNamespace,
+                  label_tag_prefix: (editableVariableLabelTagPrefix || '').trim(),
                 },
               },
         ] : [],
@@ -2037,38 +2154,28 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
 
   // ── Text panel helpers ────────────────────────────────────────────
-  const getPanelRect = (panelId) => {
-    if (!gridRef.current) return null;
-    const panelEl = gridRef.current.querySelector(`[data-panel-id="${panelId}"]`);
-    return panelEl ? panelEl.getBoundingClientRect() : null;
-  };
-
+  // Convert a panel into a text panel (default config) and open the editor
+  // modal on it. The modal edits a draft and commits on Apply (dirtying the
+  // dashboard), same as the Settings/Variables modals.
   const setTextPanel = (panelId) => {
-    // Set default text config and clear component_id
     updateEditablePanel(panelId, {
       component_id: null,
-      text_config: { content: '', display_content: 'title', size: 20, align: 'center' }
+      text_config: { content: '', display_content: 'title', size: 20, align: 'center' },
     });
-    // Open the text editor anchored to the panel
-    // Use requestAnimationFrame to ensure the panel has re-rendered with text_config
-    requestAnimationFrame(() => {
-      setTextEditorAnchorRect(getPanelRect(panelId));
-      setTextEditorPanelId(panelId);
-    });
-  };
-
-  const openTextEditor = (panelId) => {
-    setTextEditorAnchorRect(getPanelRect(panelId));
     setTextEditorPanelId(panelId);
   };
 
-  const handleTextConfigUpdate = (panelId, textConfig) => {
-    updateEditablePanel(panelId, { text_config: textConfig });
+  const openTextEditor = (panelId) => {
+    setTextEditorPanelId(panelId);
+  };
+
+  // Apply: commit the modal's draft config to the panel (marks dirty).
+  const handleTextConfigApply = (textConfig) => {
+    if (textEditorPanelId) updateEditablePanel(textEditorPanelId, { text_config: textConfig });
   };
 
   const closeTextEditor = () => {
     setTextEditorPanelId(null);
-    setTextEditorAnchorRect(null);
   };
 
   const openComponentPicker = (panelId, category) => {
@@ -2210,6 +2317,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             {!isEditMode && dashVariable && (() => {
               const items = (dashVariableCandidates || []).filter((c) => c.compatible);
               const selected = items.find((c) => c.id === dashVariableValue) || null;
+              // Optional: label each candidate from a prefixed tag (e.g. a
+              // "host:trv-srv-001" tag → "trv-srv-001"), falling back to name.
+              const labelPrefix = dashVariable.connection_swap?.label_tag_prefix || '';
               return (
                 <div className="dashboard-variable-picker">
                   <Dropdown
@@ -2218,7 +2328,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     titleText={dashVariable.label || 'Variable'}
                     label={`${dashVariable.label || 'Variable'}: select…`}
                     items={items}
-                    itemToString={(item) => (item ? (item.name || item.id) : '')}
+                    itemToString={(item) => candidateLabel(item, labelPrefix)}
                     selectedItem={selected}
                     onChange={({ selectedItem }) => setDashVariableValue(selectedItem?.id || null)}
                   />
@@ -2247,14 +2357,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   </div>
                 );
               }
-              // 'static' → the authored list; 'connection' → live-discovered
-              // values, falling back to the static list (seed) on failure/empty.
+              // 'static' → the authored list; 'connection' → discovered values
+              // (server-side for SQL/API, stored list for stream/socket; session
+              // override wins), falling back to the static list (seed) on
+              // failure/empty.
               const staticOptions = Array.isArray(cfg.options) ? cfg.options : [];
               const options = cfg.value_source === 'connection'
-                ? (discoveredOptions ?? staticOptions)
+                ? (effectiveDiscoveredOptions ?? staticOptions)
                 : staticOptions;
               const selectedOpt = options.includes(dashFilterValue) ? dashFilterValue : null;
               const loading = cfg.value_source === 'connection' && discoveryLoading;
+              // Stream/socket variables store their list; offer a session-only
+              // "regenerate" (live re-capture) since the stored list can go
+              // stale or have been stopped too early. Not persisted (a designer
+              // makes it permanent via the editor).
+              const showRegenerate = cfg.value_source === 'connection' && discoveryIsStream;
               return (
                 <div className="dashboard-variable-picker">
                   <Dropdown
@@ -2263,11 +2380,27 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     titleText={label}
                     label={loading ? 'Loading…' : `${label}: select…`}
                     items={options}
-                    disabled={loading}
+                    disabled={loading || regenerating}
                     itemToString={(item) => (item == null ? '' : String(item))}
                     selectedItem={selectedOpt}
                     onChange={({ selectedItem }) => setDashFilterValue(selectedItem ?? null)}
                   />
+                  {showRegenerate && (
+                    regenerating ? (
+                      <Button kind="ghost" size="sm" onClick={stopSessionRegenerate} title="Stop capturing">
+                        Stop
+                      </Button>
+                    ) : (
+                      <Button
+                        kind="ghost"
+                        size="sm"
+                        hasIconOnly
+                        renderIcon={Renew}
+                        iconDescription="Regenerate values (this session only)"
+                        onClick={startSessionRegenerate}
+                      />
+                    )
+                  )}
                 </div>
               );
             })()}
@@ -2670,6 +2803,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           dashboard={dashboard}
           resolveConnectionId={resolveConnectionId}
           dashboardVariableText={dashboardVariableText}
+          variableValues={variableValues}
           dashboardVariableValue={dashFilterValue}
           dashboardCommand={dashboardCommand}
           canControl={canControl}
@@ -2850,7 +2984,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   {/* Panel content */}
                   {hasText ? (
                     <div className="component-wrapper text-wrapper">
-                      <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} />
+                      <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
                     </div>
                   ) : hasChart ? (
                     <>
@@ -3038,14 +3172,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       />
 
       {/* Text panel editor */}
-      {textEditorPanelId && (
-        <PanelTextEditor
-          config={editablePanels.find(p => p.id === textEditorPanelId)?.text_config}
-          onUpdate={(config) => handleTextConfigUpdate(textEditorPanelId, config)}
-          onClose={closeTextEditor}
-          anchorRect={textEditorAnchorRect}
-        />
-      )}
+      <PanelTextModal
+        open={!!textEditorPanelId}
+        config={editablePanels.find((p) => p.id === textEditorPanelId)?.text_config}
+        onApply={handleTextConfigApply}
+        onClose={closeTextEditor}
+        variables={definedVariables}
+        variableValues={variableValues}
+      />
 
       {/* Dashboard settings modal */}
       <DashboardExportModal
@@ -3146,6 +3280,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             setEditableVariableTags(varsDraft.tags);
             setEditableVariableSchemaStrict(varsDraft.schemaStrict);
             setEditableVariableSameNamespace(varsDraft.sameNamespace);
+            setEditableVariableLabelTagPrefix(varsDraft.labelTagPrefix);
             setEditableVariableValueSource(varsDraft.valueSource);
             setEditableVariableOptions(varsDraft.options);
             setEditableVariableDefault(varsDraft.defaultValue);
@@ -3216,6 +3351,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     labelB="On"
                     toggled={!!varsDraft?.sameNamespace}
                     onToggle={(checked) => setVarsDraft((d) => ({ ...d, sameNamespace: checked }))}
+                  />
+                  <TextInput
+                    id="settings-variable-label-tag-prefix"
+                    labelText="Label tag prefix (optional)"
+                    value={varsDraft?.labelTagPrefix ?? ''}
+                    onChange={(e) => setVarsDraft((d) => ({ ...d, labelTagPrefix: e.target.value }))}
+                    placeholder="e.g. host"
+                    helperText="Show a connection's tag value in the dropdown instead of its name: prefix &quot;host&quot; shows &quot;trv-srv-001&quot; from a &quot;host:trv-srv-001&quot; tag. Falls back to the connection name when no matching tag."
                   />
                 </>
               )}

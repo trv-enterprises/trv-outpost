@@ -369,6 +369,44 @@ func (h *ConnectionHandler) GetVariableValues(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// SaveDiscoveredValues persists a client-side-captured distinct-value list onto
+// a connection (one column), for the dashboard-variable dropdown.
+// @Summary Save discovered dashboard-variable values for a connection column
+// @Description Stores a column's distinct values on the connection (streams/sockets have no engine-side DISTINCT, so values are captured client-side at authoring time). Design capability required.
+// @Tags connections
+// @Accept json
+// @Produce json
+// @Param id path string true "Connection ID"
+// @Param request body models.SaveDiscoveredValuesRequest true "Column + values"
+// @Success 200 {object} models.Connection
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /connections/{id}/discovered-values [put]
+func (h *ConnectionHandler) SaveDiscoveredValues(c *gin.Context) {
+	id := c.Param("id")
+
+	var req models.SaveDiscoveredValuesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	conn, err := h.service.SaveDiscoveredValues(c.Request.Context(), id, req.Column, models.DiscoveredValueList{
+		Values:  req.Values,
+		Partial: req.Partial,
+	})
+	if err != nil {
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, conn)
+}
+
 // GetPrometheusLabelValues retrieves possible values for a Prometheus label
 // @Summary Get values for a Prometheus label
 // @Description Retrieve all possible values for a specific label from a Prometheus datasource

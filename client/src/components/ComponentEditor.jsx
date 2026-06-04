@@ -458,6 +458,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // preview render) so the query resolves instead of failing "variable not set".
   const [previewVariableValue, setPreviewVariableValue] = useState('');
   const [valuePickerOpen, setValuePickerOpen] = useState(false);
+  // Client-side-filter value discovery: when a client-side filter is bound to
+  // the dashboard variable, there's no engine-side DISTINCT — we capture
+  // records (the normal Fetch), unique the bound column in the browser, and
+  // open the picker in CLIENT mode with that list. Separate state from the
+  // server picker above (which handles SQL/EdgeLake).
+  const [clientValuePickerOpen, setClientValuePickerOpen] = useState(false);
+  const [clientDiscoveredValues, setClientDiscoveredValues] = useState([]);
+  const [clientDiscoveredColumn, setClientDiscoveredColumn] = useState('');
+  const [clientDiscoveredPartial, setClientDiscoveredPartial] = useState(false);
 
   // Insert a substitution token into the raw query at the current cursor
   // position (falls back to appending). Keeps focus + caret after the inserted
@@ -497,6 +506,54 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Filters and aggregation
   const [filters, setFilters] = useState([]);
+
+  // The client-side filter (if any) bound to the dashboard variable — its value
+  // is exactly the token. Its `field` is the column whose distinct values feed
+  // the picker. Null when no filter is variable-bound. (Declared after `filters`
+  // to avoid a TDZ on it.)
+  const variableBoundFilter = useMemo(
+    () => filters.find((f) => typeof f?.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN) || null,
+    [filters],
+  );
+
+  // Harvest the distinct values of `column` from a captured preview result set
+  // ({columns, rows}), in row order, de-duplicated, dropping null/empty. Used
+  // for client-side-filter value discovery (no engine-side DISTINCT). `cap`
+  // bounds the scan; the caller marks the list partial when the source was
+  // itself capped/stopped.
+  const harvestColumnValues = useCallback((resultSet, column, cap = 1000) => {
+    if (!resultSet || !column) return [];
+    const cols = resultSet.columns || [];
+    const idx = cols.indexOf(column);
+    if (idx < 0) return [];
+    const seen = new Set();
+    const out = [];
+    const rows = resultSet.rows || [];
+    for (let i = 0; i < rows.length && out.length < cap; i++) {
+      const v = rows[i]?.[idx];
+      if (v == null) continue;
+      const s = String(v);
+      if (s === '' || seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  }, []);
+
+  // After a capture, if a client-side filter is bound to the variable and no
+  // preview value is chosen yet, harvest the bound column's distinct values and
+  // open the client-mode picker. No-op otherwise.
+  const maybeOpenClientValuePicker = useCallback((resultSet, { partial = false } = {}) => {
+    if (!variableBoundFilter || previewVariableValue) return false;
+    const column = variableBoundFilter.field;
+    const values = harvestColumnValues(resultSet, column);
+    setClientDiscoveredColumn(column);
+    setClientDiscoveredValues(values);
+    setClientDiscoveredPartial(partial);
+    setClientValuePickerOpen(true);
+    return true;
+  }, [variableBoundFilter, previewVariableValue, harvestColumnValues]);
+
   const [aggregation, setAggregation] = useState({ type: '', sortBy: '', field: '', count: 10 });
   const [sortBy, setSortBy] = useState('');
   const [sortOrder, setSortOrder] = useState('desc');
@@ -1219,6 +1276,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const isMQTT = selectedDatasource?.type === 'mqtt';
   const isAPI = selectedDatasource?.type === 'api';
 
+  // Stream-like types have no engine-side DISTINCT and high view-time capture
+  // latency, so a discovered value list is persisted on the connection (design
+  // authority) for the dashboard dropdown to read. API/SQL/EdgeLake stay
+  // on-demand (fast enough to re-fetch), so we don't persist for those.
+  const shouldPersistDiscovered = isSocket || isMQTT || isTSStoreStreaming || isTSStore;
+
   const handleDatasourceChange = (newDatasourceId) => {
     setSelectedConnectionId(newDatasourceId);
 
@@ -1577,12 +1640,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           const displayRecords = records.length > 0 ? records : rawRecords;
           const columns = Object.keys(displayRecords[0]);
           const rows = displayRecords.map(r => columns.map(c => r[c]));
-          setPreviewData({ columns, rows, metadata: { row_count: rows.length } });
+          const resultSet = { columns, rows, metadata: { row_count: rows.length } };
+          setPreviewData(resultSet);
           if (columns.length > 0) {
             setAvailableColumns(columns);
             if (!xAxisColumn) setXAxisColumn(columns[0]);
             if (yAxisColumns.length === 0 && columns.length > 1) setYAxisColumns([columns[1]]);
           }
+          // Streaming captures are always potentially incomplete (the user
+          // stops, or the window/cap ends) — flag the discovered list partial.
+          maybeOpenClientValuePicker(resultSet, { partial: true });
           setPreviewLoading(false);
         };
 
@@ -1663,6 +1730,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       });
 
       setPreviewData(data.result_set);
+
+      // Client-side-filter value discovery: if a filter is bound to the
+      // variable and no value is chosen yet, open the picker on the captured
+      // rows. API/SQL fetches are bounded by the query limit (treat as
+      // complete); only flag partial for streaming captures (handled below).
+      maybeOpenClientValuePicker(data.result_set);
 
       if (data.result_set?.columns) {
         const cols = data.result_set.columns;
@@ -2270,6 +2343,36 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           table={derivedVariableColumn.table}
           database={edgelakeDatabase}
           schemaColumns={availableColumns}
+        />,
+        document.body
+      )}
+
+      {/* Client-mode value picker — for a client-side filter bound to the
+          variable. Populated from the rows just captured (uniqued in the
+          browser); no server fetch. On select we remember the preview value
+          (filteredPreviewData re-filters the captured rows to it) and, for
+          stream-like connections, persist the list onto the connection so the
+          dashboard dropdown can read it without a costly view-time capture.
+          Persistence is design-gated server-side; a viewer's 403 is swallowed. */}
+      {clientValuePickerOpen && createPortal(
+        <VariableValuePickerModal
+          open
+          onClose={() => setClientValuePickerOpen(false)}
+          onSelect={(value) => {
+            setPreviewVariableValue(value);
+            setUsesDashboardVariable(true);
+            setClientValuePickerOpen(false);
+            if (shouldPersistDiscovered && selectedConnectionId && clientDiscoveredColumn) {
+              apiClient.saveDiscoveredValues(selectedConnectionId, {
+                column: clientDiscoveredColumn,
+                values: clientDiscoveredValues,
+                partial: clientDiscoveredPartial,
+              }).catch(() => { /* design-gated; viewers can't persist — ignore */ });
+            }
+          }}
+          connectionId={selectedConnectionId}
+          providedValues={clientDiscoveredValues}
+          providedPartial={clientDiscoveredPartial}
         />,
         document.body
       )}
@@ -3323,63 +3426,107 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   {filters.length > 0 ? (
                     availableColumns.length > 0 ? (
                       <div className="filters-list">
-                        {filters.map((filter, index) => (
-                          <div key={index} className="filter-row">
-                            <Select
-                              id={`filter-field-${index}`}
-                              labelText="Field"
-                              value={filter.field}
-                              onChange={(e) => updateFilter(index, 'field', e.target.value)}
-                              size="sm"
-                            >
-                              {availableColumns.map(col => (
-                                <SelectItem key={col} value={col} text={col} />
-                              ))}
-                            </Select>
-                            <Select
-                              id={`filter-op-${index}`}
-                              labelText="Operator"
-                              value={filter.op}
-                              onChange={(e) => updateFilter(index, 'op', e.target.value)}
-                              size="sm"
-                            >
-                              {FILTER_OPERATORS.map(op => (
-                                <SelectItem key={op.id} value={op.id} text={op.label} />
-                              ))}
-                            </Select>
-                            {!['isNull', 'isNotNull'].includes(filter.op) && (
-                              <div className="filter-value-cell">
-                                <TextInput
-                                  id={`filter-value-${index}`}
-                                  labelText="Value"
-                                  value={filter.value}
-                                  onChange={(e) => updateFilter(index, 'value', e.target.value)}
-                                  placeholder={filter.op === 'in' || filter.op === 'notIn' ? 'val1, val2, val3' : 'Enter value'}
+                        {filters.map((filter, index) => {
+                          const hasValue = !['isNull', 'isNotNull'].includes(filter.op);
+                          // Value-source is DERIVED, not stored: a filter bound
+                          // to a dashboard variable carries the token as its
+                          // literal value (the same contract the substitution +
+                          // save paths already key on). The inline Select just
+                          // toggles between a typed literal and that token.
+                          const boundToVariable = typeof filter.value === 'string'
+                            && filter.value.trim() === DASHBOARD_VARIABLE_TOKEN;
+                          return (
+                            <div key={index} className="filter-row">
+                              <Select
+                                id={`filter-field-${index}`}
+                                labelText=""
+                                hideLabel
+                                value={filter.field}
+                                onChange={(e) => updateFilter(index, 'field', e.target.value)}
+                                size="sm"
+                                className="filter-field-select"
+                              >
+                                {availableColumns.map(col => (
+                                  <SelectItem key={col} value={col} text={col} />
+                                ))}
+                              </Select>
+                              {/* Operator + value-source group sizes to content
+                                  and wraps together (never a staircase). */}
+                              <div className="filter-ops">
+                                <Select
+                                  id={`filter-op-${index}`}
+                                  labelText=""
+                                  hideLabel
+                                  value={filter.op}
+                                  onChange={(e) => updateFilter(index, 'op', e.target.value)}
                                   size="sm"
-                                />
-                                {/* Click a pill to bind this filter to a
-                                    dashboard variable — sets the value to the
-                                    token, substituted live at view time. Shown
-                                    whenever the deployment has dashboard
-                                    variables enabled (no per-component flag). */}
-                                {dashboardVariableEnabled && (
-                                  <VariablePills
-                                    tokens={DASHBOARD_VARIABLE_TOKENS}
-                                    onInsert={(token) => updateFilter(index, 'value', token)}
-                                  />
+                                  className="filter-operator-select"
+                                >
+                                  {FILTER_OPERATORS.map(op => (
+                                    <SelectItem key={op.id} value={op.id} text={op.label} />
+                                  ))}
+                                </Select>
+                                {/* Value-source picker — a typed literal or the
+                                    dashboard variable (bound at view time). Only
+                                    when the deployment has dashboard variables
+                                    enabled, and not for null-checks. */}
+                                {dashboardVariableEnabled && hasValue && (
+                                  <Select
+                                    id={`filter-value-source-${index}`}
+                                    labelText=""
+                                    hideLabel
+                                    value={boundToVariable ? 'variable' : 'literal'}
+                                    onChange={(e) => updateFilter(
+                                      index,
+                                      'value',
+                                      e.target.value === 'variable' ? DASHBOARD_VARIABLE_TOKEN : '',
+                                    )}
+                                    size="sm"
+                                    className="filter-value-source-select"
+                                  >
+                                    <SelectItem value="literal" text="Value" />
+                                    <SelectItem value="variable" text="Dashboard variable" />
+                                  </Select>
                                 )}
                               </div>
-                            )}
-                            <IconButton
-                              label="Remove filter"
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => removeFilter(index)}
-                            >
-                              <TrashCan />
-                            </IconButton>
-                          </div>
-                        ))}
+                              {hasValue && (
+                                boundToVariable ? (
+                                  <Tag
+                                    type="purple"
+                                    size="sm"
+                                    className="filter-value-variable-chip"
+                                    title="Bound to the dashboard variable at view time"
+                                  >
+                                    {DASHBOARD_VARIABLE_TOKEN}
+                                  </Tag>
+                                ) : (
+                                  <TextInput
+                                    id={`filter-value-${index}`}
+                                    labelText=""
+                                    hideLabel
+                                    value={filter.value}
+                                    onChange={(e) => updateFilter(index, 'value', e.target.value)}
+                                    placeholder={filter.op === 'in' || filter.op === 'notIn' ? 'val1, val2, val3' : 'Enter value'}
+                                    size="sm"
+                                    className="filter-value-input"
+                                  />
+                                )
+                              )}
+                              {/* Flexible spacer soaks up freed width as empty
+                                  space so nothing balloons (esp. null-checks),
+                                  keeping the trash anchored right. */}
+                              <div className="filter-spacer" aria-hidden="true" />
+                              <IconButton
+                                label="Remove filter"
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => removeFilter(index)}
+                              >
+                                <TrashCan />
+                              </IconButton>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="saved-filters-display">

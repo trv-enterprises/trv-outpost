@@ -1060,31 +1060,63 @@
       gap: spacing.$spacing-03;
     }
 
+    // Single-row layout mirroring the SQL WHERE builder (.where-condition):
+    // every control is fixed-width and does NOT grow; the only growable element
+    // is .filter-spacer, which soaks up freed width as empty gap so nothing
+    // balloons (including null-checks with no value field) and the trash stays
+    // anchored right. All controls use hideLabel so the row aligns cleanly.
     .filter-row {
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       gap: spacing.$spacing-03;
       padding: spacing.$spacing-03;
       background-color: var(--cds-layer-02);
       border-radius: 4px;
+      flex-wrap: wrap;
 
-      > * {
-        flex: 1;
+      .filter-field-select {
+        width: 16rem;
+        flex: 0 0 auto;
+      }
+
+      // Operator + value-source group wraps as a unit (never a staircase).
+      .filter-ops {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-03;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+      }
+
+      .filter-operator-select {
+        width: 11rem;
+        flex: 0 0 auto;
+      }
+
+      .filter-value-source-select {
+        width: 11rem;
+        flex: 0 0 auto;
+      }
+
+      .filter-value-input {
+        width: 16rem;
+        flex: 0 0 auto;
+      }
+
+      // Token chip sits centered where the value input would be.
+      .filter-value-variable-chip {
+        flex: 0 0 auto;
+        align-self: center;
+      }
+
+      // The only growable element: absorbs all slack as empty space.
+      .filter-spacer {
+        flex: 1 1 auto;
         min-width: 0;
       }
 
       .cds--btn--icon-only {
         flex: 0 0 auto;
-        margin-bottom: spacing.$spacing-02;
-      }
-
-      // Filter value + its substitution pills stack within the row's value cell.
-      .filter-value-cell {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: spacing.$spacing-02;
       }
     }
 

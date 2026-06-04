@@ -35,6 +35,16 @@ import apiClient from '../api/client';
  * @param {string}   table           derived/declared source table (may be empty)
  * @param {string}   database        EdgeLake database (from the component query)
  * @param {string[]} schemaColumns   columns to choose from when none derived
+ *
+ * CLIENT MODE — for connection types with no engine-side DISTINCT (streams /
+ * sockets / API), the caller captures records itself and uniques the column in
+ * the browser, then supplies the list directly:
+ * @param {string[]|null} providedValues  when non-null, the modal renders THIS
+ *   list and skips the server fetch entirely (column selector hidden — the
+ *   caller already knows the column from the filter).
+ * @param {boolean}  providedPartial   list may be incomplete (cap / stop)
+ * @param {boolean}  providedLoading   a client capture is in progress
+ * @param {Function} onStop            () => void — stop an in-progress capture
  */
 function VariableValuePickerModal({
   open,
@@ -45,7 +55,14 @@ function VariableValuePickerModal({
   table = '',
   database = '',
   schemaColumns = [],
+  providedValues = null,
+  providedPartial = false,
+  providedLoading = false,
+  onStop = null,
 }) {
+  // Client mode: the caller supplies the values (client-side capture). No server
+  // fetch, no column picker.
+  const clientMode = providedValues !== null;
   const [column, setColumn] = useState(derivedColumn);
   const [values, setValues] = useState([]);
   const [partial, setPartial] = useState(false);
@@ -97,21 +114,34 @@ function VariableValuePickerModal({
     }
   }, [connectionId, column, table, database]);
 
-  // Auto-fetch when the modal opens with a known column.
+  // Auto-fetch when the modal opens with a known column — server mode only.
+  // In client mode the caller supplies the values, so there's nothing to fetch.
   useEffect(() => {
+    if (clientMode) return;
     if (open && column) fetchValues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, column]);
+  }, [open, column, clientMode]);
 
-  const stop = useCallback(() => {
+  const serverStop = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
   }, []);
 
+  // Effective view state: in client mode everything comes from props (and Stop
+  // delegates to the caller's onStop); in server mode it's the local fetch.
+  const effValues = useMemo(
+    () => (clientMode ? (providedValues || []) : values),
+    [clientMode, providedValues, values],
+  );
+  const effPartial = clientMode ? providedPartial : partial;
+  const effLoading = clientMode ? providedLoading : loading;
+  const effError = clientMode ? null : error;
+  const stop = clientMode ? (onStop || (() => {})) : serverStop;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return values;
-    return values.filter((v) => String(v).toLowerCase().includes(q));
-  }, [values, search]);
+    if (!q) return effValues;
+    return effValues.filter((v) => String(v).toLowerCase().includes(q));
+  }, [effValues, search]);
 
   const handleSelect = (value) => {
     onSelect?.(value, { column, table });
@@ -127,8 +157,11 @@ function VariableValuePickerModal({
       size="sm"
     >
       <div className="variable-value-picker">
-        {/* Column selector — preselected to the derived column, editable so the
+        {/* Column selector — server mode only. In client mode the caller already
+            knows the column (from the filter) and supplies the values, so the
+            picker is hidden. Preselected to the derived column, editable so the
             user can correct a bad derivation or pick one when none was found. */}
+        {!clientMode && (
         <Select
           id="vvp-column"
           labelText="Column"
@@ -145,30 +178,34 @@ function VariableValuePickerModal({
             <SelectItem key={c} value={c} text={c} />
           ))}
         </Select>
+        )}
 
-        {loading && (
+        {effLoading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
-            <Loading small withOverlay={false} description="Loading values" />
+            <Loading small withOverlay={false} description={clientMode ? 'Capturing values' : 'Loading values'} />
+            <span style={{ fontSize: '0.875rem', color: 'var(--cds-text-helper)' }}>
+              {clientMode ? `Capturing… ${effValues.length} value${effValues.length === 1 ? '' : 's'} so far` : 'Loading values'}
+            </span>
             <button type="button" className="cds--link" onClick={stop} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
               Stop
             </button>
           </div>
         )}
 
-        {error && (
+        {effError && (
           <InlineNotification
             kind="error"
             title="Couldn't load values"
-            subtitle={error}
+            subtitle={effError}
             lowContrast
             hideCloseButton
             style={{ marginTop: '1rem' }}
           />
         )}
 
-        {!loading && !error && values.length > 0 && (
+        {!effLoading && !effError && effValues.length > 0 && (
           <>
-            {partial && (
+            {effPartial && (
               <InlineNotification
                 kind="info"
                 title="Partial list"
@@ -205,9 +242,9 @@ function VariableValuePickerModal({
           </>
         )}
 
-        {!loading && !error && column && values.length === 0 && (
+        {!effLoading && !effError && (clientMode || column) && effValues.length === 0 && (
           <p style={{ color: 'var(--cds-text-helper)', fontSize: '0.875rem', marginTop: '1rem' }}>
-            No values found for this column.
+            No values found{clientMode ? ' in the captured records.' : ' for this column.'}
           </p>
         )}
       </div>
@@ -223,6 +260,10 @@ VariableValuePickerModal.propTypes = {
   column: PropTypes.string,
   table: PropTypes.string,
   database: PropTypes.string,
+  providedValues: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
+  providedPartial: PropTypes.bool,
+  providedLoading: PropTypes.bool,
+  onStop: PropTypes.func,
   schemaColumns: PropTypes.arrayOf(PropTypes.string),
 };
 

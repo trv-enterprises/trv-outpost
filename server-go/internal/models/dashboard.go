@@ -243,6 +243,13 @@ type ConnectionSwapConfig struct {
 	// namespace. Default false (cross-namespace by tag), so a dashboard whose
 	// source connections live in a different namespace can still find them.
 	SameNamespace bool `json:"same_namespace,omitempty" bson:"same_namespace,omitempty"`
+	// LabelTagPrefix selects the dropdown label from a prefixed connection tag.
+	// When set (e.g. "host"), each candidate's label is the value of its first
+	// tag matching "<prefix>:" (so "host:trv-srv-001" → "trv-srv-001"), falling
+	// back to the connection name when no matching tag is present. Empty → the
+	// dropdown shows the connection name as before. Prefixed tags act as a
+	// lightweight key-value store on the connection (convention: one per prefix).
+	LabelTagPrefix string `json:"label_tag_prefix,omitempty" bson:"label_tag_prefix,omitempty"`
 }
 
 // FilterValueConfig configures a filter_value variable: a value the user picks
@@ -314,6 +321,9 @@ type VariableCandidate struct {
 	Compatible bool   `json:"compatible"`          // passes the variable's SchemaStrict check
 	Reason     string `json:"reason,omitempty"`    // why incompatible (empty when compatible)
 	Reference  bool   `json:"reference,omitempty"` // the connection the panels currently use (the baseline)
+	// Tags is the connection's tag set, carried so the client can derive a
+	// dropdown label from a prefixed tag (see ConnectionSwapConfig.LabelTagPrefix).
+	Tags []string `json:"tags,omitempty"`
 }
 
 // VariableCandidatesResponse is the payload for the variable-candidates endpoint.
