@@ -1421,12 +1421,78 @@ func (s *ConnectionService) GetVariableValues(ctx context.Context, id string, re
 		return s.getSQLVariableValues(ctx, ds, req)
 	case models.ConnectionTypeEdgeLake:
 		return s.getEdgeLakeVariableValues(ctx, ds, req)
+	case models.ConnectionTypeAPI:
+		return s.getAPIVariableValues(ctx, ds, req)
 	default:
 		return &models.VariableValuesResponse{
 			Success: false,
 			Error:   fmt.Sprintf("variable value discovery not yet supported for connection type: %s", ds.Type),
 		}, nil
 	}
+}
+
+// getAPIVariableValues fetches records from an API connection (one-shot, low
+// latency — no engine-side DISTINCT) and harvests the distinct values of the
+// requested column in the browser-equivalent way the editor does. The column
+// is matched by NAME (API result sets carry all record fields), not position.
+func (s *ConnectionService) getAPIVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	// Empty raw → the adapter uses the connection's configured base URL. The
+	// component's query params aren't needed for value discovery; we just want a
+	// representative record set to harvest the column from.
+	query := models.Query{Raw: "", Type: models.QueryTypeAPI}
+	return s.runColumnDistinct(ctx, ds, query, req.Column)
+}
+
+// runColumnDistinct executes a query through the connection's adapter and
+// harvests the distinct values of a NAMED column (by header index), preserving
+// first-seen order. Used for record-based sources (API) where the result set
+// carries every field, unlike the single-column SQL/EdgeLake distinct queries
+// that runDistinctQuery flattens from column 0.
+func (s *ConnectionService) runColumnDistinct(ctx context.Context, ds *models.Connection, query models.Query, column string) (*models.VariableValuesResponse, error) {
+	factory := connection.NewConnectionFactory()
+	adapter, err := factory.CreateFromConfig(ds)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: fmt.Sprintf("failed to create connection: %v", err)}, nil
+	}
+	defer adapter.Close()
+
+	rs, err := adapter.Query(ctx, query)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	// Find the column index by name.
+	idx := -1
+	for i, c := range rs.Columns {
+		if c == column {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return &models.VariableValuesResponse{
+			Success: false,
+			Error:   fmt.Sprintf("column %q not found in API response (columns: %v)", column, rs.Columns),
+		}, nil
+	}
+
+	seen := make(map[string]struct{})
+	values := make([]string, 0, len(rs.Rows))
+	for _, row := range rs.Rows {
+		if idx >= len(row) || row[idx] == nil {
+			continue
+		}
+		v := fmt.Sprintf("%v", row[idx])
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		values = append(values, v)
+	}
+	return &models.VariableValuesResponse{Success: true, Values: values, Count: len(values)}, nil
 }
 
 // getSQLVariableValues runs a dialect-correct GROUP BY distinct query against a

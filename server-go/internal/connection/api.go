@@ -342,7 +342,14 @@ func (a *APIAdapter) Write(ctx context.Context, cmd registry.Command) (*registry
 func (a *APIAdapter) buildRequest(ctx context.Context, query registry.Query) (*http.Request, error) {
 	url := a.config.URL
 	if query.Raw != "" {
-		if strings.HasPrefix(query.Raw, "/") {
+		if strings.HasPrefix(query.Raw, "?") {
+			// Bare query string — append to the base URL, preserving its path.
+			if strings.Contains(a.config.URL, "?") {
+				url = a.config.URL + "&" + strings.TrimPrefix(query.Raw, "?")
+			} else {
+				url = a.config.URL + query.Raw
+			}
+		} else if strings.HasPrefix(query.Raw, "/") {
 			url = strings.TrimSuffix(a.config.URL, "/") + query.Raw
 		} else if strings.HasPrefix(query.Raw, "http://") || strings.HasPrefix(query.Raw, "https://") {
 			url = query.Raw
@@ -630,7 +637,15 @@ func (a *APIDataSource) buildRequest(ctx context.Context, query models.Query) (*
 	// Use config URL as base, append query.Raw as path if it starts with /
 	url := a.config.URL
 	if query.Raw != "" {
-		if strings.HasPrefix(query.Raw, "/") {
+		if strings.HasPrefix(query.Raw, "?") {
+			// Bare query string — append to the base URL, preserving its path.
+			// Merge if the base already has a query string ("base?a=1" + "?b=2").
+			if strings.Contains(a.config.URL, "?") {
+				url = a.config.URL + "&" + strings.TrimPrefix(query.Raw, "?")
+			} else {
+				url = a.config.URL + query.Raw
+			}
+		} else if strings.HasPrefix(query.Raw, "/") {
 			// Append path to base URL
 			url = strings.TrimSuffix(a.config.URL, "/") + query.Raw
 		} else if strings.HasPrefix(query.Raw, "http://") || strings.HasPrefix(query.Raw, "https://") {

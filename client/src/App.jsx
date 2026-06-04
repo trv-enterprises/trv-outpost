@@ -567,7 +567,19 @@ function AppContent({ onDisconnect }) {
     localStorage.setItem('dashboardMode', newMode);
     // Navigate to appropriate default route for the mode
     if (newMode === MODES.DESIGN) {
-      navigate('/design/dashboards');
+      // If a dashboard is currently open in the viewer, switching to Design
+      // opens THAT dashboard in the editor (design-originated) rather than
+      // dumping the user on the design list. Mirror of the Design→View path,
+      // which lands on the dashboard you were editing. Reuses the same entry
+      // the /design/dashboards/:id redirect uses: /view/dashboards/:id with
+      // autoEdit + fromDesign.
+      const m = location.pathname.match(/^\/view\/dashboards\/([^/]+)/);
+      const openId = m && m[1] !== 'new' ? m[1] : null;
+      if (openId) {
+        navigate(`/view/dashboards/${openId}`, { state: { autoEdit: true, fromDesign: true } });
+      } else {
+        navigate('/design/dashboards');
+      }
     } else if (newMode === MODES.VIEW) {
       // Prefer the dashboard the guard handed us (e.g., the one we
       // were just editing). Otherwise fall back to the user's default.

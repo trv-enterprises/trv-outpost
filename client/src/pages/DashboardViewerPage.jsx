@@ -290,6 +290,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // header mode-switch guard promise.
   const [viewNavMode, setViewNavMode] = useState(false);
   const modeSwitchResolveRef = useRef(null);
+  // The mode being switched TO when the dirty-edit prompt defers the guard, so
+  // the prompt's Save/Discard resolvers can clear the design-origin flag when
+  // proceeding into VIEW (symmetry with the clean-path guard below).
+  const modeSwitchTargetRef = useRef(null);
   const { setModeGuard, clearModeGuard, setIsEditingDashboard } = useModeGuard();
 
   // Tell App.jsx's mode sync to keep the header pill on DESIGN while we're
@@ -1265,7 +1269,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setLastRefresh(new Date());
   }, [id]);
 
-  // Auto-enter edit mode when navigated from design mode (or new dashboard)
+  // Auto-enter edit mode when navigated from design mode (or new dashboard).
+  // The latch stops a single autoEdit navigation from re-triggering on
+  // unrelated re-renders; it is reset whenever edit mode is exited (below) so a
+  // LATER autoEdit navigation (e.g. View→Design again on the same open
+  // dashboard) can re-enter the editor.
   const autoEditTriggered = useRef(false);
   useEffect(() => {
     if (dashboard && !autoEditTriggered.current && (location.state?.autoEdit || isNewDashboard) && canDesign) {
@@ -1273,6 +1281,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       enterEditMode();
     }
   }, [dashboard, location.state, isNewDashboard]);
+
+  // Reset the auto-edit latch when we leave edit mode, so the next autoEdit
+  // navigation re-fires. Without this, the latch stays armed after the first
+  // View→Design→View round-trip and a second View→Design leaves the user stuck
+  // in the viewer.
+  useEffect(() => {
+    if (!isEditMode) autoEditTriggered.current = false;
+  }, [isEditMode]);
+
+  // Switching View→Design with this dashboard already open navigates to the
+  // SAME /view/dashboards/:id with { fromDesign: true } (App.handleModeChange).
+  // The component is already mounted, so the mount-time initializers for
+  // `fromDesign` / `cancelOrigin` don't re-run — sync them here when the flag
+  // arrives, so the session behaves as design-originated (Cancel → design list).
+  useEffect(() => {
+    if (location.state?.fromDesign) {
+      setFromDesign(true);
+      cancelOrigin.current = true;
+    }
+  }, [location.state]);
 
   // Check if this dashboard is the user's default
   useEffect(() => {
@@ -1839,11 +1867,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // snapping the pill back.
         if (newMode === MODES.VIEW) {
           setFromDesign(false);
+          cancelOrigin.current = false;
         }
         return Promise.resolve({ proceed: true, dashboardId: currentId });
       }
       return new Promise((resolve) => {
         modeSwitchResolveRef.current = resolve;
+        modeSwitchTargetRef.current = newMode;
         setModeSwitchPromptOpen(true);
       });
     };
@@ -1874,13 +1904,23 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const savedId = await saveEditMode({ skipNavigate: true });
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
+    const targetMode = modeSwitchTargetRef.current;
+    modeSwitchTargetRef.current = null;
     if (!resolver) return;
     if (savedId) {
+      // The switch is proceeding. Into VIEW ends the design workflow — clear
+      // the design-origin flag so the session is view-originated after the
+      // switch (mirrors the clean-path guard).
+      if (targetMode === MODES.VIEW) {
+        setFromDesign(false);
+        cancelOrigin.current = false;
+      }
       resolver({ proceed: true, dashboardId: savedId });
     } else {
       // Save failed (e.g., duplicate name). saveEditMode already
       // pushed an error notification — block the mode switch so the
-      // user can fix the problem and try again.
+      // user can fix the problem and try again. (Origin flags untouched —
+      // the switch didn't happen.)
       resolver({ proceed: false });
     }
   };
@@ -1896,6 +1936,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditHasChanges(false);
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
+    // Proceeding into VIEW ends the design workflow — clear the design-origin
+    // flag so the session is view-originated after the switch.
+    const targetMode = modeSwitchTargetRef.current;
+    modeSwitchTargetRef.current = null;
+    if (targetMode === MODES.VIEW) {
+      setFromDesign(false);
+      cancelOrigin.current = false;
+    }
     // New unsaved dashboards have no id to land on; existing ones
     // keep theirs. App.jsx falls back to default when dashboardId is
     // null/undefined.
@@ -1911,6 +1959,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
+    modeSwitchTargetRef.current = null; // switch cancelled — leave origin flags as-is
     if (resolver) resolver({ proceed: false });
   };
 
