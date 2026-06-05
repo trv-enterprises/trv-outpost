@@ -6,6 +6,31 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.27.2] — 2026-06-05
+
+UI polish + docs. No functional or API changes.
+
+### Added
+
+- **Navigable count popovers** on the design-mode list pages. The
+  Connections, Components, and Dashboards lists' count cells (which
+  previously showed a read-only hover list of names) are now
+  click-to-open popovers with a **clickable** list — pick an item to
+  open its editor. The Dashboards count shows two columns (Components and
+  Connections).
+- Components guide: a **"Why versions exist (and their limits)"**
+  subsection — versioning is primarily an AI safety net; manual edits
+  don't create per-save snapshots.
+
+### Changed
+
+- **Viewer header refresh section** is more compact: the always-on "Last
+  refresh" text is gone; the "Data refresh" pill's tooltip shows a live
+  "Next refresh in" countdown.
+- **App header namespace control**: a "Default Namespace" tooltip,
+  bracketing dividers, and a wider dropdown so longer namespace names
+  show in full (hover highlight spans the full row).
+
 ## [0.27.1] — 2026-06-05
 
 Product rebrand + documentation + UI polish. No functional or API changes.
