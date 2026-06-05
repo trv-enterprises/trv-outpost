@@ -52,6 +52,10 @@
     background-color: var(--cds-layer-01);
     border: none;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    // The trigger may be narrow (callers shrink it to fit a toolbar row), but
+    // the type-hierarchy list still needs room to read. Keep the open menu at
+    // a comfortable minimum regardless of the trigger's inline width.
+    min-width: 240px;
 
     .thf-header {
       display: flex;

@@ -59,6 +59,7 @@ function SortMenu({ sortKey, sortDirection, onChange, options }) {
         kind="ghost"
         size="md"
         label="Sort"
+        align="bottom"
         onClick={() => setOpen(!open)}
       >
         <Icon />

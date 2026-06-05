@@ -487,23 +487,14 @@
         }
       }
 
-      // Force tooltip to appear on the left side
-      .cds--overflow-menu__wrapper .cds--popover-container {
-        .cds--popover {
-          inset: auto auto auto auto !important;
-          transform: translateX(-100%) translateY(-50%) !important;
-          top: 50% !important;
-          left: -16px !important;
-        }
-
-        .cds--popover-caret {
-          inset: auto auto auto auto !important;
-          top: 50% !important;
-          right: -6px !important;
-          left: auto !important;
-          transform: translateY(-50%) rotate(-90deg) !important;
-        }
-      }
+      // NOTE: the OverflowMenu trigger tooltips (fit-mode + actions) are left
+      // to Carbon's own positioning, driven by their align props in the JSX
+      // (align="bottom" on fit-mode, align="bottom-end" on the right-edge
+      // actions menu). This matches the neighboring IconButton tooltips
+      // (Export, Fullscreen) so all four sit at the same vertical position
+      // below the icons; bottom-end keeps the last one from overhanging the
+      // right edge. (A prior override forced these tooltips to the LEFT side,
+      // which made them look different and mis-aligned from the IconButtons.)
 
       // Fit-mode dropdown trigger: Carbon hard-codes overflow-menu icons
       // to 16×16 via .cds--overflow-menu__icon, which makes the trigger

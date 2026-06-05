@@ -282,6 +282,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
           <TypeHierarchyFilter
             selectedTypes={selectedTypes}
             onChange={setSelectedTypes}
+            width={170}
           />
           <TagFilter
             entityType="components"
