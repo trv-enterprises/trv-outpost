@@ -6,6 +6,47 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.27.0] — 2026-06-04
+
+### Added
+
+- **Dashboard variables.** One dashboard can serve many sites/systems via
+  a dropdown after the dashboard name. Two binding modes: *connection-swap*
+  repoints every panel to a chosen connection; *filter* substitutes the
+  chosen value into a component's query (server-side, bound/escaped) or
+  client-side filter via the `{{dashboard-variable}}` token. The active
+  value persists per-user-per-dashboard and is shareable via a URL param;
+  a per-panel `pin_connection` opts a panel out of connection-swap.
+- **Value discovery for the filter dropdown**, dispatched by connection
+  type: SQL/EdgeLake via `DISTINCT`/`GROUP BY`; API and ts-store via a
+  one-shot query (ts-store uses HTTP `newest` even in streaming transport,
+  so no live wait); raw socket/MQTT via a live SSE capture modal that
+  accumulates distinct values in real time with a Stop button (manual stop
+  + 1000-record cap + 5-minute safety cap).
+- **Persisted discovered lists** on the connection (`discovered_values`,
+  keyed by column) for raw stream types, written by an authoring-time
+  capture (design capability required) so the dashboard reads them without
+  a view-time capture. A session-only **Regenerate** re-captures live.
+- **Tag-prefix dropdown labels** for connection-swap
+  (`ConnectionSwapConfig.label_tag_prefix`): label each option from the
+  connection's first `<prefix>:` tag (e.g. `host` → `trv-srv-001` from a
+  `host:trv-srv-001` tag), falling back to the connection name.
+- **`{{variable:NAME}}` tokens in text panels**, resolved at view time to
+  the variable's display value, insertable from a pill. The text-panel
+  editor is now an Apply/Cancel modal that dirties the dashboard.
+
+### Changed
+
+- **View → Design with a dashboard open** now opens *that* dashboard in
+  the editor (design-originated) instead of the design list; switching
+  back to View restores view-origin.
+
+### Fixed
+
+- **API connections with a bare `?limit=…` query string** now append it
+  to the base URL (preserving the path), instead of treating it as a path
+  segment — which produced an upstream 404.
+
 ## [0.26.1] — 2026-06-02
 
 ### Fixed
