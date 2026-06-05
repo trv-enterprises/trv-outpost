@@ -2412,13 +2412,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               // Optional: label each candidate from a prefixed tag (e.g. a
               // "host:trv-srv-001" tag → "trv-srv-001"), falling back to name.
               const labelPrefix = dashVariable.connection_swap?.label_tag_prefix || '';
+              const vLabel = dashVariable.label || 'Variable';
               return (
                 <div className="dashboard-variable-picker">
+                  <span className="dashboard-variable-label">{vLabel}:</span>
                   <Dropdown
                     id="dashboard-variable-picker"
                     size="sm"
-                    titleText={dashVariable.label || 'Variable'}
-                    label={`${dashVariable.label || 'Variable'}: select…`}
+                    titleText={vLabel}
+                    label={`${vLabel}: select…`}
                     items={items}
                     itemToString={(item) => candidateLabel(item, labelPrefix)}
                     selectedItem={selected}
@@ -2438,6 +2440,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               if (cfg.value_source === 'freetext') {
                 return (
                   <div className="dashboard-variable-picker">
+                    <span className="dashboard-variable-label">{label}:</span>
                     <TextInput
                       id="dashboard-filter-variable"
                       size="sm"
@@ -2466,6 +2469,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               const showRegenerate = cfg.value_source === 'connection' && discoveryIsStream;
               return (
                 <div className="dashboard-variable-picker" ref={filterDropdownRef}>
+                  <span className="dashboard-variable-label">{label}:</span>
                   <Dropdown
                     id="dashboard-filter-variable"
                     size="sm"
@@ -2488,6 +2492,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                       hasIconOnly
                       renderIcon={Renew}
                       iconDescription="Refresh values (live capture, this session)"
+                      tooltipPosition="bottom"
                       onClick={startSessionRegenerate}
                       disabled={regenerating}
                     />
@@ -2694,11 +2699,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   lastRefresh={lastRefresh}
                 />
               )}
+              {/* RefreshControls renders the refresh button AND its trailing
+                  divider together — both vanish when there's nothing to refresh,
+                  so a streaming-only dashboard doesn't show a doubled separator. */}
               <RefreshControls
                 loading={loading}
                 onRefresh={handleManualRefresh}
               />
-              <span className="toolbar-divider" aria-hidden="true" />
               {/* Design workflow: a prominent ghost Edit button (mirror of the
                   editor's ghost View button) to jump back into the editor, sitting
                   to the RIGHT of the refresh section. Plain viewers get Edit in
@@ -3649,17 +3656,23 @@ function RefreshIntervalPill({ intervalSec, lastRefresh }) {
 // in the interval pill's tooltip, so this is just the button.
 function RefreshControls({ loading, onRefresh }) {
   const { hasRefreshable } = useRefreshableComponentsContext();
+  // Nothing to refresh → render NOTHING, including the trailing divider, so a
+  // streaming-only dashboard doesn't leave a doubled separator where the
+  // refresh section would have been.
   if (!hasRefreshable) return null;
   return (
-    <IconButton
-      kind="ghost"
-      label="Refresh"
-      align="bottom"
-      onClick={onRefresh}
-      disabled={loading}
-    >
-      <Renew size={20} className={loading ? 'spinning' : ''} />
-    </IconButton>
+    <>
+      <IconButton
+        kind="ghost"
+        label="Refresh"
+        align="bottom"
+        onClick={onRefresh}
+        disabled={loading}
+      >
+        <Renew size={20} className={loading ? 'spinning' : ''} />
+      </IconButton>
+      <span className="toolbar-divider" aria-hidden="true" />
+    </>
   );
 }
 

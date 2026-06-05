@@ -158,10 +158,12 @@
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          // Allow the title to shrink so the variable picker keeps its width
-          // instead of being squeezed out / overlapping.
+          // Reserve a generous minimum for the dashboard name so the variable
+          // picker doesn't crowd it; the name still ellipsizes past this if
+          // very long. The variable section keeps an 8px gap in front of it
+          // (below) so even a long name stays separated from the picker.
           flex: 0 1 auto;
-          min-width: 3rem;
+          min-width: 12rem;
         }
 
         p {
@@ -176,17 +178,35 @@
         // context) but kept in the DOM for screen readers.
         .dashboard-variable-picker {
           flex-shrink: 0;
-          width: 15rem;
-          // Lay the dropdown + its (regenerate/stop) action in a row so the
-          // action sits to the RIGHT of the dropdown, not stacked beneath it.
+          width: auto;
+          // Keep a clear gap (24px) between the dashboard name and the variable
+          // section, even when a long name has consumed the slack.
+          margin-left: 24px;
+          // Lay the inline label + dropdown + its (regenerate/stop) action in a
+          // row so the action sits to the RIGHT of the dropdown.
           display: flex;
           align-items: center;
           gap: 0.25rem;
 
-          // The dropdown takes the row; the action button stays its natural size.
+          // Inline label in front of the selector (the Carbon field label is
+          // visually hidden; this is the visible one).
+          .dashboard-variable-label {
+            flex-shrink: 0;
+            color: #f4f4f4;
+            font-size: 1rem;
+            font-weight: 600;
+            white-space: nowrap;
+            margin-right: 0.5rem;
+          }
+
+          // The dropdown/input keeps a fixed width now that the label sits
+          // beside it and the section sizes to content. The action button
+          // (regenerate/stop) keeps its natural size to the right.
           .cds--dropdown__wrapper,
-          .cds--list-box__wrapper {
-            flex: 1 1 auto;
+          .cds--list-box__wrapper,
+          .cds--text-input__field-wrapper {
+            flex: 0 0 auto;
+            width: 12rem;
             min-width: 0;
           }
           > .cds--btn {
