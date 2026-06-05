@@ -157,5 +157,54 @@
   &__item-name {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.75rem;
+    white-space: nowrap; // names stay on one line; the menu widens to fit
+  }
+}
+
+// The OPEN namespace menu. Carbon's overflow-menu options box has a fixed
+// narrow width, which wraps longer namespace names ("dashboard-variable",
+// "trv-srv-001-test") onto multiple lines. Let it size to its content so each
+// name fits on one line — independent of the compact trigger button width.
+// Carbon hard-codes the options menu to `inline-size: $spacing-13` (13rem),
+// which clips longer namespace names. Override the logical size (not just
+// `width`) so the menu grows to fit its content. The extra specificity
+// (&.cds--overflow-menu-options) beats Carbon's single-class rule + source
+// order.
+.namespace-picker-menu.cds--overflow-menu-options {
+  // A fixed, generous width (not max-content): Carbon's FloatingMenu measures
+  // the menu via getBoundingClientRect to position it, and a content-dependent
+  // width measured mid-layout left the box too narrow. A concrete width wide
+  // enough for the longest namespace name renders + positions reliably.
+  inline-size: 16rem !important;
+  width: 16rem !important;
+  max-inline-size: none !important;
+  max-width: none !important;
+
+  .cds--overflow-menu-options__btn {
+    white-space: nowrap;
+    // Breathing room so a long name doesn't run flush to the menu's right edge.
+    padding-right: 1.5rem;
+    // Fill the full menu width so the hover/focus highlight spans the entire
+    // row, not just the inner content width.
+    inline-size: 100%;
+    width: 100%;
+    max-inline-size: none;
+    max-width: none;
+  }
+
+  // The option <li> wrapper must also be full-width for the button to fill it.
+  .cds--overflow-menu-options__option {
+    inline-size: 100%;
+    width: 100%;
+  }
+
+  // Carbon's __option-content clips with `overflow: hidden; text-overflow:
+  // ellipsis`, which truncated the longer names. Let it show in full — the menu
+  // is sized to content (width: max-content) so there's room.
+  .cds--overflow-menu-options__option-content {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    max-width: none;
   }
 }
