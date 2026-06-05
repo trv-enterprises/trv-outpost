@@ -26,7 +26,6 @@ import {
   Tile,
   ContentSwitcher,
   Switch,
-  Tooltip,
   InlineNotification,
   Dropdown
 } from '@carbon/react';
@@ -46,6 +45,7 @@ import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
+import CountListPopover from '../components/shared/CountListPopover';
 import './ComponentsListPage.scss';
 
 /**
@@ -168,7 +168,9 @@ function ComponentsListPage() {
             counts[panel.component_id] = (counts[panel.component_id] || 0) + 1;
             if (seenInThisDashboard.has(panel.component_id)) return;
             seenInThisDashboard.add(panel.component_id);
-            (names[panel.component_id] = names[panel.component_id] || []).push(dashboardLabel);
+            // Store { id, label } so the count popover can navigate to each
+            // dashboard's editor.
+            (names[panel.component_id] = names[panel.component_id] || []).push({ id: dashboard.id, label: dashboardLabel });
           });
         });
         setDashboardCounts(counts);
@@ -788,20 +790,17 @@ function ComponentsListPage() {
                               );
                             }
                             if (cell.info.header === 'dashboards') {
-                              const names = (chart && dashboardNames[chart.id]) || [];
-                              const label = names.length === 0
-                                ? 'Not used by any dashboard'
-                                : names.join('\n');
+                              const items = (chart && dashboardNames[chart.id]) || [];
                               return (
-                                <TableCell key={cell.id} className="dashboards-cell">
-                                  <Tooltip
-                                    label={label}
-                                    align="bottom"
-                                    enterDelayMs={150}
-                                    className="tooltip-multiline"
-                                  >
-                                    <span tabIndex={0} className="dashboards-count">{cell.value}</span>
-                                  </Tooltip>
+                                <TableCell key={cell.id} className="dashboards-cell" onClick={(e) => e.stopPropagation()}>
+                                  <CountListPopover
+                                    count={cell.value}
+                                    items={items}
+                                    heading="Dashboards"
+                                    emptyLabel="Not used by any dashboard"
+                                    className="dashboards-count"
+                                    onItemClick={(item) => navigate(`/design/dashboards/${item.id}`)}
+                                  />
                                 </TableCell>
                               );
                             }

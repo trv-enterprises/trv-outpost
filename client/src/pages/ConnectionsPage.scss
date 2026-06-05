@@ -396,6 +396,6 @@
   // Components column: count is hoverable to reveal a tooltip listing
   // the components referencing this connection.
   .components-cell .components-count {
-    cursor: help;
+    cursor: pointer;
   }
 }

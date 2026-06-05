@@ -10,6 +10,17 @@
   align-items: center;
   height: 3rem;
 
+  // Vertical dividers bracketing the namespace group ((i) + pill), so it
+  // reads as one bounded control between the neighboring header actions.
+  .namespace-picker__divider {
+    width: 1px;
+    align-self: center;
+    height: 1.25rem;
+    margin: 0 0.5rem;
+    background-color: var(--cds-border-subtle-01, #393939);
+    flex-shrink: 0;
+  }
+
   // Carbon's ToggletipButton is just a plain unstyled <button>. Make
   // it match the surrounding header-icon style — square hover area,
   // muted icon color, brightens on hover/focus.
@@ -26,14 +37,14 @@
     // shrinking the icon's own size; the button width auto-sizes
     // to (16px icon + 16px left padding + 0 right padding) ≈ 2rem.
     //
-    //   - Generous LEFT padding (1rem) separates the group from
-    //     the AI launcher on the icon's left side
-    //   - Zero RIGHT padding so the icon nests flush against the
-    //     namespace pill on its right
+    //   - The bracketing dividers now bound the group, so the icon
+    //     gets balanced padding for a normal square hover box that
+    //     doesn't hug the pill on its right (the old zero-right-padding
+    //     made the mouseover highlight look cramped against the pill).
     box-sizing: content-box;
     width: 16px;
     height: 3rem;
-    padding: 0 0 0 1rem;
+    padding: 0 0.5rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;

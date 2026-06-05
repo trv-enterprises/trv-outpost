@@ -35,8 +35,9 @@ export default function NamespacePicker() {
 
   return (
     <div className="namespace-picker-wrap">
+      <span className="namespace-picker__divider" aria-hidden="true" />
       <Toggletip align="bottom" className="namespace-picker__info-toggletip">
-        <ToggletipButton label="What is this namespace picker?">
+        <ToggletipButton label="About the namespace picker">
           <Information size={16} className="namespace-picker__info-icon" />
         </ToggletipButton>
         <ToggletipContent>
@@ -56,7 +57,12 @@ export default function NamespacePicker() {
 
       <OverflowMenu
       aria-label="Active namespace"
-      iconDescription="Default namespace for new dashboards, components, and connections"
+      iconDescription="Default Namespace"
+      // The pill sits in the fixed app header at the very top of the viewport.
+      // Carbon's default tooltip align is "top", which renders the
+      // iconDescription tooltip ABOVE the header — off-screen / clipped, so it
+      // never appears. Anchor it bottom so it shows below the pill.
+      align="bottom"
       className="namespace-picker"
       menuOptionsClass="namespace-picker-menu"
       flipped
@@ -98,6 +104,7 @@ export default function NamespacePicker() {
         onClick={() => navigate('/manage/namespaces')}
       />
     </OverflowMenu>
+      <span className="namespace-picker__divider" aria-hidden="true" />
     </div>
   );
 }

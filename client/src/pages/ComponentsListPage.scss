@@ -450,7 +450,7 @@
   // Dashboards column: count is hoverable to reveal a tooltip
   // listing every dashboard that places this component on a panel.
   .dashboards-cell .dashboards-count {
-    cursor: help;
+    cursor: pointer;
   }
 
   // Name cell with tags stacked below

@@ -37,6 +37,7 @@ import { useNotifications } from '../context/NotificationContext';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
+import CountListPopover from '../components/shared/CountListPopover';
 import './ConnectionsPage.scss';
 
 /**
@@ -159,7 +160,9 @@ function ConnectionsPage() {
           const componentLabel = component.title || component.name || '(unnamed)';
           refs.forEach(connId => {
             counts[connId] = (counts[connId] || 0) + 1;
-            (names[connId] = names[connId] || []).push(componentLabel);
+            // Store { id, label } so the count popover can navigate to each
+            // component's editor (not just show names).
+            (names[connId] = names[connId] || []).push({ id: component.id, label: componentLabel });
           });
         });
         setComponentCounts(counts);
@@ -624,20 +627,17 @@ function ConnectionsPage() {
                               );
                             }
                             if (cell.info.header === 'components') {
-                              const names = componentNames[connection.id] || [];
-                              const label = names.length === 0
-                                ? 'No components reference this connection'
-                                : names.join('\n');
+                              const items = componentNames[connection.id] || [];
                               return (
-                                <TableCell key={cell.id} className="components-cell">
-                                  <Tooltip
-                                    label={label}
-                                    align="bottom"
-                                    enterDelayMs={150}
-                                    className="tooltip-multiline"
-                                  >
-                                    <span tabIndex={0} className="components-count">{cell.value}</span>
-                                  </Tooltip>
+                                <TableCell key={cell.id} className="components-cell" onClick={(e) => e.stopPropagation()}>
+                                  <CountListPopover
+                                    count={cell.value}
+                                    items={items}
+                                    heading="Components"
+                                    emptyLabel="No components reference this connection"
+                                    className="components-count"
+                                    onItemClick={(item) => navigate(`/design/components/${item.id}`)}
+                                  />
                                 </TableCell>
                               );
                             }

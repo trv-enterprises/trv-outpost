@@ -86,4 +86,26 @@ Older final versions stay in history; the version list on the
 component detail page lets you inspect or roll back to any prior
 state.
 
+### Why versions exist (and their limits)
+
+Versioning is primarily an **AI safety net**. When the AI builder makes
+a change, *you* didn't make the edit by hand — so if the result isn't
+what you wanted, there's nothing obvious for you to undo manually. The
+version history is what lets you **revert to the prior state** in that
+case: each AI save is a distinct version you can roll back to.
+
+For **manual edits there is no per-save version snapshot** — a manual
+save updates the component in place. The assumption is that since you
+just made the change yourself, you can reverse it the same way (edit
+again and put it back). Versioning isn't trying to be a general
+undo/redo history; it exists mainly so an AI-driven change you can't
+easily reproduce by hand can still be rolled back.
+
+In short:
+
+- **AI change didn't work out?** Roll back to the previous version from
+  the component detail page.
+- **Manual change you want to undo?** Just edit it again — there's no
+  version to revert because you authored the change directly.
+
 ---

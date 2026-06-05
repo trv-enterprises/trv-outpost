@@ -1,0 +1,141 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+.count-list-popover {
+  display: inline-flex;
+
+  // Theme the Carbon Popover surface + caret to the app's dark g100 layer
+  // (default Carbon can render a bright/high-contrast surface). The caret is a
+  // rotated square that must share the content's background + border to read
+  // as one shape.
+  .cds--popover-content {
+    background-color: var(--cds-layer-01);
+    color: var(--cds-text-primary);
+    border: 1px solid var(--cds-border-subtle-01);
+  }
+  .cds--popover-caret {
+    background-color: var(--cds-layer-01);
+  }
+
+  // The count itself, now a clickable trigger. Styled as a link so it reads as
+  // interactive even though the whole table row is also clickable — without
+  // this the row's cursor/affordance wins and the count looks like plain text.
+  // cursor: pointer is forced over the row's own cursor.
+  &__trigger {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: var(--cds-link-primary, #78a9ff);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer !important;
+    // Always-underlined link look so the count reads as clickable at a glance
+    // (the whole row is also clickable, so a hover-only affordance was easy to
+    // miss). Brightens on hover for feedback.
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: var(--cds-link-primary-hover, #a6c8ff);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: 2px;
+    }
+
+    // No items → not clickable, plain muted text, no affordance.
+    &--empty {
+      color: var(--cds-text-secondary);
+      cursor: default !important;
+      font-weight: 400;
+      text-decoration: none;
+      &:hover { text-decoration: none; }
+    }
+  }
+
+  // Dark popover surface (the default Carbon Popover content is unstyled / can
+  // render light). Use the raised-surface layer token so it matches the app's
+  // g100 theme instead of the bright high-contrast look.
+  &__content {
+    padding: 0.25rem 0;
+    background-color: var(--cds-layer-01);
+    color: var(--cds-text-primary);
+    border: 1px solid var(--cds-border-subtle-01);
+  }
+
+  // The columns wrapper (an inner div we fully control — Carbon's
+  // .cds--popover-content span also holds the caret, so we don't flex it
+  // directly). Single section → one column; multi → side-by-side.
+  &__columns {
+    display: flex;
+    flex-direction: column;
+
+    &--multi {
+      flex-direction: row;
+
+      .count-list-popover__section {
+        flex: 1 1 0;
+        min-width: 11rem;
+        max-width: 18rem;
+
+        & + .count-list-popover__section {
+          border-left: 1px solid var(--cds-border-subtle-01);
+        }
+      }
+    }
+  }
+
+  &__section {
+    min-width: 0;
+  }
+
+  &__heading {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--cds-text-secondary);
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+  }
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 18rem;
+    overflow-y: auto;
+  }
+
+  &__item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0.4rem 0.75rem;
+    color: var(--cds-text-primary);
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover {
+      background-color: var(--cds-layer-hover-01);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
+    }
+  }
+
+  &__empty {
+    padding: 0.4rem 0.75rem;
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+  }
+}

@@ -36,6 +36,7 @@ import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
+import CountListPopover from '../components/shared/CountListPopover';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
@@ -317,18 +318,46 @@ function DashboardsListPage() {
   // Panels without a component_id (text labels, spacers, etc.) are
   // omitted; panels referencing deleted components are surfaced
   // explicitly so the count stays honest.
-  const getComponentNamesLabel = (dashboard) => {
+  // Components placed on a dashboard, as { id, label } so the count popover can
+  // navigate to each component's editor. Panels referencing a deleted component
+  // are dropped (nothing to navigate to). De-duped so a component used in two
+  // panels lists once.
+  const getComponentItems = (dashboard) => {
     const panels = dashboard.panels || [];
-    if (panels.length === 0) return 'No panels';
-    const lines = panels
-      .filter((panel) => panel.component_id)
-      .map((panel) => {
-        const c = charts[panel.component_id];
-        if (!c) return '(missing component)';
-        return c.title || c.name || '(unnamed)';
-      });
-    if (lines.length === 0) return 'No components';
-    return lines.join('\n');
+    const seen = new Set();
+    const items = [];
+    panels.forEach((panel) => {
+      if (!panel.component_id || seen.has(panel.component_id)) return;
+      const c = charts[panel.component_id];
+      if (!c) return; // missing/deleted component — can't navigate to it
+      seen.add(panel.component_id);
+      items.push({ id: panel.component_id, label: c.title || c.name || '(unnamed)' });
+    });
+    return items;
+  };
+
+  // Distinct connections used by a dashboard's components, as { id, label } so
+  // the popover's second column can navigate to each connection's editor. Pulls
+  // the top-level connection_id plus the display_config frigate/mqtt refs (the
+  // same union the connection filter uses).
+  const getConnectionItems = (dashboard) => {
+    const panels = dashboard.panels || [];
+    const seen = new Set();
+    const items = [];
+    const add = (connId) => {
+      if (!connId || seen.has(connId) || !connections[connId]) return;
+      seen.add(connId);
+      items.push({ id: connId, label: connections[connId] });
+    };
+    panels.forEach((panel) => {
+      if (!panel.component_id) return;
+      const c = charts[panel.component_id];
+      if (!c) return;
+      add(c.connection_id);
+      add(c.display_config?.frigate_connection_id);
+      add(c.display_config?.mqtt_connection_id);
+    });
+    return items;
   };
 
   // Handle column sorting. Goes through persistSort so the choice
@@ -897,15 +926,25 @@ function DashboardsListPage() {
                             }
                             if (cell.info.header === 'panels') {
                               return (
-                                <TableCell key={cell.id} className="panels-cell">
-                                  <Tooltip
-                                    label={getComponentNamesLabel(dashboard)}
-                                    align="bottom"
-                                    enterDelayMs={150}
-                                    className="tooltip-multiline"
-                                  >
-                                    <span tabIndex={0} className="panels-count">{cell.value}</span>
-                                  </Tooltip>
+                                <TableCell key={cell.id} className="panels-cell" onClick={(e) => e.stopPropagation()}>
+                                  <CountListPopover
+                                    count={cell.value}
+                                    className="panels-count"
+                                    sections={[
+                                      {
+                                        heading: 'Components',
+                                        items: getComponentItems(dashboard),
+                                        emptyLabel: 'No components on this dashboard',
+                                        onItemClick: (item) => navigate(`/design/components/${item.id}`),
+                                      },
+                                      {
+                                        heading: 'Connections',
+                                        items: getConnectionItems(dashboard),
+                                        emptyLabel: 'No connections',
+                                        onItemClick: (item) => navigate(`/design/connections/${item.id}`),
+                                      },
+                                    ]}
+                                  />
                                 </TableCell>
                               );
                             }

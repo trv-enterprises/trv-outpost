@@ -2685,17 +2685,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   <span className="toolbar-divider" aria-hidden="true" />
                 </>
               )}
-              {/* Refresh section: [Data refresh pill][Last refresh][refresh
-                  icon] grouped together. (Slated to be replaced by a single
-                  compressed control.) */}
+              {/* Refresh section, compact: [Data refresh pill][refresh icon].
+                  The pill's tooltip shows a live "Next refresh in: Ns"
+                  countdown (replacing the old always-on "Last refresh" text). */}
               {dashboard?.settings?.refresh_interval > 0 && (
-                <RefreshIntervalPill intervalSec={dashboard.settings.refresh_interval} />
+                <RefreshIntervalPill
+                  intervalSec={dashboard.settings.refresh_interval}
+                  lastRefresh={lastRefresh}
+                />
               )}
               <RefreshControls
-                lastRefresh={lastRefresh}
                 loading={loading}
                 onRefresh={handleManualRefresh}
               />
+              <span className="toolbar-divider" aria-hidden="true" />
               {/* Design workflow: a prominent ghost Edit button (mirror of the
                   editor's ghost View button) to jump back into the editor, sitting
                   to the RIGHT of the refresh section. Plain viewers get Edit in
@@ -3593,44 +3596,70 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 }
 
 // "Data refresh: 10s" green pill — surfaces the dashboard's configured
-// polling cadence. Gated on the same context as RefreshControls so a
-// streaming-only dashboard doesn't see a refresh-interval label that
-// applies to nothing currently rendered.
-function RefreshIntervalPill({ intervalSec }) {
+// polling cadence. Hovering it shows a live "Next refresh in: Ns" countdown
+// (this replaces the old always-visible "Last refresh: …" text — the live
+// countdown makes the absolute timestamp redundant). Gated on the same
+// context as RefreshControls so a streaming-only dashboard doesn't see a
+// refresh-interval label that applies to nothing currently rendered.
+function RefreshIntervalPill({ intervalSec, lastRefresh }) {
   const { hasRefreshable } = useRefreshableComponentsContext();
+  const [hovered, setHovered] = useState(false);
+  // Tick once a second only while the tooltip is open, so the countdown is
+  // live when you're reading it and there's no background timer otherwise.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!hovered) return undefined;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [hovered]);
+
   if (!hasRefreshable) return null;
+
+  // FREE-RUNNING cycle countdown. The per-panel auto-polls run on their own
+  // timers inside useData; the parent's `lastRefresh` only advances on a
+  // manual refresh / dashboard switch, NOT on each poll — so a
+  // "(lastRefresh + interval) - now" countdown would stick at 0 after the
+  // first cycle. Instead, count down interval→1 continuously, anchored at the
+  // last known refresh and wrapped by the interval, which matches the polling
+  // cadence (phase is approximate but the cadence is right).
+  const anchor = lastRefresh?.getTime?.() || Date.now();
+  const elapsedSec = Math.max(0, (Date.now() - anchor) / 1000);
+  const remaining = intervalSec - (Math.floor(elapsedSec) % intervalSec);
+
   return (
-    <Tag type="green" size="sm">
-      <Time size={12} />
-      Data refresh: {intervalSec}s
-    </Tag>
+    <span
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <Tooltip align="bottom" label={`Next refresh in: ${remaining}s`}>
+        <Tag type="green" size="sm">
+          <Time size={12} />
+          Data refresh: {intervalSec}s
+        </Tag>
+      </Tooltip>
+    </span>
   );
 }
 
-// Toolbar refresh controls — extracted so we can read the
-// RefreshableComponents context, which only resolves inside the
-// provider that wraps the rendered viewer. Hides the button (and
-// the "Last refresh" timestamp) when no mounted component on the
-// dashboard would actually do anything with a refresh — streaming-
-// only dashboards see no toolbar noise.
-function RefreshControls({ lastRefresh, loading, onRefresh }) {
+// Toolbar manual-refresh button — extracted so we can read the
+// RefreshableComponents context, which only resolves inside the provider
+// that wraps the rendered viewer. Hidden when no mounted component on the
+// dashboard would do anything with a refresh (streaming-only dashboards see
+// no toolbar noise). The last-refresh time / next-refresh countdown now lives
+// in the interval pill's tooltip, so this is just the button.
+function RefreshControls({ loading, onRefresh }) {
   const { hasRefreshable } = useRefreshableComponentsContext();
   if (!hasRefreshable) return null;
   return (
-    <>
-      <span className="last-refresh">
-        Last refresh: {formatTime(lastRefresh)}
-      </span>
-      <IconButton
-        kind="ghost"
-        label="Refresh"
-        align="bottom"
-        onClick={onRefresh}
-        disabled={loading}
-      >
-        <Renew size={20} className={loading ? 'spinning' : ''} />
-      </IconButton>
-    </>
+    <IconButton
+      kind="ghost"
+      label="Refresh"
+      align="bottom"
+      onClick={onRefresh}
+      disabled={loading}
+    >
+      <Renew size={20} className={loading ? 'spinning' : ''} />
+    </IconButton>
   );
 }
 
