@@ -123,6 +123,41 @@ func (s *ConnectionService) GetConnection(ctx context.Context, id string) (*mode
 	return connection, nil
 }
 
+// SaveDiscoveredValues persists a column's distinct-value list onto the
+// connection (merged into DiscoveredValues by column), for the dashboard-
+// variable dropdown. Used for connection types with no engine-side DISTINCT
+// (streams/sockets), where the values are captured client-side at authoring
+// time. The route is design-gated (PUT /api/connections/* requires Design), so
+// only authors persist; viewers keep a session-only override on the client.
+//
+// We read the stored connection and mutate only DiscoveredValues, so secrets in
+// the record are preserved (we never touch a client-supplied config here).
+func (s *ConnectionService) SaveDiscoveredValues(ctx context.Context, id, column string, list models.DiscoveredValueList) (*models.Connection, error) {
+	column = strings.TrimSpace(column)
+	if column == "" {
+		return nil, fmt.Errorf("column is required")
+	}
+	connection, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
+	}
+	if connection == nil {
+		return nil, fmt.Errorf("connection not found")
+	}
+	if list.CapturedAt.IsZero() {
+		list.CapturedAt = time.Now()
+	}
+	if connection.DiscoveredValues == nil {
+		connection.DiscoveredValues = map[string]models.DiscoveredValueList{}
+	}
+	connection.DiscoveredValues[column] = list
+
+	if err := s.repo.Update(ctx, id, connection); err != nil {
+		return nil, fmt.Errorf("error saving discovered values: %w", err)
+	}
+	return connection, nil
+}
+
 // ListConnections retrieves all connections with pagination
 func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {
@@ -1270,10 +1305,15 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 	duration := time.Since(startTime).Milliseconds()
 
 	if err != nil {
+		errorCode := ""
+		if errors.Is(err, connection.ErrDashboardVariableNotSet) {
+			errorCode = models.QueryErrorVariableNotSet
+		}
 		return &models.QueryResponse{
-			Success:  false,
-			Error:    err.Error(),
-			Duration: duration,
+			Success:   false,
+			Error:     err.Error(),
+			ErrorCode: errorCode,
+			Duration:  duration,
 		}, nil
 	}
 
@@ -1358,6 +1398,199 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 		Schema:   schema,
 		Duration: duration,
 	}, nil
+}
+
+// GetVariableValues returns the distinct values of a column on a connection,
+// used to populate a dashboard-variable picker. Dispatches per connection type
+// (mirrors GetSchema). Step 1 implements SQL + EdgeLake via a generated GROUP BY
+// query; streaming/record-based capture and the API/CSV dedupe path land next.
+func (s *ConnectionService) GetVariableValues(ctx context.Context, id string, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	ds, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
+	}
+	if ds == nil {
+		return nil, fmt.Errorf("connection not found")
+	}
+	if req == nil || req.Column == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "column is required"}, nil
+	}
+
+	switch ds.Type {
+	case models.ConnectionTypeSQL:
+		return s.getSQLVariableValues(ctx, ds, req)
+	case models.ConnectionTypeEdgeLake:
+		return s.getEdgeLakeVariableValues(ctx, ds, req)
+	case models.ConnectionTypeAPI:
+		return s.getAPIVariableValues(ctx, ds, req)
+	case models.ConnectionTypeTSStore:
+		return s.getTSStoreVariableValues(ctx, ds, req)
+	default:
+		return &models.VariableValuesResponse{
+			Success: false,
+			Error:   fmt.Sprintf("variable value discovery not yet supported for connection type: %s", ds.Type),
+		}, nil
+	}
+}
+
+// getTSStoreVariableValues harvests distinct column values from the most-recent
+// records of a ts-store connection. ts-store exposes an HTTP query API
+// (fetchNewest) regardless of transport — even "streaming" (WebSocket) tsstore
+// connections answer "newest" over HTTP — so discovery pulls the latest 1000
+// records and harvests the column, rather than relying on a slow live capture.
+// (Raw websocket/socket connections, which have NO query API, are the only
+// types that still require a live SSE capture.)
+func (s *ConnectionService) getTSStoreVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 1000
+	}
+	query := models.Query{
+		Raw:    "newest",
+		Type:   models.QueryTypeTSStore,
+		Params: map[string]interface{}{"limit": limit},
+	}
+	return s.runColumnDistinct(ctx, ds, query, req.Column)
+}
+
+// getAPIVariableValues fetches records from an API connection (one-shot, low
+// latency — no engine-side DISTINCT) and harvests the distinct values of the
+// requested column in the browser-equivalent way the editor does. The column
+// is matched by NAME (API result sets carry all record fields), not position.
+func (s *ConnectionService) getAPIVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	// Empty raw → the adapter uses the connection's configured base URL. The
+	// component's query params aren't needed for value discovery; we just want a
+	// representative record set to harvest the column from.
+	query := models.Query{Raw: "", Type: models.QueryTypeAPI}
+	return s.runColumnDistinct(ctx, ds, query, req.Column)
+}
+
+// runColumnDistinct executes a query through the connection's adapter and
+// harvests the distinct values of a NAMED column (by header index), preserving
+// first-seen order. Used for record-based sources (API) where the result set
+// carries every field, unlike the single-column SQL/EdgeLake distinct queries
+// that runDistinctQuery flattens from column 0.
+func (s *ConnectionService) runColumnDistinct(ctx context.Context, ds *models.Connection, query models.Query, column string) (*models.VariableValuesResponse, error) {
+	factory := connection.NewConnectionFactory()
+	adapter, err := factory.CreateFromConfig(ds)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: fmt.Sprintf("failed to create connection: %v", err)}, nil
+	}
+	defer adapter.Close()
+
+	rs, err := adapter.Query(ctx, query)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	// Find the column index by name.
+	idx := -1
+	for i, c := range rs.Columns {
+		if c == column {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return &models.VariableValuesResponse{
+			Success: false,
+			Error:   fmt.Sprintf("column %q not found in API response (columns: %v)", column, rs.Columns),
+		}, nil
+	}
+
+	seen := make(map[string]struct{})
+	values := make([]string, 0, len(rs.Rows))
+	for _, row := range rs.Rows {
+		if idx >= len(row) || row[idx] == nil {
+			continue
+		}
+		v := fmt.Sprintf("%v", row[idx])
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		values = append(values, v)
+	}
+	return &models.VariableValuesResponse{Success: true, Values: values, Count: len(values)}, nil
+}
+
+// getSQLVariableValues runs a dialect-correct GROUP BY distinct query against a
+// SQL connection and returns the first column's values.
+func (s *ConnectionService) getSQLVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	if ds.Config.SQL == nil {
+		return &models.VariableValuesResponse{Success: false, Error: "SQL configuration missing"}, nil
+	}
+	if req.Table == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "table is required for SQL value discovery"}, nil
+	}
+	sqlText, err := connection.BuildDistinctQuery(ds.Config.SQL.Driver, req.Column, req.Table, req.Limit)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+	return s.runDistinctQuery(ctx, ds, models.Query{Raw: sqlText, Type: models.QueryTypeSQL}, false)
+}
+
+// getEdgeLakeVariableValues runs a GROUP BY distinct query (no DISTINCT, no
+// ORDER BY — EdgeLake parser limits) and sorts the values server-side.
+func (s *ConnectionService) getEdgeLakeVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	if req.Table == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "table is required for EdgeLake value discovery"}, nil
+	}
+	if req.Database == "" {
+		return &models.VariableValuesResponse{Success: false, Error: "database is required for EdgeLake value discovery"}, nil
+	}
+	sqlText, err := connection.BuildDistinctQuery("edgelake", req.Column, req.Table, req.Limit)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+	query := models.Query{
+		Raw:    sqlText,
+		Type:   models.QueryTypeEdgeLake,
+		Params: map[string]interface{}{"database": req.Database},
+	}
+	return s.runDistinctQuery(ctx, ds, query, true) // sort server-side
+}
+
+// runDistinctQuery executes a single-column query through the connection's
+// adapter and flattens the first column into a de-duplicated string slice.
+// When sortValues is true the result is sorted (for adapters that can't order
+// server-side, e.g. EdgeLake).
+func (s *ConnectionService) runDistinctQuery(ctx context.Context, ds *models.Connection, query models.Query, sortValues bool) (*models.VariableValuesResponse, error) {
+	factory := connection.NewConnectionFactory()
+	adapter, err := factory.CreateFromConfig(ds)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: fmt.Sprintf("failed to create connection: %v", err)}, nil
+	}
+	defer adapter.Close()
+
+	rs, err := adapter.Query(ctx, query)
+	if err != nil {
+		return &models.VariableValuesResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	seen := make(map[string]struct{})
+	values := make([]string, 0, len(rs.Rows))
+	for _, row := range rs.Rows {
+		if len(row) == 0 || row[0] == nil {
+			continue
+		}
+		v := fmt.Sprintf("%v", row[0])
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		values = append(values, v)
+	}
+	if sortValues {
+		sort.Strings(values)
+	}
+	return &models.VariableValuesResponse{Success: true, Values: values, Count: len(values)}, nil
 }
 
 // getPrometheusSchema retrieves schema information from a Prometheus connection

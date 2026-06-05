@@ -865,6 +865,36 @@ class APIClient {
     return this.request(`/api/connections/${id}/schema`, { connectionId: id });
   }
 
+  // Distinct values of a column on a connection, for a dashboard-variable
+  // picker. column (+ table for SQL/EdgeLake, database for EdgeLake) identify
+  // what to list. Pass opts.signal to support a Stop button on slow/streaming
+  // discovery, and opts.timeout (0 = no timeout) for long captures.
+  async getVariableValues(connectionId, { column, table, database, field, limit, captureSeconds, signal, timeout } = {}) {
+    const params = new URLSearchParams();
+    if (column) params.set('column', column);
+    if (table) params.set('table', table);
+    if (database) params.set('database', database);
+    if (field) params.set('field', field);
+    if (limit) params.set('limit', String(limit));
+    if (captureSeconds) params.set('capture_seconds', String(captureSeconds));
+    const reqOpts = { connectionId };
+    if (signal) reqOpts.signal = signal;
+    if (timeout !== undefined) reqOpts.timeout = timeout;
+    return this.request(`/api/connections/${connectionId}/variable-values?${params.toString()}`, reqOpts);
+  }
+
+  // Persist a client-captured distinct-value list onto a connection (one
+  // column), for the dashboard-variable dropdown. Design capability required
+  // (the route is design-gated). Invalidates the connection cache so the next
+  // getConnection reads the updated discovered_values.
+  async saveDiscoveredValues(connectionId, { column, values, partial = false } = {}) {
+    this._invalidateConnectionCache(connectionId);
+    return this.request(`/api/connections/${connectionId}/discovered-values`, {
+      method: 'PUT',
+      body: JSON.stringify({ column, values, partial }),
+    });
+  }
+
   async createConnection(connection) {
     return this.request('/api/connections', {
       method: 'POST',

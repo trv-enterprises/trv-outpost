@@ -105,7 +105,8 @@
     flex-direction: column;
     gap: spacing.$spacing-03;
 
-    h4 {
+    h4,
+    h5 {
       font-size: 0.875rem;
       font-weight: 600;
       color: var(--cds-text-primary);
@@ -125,7 +126,10 @@
   }
 
   // Add column row
-  .add-column-row {
+  // Table + Add-column pickers share one width so they line up vertically with
+  // each other and with the WHERE "Column…" field (also 300px).
+  .add-column-row,
+  .table-select-row {
     max-width: 300px;
   }
 
@@ -196,19 +200,49 @@
 
     .logic-select {
       width: 80px;
+      flex-shrink: 0;
     }
 
+    // Every control is FIXED width and does NOT grow. The freed row space is
+    // absorbed by .condition-spacer (the only growable element) as EMPTY gap,
+    // so nothing balloons — including on null-checks where the value field is
+    // removed. Reads like a normal form row; trash stays anchored right.
+    // Matches the COLUMNS section's "Add column…" field width (.add-column-row
+    // max-width: 300px) so the two column pickers line up vertically.
     .column-select {
-      width: 150px;
+      width: 300px;
+      flex: 0 0 auto;
     }
 
+    // Operator + value-source group wraps as a unit (never a staircase).
+    .condition-ops {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+      flex: 0 0 auto;
+      flex-wrap: nowrap;
+    }
+
+    // Fixed width sized to hold the longest operator label ("IS NOT NULL").
     .operator-select {
-      width: 120px;
+      width: 11rem;
+      flex: 0 0 auto;
+    }
+
+    .value-source-select {
+      width: 9.5rem;
+      flex: 0 0 auto;
     }
 
     .value-input {
-      flex: 1;
-      min-width: 120px;
+      width: 16rem;
+      flex: 0 0 auto;
+    }
+
+    // The only growable element: soaks up all slack as empty space.
+    .condition-spacer {
+      flex: 1 1 auto;
+      min-width: 0;
     }
   }
 
@@ -248,7 +282,8 @@
       align-items: center;
       margin-bottom: spacing.$spacing-03;
 
-      h4 {
+      h4,
+      h5 {
         font-size: 0.875rem;
         font-weight: 600;
         color: var(--cds-text-primary);

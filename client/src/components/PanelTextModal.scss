@@ -1,0 +1,43 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.panel-text-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-05;
+}
+
+.panel-text-modal-row {
+  display: flex;
+  gap: spacing.$spacing-04;
+
+  > * {
+    flex: 1;
+  }
+}
+
+.panel-text-modal-body .variable-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: spacing.$spacing-02;
+  margin-top: -#{spacing.$spacing-03};
+
+  &__hint {
+    font-size: 0.75rem;
+    color: var(--cds-text-helper);
+  }
+}
+
+.panel-text-modal-preview {
+  font-size: 0.75rem;
+  color: var(--cds-text-helper);
+  margin: 0;
+
+  span {
+    color: var(--cds-text-primary);
+  }
+}

@@ -168,6 +168,19 @@
       }
     }
 
+    // "Accepts dashboard-variable substitution" toggle: sits below the Tags
+    // field in the same column. Left-justified, with top space matching the
+    // inter-row gap ($spacing-05) so it doesn't crowd the field above it.
+    .uses-variable-toggle {
+      margin-top: spacing.$spacing-05;
+      display: flex;
+      justify-content: flex-start;
+
+      .cds--toggle {
+        align-items: flex-start;
+      }
+    }
+
     // Narrow viewport / sidecard-open fallback: stack all columns.
     // ~720px is roughly the point where halves become unreadable
     // for a TextInput with a label + helper text.
@@ -1047,25 +1060,82 @@
       gap: spacing.$spacing-03;
     }
 
+    // Single-row layout mirroring the SQL WHERE builder (.where-condition):
+    // every control is fixed-width and does NOT grow; the only growable element
+    // is .filter-spacer, which soaks up freed width as empty gap so nothing
+    // balloons (including null-checks with no value field) and the trash stays
+    // anchored right. All controls use hideLabel so the row aligns cleanly.
     .filter-row {
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       gap: spacing.$spacing-03;
       padding: spacing.$spacing-03;
       background-color: var(--cds-layer-02);
       border-radius: 4px;
+      flex-wrap: wrap;
 
-      > * {
-        flex: 1;
+      .filter-field-select {
+        width: 16rem;
+        flex: 0 0 auto;
+      }
+
+      // Operator + value-source group wraps as a unit (never a staircase).
+      .filter-ops {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-03;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+      }
+
+      .filter-operator-select {
+        width: 11rem;
+        flex: 0 0 auto;
+      }
+
+      .filter-value-source-select {
+        width: 11rem;
+        flex: 0 0 auto;
+      }
+
+      .filter-value-input {
+        width: 16rem;
+        flex: 0 0 auto;
+      }
+
+      // Token chip sits centered where the value input would be.
+      .filter-value-variable-chip {
+        flex: 0 0 auto;
+        align-self: center;
+      }
+
+      // The only growable element: absorbs all slack as empty space.
+      .filter-spacer {
+        flex: 1 1 auto;
         min-width: 0;
       }
 
       .cds--btn--icon-only {
         flex: 0 0 auto;
-        margin-bottom: spacing.$spacing-02;
       }
     }
 
+  }
+
+  // Row of clickable substitution-token pills, shown beneath the SQL query
+  // field and filter value inputs when the component accepts dashboard-variable
+  // substitution. Clicking a pill inserts its token.
+  .variable-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    margin-top: spacing.$spacing-02;
+
+    &__hint {
+      font-size: 0.75rem;
+      color: var(--cds-text-helper);
+    }
   }
 
   // Aggregation section

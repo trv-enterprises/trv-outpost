@@ -3851,6 +3851,61 @@
                 }
             }
         },
+        "/connections/{id}/discovered-values": {
+            "put": {
+                "description": "Stores a column's distinct values on the connection (streams/sockets have no engine-side DISTINCT, so values are captured client-side at authoring time). Design capability required.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "Save discovered dashboard-variable values for a connection column",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Column + values",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.SaveDiscoveredValuesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Connection"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/connections/{id}/mqtt/sample": {
             "get": {
                 "description": "Subscribe to a topic and return the first message's schema (columns and sample values)",
@@ -4082,6 +4137,74 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/streaming.StreamStatus"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/connections/{id}/variable-values": {
+            "get": {
+                "description": "Returns the distinct values of a column (SQL/EdgeLake via GROUP BY). Column + table from query params; limit optional.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "List distinct column values for a dashboard-variable picker",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Column whose distinct values to list",
+                        "name": "column",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source table (required for SQL/EdgeLake)",
+                        "name": "table",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max distinct values (default 1000)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Streaming capture window",
+                        "name": "capture_seconds",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.VariableValuesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "404": {
@@ -7378,6 +7501,13 @@
                 "description": {
                     "type": "string"
                 },
+                "discovered_values": {
+                    "description": "DiscoveredValues caches the distinct values of a column for the\ndashboard-variable dropdown, keyed by column name. Populated by an\nauthoring-side capture (the editor's Fetch flow) for connection types\nthat have no engine-side DISTINCT (streams/sockets) — the connection\ndefines the API/topic and therefore the value domain, so the list lives\nhere, not on the component or dashboard. Additive + nil-safe: absent on\nolder records, no migration needed. A connection may filter on several\ncolumns over time, hence a map.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/models.DiscoveredValueList"
+                    }
+                },
                 "health": {
                     "$ref": "#/definitions/models.HealthInfo"
                 },
@@ -7460,6 +7590,10 @@
         "models.ConnectionSwapConfig": {
             "type": "object",
             "properties": {
+                "label_tag_prefix": {
+                    "description": "LabelTagPrefix selects the dropdown label from a prefixed connection tag.\nWhen set (e.g. \"host\"), each candidate's label is the value of its first\ntag matching \"\u003cprefix\u003e:\" (so \"host:trv-srv-001\" → \"trv-srv-001\"), falling\nback to the connection name when no matching tag is present. Empty → the\ndropdown shows the connection name as before. Prefixed tags act as a\nlightweight key-value store on the connection (convention: one per prefix).",
+                    "type": "string"
+                },
                 "same_namespace": {
                     "description": "SameNamespace restricts candidate discovery to the dashboard's own\nnamespace. Default false (cross-namespace by tag), so a dashboard whose\nsource connections live in a different namespace can still find them.",
                     "type": "boolean"
@@ -8450,6 +8584,23 @@
                 }
             }
         },
+        "models.DiscoveredValueList": {
+            "type": "object",
+            "properties": {
+                "captured_at": {
+                    "type": "string"
+                },
+                "partial": {
+                    "type": "boolean"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "models.DisplayConfig": {
             "description": "Configuration for non-chart visual components (cameras, weather, etc.)",
             "type": "object",
@@ -8609,7 +8760,30 @@
             }
         },
         "models.FilterValueConfig": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "default_value": {
+                    "type": "string"
+                },
+                "options": {
+                    "description": "selectable values when ValueSource == \"static\"; also the seeded fallback list for \"connection\"",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "value_column": {
+                    "description": "ValueColumn / ValueTable drive ValueSource == \"connection\": the column\n(and source table) whose distinct values populate the picker, discovered\nlive against the variable-driven component's connection at view time.\nSet by the editor's value-picker. Options doubles as the fallback list\nwhen the live discovery query fails or times out.",
+                    "type": "string"
+                },
+                "value_source": {
+                    "description": "\"static\" (default) | \"freetext\" | \"connection\"",
+                    "type": "string"
+                },
+                "value_table": {
+                    "type": "string"
+                }
+            }
         },
         "models.FrigateConfig": {
             "type": "object",
@@ -9127,6 +9301,10 @@
                 "error": {
                     "type": "string"
                 },
+                "error_code": {
+                    "description": "ErrorCode is a stable machine-readable classifier for the error, when\none applies (empty otherwise). Lets the client distinguish recoverable\nstates (e.g. \"dashboard_variable_not_set\" → render a friendly\nselect-a-value empty-state) from genuine query failures without\nstring-matching the human-readable Error message.",
+                    "type": "string"
+                },
                 "result_set": {
                     "$ref": "#/definitions/models.ResultSet"
                 },
@@ -9268,6 +9446,29 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "models.SaveDiscoveredValuesRequest": {
+            "type": "object",
+            "required": [
+                "column"
+            ],
+            "properties": {
+                "column": {
+                    "description": "the column the list is for",
+                    "type": "string"
+                },
+                "partial": {
+                    "description": "true when capture was cut short",
+                    "type": "boolean"
+                },
+                "values": {
+                    "description": "distinct values",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -10429,6 +10630,13 @@
                     "description": "the connection the panels currently use (the baseline)",
                     "type": "boolean"
                 },
+                "tags": {
+                    "description": "Tags is the connection's tag set, carried so the client can derive a\ndropdown label from a prefixed tag (see ConnectionSwapConfig.LabelTagPrefix).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "type_id": {
                     "type": "string"
                 }
@@ -10445,6 +10653,30 @@
                 },
                 "variable": {
                     "type": "string"
+                }
+            }
+        },
+        "models.VariableValuesResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "partial": {
+                    "description": "Partial is true when a streaming capture was cut short (timeout / client\nstop / cap) and the list may be incomplete.",
+                    "type": "boolean"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

@@ -321,6 +321,92 @@ func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// GetVariableValues lists the distinct values of a column on a connection, used
+// to populate a dashboard-variable picker.
+// @Summary List distinct column values for a dashboard-variable picker
+// @Description Returns the distinct values of a column (SQL/EdgeLake via GROUP BY). Column + table from query params; limit optional.
+// @Tags connections
+// @Produce json
+// @Param id path string true "Connection ID"
+// @Param column query string true "Column whose distinct values to list"
+// @Param table query string false "Source table (required for SQL/EdgeLake)"
+// @Param limit query int false "Max distinct values (default 1000)"
+// @Param capture_seconds query int false "Streaming capture window"
+// @Success 200 {object} models.VariableValuesResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /connections/{id}/variable-values [get]
+func (h *ConnectionHandler) GetVariableValues(c *gin.Context) {
+	id := c.Param("id")
+
+	req := &models.VariableValuesRequest{
+		Column:   c.Query("column"),
+		Table:    c.Query("table"),
+		Database: c.Query("database"),
+		Field:    c.Query("field"),
+	}
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			req.Limit = n
+		}
+	}
+	if v := c.Query("capture_seconds"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			req.CaptureSeconds = n
+		}
+	}
+
+	response, err := h.service.GetVariableValues(c.Request.Context(), id, req)
+	if err != nil {
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// SaveDiscoveredValues persists a client-side-captured distinct-value list onto
+// a connection (one column), for the dashboard-variable dropdown.
+// @Summary Save discovered dashboard-variable values for a connection column
+// @Description Stores a column's distinct values on the connection (streams/sockets have no engine-side DISTINCT, so values are captured client-side at authoring time). Design capability required.
+// @Tags connections
+// @Accept json
+// @Produce json
+// @Param id path string true "Connection ID"
+// @Param request body models.SaveDiscoveredValuesRequest true "Column + values"
+// @Success 200 {object} models.Connection
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /connections/{id}/discovered-values [put]
+func (h *ConnectionHandler) SaveDiscoveredValues(c *gin.Context) {
+	id := c.Param("id")
+
+	var req models.SaveDiscoveredValuesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	conn, err := h.service.SaveDiscoveredValues(c.Request.Context(), id, req.Column, models.DiscoveredValueList{
+		Values:  req.Values,
+		Partial: req.Partial,
+	})
+	if err != nil {
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, conn)
+}
+
 // GetPrometheusLabelValues retrieves possible values for a Prometheus label
 // @Summary Get values for a Prometheus label
 // @Description Retrieve all possible values for a specific label from a Prometheus datasource

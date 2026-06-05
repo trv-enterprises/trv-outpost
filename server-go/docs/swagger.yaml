@@ -947,6 +947,19 @@ definitions:
         type: string
       description:
         type: string
+      discovered_values:
+        additionalProperties:
+          $ref: '#/definitions/models.DiscoveredValueList'
+        description: |-
+          DiscoveredValues caches the distinct values of a column for the
+          dashboard-variable dropdown, keyed by column name. Populated by an
+          authoring-side capture (the editor's Fetch flow) for connection types
+          that have no engine-side DISTINCT (streams/sockets) — the connection
+          defines the API/topic and therefore the value domain, so the list lives
+          here, not on the component or dashboard. Additive + nil-safe: absent on
+          older records, no migration needed. A connection may filter on several
+          columns over time, hence a map.
+        type: object
       health:
         $ref: '#/definitions/models.HealthInfo'
       id:
@@ -1006,6 +1019,15 @@ definitions:
     type: object
   models.ConnectionSwapConfig:
     properties:
+      label_tag_prefix:
+        description: |-
+          LabelTagPrefix selects the dropdown label from a prefixed connection tag.
+          When set (e.g. "host"), each candidate's label is the value of its first
+          tag matching "<prefix>:" (so "host:trv-srv-001" → "trv-srv-001"), falling
+          back to the connection name when no matching tag is present. Empty → the
+          dropdown shows the connection name as before. Prefixed tags act as a
+          lightweight key-value store on the connection (convention: one per prefix).
+        type: string
       same_namespace:
         description: |-
           SameNamespace restricts candidate discovery to the dashboard's own
@@ -1718,6 +1740,17 @@ definitions:
       vendor:
         type: string
     type: object
+  models.DiscoveredValueList:
+    properties:
+      captured_at:
+        type: string
+      partial:
+        type: boolean
+      values:
+        items:
+          type: string
+        type: array
+    type: object
   models.DisplayConfig:
     description: Configuration for non-chart visual components (cameras, weather,
       etc.)
@@ -1832,6 +1865,28 @@ definitions:
     - dashboard_ids
     type: object
   models.FilterValueConfig:
+    properties:
+      default_value:
+        type: string
+      options:
+        description: selectable values when ValueSource == "static"; also the seeded
+          fallback list for "connection"
+        items:
+          type: string
+        type: array
+      value_column:
+        description: |-
+          ValueColumn / ValueTable drive ValueSource == "connection": the column
+          (and source table) whose distinct values populate the picker, discovered
+          live against the variable-driven component's connection at view time.
+          Set by the editor's value-picker. Options doubles as the fallback list
+          when the live discovery query fails or times out.
+        type: string
+      value_source:
+        description: '"static" (default) | "freetext" | "connection"'
+        type: string
+      value_table:
+        type: string
     type: object
   models.FrigateConfig:
     properties:
@@ -2200,6 +2255,14 @@ definitions:
         type: integer
       error:
         type: string
+      error_code:
+        description: |-
+          ErrorCode is a stable machine-readable classifier for the error, when
+          one applies (empty otherwise). Lets the client distinguish recoverable
+          states (e.g. "dashboard_variable_not_set" → render a friendly
+          select-a-value empty-state) from genuine query failures without
+          string-matching the human-readable Error message.
+        type: string
       result_set:
         $ref: '#/definitions/models.ResultSet'
       success:
@@ -2313,6 +2376,22 @@ definitions:
         type: string
     required:
     - driver
+    type: object
+  models.SaveDiscoveredValuesRequest:
+    properties:
+      column:
+        description: the column the list is for
+        type: string
+      partial:
+        description: true when capture was cut short
+        type: boolean
+      values:
+        description: distinct values
+        items:
+          type: string
+        type: array
+    required:
+    - column
     type: object
   models.SchemaInfo:
     properties:
@@ -3164,6 +3243,13 @@ definitions:
       reference:
         description: the connection the panels currently use (the baseline)
         type: boolean
+      tags:
+        description: |-
+          Tags is the connection's tag set, carried so the client can derive a
+          dropdown label from a prefixed tag (see ConnectionSwapConfig.LabelTagPrefix).
+        items:
+          type: string
+        type: array
       type_id:
         type: string
     type: object
@@ -3175,6 +3261,24 @@ definitions:
         type: array
       variable:
         type: string
+    type: object
+  models.VariableValuesResponse:
+    properties:
+      count:
+        type: integer
+      error:
+        type: string
+      partial:
+        description: |-
+          Partial is true when a streaming capture was cut short (timeout / client
+          stop / cap) and the list may be incomplete.
+        type: boolean
+      success:
+        type: boolean
+      values:
+        items:
+          type: string
+        type: array
     type: object
   registry.Capabilities:
     properties:
@@ -6185,6 +6289,45 @@ paths:
       summary: Update user configuration
       tags:
       - config
+  /connections/{id}/discovered-values:
+    put:
+      consumes:
+      - application/json
+      description: Stores a column's distinct values on the connection (streams/sockets
+        have no engine-side DISTINCT, so values are captured client-side at authoring
+        time). Design capability required.
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column + values
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SaveDiscoveredValuesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Connection'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Save discovered dashboard-variable values for a connection column
+      tags:
+      - connections
   /connections/{id}/mqtt/sample:
     get:
       description: Subscribe to a topic and return the first message's schema (columns
@@ -6350,6 +6493,53 @@ paths:
             additionalProperties: true
             type: object
       summary: Get stream status
+      tags:
+      - connections
+  /connections/{id}/variable-values:
+    get:
+      description: Returns the distinct values of a column (SQL/EdgeLake via GROUP
+        BY). Column + table from query params; limit optional.
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column whose distinct values to list
+        in: query
+        name: column
+        required: true
+        type: string
+      - description: Source table (required for SQL/EdgeLake)
+        in: query
+        name: table
+        type: string
+      - description: Max distinct values (default 1000)
+        in: query
+        name: limit
+        type: integer
+      - description: Streaming capture window
+        in: query
+        name: capture_seconds
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.VariableValuesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List distinct column values for a dashboard-variable picker
       tags:
       - connections
   /connections/aggregators:

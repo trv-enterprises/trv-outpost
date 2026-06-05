@@ -5,6 +5,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -242,12 +243,72 @@ type ConnectionSwapConfig struct {
 	// namespace. Default false (cross-namespace by tag), so a dashboard whose
 	// source connections live in a different namespace can still find them.
 	SameNamespace bool `json:"same_namespace,omitempty" bson:"same_namespace,omitempty"`
+	// LabelTagPrefix selects the dropdown label from a prefixed connection tag.
+	// When set (e.g. "host"), each candidate's label is the value of its first
+	// tag matching "<prefix>:" (so "host:trv-srv-001" → "trv-srv-001"), falling
+	// back to the connection name when no matching tag is present. Empty → the
+	// dropdown shows the connection name as before. Prefixed tags act as a
+	// lightweight key-value store on the connection (convention: one per prefix).
+	LabelTagPrefix string `json:"label_tag_prefix,omitempty" bson:"label_tag_prefix,omitempty"`
 }
 
-// FilterValueConfig is a forward-compatibility seam for filter_value mode (the
-// value substituted into a SQL WHERE clause or a client-side filter). Empty in
-// v1; adding fields later is a non-breaking JSON change.
-type FilterValueConfig struct{}
+// FilterValueConfig configures a filter_value variable: a value the user picks
+// from a header control that is substituted at view time into a component's
+// query (server-side, via the `{{dashboard-variable}}` token bound as a SQL
+// parameter / escaped EdgeLake literal) or into a client-side filter predicate.
+//
+// ValueSource decides how the header control sources options:
+//   - "static"     → choose from Options (a Dropdown)
+//   - "freetext"   → type an arbitrary value (a TextInput/ComboBox)
+//   - "connection" → options are DISCOVERED LIVE at view time: the dashboard
+//     queries distinct values of the bound column from the connection used by
+//     the variable-driven components (column/table derived from the
+//     component's query, same as the editor's value picker), via
+//     GET /api/connections/:id/variable-values. Options doubles as the
+//     fallback list when discovery fails/empty. If the dashboard's
+//     variable-driven components span >1 connection, the client uses the first
+//     and warns.
+//
+// v1 enforces at most one filter_value variable per dashboard (the token is a
+// single fixed name).
+type FilterValueConfig struct {
+	ValueSource  string   `json:"value_source,omitempty" bson:"value_source,omitempty"` // "static" (default) | "freetext" | "connection"
+	Options      []string `json:"options,omitempty" bson:"options,omitempty"`           // selectable values when ValueSource == "static"; also the seeded fallback list for "connection"
+	DefaultValue string   `json:"default_value,omitempty" bson:"default_value,omitempty"`
+	// ValueColumn / ValueTable drive ValueSource == "connection": the column
+	// (and source table) whose distinct values populate the picker, discovered
+	// live against the variable-driven component's connection at view time.
+	// Set by the editor's value-picker. Options doubles as the fallback list
+	// when the live discovery query fails or times out.
+	ValueColumn string `json:"value_column,omitempty" bson:"value_column,omitempty"`
+	ValueTable  string `json:"value_table,omitempty" bson:"value_table,omitempty"`
+}
+
+// Variable mode constants — the DashboardVariable.Mode discriminator.
+const (
+	VariableModeConnectionSwap = "connection_swap"
+	VariableModeFilter         = "filter"
+)
+
+// ValidateVariables enforces the v1 invariant that a dashboard carries at most
+// one filter-mode variable. The substitution token (`{{dashboard-variable}}`)
+// is a single fixed name, so two filter variables would be ambiguous about
+// which value to bind. A connection_swap variable and a filter variable MAY
+// coexist — they drive different mechanisms (panel connection repointing vs.
+// query/filter value substitution) and never collide on the token. Returns nil
+// when the variable set is valid.
+func ValidateVariables(variables []DashboardVariable) error {
+	filterCount := 0
+	for i := range variables {
+		if variables[i].Mode == VariableModeFilter {
+			filterCount++
+		}
+	}
+	if filterCount > 1 {
+		return fmt.Errorf("a dashboard may define at most one filter variable (found %d); the {{dashboard-variable}} token is a single fixed name", filterCount)
+	}
+	return nil
+}
 
 // VariableCandidate is one selectable option for a connection_swap variable:
 // a connection discovered by tag match, annotated with whether it is
@@ -260,6 +321,9 @@ type VariableCandidate struct {
 	Compatible bool   `json:"compatible"`          // passes the variable's SchemaStrict check
 	Reason     string `json:"reason,omitempty"`    // why incompatible (empty when compatible)
 	Reference  bool   `json:"reference,omitempty"` // the connection the panels currently use (the baseline)
+	// Tags is the connection's tag set, carried so the client can derive a
+	// dropdown label from a prefixed tag (see ConnectionSwapConfig.LabelTagPrefix).
+	Tags []string `json:"tags,omitempty"`
 }
 
 // VariableCandidatesResponse is the payload for the variable-candidates endpoint.

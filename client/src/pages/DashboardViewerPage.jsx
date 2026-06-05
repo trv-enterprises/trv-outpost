@@ -52,6 +52,7 @@ import {
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
+import VariableValuePickerModal from '../components/VariableValuePickerModal';
 import ComponentPanelWithActions from '../components/ComponentPanelWithActions';
 import ComponentExpandModal from '../components/ComponentExpandModal';
 import DashboardGrid from '../components/DashboardGrid';
@@ -61,13 +62,16 @@ import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
 import WeatherDisplay from '../components/weather/WeatherDisplay';
 import PanelEditMenu from '../components/PanelEditMenu';
 import PanelText from '../components/PanelText';
-import PanelTextEditor from '../components/PanelTextEditor';
+import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
-import apiClient from '../api/client';
+import apiClient, { API_BASE } from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
+import { deriveVariableColumn } from '../utils/deriveVariableColumn';
+import { DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { candidateLabel } from '../utils/tagValueByPrefix';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
 import NamespaceSelect from '../components/shared/NamespaceSelect';
@@ -197,6 +201,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     selectedConnId: dashVariableValue,
     setValue: setDashVariableValue,
     resolveConnectionId,
+    filterVariable: dashFilterVariable,
+    filterValue: dashFilterValue,
+    setFilterValue: setDashFilterValue,
   } = useDashboardVariable({
     dashboard,
     globalEnabled: dashboardVariableEnabled,
@@ -204,17 +211,39 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setSearchParam,
   });
 
-  // Live text for "Dashboard Variable" text panels: the selected connection's
-  // name, falling back to the reference (baseline) connection when nothing is
+  // Resolved display value of the connection-swap variable: the selected
+  // connection's label (tag-prefix label when configured, else its name),
+  // falling back to the reference (baseline) connection when nothing is
   // selected. Empty when the feature is inactive.
   const dashboardVariableText = useMemo(() => {
     if (!dashVariable) return '';
     const cands = dashVariableCandidates || [];
+    const prefix = dashVariable.connection_swap?.label_tag_prefix || '';
     const selected = cands.find((c) => c.id === dashVariableValue);
-    if (selected) return selected.name || '';
+    if (selected) return candidateLabel(selected, prefix);
     const reference = cands.find((c) => c.reference);
-    return reference?.name || '';
+    return reference ? candidateLabel(reference, prefix) : '';
   }, [dashVariable, dashVariableCandidates, dashVariableValue]);
+
+  // Map of variable NAME → resolved display value, for {{variable:NAME}} tokens
+  // embedded in text-panel content. Covers both variable kinds: the
+  // connection-swap variable (its label/tag-prefix value) and the filter
+  // variable (its chosen string value). Keyed on each variable's stable name.
+  const variableValues = useMemo(() => {
+    const map = {};
+    if (dashVariable?.name) map[dashVariable.name] = dashboardVariableText;
+    if (dashFilterVariable?.name) map[dashFilterVariable.name] = dashFilterValue || '';
+    return map;
+  }, [dashVariable, dashboardVariableText, dashFilterVariable, dashFilterValue]);
+
+  // The variables a text-panel editor can offer as insertable pills: every
+  // defined variable, by name + label. Empty when the feature is inactive.
+  const definedVariables = useMemo(() => {
+    const list = [];
+    if (dashVariable?.name) list.push({ name: dashVariable.name, label: dashVariable.label || dashVariable.name });
+    if (dashFilterVariable?.name) list.push({ name: dashFilterVariable.name, label: dashFilterVariable.label || dashFilterVariable.name });
+    return list;
+  }, [dashVariable, dashFilterVariable]);
 
   // Cadence (seconds) for the slow-poll refresh of the dashboard
   // record itself — picks up edits made by another author so an
@@ -262,6 +291,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // header mode-switch guard promise.
   const [viewNavMode, setViewNavMode] = useState(false);
   const modeSwitchResolveRef = useRef(null);
+  // The mode being switched TO when the dirty-edit prompt defers the guard, so
+  // the prompt's Save/Discard resolvers can clear the design-origin flag when
+  // proceeding into VIEW (symmetry with the clean-path guard below).
+  const modeSwitchTargetRef = useRef(null);
   const { setModeGuard, clearModeGuard, setIsEditingDashboard } = useModeGuard();
 
   // Tell App.jsx's mode sync to keep the header pill on DESIGN while we're
@@ -272,13 +305,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setIsEditingDashboard(isEditMode || fromDesign);
     return () => setIsEditingDashboard(false);
   }, [isEditMode, fromDesign, setIsEditingDashboard]);
-  const { pushToast, notifications, togglePanel: toggleNotificationPanel } = useNotifications();
+  const { pushToast, addNotification, notifications, togglePanel: toggleNotificationPanel } = useNotifications();
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');
   // Server-rejection error for the dashboard name (e.g., duplicate
   // name in the target namespace). Cleared when the user edits the
   // name input, set when the save fails with a name-related error.
   const [nameError, setNameError] = useState('');
+  const nameInputRef = useRef(null);
   const [editableNamespace, setEditableNamespace] = useState('');
   const { activeNamespace } = useNamespaces();
 
@@ -296,11 +330,69 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // uses the fixed token name "dashboard-variable"; the designer sets its
   // display label, discovery tags, and schema-strictness.
   const [editableVariablesEnabled, setEditableVariablesEnabled] = useState(false);
+  // The variable's TYPE drives both authoring fields and how the header
+  // surfaces the selection: 'connection_swap' (connection picker) or 'filter'
+  // (a string value substituted into queries/filters). 'range' (time window) is
+  // a planned future type — the selector is built to grow.
+  const [editableVariableMode, setEditableVariableMode] = useState('connection_swap');
   const [editableVariableLabel, setEditableVariableLabel] = useState('');
   const [editableVariableTags, setEditableVariableTags] = useState([]);
   const [editableVariableSchemaStrict, setEditableVariableSchemaStrict] = useState('type_only');
   const [editableVariableSameNamespace, setEditableVariableSameNamespace] = useState(false);
+  // Optional tag prefix whose matched value labels each connection in the
+  // dropdown (e.g. "host" → show "trv-srv-001" from a "host:trv-srv-001" tag),
+  // falling back to the connection name. Connection-swap only.
+  const [editableVariableLabelTagPrefix, setEditableVariableLabelTagPrefix] = useState('');
+  // Filter-type fields: how the header sources the value, and (for static) the
+  // option list + default. Data-driven discovery (query the connection for valid
+  // values) is a deferred seam — see the dashboard-variable-picker TODO.
+  const [editableVariableValueSource, setEditableVariableValueSource] = useState('static');
+  const [editableVariableOptions, setEditableVariableOptions] = useState([]);
+  const [editableVariableDefault, setEditableVariableDefault] = useState('');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [varsModalOpen, setVarsModalOpen] = useState(false);
+  // Draft buffers for the Settings and Vars modals. Inputs edit the draft, NOT
+  // the shared editable* state — so Cancel discards cleanly and an abandoned
+  // change can't ride along on a later Save. Apply copies the draft into the
+  // editable* state (+ marks dirty). Seeded from editable* when each modal opens.
+  const [settingsDraft, setSettingsDraft] = useState(null);
+  const [varsDraft, setVarsDraft] = useState(null);
+
+  // Seed the Settings modal draft from the live editable* state when it opens,
+  // so the modal edits a buffer and Cancel discards without mutating anything.
+  // (Declared here, AFTER the editable*/draft state, to avoid a TDZ on the
+  // dependency.)
+  useEffect(() => {
+    if (settingsModalOpen) {
+      setSettingsDraft({
+        description: editableDescription,
+        namespace: editableNamespace,
+        tags: editableTags,
+        refreshInterval: editableRefreshInterval,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsModalOpen]);
+
+  // Seed the Vars modal draft likewise.
+  useEffect(() => {
+    if (varsModalOpen) {
+      setVarsDraft({
+        enabled: editableVariablesEnabled,
+        mode: editableVariableMode,
+        label: editableVariableLabel,
+        tags: editableVariableTags,
+        schemaStrict: editableVariableSchemaStrict,
+        sameNamespace: editableVariableSameNamespace,
+        labelTagPrefix: editableVariableLabelTagPrefix,
+        valueSource: editableVariableValueSource,
+        options: editableVariableOptions,
+        defaultValue: editableVariableDefault,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [varsModalOpen]);
+
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [expandedPanelId, setExpandedPanelId] = useState(null);
 
@@ -340,9 +432,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
   const [aiPreflightPanelId, setAiPreflightPanelId] = useState(null);
 
-  // Text panel editor state
+  // Text panel editor state — the panel whose text_config the modal is editing
+  // (null = closed).
   const [textEditorPanelId, setTextEditorPanelId] = useState(null);
-  const [textEditorAnchorRect, setTextEditorAnchorRect] = useState(null);
 
   // Close all SSE connections when leaving the dashboard viewer
   // (frees browser connection slots so other pages load instantly)
@@ -516,6 +608,218 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // In edit mode: use layout dimension preset for bounds (allows dragging into empty space)
   // In view mode: use panel extent (tight fit)
   const panels = isEditMode ? editablePanels : (dashboard?.panels || []);
+
+  // ── Runtime value discovery for a `connection`-sourced filter variable ──
+  // When the filter variable's value_source is "connection", the header
+  // dropdown's options are discovered live: query distinct values of the bound
+  // column from the connection used by the dashboard's variable-driven
+  // components. Column/table are derived from the component's query the same way
+  // the editor's value picker does. If the variable-driven components span more
+  // than one connection, use the FIRST and warn (toast + notification, once).
+  const discoveryWarnedRef = useRef(null);
+  const discoveryTarget = useMemo(() => {
+    const cfg = dashFilterVariable?.filter_value || {};
+    if (!dashFilterVariable || cfg.value_source !== 'connection') return null;
+
+    // Components that actually consume the token (query OR a filter value).
+    const driven = [];
+    for (const panel of panels || []) {
+      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
+      if (!comp || !comp.connection_id) continue;
+      const raw = comp.query_config?.raw;
+      const usesInQuery = typeof raw === 'string' && raw.includes(DASHBOARD_VARIABLE_TOKEN);
+      const usesInFilter = Array.isArray(comp.data_mapping?.filters)
+        && comp.data_mapping.filters.some((f) => typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN);
+      if (usesInQuery || usesInFilter) driven.push(comp);
+    }
+    if (driven.length === 0) return null;
+
+    const connIds = [...new Set(driven.map((c) => c.connection_id))];
+    // Pick the first component on the first connection to derive column/table.
+    const firstConnId = connIds[0];
+    const comp = driven.find((c) => c.connection_id === firstConnId);
+    const raw = comp.query_config?.raw || '';
+    let { column, table } = deriveVariableColumn(raw);
+    // Non-SQL filter components: the bound column is the filter row whose value
+    // is the token (no table needed for those adapters).
+    if (!column && Array.isArray(comp.data_mapping?.filters)) {
+      const f = comp.data_mapping.filters.find((x) => typeof x.value === 'string' && x.value.trim() === DASHBOARD_VARIABLE_TOKEN);
+      if (f?.field) column = f.field;
+    }
+    const database = comp.query_config?.params?.database || '';
+    return { connId: firstConnId, column, table, database, multiConn: connIds.length > 1 };
+  }, [dashFilterVariable, panels, chartsMap]);
+
+  // Warn once per dashboard when discovery spans >1 connection (use first).
+  useEffect(() => {
+    if (!discoveryTarget?.multiConn) return;
+    const key = `${dashboard?.id || ''}`;
+    if (discoveryWarnedRef.current === key) return;
+    discoveryWarnedRef.current = key;
+    const msg = "This dashboard's variable spans more than one connection; using the first for value discovery.";
+    pushToast({ kind: 'warning', title: 'Multiple connections', subtitle: msg });
+    addNotification({ kind: 'warning', title: 'Dashboard variable: multiple connections', subtitle: msg });
+  }, [discoveryTarget, dashboard?.id, pushToast, addNotification]);
+
+  // Discovered options + fetch state for the connection-sourced filter variable.
+  // Dispatch by connection type:
+  //   - SQL/EdgeLake/API → getVariableValues (server-side DISTINCT / one-shot;
+  //     low latency, no storage).
+  //   - stream/socket → read the connection's persisted discovered_values[column]
+  //     (captured at authoring time; view-time stream capture is too slow). A
+  //     session-only "regenerate" (below) can override this list for this user.
+  const [discoveredOptions, setDiscoveredOptions] = useState(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  // Session-only override the viewer's "regenerate" sets; wins over the stored
+  // list but is NOT persisted (persistence needs design authority in the editor).
+  const [sessionDiscoveredOverride, setSessionDiscoveredOverride] = useState(null);
+  // The connection type backing discovery (drives path + whether regenerate is
+  // offered). Set by the discovery effect.
+  const [discoveryConnType, setDiscoveryConnType] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSessionDiscoveredOverride(null); // clear stale session override on target change
+    if (!discoveryTarget || !discoveryTarget.connId || !discoveryTarget.column) {
+      setDiscoveredOptions(null);
+      setDiscoveryLoading(false);
+      setDiscoveryConnType(null);
+      return undefined;
+    }
+    setDiscoveryLoading(true);
+    (async () => {
+      try {
+        // Resolve the connection type (cached) to choose the discovery path.
+        const conn = await apiClient.getConnection(discoveryTarget.connId).catch(() => null);
+        if (cancelled) return;
+        const type = conn?.type || conn?.config?.type || null;
+        setDiscoveryConnType(type);
+        // Only RAW socket / mqtt are truly stream-only (no query API) — those
+        // read the authoring-captured stored list. tsstore (even streaming
+        // transport) answers "newest" over HTTP, so it uses the server path
+        // like SQL/EdgeLake/API — no stored list, no view-time capture.
+        const isStreamLike = type === 'socket' || type === 'mqtt';
+
+        if (isStreamLike) {
+          // Raw socket/mqtt: read the authoring-time captured list off the
+          // connection record. No view-time capture (too slow).
+          const stored = conn?.discovered_values?.[discoveryTarget.column];
+          setDiscoveredOptions(Array.isArray(stored?.values) ? stored.values : null);
+        } else {
+          // SQL/EdgeLake/API/tsstore: server-side discovery (DISTINCT for SQL/
+          // EdgeLake; one-shot fetch + harvest for API; newest 1000 for tsstore).
+          const res = await apiClient.getVariableValues(discoveryTarget.connId, {
+            column: discoveryTarget.column,
+            table: discoveryTarget.table,
+            database: discoveryTarget.database,
+          });
+          if (cancelled) return;
+          setDiscoveredOptions(res?.success && Array.isArray(res.values) ? res.values : null);
+        }
+      } catch {
+        if (!cancelled) setDiscoveredOptions(null); // fall back to static options
+      } finally {
+        if (!cancelled) setDiscoveryLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // Key on the resolved triple so it doesn't refire on unrelated renders.
+  }, [discoveryTarget?.connId, discoveryTarget?.column, discoveryTarget?.table, discoveryTarget?.database]);
+
+  // Session-only regenerate for a stream/socket variable: live-capture records
+  // via the connection's SSE stream, unique the bound column, and override the
+  // dropdown list for THIS session (not persisted — a designer makes it
+  // permanent via the editor). Mirrors the editor's capture-with-stop.
+  const regenerateCaptureRef = useRef(null);
+  const [regenerating, setRegenerating] = useState(false);
+  // Live-accumulating distinct values during a regenerate capture + the capture
+  // modal's open state. The modal shows the list growing in real time with a
+  // Stop button, so the user can watch and stop when it stabilizes.
+  const [regenLiveValues, setRegenLiveValues] = useState([]);
+  const [regenModalOpen, setRegenModalOpen] = useState(false);
+  const regenSeenRef = useRef(null);
+  // Set true on Stop so, after the modal closes, the dropdown auto-opens to
+  // signal the freshly-captured list is ready to pick from.
+  const [autoOpenFilterDropdown, setAutoOpenFilterDropdown] = useState(false);
+
+  const startSessionRegenerate = useCallback(() => {
+    const target = discoveryTarget;
+    if (!target?.connId || !target.column) return;
+    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+    const seen = new Set();
+    regenSeenRef.current = seen;
+    setRegenLiveValues([]);
+    setRegenModalOpen(true);
+    setRegenerating(true);
+    const authParam = apiClient.streamAuthQuery();
+    const sseUrl = `${API_BASE}/api/connections/${target.connId}/stream?${authParam}`;
+    const es = new EventSource(sseUrl);
+    regenerateCaptureRef.current = es;
+    const values = [];
+    const CAP = 1000;
+    const finish = () => {
+      if (regenerateCaptureRef.current !== es) return;
+      es.close();
+      regenerateCaptureRef.current = null;
+      setRegenerating(false);
+    };
+    es.addEventListener('record', (event) => {
+      try {
+        const rec = JSON.parse(event.data);
+        const v = rec?.[target.column];
+        if (v != null) {
+          const s = String(v);
+          if (s !== '' && !seen.has(s)) {
+            seen.add(s);
+            values.push(s);
+            setRegenLiveValues([...values]); // live update → modal re-renders
+          }
+        }
+        if (values.length >= CAP) finish();
+      } catch { /* ignore parse errors */ }
+    });
+    es.onerror = () => { if (regenerateCaptureRef.current === es) finish(); };
+    // Safety cap: stop after 5 minutes if the user walks away.
+    setTimeout(() => { if (regenerateCaptureRef.current === es) finish(); }, 300000);
+  }, [discoveryTarget]);
+
+  // Stop capturing — close the SSE, commit the accumulated list as the session
+  // override, close the modal, and flag the dropdown to auto-open so the user
+  // sees the new list is ready to pick from.
+  const stopSessionRegenerate = useCallback(() => {
+    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+    setRegenerating(false);
+    setSessionDiscoveredOverride([...regenLiveValues]);
+    setRegenModalOpen(false);
+    setAutoOpenFilterDropdown(true);
+  }, [regenLiveValues]);
+
+  // Tear down any in-flight capture on unmount.
+  useEffect(() => () => {
+    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+  }, []);
+
+  // After a regenerate completes, auto-open the filter dropdown so the user
+  // sees the freshly-captured list is ready to pick from. Carbon's Dropdown has
+  // no controlled-open prop (Downshift-driven), so we click its trigger.
+  const filterDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!autoOpenFilterDropdown || regenModalOpen) return;
+    setAutoOpenFilterDropdown(false);
+    const t = setTimeout(() => {
+      const trigger = filterDropdownRef.current?.querySelector('[role="combobox"], .cds--list-box__field');
+      if (trigger) trigger.click();
+    }, 50);
+    return () => clearTimeout(t);
+  }, [autoOpenFilterDropdown, regenModalOpen]);
+
+  // The list the dropdown actually uses: session override wins, else discovered.
+  const effectiveDiscoveredOptions = sessionDiscoveredOverride ?? discoveredOptions;
+  // Regenerate (live SSE re-capture) is only meaningful for RAW socket/mqtt
+  // variables, where the list is stored (no query API). tsstore uses the HTTP
+  // "newest" server path like SQL/API — it re-discovers on load, so no
+  // Regenerate button.
+  const discoveryIsStream = discoveryConnType === 'socket' || discoveryConnType === 'mqtt';
 
   const panelExtentCol = useMemo(() => {
     if (!panels || panels.length === 0) return 0;
@@ -1008,7 +1312,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setLastRefresh(new Date());
   }, [id]);
 
-  // Auto-enter edit mode when navigated from design mode (or new dashboard)
+  // Auto-enter edit mode when navigated from design mode (or new dashboard).
+  // The latch stops a single autoEdit navigation from re-triggering on
+  // unrelated re-renders; it is reset whenever edit mode is exited (below) so a
+  // LATER autoEdit navigation (e.g. View→Design again on the same open
+  // dashboard) can re-enter the editor.
   const autoEditTriggered = useRef(false);
   useEffect(() => {
     if (dashboard && !autoEditTriggered.current && (location.state?.autoEdit || isNewDashboard) && canDesign) {
@@ -1016,6 +1324,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       enterEditMode();
     }
   }, [dashboard, location.state, isNewDashboard]);
+
+  // Reset the auto-edit latch when we leave edit mode, so the next autoEdit
+  // navigation re-fires. Without this, the latch stays armed after the first
+  // View→Design→View round-trip and a second View→Design leaves the user stuck
+  // in the viewer.
+  useEffect(() => {
+    if (!isEditMode) autoEditTriggered.current = false;
+  }, [isEditMode]);
+
+  // Switching View→Design with this dashboard already open navigates to the
+  // SAME /view/dashboards/:id with { fromDesign: true } (App.handleModeChange).
+  // The component is already mounted, so the mount-time initializers for
+  // `fromDesign` / `cancelOrigin` don't re-run — sync them here when the flag
+  // arrives, so the session behaves as design-originated (Cancel → design list).
+  useEffect(() => {
+    if (location.state?.fromDesign) {
+      setFromDesign(true);
+      cancelOrigin.current = true;
+    }
+  }, [location.state]);
 
   // Check if this dashboard is the user's default
   useEffect(() => {
@@ -1331,14 +1659,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditableRefreshInterval(
       dashboard?.settings?.refresh_interval == null ? 30 : dashboard.settings.refresh_interval
     );
-    // Dashboard-variable authoring state (connection-swap variable, index 0).
+    // Dashboard-variable authoring state. v1 carries a single variable (fixed
+    // token); read whichever mode is defined and populate the matching fields.
     setEditableVariablesEnabled(!!dashboard?.settings?.variables_enabled);
     {
-      const v0 = (dashboard?.settings?.variables || []).find((v) => v?.mode === 'connection_swap') || null;
+      const vars = dashboard?.settings?.variables || [];
+      const v0 = vars.find((v) => v?.mode === 'filter') || vars.find((v) => v?.mode === 'connection_swap') || null;
+      setEditableVariableMode(v0?.mode || 'connection_swap');
       setEditableVariableLabel(v0?.label || '');
       setEditableVariableTags(v0?.connection_swap?.tags || []);
       setEditableVariableSchemaStrict(v0?.connection_swap?.schema_strict || 'type_only');
       setEditableVariableSameNamespace(!!v0?.connection_swap?.same_namespace);
+      setEditableVariableLabelTagPrefix(v0?.connection_swap?.label_tag_prefix || '');
+      setEditableVariableValueSource(v0?.filter_value?.value_source || 'static');
+      setEditableVariableOptions(v0?.filter_value?.options || []);
+      setEditableVariableDefault(v0?.filter_value?.default_value || '');
     }
     setEditHasChanges(false);
     setZoom(100);
@@ -1425,6 +1760,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // options.skipNavigate=true suppresses the post-create navigate so
   // a caller (the mode guard) can do its own navigation instead.
   const saveEditMode = async (options) => {
+    // Validate-on-submit (Carbon pattern): Save stays enabled while dirty, but a
+    // required empty Name blocks the save with an inline field error + focus,
+    // rather than a silently-disabled button. The error clears as the user types
+    // (see the name input's onChange).
+    if (!editableName.trim()) {
+      setNameError('Name is required');
+      nameInputRef.current?.focus();
+      return null;
+    }
     setEditSaving(true);
     try {
       // Spread the existing settings first so removed-from-editor fields
@@ -1437,19 +1781,37 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         scale_percent: scalePercent,
         refresh_interval: editableRefreshInterval,
         variables_enabled: editableVariablesEnabled,
-        // Persist the single connection-swap variable (fixed token name) when
-        // the feature is enabled; clear it otherwise so a disabled dashboard
-        // carries no stale variable definition.
-        variables: editableVariablesEnabled ? [{
-          name: 'dashboard-variable',
-          label: editableVariableLabel || 'Variable',
-          mode: 'connection_swap',
-          connection_swap: {
-            tags: editableVariableTags || [],
-            schema_strict: editableVariableSchemaStrict || 'type_only',
-            same_namespace: editableVariableSameNamespace,
-          },
-        }] : [],
+        // Persist the single variable (fixed token name) when the feature is
+        // enabled; clear it otherwise so a disabled dashboard carries no stale
+        // definition. The type-specific config block is keyed by the mode.
+        variables: editableVariablesEnabled ? [
+          editableVariableMode === 'filter'
+            ? {
+                name: 'dashboard-variable',
+                label: editableVariableLabel || 'Filter',
+                mode: 'filter',
+                filter_value: {
+                  value_source: editableVariableValueSource || 'static',
+                  // Persist options for both 'static' (the list) and 'connection'
+                  // (the fallback list). 'freetext' carries none.
+                  options: (editableVariableValueSource === 'static' || editableVariableValueSource === 'connection')
+                    ? (editableVariableOptions || [])
+                    : [],
+                  default_value: editableVariableDefault || '',
+                },
+              }
+            : {
+                name: 'dashboard-variable',
+                label: editableVariableLabel || 'Variable',
+                mode: 'connection_swap',
+                connection_swap: {
+                  tags: editableVariableTags || [],
+                  schema_strict: editableVariableSchemaStrict || 'type_only',
+                  same_namespace: editableVariableSameNamespace,
+                  label_tag_prefix: (editableVariableLabelTagPrefix || '').trim(),
+                },
+              },
+        ] : [],
       };
       const payload = {
         name: editableName,
@@ -1548,11 +1910,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // snapping the pill back.
         if (newMode === MODES.VIEW) {
           setFromDesign(false);
+          cancelOrigin.current = false;
         }
         return Promise.resolve({ proceed: true, dashboardId: currentId });
       }
       return new Promise((resolve) => {
         modeSwitchResolveRef.current = resolve;
+        modeSwitchTargetRef.current = newMode;
         setModeSwitchPromptOpen(true);
       });
     };
@@ -1583,13 +1947,23 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const savedId = await saveEditMode({ skipNavigate: true });
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
+    const targetMode = modeSwitchTargetRef.current;
+    modeSwitchTargetRef.current = null;
     if (!resolver) return;
     if (savedId) {
+      // The switch is proceeding. Into VIEW ends the design workflow — clear
+      // the design-origin flag so the session is view-originated after the
+      // switch (mirrors the clean-path guard).
+      if (targetMode === MODES.VIEW) {
+        setFromDesign(false);
+        cancelOrigin.current = false;
+      }
       resolver({ proceed: true, dashboardId: savedId });
     } else {
       // Save failed (e.g., duplicate name). saveEditMode already
       // pushed an error notification — block the mode switch so the
-      // user can fix the problem and try again.
+      // user can fix the problem and try again. (Origin flags untouched —
+      // the switch didn't happen.)
       resolver({ proceed: false });
     }
   };
@@ -1605,6 +1979,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditHasChanges(false);
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
+    // Proceeding into VIEW ends the design workflow — clear the design-origin
+    // flag so the session is view-originated after the switch.
+    const targetMode = modeSwitchTargetRef.current;
+    modeSwitchTargetRef.current = null;
+    if (targetMode === MODES.VIEW) {
+      setFromDesign(false);
+      cancelOrigin.current = false;
+    }
     // New unsaved dashboards have no id to land on; existing ones
     // keep theirs. App.jsx falls back to default when dashboardId is
     // null/undefined.
@@ -1620,6 +2002,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
     const resolver = modeSwitchResolveRef.current;
     modeSwitchResolveRef.current = null;
+    modeSwitchTargetRef.current = null; // switch cancelled — leave origin flags as-is
     if (resolver) resolver({ proceed: false });
   };
 
@@ -1863,38 +2246,28 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
 
   // ── Text panel helpers ────────────────────────────────────────────
-  const getPanelRect = (panelId) => {
-    if (!gridRef.current) return null;
-    const panelEl = gridRef.current.querySelector(`[data-panel-id="${panelId}"]`);
-    return panelEl ? panelEl.getBoundingClientRect() : null;
-  };
-
+  // Convert a panel into a text panel (default config) and open the editor
+  // modal on it. The modal edits a draft and commits on Apply (dirtying the
+  // dashboard), same as the Settings/Variables modals.
   const setTextPanel = (panelId) => {
-    // Set default text config and clear component_id
     updateEditablePanel(panelId, {
       component_id: null,
-      text_config: { content: '', display_content: 'title', size: 20, align: 'center' }
+      text_config: { content: '', display_content: 'title', size: 20, align: 'center' },
     });
-    // Open the text editor anchored to the panel
-    // Use requestAnimationFrame to ensure the panel has re-rendered with text_config
-    requestAnimationFrame(() => {
-      setTextEditorAnchorRect(getPanelRect(panelId));
-      setTextEditorPanelId(panelId);
-    });
-  };
-
-  const openTextEditor = (panelId) => {
-    setTextEditorAnchorRect(getPanelRect(panelId));
     setTextEditorPanelId(panelId);
   };
 
-  const handleTextConfigUpdate = (panelId, textConfig) => {
-    updateEditablePanel(panelId, { text_config: textConfig });
+  const openTextEditor = (panelId) => {
+    setTextEditorPanelId(panelId);
+  };
+
+  // Apply: commit the modal's draft config to the panel (marks dirty).
+  const handleTextConfigApply = (textConfig) => {
+    if (textEditorPanelId) updateEditablePanel(textEditorPanelId, { text_config: textConfig });
   };
 
   const closeTextEditor = () => {
     setTextEditorPanelId(null);
-    setTextEditorAnchorRect(null);
   };
 
   const openComponentPicker = (panelId, category) => {
@@ -1997,9 +2370,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             {isEditMode ? (
               <div className="dashboard-name-wrapper">
                 <input
+                  ref={nameInputRef}
                   className={`dashboard-name-input ${nameError ? 'has-error' : ''}`}
                   type="text"
                   value={editableName}
+                  placeholder="Dashboard name (required)"
+                  aria-label="Dashboard name"
+                  aria-required="true"
+                  aria-invalid={!!nameError}
                   onChange={(e) => {
                     setEditableName(e.target.value);
                     setEditHasChanges(true);
@@ -2013,11 +2391,27 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             ) : (
               <h1>{dashboard?.name}</h1>
             )}
+            {/* Variables editor trigger — hugs the name in edit mode. Styled
+                like the Cancel button (secondary) for consistency with the
+                edit-mode action cluster + the Settings gear. */}
+            {isEditMode && dashboardVariableEnabled && (
+              <Button
+                kind="secondary"
+                size="sm"
+                className="variables-button"
+                onClick={() => setVarsModalOpen(true)}
+              >
+                Variables
+              </Button>
+            )}
             {/* Dashboard-variable picker (connection-swap). Renders only in
                 view mode when the feature is active for this dashboard. */}
             {!isEditMode && dashVariable && (() => {
               const items = (dashVariableCandidates || []).filter((c) => c.compatible);
               const selected = items.find((c) => c.id === dashVariableValue) || null;
+              // Optional: label each candidate from a prefixed tag (e.g. a
+              // "host:trv-srv-001" tag → "trv-srv-001"), falling back to name.
+              const labelPrefix = dashVariable.connection_swap?.label_tag_prefix || '';
               return (
                 <div className="dashboard-variable-picker">
                   <Dropdown
@@ -2026,10 +2420,78 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     titleText={dashVariable.label || 'Variable'}
                     label={`${dashVariable.label || 'Variable'}: select…`}
                     items={items}
-                    itemToString={(item) => (item ? (item.name || item.id) : '')}
+                    itemToString={(item) => candidateLabel(item, labelPrefix)}
                     selectedItem={selected}
                     onChange={({ selectedItem }) => setDashVariableValue(selectedItem?.id || null)}
                   />
+                </div>
+              );
+            })()}
+
+            {/* Filter-type variable picker. A value the viewer chooses that is
+                substituted server-side into the query ({{dashboard-variable}})
+                and client-side into filters. Static options → Dropdown;
+                freetext → TextInput. Coexists with the connection picker. */}
+            {!isEditMode && dashFilterVariable && (() => {
+              const cfg = dashFilterVariable.filter_value || {};
+              const label = dashFilterVariable.label || 'Filter';
+              if (cfg.value_source === 'freetext') {
+                return (
+                  <div className="dashboard-variable-picker">
+                    <TextInput
+                      id="dashboard-filter-variable"
+                      size="sm"
+                      labelText={label}
+                      placeholder="Enter a value…"
+                      value={dashFilterValue || ''}
+                      onChange={(e) => setDashFilterValue(e.target.value)}
+                    />
+                  </div>
+                );
+              }
+              // 'static' → the authored list; 'connection' → discovered values
+              // (server-side for SQL/API, stored list for stream/socket; session
+              // override wins), falling back to the static list (seed) on
+              // failure/empty.
+              const staticOptions = Array.isArray(cfg.options) ? cfg.options : [];
+              const options = cfg.value_source === 'connection'
+                ? (effectiveDiscoveredOptions ?? staticOptions)
+                : staticOptions;
+              const selectedOpt = options.includes(dashFilterValue) ? dashFilterValue : null;
+              const loading = cfg.value_source === 'connection' && discoveryLoading;
+              // Stream/socket variables store their list; offer a session-only
+              // "regenerate" (live re-capture) since the stored list can go
+              // stale or have been stopped too early. Not persisted (a designer
+              // makes it permanent via the editor).
+              const showRegenerate = cfg.value_source === 'connection' && discoveryIsStream;
+              return (
+                <div className="dashboard-variable-picker" ref={filterDropdownRef}>
+                  <Dropdown
+                    id="dashboard-filter-variable"
+                    size="sm"
+                    titleText={label}
+                    label={loading ? 'Loading…' : `${label}: select…`}
+                    items={options}
+                    disabled={loading || regenerating}
+                    itemToString={(item) => (item == null ? '' : String(item))}
+                    selectedItem={selectedOpt}
+                    onChange={({ selectedItem }) => setDashFilterValue(selectedItem ?? null)}
+                  />
+                  {/* Regenerate (live re-capture) opens a modal that accumulates
+                      the distinct values in real time with a Stop button. Only
+                      for raw socket/mqtt variables (stored list); tsstore/API/SQL
+                      re-discover on load. */}
+                  {showRegenerate && (
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      hasIconOnly
+                      renderIcon={Renew}
+                      iconDescription="Refresh values (live capture, this session)"
+                      onClick={startSessionRegenerate}
+                      disabled={regenerating}
+                    />
+                  )}
                 </div>
               );
             })()}
@@ -2037,40 +2499,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         </div>
 
         <div className="toolbar-center">
-          {!isEditMode && !fromDesign && dashboardList.length > 1 && (
-            <div className="dashboard-nav-buttons">
-              <IconButton
-                kind="ghost"
-                size="sm"
-                label={`Previous dashboard  ${ALT_KEY_LABEL} ←`}
-                align="bottom"
-                onClick={goToPrevDashboard}
-                disabled={!canGoPrev}
-              >
-                <ChevronLeft size={20} />
-              </IconButton>
-              <IconButton
-                kind="ghost"
-                size="sm"
-                label={isDefaultDashboard ? 'This is the default dashboard' : 'Go to default dashboard'}
-                align="bottom"
-                onClick={goToDefaultDashboard}
-                disabled={isDefaultDashboard || !defaultDashboardId}
-              >
-                <Home size={16} />
-              </IconButton>
-              <IconButton
-                kind="ghost"
-                size="sm"
-                label={`Next dashboard  ${ALT_KEY_LABEL} →`}
-                align="bottom"
-                onClick={goToNextDashboard}
-                disabled={!canGoNext}
-              >
-                <ChevronRight size={20} />
-              </IconButton>
-            </div>
-          )}
           {isEditMode && dimensions.length > 0 && (
             <div className="dimension-selector">
               <Select
@@ -2085,7 +2513,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   <SelectItem
                     key={dim.name}
                     value={dim.name}
-                    text={`${dim.name} (${dim.max_width}×${dim.max_height})`}
+                    text={dim.name}
                   />
                 ))}
               </Select>
@@ -2155,15 +2583,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               </IconButton>
             </div>
           )}
-          {isEditMode && editHasChanges && (
-            <Tag type="blue" size="sm">Unsaved changes</Tag>
-          )}
+          {/* "Unsaved changes" pill removed — the Save button turning primary
+              (blue) on dirty + the navigation/cancel guards convey this. */}
         </div>
 
         <div className="toolbar-right">
-          {!isEditMode && dashboard?.settings?.refresh_interval > 0 && (
-            <RefreshIntervalPill intervalSec={dashboard.settings.refresh_interval} />
-          )}
           {isEditMode ? (
             <>
               {/* View jumps to the read-only viewer of the dashboard
@@ -2220,11 +2644,72 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             </>
           ) : (
             <>
+              {/* Dashboard nav (prev / home / next) sits just before the
+                  right-side control group, separated by a vertical divider.
+                  Moved out of toolbar-center to free up the center for the
+                  dashboard name + variable pickers. */}
+              {!fromDesign && dashboardList.length > 1 && (
+                <>
+                  <div className="dashboard-nav-buttons">
+                    <IconButton
+                      kind="ghost"
+                      size="sm"
+                      label={`Previous dashboard  ${ALT_KEY_LABEL} ←`}
+                      align="bottom"
+                      onClick={goToPrevDashboard}
+                      disabled={!canGoPrev}
+                    >
+                      <ChevronLeft size={20} />
+                    </IconButton>
+                    <IconButton
+                      kind="ghost"
+                      size="sm"
+                      label={isDefaultDashboard ? 'This is the default dashboard' : 'Go to default dashboard'}
+                      align="bottom"
+                      onClick={goToDefaultDashboard}
+                      disabled={isDefaultDashboard || !defaultDashboardId}
+                    >
+                      <Home size={16} />
+                    </IconButton>
+                    <IconButton
+                      kind="ghost"
+                      size="sm"
+                      label={`Next dashboard  ${ALT_KEY_LABEL} →`}
+                      align="bottom"
+                      onClick={goToNextDashboard}
+                      disabled={!canGoNext}
+                    >
+                      <ChevronRight size={20} />
+                    </IconButton>
+                  </div>
+                  <span className="toolbar-divider" aria-hidden="true" />
+                </>
+              )}
+              {/* Refresh section: [Data refresh pill][Last refresh][refresh
+                  icon] grouped together. (Slated to be replaced by a single
+                  compressed control.) */}
+              {dashboard?.settings?.refresh_interval > 0 && (
+                <RefreshIntervalPill intervalSec={dashboard.settings.refresh_interval} />
+              )}
               <RefreshControls
                 lastRefresh={lastRefresh}
                 loading={loading}
                 onRefresh={handleManualRefresh}
               />
+              {/* Design workflow: a prominent ghost Edit button (mirror of the
+                  editor's ghost View button) to jump back into the editor, sitting
+                  to the RIGHT of the refresh section. Plain viewers get Edit in
+                  the overflow menu instead. */}
+              {fromDesign && canDesign && (
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  onClick={enterEditMode}
+                  renderIcon={Edit}
+                >
+                  Edit
+                </Button>
+              )}
               {canDesign && dashboard?.id && !isNewDashboard && (
                 <IconButton
                   kind="ghost"
@@ -2337,16 +2822,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   hasDivider
                 />
               </OverflowMenu>
-              {canDesign && (
-                <IconButton
-                  kind="ghost"
-                  label="Edit dashboard"
-                  align="bottom"
-                  onClick={enterEditMode}
-                >
-                  <Edit size={20} />
-                </IconButton>
-              )}
               <OverflowMenu
                 renderIcon={() => <OverflowMenuVertical size={20} />}
                 flipped
@@ -2358,6 +2833,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 align="bottom-end"
                 iconDescription="Dashboard actions"
               >
+                {/* Edit lives in the overflow for PLAIN viewers (reclaims
+                    header space). In the design workflow (fromDesign) a
+                    prominent ghost Edit button is shown instead — see above. */}
+                {canDesign && !fromDesign && (
+                  <OverflowMenuItem
+                    itemText="Edit"
+                    onClick={enterEditMode}
+                  />
+                )}
                 {canDesign && (
                   <OverflowMenuItem
                     itemText={savingThumbnail ? "Saving..." : "Save Thumbnail"}
@@ -2410,6 +2894,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           dashboard={dashboard}
           resolveConnectionId={resolveConnectionId}
           dashboardVariableText={dashboardVariableText}
+          variableValues={variableValues}
+          dashboardVariableValue={dashFilterValue}
           dashboardCommand={dashboardCommand}
           canControl={canControl}
           refreshTick={refreshTick}
@@ -2589,7 +3075,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   {/* Panel content */}
                   {hasText ? (
                     <div className="component-wrapper text-wrapper">
-                      <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} />
+                      <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
                     </div>
                   ) : hasChart ? (
                     <>
@@ -2647,6 +3133,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                                 // selected. Otherwise returns chart.connection_id.
                                 connectionId: resolveConnectionId(chart, panel),
                                 queryConfig: chart.query_config,
+                                // Edit-mode preview reuses the dashboard's
+                                // resolved variable value (the hook seeds it
+                                // URL → saved userConfig → default_value), so
+                                // variable-driven panels render instead of
+                                // failing on an unsubstituted token.
+                                dashboardVariableValue: dashFilterValue,
                                 dataRefreshInterval: !isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                                 refreshTick,
                               }}
@@ -2771,14 +3263,31 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       />
 
       {/* Text panel editor */}
-      {textEditorPanelId && (
-        <PanelTextEditor
-          config={editablePanels.find(p => p.id === textEditorPanelId)?.text_config}
-          onUpdate={(config) => handleTextConfigUpdate(textEditorPanelId, config)}
-          onClose={closeTextEditor}
-          anchorRect={textEditorAnchorRect}
-        />
-      )}
+      <PanelTextModal
+        open={!!textEditorPanelId}
+        config={editablePanels.find((p) => p.id === textEditorPanelId)?.text_config}
+        onApply={handleTextConfigApply}
+        onClose={closeTextEditor}
+        variables={definedVariables}
+        variableValues={variableValues}
+      />
+
+      {/* Live value-capture modal for a raw socket/mqtt variable Regenerate.
+          Shows the distinct values accumulating in real time with a Stop button;
+          Stop commits the list (session-only) and closes — the dropdown then
+          auto-opens. No selection inside the modal (the dashboard's pick UI is
+          the dropdown). */}
+      <VariableValuePickerModal
+        open={regenModalOpen}
+        onClose={stopSessionRegenerate}
+        onSelect={() => {}}
+        connectionId={discoveryTarget?.connId}
+        providedValues={regenLiveValues}
+        providedLoading={regenerating}
+        providedPartial
+        onStop={stopSessionRegenerate}
+        captureOnly
+      />
 
       {/* Dashboard settings modal */}
       <DashboardExportModal
@@ -2813,7 +3322,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         open={settingsModalOpen}
         onRequestClose={() => setSettingsModalOpen(false)}
         onRequestSubmit={() => {
-          setEditHasChanges(true);
+          // Commit the draft into the live editable* state on Apply.
+          if (settingsDraft) {
+            setEditableDescription(settingsDraft.description);
+            setEditableNamespace(settingsDraft.namespace);
+            setEditableTags(settingsDraft.tags);
+            setEditableRefreshInterval(settingsDraft.refreshInterval);
+            setEditHasChanges(true);
+          }
           setSettingsModalOpen(false);
         }}
         modalHeading="Dashboard Settings"
@@ -2825,66 +3341,110 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           <TextInput
             id="settings-description"
             labelText="Description"
-            value={editableDescription}
-            onChange={(e) => setEditableDescription(e.target.value)}
+            value={settingsDraft?.description ?? ''}
+            onChange={(e) => setSettingsDraft((d) => ({ ...d, description: e.target.value }))}
             placeholder="Enter dashboard description"
           />
           <NamespaceSelect
             id="settings-namespace"
-            value={editableNamespace}
-            onChange={(v) => { setEditableNamespace(v); setEditHasChanges(true); }}
+            value={settingsDraft?.namespace ?? ''}
+            onChange={(v) => setSettingsDraft((d) => ({ ...d, namespace: v }))}
           />
           <TagInput
             id="settings-tags"
             label="Tags"
-            value={editableTags}
-            onChange={setEditableTags}
+            value={settingsDraft?.tags ?? []}
+            onChange={(t) => setSettingsDraft((d) => ({ ...d, tags: t }))}
           />
           <NumberInput
             id="settings-refresh"
             label="Auto Refresh (seconds)"
-            value={editableRefreshInterval}
-            onChange={(e, { value }) => setEditableRefreshInterval(value)}
+            value={settingsDraft?.refreshInterval ?? 30}
+            onChange={(e, { value }) => setSettingsDraft((d) => ({ ...d, refreshInterval: value }))}
             min={0}
             max={3600}
             step={5}
             helperText="Polling pauses while the browser tab is hidden. Set to 0 to disable auto refresh entirely."
           />
+          {/* Dashboard-variable editing moved to its own "Variables" modal,
+              triggered from the toolbar between the name and the dimension
+              selector. */}
+        </div>
+      </Modal>
 
-          {/* Dashboard Variable — only offered when the deployment has the
-              feature enabled (admin gate). The toggle reveals the config. */}
-          {dashboardVariableEnabled && (
-            <div className="dashboard-variable-settings">
-              <Toggle
-                id="settings-variable-enabled"
-                size="sm"
-                labelText="Dashboard Variable"
-                labelA="Off"
-                labelB="On"
-                toggled={editableVariablesEnabled}
-                onToggle={(checked) => { setEditableVariablesEnabled(checked); setEditHasChanges(true); }}
+      {/* Dashboard Variables editor — moved out of the general Settings form
+          into its own modal (triggered by the toolbar "Vars" button). Edits the
+          same editableVariable* state; like Settings, Apply just commits the
+          dirty flag and the values persist with the main edit-mode Save. */}
+      <Modal
+        open={varsModalOpen}
+        onRequestClose={() => setVarsModalOpen(false)}
+        onRequestSubmit={() => {
+          // Commit the draft into the live editable* state on Apply.
+          if (varsDraft) {
+            setEditableVariablesEnabled(varsDraft.enabled);
+            setEditableVariableMode(varsDraft.mode);
+            setEditableVariableLabel(varsDraft.label);
+            setEditableVariableTags(varsDraft.tags);
+            setEditableVariableSchemaStrict(varsDraft.schemaStrict);
+            setEditableVariableSameNamespace(varsDraft.sameNamespace);
+            setEditableVariableLabelTagPrefix(varsDraft.labelTagPrefix);
+            setEditableVariableValueSource(varsDraft.valueSource);
+            setEditableVariableOptions(varsDraft.options);
+            setEditableVariableDefault(varsDraft.defaultValue);
+            setEditHasChanges(true);
+          }
+          setVarsModalOpen(false);
+        }}
+        modalHeading="Dashboard Variables"
+        primaryButtonText="Apply"
+        secondaryButtonText="Cancel"
+        size="sm"
+      >
+        <div className="dashboard-variable-settings">
+          <Toggle
+            id="settings-variable-enabled"
+            size="sm"
+            labelText="Dashboard Variable"
+            labelA="Off"
+            labelB="On"
+            toggled={!!varsDraft?.enabled}
+            onToggle={(checked) => setVarsDraft((d) => ({ ...d, enabled: checked }))}
+          />
+          {varsDraft?.enabled && (
+            <>
+              <Select
+                id="settings-variable-mode"
+                labelText="Variable type"
+                value={varsDraft?.mode ?? 'connection_swap'}
+                onChange={(e) => setVarsDraft((d) => ({ ...d, mode: e.target.value }))}
+                helperText="What the variable drives, and how the header surfaces it."
+              >
+                <SelectItem value="connection_swap" text="Connection — repoint panels to a chosen connection" />
+                <SelectItem value="filter" text="Filter value — substitute a value into queries/filters" />
+              </Select>
+              <TextInput
+                id="settings-variable-label"
+                labelText="Variable label"
+                value={varsDraft?.label ?? ''}
+                onChange={(e) => setVarsDraft((d) => ({ ...d, label: e.target.value }))}
+                placeholder={varsDraft?.mode === 'filter' ? 'e.g. Host' : 'e.g. Site'}
+                helperText="Shown next to the dashboard name in the header control."
               />
-              {editableVariablesEnabled && (
+
+              {varsDraft?.mode === 'connection_swap' && (
                 <>
-                  <TextInput
-                    id="settings-variable-label"
-                    labelText="Variable label"
-                    value={editableVariableLabel}
-                    onChange={(e) => { setEditableVariableLabel(e.target.value); setEditHasChanges(true); }}
-                    placeholder="e.g. Site"
-                    helperText="Shown next to the dashboard name in the header dropdown."
-                  />
                   <TagInput
                     id="settings-variable-tags"
                     label="Connection tags"
-                    value={editableVariableTags}
-                    onChange={(t) => { setEditableVariableTags(t); setEditHasChanges(true); }}
+                    value={varsDraft?.tags ?? []}
+                    onChange={(t) => setVarsDraft((d) => ({ ...d, tags: t }))}
                   />
                   <Select
                     id="settings-variable-schema-strict"
                     labelText="Compatibility check"
-                    value={editableVariableSchemaStrict}
-                    onChange={(e) => { setEditableVariableSchemaStrict(e.target.value); setEditHasChanges(true); }}
+                    value={varsDraft?.schemaStrict ?? 'type_only'}
+                    onChange={(e) => setVarsDraft((d) => ({ ...d, schemaStrict: e.target.value }))}
                     helperText="How strictly candidate connections must match. Type only is recommended (one store per site)."
                   >
                     <SelectItem value="type_only" text="Type only (recommended)" />
@@ -2897,12 +3457,60 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     labelText="Same namespace only"
                     labelA="Off (any namespace)"
                     labelB="On"
-                    toggled={editableVariableSameNamespace}
-                    onToggle={(checked) => { setEditableVariableSameNamespace(checked); setEditHasChanges(true); }}
+                    toggled={!!varsDraft?.sameNamespace}
+                    onToggle={(checked) => setVarsDraft((d) => ({ ...d, sameNamespace: checked }))}
+                  />
+                  <TextInput
+                    id="settings-variable-label-tag-prefix"
+                    labelText="Label tag prefix (optional)"
+                    value={varsDraft?.labelTagPrefix ?? ''}
+                    onChange={(e) => setVarsDraft((d) => ({ ...d, labelTagPrefix: e.target.value }))}
+                    placeholder="e.g. host"
+                    helperText="Show a connection's tag value in the dropdown instead of its name: prefix &quot;host&quot; shows &quot;trv-srv-001&quot; from a &quot;host:trv-srv-001&quot; tag. Falls back to the connection name when no matching tag."
                   />
                 </>
               )}
-            </div>
+
+              {varsDraft?.mode === 'filter' && (
+                <>
+                  <Select
+                    id="settings-variable-value-source"
+                    labelText="Value source"
+                    value={varsDraft?.valueSource ?? 'static'}
+                    onChange={(e) => setVarsDraft((d) => ({ ...d, valueSource: e.target.value }))}
+                    helperText="Where the header gets the value. Use the {{dashboard-variable}} token in a component's query or filter to consume it."
+                  >
+                    <SelectItem value="static" text="Pick from a list" />
+                    <SelectItem value="freetext" text="Type a value (free text)" />
+                    <SelectItem value="connection" text="From connection (live)" />
+                  </Select>
+                  {varsDraft?.valueSource === 'connection' && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', margin: '0' }}>
+                      Options are discovered live from the variable-driven component&apos;s
+                      connection at view time. The static list below (optional) is used as a
+                      fallback if discovery fails.
+                    </p>
+                  )}
+                  {/* Static options: the explicit list for "static", and the
+                      optional fallback list for "connection". */}
+                  {(varsDraft?.valueSource === 'static' || varsDraft?.valueSource === 'connection') && (
+                    <TagInput
+                      id="settings-variable-options"
+                      label={varsDraft?.valueSource === 'connection' ? 'Fallback options (optional)' : 'Options'}
+                      value={varsDraft?.options ?? []}
+                      onChange={(o) => setVarsDraft((d) => ({ ...d, options: o }))}
+                    />
+                  )}
+                  <TextInput
+                    id="settings-variable-default"
+                    labelText="Default value (optional)"
+                    value={varsDraft?.defaultValue ?? ''}
+                    onChange={(e) => setVarsDraft((d) => ({ ...d, defaultValue: e.target.value }))}
+                    placeholder="Pre-selected on first load"
+                  />
+                </>
+              )}
+            </>
           )}
         </div>
       </Modal>

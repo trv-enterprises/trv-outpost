@@ -131,7 +131,17 @@ func (a *EdgeLakeAdapter) Query(ctx context.Context, query registry.Query) (*reg
 		return nil, fmt.Errorf("database parameter is required for EdgeLake queries")
 	}
 
-	command := fmt.Sprintf(`sql %s format = json "%s"`, database, query.Raw)
+	// Substitute the dashboard-variable token (if any). EdgeLake has no bind
+	// params — the command interpolates the query into a double-quoted AnyLog
+	// SQL string — so the value is ESCAPED (this is the sole injection vector
+	// for this adapter; see substituteEdgeLakeToken / escapeEdgeLakeValue).
+	value, hasValue := dashboardVariableValue(query.Params)
+	substituted, err := substituteEdgeLakeToken(query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+
+	command := fmt.Sprintf(`sql %s format = json "%s"`, database, substituted)
 
 	distributed := a.config.UseDistributedQuery
 	if query.Params != nil {

@@ -38,7 +38,8 @@ import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
 import MQTTTopicSelector from './MQTTTopicSelector';
 import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
-import { transformData, formatCellValue } from '../utils/dataTransforms';
+import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { deriveVariableColumn } from '../utils/deriveVariableColumn';
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -46,6 +47,7 @@ import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceSelect from './shared/NamespaceSelect';
 import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
+import VariableValuePickerModal from './VariableValuePickerModal';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
@@ -93,6 +95,40 @@ const FILTER_OPERATORS = [
   { id: 'isNull', label: 'Is Null' },
   { id: 'isNotNull', label: 'Is Not Null' }
 ];
+
+// Dashboard-variable substitution tokens offered as insertable pills when the
+// component's "Accepts dashboard-variable substitution" flag is on. Each entry
+// is { label, token }. v1 has a single string/filter variable; this is a LIST
+// so the future range type (which contributes two tokens — {{range_from}} /
+// {{range_to}}) drops in as additional entries with no structural change.
+const DASHBOARD_VARIABLE_TOKENS = [
+  { label: 'Variable', token: DASHBOARD_VARIABLE_TOKEN },
+];
+
+// VariablePills — a row of clickable pills, one per available substitution
+// token. Clicking a pill calls onInsert(token); the caller decides where the
+// token lands (cursor position in the SQL field, or the whole value of a filter
+// row). Rendered only when the substitution flag is on.
+function VariablePills({ tokens, onInsert, hint }) {
+  if (!tokens || tokens.length === 0) return null;
+  return (
+    <div className="variable-pills">
+      {hint && <span className="variable-pills__hint">{hint}</span>}
+      {tokens.map((t) => (
+        <Tag
+          key={t.token}
+          type="purple"
+          size="sm"
+          onClick={() => onInsert(t.token)}
+          title={`Insert ${t.token}`}
+          style={{ cursor: 'pointer' }}
+        >
+          {t.label}
+        </Tag>
+      ))}
+    </div>
+  );
+}
 
 // Aggregation types
 const AGGREGATION_TYPES = [
@@ -411,6 +447,57 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Query configuration
   const [queryRaw, setQueryRaw] = useState('');
   const [queryType, setQueryType] = useState('sql');
+  // Ref to the raw-query TextArea so a variable pill can insert its token at the
+  // cursor position rather than only appending.
+  const queryRawRef = useRef(null);
+
+  // Preview value for the dashboard-variable token. The editor has no dashboard
+  // context to supply the runtime value, so when the query/filter uses the
+  // {{dashboard-variable}} token the author types a sample value here; it is
+  // sent as query.params.dashboard_variable for the preview fetch (and the live
+  // preview render) so the query resolves instead of failing "variable not set".
+  const [previewVariableValue, setPreviewVariableValue] = useState('');
+  const [valuePickerOpen, setValuePickerOpen] = useState(false);
+  // Client-side-filter value discovery: when a client-side filter is bound to
+  // the dashboard variable, there's no engine-side DISTINCT — we capture
+  // records (the normal Fetch), unique the bound column in the browser, and
+  // open the picker in CLIENT mode with that list. Separate state from the
+  // server picker above (which handles SQL/EdgeLake).
+  const [clientValuePickerOpen, setClientValuePickerOpen] = useState(false);
+  const [clientDiscoveredValues, setClientDiscoveredValues] = useState([]);
+  const [clientDiscoveredColumn, setClientDiscoveredColumn] = useState('');
+  const [clientDiscoveredPartial, setClientDiscoveredPartial] = useState(false);
+  // True while a RAW socket/mqtt value-discovery capture is streaming live into
+  // the picker (the modal shows values accumulating + a Stop button). tsstore/
+  // API harvest from a one-shot fetch and never set this.
+  const [clientCapturing, setClientCapturing] = useState(false);
+  const clientCaptureRef = useRef(null); // EventSource for the live discovery capture
+
+  // Insert a substitution token into the raw query at the current cursor
+  // position (falls back to appending). Keeps focus + caret after the inserted
+  // token so the author can keep typing.
+  const insertTokenIntoQuery = useCallback((token) => {
+    const el = queryRawRef.current?.input || queryRawRef.current?.textarea || queryRawRef.current;
+    setQueryRaw((prev) => {
+      const start = el?.selectionStart ?? prev.length;
+      const end = el?.selectionEnd ?? prev.length;
+      const next = prev.slice(0, start) + token + prev.slice(end);
+      // Restore caret just after the inserted token on the next tick.
+      requestAnimationFrame(() => {
+        if (el && typeof el.setSelectionRange === 'function') {
+          const pos = start + token.length;
+          el.focus();
+          el.setSelectionRange(pos, pos);
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  // Best-effort derivation of the column/table the dashboard variable filters
+  // on, for the value-picker. Shared with the dashboard runtime discovery so
+  // both behave identically. Ambiguity → empty (picker asks the user to choose).
+  const derivedVariableColumn = useMemo(() => deriveVariableColumn(queryRaw), [queryRaw]);
 
   // Data mapping
   const [xAxisColumn, setXAxisColumn] = useState('');
@@ -424,6 +511,55 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Filters and aggregation
   const [filters, setFilters] = useState([]);
+
+  // The client-side filter (if any) bound to the dashboard variable — its value
+  // is exactly the token. Its `field` is the column whose distinct values feed
+  // the picker. Null when no filter is variable-bound. (Declared after `filters`
+  // to avoid a TDZ on it.)
+  const variableBoundFilter = useMemo(
+    () => filters.find((f) => typeof f?.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN) || null,
+    [filters],
+  );
+
+  // Harvest the distinct values of `column` from a captured preview result set
+  // ({columns, rows}), in row order, de-duplicated, dropping null/empty. Used
+  // for client-side-filter value discovery (no engine-side DISTINCT). `cap`
+  // bounds the scan; the caller marks the list partial when the source was
+  // itself capped/stopped.
+  const harvestColumnValues = useCallback((resultSet, column, cap = 1000) => {
+    if (!resultSet || !column) return [];
+    const cols = resultSet.columns || [];
+    const idx = cols.indexOf(column);
+    if (idx < 0) return [];
+    const seen = new Set();
+    const out = [];
+    const rows = resultSet.rows || [];
+    for (let i = 0; i < rows.length && out.length < cap; i++) {
+      const v = rows[i]?.[idx];
+      if (v == null) continue;
+      const s = String(v);
+      if (s === '' || seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  }, []);
+
+  // After a capture, if a client-side filter is bound to the variable and no
+  // preview value is chosen yet, harvest the bound column's distinct values and
+  // open the client-mode picker. No-op otherwise.
+  const maybeOpenClientValuePicker = useCallback((resultSet, { partial = false } = {}) => {
+    if (!variableBoundFilter || previewVariableValue) return false;
+    const column = variableBoundFilter.field;
+    const values = harvestColumnValues(resultSet, column);
+    setClientDiscoveredColumn(column);
+    setClientDiscoveredValues(values);
+    setClientDiscoveredPartial(partial);
+    setClientValuePickerOpen(true);
+    return true;
+  }, [variableBoundFilter, previewVariableValue, harvestColumnValues]);
+
+
   const [aggregation, setAggregation] = useState({ type: '', sortBy: '', field: '', count: 10 });
   const [sortBy, setSortBy] = useState('');
   const [sortOrder, setSortOrder] = useState('desc');
@@ -1146,6 +1282,65 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const isMQTT = selectedDatasource?.type === 'mqtt';
   const isAPI = selectedDatasource?.type === 'api';
 
+  // RAW socket/mqtt have no query API (only a live stream), so a discovered
+  // value list is captured live + persisted on the connection (design authority)
+  // for the dashboard dropdown to read without a costly view-time capture.
+  // tsstore/API/SQL/EdgeLake re-discover on demand via a query, so no persist.
+  const shouldPersistDiscovered = isSocket || isMQTT;
+
+  // Stop an in-flight live discovery capture (raw socket/mqtt). Leaves the
+  // picker open with what was accumulated so the user can pick.
+  const stopClientCapture = useCallback(() => {
+    if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
+    setClientCapturing(false);
+  }, []);
+
+  // Live value discovery for RAW socket/mqtt: open the picker immediately and
+  // stream distinct values into it as SSE records arrive, with a Stop button.
+  // Mirrors the dashboard's Regenerate. column = the bound filter field.
+  const startClientCapture = useCallback((column) => {
+    if (!selectedConnectionId || !column) return false;
+    if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
+    setClientDiscoveredColumn(column);
+    setClientDiscoveredValues([]);
+    setClientDiscoveredPartial(true); // a live capture is always potentially incomplete
+    setClientCapturing(true);
+    setClientValuePickerOpen(true);
+    const authParam = apiClient.streamAuthQuery();
+    const topicParam = (isMQTT && queryRaw) ? `&topics=${encodeURIComponent(queryRaw)}` : '';
+    const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
+    const es = new EventSource(sseUrl);
+    clientCaptureRef.current = es;
+    const seen = new Set();
+    const values = [];
+    const CAP = 1000;
+    const finish = () => {
+      if (clientCaptureRef.current !== es) return;
+      es.close();
+      clientCaptureRef.current = null;
+      setClientCapturing(false);
+    };
+    es.addEventListener('record', (event) => {
+      try {
+        const rec = JSON.parse(event.data);
+        const v = rec?.[column];
+        if (v != null) {
+          const s = String(v);
+          if (s !== '' && !seen.has(s)) { seen.add(s); values.push(s); setClientDiscoveredValues([...values]); }
+        }
+        if (values.length >= CAP) finish();
+      } catch { /* ignore parse errors */ }
+    });
+    es.onerror = () => { if (clientCaptureRef.current === es) finish(); };
+    setTimeout(() => { if (clientCaptureRef.current === es) finish(); }, 300000); // 5 min safety cap
+    return true;
+  }, [selectedConnectionId, isMQTT, queryRaw]);
+
+  // Tear down any live discovery capture on unmount.
+  useEffect(() => () => {
+    if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
+  }, []);
+
   const handleDatasourceChange = (newDatasourceId) => {
     setSelectedConnectionId(newDatasourceId);
 
@@ -1396,7 +1591,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   };
 
-  const fetchPreviewData = async () => {
+  // fetchPreviewData runs the preview query. variableValueOverride lets the
+  // value-picker re-invoke it with the chosen value directly (state updates are
+  // async, so we can't rely on previewVariableValue being set yet on re-entry).
+  const fetchPreviewData = async (variableValueOverride = undefined) => {
+    // Buttons wire onClick={fetchPreviewData}, so React passes a click EVENT as
+    // the first arg. Only honor a real string override (the value picker passes
+    // one); ignore anything else so an event never lands in query.params and
+    // breaks JSON.stringify ("cyclic object value").
+    if (typeof variableValueOverride !== 'string') variableValueOverride = undefined;
     if (!selectedConnectionId) {
       setPreviewError('Please select a connection');
       return;
@@ -1405,6 +1608,32 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Socket, API, and TSStore datasources don't require manual query entry
     if (!isSocket && !isMQTT && !isAPI && !isTSStore && !queryRaw.trim()) {
       setPreviewError('Please enter a query');
+      return;
+    }
+
+    // Intercept: a query that uses the dashboard-variable token can't run
+    // without a value. Rather than a separate "set a preview value" step, the
+    // Fetch action opens the value picker; the user picks a value and the
+    // picker re-invokes this fetch with it. The chosen value is transient —
+    // the returned data makes the selection self-evident, so we don't surface
+    // a "current value" field.
+    const effectiveVarValue = variableValueOverride !== undefined ? variableValueOverride : previewVariableValue;
+    if (
+      typeof queryRaw === 'string' &&
+      queryRaw.includes(DASHBOARD_VARIABLE_TOKEN) &&
+      !effectiveVarValue
+    ) {
+      setValuePickerOpen(true);
+      return;
+    }
+
+    // Raw socket/mqtt value discovery: these have NO query API, so we can't
+    // harvest from a one-shot fetch. When a client-side filter is bound to the
+    // variable and no value is chosen yet, open the picker and stream distinct
+    // values into it live (Stop when it stabilizes), instead of running a
+    // preview query. tsstore/API/SQL harvest from their query result below.
+    if ((isSocket || isMQTT) && variableBoundFilter && !effectiveVarValue) {
+      startClientCapture(variableBoundFilter.field);
       return;
     }
 
@@ -1480,12 +1709,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           const displayRecords = records.length > 0 ? records : rawRecords;
           const columns = Object.keys(displayRecords[0]);
           const rows = displayRecords.map(r => columns.map(c => r[c]));
-          setPreviewData({ columns, rows, metadata: { row_count: rows.length } });
+          const resultSet = { columns, rows, metadata: { row_count: rows.length } };
+          setPreviewData(resultSet);
           if (columns.length > 0) {
             setAvailableColumns(columns);
             if (!xAxisColumn) setXAxisColumn(columns[0]);
             if (yAxisColumns.length === 0 && columns.length > 1) setYAxisColumns([columns[1]]);
           }
+          // Streaming captures are always potentially incomplete (the user
+          // stops, or the window/cap ends) — flag the discovered list partial.
+          maybeOpenClientValuePicker(resultSet, { partial: true });
           setPreviewLoading(false);
         };
 
@@ -1521,8 +1754,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       let queryParams = {};
       let rawQuery = queryRaw;
 
-      if (isSocket || isTSStoreStreaming) {
-        rawQuery = ''; // Streaming doesn't need a query string — fetch newest for schema discovery
+      if (isTSStoreStreaming) {
+        // tsstore answers "newest" over HTTP even in streaming transport, so we
+        // don't rely on a live stream collect. For value discovery (a filter
+        // bound to the variable, no value chosen yet) pull a deep window so the
+        // harvest sees enough distinct values; otherwise a small newest is
+        // plenty for schema preview.
+        rawQuery = 'newest';
+        queryParams = { limit: (variableBoundFilter && !effectiveVarValue) ? 1000 : (tsstoreLimit || 100) };
+      } else if (isSocket) {
+        rawQuery = ''; // Raw socket has no query API — adapter collects from the live stream
       } else if (isTSStore) {
         // Build TSStore query: 'newest', 'oldest', or 'since:DURATION'
         if (tsstoreQueryType === 'since') {
@@ -1551,6 +1792,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // empty raw as "newest" + default cap, so flat payloads got back
       // ANY result on tsstore connections — masking the bug for SQL /
       // EdgeLake / Prometheus / API users who hit "query is required."
+      // Supply the dashboard-variable value (from the picker) when the query
+      // uses the token, so the server substitutes it instead of erroring.
+      if (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) {
+        queryParams = { ...queryParams, dashboard_variable: effectiveVarValue };
+      }
+
       const data = await apiClient.queryConnection(selectedConnectionId, {
         query: {
           raw: rawQuery,
@@ -1560,6 +1807,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       });
 
       setPreviewData(data.result_set);
+
+      // Client-side-filter value discovery: if a filter is bound to the
+      // variable and no value is chosen yet, open the picker on the captured
+      // rows. API/SQL fetches are bounded by the query limit (treat as
+      // complete); only flag partial for streaming captures (handled below).
+      maybeOpenClientValuePicker(data.result_set);
 
       if (data.result_set?.columns) {
         const cols = data.result_set.columns;
@@ -1616,6 +1869,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       queryParams = { database: edgelakeDatabase };
     }
 
+    // Inject the preview value so the rendered preview's own useData fetch
+    // resolves the {{dashboard-variable}} token (same as the preview-fetch path).
+    if (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) {
+      queryParams = { ...queryParams, dashboard_variable: previewVariableValue };
+    }
+
     const transforms = {
       filters,
       aggregation: aggregation.type ? aggregation : null,
@@ -1641,7 +1900,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -1658,13 +1917,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     const hasTransforms = completeFilters.length > 0 || aggregation?.type || sortBy || limitRows > 0;
     if (!hasTransforms) return previewData;
 
-    const parsedFilters = completeFilters.map(f => ({
-      field: f.field,
-      op: f.op,
-      value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'
-        ? f.value.split(',').map(v => v.trim())
-        : f.value
-    }));
+    const parsedFilters = completeFilters.map(f => {
+      // Resolve the dashboard-variable token to the preview value so a
+      // variable-driven filter previews against the sample value.
+      const rawValue = (typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN)
+        ? previewVariableValue
+        : f.value;
+      return {
+        field: f.field,
+        op: f.op,
+        value: (f.op === 'in' || f.op === 'notIn') && typeof rawValue === 'string'
+          ? rawValue.split(',').map(v => v.trim())
+          : rawValue
+      };
+    });
 
     const transforms = {
       filters: parsedFilters,
@@ -1685,7 +1951,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         filtered: completeFilters.length > 0
       }
     };
-  }, [previewData, filters, aggregation, sortBy, sortOrder, limitRows]);
+  }, [previewData, filters, aggregation, sortBy, sortOrder, limitRows, previewVariableValue]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -1796,7 +2062,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       } : null,
       component_code: showCustomCode ? componentCode : generatedCode,
       use_custom_code: showCustomCode,
-      uses_dashboard_variable: usesDashboardVariable,
+      // Derive from token presence (query or a filter value) rather than a
+      // toggle — the field reflects whether this component actually uses the
+      // {{dashboard-variable}} token, however it was authored.
+      uses_dashboard_variable:
+        usesDashboardVariable ||
+        (typeof queryRaw === 'string' && queryRaw.includes(DASHBOARD_VARIABLE_TOKEN)) ||
+        filters.some((f) => typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN),
       options: (() => {
         if (chartType === 'banded_bar') {
           return { ...chartOptions, bandedBarStyle };
@@ -2038,6 +2310,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               value={namespace}
               onChange={setNamespace}
             />
+            {/* The per-component "accepts substitution" toggle was removed —
+                substitution capabilities (the query pill + visual-builder
+                "Dashboard variable" value type) now show whenever the
+                deployment has dashboard variables enabled. The runtime keys on
+                the {{dashboard-variable}} token's presence, not a flag; the
+                stored uses_dashboard_variable field is still set on save (auto)
+                for any future surface that wants the authoring-intent signal. */}
           </div>
           <div className="metadata-col metadata-col--three-quarters">
             <TagInput
@@ -2046,22 +2325,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               value={tags}
               onChange={setTags}
             />
-            {/* Variable-substitution opt-in. Marks this component's query/filter
-                as authored with the `dashboard-variable` token, for value
-                substitution at view time (SQL WHERE / client-side filter; future).
-                This is NOT connection-swap — swap is per-panel and needs no flag.
-                Gated by the global dashboard_variable.enabled admin setting. */}
-            {dashboardVariableEnabled && (
-              <Toggle
-                id="chart-uses-dashboard-variable"
-                size="sm"
-                labelText="Accepts dashboard-variable substitution"
-                labelA="No"
-                labelB="Yes"
-                toggled={usesDashboardVariable}
-                onToggle={setUsesDashboardVariable}
-              />
-            )}
           </div>
         </div>
       </div>
@@ -2132,6 +2395,64 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             </div>
           </div>
         </Modal>,
+        document.body
+      )}
+
+      {/* Dashboard-variable value picker — distinct values from the connection.
+          Portaled to escape the parent editor modal. On select, sets the
+          preview value and remembers the column/table for the variable's
+          runtime discovery config. */}
+      {valuePickerOpen && createPortal(
+        <VariableValuePickerModal
+          open
+          onClose={() => setValuePickerOpen(false)}
+          onSelect={(value) => {
+            // Remember the value for the live-preview render path, auto-enable
+            // the substitution flag (the author clearly intends it), close the
+            // picker, and run the real query with the chosen value.
+            setPreviewVariableValue(value);
+            setUsesDashboardVariable(true);
+            setValuePickerOpen(false);
+            fetchPreviewData(value);
+          }}
+          connectionId={selectedConnectionId}
+          column={derivedVariableColumn.column}
+          table={derivedVariableColumn.table}
+          database={edgelakeDatabase}
+          schemaColumns={availableColumns}
+        />,
+        document.body
+      )}
+
+      {/* Client-mode value picker — for a client-side filter bound to the
+          variable. Populated from the rows just captured (uniqued in the
+          browser); no server fetch. On select we remember the preview value
+          (filteredPreviewData re-filters the captured rows to it) and, for
+          stream-like connections, persist the list onto the connection so the
+          dashboard dropdown can read it without a costly view-time capture.
+          Persistence is design-gated server-side; a viewer's 403 is swallowed. */}
+      {clientValuePickerOpen && createPortal(
+        <VariableValuePickerModal
+          open
+          onClose={() => { stopClientCapture(); setClientValuePickerOpen(false); }}
+          onSelect={(value) => {
+            setPreviewVariableValue(value);
+            setUsesDashboardVariable(true);
+            setClientValuePickerOpen(false);
+            if (shouldPersistDiscovered && selectedConnectionId && clientDiscoveredColumn) {
+              apiClient.saveDiscoveredValues(selectedConnectionId, {
+                column: clientDiscoveredColumn,
+                values: clientDiscoveredValues,
+                partial: clientDiscoveredPartial,
+              }).catch(() => { /* design-gated; viewers can't persist — ignore */ });
+            }
+          }}
+          connectionId={selectedConnectionId}
+          providedValues={clientDiscoveredValues}
+          providedPartial={clientDiscoveredPartial}
+          providedLoading={clientCapturing}
+          onStop={stopClientCapture}
+        />,
         document.body
       )}
 
@@ -2624,6 +2945,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   ) : selectedDatasource.type === 'sql' && queryMode === 'visual' ? (
                     <SQLQueryBuilder
                       connectionId={selectedConnectionId}
+                      allowDashboardVariable={dashboardVariableEnabled}
                       onQueryChange={(query) => setQueryRaw(query)}
                       onExecute={(response) => {
                         if (response.success && response.result_set) {
@@ -2764,6 +3086,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       )}
                       <TextArea
                         id="query-raw"
+                        ref={queryRawRef}
                         labelText={getQueryLabelForType(selectedDatasource.type)}
                         value={queryRaw}
                         onChange={(e) => setQueryRaw(e.target.value)}
@@ -2771,6 +3094,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         rows={selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 1 : 6}
                         className={`query-textarea ${selectedDatasource.type === 'api' || selectedDatasource.type === 'mqtt' ? 'query-textarea--compact' : ''}`}
                       />
+                      {/* Substitution pills — click to drop a dashboard-variable
+                          token into the query at the cursor. Shown when the
+                          deployment has dashboard variables enabled, so the
+                          author can author a variable-driven query. Fetching a
+                          query that contains the token opens the value picker
+                          automatically (no separate "set a value" step). */}
+                      {dashboardVariableEnabled && (
+                        <VariablePills
+                          tokens={DASHBOARD_VARIABLE_TOKENS}
+                          onInsert={insertTokenIntoQuery}
+                          hint="Insert variable:"
+                        />
+                      )}
                     </>
                   )}
                 </div>
@@ -3169,50 +3505,107 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   {filters.length > 0 ? (
                     availableColumns.length > 0 ? (
                       <div className="filters-list">
-                        {filters.map((filter, index) => (
-                          <div key={index} className="filter-row">
-                            <Select
-                              id={`filter-field-${index}`}
-                              labelText="Field"
-                              value={filter.field}
-                              onChange={(e) => updateFilter(index, 'field', e.target.value)}
-                              size="sm"
-                            >
-                              {availableColumns.map(col => (
-                                <SelectItem key={col} value={col} text={col} />
-                              ))}
-                            </Select>
-                            <Select
-                              id={`filter-op-${index}`}
-                              labelText="Operator"
-                              value={filter.op}
-                              onChange={(e) => updateFilter(index, 'op', e.target.value)}
-                              size="sm"
-                            >
-                              {FILTER_OPERATORS.map(op => (
-                                <SelectItem key={op.id} value={op.id} text={op.label} />
-                              ))}
-                            </Select>
-                            {!['isNull', 'isNotNull'].includes(filter.op) && (
-                              <TextInput
-                                id={`filter-value-${index}`}
-                                labelText="Value"
-                                value={filter.value}
-                                onChange={(e) => updateFilter(index, 'value', e.target.value)}
-                                placeholder={filter.op === 'in' || filter.op === 'notIn' ? 'val1, val2, val3' : 'Enter value'}
+                        {filters.map((filter, index) => {
+                          const hasValue = !['isNull', 'isNotNull'].includes(filter.op);
+                          // Value-source is DERIVED, not stored: a filter bound
+                          // to a dashboard variable carries the token as its
+                          // literal value (the same contract the substitution +
+                          // save paths already key on). The inline Select just
+                          // toggles between a typed literal and that token.
+                          const boundToVariable = typeof filter.value === 'string'
+                            && filter.value.trim() === DASHBOARD_VARIABLE_TOKEN;
+                          return (
+                            <div key={index} className="filter-row">
+                              <Select
+                                id={`filter-field-${index}`}
+                                labelText=""
+                                hideLabel
+                                value={filter.field}
+                                onChange={(e) => updateFilter(index, 'field', e.target.value)}
                                 size="sm"
-                              />
-                            )}
-                            <IconButton
-                              label="Remove filter"
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => removeFilter(index)}
-                            >
-                              <TrashCan />
-                            </IconButton>
-                          </div>
-                        ))}
+                                className="filter-field-select"
+                              >
+                                {availableColumns.map(col => (
+                                  <SelectItem key={col} value={col} text={col} />
+                                ))}
+                              </Select>
+                              {/* Operator + value-source group sizes to content
+                                  and wraps together (never a staircase). */}
+                              <div className="filter-ops">
+                                <Select
+                                  id={`filter-op-${index}`}
+                                  labelText=""
+                                  hideLabel
+                                  value={filter.op}
+                                  onChange={(e) => updateFilter(index, 'op', e.target.value)}
+                                  size="sm"
+                                  className="filter-operator-select"
+                                >
+                                  {FILTER_OPERATORS.map(op => (
+                                    <SelectItem key={op.id} value={op.id} text={op.label} />
+                                  ))}
+                                </Select>
+                                {/* Value-source picker — a typed literal or the
+                                    dashboard variable (bound at view time). Only
+                                    when the deployment has dashboard variables
+                                    enabled, and not for null-checks. */}
+                                {dashboardVariableEnabled && hasValue && (
+                                  <Select
+                                    id={`filter-value-source-${index}`}
+                                    labelText=""
+                                    hideLabel
+                                    value={boundToVariable ? 'variable' : 'literal'}
+                                    onChange={(e) => updateFilter(
+                                      index,
+                                      'value',
+                                      e.target.value === 'variable' ? DASHBOARD_VARIABLE_TOKEN : '',
+                                    )}
+                                    size="sm"
+                                    className="filter-value-source-select"
+                                  >
+                                    <SelectItem value="literal" text="Value" />
+                                    <SelectItem value="variable" text="Dashboard variable" />
+                                  </Select>
+                                )}
+                              </div>
+                              {hasValue && (
+                                boundToVariable ? (
+                                  <Tag
+                                    type="purple"
+                                    size="sm"
+                                    className="filter-value-variable-chip"
+                                    title="Bound to the dashboard variable at view time"
+                                  >
+                                    {DASHBOARD_VARIABLE_TOKEN}
+                                  </Tag>
+                                ) : (
+                                  <TextInput
+                                    id={`filter-value-${index}`}
+                                    labelText=""
+                                    hideLabel
+                                    value={filter.value}
+                                    onChange={(e) => updateFilter(index, 'value', e.target.value)}
+                                    placeholder={filter.op === 'in' || filter.op === 'notIn' ? 'val1, val2, val3' : 'Enter value'}
+                                    size="sm"
+                                    className="filter-value-input"
+                                  />
+                                )
+                              )}
+                              {/* Flexible spacer soaks up freed width as empty
+                                  space so nothing balloons (esp. null-checks),
+                                  keeping the trash anchored right. */}
+                              <div className="filter-spacer" aria-hidden="true" />
+                              <IconButton
+                                label="Remove filter"
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => removeFilter(index)}
+                              >
+                                <TrashCan />
+                              </IconButton>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="saved-filters-display">
@@ -3810,6 +4203,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           timestamp_scale: parserTimestampScale || undefined
                         } : null
                       } : null}
+                      // The author's picked preview value (from the fetch-time
+                      // value picker) drives the live preview's token
+                      // substitution — both the server query param and any
+                      // client-side filter using the token.
+                      dashboardVariableValue={previewVariableValue || null}
                       props={{}}
                     />
                   </div>
