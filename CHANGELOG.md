@@ -6,6 +6,37 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.27.1] — 2026-06-05
+
+Product rebrand + documentation + UI polish. No functional or API changes.
+
+### Changed
+
+- **Rebranded to TRV Outpost** across every user-facing surface — app
+  header, browser title, About dialog, Swagger title, Electron window,
+  AI prompts, docs, and the Postman collection. The JWT issuer default
+  is now `trv-outpost` (a non-validated tag, so existing tokens keep
+  working). The repository moved to `trv-enterprises/trv-outpost`.
+
+### Added
+
+- **Dashboard Variables** user-guide topic (under both View Mode and
+  Editing Dashboards), plus new **System Users** and **AI API Usage**
+  pages. The design pages' "Learn more" links now open the matching doc.
+
+### Fixed
+
+- **Component picker** — narrowed the "All Types" filter so the Sort
+  control no longer wraps to a second line.
+- **Viewer header tooltips** — the fit-mode and actions-menu tooltips now
+  align to the bottom like the Export/Fullscreen tooltips, instead of
+  opening to the left at a different height.
+
+### Infrastructure
+
+- Bumped the container-publish GitHub Actions to their Node 24 majors
+  ahead of GitHub's 2026-06-16 forced migration.
+
 ## [0.27.0] — 2026-06-04
 
 ### Added
