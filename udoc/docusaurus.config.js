@@ -2,7 +2,7 @@
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'TRVE Dashboards',
+  title: 'TRV Outpost',
   tagline: 'User Guide',
   favicon: 'img/favicon.ico',
 
@@ -43,7 +43,7 @@ const config = {
         respectPrefersColorScheme: false,
       },
       navbar: {
-        title: 'TRVE Dashboards',
+        title: 'TRV Outpost',
         // No "Back to Dashboard" link — the docs open in a new tab,
         // so the link only spawned a duplicate tab. Closing the docs
         // tab is the natural way back to the app.

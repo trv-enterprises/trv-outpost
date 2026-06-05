@@ -3,9 +3,9 @@ sidebar_position: 1
 slug: /
 ---
 
-# TRVE Dashboards User Guide
+# TRV Outpost User Guide
 
-Welcome to TRVE Dashboards, a full-stack application for creating, managing, and viewing dynamic data visualization dashboards with real-time data from multiple sources.
+Welcome to TRV Outpost, a full-stack application for creating, managing, and viewing dynamic data visualization dashboards with real-time data from multiple sources.
 
 ## Getting Started
 

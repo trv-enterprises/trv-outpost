@@ -163,7 +163,7 @@ How you make these persist depends on your deployment:
 
 | Deployment style | Where to put them |
 |---|---|
-| `docker-compose.deploy.yml` | A `.env` file next to the compose file. See [.env.example](https://github.com/trv-enterprises/trve-dashboard/blob/main/.env.example) for the full list of optional env vars. |
+| `docker-compose.deploy.yml` | A `.env` file next to the compose file. See [.env.example](https://github.com/trv-enterprises/trv-outpost/blob/main/.env.example) for the full list of optional env vars. |
 | Native dev (`go run` / `./bin/server`) | `~/.zshrc` or `~/.bashrc`, then `source` it. |
 | Kubernetes / Nomad | Your orchestrator's secret manager. |
 | Ansible | Group/host vars or vault. |

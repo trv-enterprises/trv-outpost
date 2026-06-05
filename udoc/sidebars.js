@@ -15,12 +15,12 @@ const sidebars = {
     {
       type: 'category',
       label: 'View Mode',
-      items: ['viewing-dashboards', 'viewer-controls'],
+      items: ['viewing-dashboards', 'viewer-controls', 'dashboard-variables'],
     },
     {
       type: 'category',
       label: 'Editing Dashboards',
-      items: ['dashboard-editor', 'panel-management', 'dashboard-settings'],
+      items: ['dashboard-editor', 'panel-management', 'dashboard-settings', 'dashboard-variables'],
     },
     {
       type: 'category',
@@ -52,7 +52,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Administration',
-      items: ['user-management', 'system-settings', 'device-types'],
+      items: ['user-management', 'system-users', 'system-settings', 'device-types', 'ai-usage'],
     },
     {
       type: 'category',

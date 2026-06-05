@@ -18,7 +18,8 @@ import {
   Button,
   Tag,
   InlineNotification,
-  Modal
+  Modal,
+  Link
 } from '@carbon/react';
 import { Add, TrashCan, Edit, View } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -130,6 +131,10 @@ function DevicesPage() {
     <div className="devices-page">
       <div className="devices-page-header">
         <h2>Device Types</h2>
+        <p className="page-description">
+          Define reusable device types with command schemas that control components send to connected devices.
+          {' '}<Link href="/docs/device-types" target="_blank" rel="noopener noreferrer">Learn more</Link>.
+        </p>
       </div>
 
       {notification && (

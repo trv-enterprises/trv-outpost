@@ -15,8 +15,8 @@ There are two ways to deploy the dashboard with Docker Compose:
 ## Quick Start (deploy from published images)
 
 ```bash
-git clone https://github.com/trv-enterprises/trve-dashboard
-cd trve-dashboard
+git clone https://github.com/trv-enterprises/trv-outpost
+cd trv-outpost
 
 # Optional: copy and edit .env to set DOMAIN, IMAGE_TAG,
 # ASSISTANT_ANTHROPIC_API_KEY (for AI; falls back to ANTHROPIC_API_KEY),
@@ -36,7 +36,7 @@ Your dashboard will be available at:
 
 Pin a specific release with `IMAGE_TAG=v0.10.0` in `.env`; otherwise
 `latest` is used. Available tags:
-<https://github.com/trv-enterprises/trve-dashboard/releases>.
+<https://github.com/trv-enterprises/trv-outpost/releases>.
 
 ## Build from source
 

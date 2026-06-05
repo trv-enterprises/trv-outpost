@@ -1,7 +1,7 @@
 {
   "name": "trve-dashboards",
   "version": "1.0.0",
-  "description": "TRVE Dashboards Desktop Client",
+  "description": "TRV Outpost Desktop Client",
   "main": "main.js",
   "author": "TRV Enterprises LLC",
   "license": "Apache-2.0",
@@ -26,7 +26,7 @@
   },
   "build": {
     "appId": "com.trv.dashboards",
-    "productName": "TRVE Dashboards",
+    "productName": "TRV Outpost",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
@@ -65,7 +65,7 @@
       "entitlementsInherit": "resources/entitlements.mac.plist"
     },
     "dmg": {
-      "title": "TRVE Dashboards",
+      "title": "TRV Outpost",
       "contents": [
         {
           "x": 130,

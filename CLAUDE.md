@@ -8,7 +8,7 @@ See the `release-deploy` skill for the authoritative runbook (tagging, image bui
 
 **Project-specific defaults:** deploy target is `deploy-dashboard`, images land at `ghcr.io/trv-enterprises/dashboard-{server,client}`, token is `$TRVE_GH_TOKEN`. Everything else follows the skill.
 
-**API docs regeneration is part of release.** `make release` calls `make api-docs-check`, which regenerates `server-go/docs/swagger.{json,yaml,go}` (via `swag init`) and `docs/postman/trve-dashboard.postman_collection.json` (via `docs/postman/build-collection.js`), then fails if any of those files diff. If you've added or changed an API handler since the last release, run `make api-docs` and commit the result before tagging — otherwise the release target stops you with a one-line `git add … && git commit` recipe.
+**API docs regeneration is part of release.** `make release` calls `make api-docs-check`, which regenerates `server-go/docs/swagger.{json,yaml,go}` (via `swag init`) and `docs/postman/trv-outpost.postman_collection.json` (via `docs/postman/build-collection.js`), then fails if any of those files diff. If you've added or changed an API handler since the last release, run `make api-docs` and commit the result before tagging — otherwise the release target stops you with a one-line `git add … && git commit` recipe.
 
 **Release notes are mandatory.** After tagging and pushing, run step 4b of the skill (`gh release create vX.Y.Z --title … --notes …`). The tag annotation does not become the GitHub release body — without this step the Releases page shows only the empty `Release vX.Y.Z (BUILD ####)` placeholder. Use the feature-release or fix-release template documented in the skill. Then add the same content as a new entry at the top of `CHANGELOG.md` (Keep-a-Changelog format) so git-clone users see it too.
 
@@ -229,7 +229,7 @@ Use the most abstract (semantic) token available. This ensures theme compatibili
 
 ## Project Overview
 
-**TRVE Dashboards** - A full-stack application for creating, managing, and viewing dynamic data visualization dashboards. The application features:
+**TRV Outpost** - A full-stack application for creating, managing, and viewing dynamic data visualization dashboards. The application features:
 
 1. **Three Operating Modes**: Design, View, and Manage
 2. **Dynamic Chart Builder**: Create React components with ECharts visualizations

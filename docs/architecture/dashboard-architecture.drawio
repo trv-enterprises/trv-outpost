@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="TRVE Dashboards - Logical Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontColor=#f4f4f4;fontStyle=1" parent="1" vertex="1">
+        <mxCell id="title" value="TRV Outpost - Logical Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontColor=#f4f4f4;fontStyle=1" parent="1" vertex="1">
           <mxGeometry x="500" y="20" width="600" height="40" as="geometry" />
         </mxCell>
         <mxCell id="frontend-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;strokeColor=#0f62fe;strokeWidth=2;arcSize=3" parent="1" vertex="1">

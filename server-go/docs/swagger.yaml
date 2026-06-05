@@ -3714,7 +3714,7 @@ info:
     email: support@example.com
     name: Dashboard Team
   description: Dashboard system with AI-powered chart generation
-  title: TRVE Dashboards API
+  title: TRV Outpost API
   version: "1.0"
 paths:
   /ai/sessions:

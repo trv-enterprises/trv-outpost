@@ -18,6 +18,7 @@ import {
   StructuredListBody,
   StructuredListRow,
   StructuredListCell,
+  Link,
 } from '@carbon/react';
 import { Edit, Reset } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -155,6 +156,7 @@ function AIUsagePage() {
       <p className="caps-note">
         Global daily caps: {fmtTokens(data?.global_input_cap)} input / {fmtTokens(data?.global_output_cap)} output per user.
         Resets at UTC midnight. History shows the last {data?.history_days} days.
+        {' '}<Link href="/docs/ai-usage" target="_blank" rel="noopener noreferrer">Learn more</Link>.
       </p>
 
       <div className="user-cards">

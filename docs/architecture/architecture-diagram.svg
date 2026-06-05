@@ -18,7 +18,7 @@
   <rect width="1200" height="900" fill="#0d0d0d"/>
 
   <!-- Title -->
-  <text x="600" y="40" text-anchor="middle" fill="#f4f4f4" font-size="24" font-weight="600">TRVE Dashboards - Logical Architecture</text>
+  <text x="600" y="40" text-anchor="middle" fill="#f4f4f4" font-size="24" font-weight="600">TRV Outpost - Logical Architecture</text>
 
   <!-- ==================== FRONTEND BOX ==================== -->
   <rect x="40" y="70" width="540" height="380" rx="8" fill="url(#frontendGrad)" stroke="#0f62fe" stroke-width="2"/>

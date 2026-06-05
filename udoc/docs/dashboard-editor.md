@@ -20,6 +20,7 @@ When in edit mode, the toolbar changes to show editing controls:
 | Control | Description |
 |---------|-------------|
 | **Dashboard name** | Editable text input — click to rename |
+| **Variables** | Define [dashboard variables](dashboard-variables.md) that re-scope the board at view time |
 | **Dimension preset** | Dropdown to select layout dimensions (center of toolbar) |
 | **Zoom controls** | `-` / `100%` / `+` buttons to zoom the canvas (10%-100%) |
 | **Unsaved changes tag** | Blue tag appears when edits have been made |
@@ -50,6 +51,16 @@ No header bar — components render at full size. The entire panel is a drag tar
 - Empty panels show an "Add" button for assigning components
 
 Toggle between modes using the icon button in the toolbar.
+
+## Dashboard Variables
+
+Click **Variables** (next to the dashboard name) to define a
+[dashboard variable](dashboard-variables.md) — a header dropdown that re-scopes
+every panel at view time, so one dashboard can serve many sites or systems.
+Variables either **swap the connection** each panel reads from, or **substitute
+a value** into panel queries and filters. See
+[Dashboard Variables](dashboard-variables.md) for the full setup, including
+automatic value discovery from the connection.
 
 ## Dimension Presets
 

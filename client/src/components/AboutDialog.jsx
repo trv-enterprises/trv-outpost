@@ -108,7 +108,7 @@ function AboutDialog({ open, onClose, currentUser, clerkActive }) {
     <Modal
       open={open}
       onRequestClose={onClose}
-      modalHeading="About TRVE Dashboards"
+      modalHeading="About TRV Outpost"
       modalLabel="Diagnostic information"
       primaryButtonText="Close"
       onRequestSubmit={onClose}

@@ -2,7 +2,7 @@
     "swagger": "2.0",
     "info": {
         "description": "Dashboard system with AI-powered chart generation",
-        "title": "TRVE Dashboards API",
+        "title": "TRV Outpost API",
         "contact": {
             "name": "Dashboard Team",
             "email": "support@example.com"

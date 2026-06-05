@@ -1,6 +1,6 @@
 # Building from source
 
-This document is for **anyone who wants to build the TRVE Dashboards
+This document is for **anyone who wants to build the TRV Outpost
 container images themselves** rather than pull the prebuilt ones from
 ghcr.io. The published images at
 `ghcr.io/trv-enterprises/dashboard-{server,client}:<version>` are
@@ -44,8 +44,8 @@ defaults are fine — skip the QEMU setup.
 The simplest path. Produces two images you can `docker run` immediately.
 
 ```bash
-git clone https://github.com/trv-enterprises/trve-dashboard.git
-cd trve-dashboard
+git clone https://github.com/trv-enterprises/trv-outpost.git
+cd trv-outpost
 git checkout v0.18.2                   # or whichever tag you want
 
 # Server image — context is the repo root because the server's

@@ -25,6 +25,15 @@ The editor provides a form-based interface:
 
 Click **Save** to create the component.
 
+:::tip Make a component variable-driven
+To let a [dashboard variable](dashboard-variables.md) drive this component, put
+the `{{dashboard-variable}}` token where the value should go — in a SQL/EdgeLake
+`WHERE` clause, or as a client-side filter value. At view time the dashboard's
+selected value is substituted in (safely bound or escaped for queries). The
+component is detected as variable-driven automatically once the token is
+present.
+:::
+
 ## 2. AI Builder
 
 Create components through natural language conversation with an AI assistant:

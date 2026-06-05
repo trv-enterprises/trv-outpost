@@ -14,6 +14,7 @@ import {
   Tile,
   Checkbox,
   FormGroup,
+  Link,
 } from '@carbon/react';
 import { TrashCan, Add, Password } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -117,6 +118,7 @@ function SystemUsersPage() {
             webhook receiver) and <strong>kiosks</strong> (a TV or panel that loads a
             dashboard with the API key baked into the URL). The capability set on
             each user controls what its keys can do.
+            {' '}<Link href="/docs/system-users" target="_blank" rel="noopener noreferrer">Learn more</Link>.
           </p>
         </div>
         <Button

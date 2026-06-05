@@ -215,7 +215,7 @@ function UsersListPage() {
         <p className="page-description">
           Manage user accounts and their access capabilities.
           Users can have View, Design, and/or Manage permissions.
-          {' '}<Link href="#" onClick={(e) => e.preventDefault()}>Learn more</Link>.
+          {' '}<Link href="/docs/user-management" target="_blank" rel="noopener noreferrer">Learn more</Link>.
         </p>
       </div>
 

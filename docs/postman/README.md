@@ -1,14 +1,14 @@
 # Postman collection
 
-Postman v2.1 collection for the TRVE Dashboard API, generated from the
+Postman v2.1 collection for the TRV Outpost API, generated from the
 Swagger spec the Go server emits at `server-go/docs/swagger.json`.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `trve-dashboard.postman_collection.json` | The collection itself — every documented `/api/*` endpoint, grouped by tag, plus a hand-authored `MCP` folder for `/mcp/message`. **Regenerated** by `build-collection.js`. |
-| `trve-dashboard.postman_environment.json` | Your local environment variables: `baseUrl`, `apiKey`, `userId`. **Only seeded on first run** so your real values don't get clobbered when you regenerate. |
+| `trv-outpost.postman_collection.json` | The collection itself — every documented `/api/*` endpoint, grouped by tag, plus a hand-authored `MCP` folder for `/mcp/message`. **Regenerated** by `build-collection.js`. |
+| `trv-outpost.postman_environment.json` | Your local environment variables: `baseUrl`, `apiKey`, `userId`. **Only seeded on first run** so your real values don't get clobbered when you regenerate. |
 | `build-collection.js` | The converter. Re-run after any change to a handler's swag annotations. |
 | `package.json` | Just `"type": "module"` so `node` doesn't print a warning when running the converter. |
 
@@ -20,7 +20,7 @@ Swagger spec the Go server emits at `server-go/docs/swagger.json`.
 
 2. **Import the collection + environment into Postman**
    - File → Import → drop both JSON files
-   - Top-right environment selector → pick "TRVE Dashboard (local)"
+   - Top-right environment selector → pick "TRV Outpost (local)"
    - Set `apiKey` to the token from step 1
    - Adjust `baseUrl` if you're not on `localhost:3001`
 

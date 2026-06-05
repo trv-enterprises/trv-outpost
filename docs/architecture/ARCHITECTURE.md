@@ -1,4 +1,4 @@
-# TRVE Dashboards — Architecture
+# TRV Outpost — Architecture
 
 This page is the landing point for the architecture doc set. For any
 topic larger than a paragraph, see the dedicated sub-document linked
@@ -6,7 +6,7 @@ from the index below.
 
 ## System overview
 
-TRVE Dashboards is a full-stack application for building, viewing,
+TRV Outpost is a full-stack application for building, viewing,
 and managing real-time data visualization dashboards backed by
 multiple external data sources. It includes an AI-assisted component
 builder, a smart-device control plane (MQTT, WebSocket), and

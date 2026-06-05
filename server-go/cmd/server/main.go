@@ -46,7 +46,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/connection" // Registers adapters via init() and exposes SetAllowInsecureTLS for deployment policy
 )
 
-// @title TRVE Dashboards API
+// @title TRV Outpost API
 // @version 1.0
 // @description Dashboard system with AI-powered chart generation
 // @contact.name Dashboard Team

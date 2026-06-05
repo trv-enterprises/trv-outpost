@@ -66,4 +66,11 @@ Click the edit icon (pencil for existing components, `+` for empty panels) in th
 
 After assigning a component, the panel automatically expands to meet the component's minimum size if needed.
 
+## Panels and Dashboard Variables
+
+When a dashboard defines a [dashboard variable](dashboard-variables.md), panels interact with it in two ways:
+
+- **Connection-swap pinning.** Every panel follows a connection-swap variable by default. To keep a panel on its own connection, **pin** it from the panel's edit menu — useful when one panel should always show a fixed reference while the rest of the board re-scopes.
+- **Text panels with variable tokens.** A text panel can embed a `{{variable:NAME}}` token (inserted from a pill in the text editor) that resolves to the variable's current value — e.g. a header reading `Host: {{variable:host}}` updates as the viewer changes the selection.
+
 ---

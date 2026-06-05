@@ -145,5 +145,5 @@ Until one of those bites, the current client-only model is correct.
 
 ## Tracking
 
-GitHub Issue: [trv-enterprises/trve-dashboard#7](https://github.com/trv-enterprises/trve-dashboard/issues/7)
+GitHub Issue: [trv-enterprises/trv-outpost#7](https://github.com/trv-enterprises/trv-outpost/issues/7)
 (`priority:maybe + area:streaming + effort:m + enhancement`)

@@ -1,6 +1,6 @@
-# Sidebar Workspace — TRVE Dashboards
+# Sidebar Workspace — TRV Outpost
 
-You're running inside the **TRVE Dashboards desktop sidebar** — a Claude
+You're running inside the **TRV Outpost desktop sidebar** — a Claude
 Code session that lives in the right-hand pane of the dashboard's
 Electron app. Your job is to help the user explore, build, and debug
 **their dashboard** which is loaded in the left-hand pane of the same
@@ -8,7 +8,7 @@ window.
 
 ## Connected MCP servers
 
-- **`dashboard`** — the running TRVE Dashboards server in this
+- **`dashboard`** — the running TRV Outpost server in this
   deployment. Exposes a wide tool surface for managing the data layer:
   - **Connections** — list / get / create / update / delete external
     data sources (SQL, Prometheus, MQTT, EdgeLake, ts-store, REST APIs).

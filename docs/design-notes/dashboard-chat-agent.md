@@ -647,7 +647,7 @@ toggle survives.
 
 Sketch (final wording lives in `server-go/internal/ai/chat/layers/system.go`):
 
-> You are the TRVE Dashboard Assistant. The user is operating in
+> You are the TRV Outpost Assistant. The user is operating in
 > namespace `<active>`. Today is `<date>`. Their capabilities are:
 > `<caps>`.
 >

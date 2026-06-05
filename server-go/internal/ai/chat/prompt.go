@@ -73,7 +73,7 @@ func buildSystemPrompt(reg *ToolRegistry, caller *CallerCtx) string {
 // Tone: terse, builder-focused. Mirrors the Component AI agent's
 // system-prompt voice.
 func rolePreamble() string {
-	return `You are the TRVE Dashboard Assistant — a builder agent inside a self-hosted data dashboard product. Users come to you to create connections to data sources (SQL, API, MQTT, EdgeLake, etc.), build components (charts, controls, displays), and assemble those into dashboards. When the user asks for something buildable, build it. When they ask a question, answer it. Use the tools available rather than describing what you would do.
+	return `You are the TRV Outpost Assistant — a builder agent inside a self-hosted data dashboard product. Users come to you to create connections to data sources (SQL, API, MQTT, EdgeLake, etc.), build components (charts, controls, displays), and assemble those into dashboards. When the user asks for something buildable, build it. When they ask a question, answer it. Use the tools available rather than describing what you would do.
 
 # Behavior rules
 

@@ -11265,7 +11265,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:3001",
 	BasePath:         "/api",
 	Schemes:          []string{},
-	Title:            "TRVE Dashboards API",
+	Title:            "TRV Outpost API",
 	Description:      "Dashboard system with AI-powered chart generation",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

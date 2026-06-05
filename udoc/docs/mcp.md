@@ -4,7 +4,7 @@ sidebar_position: 22
 
 # MCP Server (External Agents)
 
-TRVE Dashboards exposes a **Model Context Protocol (MCP) server** so external AI agents can introspect connections, create components, and build dashboards through the same tool surface the application's own UI uses. The two supported clients are **Claude Code** (the CLI, direct HTTP) and **Claude Desktop** (via a local stdio bridge).
+TRV Outpost exposes a **Model Context Protocol (MCP) server** so external AI agents can introspect connections, create components, and build dashboards through the same tool surface the application's own UI uses. The two supported clients are **Claude Code** (the CLI, direct HTTP) and **Claude Desktop** (via a local stdio bridge).
 
 ## What is MCP?
 
@@ -149,5 +149,5 @@ API keys are what you want for both Claude Code and Claude Desktop. Generate one
 
 ## See Also
 
-- [`docs/mcp.md`](https://github.com/trv-enterprises/trve-dashboard/blob/main/docs/mcp.md) — the developer-facing reference with the full tool inventory, schema details, and contributor notes.
+- [`docs/mcp.md`](https://github.com/trv-enterprises/trv-outpost/blob/main/docs/mcp.md) — the developer-facing reference with the full tool inventory, schema details, and contributor notes.
 - [Connection Types](connection-types.md) — what each adapter expects in `query_config`.

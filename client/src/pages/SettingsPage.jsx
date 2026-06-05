@@ -19,7 +19,8 @@ import {
   Modal,
   TextInput,
   Select,
-  SelectItem
+  SelectItem,
+  Link
 } from '@carbon/react';
 import { Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -251,6 +252,7 @@ function SettingsPage() {
         <p className="page-description">
           Manage user-configurable system settings.
           These settings are persisted in the database and can be modified by administrators.
+          {' '}<Link href="/docs/system-settings" target="_blank" rel="noopener noreferrer">Learn more</Link>.
         </p>
       </div>
 

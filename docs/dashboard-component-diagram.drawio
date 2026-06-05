@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="TRVE Dashboard - Component Architecture" style="text;html=1;fontSize=18;fontStyle=1;align=center;verticalAlign=middle;" parent="1" vertex="1">
+        <mxCell id="title" value="TRV Outpost - Component Architecture" style="text;html=1;fontSize=18;fontStyle=1;align=center;verticalAlign=middle;" parent="1" vertex="1">
           <mxGeometry x="400" y="-20" width="500" height="40" as="geometry" />
         </mxCell>
         <mxCell id="ext-group" value="External Systems" style="shape=mxgraph.c4.groupContainer;whiteSpace=wrap;container=1;rounded=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;fontStyle=1;fontSize=14;fillColor=#E6E6E6;strokeColor=#666666;dashed=1;arcSize=6;" parent="1" vertex="1">

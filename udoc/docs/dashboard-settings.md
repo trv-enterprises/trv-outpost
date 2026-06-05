@@ -14,7 +14,7 @@ Click the gear icon in the edit-mode toolbar to open the Dashboard Settings moda
 
 ## Auto Refresh — what it actually does
 
-When `refresh_interval > 0`, every chart on the dashboard polls its data source on the configured cadence using the [`useData`](https://github.com/trv-enterprises/trve-dashboard/blob/main/client/src/hooks/useData.js) hook. Polling has these properties:
+When `refresh_interval > 0`, every chart on the dashboard polls its data source on the configured cadence using the [`useData`](https://github.com/trv-enterprises/trv-outpost/blob/main/client/src/hooks/useData.js) hook. Polling has these properties:
 
 - **Visibility-gated.** When the browser tab is hidden (user switched tabs, screen locked, kiosk dormant), the polling timer pauses. When the tab becomes visible again the chart refetches immediately and resumes the cadence — so a kiosk that wakes up shows fresh data right away.
 - **Streaming sources are unaffected.** MQTT, ts-store push streaming, and bidirectional WebSocket connections push their own updates and ignore the refresh interval entirely.

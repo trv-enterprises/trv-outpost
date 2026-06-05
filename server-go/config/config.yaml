@@ -72,7 +72,7 @@ api:
 # (URLs, logs, exports) can impersonate at the bootstrap endpoint.
 auth:
   jwt_secret: ""
-  issuer: "trve-dashboard"
+  issuer: "trv-outpost"
   cookie_secure: false
   cookie_samesite: "lax"
   allow_legacy_guid: false

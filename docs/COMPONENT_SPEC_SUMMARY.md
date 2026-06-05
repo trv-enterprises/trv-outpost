@@ -1,6 +1,6 @@
 # Component Specification Summary
 
-**Purpose**: Design constraints and templates for creating React dashboard components in TRVE Dashboards.
+**Purpose**: Design constraints and templates for creating React dashboard components in TRV Outpost.
 
 ## Quick Reference
 

@@ -350,7 +350,7 @@ function ConnectionsPage() {
         <p className="page-description">
           Configure connections to SQL databases, REST APIs, CSV files, and WebSocket streams.
           Connections provide data for components and receive commands from controls.
-          {' '}<Link href="#" onClick={(e) => e.preventDefault()}>Learn more</Link>.
+          {' '}<Link href="/docs/connections-overview" target="_blank" rel="noopener noreferrer">Learn more</Link>.
         </p>
       </div>
 

@@ -44,7 +44,7 @@ api-docs: ## Regenerate Swagger spec + Postman collection from Go annotations
 	cd server-go && $(MAKE) swagger
 	@echo "Rebuilding Postman collection..."
 	cd docs/postman && node build-collection.js
-	@echo "✓ API docs regenerated (server-go/docs/swagger.{json,yaml}, docs/postman/trve-dashboard.postman_collection.json)"
+	@echo "✓ API docs regenerated (server-go/docs/swagger.{json,yaml}, docs/postman/trv-outpost.postman_collection.json)"
 
 # Guardrail used by `release`: regenerate the API docs and fail if the
 # working tree picks up changes — that means the committed Swagger
@@ -52,13 +52,13 @@ api-docs: ## Regenerate Swagger spec + Postman collection from Go annotations
 # refresh + commit before tagging, rather than shipping a tag that
 # disagrees with the running server.
 api-docs-check: api-docs
-	@if [ -n "$$(git status --porcelain server-go/docs/swagger.json server-go/docs/swagger.yaml server-go/docs/docs.go docs/postman/trve-dashboard.postman_collection.json 2>/dev/null)" ]; then \
+	@if [ -n "$$(git status --porcelain server-go/docs/swagger.json server-go/docs/swagger.yaml server-go/docs/docs.go docs/postman/trv-outpost.postman_collection.json 2>/dev/null)" ]; then \
 		echo ""; \
 		echo "❌  API docs are out of date. Diff:"; \
-		git status --short server-go/docs/swagger.json server-go/docs/swagger.yaml server-go/docs/docs.go docs/postman/trve-dashboard.postman_collection.json; \
+		git status --short server-go/docs/swagger.json server-go/docs/swagger.yaml server-go/docs/docs.go docs/postman/trv-outpost.postman_collection.json; \
 		echo ""; \
 		echo "    Review the regenerated files, then commit them:"; \
-		echo "      git add server-go/docs/ docs/postman/trve-dashboard.postman_collection.json"; \
+		echo "      git add server-go/docs/ docs/postman/trv-outpost.postman_collection.json"; \
 		echo "      git commit -m 'Regenerate API docs'"; \
 		exit 1; \
 	fi
@@ -227,7 +227,7 @@ SIDEBAR_CONFIG := $(USERDATA_DIR)/trve-dashboards-config.json
 
 sidebar-clear-creds: ## Wipe just the dashboard credentials (forces sign-in next launch)
 	@if pgrep -fl "dashboard/electron" >/dev/null 2>&1; then \
-		echo "⚠️  TRVE Dashboards Electron app appears to be running."; \
+		echo "⚠️  TRV Outpost Electron app appears to be running."; \
 		echo "    Quit it first (Cmd-Q in the app) — electron-store writes"; \
 		echo "    state on exit and may resurrect the file you're deleting."; \
 		exit 1; \
@@ -254,7 +254,7 @@ sidebar-reset-workspace: ## Re-copy .mcp.json + CLAUDE.md from the packaged temp
 
 sidebar-clean-all: ## Nuke ALL Electron app userData (cookies, cache, store, workspace)
 	@if pgrep -fl "dashboard/electron" >/dev/null 2>&1; then \
-		echo "⚠️  TRVE Dashboards Electron app appears to be running."; \
+		echo "⚠️  TRV Outpost Electron app appears to be running."; \
 		echo "    Quit it first (Cmd-Q) — running renderers hold open files"; \
 		echo "    that this rm -rf would leave half-deleted."; \
 		exit 1; \

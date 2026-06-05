@@ -1,7 +1,7 @@
 {
   "info": {
-    "_postman_id": "fa89438f-b5f4-48d8-81d2-b665dd94dad7",
-    "name": "TRVE Dashboard API",
+    "_postman_id": "cadeb750-f878-4d14-88cc-27321aee2aa9",
+    "name": "TRV Outpost API",
     "description": "Auto-generated from server-go/docs/swagger.json. Re-run docs/postman/build-collection.js to refresh after API changes.\n\nAuth: collection-level `Authorization: Bearer {{apiKey}}` is on every request. The legacy `X-User-ID: {{userId}}` header is added to every request as a *disabled* header — flip it on per-request if you need the legacy identity-assertion path (dev only).\n\nVariables you set in the environment:\n- `baseUrl` — e.g. `http://localhost:3001`\n- `apiKey`  — `trve_…` token from Manage Mode → API Keys\n- `userId`  — optional GUID, only used if you switch a request to the legacy header path",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

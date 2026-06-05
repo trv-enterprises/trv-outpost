@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Application Modes
 
-TRVE Dashboards operates in three modes, accessible via the mode toggle in the application header.
+TRV Outpost operates in three modes, accessible via the mode toggle in the application header.
 
 ## View Mode
 
@@ -109,32 +109,18 @@ Control-capability notes in [User Management](user-management.md).
 A dashboard can carry **variables** that re-scope its components at view
 time, so one dashboard serves many hosts/sites. The header shows a
 dropdown per variable (in normal view mode), and a kiosk entry can set a
-variable from the URL (`:connection=<id>`).
+connection-swap variable from the URL (`<id>:connection=<connectionId>`).
 
-Today the variable does a **connection swap**: selecting a connection
-repoints every panel to it (each panel keeps its own connection unless
-it follows the variable). Candidate connections are discovered by
-**tag** — connections sharing the variable's tags appear in the dropdown.
-*(Parameter substitution — feeding a value into queries/filters, and a
-time-range variable — is planned.)*
+Variables come in two kinds — **connection swap** (repoint panels to a
+chosen connection) and **filter** (substitute a value into queries and
+filters) — and the dropdown values can be discovered automatically from
+the connection. For the full picture, including how to define them and
+how value discovery works per connection type, see the dedicated
+**[Dashboard Variables](dashboard-variables.md)** page.
 
-### Tagging matters: real-time vs. query connections
-
-> **Important.** If you have **both** a real-time (WebSocket / streaming)
-> and a SQL/API connection to the **same source**, distinguish them with
-> tags and use the right one on each component.
-
-The variable picker offers connections by tag, so tagging is how you
-keep the streaming and query worlds separate:
-
-- Tag your **real-time / WebSocket** connections (e.g. `ts-store`,
-  `websocket`, `realtime`) and use them on your **live charts** — the
-  ones that stream and update continuously.
-- Tag your **SQL / API** connections (e.g. `sql`, `api`, `history`) and
-  use them on components that do **time-range / point-in-time lookups**.
-
-If both point at the same underlying system but aren't distinguished,
-the variable can hand a live chart an API connection (or vice versa),
-and it won't get the data shape it expects. Consistent, intentional
-tagging — and choosing the matching connection on each component — is
-what makes connection scoping work cleanly.
+> **Tagging tip for kiosks.** Connection-swap candidates are discovered
+> by **tag**. If you have both a real-time (WebSocket/streaming) and a
+> SQL/API connection to the same source, tag them distinctly and use the
+> right one on each component, so a rotating kiosk hands every chart the
+> connection it expects. See
+> [Tagging: real-time vs. query connections](dashboard-variables.md#tagging-matters-real-time-vs-query-connections).

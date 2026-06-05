@@ -789,7 +789,7 @@ function AppContent({ onDisconnect }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
                 <ChartMultitype size={20} />
-                <span>TRVE Dashboards</span>
+                <span>TRV Outpost</span>
               </div>
             </HeaderName>
             <div className="header-mode-group">

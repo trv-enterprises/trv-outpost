@@ -23,8 +23,8 @@
  *     node build-collection.js
  *
  * Outputs:
- *   trve-dashboard.postman_collection.json
- *   trve-dashboard.postman_environment.json   (only re-emitted if missing)
+ *   trv-outpost.postman_collection.json
+ *   trv-outpost.postman_environment.json   (only re-emitted if missing)
  *
  * The environment file is intentionally only created on first run so
  * a developer's local edits (a real `apiKey` value, a different
@@ -39,10 +39,10 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const SWAGGER_PATH = path.join(REPO_ROOT, 'server-go', 'docs', 'swagger.json');
-const COLLECTION_OUT = path.join(__dirname, 'trve-dashboard.postman_collection.json');
-const ENV_OUT = path.join(__dirname, 'trve-dashboard.postman_environment.json');
+const COLLECTION_OUT = path.join(__dirname, 'trv-outpost.postman_collection.json');
+const ENV_OUT = path.join(__dirname, 'trv-outpost.postman_environment.json');
 
-const COLLECTION_NAME = 'TRVE Dashboard API';
+const COLLECTION_NAME = 'TRV Outpost API';
 const COLLECTION_DESCRIPTION =
   'Auto-generated from server-go/docs/swagger.json. Re-run docs/postman/build-collection.js to refresh after API changes.\n\n' +
   'Auth: collection-level `Authorization: Bearer {{apiKey}}` is on every request. The legacy `X-User-ID: {{userId}}` header is added to every request as a *disabled* header — flip it on per-request if you need the legacy identity-assertion path (dev only).\n\n' +
@@ -118,7 +118,7 @@ console.log(`✓ Wrote ${path.relative(REPO_ROOT, COLLECTION_OUT)}`);
 if (!fs.existsSync(ENV_OUT)) {
   const env = {
     id: deterministicId('environment'),
-    name: 'TRVE Dashboard (local)',
+    name: 'TRV Outpost (local)',
     values: [
       { key: 'baseUrl', value: 'http://localhost:3001', type: 'default', enabled: true },
       { key: 'apiKey', value: '', type: 'secret', enabled: true },

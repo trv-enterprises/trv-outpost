@@ -468,7 +468,7 @@ function ComponentsListPage() {
         <p className="page-description">
           Create and manage reusable components for your dashboards.
           Components include charts for data visualization and controls for user interaction.
-          {' '}<Link href="#" onClick={(e) => e.preventDefault()}>Learn more</Link>.
+          {' '}<Link href="/docs/components-overview" target="_blank" rel="noopener noreferrer">Learn more</Link>.
         </p>
       </div>
 

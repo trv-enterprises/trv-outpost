@@ -35,4 +35,8 @@ The connection editor includes a test feature:
 
 The chart count column shows how many components reference each connection. Deleting a connection that's in use by components will cause those components to fail to load data.
 
+## Tags and Dashboard Variables
+
+Connection **tags** do double duty for [dashboard variables](dashboard-variables.md): a connection-swap variable discovers its candidate connections by tag, and a configurable **tag prefix** can drive the dropdown label. Tag a connection `host:trv-srv-001`, set the variable's label prefix to `host`, and the dropdown shows `trv-srv-001` instead of the full connection name. See [Tagging: real-time vs. query connections](dashboard-variables.md#tagging-matters-real-time-vs-query-connections) for why distinct tags matter when one source has both a streaming and a query connection.
+
 ---

@@ -442,7 +442,7 @@ function createWindow() {
     // sidebar toggle without us needing a separate UI button. The
     // dashboard renderer's <title> would override this once the page
     // loads, so we re-set after load below.
-    title: 'TRVE Dashboards   —   ⌘⇧/  Claude Code sidebar',
+    title: 'TRV Outpost   —   ⌘⇧/  Claude Code sidebar',
   });
 
   // Dashboard view — the existing webapp. Loaded the same way the
@@ -526,7 +526,7 @@ function createWindow() {
 // Title we want on the window regardless of what the dashboard
 // renderer sets via <title>. Carries the keyboard hint so the
 // sidebar toggle is discoverable without a separate UI button.
-const APP_WINDOW_TITLE = 'TRVE Dashboards   —   ⌘⇧/  Claude Code sidebar';
+const APP_WINDOW_TITLE = 'TRV Outpost   —   ⌘⇧/  Claude Code sidebar';
 
 // BrowserWindow's `ready-to-show` doesn't fire when content is loaded
 // into a BrowserView (only when the window's own webContents finishes).

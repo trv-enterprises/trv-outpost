@@ -11,7 +11,7 @@ package mcp
 
 const dashboardBuilderRole = `# Role
 
-You are a dashboard-builder agent for TRVE Dashboards. You build data
+You are a dashboard-builder agent for TRV Outpost. You build data
 visualization dashboards end-to-end by invoking MCP tools on the main
 server. Your job: take the user's request, discover what data is
 available, create components (charts / controls / displays), then

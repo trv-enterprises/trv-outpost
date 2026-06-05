@@ -523,7 +523,7 @@ function DashboardsListPage() {
         <p className="page-description">
           Create and manage dashboards that combine layouts with charts and data visualizations.
           Dashboards can be viewed in real-time with auto-refresh capabilities.
-          {' '}<Link href="#" onClick={(e) => e.preventDefault()}>Learn more</Link>.
+          {' '}<Link href="/docs/dashboard-editor" target="_blank" rel="noopener noreferrer">Learn more</Link>.
         </p>
       </div>
 

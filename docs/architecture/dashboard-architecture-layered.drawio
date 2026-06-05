@@ -70,7 +70,7 @@
         <mxCell id="ext-tsstore" value="ts-store&#xa;(time-series sink)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1" vertex="1">
           <mxGeometry x="44" y="1073" width="140" height="77" as="geometry" />
         </mxCell>
-        <mxCell id="main-container" value="TRVE Dashboards — homelab deployment (Docker Compose, Caddy reverse proxy)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6DDEC;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+        <mxCell id="main-container" value="TRV Outpost — homelab deployment (Docker Compose, Caddy reverse proxy)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6DDEC;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
           <mxGeometry x="200" y="380" width="1460" height="770" as="geometry" />
         </mxCell>
         <mxCell id="security-row" value="Security &amp; access" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B6C3E1;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
@@ -328,7 +328,7 @@
         <mxCell id="dep-7" value="release-deploy&#xa;skill / runbook" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1" vertex="1">
           <mxGeometry x="1500" y="1230" width="160" height="46" as="geometry" />
         </mxCell>
-        <mxCell id="title-label" value="TRVE Dashboards — Architecture" style="text;html=1;align=center;verticalAlign=middle;fontSize=27;fontStyle=1;fontColor=#2E3B5C;" parent="1" vertex="1">
+        <mxCell id="title-label" value="TRV Outpost — Architecture" style="text;html=1;align=center;verticalAlign=middle;fontSize=27;fontStyle=1;fontColor=#2E3B5C;" parent="1" vertex="1">
           <mxGeometry x="578" y="67" width="526" height="51" as="geometry" />
         </mxCell>
       </root>
@@ -408,7 +408,7 @@
         <mxCell id="ext-tsstore-v11" value="ts-store&#xa;(time-series sink)" style="rounded=0;html=1;fillColor=#D6E5C2;strokeColor=#6E7F44;fontSize=13;whiteSpace=wrap;spacingTop=0;" parent="1-v11" vertex="1">
           <mxGeometry x="42" y="1074" width="140" height="77" as="geometry" />
         </mxCell>
-        <mxCell id="main-container-v11" value="TRVE Dashboards — homelab deployment (Docker Compose, Caddy reverse proxy)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6DDEC;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
+        <mxCell id="main-container-v11" value="TRV Outpost — homelab deployment (Docker Compose, Caddy reverse proxy)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D6DDEC;strokeColor=#4A5E8A;fontSize=13;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
           <mxGeometry x="200" y="380" width="1460" height="770" as="geometry" />
         </mxCell>
         <mxCell id="security-row-v11" value="Security &amp; access" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B6C3E1;strokeColor=#4A5E8A;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1-v11" vertex="1">
@@ -666,7 +666,7 @@
         <mxCell id="dep-7-v11" value="release-deploy&#xa;skill / runbook" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4C3A72;fontSize=10;" parent="1-v11" vertex="1">
           <mxGeometry x="1500" y="1230" width="160" height="46" as="geometry" />
         </mxCell>
-        <mxCell id="title-label-v11" value="TRVE Dashboards — Architecture (V0.11.0+, Clerk SSO)" style="text;html=1;align=center;verticalAlign=middle;fontSize=27;fontStyle=1;fontColor=#2E3B5C;" parent="1-v11" vertex="1">
+        <mxCell id="title-label-v11" value="TRV Outpost — Architecture (V0.11.0+, Clerk SSO)" style="text;html=1;align=center;verticalAlign=middle;fontSize=27;fontStyle=1;fontColor=#2E3B5C;" parent="1-v11" vertex="1">
           <mxGeometry x="578" y="67" width="526" height="51" as="geometry" />
         </mxCell>
       </root>

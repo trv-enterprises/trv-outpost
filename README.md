@@ -1,4 +1,4 @@
-# TRVE Dashboards
+# TRV Outpost
 
 A full-stack application for creating, managing, and viewing dynamic
 data visualization dashboards with AI-powered component generation,
@@ -114,8 +114,8 @@ command. Pulls the published images from `ghcr.io`; no source build,
 no language toolchains required.
 
 ```bash
-git clone https://github.com/trv-enterprises/trve-dashboard
-cd trve-dashboard
+git clone https://github.com/trv-enterprises/trv-outpost
+cd trv-outpost
 docker compose -f docker-compose.deploy.yml up -d
 ```
 

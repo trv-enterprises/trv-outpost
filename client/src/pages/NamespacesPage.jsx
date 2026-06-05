@@ -21,6 +21,7 @@ import {
   TextInput,
   TextArea,
   InlineNotification,
+  Link,
 } from '@carbon/react';
 import { Add, TrashCan, Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -162,6 +163,7 @@ function NamespacesPage() {
           <p className="namespaces-page__subtitle">
             Namespaces group connections, components, and dashboards into separate conflict domains.
             Two namespaces can each have a dashboard called “Home” without colliding.
+            {' '}<Link href="/docs/namespaces" target="_blank" rel="noopener noreferrer">Learn more</Link>.
           </p>
         </div>
       </div>

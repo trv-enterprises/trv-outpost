@@ -9,7 +9,7 @@ components, and assembles them into a laid-out dashboard.
 
 ## How it was built
 
-TRVE Dashboards exposes AI-assisted dashboard building two ways, both
+TRV Outpost exposes AI-assisted dashboard building two ways, both
 driving the same component/dashboard tools:
 
 - **Dashboard Assistant** — the in-app chat sidecar. Ask it (e.g. *"Build

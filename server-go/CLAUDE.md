@@ -1,7 +1,7 @@
 # Dashboard Server (Go) - Development Status
 
 ## Project Overview
-Go-based backend server for the TRVE Dashboards project. Gin + MongoDB.
+Go-based backend server for the TRV Outpost project. Gin + MongoDB.
 
 ## Current state (2026-04-29)
 

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to TRVE Dashboards. This file is started at v0.6.0;
+All notable changes to TRV Outpost. This file is started at v0.6.0;
 prior releases are described in the git history (see `git tag`).
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).

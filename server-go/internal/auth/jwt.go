@@ -118,7 +118,7 @@ func NewTokenSigner(secret, issuer string) (*TokenSigner, error) {
 		return nil, fmt.Errorf("%w: JWT secret must be at least 32 bytes (got %d)", ErrWeakSecret, len(secret))
 	}
 	if issuer == "" {
-		issuer = "trve-dashboard"
+		issuer = "trv-outpost"
 	}
 	return &TokenSigner{secret: []byte(secret), issuer: issuer}, nil
 }
