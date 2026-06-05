@@ -177,6 +177,21 @@
         .dashboard-variable-picker {
           flex-shrink: 0;
           width: 15rem;
+          // Lay the dropdown + its (regenerate/stop) action in a row so the
+          // action sits to the RIGHT of the dropdown, not stacked beneath it.
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+
+          // The dropdown takes the row; the action button stays its natural size.
+          .cds--dropdown__wrapper,
+          .cds--list-box__wrapper {
+            flex: 1 1 auto;
+            min-width: 0;
+          }
+          > .cds--btn {
+            flex: 0 0 auto;
+          }
 
           // The OPEN menu is a normal absolutely-positioned child of the
           // trigger (left-aligned under it). Widen it past the compact trigger

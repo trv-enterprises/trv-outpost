@@ -59,6 +59,10 @@ function VariableValuePickerModal({
   providedPartial = false,
   providedLoading = false,
   onStop = null,
+  // captureOnly: render the accumulating list read-only (no clickable tiles).
+  // Used by the dashboard, where the modal only CAPTURES — selection happens in
+  // the header dropdown afterward, not inside the modal.
+  captureOnly = false,
 }) {
   // Client mode: the caller supplies the values (client-side capture). No server
   // fetch, no column picker.
@@ -152,7 +156,7 @@ function VariableValuePickerModal({
     <Modal
       open={open}
       onRequestClose={onClose}
-      modalHeading="Pick a value from the connection"
+      modalHeading={captureOnly ? 'Capturing values from the stream' : 'Pick a value from the connection'}
       passiveModal
       size="sm"
     >
@@ -203,9 +207,12 @@ function VariableValuePickerModal({
           />
         )}
 
-        {!effLoading && !effError && effValues.length > 0 && (
+        {/* Value list. In captureOnly mode it renders WHILE capturing (so the
+            list visibly accumulates) and tiles are read-only — selection happens
+            elsewhere. Otherwise it shows after loading and tiles are clickable. */}
+        {!effError && effValues.length > 0 && (captureOnly || !effLoading) && (
           <>
-            {effPartial && (
+            {effPartial && !effLoading && (
               <InlineNotification
                 kind="info"
                 title="Partial list"
@@ -229,8 +236,8 @@ function VariableValuePickerModal({
                 <Tile
                   key={String(v)}
                   className="variable-value-option"
-                  onClick={() => handleSelect(v)}
-                  style={{ cursor: 'pointer', marginBottom: '0.25rem' }}
+                  onClick={captureOnly ? undefined : () => handleSelect(v)}
+                  style={{ cursor: captureOnly ? 'default' : 'pointer', marginBottom: '0.25rem' }}
                 >
                   {String(v)}
                 </Tile>
@@ -264,6 +271,7 @@ VariableValuePickerModal.propTypes = {
   providedPartial: PropTypes.bool,
   providedLoading: PropTypes.bool,
   onStop: PropTypes.func,
+  captureOnly: PropTypes.bool,
   schemaColumns: PropTypes.arrayOf(PropTypes.string),
 };
 

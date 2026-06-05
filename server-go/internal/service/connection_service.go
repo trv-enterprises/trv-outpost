@@ -1423,12 +1423,34 @@ func (s *ConnectionService) GetVariableValues(ctx context.Context, id string, re
 		return s.getEdgeLakeVariableValues(ctx, ds, req)
 	case models.ConnectionTypeAPI:
 		return s.getAPIVariableValues(ctx, ds, req)
+	case models.ConnectionTypeTSStore:
+		return s.getTSStoreVariableValues(ctx, ds, req)
 	default:
 		return &models.VariableValuesResponse{
 			Success: false,
 			Error:   fmt.Sprintf("variable value discovery not yet supported for connection type: %s", ds.Type),
 		}, nil
 	}
+}
+
+// getTSStoreVariableValues harvests distinct column values from the most-recent
+// records of a ts-store connection. ts-store exposes an HTTP query API
+// (fetchNewest) regardless of transport — even "streaming" (WebSocket) tsstore
+// connections answer "newest" over HTTP — so discovery pulls the latest 1000
+// records and harvests the column, rather than relying on a slow live capture.
+// (Raw websocket/socket connections, which have NO query API, are the only
+// types that still require a live SSE capture.)
+func (s *ConnectionService) getTSStoreVariableValues(ctx context.Context, ds *models.Connection, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 1000
+	}
+	query := models.Query{
+		Raw:    "newest",
+		Type:   models.QueryTypeTSStore,
+		Params: map[string]interface{}{"limit": limit},
+	}
+	return s.runColumnDistinct(ctx, ds, query, req.Column)
 }
 
 // getAPIVariableValues fetches records from an API connection (one-shot, low

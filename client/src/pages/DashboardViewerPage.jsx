@@ -52,6 +52,7 @@ import {
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
+import VariableValuePickerModal from '../components/VariableValuePickerModal';
 import ComponentPanelWithActions from '../components/ComponentPanelWithActions';
 import ComponentExpandModal from '../components/ComponentExpandModal';
 import DashboardGrid from '../components/DashboardGrid';
@@ -693,16 +694,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         if (cancelled) return;
         const type = conn?.type || conn?.config?.type || null;
         setDiscoveryConnType(type);
-        const isStreamLike = type === 'socket' || type === 'mqtt'
-          || (type === 'tsstore' && conn?.config?.tsstore?.transport === 'streaming');
+        // Only RAW socket / mqtt are truly stream-only (no query API) — those
+        // read the authoring-captured stored list. tsstore (even streaming
+        // transport) answers "newest" over HTTP, so it uses the server path
+        // like SQL/EdgeLake/API — no stored list, no view-time capture.
+        const isStreamLike = type === 'socket' || type === 'mqtt';
 
         if (isStreamLike) {
-          // Stream/socket: read the authoring-time captured list off the
+          // Raw socket/mqtt: read the authoring-time captured list off the
           // connection record. No view-time capture (too slow).
           const stored = conn?.discovered_values?.[discoveryTarget.column];
           setDiscoveredOptions(Array.isArray(stored?.values) ? stored.values : null);
         } else {
-          // SQL/EdgeLake/API: server-side discovery (DISTINCT / one-shot).
+          // SQL/EdgeLake/API/tsstore: server-side discovery (DISTINCT for SQL/
+          // EdgeLake; one-shot fetch + harvest for API; newest 1000 for tsstore).
           const res = await apiClient.getVariableValues(discoveryTarget.connId, {
             column: discoveryTarget.column,
             table: discoveryTarget.table,
@@ -727,16 +732,29 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // permanent via the editor). Mirrors the editor's capture-with-stop.
   const regenerateCaptureRef = useRef(null);
   const [regenerating, setRegenerating] = useState(false);
+  // Live-accumulating distinct values during a regenerate capture + the capture
+  // modal's open state. The modal shows the list growing in real time with a
+  // Stop button, so the user can watch and stop when it stabilizes.
+  const [regenLiveValues, setRegenLiveValues] = useState([]);
+  const [regenModalOpen, setRegenModalOpen] = useState(false);
+  const regenSeenRef = useRef(null);
+  // Set true on Stop so, after the modal closes, the dropdown auto-opens to
+  // signal the freshly-captured list is ready to pick from.
+  const [autoOpenFilterDropdown, setAutoOpenFilterDropdown] = useState(false);
+
   const startSessionRegenerate = useCallback(() => {
     const target = discoveryTarget;
     if (!target?.connId || !target.column) return;
     if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
+    const seen = new Set();
+    regenSeenRef.current = seen;
+    setRegenLiveValues([]);
+    setRegenModalOpen(true);
     setRegenerating(true);
     const authParam = apiClient.streamAuthQuery();
     const sseUrl = `${API_BASE}/api/connections/${target.connId}/stream?${authParam}`;
     const es = new EventSource(sseUrl);
     regenerateCaptureRef.current = es;
-    const seen = new Set();
     const values = [];
     const CAP = 1000;
     const finish = () => {
@@ -744,7 +762,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       es.close();
       regenerateCaptureRef.current = null;
       setRegenerating(false);
-      setSessionDiscoveredOverride([...values]);
     };
     es.addEventListener('record', (event) => {
       try {
@@ -752,31 +769,57 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         const v = rec?.[target.column];
         if (v != null) {
           const s = String(v);
-          if (s !== '' && !seen.has(s)) { seen.add(s); values.push(s); }
+          if (s !== '' && !seen.has(s)) {
+            seen.add(s);
+            values.push(s);
+            setRegenLiveValues([...values]); // live update → modal re-renders
+          }
         }
         if (values.length >= CAP) finish();
       } catch { /* ignore parse errors */ }
     });
     es.onerror = () => { if (regenerateCaptureRef.current === es) finish(); };
-    // Safety cap: stop after 30s if the stream is quiet.
-    setTimeout(() => { if (regenerateCaptureRef.current === es) finish(); }, 30000);
+    // Safety cap: stop after 5 minutes if the user walks away.
+    setTimeout(() => { if (regenerateCaptureRef.current === es) finish(); }, 300000);
   }, [discoveryTarget]);
 
+  // Stop capturing — close the SSE, commit the accumulated list as the session
+  // override, close the modal, and flag the dropdown to auto-open so the user
+  // sees the new list is ready to pick from.
   const stopSessionRegenerate = useCallback(() => {
     if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
     setRegenerating(false);
-  }, []);
+    setSessionDiscoveredOverride([...regenLiveValues]);
+    setRegenModalOpen(false);
+    setAutoOpenFilterDropdown(true);
+  }, [regenLiveValues]);
 
   // Tear down any in-flight capture on unmount.
   useEffect(() => () => {
     if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
   }, []);
 
+  // After a regenerate completes, auto-open the filter dropdown so the user
+  // sees the freshly-captured list is ready to pick from. Carbon's Dropdown has
+  // no controlled-open prop (Downshift-driven), so we click its trigger.
+  const filterDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!autoOpenFilterDropdown || regenModalOpen) return;
+    setAutoOpenFilterDropdown(false);
+    const t = setTimeout(() => {
+      const trigger = filterDropdownRef.current?.querySelector('[role="combobox"], .cds--list-box__field');
+      if (trigger) trigger.click();
+    }, 50);
+    return () => clearTimeout(t);
+  }, [autoOpenFilterDropdown, regenModalOpen]);
+
   // The list the dropdown actually uses: session override wins, else discovered.
   const effectiveDiscoveredOptions = sessionDiscoveredOverride ?? discoveredOptions;
-  // Regenerate is only meaningful for stream/socket variables (where the list is
-  // stored, not live-queried).
-  const discoveryIsStream = discoveryConnType === 'socket' || discoveryConnType === 'mqtt' || discoveryConnType === 'tsstore';
+  // Regenerate (live SSE re-capture) is only meaningful for RAW socket/mqtt
+  // variables, where the list is stored (no query API). tsstore uses the HTTP
+  // "newest" server path like SQL/API — it re-discovers on load, so no
+  // Regenerate button.
+  const discoveryIsStream = discoveryConnType === 'socket' || discoveryConnType === 'mqtt';
 
   const panelExtentCol = useMemo(() => {
     if (!panels || panels.length === 0) return 0;
@@ -2422,7 +2465,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               // makes it permanent via the editor).
               const showRegenerate = cfg.value_source === 'connection' && discoveryIsStream;
               return (
-                <div className="dashboard-variable-picker">
+                <div className="dashboard-variable-picker" ref={filterDropdownRef}>
                   <Dropdown
                     id="dashboard-filter-variable"
                     size="sm"
@@ -2434,21 +2477,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     selectedItem={selectedOpt}
                     onChange={({ selectedItem }) => setDashFilterValue(selectedItem ?? null)}
                   />
+                  {/* Regenerate (live re-capture) opens a modal that accumulates
+                      the distinct values in real time with a Stop button. Only
+                      for raw socket/mqtt variables (stored list); tsstore/API/SQL
+                      re-discover on load. */}
                   {showRegenerate && (
-                    regenerating ? (
-                      <Button kind="ghost" size="sm" onClick={stopSessionRegenerate} title="Stop capturing">
-                        Stop
-                      </Button>
-                    ) : (
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        hasIconOnly
-                        renderIcon={Renew}
-                        iconDescription="Regenerate values (this session only)"
-                        onClick={startSessionRegenerate}
-                      />
-                    )
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      hasIconOnly
+                      renderIcon={Renew}
+                      iconDescription="Refresh values (live capture, this session)"
+                      onClick={startSessionRegenerate}
+                      disabled={regenerating}
+                    />
                   )}
                 </div>
               );
@@ -3228,6 +3270,23 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         onClose={closeTextEditor}
         variables={definedVariables}
         variableValues={variableValues}
+      />
+
+      {/* Live value-capture modal for a raw socket/mqtt variable Regenerate.
+          Shows the distinct values accumulating in real time with a Stop button;
+          Stop commits the list (session-only) and closes — the dropdown then
+          auto-opens. No selection inside the modal (the dashboard's pick UI is
+          the dropdown). */}
+      <VariableValuePickerModal
+        open={regenModalOpen}
+        onClose={stopSessionRegenerate}
+        onSelect={() => {}}
+        connectionId={discoveryTarget?.connId}
+        providedValues={regenLiveValues}
+        providedLoading={regenerating}
+        providedPartial
+        onStop={stopSessionRegenerate}
+        captureOnly
       />
 
       {/* Dashboard settings modal */}

@@ -467,6 +467,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [clientDiscoveredValues, setClientDiscoveredValues] = useState([]);
   const [clientDiscoveredColumn, setClientDiscoveredColumn] = useState('');
   const [clientDiscoveredPartial, setClientDiscoveredPartial] = useState(false);
+  // True while a RAW socket/mqtt value-discovery capture is streaming live into
+  // the picker (the modal shows values accumulating + a Stop button). tsstore/
+  // API harvest from a one-shot fetch and never set this.
+  const [clientCapturing, setClientCapturing] = useState(false);
+  const clientCaptureRef = useRef(null); // EventSource for the live discovery capture
 
   // Insert a substitution token into the raw query at the current cursor
   // position (falls back to appending). Keeps focus + caret after the inserted
@@ -553,6 +558,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setClientValuePickerOpen(true);
     return true;
   }, [variableBoundFilter, previewVariableValue, harvestColumnValues]);
+
 
   const [aggregation, setAggregation] = useState({ type: '', sortBy: '', field: '', count: 10 });
   const [sortBy, setSortBy] = useState('');
@@ -1276,11 +1282,64 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const isMQTT = selectedDatasource?.type === 'mqtt';
   const isAPI = selectedDatasource?.type === 'api';
 
-  // Stream-like types have no engine-side DISTINCT and high view-time capture
-  // latency, so a discovered value list is persisted on the connection (design
-  // authority) for the dashboard dropdown to read. API/SQL/EdgeLake stay
-  // on-demand (fast enough to re-fetch), so we don't persist for those.
-  const shouldPersistDiscovered = isSocket || isMQTT || isTSStoreStreaming || isTSStore;
+  // RAW socket/mqtt have no query API (only a live stream), so a discovered
+  // value list is captured live + persisted on the connection (design authority)
+  // for the dashboard dropdown to read without a costly view-time capture.
+  // tsstore/API/SQL/EdgeLake re-discover on demand via a query, so no persist.
+  const shouldPersistDiscovered = isSocket || isMQTT;
+
+  // Stop an in-flight live discovery capture (raw socket/mqtt). Leaves the
+  // picker open with what was accumulated so the user can pick.
+  const stopClientCapture = useCallback(() => {
+    if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
+    setClientCapturing(false);
+  }, []);
+
+  // Live value discovery for RAW socket/mqtt: open the picker immediately and
+  // stream distinct values into it as SSE records arrive, with a Stop button.
+  // Mirrors the dashboard's Regenerate. column = the bound filter field.
+  const startClientCapture = useCallback((column) => {
+    if (!selectedConnectionId || !column) return false;
+    if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
+    setClientDiscoveredColumn(column);
+    setClientDiscoveredValues([]);
+    setClientDiscoveredPartial(true); // a live capture is always potentially incomplete
+    setClientCapturing(true);
+    setClientValuePickerOpen(true);
+    const authParam = apiClient.streamAuthQuery();
+    const topicParam = (isMQTT && queryRaw) ? `&topics=${encodeURIComponent(queryRaw)}` : '';
+    const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
+    const es = new EventSource(sseUrl);
+    clientCaptureRef.current = es;
+    const seen = new Set();
+    const values = [];
+    const CAP = 1000;
+    const finish = () => {
+      if (clientCaptureRef.current !== es) return;
+      es.close();
+      clientCaptureRef.current = null;
+      setClientCapturing(false);
+    };
+    es.addEventListener('record', (event) => {
+      try {
+        const rec = JSON.parse(event.data);
+        const v = rec?.[column];
+        if (v != null) {
+          const s = String(v);
+          if (s !== '' && !seen.has(s)) { seen.add(s); values.push(s); setClientDiscoveredValues([...values]); }
+        }
+        if (values.length >= CAP) finish();
+      } catch { /* ignore parse errors */ }
+    });
+    es.onerror = () => { if (clientCaptureRef.current === es) finish(); };
+    setTimeout(() => { if (clientCaptureRef.current === es) finish(); }, 300000); // 5 min safety cap
+    return true;
+  }, [selectedConnectionId, isMQTT, queryRaw]);
+
+  // Tear down any live discovery capture on unmount.
+  useEffect(() => () => {
+    if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
+  }, []);
 
   const handleDatasourceChange = (newDatasourceId) => {
     setSelectedConnectionId(newDatasourceId);
@@ -1568,6 +1627,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       return;
     }
 
+    // Raw socket/mqtt value discovery: these have NO query API, so we can't
+    // harvest from a one-shot fetch. When a client-side filter is bound to the
+    // variable and no value is chosen yet, open the picker and stream distinct
+    // values into it live (Stop when it stabilizes), instead of running a
+    // preview query. tsstore/API/SQL harvest from their query result below.
+    if ((isSocket || isMQTT) && variableBoundFilter && !effectiveVarValue) {
+      startClientCapture(variableBoundFilter.field);
+      return;
+    }
+
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewData(null); // Clear previous results on every new capture/query
@@ -1685,8 +1754,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       let queryParams = {};
       let rawQuery = queryRaw;
 
-      if (isSocket || isTSStoreStreaming) {
-        rawQuery = ''; // Streaming doesn't need a query string — fetch newest for schema discovery
+      if (isTSStoreStreaming) {
+        // tsstore answers "newest" over HTTP even in streaming transport, so we
+        // don't rely on a live stream collect. For value discovery (a filter
+        // bound to the variable, no value chosen yet) pull a deep window so the
+        // harvest sees enough distinct values; otherwise a small newest is
+        // plenty for schema preview.
+        rawQuery = 'newest';
+        queryParams = { limit: (variableBoundFilter && !effectiveVarValue) ? 1000 : (tsstoreLimit || 100) };
+      } else if (isSocket) {
+        rawQuery = ''; // Raw socket has no query API — adapter collects from the live stream
       } else if (isTSStore) {
         // Build TSStore query: 'newest', 'oldest', or 'since:DURATION'
         if (tsstoreQueryType === 'since') {
@@ -2357,7 +2434,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       {clientValuePickerOpen && createPortal(
         <VariableValuePickerModal
           open
-          onClose={() => setClientValuePickerOpen(false)}
+          onClose={() => { stopClientCapture(); setClientValuePickerOpen(false); }}
           onSelect={(value) => {
             setPreviewVariableValue(value);
             setUsesDashboardVariable(true);
@@ -2373,6 +2450,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           connectionId={selectedConnectionId}
           providedValues={clientDiscoveredValues}
           providedPartial={clientDiscoveredPartial}
+          providedLoading={clientCapturing}
+          onStop={stopClientCapture}
         />,
         document.body
       )}
