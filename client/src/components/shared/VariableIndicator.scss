@@ -11,15 +11,29 @@
   align-items: center;
   vertical-align: middle;
 
-  // Quiet marker, not a primary badge: outline tag with muted text + a subtle
+  // Quiet marker, not a primary badge: outline tag with muted text + a dim
   // border, so it reads as a small annotation beside the name rather than
   // competing with it. Kill the Tag's default outer margin so it lines up.
   .cds--tag {
     margin: 0;
     color: var(--cds-text-helper);
-    border-color: var(--cds-border-subtle-01);
+    // Dimmer outline than border-subtle-01 (#393939) — border-subtle-00 is the
+    // faintest border token, so the chip's edge recedes.
+    border-color: var(--cds-border-subtle-00, #303030);
     min-height: auto;
     font-size: 0.6875rem;
     letter-spacing: 0.01em;
+    // Center the label and lift it up ~1px — the lowercase "var" sat slightly
+    // low in the chip's line box.
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    .cds--tag__label {
+      position: relative;
+      top: -1px;
+      text-align: center;
+      width: 100%;
+    }
   }
 }
