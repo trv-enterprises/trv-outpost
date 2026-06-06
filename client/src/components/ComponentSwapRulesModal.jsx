@@ -84,7 +84,9 @@ function ComponentSwapRulesModal({
   const componentName = (cid) => {
     if (!cid) return '';
     const c = chartsMap[cid] || pickedComponents[cid];
-    return c ? (c.title || c.name || cid) : cid;
+    // Show the component's NAME (its unique identifier), not its display title —
+    // the author is wiring a specific component, so the name disambiguates.
+    return c ? (c.name || cid) : cid;
   };
 
   const addRule = () => {

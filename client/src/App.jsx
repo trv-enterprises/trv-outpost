@@ -84,7 +84,6 @@ import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
 import { useEventStream } from './hooks/useEventStream';
 import { MODES } from './config/layoutConfig';
-import buildInfo from '../build.json';
 import './App.scss';
 
 // Redirect /design/dashboards/:id to /view/dashboards/:id with auto-edit.
@@ -838,7 +837,7 @@ function AppContent({ onDisconnect }) {
                   which makes the in-header switcher redundant. */}
 
               <HeaderGlobalAction
-                aria-label={`Help - Build ${buildInfo.buildNumber}`}
+                aria-label="Help"
                 tooltipAlignment="end"
                 onClick={() => window.open('/docs', '_blank')}
               >

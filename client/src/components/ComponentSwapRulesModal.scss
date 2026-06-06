@@ -39,23 +39,29 @@
   }
 
   .csr-subject {
-    flex: 0 0 7rem;
+    flex: 0 0 9.5rem;
   }
 
   .csr-op {
-    flex: 0 0 7rem;
+    flex: 0 0 8.5rem;
   }
 
   .csr-value {
     flex: 1 1 auto;
-    min-width: 6rem;
+    min-width: 5rem;
   }
 
-  // The "Select component…" buttons truncate long component names rather than
-  // blow out the row width.
+  // The "Select component…" buttons get generous room for the component name,
+  // truncating only very long names rather than blowing out the row width. The
+  // rule-row component button reserves up to 18rem and shrinks before the value
+  // field does, so the name stays readable.
+  .csr-component-btn {
+    flex: 0 1 18rem;
+  }
+
   .csr-component-btn,
   .csr-row--default .cds--btn {
-    max-width: 14rem;
+    max-width: 22rem;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
