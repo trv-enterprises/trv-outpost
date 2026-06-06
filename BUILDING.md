@@ -3,7 +3,7 @@
 This document is for **anyone who wants to build the TRV Outpost
 container images themselves** rather than pull the prebuilt ones from
 ghcr.io. The published images at
-`ghcr.io/trv-enterprises/dashboard-{server,client}:<version>` are
+`ghcr.io/trv-enterprises/outpost-{server,client}:<version>` are
 produced by exactly the steps below, running on a clean Ubuntu
 runner via GitHub Actions (see `.github/workflows/publish-containers.yml`).
 You can reproduce them with nothing but Docker.
@@ -50,11 +50,11 @@ git checkout v0.18.2                   # or whichever tag you want
 
 # Server image — context is the repo root because the server's
 # Dockerfile pulls files from both ./server-go and ./udoc.
-docker build -f server-go/Dockerfile -t dashboard-server:local .
+docker build -f server-go/Dockerfile -t outpost-server:local .
 
 # Client image — context is ./client because everything the client
 # build needs lives there.
-docker build -f client/Dockerfile -t dashboard-client:local ./client
+docker build -f client/Dockerfile -t outpost-client:local ./client
 ```
 
 Builds take ~3-5 minutes depending on your machine and whether
@@ -74,7 +74,7 @@ ARM Pi 4 / Apple Silicon hardware. To reproduce that:
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -f server-go/Dockerfile \
-  -t dashboard-server:local \
+  -t outpost-server:local \
   --load \
   .
 
@@ -82,7 +82,7 @@ docker buildx build \
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -f client/Dockerfile \
-  -t dashboard-client:local \
+  -t outpost-client:local \
   --load \
   ./client
 ```
@@ -95,7 +95,7 @@ appropriate `-t` tags.
 
 ## What's in each image
 
-### `dashboard-server`
+### `outpost-server`
 
 - **Go binary** at `/server` — built from `server-go/cmd/server/main.go`
   with Go 1.26 inside the image
@@ -106,7 +106,7 @@ appropriate `-t` tags.
   at build time)
 - Listens on port `3001`
 
-### `dashboard-client`
+### `outpost-client`
 
 - **Static SPA bundle** in `/srv/` — Vite production build of
   `client/` with Node 20 inside the image
@@ -124,6 +124,12 @@ You can confirm the published image at
 `ghcr.io/trv-enterprises/dashboard-server:0.17.7` is exactly what
 the source produces by comparing image digests:
 
+> **Note:** images were renamed `dashboard-{server,client}` →
+> `outpost-{server,client}` partway through the project's history.
+> Tags published **before** the rename keep the `dashboard-*` name
+> (the example below pulls one); tags published **after** use
+> `outpost-*`. Pick the registry path that matches the tag's era.
+
 ```bash
 # Pull the published one
 docker pull ghcr.io/trv-enterprises/dashboard-server:0.17.7
@@ -133,7 +139,7 @@ git checkout v0.18.2
 docker buildx build \
   --platform linux/amd64 \
   -f server-go/Dockerfile \
-  -t dashboard-server:from-source \
+  -t outpost-server:from-source \
   --load \
   .
 
@@ -142,7 +148,7 @@ docker buildx build \
 # differ. To verify equivalence, compare the *binary contents* of
 # the /server executable inside both:
 docker run --rm --entrypoint sha256sum ghcr.io/trv-enterprises/dashboard-server:0.17.7 /server
-docker run --rm --entrypoint sha256sum dashboard-server:from-source /server
+docker run --rm --entrypoint sha256sum outpost-server:from-source /server
 ```
 
 If those two sha256 values match, the binary is bit-identical. This

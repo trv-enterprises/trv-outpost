@@ -254,7 +254,7 @@ let ptyProcess = null;
  *   packaged template on first launch). Claude Code discovers
  *   `.mcp.json` relative to cwd, so the workspace's curated config
  *   determines which MCP servers the session connects to.
- * - TRVE_DASHBOARD_URL + TRVE_DASHBOARD_KEY are injected so the
+ * - OUTPOST_DASHBOARD_URL + OUTPOST_DASHBOARD_KEY are injected so the
  *   workspace's .mcp.json `${VAR}` placeholders resolve. The user
  *   never has to set these in their shell.
  * - ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are stripped — if
@@ -275,8 +275,8 @@ function spawnClaudeCLI(credentials, workspace) {
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
-  env.TRVE_DASHBOARD_URL = credentials.url;
-  env.TRVE_DASHBOARD_KEY = credentials.key;
+  env.OUTPOST_DASHBOARD_URL = credentials.url;
+  env.OUTPOST_DASHBOARD_KEY = credentials.key;
 
   const shell = process.env.SHELL || '/bin/zsh';
 

@@ -1,4 +1,4 @@
-# Repo-root .dockerignore used when building the dashboard-server image
+# Repo-root .dockerignore used when building the outpost-server image
 # from the repo root (so the Dockerfile can see both server-go/ and udoc/).
 # Keeps the build context small by excluding anything the image doesn't need.
 

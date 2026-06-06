@@ -9,7 +9,7 @@
     "dashboard": {
       "type": "http",
       "url": "http://127.0.0.1:3001/mcp",
-      "headers": { "Authorization": "Bearer ${TRVE_DASHBOARD_KEY}" }
+      "headers": { "Authorization": "Bearer ${OUTPOST_DASHBOARD_KEY}" }
     }
   }
 }

@@ -30,13 +30,13 @@ Claude Code speaks streamable HTTP natively from `.mcp.json` — no bridge neede
     "dashboard": {
       "type": "http",
       "url": "http://127.0.0.1:3001/mcp",
-      "headers": { "Authorization": "Bearer ${TRVE_DASHBOARD_KEY}" }
+      "headers": { "Authorization": "Bearer ${OUTPOST_DASHBOARD_KEY}" }
     }
   }
 }
 ```
 
-Replace `127.0.0.1:3001` with the host:port your dashboard server is reachable on. `${TRVE_DASHBOARD_KEY}` expands from your shell env at connection time, so the file itself stays credential-free and safe to commit.
+Replace `127.0.0.1:3001` with the host:port your dashboard server is reachable on. `${OUTPOST_DASHBOARD_KEY}` expands from your shell env at connection time, so the file itself stays credential-free and safe to commit.
 
 Then run `claude` from a directory containing the file. Inside the session:
 
@@ -68,7 +68,7 @@ The recommended bridge is [`mcp-remote`](https://github.com/geelen/mcp-remote) �
         "-y", "mcp-remote",
         "http://127.0.0.1:3001/mcp",
         "--allow-http",
-        "--header", "Authorization:Bearer ${TRVE_DASHBOARD_KEY}"
+        "--header", "Authorization:Bearer ${OUTPOST_DASHBOARD_KEY}"
       ]
     }
   }
@@ -87,7 +87,7 @@ The `--allow-http` flag is required because `mcp-remote` defaults to refusing pl
       "args": [
         "-y", "mcp-remote",
         "https://127.0.0.1:3001/mcp",
-        "--header", "Authorization:Bearer ${TRVE_DASHBOARD_KEY}"
+        "--header", "Authorization:Bearer ${OUTPOST_DASHBOARD_KEY}"
       ],
       "env": { "NODE_TLS_REJECT_UNAUTHORIZED": "0" }
     }
@@ -95,7 +95,7 @@ The `--allow-http` flag is required because `mcp-remote` defaults to refusing pl
 }
 ```
 
-`${TRVE_DASHBOARD_KEY}` expands from the host shell env, keeping the credential out of the file itself.
+`${OUTPOST_DASHBOARD_KEY}` expands from the host shell env, keeping the credential out of the file itself.
 
 **After editing the config**, fully **quit and restart** Claude Desktop — closing the window is not enough; you need a real process restart for it to re-read the config.
 
@@ -145,7 +145,7 @@ MCP endpoints require authentication, same as `/api/*`. Two credential channels:
 1. **API key (preferred)** — `Authorization: Bearer trve_…`. Create a key from **Manage Mode → API Keys**; the plaintext token is shown exactly once at creation, then only the bcrypt hash and a short prefix are stored. Each key inherits the full capability set of its owning user.
 2. **Legacy `X-User-ID` header** — used only at the `/api/auth/session` bootstrap to trade an identity assertion for an access JWT. The middleware on `/mcp/*` does NOT accept `X-User-ID` directly; you must bootstrap to a JWT first, or use an API key for direct access.
 
-API keys are what you want for both Claude Code and Claude Desktop. Generate one, drop it into `$TRVE_DASHBOARD_KEY` in your shell, and reference it via `${TRVE_DASHBOARD_KEY}` in the config files above.
+API keys are what you want for both Claude Code and Claude Desktop. Generate one, drop it into `$OUTPOST_DASHBOARD_KEY` in your shell, and reference it via `${OUTPOST_DASHBOARD_KEY}` in the config files above.
 
 ## See Also
 

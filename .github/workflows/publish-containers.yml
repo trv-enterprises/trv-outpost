@@ -17,10 +17,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - image: dashboard-server
+          - image: outpost-server
             context: .
             dockerfile: ./server-go/Dockerfile
-          - image: dashboard-client
+          - image: outpost-client
             context: ./client
             dockerfile: ./client/Dockerfile
 

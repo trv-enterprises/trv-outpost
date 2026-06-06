@@ -94,7 +94,7 @@ needed:
     "dashboard": {
       "type": "http",
       "url": "http://127.0.0.1:3001/mcp",
-      "headers": { "Authorization": "Bearer ${TRVE_DASHBOARD_KEY}" }
+      "headers": { "Authorization": "Bearer ${OUTPOST_DASHBOARD_KEY}" }
     }
   }
 }
@@ -130,7 +130,7 @@ a local stdio bridge instead. The recommended bridge is
         "-y", "mcp-remote",
         "http://127.0.0.1:3001/mcp",
         "--allow-http",
-        "--header", "Authorization:Bearer ${TRVE_DASHBOARD_KEY}"
+        "--header", "Authorization:Bearer ${OUTPOST_DASHBOARD_KEY}"
       ]
     }
   }
@@ -150,7 +150,7 @@ refuses the URL silently.
       "args": [
         "-y", "mcp-remote",
         "https://127.0.0.1:3001/mcp",
-        "--header", "Authorization:Bearer ${TRVE_DASHBOARD_KEY}"
+        "--header", "Authorization:Bearer ${OUTPOST_DASHBOARD_KEY}"
       ],
       "env": { "NODE_TLS_REJECT_UNAUTHORIZED": "0" }
     }

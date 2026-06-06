@@ -10,6 +10,7 @@ import FrigateCameraViewer from './frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from './frigate/FrigateAlertsGrid';
 import WeatherDisplay from './weather/WeatherDisplay';
 import PanelText from './PanelText';
+import PanelErrorBoundary from './shared/PanelErrorBoundary';
 import './DashboardGrid.scss';
 
 const CELL_WIDTH = 32;
@@ -179,6 +180,10 @@ function DashboardGrid({
                 }}
                 onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
               >
+                <PanelErrorBoundary
+                  resetKey={`${panel.component_id || panel.id}-${chart?.updated || ''}`}
+                  label={chart?.title || chart?.name || (hasText ? 'Text panel' : 'Component')}
+                >
                 {hasText ? (
                   <div className="component-wrapper text-wrapper">
                     <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
@@ -233,6 +238,7 @@ function DashboardGrid({
                     <span>No chart</span>
                   </div>
                 )}
+                </PanelErrorBoundary>
               </div>
             );
           })}
