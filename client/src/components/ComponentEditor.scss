@@ -545,6 +545,25 @@
     }
   }
 
+  // Connection picker control: a Change button + the selected connection name,
+  // replacing the old inline Select. The name truncates so a long
+  // "name (type)" doesn't push the button or overflow the tile.
+  .connection-picker-control {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+
+    .connection-picker-selected {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--cds-text-primary);
+      font-size: 0.875rem;
+    }
+  }
+
   // Tag chip row beneath the Select inside the connection tile.
   // Wraps onto multiple lines only as a last resort — the +N
   // overflow Toggletip is the primary affordance.

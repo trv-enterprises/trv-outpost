@@ -1,0 +1,55 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.connection-picker-modal {
+  // Give the table room and let long lists scroll inside the modal body.
+  .cds--modal-content {
+    padding-block-end: 0;
+  }
+
+  .conn-picker-loading {
+    display: flex;
+    justify-content: center;
+    padding: spacing.$spacing-07 0;
+  }
+
+  .conn-picker-row {
+    cursor: pointer;
+  }
+
+  // Highlight the currently-selected connection's row.
+  .conn-picker-row--selected td {
+    background-color: var(--cds-layer-selected, #393939);
+  }
+
+  // Description truncates to a single line so a long blurb doesn't blow out
+  // the row height; the full text is available via the cell's title attribute.
+  .conn-picker-desc-cell {
+    max-width: 22rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--cds-text-secondary);
+  }
+
+  .conn-picker-tags-cell {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: spacing.$spacing-02;
+
+    .conn-picker-tags-more {
+      font-size: 0.75rem;
+      color: var(--cds-text-helper);
+    }
+  }
+
+  .conn-picker-empty {
+    text-align: center;
+    color: var(--cds-text-helper);
+    padding: spacing.$spacing-06 0;
+  }
+}

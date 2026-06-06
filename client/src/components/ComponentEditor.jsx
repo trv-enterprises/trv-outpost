@@ -48,6 +48,7 @@ import NamespaceSelect from './shared/NamespaceSelect';
 import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
 import VariableValuePickerModal from './VariableValuePickerModal';
+import ConnectionPickerModal from './ConnectionPickerModal';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
@@ -432,6 +433,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // the default).
   const [chartType, setChartType] = useState('line');
   const [chartTypeModalOpen, setChartTypeModalOpen] = useState(false);
+  const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
 
   // Control configuration (when componentType === 'control')
   const [controlConfig, setControlConfig] = useState(null);
@@ -1348,11 +1350,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
   }, []);
 
-  const handleDatasourceChange = (newDatasourceId) => {
+  const handleDatasourceChange = (newDatasourceId, connObj = null) => {
     setSelectedConnectionId(newDatasourceId);
 
-    if (newDatasourceId && connections.length > 0) {
-      const ds = connections.find(d => d.id === newDatasourceId);
+    // Resolve the connection: an explicitly-passed object (from the picker
+    // modal, which may know connections beyond the editor's capped list) wins;
+    // otherwise look it up in the editor's loaded connections.
+    if (newDatasourceId) {
+      const ds = connObj || (connections.length > 0 ? connections.find(d => d.id === newDatasourceId) : null);
       if (ds) {
         switch (ds.type) {
           case 'sql':
@@ -2405,6 +2410,29 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         document.body
       )}
 
+      {/* Connection picker — modeled on the connections list (sortable table,
+          same filters), trimmed for selection. Portaled to escape the parent
+          editor modal. On select, routes through handleDatasourceChange so the
+          type-dependent editor state updates exactly as the old dropdown did. */}
+      {connectionPickerOpen && createPortal(
+        <ConnectionPickerModal
+          open
+          onClose={() => setConnectionPickerOpen(false)}
+          onSelect={(conn) => {
+            // The editor's own connections list is capped (page_size 100); the
+            // picker loads more. Merge the chosen connection in (for the tag
+            // row / guidance that read from `connections`), and pass it
+            // explicitly so handleDatasourceChange's type-based defaults fire
+            // even before the async merge lands.
+            setConnections((prev) =>
+              prev.some((c) => c.id === conn.id) ? prev : [...prev, conn]);
+            handleDatasourceChange(conn.id, conn);
+          }}
+          selectedId={selectedConnectionId}
+        />,
+        document.body
+      )}
+
       {/* Dashboard-variable value picker — distinct values from the connection.
           Portaled to escape the parent editor modal. On select, sets the
           preview value and remembers the column/table for the variable's
@@ -2554,22 +2582,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </Tooltip>
                   )}
                 </div>
-                <Select
-                  id="datasource-select"
-                  labelText=""
-                  hideLabel
-                  value={selectedConnectionId}
-                  onChange={(e) => handleDatasourceChange(e.target.value)}
-                >
-                  <SelectItem value="" text="Select a connection..." />
-                  {connections.map(ds => (
-                    <SelectItem
-                      key={ds.id}
-                      value={ds.id}
-                      text={`${ds.name} (${ds.type})`}
-                    />
-                  ))}
-                </Select>
+                {/* Connection picker: a Change button opens a modal (modeled
+                    on the connections list) to select; the chosen connection
+                    is shown inline as "name (type)". Replaces the old inline
+                    Select dropdown. */}
+                <div className="connection-picker-control">
+                  <Button
+                    kind="tertiary"
+                    size="md"
+                    onClick={() => setConnectionPickerOpen(true)}
+                  >
+                    Change
+                  </Button>
+                  <span className="connection-picker-selected">
+                    {selectedDatasource
+                      ? `${selectedDatasource.name} (${selectedDatasource.type})`
+                      : 'No connection selected'}
+                  </span>
+                </div>
                 {selectedDatasource && (() => {
                   // Type tag first, then the connection's user tags,
                   // deduped (a user tag equal to the type tag shows once).
