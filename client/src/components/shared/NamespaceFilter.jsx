@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { MultiSelect } from '@carbon/react';
 import { useNamespaces } from '../../context/NamespaceContext';
 import { NAMESPACE_DEFAULT_COLOR } from '../../utils/namespaceColor';
+import './NamespaceFilter.scss';
 
 /**
  * Multi-select namespace filter for list pages. Mirrors TagFilter's

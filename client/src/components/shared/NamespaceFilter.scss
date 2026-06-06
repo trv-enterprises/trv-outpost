@@ -1,0 +1,20 @@
+.namespace-filter {
+  min-width: 12rem;
+
+  // Trigger stays its set width so toolbar layout is predictable, but let the
+  // open menu and its items expand to fit long namespace names (which were
+  // truncating to "chart-", "dashb…", etc.). Mirrors TagFilter's rule.
+  .cds--list-box__menu {
+    inline-size: max-content;
+    min-inline-size: 100%;
+    max-inline-size: 480px;
+  }
+
+  // The option content is the color swatch + name (itemToElement). Let it lay
+  // out on one line and not clip, so the name shows in full.
+  .cds--list-box__menu-item__option {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
