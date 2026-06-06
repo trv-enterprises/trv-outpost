@@ -53,26 +53,30 @@
     cursor: pointer;
     color: var(--cds-icon-secondary, #c6c6c6);
 
-    // Hover brightens the icon — but do NOT paint a background box on
-    // click/focus. This is a Toggletip trigger: clicking it just opens
-    // the tooltip, and the tooltip itself is plenty of feedback. A
-    // mouse click was leaving a persistent highlight box. Keep the
-    // brightened color (and a keyboard :focus-visible ring) for a11y,
-    // drop the mouse-click background.
-    &:hover {
-      background-color: var(--cds-header-hover, #333333);
-      color: var(--cds-icon-primary, #f4f4f4);
-    }
-
     // Carbon paints a box-shadow focus ring on .cds--toggletip-button:focus
     // (utilities/focus-outline). Because clicking opens the toggletip and
     // leaves DOM focus on the button, that ring persists after release —
-    // the "highlight box" the user sees. Kill the ring (and any bg) on
-    // plain :focus; restore a real ring only for keyboard :focus-visible.
+    // a "highlight box" we don't want from a mouse click. Kill the ring (and
+    // any bg) on plain :focus; restore a real ring only for keyboard
+    // :focus-visible.
+    //
+    // ORDER MATTERS: this :focus rule must come BEFORE :hover. Otherwise,
+    // once the button has been clicked (and keeps DOM focus), a later
+    // :focus { background: transparent } would override the hover background
+    // — so the icon stops highlighting on mouseover after the first click,
+    // which is exactly the bug this fixes. :hover wins by being declared last.
     &:focus {
       background-color: transparent;
       box-shadow: none;
       outline: none;
+    }
+
+    // Hover paints a square highlight box (matching the other header icons)
+    // and brightens the icon, so it reads as an active button. Declared after
+    // :focus so it wins even when the button still holds focus from a click.
+    &:hover {
+      background-color: var(--cds-header-hover, #333333);
+      color: var(--cds-icon-primary, #f4f4f4);
     }
 
     &:focus-visible {
