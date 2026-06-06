@@ -2354,7 +2354,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           <div className="mapping-section type-card-section">
             <h4>Chart Type</h4>
             <div className="type-card-current" onClick={() => setChartTypeModalOpen(true)}>
-              <Button kind="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setChartTypeModalOpen(true); }}>
+              <Button kind="tertiary" size="md" onClick={(e) => { e.stopPropagation(); setChartTypeModalOpen(true); }}>
                 Change
               </Button>
               {TypeIcon && <TypeIcon size={20} />}
@@ -2592,7 +2592,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     size="md"
                     onClick={() => setConnectionPickerOpen(true)}
                   >
-                    Change
+                    {selectedDatasource ? 'Change' : 'Select'}
                   </Button>
                   <span className="connection-picker-selected">
                     {selectedDatasource
