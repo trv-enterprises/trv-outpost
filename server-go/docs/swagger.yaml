@@ -853,8 +853,8 @@ definitions:
           VALUE SUBSTITUTION: its query/filter is authored with the `dashboard-variable`
           token, substituted at view time (filter_value mode — SQL WHERE or client-side
           filter; future). It does NOT gate connection_swap — swap is a per-panel
-          concern (DashboardPanel.PinConnection): the connection itself is the
-          variable, so any panel can be repointed without the component opting in.
+          concern: the connection itself is the variable, so any panel can be
+          repointed without the component opting in.
         type: boolean
       version:
         description: Version number (1, 2, 3...)
@@ -875,6 +875,30 @@ definitions:
         type: integer
       total:
         type: integer
+    type: object
+  models.ComponentOverride:
+    description: A predicate over the active dashboard-variable value that selects
+      an alternate component for the panel.
+    properties:
+      component_id:
+        description: ComponentID — the component to render when this rule matches.
+        type: string
+      op:
+        description: Op — "eq" (exact match) or "contains" (case-insensitive substring).
+        type: string
+      subject:
+        description: |-
+          Subject — what the predicate tests:
+            "variable" — the variable's effective VALUE string. For connection_swap
+                         that's the selected connection's display value (the
+                         configured prefix-tag value, else the connection NAME as
+                         fallback). For a filter variable it's the filter value.
+            "tag"      — the VALUE part of one of the selected connection's
+                         prefix:value tags (connection_swap variables only).
+        type: string
+      value:
+        description: Value — the operand the subject is compared against (e.g. "PI").
+        type: string
     type: object
   models.ComponentSummary:
     description: Minimal component info for selection cards and lists
@@ -1415,20 +1439,30 @@ definitions:
       or text config
     properties:
       component_id:
-        description: Reference to a component (chart, control, or display)
+        description: Reference to a component (chart, control, or display) — the DEFAULT
+          component for this panel
         type: string
+      component_overrides:
+        description: |-
+          ComponentOverrides lets a panel render a DIFFERENT component depending on
+          the active dashboard-variable value (component-swap-by-rule). Rules are
+          evaluated top-to-bottom; the first whose predicate matches the active
+          variable wins and its ComponentID renders. No match → the panel's default
+          ComponentID. For a connection_swap variable the swapped component also
+          reads from the selected connection (component + connection swap together);
+          for a filter variable only the component swaps (it keeps its own
+          connection and still receives the filter-value substitution).
+
+          This REPLACES the former per-panel pin_connection opt-out: a panel that
+          must stay fixed simply has no overrides and points its default at the
+          connection it wants.
+        items:
+          $ref: '#/definitions/models.ComponentOverride'
+        type: array
       h:
         type: integer
       id:
         type: string
-      pin_connection:
-        description: |-
-          PinConnection opts this panel OUT of dashboard-variable connection-swap.
-          When a connection_swap variable is active, every panel follows the
-          selected connection by default; a pinned panel keeps its component's own
-          connection. Per-panel (not per-component) so the same component can
-          follow on one dashboard and be pinned on another.
-        type: boolean
       text_config:
         allOf:
         - $ref: '#/definitions/models.PanelTextConfig'

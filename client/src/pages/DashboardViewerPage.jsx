@@ -65,6 +65,7 @@ import PanelText from '../components/PanelText';
 import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
+import ComponentSwapRulesModal from '../components/ComponentSwapRulesModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient, { API_BASE } from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
@@ -201,6 +202,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     selectedConnId: dashVariableValue,
     setValue: setDashVariableValue,
     resolveConnectionId,
+    resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
     setFilterValue: setDashFilterValue,
@@ -427,6 +429,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
   const [componentPickerCategory, setComponentPickerCategory] = useState('all');
   const [componentPickerPanelId, setComponentPickerPanelId] = useState(null);
+
+  // Component-swap rules modal state (which panel's rules are being edited)
+  const [swapRulesPanelId, setSwapRulesPanelId] = useState(null);
 
   // AI pre-flight modal state
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
@@ -1074,7 +1079,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setDashboard(data);
 
       if (data.panels && data.panels.length > 0) {
-        const chartIds = [...new Set(data.panels.map(p => p.component_id).filter(Boolean))];
+        // Collect each panel's default component AND every component referenced
+        // by its component-swap rules, so a swap renders instantly (no mid-render
+        // fetch). De-duped across all panels.
+        const chartIds = [...new Set(
+          data.panels.flatMap(p => [
+            p.component_id,
+            ...(Array.isArray(p.component_overrides) ? p.component_overrides.map(o => o?.component_id) : []),
+          ]).filter(Boolean)
+        )];
         if (chartIds.length > 0) {
           const chartPromises = chartIds.map(chartId =>
             apiClient.getComponent(chartId).catch(() => null)
@@ -2307,6 +2320,27 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     closeComponentPicker();
   };
 
+  const openSwapRulesModal = (panelId) => setSwapRulesPanelId(panelId);
+  const closeSwapRulesModal = () => setSwapRulesPanelId(null);
+  const handleSaveSwapRules = ({ component_id, component_overrides }) => {
+    if (!swapRulesPanelId) return;
+    updateEditablePanel(swapRulesPanelId, { component_id, component_overrides });
+    // Pull any newly-referenced override components into chartsMap so the swap
+    // renders immediately (the dashboard-load pre-fetch only covers saved rules).
+    const ids = [component_id, ...(component_overrides || []).map((o) => o.component_id)].filter(Boolean);
+    const missing = ids.filter((cid) => !chartsMap[cid]);
+    if (missing.length > 0) {
+      Promise.all(missing.map((cid) => apiClient.getComponent(cid).catch(() => null)))
+        .then((comps) => {
+          const add = {};
+          comps.forEach((c) => { if (c) add[c.id] = c; });
+          if (Object.keys(add).length) setChartsMap((prev) => ({ ...prev, ...add }));
+        });
+    }
+    setEditHasChanges(true);
+    closeSwapRulesModal();
+  };
+
   const openAIPreflightModal = (panelId) => {
     updateEditablePanel(panelId, { component_id: null });
     setAiPreflightPanelId(panelId);
@@ -2910,6 +2944,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           chartsMap={chartsMap}
           dashboard={dashboard}
           resolveConnectionId={resolveConnectionId}
+          resolveComponent={resolveComponent}
           dashboardVariableText={dashboardVariableText}
           variableValues={variableValues}
           dashboardVariableValue={dashFilterValue}
@@ -3066,9 +3101,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                               onNewWithAI={() => openAIPreflightModal(panel.id)}
                               onSelectExisting={() => openComponentPicker(panel.id, 'all')}
                               onText={() => setTextPanel(panel.id)}
-                              showPinOption={!!dashVariable && hasChart}
-                              pinned={!!panel.pin_connection}
-                              onTogglePin={() => updateEditablePanel(panel.id, { pin_connection: !panel.pin_connection })}
+                              showSwapRulesOption={(!!dashVariable || !!dashFilterVariable) && hasChart}
+                              hasSwapRules={Array.isArray(panel.component_overrides) && panel.component_overrides.length > 0}
+                              onEditSwapRules={() => openSwapRulesModal(panel.id)}
                             />
                           )}
                         </div>
@@ -3148,7 +3183,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                                 // component's design-time connection when the feature
                                 // is active, the component opts in, and a value is
                                 // selected. Otherwise returns chart.connection_id.
-                                connectionId: resolveConnectionId(chart, panel),
+                                connectionId: resolveConnectionId(chart),
                                 queryConfig: chart.query_config,
                                 // Edit-mode preview reuses the dashboard's
                                 // resolved variable value (the hook seeds it
@@ -3269,6 +3304,19 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         category={componentPickerCategory}
       />
 
+      {/* Component-swap rules editor (edit mode, dashboard-variable active) */}
+      {swapRulesPanelId && (
+        <ComponentSwapRulesModal
+          open={!!swapRulesPanelId}
+          onClose={closeSwapRulesModal}
+          onSave={handleSaveSwapRules}
+          panel={editablePanels.find((p) => p.id === swapRulesPanelId)}
+          chartsMap={chartsMap}
+          variableMode={dashVariable ? 'connection_swap' : 'filter'}
+          variableLabel={(dashVariable || dashFilterVariable)?.label || (dashVariable || dashFilterVariable)?.name || 'variable'}
+        />
+      )}
+
       {/* AI Pre-flight Modal (edit mode) */}
       <AIPreflightModal
         open={aiPreflightOpen}
@@ -3316,11 +3364,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       />
       {expandedPanelId && (() => {
         const expandedPanel = panels.find(p => p.id === expandedPanelId);
-        const rawExpandedChart = expandedPanel?.component_id ? chartsMap[expandedPanel.component_id] : null;
+        // Apply BOTH swaps to the expanded panel so it matches the grid: the
+        // component-swap rules pick the effective component, then connection-swap
+        // repoints it at the selected connection.
+        const expandedComponentId = resolveComponent
+          ? resolveComponent(expandedPanel)
+          : expandedPanel?.component_id;
+        const rawExpandedChart = expandedComponentId ? chartsMap[expandedComponentId] : null;
         if (!rawExpandedChart) return null;
-        // Apply the dashboard-variable connection-swap to the expanded chart too,
-        // so an expanded panel reads from the selected connection like the grid.
-        const resolvedConnId = resolveConnectionId(rawExpandedChart, expandedPanel);
+        const resolvedConnId = resolveConnectionId(rawExpandedChart);
         const expandedChart = resolvedConnId === rawExpandedChart.connection_id
           ? rawExpandedChart
           : { ...rawExpandedChart, connection_id: resolvedConnId };

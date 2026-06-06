@@ -31,16 +31,23 @@ const CONTAINER_PADDING = 4;
  * → DynamicComponentLoader → useData. The caller must wrap this in a
  * RefreshableComponentsProvider (the viewer and kiosk both do).
  *
- * connection resolution: `resolveConnectionId(component, panel)` lets the caller
+ * connection resolution: `resolveConnectionId(component)` lets the caller
  * override a panel's connection (dashboard-variable connection-swap). The viewer
  * passes its hook's resolver; the kiosk passes one bound to the active entry's
  * forced connection.
+ *
+ * component resolution: `resolveComponent(panel)` lets the caller swap which
+ * COMPONENT a panel renders based on the active variable (component-swap rules).
+ * Returns the effective component_id, which must be present in chartsMap (the
+ * caller pre-fetches override components). Optional — when absent, the panel's
+ * own component_id is used.
  */
 function DashboardGrid({
   panels,
   chartsMap,
   dashboard,
   resolveConnectionId,
+  resolveComponent,
   dashboardVariableText = '',
   variableValues = {},
   dashboardVariableValue = null,
@@ -153,7 +160,14 @@ function DashboardGrid({
           }}
         >
           {panels.map((panel) => {
-            const chart = panel.component_id ? chartsMap[panel.component_id] : null;
+            // Effective component for this panel: a component-swap rule may pick
+            // an alternate component_id based on the active variable; otherwise
+            // the panel's own component_id. The resolved id must be in chartsMap
+            // (override components are pre-fetched by the caller).
+            const effectiveComponentId = resolveComponent
+              ? resolveComponent(panel)
+              : panel.component_id;
+            const chart = effectiveComponentId ? chartsMap[effectiveComponentId] : null;
             const hasText = !!panel.text_config;
             const hasChart = !hasText && (!!chart?.component_code || chart?.component_type === 'control' || chart?.component_type === 'display');
             const hasContent = hasText || hasChart;
@@ -181,7 +195,7 @@ function DashboardGrid({
                 onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
               >
                 <PanelErrorBoundary
-                  resetKey={`${panel.component_id || panel.id}-${chart?.updated || ''}`}
+                  resetKey={`${effectiveComponentId || panel.id}-${chart?.updated || ''}`}
                   label={chart?.title || chart?.name || (hasText ? 'Text panel' : 'Component')}
                 >
                 {hasText ? (
@@ -215,14 +229,14 @@ function DashboardGrid({
                         )}
                         <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''} ${(chart.chart_type === 'datatable' || (chart.options?.showTitle !== false && (chart.title || chart.name))) ? 'has-title' : ''}`}>
                           <ComponentPanelWithActions
-                            key={`${panel.component_id}-${chart.updated || ''}`}
+                            key={`${effectiveComponentId}-${chart.updated || ''}`}
                             chart={chart}
                             loaderProps={{
                               code: chart.component_code,
                               props: {},
                               componentMeta: chart,
                               dataMapping: chart.data_mapping,
-                              connectionId: resolveConnectionId ? resolveConnectionId(chart, panel) : chart.connection_id,
+                              connectionId: resolveConnectionId ? resolveConnectionId(chart) : chart.connection_id,
                               queryConfig: chart.query_config,
                               dataRefreshInterval: dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                               refreshTick,
@@ -253,6 +267,7 @@ DashboardGrid.propTypes = {
   chartsMap: PropTypes.object,
   dashboard: PropTypes.object,
   resolveConnectionId: PropTypes.func,
+  resolveComponent: PropTypes.func,
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,

@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../api/client';
+import { candidateLabel, tagValues } from '../utils/tagValueByPrefix';
 
 /**
  * useDashboardVariable — runtime state + resolution for the dashboard-variable
@@ -235,20 +236,80 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
   );
 
   // Resolve a panel's effective connection_id for connection-swap. When the
-  // variable is active and a connection is selected, EVERY panel follows it by
-  // default — the connection IS the variable, so any panel can be repointed.
-  // A panel opts OUT via panel.pin_connection (set per placement, in the panel
-  // edit menu), keeping its component's own connection. With no selection (or
-  // feature off) everything falls through to the component's design-time
-  // connection_id.
+  // variable is active and a connection is selected, EVERY panel follows it —
+  // the connection IS the variable, so any panel is repointed. A panel that
+  // must stay fixed simply points its (default) component at a specific
+  // connection (the former per-panel pin_connection opt-out was replaced by the
+  // component-override mechanism). With no selection (or feature off) everything
+  // falls through to the component's design-time connection_id.
   const resolveConnectionId = useCallback(
-    (component, panel) => {
+    (component) => {
       const baseline = component?.connection_id;
       if (!variableName || !selectedConnId) return baseline;
-      if (panel?.pin_connection) return baseline;
       return selectedConnId;
     },
     [variableName, selectedConnId],
+  );
+
+  // The selected connection-swap candidate (carries name + tags), or null.
+  const selectedCandidate = useMemo(
+    () => (selectedConnId ? candidates.find((c) => c.id === selectedConnId) || null : null),
+    [selectedConnId, candidates],
+  );
+
+  // Resolve a panel's effective component_id via its component-swap rules
+  // (panel.component_overrides). Rules are evaluated in order; the first whose
+  // predicate matches the active variable wins, else the panel's default
+  // component_id. A matched override component is the one the viewer should
+  // render for the panel (and, for connection_swap, resolveConnectionId points
+  // it at the selected connection — both swap together).
+  //
+  // Predicate subjects:
+  //   "variable" — tests the variable's effective VALUE string. For
+  //                connection_swap that's the selected connection's display
+  //                value (label-tag-prefix value, else its name); for a filter
+  //                variable it's the current filter value.
+  //   "tag"      — tests the VALUE part of any of the selected connection's
+  //                prefixed tags (connection_swap variables only; ignored for
+  //                filter variables, which have no connection).
+  // Op: "eq" (exact, case-insensitive) or "contains" (case-insensitive substring).
+  const resolveComponent = useCallback(
+    (panel) => {
+      const fallback = panel?.component_id || null;
+      const rules = Array.isArray(panel?.component_overrides) ? panel.component_overrides : [];
+      if (rules.length === 0) return fallback;
+
+      // No active variable / no selection → nothing to match against → default.
+      const swapActive = !!variableName && !!selectedCandidate;
+      const filterActive = !!filterVariableName && filterValue != null && filterValue !== '';
+      if (!swapActive && !filterActive) return fallback;
+
+      // The "variable" subject's comparison string.
+      const variableValue = swapActive
+        ? candidateLabel(selectedCandidate, variable?.connection_swap?.label_tag_prefix || '')
+        : (filterActive ? String(filterValue) : '');
+      // The "tag" subject's candidate strings (connection_swap only).
+      const tagVals = swapActive ? tagValues(selectedCandidate.tags) : [];
+
+      const cmp = (op, haystack, needle) => {
+        const h = String(haystack).toLowerCase();
+        const n = String(needle).toLowerCase();
+        return op === 'contains' ? h.includes(n) : h === n;
+      };
+
+      for (const rule of rules) {
+        if (!rule || !rule.component_id) continue;
+        const op = rule.op === 'contains' ? 'contains' : 'eq';
+        if (rule.subject === 'tag') {
+          if (swapActive && tagVals.some((tv) => cmp(op, tv, rule.value))) return rule.component_id;
+        } else {
+          // default subject "variable"
+          if (variableValue && cmp(op, variableValue, rule.value)) return rule.component_id;
+        }
+      }
+      return fallback;
+    },
+    [variableName, selectedCandidate, filterVariableName, filterValue, variable],
   );
 
   return {
@@ -260,8 +321,10 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     selectedConnId,
     /** set + persist the selection (pass null to clear) */
     setValue,
-    /** (component, panel) => effective connection_id */
+    /** (component) => effective connection_id */
     resolveConnectionId,
+    /** (panel) => effective component_id (component-swap rules), else panel default */
+    resolveComponent,
     /** the active filter-mode variable definition, or null when inactive */
     filterVariable,
     /** the active filter value (string), or null when unset */

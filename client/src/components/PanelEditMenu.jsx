@@ -44,12 +44,13 @@ function PanelEditMenu({
   onNewWithAI,
   onSelectExisting,
   onText,
-  // Connection-swap pin (dashboard-variable). When showPinOption is true the
-  // menu offers a per-panel "Pin connection" toggle: pinned panels keep their
-  // own connection instead of following the dashboard variable.
-  showPinOption = false,
-  pinned = false,
-  onTogglePin,
+  // Component-swap rules (dashboard-variable). When showSwapRulesOption is true
+  // the menu offers a "Connection-based components…" item that opens the rule
+  // editor: a panel can render a different component depending on the active
+  // variable value. Replaces the former per-panel "Pin connection" toggle.
+  showSwapRulesOption = false,
+  hasSwapRules = false,
+  onEditSwapRules,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState({});
@@ -212,17 +213,18 @@ function PanelEditMenu({
         <span>Text</span>
       </button>
 
-      {/* Connection-swap pin (only when the dashboard has an active
-          connection_swap variable and this panel has a component). */}
-      {showPinOption && (
+      {/* Component-swap rules (only when the dashboard has an active variable
+          and this panel has a component). Lets the panel render a different
+          component per active variable value. */}
+      {showSwapRulesOption && (
         <>
           <div className="panel-edit-menu-divider" />
           <button
             className="panel-edit-menu-item"
-            onClick={() => handleAction(onTogglePin)}
+            onClick={() => handleAction(onEditSwapRules)}
           >
-            {pinned ? <PinFilled size={16} /> : <Pin size={16} />}
-            <span>{pinned ? 'Unpin (follow variable)' : 'Pin connection'}</span>
+            {hasSwapRules ? <PinFilled size={16} /> : <Pin size={16} />}
+            <span>Connection-based components…</span>
           </button>
         </>
       )}

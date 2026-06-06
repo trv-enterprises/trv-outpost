@@ -43,6 +43,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"refresh_assistant_model_description_v1", migrateRefreshAssistantModelDescription},
 		{"assistant_enabled_to_ai_enabled_v1", migrateAssistantEnabledToAIEnabled},
 		{"refresh_tile_font_size_description_v1", migrateRefreshTileFontSizeDescription},
+		{"drop_panel_pin_connection_v1", migrateDropPanelPinConnection},
 	}
 
 	coll := db.Collection("migrations")
@@ -674,6 +675,28 @@ func migrateDropMaskSecrets(ctx context.Context, db *mongo.Database) error {
 		return fmt.Errorf("drop mask_secrets: %w", err)
 	}
 	log.Printf("  connections: dropped mask_secrets from %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateDropPanelPinConnection removes the legacy `pin_connection` field
+// from every dashboard panel. The per-panel connection-swap opt-out was
+// replaced by per-panel component-swap rules (`component_overrides`); a panel
+// that must stay fixed now simply has no overrides and points its default
+// component at the desired connection. A previously-pinned panel becomes a
+// plain default-only panel (which now follows the connection swap like any
+// other) — acceptable since pinning was a wrong stand-in for the override
+// feature. Idempotent: only touches docs that still carry the field, and the
+// `$[]` all-positional operator unsets it from every panel in the array.
+func migrateDropPanelPinConnection(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("dashboards").UpdateMany(
+		ctx,
+		bson.M{"panels.pin_connection": bson.M{"$exists": true}},
+		bson.M{"$unset": bson.M{"panels.$[].pin_connection": ""}},
+	)
+	if err != nil {
+		return fmt.Errorf("drop panel pin_connection: %w", err)
+	}
+	log.Printf("  dashboards: dropped pin_connection from %d documents", res.ModifiedCount)
 	return nil
 }
 

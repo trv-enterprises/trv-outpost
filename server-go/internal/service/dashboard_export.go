@@ -74,6 +74,13 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 			if panel.ComponentID != "" {
 				chartIDsSeen[panel.ComponentID] = struct{}{}
 			}
+			// Component-swap rules reference alternate components; bundle them too
+			// so an exported dashboard's swaps resolve on import.
+			for _, ov := range panel.ComponentOverrides {
+				if ov.ComponentID != "" {
+					chartIDsSeen[ov.ComponentID] = struct{}{}
+				}
+			}
 		}
 	}
 
@@ -168,13 +175,23 @@ func bundleWarnings(b *models.ExportBundle) []string {
 	var warnings []string
 	for _, d := range b.Objects.Dashboards {
 		for _, p := range d.Panels {
-			if p.ComponentID == "" {
-				continue
+			if p.ComponentID != "" {
+				if _, ok := have[p.ComponentID]; !ok {
+					warnings = append(warnings, fmt.Sprintf(
+						"dashboard %q (%s) references missing component %s", d.Name, d.ID, p.ComponentID,
+					))
+				}
 			}
-			if _, ok := have[p.ComponentID]; !ok {
-				warnings = append(warnings, fmt.Sprintf(
-					"dashboard %q (%s) references missing component %s", d.Name, d.ID, p.ComponentID,
-				))
+			// Component-swap rule targets must also resolve.
+			for _, ov := range p.ComponentOverrides {
+				if ov.ComponentID == "" {
+					continue
+				}
+				if _, ok := have[ov.ComponentID]; !ok {
+					warnings = append(warnings, fmt.Sprintf(
+						"dashboard %q (%s) component-swap rule references missing component %s", d.Name, d.ID, ov.ComponentID,
+					))
+				}
 			}
 		}
 	}

@@ -61,4 +61,27 @@ export function candidateLabel(candidate, prefix) {
   return candidate.name || candidate.id || '';
 }
 
+/**
+ * tagValues — the VALUE part of every prefixed tag on a connection, used by
+ * component-swap rules whose subject is "tag" (e.g. a rule `tag CONTAINS "PI"`
+ * tests these values). For a `prefix:value` tag the value is the part after the
+ * first colon; a tag with no colon contributes its whole string (so a bare
+ * `PI` tag still matches). Returns a de-duplicated array of non-empty strings.
+ *
+ * @param {string[]} tags  the connection's tag set
+ * @returns {string[]}
+ */
+export function tagValues(tags) {
+  if (!Array.isArray(tags)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const tag of tags) {
+    if (typeof tag !== 'string') continue;
+    const idx = tag.indexOf(':');
+    const value = (idx >= 0 ? tag.slice(idx + 1) : tag).trim();
+    if (value && !seen.has(value)) { seen.add(value); out.push(value); }
+  }
+  return out;
+}
+
 export default tagValueByPrefix;

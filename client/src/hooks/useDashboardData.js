@@ -37,7 +37,14 @@ export function useDashboardData(id) {
 
       const map = {};
       if (data.panels && data.panels.length > 0) {
-        const chartIds = [...new Set(data.panels.map((p) => p.component_id).filter(Boolean))];
+        // Default component per panel + every component referenced by its
+        // component-swap rules, so a kiosk swap renders without a mid-render fetch.
+        const chartIds = [...new Set(
+          data.panels.flatMap((p) => [
+            p.component_id,
+            ...(Array.isArray(p.component_overrides) ? p.component_overrides.map((o) => o?.component_id) : []),
+          ]).filter(Boolean),
+        )];
         if (chartIds.length > 0) {
           const charts = await Promise.all(
             chartIds.map((cid) => apiClient.getComponent(cid).catch(() => null)),

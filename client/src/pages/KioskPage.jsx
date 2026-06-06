@@ -10,7 +10,7 @@ import KioskNotifications from '../components/KioskNotifications';
 import { useDashboardData } from '../hooks/useDashboardData';
 import apiClient from '../api/client';
 import { syncKioskFromUrl, getKioskConfig } from '../utils/kioskMode';
-import { tagValueByPrefix } from '../utils/tagValueByPrefix';
+import { tagValueByPrefix, tagValues } from '../utils/tagValueByPrefix';
 import './KioskPage.scss';
 
 /**
@@ -46,10 +46,9 @@ function KioskPage() {
     ? activeEntry.variable.value
     : null;
   const resolveConnectionId = useCallback(
-    (component, panel) => {
+    (component) => {
       const baseline = component?.connection_id;
       if (!forcedConnId) return baseline;
-      if (panel?.pin_connection) return baseline;
       return forcedConnId;
     },
     [forcedConnId],
@@ -92,6 +91,37 @@ function KioskPage() {
     if (!connVariable?.name) return {};
     return { [connVariable.name]: dashboardVariableText };
   }, [connVariable, dashboardVariableText]);
+
+  // Resolve a panel's effective component via its component-swap rules, matched
+  // against the kiosk's forced connection. Mirrors useDashboardVariable's
+  // resolveComponent (the kiosk has its own resolvers since it forces a
+  // connection per entry rather than using the candidate-list hook). Subject
+  // "variable" tests the connection's display value (dashboardVariableText);
+  // subject "tag" tests the forced connection's prefixed-tag values.
+  const resolveComponent = useCallback(
+    (panel) => {
+      const fallback = panel?.component_id || null;
+      const rules = Array.isArray(panel?.component_overrides) ? panel.component_overrides : [];
+      if (rules.length === 0 || !forcedConnId) return fallback;
+      const tagVals = tagValues(forcedConn?.tags);
+      const cmp = (op, haystack, needle) => {
+        const h = String(haystack).toLowerCase();
+        const n = String(needle).toLowerCase();
+        return op === 'contains' ? h.includes(n) : h === n;
+      };
+      for (const rule of rules) {
+        if (!rule || !rule.component_id) continue;
+        const op = rule.op === 'contains' ? 'contains' : 'eq';
+        if (rule.subject === 'tag') {
+          if (tagVals.some((tv) => cmp(op, tv, rule.value))) return rule.component_id;
+        } else if (dashboardVariableText && cmp(op, dashboardVariableText, rule.value)) {
+          return rule.component_id;
+        }
+      }
+      return fallback;
+    },
+    [forcedConnId, forcedConn, dashboardVariableText],
+  );
 
   // ── Auto-rotate (Phase 4) ──────────────────────────────────────────
   // Advance the entry index on the interval; pause while the tab is hidden so
@@ -168,6 +198,7 @@ function KioskPage() {
             chartsMap={chartsMap}
             dashboard={dashboard}
             resolveConnectionId={resolveConnectionId}
+            resolveComponent={resolveComponent}
             dashboardVariableText={dashboardVariableText}
             variableValues={variableValues}
             dashboardCommand={null}

@@ -116,8 +116,8 @@ type Component struct {
 	// VALUE SUBSTITUTION: its query/filter is authored with the `dashboard-variable`
 	// token, substituted at view time (filter_value mode — SQL WHERE or client-side
 	// filter; future). It does NOT gate connection_swap — swap is a per-panel
-	// concern (DashboardPanel.PinConnection): the connection itself is the
-	// variable, so any panel can be repointed without the component opting in.
+	// concern: the connection itself is the variable, so any panel can be
+	// repointed without the component opting in.
 	UsesDashboardVariable bool                   `json:"uses_dashboard_variable,omitempty" bson:"uses_dashboard_variable,omitempty"`
 	Options               map[string]interface{} `json:"options" bson:"options"`                                 // ECharts options overrides (charts only)
 	Tags                  []string               `json:"tags,omitempty" bson:"tags,omitempty"`                   // Searchable tags

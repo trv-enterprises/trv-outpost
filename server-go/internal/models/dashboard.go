@@ -26,14 +26,40 @@ type DashboardPanel struct {
 	Y           int              `json:"y" bson:"y"`
 	W           int              `json:"w" bson:"w"`
 	H           int              `json:"h" bson:"h"`
-	ComponentID string           `json:"component_id,omitempty" bson:"component_id,omitempty"` // Reference to a component (chart, control, or display)
+	ComponentID string           `json:"component_id,omitempty" bson:"component_id,omitempty"` // Reference to a component (chart, control, or display) — the DEFAULT component for this panel
 	TextConfig  *PanelTextConfig `json:"text_config,omitempty" bson:"text_config,omitempty"`   // Native text panel config
-	// PinConnection opts this panel OUT of dashboard-variable connection-swap.
-	// When a connection_swap variable is active, every panel follows the
-	// selected connection by default; a pinned panel keeps its component's own
-	// connection. Per-panel (not per-component) so the same component can
-	// follow on one dashboard and be pinned on another.
-	PinConnection bool `json:"pin_connection,omitempty" bson:"pin_connection,omitempty"`
+	// ComponentOverrides lets a panel render a DIFFERENT component depending on
+	// the active dashboard-variable value (component-swap-by-rule). Rules are
+	// evaluated top-to-bottom; the first whose predicate matches the active
+	// variable wins and its ComponentID renders. No match → the panel's default
+	// ComponentID. For a connection_swap variable the swapped component also
+	// reads from the selected connection (component + connection swap together);
+	// for a filter variable only the component swaps (it keeps its own
+	// connection and still receives the filter-value substitution).
+	//
+	// This REPLACES the former per-panel pin_connection opt-out: a panel that
+	// must stay fixed simply has no overrides and points its default at the
+	// connection it wants.
+	ComponentOverrides []ComponentOverride `json:"component_overrides,omitempty" bson:"component_overrides,omitempty"`
+}
+
+// ComponentOverride is one component-swap rule on a DashboardPanel.
+// @Description A predicate over the active dashboard-variable value that selects an alternate component for the panel.
+type ComponentOverride struct {
+	// Subject — what the predicate tests:
+	//   "variable" — the variable's effective VALUE string. For connection_swap
+	//                that's the selected connection's display value (the
+	//                configured prefix-tag value, else the connection NAME as
+	//                fallback). For a filter variable it's the filter value.
+	//   "tag"      — the VALUE part of one of the selected connection's
+	//                prefix:value tags (connection_swap variables only).
+	Subject string `json:"subject" bson:"subject"`
+	// Op — "eq" (exact match) or "contains" (case-insensitive substring).
+	Op string `json:"op" bson:"op"`
+	// Value — the operand the subject is compared against (e.g. "PI").
+	Value string `json:"value" bson:"value"`
+	// ComponentID — the component to render when this rule matches.
+	ComponentID string `json:"component_id" bson:"component_id"`
 }
 
 // ChartQueryConfig defines how to query data for a chart

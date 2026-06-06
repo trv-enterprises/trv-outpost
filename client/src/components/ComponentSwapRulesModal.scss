@@ -1,0 +1,68 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.component-swap-rules {
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-03;
+
+  .csr-help {
+    font-size: 0.8125rem;
+    color: var(--cds-text-secondary);
+    margin-bottom: spacing.$spacing-03;
+  }
+
+  .csr-row {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+
+    &--default {
+      padding-bottom: spacing.$spacing-03;
+      border-bottom: 1px solid var(--cds-border-subtle-01);
+      margin-bottom: spacing.$spacing-02;
+    }
+  }
+
+  .csr-rule-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--cds-text-secondary);
+    letter-spacing: 0.02em;
+  }
+
+  .csr-spacer {
+    flex: 1 1 auto;
+  }
+
+  .csr-subject {
+    flex: 0 0 7rem;
+  }
+
+  .csr-op {
+    flex: 0 0 7rem;
+  }
+
+  .csr-value {
+    flex: 1 1 auto;
+    min-width: 6rem;
+  }
+
+  // The "Select component…" buttons truncate long component names rather than
+  // blow out the row width.
+  .csr-component-btn,
+  .csr-row--default .cds--btn {
+    max-width: 14rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .csr-add {
+    align-self: flex-start;
+    margin-top: spacing.$spacing-02;
+  }
+}
