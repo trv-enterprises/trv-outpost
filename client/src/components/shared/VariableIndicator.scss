@@ -11,9 +11,15 @@
   align-items: center;
   vertical-align: middle;
 
-  // The "var" tag sits flush with its neighbours; kill the Tag's default
-  // outer margin so it lines up next to the name / other badges.
+  // Quiet marker, not a primary badge: outline tag with muted text + a subtle
+  // border, so it reads as a small annotation beside the name rather than
+  // competing with it. Kill the Tag's default outer margin so it lines up.
   .cds--tag {
     margin: 0;
+    color: var(--cds-text-helper);
+    border-color: var(--cds-border-subtle-01);
+    min-height: auto;
+    font-size: 0.6875rem;
+    letter-spacing: 0.01em;
   }
 }

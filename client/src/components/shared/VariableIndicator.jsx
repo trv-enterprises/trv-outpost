@@ -29,7 +29,7 @@ function VariableIndicator({ active = false, size = 'sm' }) {
       className="variable-indicator-tooltip"
     >
       <span className="variable-indicator" aria-label="Uses a dashboard variable">
-        <Tag type="warm-gray" size={size}>var</Tag>
+        <Tag type="outline" size={size}>var</Tag>
       </span>
     </Tooltip>
   );
