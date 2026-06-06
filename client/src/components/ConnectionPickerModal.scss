@@ -100,21 +100,25 @@
       background-color: var(--cds-layer-01, #262626) !important;
     }
 
+    // Header background. Carbon paints the whole <thead> $layer-accent (#393939,
+    // lighter than our layer-01 rows). Sortable headers (Name/Namespace/Type)
+    // cover that with their sort button, but NON-sortable ones (Tags,
+    // Description) leave the thead's $layer-accent showing as a lighter band.
+    // Force layer-01 on thead + th + the header-label + sort button so every
+    // header cell matches uniformly.
+    .cds--data-table thead,
+    .cds--data-table thead th,
+    .cds--data-table thead .cds--table-header-label,
+    .cds--data-table thead .cds--table-sort,
+    .cds--data-table thead .cds--table-sort__header {
+      background-color: var(--cds-layer-01, #262626) !important;
+    }
+
     // Sticky header: pinned within .cds--data-table-content while rows scroll.
-    // The th must carry an OPAQUE background or scrolling rows show through.
     .cds--data-table thead th {
       position: sticky;
       top: 0;
       z-index: 2;
-      background-color: var(--cds-layer-01, #262626) !important;
-
-      // Some th render an inner button/content wrapper that Carbon paints; make
-      // sure those are opaque too so the Tags/Description header cells don't
-      // show a translucent/contrasting band (the "strange background" artifact).
-      .cds--table-header-label,
-      button {
-        background-color: var(--cds-layer-01, #262626);
-      }
     }
   }
 
