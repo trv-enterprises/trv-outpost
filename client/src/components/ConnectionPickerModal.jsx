@@ -7,7 +7,6 @@ import PropTypes from 'prop-types';
 import {
   Modal,
   DataTable,
-  TableContainer,
   Table,
   TableHead,
   TableRow,
@@ -219,7 +218,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
       ) : (
         <DataTable rows={rows} headers={headers}>
           {({ rows: dtRows, headers: dtHeaders, getHeaderProps, getRowProps, getTableProps }) => (
-            <TableContainer className="conn-picker-table-container">
+            <div className="conn-picker-table-container">
               <Table {...getTableProps()}>
                 <TableHead>
                   <TableRow>
@@ -301,7 +300,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
                   )}
                 </TableBody>
               </Table>
-            </TableContainer>
+            </div>
           )}
         </DataTable>
       )}

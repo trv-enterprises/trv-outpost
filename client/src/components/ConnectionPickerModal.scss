@@ -5,8 +5,32 @@
 @use '@carbon/react/scss/spacing' as spacing;
 
 .connection-picker-modal {
+  // Darker modal shell: drop the whole modal onto --cds-background (#161616)
+  // instead of Carbon's default layer-01 (#262626). The table (rows + header)
+  // then stays at layer-01, reading as a raised surface against the darker
+  // modal — real tokens, clean one-step hierarchy.
+  .cds--modal-container {
+    background-color: var(--cds-background, #161616);
+    // Fixed modal height so filtering down to a few rows doesn't shrink the
+    // window. The grid (auto 1fr auto) gives the content row the remaining
+    // space; the table container fills + scrolls within it.
+    height: 80vh;
+  }
+  .cds--modal-header,
+  .cds--modal-footer {
+    background-color: var(--cds-background, #161616);
+  }
+
+  // The modal body itself must NOT scroll — Carbon defaults it to
+  // overflow-y:auto, which made the whole body (toolbar + table + header)
+  // scroll as one, taking the header off the top. Lock it; the table's own
+  // container owns the scroll instead, so the toolbar + sticky header stay put.
   .cds--modal-content {
     padding-block-end: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--cds-background, #161616);
   }
 
   // Toolbar mirrors the connections list page's .page-toolbar: a separate row
@@ -41,22 +65,50 @@
   .conn-picker-loading {
     display: flex;
     justify-content: center;
-    padding: spacing.$spacing-07 0;
+    align-items: center;
+    // Fill the remaining modal-body height so the modal doesn't resize between
+    // the loading state and the loaded table.
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
-  // Let the table scroll inside the modal body without clipping the open
-  // filter popovers (which live in the toolbar above, outside this container).
+  // The table owns the scroll. flex:1 fills the remaining modal-body height, so
+  // the modal stays the SAME size no matter how many rows the filters leave —
+  // filtering no longer shrinks the window. Only the rows scroll; the header is
+  // sticky (below). overflow:auto here (not on .cds--modal-content) keeps the
+  // scroll on this element so sticky-thead works.
   .conn-picker-table-container {
-    max-height: 55vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
+
+    // Rows + header stay at layer-01 (#262626), reading as a raised surface on
+    // the darker (#161616) modal shell. !important beats Carbon's own
+    // tbody td { background: $layer } rule.
+    .cds--data-table tbody tr td {
+      background-color: var(--cds-layer-01, #262626) !important;
+    }
+
+    // Sticky header: pinned while the tbody scrolls underneath. Same layer-01
+    // band so it reads as part of the table.
+    .cds--data-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background-color: var(--cds-layer-01, #262626) !important;
+    }
   }
 
   .conn-picker-row {
     cursor: pointer;
+
+    &:hover td {
+      background-color: var(--cds-layer-hover-01, #333333) !important;
+    }
   }
 
   .conn-picker-row--selected td {
-    background-color: var(--cds-layer-selected, #393939);
+    background-color: var(--cds-layer-selected, #393939) !important;
   }
 
   // Top-align the multi-value cells so a wrapping tag row doesn't push the

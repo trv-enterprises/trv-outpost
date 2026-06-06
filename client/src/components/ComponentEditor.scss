@@ -267,11 +267,11 @@
       display: flex;
       align-items: center;
       gap: spacing.$spacing-04;
-      // Horizontal padding only — the surrounding .mapping-section
-      // card already provides vertical padding around its contents,
-      // and stacking the tile's own top/bottom padding on top
-      // produced visible double-padding inside the Chart Type card.
-      padding: 0 spacing.$spacing-04;
+      // No LEFT padding so the Change button's left edge lines up with the
+      // Connection tile's Select button (and the other section controls).
+      // Keep right padding so the label/description don't hug the card edge.
+      // The surrounding .mapping-section card provides the vertical padding.
+      padding: 0 spacing.$spacing-04 0 0;
       background-color: var(--cds-layer-01);
       border-radius: 4px;
       cursor: pointer;
