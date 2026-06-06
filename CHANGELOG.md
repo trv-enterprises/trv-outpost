@@ -6,6 +6,47 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.0] — 2026-06-05
+
+Per-panel component-swap rules for dashboard variables, plus the container
+image / Electron env-var rebrand and a crash-isolation hardening pass.
+
+### Added
+
+- **Per-panel component-swap rules.** A dashboard panel can now render a
+  *different component* depending on the active dashboard-variable value.
+  Each panel has a DEFAULT component plus an ordered list of rules; the
+  first rule whose predicate matches the active variable wins. A predicate
+  tests either the variable's **value** (subject `VARIABLE`) or one of the
+  selected connection's prefixed-tag values (subject `TAG`), with operator
+  `=` or `CONTAINS`. For a connection-swap variable the matched component
+  also reads from the selected connection (component + connection swap
+  together); for a filter variable only the component swaps. Authored from
+  the panel edit menu's **"Connection-based components…"** item. This
+  replaces the former per-panel "Pin connection" toggle.
+- **Per-panel error boundary.** A render-time error in one panel's
+  component now shows an inline error tile for that panel only, instead of
+  blanking the entire dashboard.
+- **Stream value-capture modal**: shows a live **records-processed** count
+  next to the distinct-value count, and the editor's Fetch now shows
+  captured values accumulating live (previously only after Stop). The Stop
+  control is a primary button.
+
+### Changed
+
+- **Container images renamed** `dashboard-{server,client}` →
+  `outpost-{server,client}` (`ghcr.io/trv-enterprises/outpost-*`),
+  finishing the TRV Outpost rebrand. Tags published before this release
+  keep the old image names; rollback to a pre-rename version still works.
+- **Electron desktop**: the host-injected env vars
+  `TRVE_DASHBOARD_{URL,KEY}` are renamed `OUTPOST_DASHBOARD_{URL,KEY}`.
+
+### Migration
+
+- `drop_panel_pin_connection_v1` removes the obsolete `pin_connection`
+  field from dashboard panels automatically on first boot of the new
+  server image.
+
 ## [0.27.2] — 2026-06-05
 
 UI polish + docs. No functional or API changes.

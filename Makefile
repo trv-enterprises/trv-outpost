@@ -89,16 +89,16 @@ docker-push: ## Build and push multi-arch images to ghcr.io
 	@docker buildx inspect multiarch-builder >/dev/null 2>&1 || \
 		docker buildx create --name multiarch-builder --driver docker-container
 	@docker buildx use multiarch-builder
-	@echo "Building dashboard-server..."
+	@echo "Building outpost-server..."
 	docker buildx build --platform linux/amd64,linux/arm64 \
 		-f ./server-go/Dockerfile \
-		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-server:$(VERSION) \
-		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-server:latest \
+		-t $(REGISTRY)/$(GITHUB_OWNER)/outpost-server:$(VERSION) \
+		-t $(REGISTRY)/$(GITHUB_OWNER)/outpost-server:latest \
 		--push .
-	@echo "Building dashboard-client..."
+	@echo "Building outpost-client..."
 	docker buildx build --platform linux/amd64,linux/arm64 \
-		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-client:$(VERSION) \
-		-t $(REGISTRY)/$(GITHUB_OWNER)/dashboard-client:latest \
+		-t $(REGISTRY)/$(GITHUB_OWNER)/outpost-client:$(VERSION) \
+		-t $(REGISTRY)/$(GITHUB_OWNER)/outpost-client:latest \
 		--push ./client
 	@echo "✓ Images pushed to $(REGISTRY)/$(GITHUB_OWNER)"
 
@@ -171,8 +171,8 @@ release: ## Full release: build, tarballs, commit, tag, push (use with VERSION=v
 	@ls dist/*.tar.gz 2>/dev/null | sed 's/^/  /'
 	@echo ""
 	@echo "GitHub Actions is now publishing to ghcr.io:"
-	@echo "  - $(REGISTRY)/$(GITHUB_OWNER)/dashboard-server:$(VERSION)"
-	@echo "  - $(REGISTRY)/$(GITHUB_OWNER)/dashboard-client:$(VERSION)"
+	@echo "  - $(REGISTRY)/$(GITHUB_OWNER)/outpost-server:$(VERSION)"
+	@echo "  - $(REGISTRY)/$(GITHUB_OWNER)/outpost-client:$(VERSION)"
 
 # Publish (or update) the GitHub Release entry for VERSION sourced from
 # the annotated tag's body. Idempotent: if the release already exists

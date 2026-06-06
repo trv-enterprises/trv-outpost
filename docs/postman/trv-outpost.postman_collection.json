@@ -1831,7 +1831,7 @@
             "description": "Create a new dashboard\n\nCreate a new dashboard with panels and embedded charts\n\n\nResponses: 201, 400, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"pin_connection\": false,\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0,\n    \"variables\": [\n      null\n    ],\n    \"variables_enabled\": false\n  },\n  \"tags\": [\n    \"\"\n  ]\n}",
+              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"component_overrides\": [\n        null\n      ],\n      \"h\": 0,\n      \"id\": \"\",\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0,\n    \"variables\": [\n      null\n    ],\n    \"variables_enabled\": false\n  },\n  \"tags\": [\n    \"\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2169,7 +2169,7 @@
             "description": "Update a dashboard\n\nUpdate an existing dashboard\n\n\nResponses: 200, 400, 404, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"h\": 0,\n      \"id\": \"\",\n      \"pin_connection\": false,\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0,\n    \"variables\": [\n      null\n    ],\n    \"variables_enabled\": false\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"thumbnail\": \"\"\n}",
+              "raw": "{\n  \"description\": \"\",\n  \"metadata\": {},\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"panels\": [\n    {\n      \"component_id\": \"\",\n      \"component_overrides\": [\n        null\n      ],\n      \"h\": 0,\n      \"id\": \"\",\n      \"text_config\": null,\n      \"w\": 0,\n      \"x\": 0,\n      \"y\": 0\n    }\n  ],\n  \"settings\": {\n    \"allow_export\": false,\n    \"default_view\": \"\",\n    \"is_public\": false,\n    \"layout_dimension\": \"\",\n    \"refresh_interval\": 0,\n    \"scale_percent\": 0,\n    \"theme\": \"\",\n    \"timezone\": \"\",\n    \"title_scale\": 0,\n    \"variables\": [\n      null\n    ],\n    \"variables_enabled\": false\n  },\n  \"tags\": [\n    \"\"\n  ],\n  \"thumbnail\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
