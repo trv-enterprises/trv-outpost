@@ -42,6 +42,7 @@ import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
 import TypeHierarchyFilter from '../components/shared/TypeHierarchyFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
+import VariableIndicator from '../components/shared/VariableIndicator';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
@@ -746,7 +747,10 @@ function ComponentsListPage() {
                               const chartTags = chart?.tags || [];
                               return (
                                 <TableCell key={cell.id} className="name-cell">
-                                  <div className="name-cell__name">{cell.value}</div>
+                                  <div className="name-cell__name">
+                                    <span>{cell.value}</span>
+                                    <VariableIndicator active={!!chart?.uses_dashboard_variable} />
+                                  </div>
                                   {chartTags.length > 0 && (
                                     <div className="name-cell__tags">
                                       {chartTags.map((t) => (

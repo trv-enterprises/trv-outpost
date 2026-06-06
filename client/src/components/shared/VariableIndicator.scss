@@ -1,0 +1,21 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+.variable-indicator-tooltip {
+  display: inline-flex;
+}
+
+.variable-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cds-text-secondary);
+  vertical-align: middle;
+
+  // Slightly subdued so it reads as a marker, not a primary action; brightens
+  // on hover for discoverability.
+  &:hover {
+    color: var(--cds-text-primary);
+  }
+}

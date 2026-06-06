@@ -18,6 +18,7 @@ import TypeHierarchyFilter, { matchesTypeSelection, COMPONENT_TYPE_HIERARCHY } f
 import ResetFiltersButton from './shared/ResetFiltersButton';
 import NamespaceFilter from './shared/NamespaceFilter';
 import NamespaceChip from './shared/NamespaceChip';
+import VariableIndicator from './shared/VariableIndicator';
 import SortMenu from './shared/SortMenu';
 import './ComponentPickerModal.scss';
 
@@ -367,6 +368,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                     {item.namespace && (
                       <NamespaceChip name={item.namespace} />
                     )}
+                    <VariableIndicator active={!!item.uses_dashboard_variable} />
                   </div>
                   <div className="picker-tile-content">
                     <h4>{item.title || item.name}</h4>

@@ -459,6 +459,9 @@
 
     &__name {
       line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
     }
 
     &__tags {
