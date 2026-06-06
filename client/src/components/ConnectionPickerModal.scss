@@ -50,14 +50,15 @@
 
       .cds--search {
         width: 16rem;
-        background-color: var(--cds-layer-01);
       }
 
       // Type filter dropdown — wide enough that "SQL Database" etc. don't
-      // truncate to "SQL D…".
+      // truncate to "SQL D…". No explicit background override: it had a
+      // layer-01 fill the search/namespace/tag controls didn't, so it read as
+      // a different treatment. Let all four share Carbon's default field
+      // background for a consistent toolbar.
       #conn-picker-type-filter {
         min-width: 180px;
-        background-color: var(--cds-layer-01);
       }
     }
   }
@@ -72,15 +73,25 @@
     min-height: 0;
   }
 
-  // The table owns the scroll. flex:1 fills the remaining modal-body height, so
-  // the modal stays the SAME size no matter how many rows the filters leave —
-  // filtering no longer shrinks the window. Only the rows scroll; the header is
-  // sticky (below). overflow:auto here (not on .cds--modal-content) keeps the
-  // scroll on this element so sticky-thead works.
+  // The table area fills the remaining modal-body height. flex:1 + min-height:0
+  // so the modal stays the SAME size no matter how many rows the filters leave.
+  // A bottom margin lets the darker modal shell show beneath the table.
   .conn-picker-table-container {
     flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: spacing.$spacing-05;
+
+    // Carbon wraps the <table> in .cds--data-table-content, which already sets
+    // overflow-x:auto — that makes IT the scroll/containing block, so a sticky
+    // <th> sticks relative to this element, not our outer wrapper. Therefore
+    // the VERTICAL scroll + height must live HERE, or the header scrolls away.
+    .cds--data-table-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
 
     // Rows + header stay at layer-01 (#262626), reading as a raised surface on
     // the darker (#161616) modal shell. !important beats Carbon's own
@@ -89,13 +100,21 @@
       background-color: var(--cds-layer-01, #262626) !important;
     }
 
-    // Sticky header: pinned while the tbody scrolls underneath. Same layer-01
-    // band so it reads as part of the table.
+    // Sticky header: pinned within .cds--data-table-content while rows scroll.
+    // The th must carry an OPAQUE background or scrolling rows show through.
     .cds--data-table thead th {
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: 2;
       background-color: var(--cds-layer-01, #262626) !important;
+
+      // Some th render an inner button/content wrapper that Carbon paints; make
+      // sure those are opaque too so the Tags/Description header cells don't
+      // show a translucent/contrasting band (the "strange background" artifact).
+      .cds--table-header-label,
+      button {
+        background-color: var(--cds-layer-01, #262626);
+      }
     }
   }
 
