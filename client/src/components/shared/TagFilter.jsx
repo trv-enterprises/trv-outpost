@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useEffect, useMemo, useState } from 'react';
-import { MultiSelect } from '@carbon/react';
+import { FilterableMultiSelect } from '@carbon/react';
 import apiClient from '../../api/client';
 import { getAllTagsCached } from './tagsApi';
 import './TagFilter.scss';
@@ -54,7 +54,7 @@ function TagFilter({
     }
   }, [entityType]);
 
-  // Items the MultiSelect renders: only tags used by this entity type,
+  // Items the select renders: only tags used by this entity type,
   // shaped as `{ id, text }` with the count inline.
   const items = useMemo(() => {
     return allTags
@@ -65,7 +65,7 @@ function TagFilter({
       }));
   }, [allTags, countField]);
 
-  // MultiSelect wants selectedItems as objects matching items[].
+  // The select wants selectedItems as objects matching items[].
   const selectedItems = useMemo(() => {
     return selected
       .map((name) => items.find((i) => i.id === name))
@@ -76,12 +76,20 @@ function TagFilter({
     onChange((next || []).map((i) => i.id));
   };
 
+  // Collapsed label: the search input shows this as its placeholder when
+  // nothing is selected, and a count once tags are chosen. FilterableMultiSelect
+  // adds a type-to-search box that filters `items` by `itemToString` — so long
+  // tag lists are searchable instead of scroll-only.
+  const placeholder = selected.length > 0
+    ? `${selected.length} tag${selected.length > 1 ? 's' : ''} selected`
+    : label;
+
   return (
     <div className="tag-filter">
-      <MultiSelect
+      <FilterableMultiSelect
         id={id}
         titleText=""
-        label={selected.length > 0 ? `${selected.length} tag${selected.length > 1 ? 's' : ''} selected` : label}
+        placeholder={placeholder}
         items={items}
         itemToString={(item) => (item ? item.text : '')}
         selectedItems={selectedItems}
