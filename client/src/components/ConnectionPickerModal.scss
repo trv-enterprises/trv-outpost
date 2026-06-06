@@ -5,9 +5,37 @@
 @use '@carbon/react/scss/spacing' as spacing;
 
 .connection-picker-modal {
-  // Give the table room and let long lists scroll inside the modal body.
   .cds--modal-content {
     padding-block-end: 0;
+  }
+
+  // Toolbar mirrors the connections list page's .page-toolbar: a separate row
+  // ABOVE the table (not Carbon's TableToolbar). Filters are left-aligned;
+  // search is a modest fixed width like the editor's.
+  .conn-picker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+    margin-bottom: spacing.$spacing-04;
+
+    .conn-picker-toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-04;
+      flex-wrap: wrap;
+
+      .cds--search {
+        width: 16rem;
+        background-color: var(--cds-layer-01);
+      }
+
+      // Type filter dropdown — wide enough that "SQL Database" etc. don't
+      // truncate to "SQL D…".
+      #conn-picker-type-filter {
+        min-width: 180px;
+        background-color: var(--cds-layer-01);
+      }
+    }
   }
 
   .conn-picker-loading {
@@ -16,35 +44,49 @@
     padding: spacing.$spacing-07 0;
   }
 
+  // Let the table scroll inside the modal body without clipping the open
+  // filter popovers (which live in the toolbar above, outside this container).
+  .conn-picker-table-container {
+    max-height: 55vh;
+    overflow-y: auto;
+  }
+
   .conn-picker-row {
     cursor: pointer;
   }
 
-  // Highlight the currently-selected connection's row.
   .conn-picker-row--selected td {
     background-color: var(--cds-layer-selected, #393939);
   }
 
-  // Description truncates to a single line so a long blurb doesn't blow out
-  // the row height; the full text is available via the cell's title attribute.
+  // Top-align the multi-value cells so a wrapping tag row doesn't push the
+  // single-line cells (name/type) to the vertical middle — and so the row's
+  // bottom border sits cleanly under the content instead of mid-tags (the
+  // "extra underline under the tags" artifact). Mirrors the list page.
+  .conn-picker-namespace-cell,
+  .conn-picker-tags-cell {
+    vertical-align: top;
+  }
+
+  .conn-picker-tags-cell {
+    .cds--tag {
+      margin: 2px;
+    }
+
+    .conn-picker-tags-more {
+      font-size: 0.75rem;
+      color: var(--cds-text-helper);
+      margin-inline-start: spacing.$spacing-02;
+    }
+  }
+
   .conn-picker-desc-cell {
     max-width: 22rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--cds-text-secondary);
-  }
-
-  .conn-picker-tags-cell {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: spacing.$spacing-02;
-
-    .conn-picker-tags-more {
-      font-size: 0.75rem;
-      color: var(--cds-text-helper);
-    }
+    vertical-align: top;
   }
 
   .conn-picker-empty {

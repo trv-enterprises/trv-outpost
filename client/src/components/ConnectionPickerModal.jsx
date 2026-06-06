@@ -14,9 +14,7 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
-  TableToolbarSearch,
+  Search,
   Dropdown,
   Tag,
   Loading,
@@ -127,6 +125,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
   }, [connections, searchTerm, typeFilter, tagFilter, namespaceFilter, sortKey, sortDirection]);
 
   // Map to DataTable rows; keep the raw connection alongside for selection.
+  // Tags stay an array so cells render chips (not a joined string).
   const byId = useMemo(() => {
     const m = {};
     connections.forEach((c) => { m[c.id] = c; });
@@ -138,7 +137,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     name: c.name,
     namespace: c.namespace || 'default',
     type: c.type,
-    tags: (c.tags || []).join(', '),
+    tags: Array.isArray(c.tags) ? c.tags : [],
     description: c.description || '',
   }));
 
@@ -150,9 +149,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     onClose?.();
   };
 
-  // DataTable's isSortable drives header clicks; capture the sort state back
-  // so our useMemo re-sorts. We read the sort via getHeaderProps onClick.
-  const onHeaderSort = (key) => {
+  const handleSort = (key) => {
     if (sortKey === key) {
       setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -170,68 +167,72 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
       size="lg"
       className="connection-picker-modal"
     >
-      <DataTable rows={rows} headers={headers}>
-        {({ rows: dtRows, headers: dtHeaders, getHeaderProps, getTableProps }) => (
-          <TableContainer>
-            <TableToolbar>
-              <TableToolbarContent>
-                <TableToolbarSearch
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search"
-                  persistent
-                  value={searchTerm}
-                />
-                <NamespaceFilter
-                  id="conn-picker-namespace-filter"
-                  selected={namespaceFilter}
-                  onChange={setNamespaceFilter}
-                />
-                <Dropdown
-                  id="conn-picker-type-filter"
-                  label="Filter by type"
-                  titleText=""
-                  items={TYPE_FILTER_ITEMS}
-                  itemToString={(item) => item?.text || ''}
-                  selectedItem={TYPE_FILTER_ITEMS.find((t) => t.id === typeFilter) || TYPE_FILTER_ITEMS[0]}
-                  onChange={({ selectedItem }) => setTypeFilter(selectedItem?.id || 'all')}
-                  size="md"
-                />
-                <TagFilter
-                  entityType="connections"
-                  selected={tagFilter}
-                  onChange={setTagFilter}
-                />
-                <ResetFiltersButton
-                  active={filtersActive}
-                  onReset={() => {
-                    setSearchTerm('');
-                    setNamespaceFilter([]);
-                    setTypeFilter('all');
-                    setTagFilter([]);
-                  }}
-                />
-              </TableToolbarContent>
-            </TableToolbar>
+      {/* Toolbar is a SEPARATE area above the table (mirrors the connections
+          list page's .page-toolbar) — NOT inside Carbon's TableToolbar, which
+          cramped the filters, clipped the namespace popover, and added a stray
+          border under the search row. Filters are left-aligned; search is the
+          same modest width as the editor's. */}
+      <div className="conn-picker-toolbar">
+        <div className="conn-picker-toolbar-left">
+          <Search
+            id="conn-picker-search"
+            labelText=""
+            size="md"
+            placeholder="Search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <NamespaceFilter
+            id="conn-picker-namespace-filter"
+            selected={namespaceFilter}
+            onChange={setNamespaceFilter}
+          />
+          <Dropdown
+            id="conn-picker-type-filter"
+            label="Filter by type"
+            titleText=""
+            items={TYPE_FILTER_ITEMS}
+            itemToString={(item) => item?.text || ''}
+            selectedItem={TYPE_FILTER_ITEMS.find((t) => t.id === typeFilter) || TYPE_FILTER_ITEMS[0]}
+            onChange={({ selectedItem }) => setTypeFilter(selectedItem?.id || 'all')}
+            size="md"
+          />
+          <TagFilter
+            entityType="connections"
+            selected={tagFilter}
+            onChange={setTagFilter}
+          />
+          <ResetFiltersButton
+            active={filtersActive}
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setTypeFilter('all');
+              setTagFilter([]);
+            }}
+          />
+        </div>
+      </div>
 
-            {loading ? (
-              <div className="conn-picker-loading"><Loading withOverlay={false} /></div>
-            ) : (
+      {loading ? (
+        <div className="conn-picker-loading"><Loading withOverlay={false} /></div>
+      ) : (
+        <DataTable rows={rows} headers={headers}>
+          {({ rows: dtRows, headers: dtHeaders, getHeaderProps, getRowProps, getTableProps }) => (
+            <TableContainer className="conn-picker-table-container">
               <Table {...getTableProps()}>
                 <TableHead>
                   <TableRow>
                     {dtHeaders.map((header) => {
-                      const { key, ...headerProps } = getHeaderProps({
-                        header,
-                        isSortable: header.isSortable,
-                        onClick: header.isSortable ? () => onHeaderSort(header.key) : undefined,
-                      });
+                      const { key, ...headerProps } = getHeaderProps({ header });
                       return (
                         <TableHeader
                           key={key}
                           {...headerProps}
                           isSortable={header.isSortable}
                           isSortHeader={sortKey === header.key}
-                          sortDirection={sortDirection === 'asc' ? 'ASC' : 'DESC'}
+                          sortDirection={sortKey === header.key ? sortDirection.toUpperCase() : 'NONE'}
+                          onClick={() => header.isSortable && handleSort(header.key)}
                         >
                           {header.header}
                         </TableHeader>
@@ -248,10 +249,11 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
                     </TableRow>
                   ) : (
                     dtRows.map((row) => {
-                      const conn = byId[row.id];
+                      const { key, ...rowProps } = getRowProps({ row });
                       return (
                         <TableRow
-                          key={row.id}
+                          key={key}
+                          {...rowProps}
                           onClick={() => handleRowClick(row.id)}
                           className={`conn-picker-row${row.id === selectedId ? ' conn-picker-row--selected' : ''}`}
                         >
@@ -259,7 +261,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
                             const colKey = cell.info.header;
                             if (colKey === 'namespace') {
                               return (
-                                <TableCell key={cell.id}>
+                                <TableCell key={cell.id} className="conn-picker-namespace-cell">
                                   <NamespaceChip name={cell.value} />
                                 </TableCell>
                               );
@@ -267,18 +269,18 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
                             if (colKey === 'type') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <Tag type={connectionTypeColor(cell.value)} size="sm">
+                                  <Tag type={connectionTypeColor(cell.value)} size="md">
                                     {connectionTypeLabel(cell.value)}
                                   </Tag>
                                 </TableCell>
                               );
                             }
                             if (colKey === 'tags') {
-                              const tags = (conn?.tags || []);
+                              const tags = Array.isArray(cell.value) ? cell.value : [];
                               return (
                                 <TableCell key={cell.id} className="conn-picker-tags-cell">
                                   {tags.slice(0, 3).map((t) => (
-                                    <Tag key={t} type="gray" size="sm">{t}</Tag>
+                                    <Tag key={t} type="blue" size="sm">{t}</Tag>
                                   ))}
                                   {tags.length > 3 && <span className="conn-picker-tags-more">+{tags.length - 3}</span>}
                                 </TableCell>
@@ -299,10 +301,10 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
                   )}
                 </TableBody>
               </Table>
-            )}
-          </TableContainer>
-        )}
-      </DataTable>
+            </TableContainer>
+          )}
+        </DataTable>
+      )}
     </Modal>
   );
 }
