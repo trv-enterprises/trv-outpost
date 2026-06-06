@@ -456,11 +456,12 @@
   // Name cell with tags stacked below
   .name-cell {
     vertical-align: top;
-    // Give Name a generous preferred width so the table's auto-layout lets it
+    // Give Name a solid preferred width so the table's auto-layout lets it
     // absorb surplus horizontal space (previously Description, with the longest
-    // content, hogged all the growth and Name barely widened).
-    width: 28%;
-    min-width: 16rem;
+    // content, hogged all the growth and Name barely widened) — but not so much
+    // that Description is starved.
+    width: 22%;
+    min-width: 15rem;
 
     &__name {
       line-height: 1.4;
@@ -482,15 +483,23 @@
   }
 
   // Cap Description so it stops greedily absorbing width; the surplus then
-  // flows to Name. Long blurbs truncate to one line (full text on hover via
-  // the cell's title attribute).
+  // flows to Name. The blurb WRAPS to use the row's two-line height (matching
+  // the name+tags height), clamping to 2 lines with an ellipsis; full text on
+  // hover via the cell's title attribute.
   .description-cell {
-    max-width: 22rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--cds-text-secondary);
+    max-width: 32rem;
     vertical-align: top;
+
+    // Clamp the TEXT (inner span), not the td — applying -webkit-box to the
+    // table cell itself disrupted the cell's border box (a stray underline).
+    .description-cell__text {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      color: var(--cds-text-secondary);
+      line-height: 1.4;
+    }
   }
 
   // Control notice (fixed position at bottom)

@@ -853,7 +853,7 @@ function ComponentsListPage() {
                             if (cell.info.header === 'description') {
                               return (
                                 <TableCell key={cell.id} className="description-cell" title={cell.value}>
-                                  {cell.value}
+                                  <span className="description-cell__text">{cell.value}</span>
                                 </TableCell>
                               );
                             }
