@@ -9,13 +9,11 @@
 .variable-indicator {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--cds-text-secondary);
   vertical-align: middle;
 
-  // Slightly subdued so it reads as a marker, not a primary action; brightens
-  // on hover for discoverability.
-  &:hover {
-    color: var(--cds-text-primary);
+  // The "var" tag sits flush with its neighbours; kill the Tag's default
+  // outer margin so it lines up next to the name / other badges.
+  .cds--tag {
+    margin: 0;
   }
 }
