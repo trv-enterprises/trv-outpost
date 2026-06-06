@@ -12,6 +12,7 @@ import {
   Loading,
   InlineNotification,
   Tile,
+  Button,
 } from '@carbon/react';
 import apiClient from '../api/client';
 
@@ -44,6 +45,10 @@ import apiClient from '../api/client';
  *   caller already knows the column from the filter).
  * @param {boolean}  providedPartial   list may be incomplete (cap / stop)
  * @param {boolean}  providedLoading   a client capture is in progress
+ * @param {number}   providedRecordCount  total stream records processed so far
+ *   during a client capture (every message seen, not just distinct values).
+ *   Shown alongside the distinct-value count so the user can tell the stream is
+ *   live even when no NEW value has arrived for a while.
  * @param {Function} onStop            () => void — stop an in-progress capture
  */
 function VariableValuePickerModal({
@@ -58,6 +63,7 @@ function VariableValuePickerModal({
   providedValues = null,
   providedPartial = false,
   providedLoading = false,
+  providedRecordCount = 0,
   onStop = null,
   // captureOnly: render the accumulating list read-only (no clickable tiles).
   // Used by the dashboard, where the modal only CAPTURES — selection happens in
@@ -185,14 +191,23 @@ function VariableValuePickerModal({
         )}
 
         {effLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
-            <Loading small withOverlay={false} description={clientMode ? 'Capturing values' : 'Loading values'} />
-            <span style={{ fontSize: '0.875rem', color: 'var(--cds-text-helper)' }}>
-              {clientMode ? `Capturing… ${effValues.length} value${effValues.length === 1 ? '' : 's'} so far` : 'Loading values'}
-            </span>
-            <button type="button" className="cds--link" onClick={stop} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+          <div style={{ marginTop: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Loading small withOverlay={false} description={clientMode ? 'Capturing values' : 'Loading values'} />
+              <span style={{ fontSize: '0.875rem', color: 'var(--cds-text-helper)' }}>
+                {clientMode
+                  ? `Capturing… ${providedRecordCount.toLocaleString()} record${providedRecordCount === 1 ? '' : 's'} processed, ${effValues.length} distinct value${effValues.length === 1 ? '' : 's'}`
+                  : 'Loading values'}
+              </span>
+            </div>
+            <Button
+              kind="primary"
+              size="md"
+              onClick={stop}
+              style={{ marginTop: '0.75rem' }}
+            >
               Stop
-            </button>
+            </Button>
           </div>
         )}
 
@@ -207,10 +222,13 @@ function VariableValuePickerModal({
           />
         )}
 
-        {/* Value list. In captureOnly mode it renders WHILE capturing (so the
-            list visibly accumulates) and tiles are read-only — selection happens
-            elsewhere. Otherwise it shows after loading and tiles are clickable. */}
-        {!effError && effValues.length > 0 && (captureOnly || !effLoading) && (
+        {/* Value list. In client (capture) mode it renders WHILE capturing so the
+            list visibly accumulates in real time — the editor and the dashboard
+            both show found uniques live, not just after Stop. captureOnly only
+            controls clickability (dashboard picks via the header dropdown, so its
+            tiles are read-only; the editor picks in-modal, so its tiles are
+            clickable even mid-capture). Server mode still shows after loading. */}
+        {!effError && effValues.length > 0 && (clientMode || !effLoading) && (
           <>
             {effPartial && !effLoading && (
               <InlineNotification
@@ -270,6 +288,7 @@ VariableValuePickerModal.propTypes = {
   providedValues: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
   providedPartial: PropTypes.bool,
   providedLoading: PropTypes.bool,
+  providedRecordCount: PropTypes.number,
   onStop: PropTypes.func,
   captureOnly: PropTypes.bool,
   schemaColumns: PropTypes.arrayOf(PropTypes.string),

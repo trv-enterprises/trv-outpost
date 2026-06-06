@@ -736,6 +736,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // modal's open state. The modal shows the list growing in real time with a
   // Stop button, so the user can watch and stop when it stabilizes.
   const [regenLiveValues, setRegenLiveValues] = useState([]);
+  // Total stream records seen during the capture (every message, not just new
+  // distinct values) — shown in the modal so the user can see the stream is live.
+  const [regenRecordCount, setRegenRecordCount] = useState(0);
   const [regenModalOpen, setRegenModalOpen] = useState(false);
   const regenSeenRef = useRef(null);
   // Set true on Stop so, after the modal closes, the dropdown auto-opens to
@@ -749,6 +752,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const seen = new Set();
     regenSeenRef.current = seen;
     setRegenLiveValues([]);
+    setRegenRecordCount(0);
     setRegenModalOpen(true);
     setRegenerating(true);
     const authParam = apiClient.streamAuthQuery();
@@ -763,8 +767,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       regenerateCaptureRef.current = null;
       setRegenerating(false);
     };
+    let records = 0;
     es.addEventListener('record', (event) => {
       try {
+        records += 1;
+        setRegenRecordCount(records); // live update → modal shows records processed
         const rec = JSON.parse(event.data);
         const v = rec?.[target.column];
         if (v != null) {
@@ -3295,6 +3302,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         providedValues={regenLiveValues}
         providedLoading={regenerating}
         providedPartial
+        providedRecordCount={regenRecordCount}
         onStop={stopSessionRegenerate}
         captureOnly
       />

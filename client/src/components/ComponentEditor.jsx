@@ -471,6 +471,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // the picker (the modal shows values accumulating + a Stop button). tsstore/
   // API harvest from a one-shot fetch and never set this.
   const [clientCapturing, setClientCapturing] = useState(false);
+  // Total stream records seen during a live capture (every message, not just new
+  // distinct values) — shown in the picker so the stream's liveness is visible.
+  const [clientRecordCount, setClientRecordCount] = useState(0);
   const clientCaptureRef = useRef(null); // EventSource for the live discovery capture
 
   // Insert a substitution token into the raw query at the current cursor
@@ -1303,6 +1306,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (clientCaptureRef.current) { clientCaptureRef.current.close(); clientCaptureRef.current = null; }
     setClientDiscoveredColumn(column);
     setClientDiscoveredValues([]);
+    setClientRecordCount(0);
     setClientDiscoveredPartial(true); // a live capture is always potentially incomplete
     setClientCapturing(true);
     setClientValuePickerOpen(true);
@@ -1320,8 +1324,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       clientCaptureRef.current = null;
       setClientCapturing(false);
     };
+    let records = 0;
     es.addEventListener('record', (event) => {
       try {
+        records += 1;
+        setClientRecordCount(records);
         const rec = JSON.parse(event.data);
         const v = rec?.[column];
         if (v != null) {
@@ -2451,6 +2458,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           providedValues={clientDiscoveredValues}
           providedPartial={clientDiscoveredPartial}
           providedLoading={clientCapturing}
+          providedRecordCount={clientRecordCount}
           onStop={stopClientCapture}
         />,
         document.body
