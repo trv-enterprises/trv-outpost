@@ -5,8 +5,18 @@
 @use '@carbon/react/scss/spacing' as spacing;
 
 .component-picker-modal {
+  // Fixed modal height so filtering down to a few tiles doesn't shrink the
+  // window. The grid (auto 1fr auto) gives the content row the remaining space;
+  // the tile grid fills + scrolls within it.
+  .cds--modal-container {
+    height: 80vh;
+  }
+
   .cds--modal-content {
     padding: 0;
+    overflow: hidden; // the tile grid owns the scroll, not the modal body
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -15,7 +25,9 @@
   flex-direction: column;
   gap: spacing.$spacing-04;
   padding: spacing.$spacing-05;
-  min-height: 400px;
+  // Fill the modal body and own the vertical space; the grid scrolls inside.
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .picker-toolbar {
@@ -71,6 +83,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: spacing.$spacing-04;
+  // The grid fills the remaining content height and scrolls — so the modal
+  // stays a fixed size regardless of how many tiles the filters leave.
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start; // keep tiles top-packed when there are only a few
 }
 
 .picker-tile {
