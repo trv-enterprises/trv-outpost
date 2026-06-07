@@ -6,6 +6,44 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.1] — 2026-06-06
+
+Component-authoring UX polish. No new features or API changes.
+
+### Added
+
+- **Component indicators**: a small **`var`** tag marks components whose
+  query/filter uses a `{{dashboard-variable}}` token, and a **`</>`** tag
+  marks components that render from custom code. Shown next to the name on
+  the components list and in the component picker.
+- **Filter toggles**: a ⋮ overflow menu on the components list and the
+  picker offers **"Variable-driven only"** and **"Custom code only"**
+  toggles; the ⋮ shows an active outline when a toggle is on.
+- **Collapsible chart-editor sections**: the tall sections between the query
+  and the results (Client Side Processing, Data Mapping, Chart Options, and
+  the other configuration sections) now collapse via their header, so the
+  editor form is easier to navigate.
+- **Searchable tag filters**: every "Filter by tag" dropdown now has a
+  type-to-search input.
+- **Desktop app icon**: the macOS app now uses the TRV Outpost mark instead
+  of the default Electron icon.
+
+### Changed
+
+- **Connection picker** in the component editor: the inline dropdown is
+  replaced by a **Change/Select** button that opens a searchable, filterable
+  table modal (modeled on the connections list).
+- **Components list**: the Name column gets more room and the Description
+  column is balanced so it no longer hogs width; namespace and tag filter
+  dropdowns expand to fit long names.
+
+### Fixed
+
+- Connection picker modal: fixed height (no longer shrinks when filtered),
+  sticky header, and consistent header/row contrast.
+- Component picker modal: fixed height; tiles keep their natural size.
+- Namespace info (i) icon: no longer stays highlighted after a click.
+
 ## [0.28.0] — 2026-06-05
 
 Per-panel component-swap rules for dashboard variables, plus the container
