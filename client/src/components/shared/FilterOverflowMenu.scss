@@ -23,23 +23,18 @@
   min-inline-size: 14rem;
 }
 
-// Active treatment on the ⋮ trigger when a filter in the menu is on, so it's
-// obvious a hidden filter is narrowing the list. A left accent bar + brighter
-// icon, echoing how Carbon marks active filter affordances.
-.filter-overflow-trigger--active {
-  position: relative;
-  color: var(--cds-text-primary);
+// Reserve the border box on the trigger always (transparent when inactive) so
+// toggling the active state doesn't nudge the icon by 1px.
+.filter-overflow-trigger {
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
 
-  // Accent bar on the leading edge.
-  &::before {
-    content: '';
-    position: absolute;
-    inset-block: spacing.$spacing-02;
-    inset-inline-start: 0;
-    inline-size: 3px;
-    background-color: var(--cds-interactive, #4589ff);
-    border-radius: 2px;
-  }
+// Active treatment on the ⋮ trigger when a filter in the menu is on, so it's
+// obvious a hidden filter is narrowing the list. A full box outline + brighter
+// icon — reads as a "pressed/active" button rather than a single edge accent.
+.filter-overflow-trigger--active {
+  border-color: var(--cds-interactive, #4589ff);
 
   svg {
     fill: var(--cds-interactive, #4589ff);
