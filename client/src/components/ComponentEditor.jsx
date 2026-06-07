@@ -49,6 +49,7 @@ import ConnectionGuidanceHint from './shared/ConnectionGuidanceHint';
 import SpecDrivenSections from '../chart-spec/SpecDrivenSections';
 import VariableValuePickerModal from './VariableValuePickerModal';
 import ConnectionPickerModal from './ConnectionPickerModal';
+import CollapsibleTile from './shared/CollapsibleTile';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
@@ -3517,8 +3518,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   )) ||
                   (selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false)
                 ) && (
-                <div className="mapping-section spec-section client-side-processing">
-                  <h4>Client Side Processing</h4>
+                <CollapsibleTile title="Client Side Processing" className="spec-section client-side-processing">
 
                 {/* Filters subsection. Hidden when the connection's
                     query language already owns this responsibility
@@ -4080,7 +4080,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   </div>
                 )}
 
-                </div>
+                </CollapsibleTile>
                 )}
 
                 {filteredPreviewData && (

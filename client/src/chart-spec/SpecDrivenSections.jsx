@@ -5,6 +5,7 @@
 import { SpecRenderContext } from './SpecContext';
 import { getFieldRenderer } from './field-types';
 import { isVisible } from './binding';
+import CollapsibleTile from '../components/shared/CollapsibleTile';
 
 // Layout primitive → per-field column class. Reuses the existing
 // .metadata-col modifiers from ComponentEditor.scss so the spec-
@@ -87,21 +88,17 @@ function SpecSubsection({ subsection, formState }) {
 function SpecSection({ section, formState }) {
   if (!isVisible(section.visibleWhen, formState)) return null;
   const isParent = Array.isArray(section.subsections) && section.subsections.length > 0;
-  if (isParent) {
-    return (
-      <div className="mapping-section spec-section">
-        <h4>{section.label}</h4>
-        {section.subsections.map((sub) => (
-          <SpecSubsection key={sub.id} subsection={sub} formState={formState} />
-        ))}
-      </div>
-    );
-  }
+  // Each spec section (Data Mapping, Chart Options, Performance, Tooltip,
+  // Legend, Thresholds…) is a collapsible tile so the user can compress the
+  // sections between the query and the results.
   return (
-    <div className="mapping-section spec-section">
-      <h4>{section.label}</h4>
-      <SpecFieldRow section={section} formState={formState} />
-    </div>
+    <CollapsibleTile title={section.label} className="spec-section">
+      {isParent
+        ? section.subsections.map((sub) => (
+            <SpecSubsection key={sub.id} subsection={sub} formState={formState} />
+          ))
+        : <SpecFieldRow section={section} formState={formState} />}
+    </CollapsibleTile>
   );
 }
 
