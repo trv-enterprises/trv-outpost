@@ -1,0 +1,35 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Shared treatment for the small inline component-indicator tags (var, </>).
+// One place so the two stay identical: a quiet dim-outline chip with muted
+// text, centered + lifted 1px so the label sits true in the chip line box.
+// Apply via @include indicator-tag on the wrapper span.
+
+@mixin indicator-tag {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+
+  .cds--tag {
+    margin: 0;
+    color: var(--cds-text-helper);
+    // border-subtle-00 (#393939) — the faintest border token, so the chip edge
+    // recedes rather than competing with the name.
+    border-color: var(--cds-border-subtle-00, #303030);
+    min-height: auto;
+    font-size: 0.6875rem;
+    letter-spacing: 0.01em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    .cds--tag__label {
+      position: relative;
+      top: -1px; // sit the label true in the chip line box
+      text-align: center;
+      width: 100%;
+    }
+  }
+}
