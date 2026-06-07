@@ -45,6 +45,7 @@ import TagFilter from '../components/shared/TagFilter';
 import TypeHierarchyFilter from '../components/shared/TypeHierarchyFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import VariableIndicator from '../components/shared/VariableIndicator';
+import CustomCodeIndicator from '../components/shared/CustomCodeIndicator';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
@@ -89,6 +90,7 @@ function ComponentsListPage() {
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.ds || 'all'); // 'all' or connection id
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   const [variableOnly, setVariableOnly] = useState(!!savedFilters.variableOnly); // show only variable-driven components
+  const [customCodeOnly, setCustomCodeOnly] = useState(!!savedFilters.customCodeOnly); // show only custom-code components
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   // Hierarchical type filter — selection state only. The widget itself
   // (popover, parent/subtype checkboxes, partial-state logic, label
@@ -116,6 +118,7 @@ function ComponentsListPage() {
       tags: tagFilter,
       namespaces: namespaceFilter,
       variableOnly,
+      customCodeOnly,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('charts', {
@@ -123,7 +126,7 @@ function ComponentsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter, variableOnly]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter, variableOnly, customCodeOnly]);
 
   // Fetch charts and data sources from API
   useEffect(() => {
@@ -377,6 +380,11 @@ function ComponentsListPage() {
       result = result.filter(chart => !!chart.uses_dashboard_variable);
     }
 
+    // Custom-code only: keep components that render from hand-written code.
+    if (customCodeOnly) {
+      result = result.filter(chart => !!chart.use_custom_code);
+    }
+
     // Filter by search term
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -428,7 +436,7 @@ function ComponentsListPage() {
     });
 
     return result;
-  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, namespaceFilter, variableOnly]);
+  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, namespaceFilter, variableOnly, customCodeOnly]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -532,7 +540,8 @@ function ComponentsListPage() {
               selectedTypes !== null ||
               tagFilter.length > 0 ||
               connectionFilter !== 'all' ||
-              variableOnly
+              variableOnly ||
+              customCodeOnly
             }
             onReset={() => {
               setSearchTerm('');
@@ -541,6 +550,7 @@ function ComponentsListPage() {
               setTagFilter([]);
               setConnectionFilter('all');
               setVariableOnly(false);
+              setCustomCodeOnly(false);
             }}
           />
           {/* Overflow (⋮) menu for facet toggles. Mirrors the dashboard
@@ -553,7 +563,7 @@ function ComponentsListPage() {
             align="bottom-end"
             iconDescription="Filter options"
             menuOptionsClass="filter-overflow-options"
-            className={`filter-overflow-trigger${variableOnly ? ' filter-overflow-trigger--active' : ''}`}
+            className={`filter-overflow-trigger${(variableOnly || customCodeOnly) ? ' filter-overflow-trigger--active' : ''}`}
           >
             <OverflowMenuItem
               itemText={
@@ -565,6 +575,17 @@ function ComponentsListPage() {
                 </span>
               }
               onClick={() => setVariableOnly((v) => !v)}
+            />
+            <OverflowMenuItem
+              itemText={
+                <span className="filter-overflow-item">
+                  {customCodeOnly
+                    ? <Checkmark size={16} />
+                    : <span style={{ width: 16, display: 'inline-block' }} />}
+                  <span>Custom code only</span>
+                </span>
+              }
+              onClick={() => setCustomCodeOnly((v) => !v)}
             />
           </OverflowMenu>
           {viewMode === 'tile' && (
@@ -787,6 +808,7 @@ function ComponentsListPage() {
                                   <div className="name-cell__name">
                                     <span>{cell.value}</span>
                                     <VariableIndicator active={!!chart?.uses_dashboard_variable} />
+                                    <CustomCodeIndicator active={!!chart?.use_custom_code} />
                                   </div>
                                   {chartTags.length > 0 && (
                                     <div className="name-cell__tags">

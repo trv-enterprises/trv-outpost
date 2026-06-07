@@ -19,6 +19,7 @@ import ResetFiltersButton from './shared/ResetFiltersButton';
 import NamespaceFilter from './shared/NamespaceFilter';
 import NamespaceChip from './shared/NamespaceChip';
 import VariableIndicator from './shared/VariableIndicator';
+import CustomCodeIndicator from './shared/CustomCodeIndicator';
 import SortMenu from './shared/SortMenu';
 import './ComponentPickerModal.scss';
 import './shared/FilterOverflowMenu.scss';
@@ -90,6 +91,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [connectionFilter, setConnectionFilter] = useState('all'); // 'all' or connection id
   const [variableOnly, setVariableOnly] = useState(false); // show only variable-driven components
+  const [customCodeOnly, setCustomCodeOnly] = useState(false); // show only custom-code components
   // Connection map (id → name) used to populate the connection dropdown
   // and label the selected item. Fetched in parallel with components on
   // open. Same shape as the connection map on the list pages.
@@ -170,6 +172,11 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       result = result.filter(item => !!item.uses_dashboard_variable);
     }
 
+    // Custom-code only: keep components that render from hand-written code.
+    if (customCodeOnly) {
+      result = result.filter(item => !!item.use_custom_code);
+    }
+
     // Connection filter. Components reference connections through one of
     // three fields: connection_id (charts/controls), or for displays
     // display_config.frigate_connection_id / mqtt_connection_id. Mirrors
@@ -211,7 +218,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       return 0;
     });
     return sorted;
-  }, [items, namespaceFilter, selectedTypes, tagFilter, connectionFilter, variableOnly, searchTerm, sortKey, sortDirection]);
+  }, [items, namespaceFilter, selectedTypes, tagFilter, connectionFilter, variableOnly, customCodeOnly, searchTerm, sortKey, sortDirection]);
 
   const handleSelect = () => {
     if (selected) onSelect(selected);
@@ -326,6 +333,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
               tagFilter.length > 0 ||
               connectionFilter !== 'all' ||
               variableOnly ||
+              customCodeOnly ||
               !sameTypeSet(selectedTypes, categoryToTypeSet(initialCategory))
             }
             onReset={() => {
@@ -335,6 +343,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
               setConnectionFilter('all');
               setSelectedTypes(categoryToTypeSet(initialCategory));
               setVariableOnly(false);
+              setCustomCodeOnly(false);
             }}
           />
           {/* Overflow (⋮) menu for facet toggles — same as the components list. */}
@@ -345,7 +354,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
             align="bottom-end"
             iconDescription="Filter options"
             menuOptionsClass="filter-overflow-options"
-            className={`filter-overflow-trigger${variableOnly ? ' filter-overflow-trigger--active' : ''}`}
+            className={`filter-overflow-trigger${(variableOnly || customCodeOnly) ? ' filter-overflow-trigger--active' : ''}`}
           >
             <OverflowMenuItem
               itemText={
@@ -357,6 +366,17 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                 </span>
               }
               onClick={() => setVariableOnly((v) => !v)}
+            />
+            <OverflowMenuItem
+              itemText={
+                <span className="filter-overflow-item">
+                  {customCodeOnly
+                    ? <Checkmark size={16} />
+                    : <span style={{ width: 16, display: 'inline-block' }} />}
+                  <span>Custom code only</span>
+                </span>
+              }
+              onClick={() => setCustomCodeOnly((v) => !v)}
             />
           </OverflowMenu>
           <SortMenu
@@ -401,6 +421,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                       <NamespaceChip name={item.namespace} />
                     )}
                     <VariableIndicator active={!!item.uses_dashboard_variable} />
+                    <CustomCodeIndicator active={!!item.use_custom_code} />
                   </div>
                   <div className="picker-tile-content">
                     <h4>{item.title || item.name}</h4>

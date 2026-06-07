@@ -1,0 +1,33 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+.custom-code-indicator-tooltip {
+  display: inline-flex;
+}
+
+.custom-code-indicator {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+
+  // Quiet marker matching VariableIndicator: dim-outline tag with muted text,
+  // so it reads as a small annotation beside the name. Kill the Tag's default
+  // outer margin so it lines up.
+  .cds--tag {
+    margin: 0;
+    color: var(--cds-text-helper);
+    border-color: var(--cds-border-subtle-00, #303030);
+    min-height: auto;
+    font-size: 0.6875rem;
+    letter-spacing: 0.01em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    .cds--tag__label {
+      text-align: center;
+      width: 100%;
+    }
+  }
+}
