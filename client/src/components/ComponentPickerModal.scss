@@ -88,7 +88,12 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  align-content: start; // keep tiles top-packed when there are only a few
+  // Each row sizes to its content (tiles keep their natural height) and rows
+  // pack at the top. Without grid-auto-rows the grid's default stretch sized
+  // rows to fill the container, which is fine when full but collapsed tiles to
+  // min-height when align-content:start packed them — auto rows fix that.
+  grid-auto-rows: max-content;
+  align-content: start;
 }
 
 .picker-tile {
