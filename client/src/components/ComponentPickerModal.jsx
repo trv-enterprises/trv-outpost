@@ -4,11 +4,11 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Modal, Search, Tag, Tile, Loading, Dropdown
+  Modal, Search, Tag, Tile, Loading, Dropdown, OverflowMenu, OverflowMenuItem
 } from '@carbon/react';
 import {
   ChartLineSmooth, ChartBar, ChartArea, ChartPie,
-  Meter, TableSplit, Code
+  Meter, TableSplit, Code, OverflowMenuVertical, Checkmark
 } from '@carbon/icons-react';
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from './controls/controlTypes';
@@ -21,6 +21,7 @@ import NamespaceChip from './shared/NamespaceChip';
 import VariableIndicator from './shared/VariableIndicator';
 import SortMenu from './shared/SortMenu';
 import './ComponentPickerModal.scss';
+import './shared/FilterOverflowMenu.scss';
 
 // Chart type icon mapping
 const CHART_ICONS = {
@@ -88,6 +89,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   const [tagFilter, setTagFilter] = useState([]);
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [connectionFilter, setConnectionFilter] = useState('all'); // 'all' or connection id
+  const [variableOnly, setVariableOnly] = useState(false); // show only variable-driven components
   // Connection map (id → name) used to populate the connection dropdown
   // and label the selected item. Fetched in parallel with components on
   // open. Same shape as the connection map on the list pages.
@@ -162,6 +164,12 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       });
     }
 
+    // Variable-driven only: keep components using the {{dashboard-variable}}
+    // token (uses_dashboard_variable).
+    if (variableOnly) {
+      result = result.filter(item => !!item.uses_dashboard_variable);
+    }
+
     // Connection filter. Components reference connections through one of
     // three fields: connection_id (charts/controls), or for displays
     // display_config.frigate_connection_id / mqtt_connection_id. Mirrors
@@ -203,7 +211,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       return 0;
     });
     return sorted;
-  }, [items, namespaceFilter, selectedTypes, tagFilter, connectionFilter, searchTerm, sortKey, sortDirection]);
+  }, [items, namespaceFilter, selectedTypes, tagFilter, connectionFilter, variableOnly, searchTerm, sortKey, sortDirection]);
 
   const handleSelect = () => {
     if (selected) onSelect(selected);
@@ -317,6 +325,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
               namespaceFilter.length > 0 ||
               tagFilter.length > 0 ||
               connectionFilter !== 'all' ||
+              variableOnly ||
               !sameTypeSet(selectedTypes, categoryToTypeSet(initialCategory))
             }
             onReset={() => {
@@ -325,8 +334,31 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
               setTagFilter([]);
               setConnectionFilter('all');
               setSelectedTypes(categoryToTypeSet(initialCategory));
+              setVariableOnly(false);
             }}
           />
+          {/* Overflow (⋮) menu for facet toggles — same as the components list. */}
+          <OverflowMenu
+            renderIcon={() => <OverflowMenuVertical size={20} />}
+            flipped
+            direction="bottom"
+            align="bottom-end"
+            iconDescription="Filter options"
+            menuOptionsClass="filter-overflow-options"
+            className={`filter-overflow-trigger${variableOnly ? ' filter-overflow-trigger--active' : ''}`}
+          >
+            <OverflowMenuItem
+              itemText={
+                <span className="filter-overflow-item">
+                  {variableOnly
+                    ? <Checkmark size={16} />
+                    : <span style={{ width: 16, display: 'inline-block' }} />}
+                  <span>Variable-driven only</span>
+                </span>
+              }
+              onClick={() => setVariableOnly((v) => !v)}
+            />
+          </OverflowMenu>
           <SortMenu
             sortKey={sortKey}
             sortDirection={sortDirection}

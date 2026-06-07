@@ -27,9 +27,11 @@ import {
   ContentSwitcher,
   Switch,
   InlineNotification,
-  Dropdown
+  Dropdown,
+  OverflowMenu,
+  OverflowMenuItem
 } from '@carbon/react';
-import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Information, Dashboard, Keyboard, TouchInteraction, Filter } from '@carbon/icons-react';
+import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Information, Dashboard, Keyboard, TouchInteraction, Filter, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
@@ -48,6 +50,7 @@ import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import './ComponentsListPage.scss';
+import '../components/shared/FilterOverflowMenu.scss';
 
 /**
  * ComponentsListPage Component
@@ -85,6 +88,7 @@ function ComponentsListPage() {
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.ds || 'all'); // 'all' or connection id
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
+  const [variableOnly, setVariableOnly] = useState(!!savedFilters.variableOnly); // show only variable-driven components
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   // Hierarchical type filter — selection state only. The widget itself
   // (popover, parent/subtype checkboxes, partial-state logic, label
@@ -111,6 +115,7 @@ function ComponentsListPage() {
       types: selectedTypes !== null && selectedTypes.size > 0 ? Array.from(selectedTypes).join(',') : '',
       tags: tagFilter,
       namespaces: namespaceFilter,
+      variableOnly,
     });
     // Persist user-level preferences (view mode, sort) to user config — survives reloads
     setListPrefs('charts', {
@@ -118,7 +123,7 @@ function ComponentsListPage() {
       sortKey,
       sortDir: sortDirection
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter, variableOnly]);
 
   // Fetch charts and data sources from API
   useEffect(() => {
@@ -366,6 +371,12 @@ function ComponentsListPage() {
       });
     }
 
+    // Variable-driven only: keep components whose query/filter uses the
+    // {{dashboard-variable}} token (auto-derived uses_dashboard_variable).
+    if (variableOnly) {
+      result = result.filter(chart => !!chart.uses_dashboard_variable);
+    }
+
     // Filter by search term
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -417,7 +428,7 @@ function ComponentsListPage() {
     });
 
     return result;
-  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, namespaceFilter]);
+  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, namespaceFilter, variableOnly]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -520,7 +531,8 @@ function ComponentsListPage() {
               namespaceFilter.length > 0 ||
               selectedTypes !== null ||
               tagFilter.length > 0 ||
-              connectionFilter !== 'all'
+              connectionFilter !== 'all' ||
+              variableOnly
             }
             onReset={() => {
               setSearchTerm('');
@@ -528,8 +540,33 @@ function ComponentsListPage() {
               setSelectedTypes(null);
               setTagFilter([]);
               setConnectionFilter('all');
+              setVariableOnly(false);
             }}
           />
+          {/* Overflow (⋮) menu for facet toggles. Mirrors the dashboard
+              viewer's three-dot menu. Holds the "Variable-driven only" toggle
+              (checkmark when active); room for more facet toggles later. */}
+          <OverflowMenu
+            renderIcon={() => <OverflowMenuVertical size={20} />}
+            flipped
+            direction="bottom"
+            align="bottom-end"
+            iconDescription="Filter options"
+            menuOptionsClass="filter-overflow-options"
+            className={`filter-overflow-trigger${variableOnly ? ' filter-overflow-trigger--active' : ''}`}
+          >
+            <OverflowMenuItem
+              itemText={
+                <span className="filter-overflow-item">
+                  {variableOnly
+                    ? <Checkmark size={16} />
+                    : <span style={{ width: 16, display: 'inline-block' }} />}
+                  <span>Variable-driven only</span>
+                </span>
+              }
+              onClick={() => setVariableOnly((v) => !v)}
+            />
+          </OverflowMenu>
           {viewMode === 'tile' && (
             <SortMenu
               sortKey={sortKey}

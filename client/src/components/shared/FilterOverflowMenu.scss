@@ -1,0 +1,47 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Shared styling for the toolbar's ⋮ "filter options" OverflowMenu used on the
+// components list and the component picker. The menu popup renders in a portal,
+// so these are root-level (not nested under a page/modal selector) and scoped
+// via the menu's own classes.
+
+// Item layout: checkmark + label on one line.
+.filter-overflow-item {
+  display: inline-flex;
+  align-items: center;
+  gap: spacing.$spacing-03;
+  white-space: nowrap;
+}
+
+// Widen the popup so "Variable-driven only" isn't cramped. Scoped to our menu
+// via menuOptionsClass so other overflow menus are unaffected.
+.filter-overflow-options {
+  min-inline-size: 14rem;
+}
+
+// Active treatment on the ⋮ trigger when a filter in the menu is on, so it's
+// obvious a hidden filter is narrowing the list. A left accent bar + brighter
+// icon, echoing how Carbon marks active filter affordances.
+.filter-overflow-trigger--active {
+  position: relative;
+  color: var(--cds-text-primary);
+
+  // Accent bar on the leading edge.
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block: spacing.$spacing-02;
+    inset-inline-start: 0;
+    inline-size: 3px;
+    background-color: var(--cds-interactive, #4589ff);
+    border-radius: 2px;
+  }
+
+  svg {
+    fill: var(--cds-interactive, #4589ff);
+  }
+}
