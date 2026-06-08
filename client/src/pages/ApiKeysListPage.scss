@@ -70,6 +70,16 @@
         width: 300px;
         background-color: var(--cds-layer-01);
       }
+
+      // "Show revoked" toggle sits inline after the search; keep its
+      // side label on one line so it doesn't wrap next to the switch.
+      .show-revoked-toggle {
+        flex-shrink: 0;
+
+        .cds--toggle__label-text {
+          white-space: nowrap;
+        }
+      }
     }
   }
 

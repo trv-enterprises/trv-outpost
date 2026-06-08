@@ -17,6 +17,7 @@ import {
   IconButton,
   Loading,
   Tag,
+  Toggle,
   Link,
   InlineNotification,
 } from '@carbon/react';
@@ -42,6 +43,9 @@ function ApiKeysListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // Revoked keys are hidden by default — the list is mostly about live
+  // credentials. Flip the toggle to audit/review revoked ones.
+  const [showRevoked, setShowRevoked] = useState(false);
   const [sortKey, setSortKey] = useState('created');
   const [sortDirection, setSortDirection] = useState('desc');
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -98,6 +102,10 @@ function ApiKeysListPage() {
 
   const filteredAndSortedKeys = useMemo(() => {
     let result = [...keys];
+    // Hide revoked keys unless the toggle is on.
+    if (!showRevoked) {
+      result = result.filter((k) => !k.revoked);
+    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -121,7 +129,7 @@ function ApiKeysListPage() {
       return 0;
     });
     return result;
-  }, [keys, searchTerm, sortKey, sortDirection]);
+  }, [keys, searchTerm, showRevoked, sortKey, sortDirection]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -187,6 +195,17 @@ function ApiKeysListPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search"
             persistent
+          />
+          <Toggle
+            id="show-revoked-toggle"
+            className="show-revoked-toggle"
+            size="sm"
+            labelText="Show revoked"
+            hideLabel
+            labelA="Show revoked"
+            labelB="Show revoked"
+            toggled={showRevoked}
+            onToggle={setShowRevoked}
           />
         </div>
         <div className="toolbar-actions">
