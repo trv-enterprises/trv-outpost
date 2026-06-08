@@ -57,7 +57,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Automation & Integration',
-      items: ['api-overview', 'mcp'],
+      items: ['api-overview', 'api-keys', 'mcp'],
     },
     {
       type: 'category',
