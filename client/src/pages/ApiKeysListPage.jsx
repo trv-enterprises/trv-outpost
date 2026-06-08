@@ -170,8 +170,12 @@ function ApiKeysListPage() {
           dashboard-agent CLI, MCP clients, and scripts. Pass the token
           as <code>Authorization: Bearer &lt;token&gt;</code>. Each key
           inherits the full capability set of your user account.{' '}
-          <Link href="/docs/mcp" target="_blank" rel="noopener noreferrer">
+          <Link href="/docs/api-overview" target="_blank" rel="noopener noreferrer">
             Learn more
+          </Link>
+          {' '}or open the{' '}
+          <Link href="/swagger/index.html" target="_blank" rel="noopener noreferrer">
+            API explorer
           </Link>
           .
         </p>
