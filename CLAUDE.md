@@ -241,7 +241,7 @@ Use the most abstract (semantic) token available. This ensures theme compatibili
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         FRONTEND (Port 5173)                                 │
-│                    React 18 + Vite + Carbon Design System                   │
+│                    React 19 + Vite + Carbon Design System                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Design Mode          │  View Mode            │  Manage Mode                │
 │  - Layouts            │  - Dashboard Viewer   │  - Settings                 │
@@ -274,7 +274,7 @@ Use the most abstract (semantic) token available. This ensures theme compatibili
 ### Frontend
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| React | 18.x | UI Framework |
+| React | 19.x | UI Framework |
 | Vite | 5.x | Build Tool & Dev Server |
 | React Router | 6.x | Client-side Routing |
 | Carbon Design System | 11.x | UI Components (g100 dark theme) |
@@ -657,10 +657,6 @@ The list below is curated from the maintainer's working memory — not
 exhaustive, not prioritized except where noted.
 
 ### Higher priority
-- **Allow N y-axis series when they share a range + rename "Series Column"**
-  — current 2-column cap is "≤2 axes" misimplemented as "≤2 columns
-  total"; should be N columns mapped to ≤2 axes. UI shape sketched.
-  The misleading "Series Column" pivot field rename lands together.
 - **AI surface must respect `enabled_types`** — preflight modal +
   agent catalog already filter, but sample prompts (if/when they
   land), MCP tool descriptions, legacy fallback prompt, and
@@ -673,12 +669,6 @@ exhaustive, not prioritized except where noted.
   wrong-tool-then-claiming-success. Prompt-side guard landed
   2026-05-19; tool/codegen/storage audit still open and pairs as one
   effort.
-- **ComponentEditor stale-codegen cliff** — older charts with
-  `use_custom_code: undefined` open as custom-code by default (the
-  `!!chart.component_code` fallback). Codegen still runs but is
-  ignored. Fix is flipping the fallback polarity + a migration to
-  stamp explicit `true` on records whose code differs from current
-  codegen.
 - **Aggregation SSE-stream sharing** — server `BucketAggregator`
   already dedups math by `configKey` but each browser still gets
   its own SSE stream. Mirror `StreamConnectionManager`'s broker
@@ -698,7 +688,6 @@ exhaustive, not prioritized except where noted.
   `from=-1`.
 - **MQTT multi-topic support** — allow a single component to read
   from multiple topics.
-- **MQTT publish (Write) UI** for control components.
 - **Parser layer expansion** — extend `StreamParserConfig` beyond
   `data_path` / `timestamp_field`. CSV parser (line-delimited CSV
   streams from instruments / SCADA exports), regex parser (named
@@ -710,14 +699,6 @@ exhaustive, not prioritized except where noted.
   and show it instead of the static example message.
 
 ### Components + UI
-- **Components list — custom-code indicator + column** — surface
-  `use_custom_code` on each row + a way to spot empty
-  `component_code` records. The picker silently drops chart
-  components with empty code.
-- **DataTable header tooltip for truncated field names** — Carbon
-  `TableHeader` truncates without exposing full text on hover; add
-  tooltip/title across list pages (dashboards, components,
-  connections, alerts).
 - **Tabbed panel layout** — allow panels to contain multiple
   components with tabs to switch between.
 - **Connection testing in editor** — add connection-test capability
@@ -726,17 +707,16 @@ exhaustive, not prioritized except where noted.
 - **Component tile-view thumbnails** — component-list tile view
   shows placeholder icons instead of actual previews; need to
   generate/capture thumbnails when saving components.
-- **Fix `include_connections` aggregation** —
-  `ListWithConnections` in `dashboard_repository.go` has had
-  panel-count drift in the past; verify and lock down.
 
 ### Controls
 - **Control widgets expansion** — MDI icons, indicator tiles,
   widget selector redesign. Includes compact indicator tiles
   (state buttons with popup controls), text/label components for
   section headers, and spacer components for layout.
-- **Control type selector redesign** — categorized dropdown with
-  MDI icons as control types grow.
+- **Control type selector redesign** — categorized dropdown with MDI icons as 
+  control types grow.
+- **Control Renderer Redesign** - allow controls to be added at
+  runtime. Requires storing scss and jsx code in mongodb associated with control
 - **Control design licensing** — HAKit is proprietary; original
   Carbon-styled control designs needed.
 
