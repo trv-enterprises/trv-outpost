@@ -9,6 +9,11 @@ API keys are personal authentication tokens for non-browser callers —
 (the SPA's identity flow covers those); anything calling the API from
 outside a browser session does.
 
+A key is also how you authenticate the interactive
+[Swagger UI](http://localhost:3001/swagger/index.html) (`/swagger/index.html`
+on your server): click **Authorize**, enter `Bearer trve_…`, and every
+"Try it out" call is sent as that user.
+
 Manage your keys from **Manage Mode → API Keys**. Every authenticated
 user can create their own keys; admins (Manage capability) can also see
 the deployment-wide list.
