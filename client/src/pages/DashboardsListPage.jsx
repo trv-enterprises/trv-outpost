@@ -37,6 +37,8 @@ import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
+import VariableIndicator from '../components/shared/VariableIndicator';
+import { dashboardUsesVariable } from '../utils/dashboardVariable';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
@@ -967,6 +969,16 @@ function DashboardsListPage() {
                                   >
                                     <TrashCan size={16} />
                                   </IconButton>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'name') {
+                              return (
+                                <TableCell key={cell.id} className="name-cell">
+                                  <div className="name-cell__name">
+                                    <span>{cell.value}</span>
+                                    <VariableIndicator active={dashboardUsesVariable(dashboard)} />
+                                  </div>
                                 </TableCell>
                               );
                             }

@@ -309,6 +309,22 @@
     }
   }
 
+  // Name column: dashboard name plus an optional "var" indicator when the
+  // dashboard has the dashboard-variable feature turned on (mirrors the
+  // components list name cell). Give Name a solid preferred + min width so
+  // the table's auto-layout stops wrapping longer names onto a second line
+  // (same fix as the components list).
+  .name-cell {
+    width: 19.8%;
+    min-width: 13.5rem;
+  }
+
+  .name-cell__name {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+  }
+
   // Panels column: count is hoverable to reveal a tooltip listing
   // the components referenced by the dashboard's panels.
   .panels-cell .panels-count {

@@ -460,8 +460,8 @@
     // absorb surplus horizontal space (previously Description, with the longest
     // content, hogged all the growth and Name barely widened) — but not so much
     // that Description is starved.
-    width: 22%;
-    min-width: 15rem;
+    width: 19.8%;
+    min-width: 13.5rem;
 
     &__name {
       line-height: 1.4;

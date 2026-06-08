@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { Tag, Tooltip } from '@carbon/react';
 import { Dashboard, DataBase, Information, Time, Copy } from '@carbon/icons-react';
 import NamespaceChip from './shared/NamespaceChip';
+import VariableIndicator from './shared/VariableIndicator';
+import { dashboardUsesVariable } from '../utils/dashboardVariable';
 import './DashboardTile.scss';
 
 /**
@@ -164,7 +166,10 @@ function DashboardTile({
 
       <div className="tile-content">
         <div className="tile-header">
-          <h3 className="tile-name">{dashboard.name}</h3>
+          <div className="tile-name-row">
+            <h3 className="tile-name">{dashboard.name}</h3>
+            <VariableIndicator active={dashboardUsesVariable(dashboard)} />
+          </div>
           <IdCopyButton id={dashboard.id} />
           {descriptionMode === 'tooltip' && dashboard.description && (
             <Tooltip label={dashboard.description} align="bottom">

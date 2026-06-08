@@ -166,6 +166,22 @@
     gap: spacing.$spacing-02;
     margin-bottom: spacing.$spacing-02;
 
+    // Groups the name and the optional "var" indicator so the tag hugs
+    // the name (rather than getting pushed to the far right by the
+    // header's space-between). The row owns the flex growth; the name
+    // ellipsizes within it.
+    .tile-name-row {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+      min-width: 0;
+      flex: 1;
+
+      .cds--tag {
+        flex-shrink: 0;
+      }
+    }
+
     .tile-name {
       margin: 0;
       font-size: 1rem;
@@ -175,7 +191,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       min-width: 0;
-      flex: 1;
     }
 
     .info-button {
