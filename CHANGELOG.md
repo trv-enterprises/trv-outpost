@@ -6,6 +6,48 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.2] — 2026-06-08
+
+Swagger usability, an Assistant bug fix, and docs/UX polish. No breaking
+changes.
+
+### Added
+
+- **Swagger is now usable for real calls**: the API explorer authenticates
+  via an **Authorize** button — paste `Bearer trve_…` (an API key) and every
+  "Try it out" call is sent as that user. The header/base-URL also follow
+  whatever host you reached the server on.
+- **API Overview docs page**: a new user-docs page covering the REST API,
+  the Swagger explorer, and the Postman collection — linked from the API
+  Keys page (in-app and docs) and the left nav.
+- **`/health` advisory warnings**: `/health` and `/api/health` now return a
+  `warnings` array; the first advisory flags when legacy GUID auth
+  (`auth.allow_legacy_guid`) is left enabled, so a monitor can catch the
+  posture without reading boot logs.
+- **Dashboards list**: a **`var`** indicator marks dashboards that have a
+  dashboard variable enabled (list and tile views).
+- **API Keys list**: revoked keys are hidden by default with a **"Show
+  revoked"** toggle on the search line.
+
+### Fixed
+
+- **Assistant: resumed sessions no longer 400**. Replaying a conversation
+  with tool-call turns emitted an empty text block that the Anthropic API
+  rejected; the first prompt of a reopened chat now works. Also fixes the
+  Assistant WebSocket URL under the Vite dev proxy.
+- **Swagger UI** rendered literal `{{.Title}}` / `{{.Host}}` placeholders and
+  duplicated `/api` in every path; both are fixed (a stray `{{value}}` token
+  in an annotation was poisoning the whole spec).
+- **Number chart**: the AI now picks `numberSize` from the standard size
+  ladder instead of inventing off-grid values that mismatched the editor
+  dropdown; the smallest size is 12px.
+
+### Changed
+
+- **Assistant** message text now renders as Markdown (tables, lists, code).
+- Removed the dead dev user-switcher component; corrected the docs that
+  described it, and documented the `?user_id=` bookmark workflow for dev/test.
+
 ## [0.28.1] — 2026-06-06
 
 Component-authoring UX polish. No new features or API changes.
