@@ -88,7 +88,7 @@ type StreamInfo struct {
 // @Tags system
 // @Param interval query string false "Update interval (e.g., '5s', '1s'). Default: 5s, Min: 1s, 0 means one-shot"
 // @Success 101 {string} string "Switching Protocols"
-// @Router /api/ws/status [get]
+// @Router /ws/status [get]
 func (h *StatusHandler) HandleStatusWebSocket(c *gin.Context) {
 	// Parse interval parameter
 	intervalStr := c.DefaultQuery("interval", "5s")

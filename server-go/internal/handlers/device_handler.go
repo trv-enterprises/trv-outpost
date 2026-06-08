@@ -37,7 +37,7 @@ func NewDeviceHandler(service *service.DeviceService, discoveryService *service.
 // @Success 201 {object} models.Device
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/devices [post]
+// @Router /devices [post]
 func (h *DeviceHandler) CreateDevice(c *gin.Context) {
 	var req models.CreateDeviceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -67,7 +67,7 @@ func (h *DeviceHandler) CreateDevice(c *gin.Context) {
 // @Success 200 {object} models.Device
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/devices/{id} [get]
+// @Router /devices/{id} [get]
 func (h *DeviceHandler) GetDevice(c *gin.Context) {
 	id := c.Param("id")
 
@@ -96,7 +96,7 @@ func (h *DeviceHandler) GetDevice(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/devices/{id} [put]
+// @Router /devices/{id} [put]
 func (h *DeviceHandler) UpdateDevice(c *gin.Context) {
 	id := c.Param("id")
 
@@ -131,7 +131,7 @@ func (h *DeviceHandler) UpdateDevice(c *gin.Context) {
 // @Success 204
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/devices/{id} [delete]
+// @Router /devices/{id} [delete]
 func (h *DeviceHandler) DeleteDevice(c *gin.Context) {
 	id := c.Param("id")
 
@@ -161,7 +161,7 @@ func (h *DeviceHandler) DeleteDevice(c *gin.Context) {
 // @Param page_size query int false "Page size"
 // @Success 200 {object} models.DeviceListResponse
 // @Failure 500 {object} map[string]string
-// @Router /api/devices [get]
+// @Router /devices [get]
 func (h *DeviceHandler) ListDevices(c *gin.Context) {
 	var params models.DeviceQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
@@ -188,7 +188,7 @@ func (h *DeviceHandler) ListDevices(c *gin.Context) {
 // @Success 201 {array} models.Device
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/devices/import [post]
+// @Router /devices/import [post]
 func (h *DeviceHandler) ImportDevices(c *gin.Context) {
 	var req models.ImportDevicesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -218,7 +218,7 @@ func (h *DeviceHandler) ImportDevices(c *gin.Context) {
 // @Success 200 {object} models.DiscoverDevicesResponse
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/connections/{id}/discover-devices [post]
+// @Router /connections/{id}/discover-devices [post]
 func (h *DeviceHandler) DiscoverDevices(c *gin.Context) {
 	connectionID := c.Param("id")
 

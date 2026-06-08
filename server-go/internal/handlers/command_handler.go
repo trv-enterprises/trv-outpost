@@ -59,7 +59,7 @@ type ExecuteCommandResponse struct {
 // @Failure 400 {object} map[string]interface{} "Bad request - connection does not support write"
 // @Failure 404 {object} map[string]interface{} "Connection not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /api/connections/{id}/command [post]
+// @Router /connections/{id}/command [post]
 func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 	id := c.Param("id")
 
@@ -138,7 +138,7 @@ type ExecuteControlRequest struct {
 // @Failure 400 {object} map[string]interface{} "Bad request - not a control or missing connection"
 // @Failure 404 {object} map[string]interface{} "Control not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /api/controls/{id}/execute [post]
+// @Router /controls/{id}/execute [post]
 func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 	controlID := c.Param("id")
 

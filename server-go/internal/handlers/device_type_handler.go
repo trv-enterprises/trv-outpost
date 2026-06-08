@@ -35,7 +35,7 @@ func NewDeviceTypeHandler(service *service.DeviceTypeService) *DeviceTypeHandler
 // @Success 201 {object} models.DeviceType
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/device-types [post]
+// @Router /device-types [post]
 func (h *DeviceTypeHandler) CreateDeviceType(c *gin.Context) {
 	var req models.CreateDeviceTypeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -66,7 +66,7 @@ func (h *DeviceTypeHandler) CreateDeviceType(c *gin.Context) {
 // @Success 200 {object} models.DeviceType
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/device-types/{id} [get]
+// @Router /device-types/{id} [get]
 func (h *DeviceTypeHandler) GetDeviceType(c *gin.Context) {
 	id := c.Param("id")
 
@@ -95,7 +95,7 @@ func (h *DeviceTypeHandler) GetDeviceType(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/device-types/{id} [put]
+// @Router /device-types/{id} [put]
 func (h *DeviceTypeHandler) UpdateDeviceType(c *gin.Context) {
 	id := c.Param("id")
 
@@ -132,7 +132,7 @@ func (h *DeviceTypeHandler) UpdateDeviceType(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/device-types/{id} [delete]
+// @Router /device-types/{id} [delete]
 func (h *DeviceTypeHandler) DeleteDeviceType(c *gin.Context) {
 	id := c.Param("id")
 
@@ -165,7 +165,7 @@ func (h *DeviceTypeHandler) DeleteDeviceType(c *gin.Context) {
 // @Param page_size query int false "Page size"
 // @Success 200 {object} models.DeviceTypeListResponse
 // @Failure 500 {object} map[string]string
-// @Router /api/device-types [get]
+// @Router /device-types [get]
 func (h *DeviceTypeHandler) ListDeviceTypes(c *gin.Context) {
 	var params models.DeviceTypeQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
@@ -188,7 +188,7 @@ func (h *DeviceTypeHandler) ListDeviceTypes(c *gin.Context) {
 // @Tags device-types
 // @Produce json
 // @Success 200 {array} string
-// @Router /api/device-types/categories [get]
+// @Router /device-types/categories [get]
 func (h *DeviceTypeHandler) GetCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, models.ValidDeviceCategories())
 }
@@ -199,7 +199,7 @@ func (h *DeviceTypeHandler) GetCategories(c *gin.Context) {
 // @Tags device-types
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /api/device-types/control-types [get]
+// @Router /device-types/control-types [get]
 func (h *DeviceTypeHandler) GetControlTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"types": models.ValidControlUITypes(),

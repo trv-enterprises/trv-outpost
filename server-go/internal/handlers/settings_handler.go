@@ -79,7 +79,7 @@ func NewSettingsHandler(service *service.SettingsService) *SettingsHandler {
 // @Produce json
 // @Success 200 {object} models.SettingsListResponse
 // @Failure 500 {object} map[string]string
-// @Router /api/settings [get]
+// @Router /settings [get]
 func (h *SettingsHandler) GetAllSettings(c *gin.Context) {
 	settings, err := h.service.GetAllSettings(c.Request.Context())
 	if err != nil {
@@ -105,7 +105,7 @@ func (h *SettingsHandler) GetAllSettings(c *gin.Context) {
 // @Success 200 {object} models.ConfigItem
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/settings/{key} [get]
+// @Router /settings/{key} [get]
 func (h *SettingsHandler) GetSetting(c *gin.Context) {
 	key := c.Param("key")
 
@@ -136,7 +136,7 @@ func (h *SettingsHandler) GetSetting(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/settings/{key} [put]
+// @Router /settings/{key} [put]
 func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 	key := c.Param("key")
 

@@ -37,7 +37,7 @@ func NewSnippetHandler(svc *service.SnippetService) *SnippetHandler {
 // @Success 200 {object} models.SnippetListResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
-// @Router /api/snippets [get]
+// @Router /snippets [get]
 func (h *SnippetHandler) ListSnippets(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {
@@ -71,7 +71,7 @@ func (h *SnippetHandler) ListSnippets(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
-// @Router /api/snippets [post]
+// @Router /snippets [post]
 func (h *SnippetHandler) CreateSnippet(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {
@@ -104,7 +104,7 @@ func (h *SnippetHandler) CreateSnippet(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
 // @Failure 404 {object} map[string]string
-// @Router /api/snippets/{id} [put]
+// @Router /snippets/{id} [put]
 func (h *SnippetHandler) UpdateSnippet(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {
@@ -133,7 +133,7 @@ func (h *SnippetHandler) UpdateSnippet(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
 // @Failure 404 {object} map[string]string
-// @Router /api/snippets/{id} [delete]
+// @Router /snippets/{id} [delete]
 func (h *SnippetHandler) DeleteSnippet(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {

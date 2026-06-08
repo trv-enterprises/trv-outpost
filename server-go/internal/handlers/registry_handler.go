@@ -96,7 +96,7 @@ type ListConnectionTypesResponse struct {
 // @Produce json
 // @Param category query string false "Filter by category (e.g., 'db', 'stream', 'api')"
 // @Success 200 {object} ListConnectionTypesResponse
-// @Router /api/registry/connections [get]
+// @Router /registry/connections [get]
 func (h *RegistryHandler) ListConnectionTypes(c *gin.Context) {
 	category := c.Query("category")
 
@@ -161,7 +161,7 @@ func appendSyntheticForListing(existing []registry.TypeInfo) []registry.TypeInfo
 // @Param typeId path string true "Type ID (e.g., 'db.postgres', 'stream.websocket-bidir')"
 // @Success 200 {object} registry.TypeInfo
 // @Failure 404 {object} map[string]interface{} "Type not found"
-// @Router /api/registry/connections/{typeId} [get]
+// @Router /registry/connections/{typeId} [get]
 func (h *RegistryHandler) GetConnectionType(c *gin.Context) {
 	typeID := c.Param("typeId")
 
@@ -238,7 +238,7 @@ func legacyToRegistryTypeID(in string) string {
 // @Produce json
 // @Param typeId path string true "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')"
 // @Success 200 {object} ConnectionTypeGuidanceResponse
-// @Router /api/registry/connections/{typeId}/guidance [get]
+// @Router /registry/connections/{typeId}/guidance [get]
 func (h *RegistryHandler) GetConnectionTypeGuidance(c *gin.Context) {
 	raw := c.Param("typeId")
 	resolved := legacyToRegistryTypeID(raw)
@@ -268,7 +268,7 @@ type CategoryInfo struct {
 // @Tags registry
 // @Produce json
 // @Success 200 {object} ListCategoriesResponse
-// @Router /api/registry/categories [get]
+// @Router /registry/categories [get]
 func (h *RegistryHandler) ListCategories(c *gin.Context) {
 	categories := registry.Categories()
 
@@ -311,7 +311,7 @@ type ListComponentTypesResponse struct {
 // @Produce json
 // @Param category query string false "Filter: chart, control, display"
 // @Success 200 {object} ListComponentTypesResponse
-// @Router /api/registry/components [get]
+// @Router /registry/components [get]
 func (h *RegistryHandler) ListComponentTypes(c *gin.Context) {
 	category := c.Query("category")
 	types := registry.ListComponentTypes(category)
@@ -340,7 +340,7 @@ func (h *RegistryHandler) ListComponentTypes(c *gin.Context) {
 // @Param typeId path string true "Component type ID"
 // @Success 200 {object} registry.ComponentTypeInfo
 // @Failure 404 {object} map[string]interface{}
-// @Router /api/registry/components/{typeId} [get]
+// @Router /registry/components/{typeId} [get]
 func (h *RegistryHandler) GetComponentType(c *gin.Context) {
 	typeID := c.Param("typeId")
 	info, ok := registry.GetComponentType(typeID)
@@ -360,7 +360,7 @@ func (h *RegistryHandler) GetComponentType(c *gin.Context) {
 // @Tags registry
 // @Produce json
 // @Success 200 {object} registry.Catalog
-// @Router /api/registry/catalog [get]
+// @Router /registry/catalog [get]
 func (h *RegistryHandler) GetCatalog(c *gin.Context) {
 	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
@@ -383,7 +383,7 @@ type ListIntegrationsResponse struct {
 // @Produce json
 // @Param include_disabled query bool false "If true, returns all integrations even if disabled"
 // @Success 200 {object} ListIntegrationsResponse
-// @Router /api/registry/integrations [get]
+// @Router /registry/integrations [get]
 func (h *RegistryHandler) ListIntegrations(c *gin.Context) {
 	items := registry.ListIntegrations()
 	if filter := h.activeFilter(c); filter != nil {
@@ -407,7 +407,7 @@ func (h *RegistryHandler) ListIntegrations(c *gin.Context) {
 // @Tags registry
 // @Produce text/plain
 // @Success 200 {string} string "Markdown document"
-// @Router /api/registry/catalog.md [get]
+// @Router /registry/catalog.md [get]
 func (h *RegistryHandler) GetCatalogMarkdown(c *gin.Context) {
 	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {

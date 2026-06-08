@@ -37,7 +37,7 @@ func NewAPIKeyHandler(svc *service.APIKeyService) *APIKeyHandler {
 // @Success 201 {object} models.CreateAPIKeyResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
-// @Router /api/api-keys [post]
+// @Router /api-keys [post]
 func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {
@@ -64,7 +64,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 // @Produce json
 // @Success 200 {array} models.APIKey
 // @Failure 401 {object} map[string]string
-// @Router /api/api-keys [get]
+// @Router /api-keys [get]
 func (h *APIKeyHandler) ListMyAPIKeys(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {
@@ -87,7 +87,7 @@ func (h *APIKeyHandler) ListMyAPIKeys(c *gin.Context) {
 // @Success 200 {array} models.APIKey
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
-// @Router /api/api-keys/all [get]
+// @Router /api-keys/all [get]
 func (h *APIKeyHandler) ListAllAPIKeys(c *gin.Context) {
 	keys, err := h.service.ListAll(c.Request.Context())
 	if err != nil {
@@ -106,7 +106,7 @@ func (h *APIKeyHandler) ListAllAPIKeys(c *gin.Context) {
 // @Success 204 "No Content"
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
-// @Router /api/api-keys/{id} [delete]
+// @Router /api-keys/{id} [delete]
 func (h *APIKeyHandler) RevokeAPIKey(c *gin.Context) {
 	user := middleware.GetUser(c)
 	if user == nil {

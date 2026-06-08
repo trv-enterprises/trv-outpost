@@ -95,7 +95,7 @@ func (h *AIUsageHandler) effectiveCaps(u *models.User, todayUTC string) (inCap, 
 // @Tags         ai
 // @Produce      json
 // @Success      200  {object}  AIUsageResponse
-// @Router       /api/ai/usage [get]
+// @Router       /ai/usage [get]
 func (h *AIUsageHandler) GetUsage(c *gin.Context) {
 	ctx := c.Request.Context()
 	now := time.Now().UTC()
@@ -180,7 +180,7 @@ type SetOverrideRequest struct {
 // @Produce      json
 // @Param        guid  path  string  true  "User GUID"
 // @Success      200  {object}  map[string]interface{}
-// @Router       /api/ai/usage/{guid}/override [put]
+// @Router       /ai/usage/{guid}/override [put]
 func (h *AIUsageHandler) SetOverride(c *gin.Context) {
 	ctx := c.Request.Context()
 	guid := c.Param("guid")

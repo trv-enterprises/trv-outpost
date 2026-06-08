@@ -33,7 +33,7 @@ func NewDebugHandler() *DebugHandler {
 // @Tags debug
 // @Produce json
 // @Success 101 {string} string "Switching Protocols"
-// @Router /api/ai/debug [get]
+// @Router /ai/debug [get]
 func (h *DebugHandler) HandleDebugWebSocket(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -80,7 +80,7 @@ func (h *DebugHandler) HandleDebugWebSocket(c *gin.Context) {
 // @Tags debug
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /api/ai/debug/status [get]
+// @Router /ai/debug/status [get]
 func (h *DebugHandler) GetDebugStatus(c *gin.Context) {
 	hub := ai.GetDebugHub()
 	c.JSON(http.StatusOK, gin.H{

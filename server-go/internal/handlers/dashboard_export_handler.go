@@ -24,7 +24,7 @@ import (
 // @Param body body models.ExportRequest true "Dashboard IDs to preview"
 // @Success 200 {object} models.ExportPreview
 // @Failure 400 {object} map[string]string
-// @Router /api/dashboards/export/preview [post]
+// @Router /dashboards/export/preview [post]
 func (h *DashboardHandler) PreviewExport(c *gin.Context) {
 	var req models.ExportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -52,7 +52,7 @@ func (h *DashboardHandler) PreviewExport(c *gin.Context) {
 // @Param body body models.ExportRequest true "Dashboard IDs to export"
 // @Success 200 {object} models.ExportBundle
 // @Failure 400 {object} map[string]string
-// @Router /api/dashboards/export [post]
+// @Router /dashboards/export [post]
 func (h *DashboardHandler) ExportDashboards(c *gin.Context) {
 	var req models.ExportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -82,7 +82,7 @@ func (h *DashboardHandler) ExportDashboards(c *gin.Context) {
 // @Param body body models.ImportPreflightRequest true "Bundle and target namespace"
 // @Success 200 {object} models.ImportPreflightResponse
 // @Failure 400 {object} map[string]string
-// @Router /api/dashboards/import/preflight [post]
+// @Router /dashboards/import/preflight [post]
 func (h *DashboardHandler) PreflightImport(c *gin.Context) {
 	var req models.ImportPreflightRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -109,7 +109,7 @@ func (h *DashboardHandler) PreflightImport(c *gin.Context) {
 // @Param body body models.ImportApplyRequest true "Bundle, target namespace, and per-object overwrite decisions"
 // @Success 200 {object} models.ImportApplyResponse
 // @Failure 400 {object} map[string]string
-// @Router /api/dashboards/import/apply [post]
+// @Router /dashboards/import/apply [post]
 func (h *DashboardHandler) ApplyImport(c *gin.Context) {
 	var req models.ImportApplyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

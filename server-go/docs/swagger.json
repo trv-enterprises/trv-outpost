@@ -12,6 +12,67 @@
     "host": "localhost:3001",
     "basePath": "/api",
     "paths": {
+        "/ai/availability": {
+            "get": {
+                "description": "Returns per-surface availability flags. `enabled` is a legacy alias for `component_agent_enabled`. Both AI surfaces require the unified `ai.enabled` admin setting AND an Anthropic key at server start; they share that single gate.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "AI availability",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AIAvailabilityResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/debug": {
+            "get": {
+                "description": "Stream real-time debug events from the AI agent including LLM requests, responses, and tool calls",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "debug"
+                ],
+                "summary": "Connect to AI debug WebSocket",
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/debug/status": {
+            "get": {
+                "description": "Get the current status of the AI debug system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "debug"
+                ],
+                "summary": "Get debug status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/ai/sessions": {
             "post": {
                 "description": "Create a new AI session for chart creation or editing. Creates a chart draft.",
@@ -296,6 +357,59 @@
                 }
             }
         },
+        "/ai/usage": {
+            "get": {
+                "description": "Per-user Assistant token usage: today vs effective cap + a 30-day history. Only the Dashboard Assistant is metered.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "AI API usage (Dashboard Assistant)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AIUsageResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/usage/{guid}/override": {
+            "put": {
+                "description": "Admin-only. Raises (or clears) a user's daily Assistant token caps. Scope \"today\" applies only for the current UTC day; \"ongoing\" persists.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Set/clear a user's Assistant budget override",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User GUID",
+                        "name": "guid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/alerts": {
             "get": {
                 "produces": [
@@ -415,121 +529,7 @@
                 }
             }
         },
-        "/api/ai/availability": {
-            "get": {
-                "description": "Returns per-surface availability flags. `enabled` is a legacy alias for `component_agent_enabled`. Both AI surfaces require the unified `ai.enabled` admin setting AND an Anthropic key at server start; they share that single gate.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ai"
-                ],
-                "summary": "AI availability",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.AIAvailabilityResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/ai/debug": {
-            "get": {
-                "description": "Stream real-time debug events from the AI agent including LLM requests, responses, and tool calls",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "debug"
-                ],
-                "summary": "Connect to AI debug WebSocket",
-                "responses": {
-                    "101": {
-                        "description": "Switching Protocols",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/ai/debug/status": {
-            "get": {
-                "description": "Get the current status of the AI debug system",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "debug"
-                ],
-                "summary": "Get debug status",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/ai/usage": {
-            "get": {
-                "description": "Per-user Assistant token usage: today vs effective cap + a 30-day history. Only the Dashboard Assistant is metered.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ai"
-                ],
-                "summary": "AI API usage (Dashboard Assistant)",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.AIUsageResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/ai/usage/{guid}/override": {
-            "put": {
-                "description": "Admin-only. Raises (or clears) a user's daily Assistant token caps. Scope \"today\" applies only for the current UTC day; \"ongoing\" persists.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ai"
-                ],
-                "summary": "Set/clear a user's Assistant budget override",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User GUID",
-                        "name": "guid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/api-keys": {
+        "/api-keys": {
             "get": {
                 "produces": [
                     "application/json"
@@ -609,7 +609,7 @@
                 }
             }
         },
-        "/api/api-keys/all": {
+        "/api-keys/all": {
             "get": {
                 "produces": [
                     "application/json"
@@ -649,7 +649,7 @@
                 }
             }
         },
-        "/api/api-keys/{id}": {
+        "/api-keys/{id}": {
             "delete": {
                 "tags": [
                     "api-keys"
@@ -684,2242 +684,6 @@
                             "additionalProperties": {
                                 "type": "string"
                             }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/connections/{id}/command": {
-            "post": {
-                "description": "Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "Execute a command on a bidirectional datasource",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Command to execute",
-                        "name": "command",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ExecuteCommandRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ExecuteCommandResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request - connection does not support write",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Connection not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/connections/{id}/discover-devices": {
-            "post": {
-                "description": "Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "devices"
-                ],
-                "summary": "Discover devices",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.DiscoverDevicesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/controls/{id}/execute": {
-            "post": {
-                "description": "Executes the command configured on a control component, using either schema-based or legacy template interpolation",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "controls"
-                ],
-                "summary": "Execute a control component command",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Control (Chart) ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Control value",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ExecuteControlRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ExecuteCommandResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request - not a control or missing connection",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Control not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/dashboards/export": {
-            "post": {
-                "description": "Returns a JSON bundle containing the selected dashboards plus all components and connections they reference.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboards"
-                ],
-                "summary": "Export dashboards as a portable bundle",
-                "parameters": [
-                    {
-                        "description": "Dashboard IDs to export",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.ExportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.ExportBundle"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/dashboards/export/preview": {
-            "post": {
-                "description": "Returns counts of entities that would be included in an export of the given dashboards",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboards"
-                ],
-                "summary": "Preview a dashboard export",
-                "parameters": [
-                    {
-                        "description": "Dashboard IDs to preview",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.ExportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.ExportPreview"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/dashboards/import/apply": {
-            "post": {
-                "description": "Writes the bundle's objects into the target namespace. Identical objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly opts out; blocked objects cause the whole apply to refuse.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboards"
-                ],
-                "summary": "Apply an import bundle",
-                "parameters": [
-                    {
-                        "description": "Bundle, target namespace, and per-object overwrite decisions",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.ImportApplyRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.ImportApplyResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/dashboards/import/preflight": {
-            "post": {
-                "description": "Classifies each object in the bundle as identical/conflict/new/blocked so the UI can show what would change before the user commits.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboards"
-                ],
-                "summary": "Preflight an import bundle",
-                "parameters": [
-                    {
-                        "description": "Bundle and target namespace",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.ImportPreflightRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.ImportPreflightResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/device-types": {
-            "get": {
-                "description": "List device types with optional filtering and pagination",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "List device types",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Filter by category",
-                        "name": "category",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by protocol",
-                        "name": "protocol",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Show only built-in types",
-                        "name": "built_in_only",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page size",
-                        "name": "page_size",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.DeviceTypeListResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Create a new device type template",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "Create a device type",
-                "parameters": [
-                    {
-                        "description": "Device type to create",
-                        "name": "device_type",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.CreateDeviceTypeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/models.DeviceType"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/device-types/categories": {
-            "get": {
-                "description": "Get the list of valid device categories",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "Get valid device categories",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/device-types/control-types": {
-            "get": {
-                "description": "Get the list of valid control UI types (toggle, scalar, button, text, plug, dimmer)",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "Get valid control types",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/device-types/{id}": {
-            "get": {
-                "description": "Get a device type by ID",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "Get a device type",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device type ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.DeviceType"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Update an existing device type",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "Update a device type",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device type ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fields to update",
-                        "name": "device_type",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateDeviceTypeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.DeviceType"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Delete a device type by ID",
-                "tags": [
-                    "device-types"
-                ],
-                "summary": "Delete a device type",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device type ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/devices": {
-            "get": {
-                "description": "List devices with optional filtering and pagination",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "devices"
-                ],
-                "summary": "List devices",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Filter by device type ID",
-                        "name": "device_type_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by connection ID",
-                        "name": "connection_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by room",
-                        "name": "room",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Filter by enabled status",
-                        "name": "enabled",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page size",
-                        "name": "page_size",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.DeviceListResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Create a new device instance",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "devices"
-                ],
-                "summary": "Create a device",
-                "parameters": [
-                    {
-                        "description": "Device to create",
-                        "name": "device",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.CreateDeviceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/models.Device"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/devices/import": {
-            "post": {
-                "description": "Bulk import devices from discovery",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "devices"
-                ],
-                "summary": "Import devices",
-                "parameters": [
-                    {
-                        "description": "Devices to import",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.ImportDevicesRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Device"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/devices/{id}": {
-            "get": {
-                "description": "Get a device by ID",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "devices"
-                ],
-                "summary": "Get a device",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Device"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Update an existing device",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "devices"
-                ],
-                "summary": "Update a device",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fields to update",
-                        "name": "device",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateDeviceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Device"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Delete a device by ID",
-                "tags": [
-                    "devices"
-                ],
-                "summary": "Delete a device",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/cameras": {
-            "get": {
-                "description": "Returns camera names from a Frigate NVR connection",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get Frigate camera list",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/event/{event_id}/clip": {
-            "get": {
-                "description": "Returns the MP4 clip for a detection event (supports Range headers)",
-                "produces": [
-                    "video/mp4"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get event clip",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Event ID",
-                        "name": "event_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/event/{event_id}/snapshot": {
-            "get": {
-                "description": "Returns the JPEG snapshot for a detection event",
-                "produces": [
-                    "image/jpeg"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get event snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Event ID",
-                        "name": "event_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/events/{camera}": {
-            "get": {
-                "description": "Returns recent detection events for a camera",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get camera events",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Camera name",
-                        "name": "camera",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Max events to return",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/info": {
-            "get": {
-                "description": "Returns connection metadata needed for direct WebSocket access (go2rtc MSE)",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get Frigate connection info",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/live/{camera}": {
-            "get": {
-                "description": "Proxies the JSMPEG WebSocket stream for a camera through the backend",
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Proxy Frigate JSMPEG live stream",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Camera name",
-                        "name": "camera",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {}
-            }
-        },
-        "/api/frigate/{connection_id}/review/{review_id}/thumbnail": {
-            "get": {
-                "description": "Returns the WebP thumbnail for a review segment",
-                "produces": [
-                    "image/webp"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get review thumbnail",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Review segment ID",
-                        "name": "review_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Camera name (required — encoded into the thumbnail filename)",
-                        "name": "camera",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/reviews": {
-            "get": {
-                "description": "Returns Frigate review segments, defaulted to unreviewed alerts. Used by the Frigate Alerts widget.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get camera review segments",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Max reviews to return",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by camera name",
-                        "name": "camera",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by severity (alert, detection)",
-                        "name": "severity",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Include reviewed (1) or only unreviewed (0)",
-                        "name": "reviewed",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/reviews/viewed": {
-            "post": {
-                "description": "Marks one or more Frigate review segments as reviewed (viewed), removing them from unreviewed listings",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Mark review segments as reviewed",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Review IDs to mark: { ids: string[] }",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/frigate/{connection_id}/snapshot/{camera}": {
-            "get": {
-                "description": "Returns the latest JPEG snapshot for a camera",
-                "produces": [
-                    "image/jpeg"
-                ],
-                "tags": [
-                    "Frigate"
-                ],
-                "summary": "Get camera snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Connection ID",
-                        "name": "connection_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Camera name",
-                        "name": "camera",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/namespaces": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "namespaces"
-                ],
-                "summary": "List namespaces",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.NamespaceListResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "namespaces"
-                ],
-                "summary": "Create a namespace",
-                "parameters": [
-                    {
-                        "description": "Namespace to create",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.CreateNamespaceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/models.Namespace"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/namespaces/{id}": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "namespaces"
-                ],
-                "summary": "Get a namespace",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Namespace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Namespace"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "namespaces"
-                ],
-                "summary": "Update a namespace",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Namespace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fields to update",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateNamespaceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Namespace"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "namespaces"
-                ],
-                "summary": "Delete a namespace",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Namespace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/namespaces/{id}/usage": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "namespaces"
-                ],
-                "summary": "Get namespace usage counts",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Namespace ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.NamespaceUsage"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/catalog": {
-            "get": {
-                "description": "Returns connection types, chart/control/display subtypes, and device types in one payload. This is what the AI builder and MCP server consume so they never duplicate enum lists.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "Unified type catalog (single source of truth)",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/registry.Catalog"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/catalog.md": {
-            "get": {
-                "description": "Same data as /catalog but formatted as a markdown document. Useful for embedding directly in an LLM system prompt or pasting into chat.",
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "Catalog rendered as markdown",
-                "responses": {
-                    "200": {
-                        "description": "Markdown document",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/categories": {
-            "get": {
-                "description": "Get all available categories with their type counts",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "List all connection type categories",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ListCategoriesResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/components": {
-            "get": {
-                "description": "Returns registered component types. Pass ?category=chart, ?category=control, or ?category=display to filter; omit for all. Hidden types are included so legacy editors still work.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "List component subtypes (chart/control/display)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Filter: chart, control, display",
-                        "name": "category",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ListComponentTypesResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/components/{typeId}": {
-            "get": {
-                "description": "Returns metadata for a single component subtype like \"chart.bar\" or \"control.toggle\".",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "Get a single component type by ID",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Component type ID",
-                        "name": "typeId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/registry.ComponentTypeInfo"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/connections": {
-            "get": {
-                "description": "Get all registered adapter types with their capabilities and configuration schema",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "List all available connection types",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Filter by category (e.g., 'db', 'stream', 'api')",
-                        "name": "category",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ListConnectionTypesResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/connections/{typeId}": {
-            "get": {
-                "description": "Get details about a specific adapter type including configuration schema",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "Get a specific connection type",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Type ID (e.g., 'db.postgres', 'stream.websocket-bidir')",
-                        "name": "typeId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/registry.TypeInfo"
-                        }
-                    },
-                    "404": {
-                        "description": "Type not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/connections/{typeId}/guidance": {
-            "get": {
-                "description": "Returns the cheat-sheet describing how to write query_config for a given connection adapter type — implicit row caps, supported DSL keywords, common pitfalls, etc. Sourced from the same connectionguidance package the chat agent reads. Accepts either a registry type id (e.g. \"store.tsstore\") or the legacy short type (\"tsstore\"); legacy values are mapped server-side so existing UI callers keep working.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "Per-type query-config conventions",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')",
-                        "name": "typeId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ConnectionTypeGuidanceResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/registry/integrations": {
-            "get": {
-                "description": "Integrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "registry"
-                ],
-                "summary": "List registered integrations",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "If true, returns all integrations even if disabled",
-                        "name": "include_disabled",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ListIntegrationsResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/settings": {
-            "get": {
-                "description": "Get all settings that can be modified by administrators",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "settings"
-                ],
-                "summary": "Get all user-configurable settings",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.SettingsListResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/settings/{key}": {
-            "get": {
-                "description": "Get a single setting by key",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "settings"
-                ],
-                "summary": "Get a single setting",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Setting key",
-                        "name": "key",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.ConfigItem"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Update the value of a user-configurable setting",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "settings"
-                ],
-                "summary": "Update a setting",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Setting key",
-                        "name": "key",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "New value for the setting",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateSettingRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.ConfigItem"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/snippets": {
-            "get": {
-                "description": "Returns the merged set of user-scoped snippets owned by the caller plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`). Each record carries a `can_edit` flag derived from the caller's capabilities — global snippets are only editable by users with Manage capability.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "snippets"
-                ],
-                "summary": "List snippets visible to the caller for a given host surface",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Host surface key (e.g. edgelake-terminal)",
-                        "name": "context",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.SnippetListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Create a user snippet (default) or a global snippet (requires Manage capability). The `scope` field is immutable after creation — promote a user snippet to global by deleting and re-creating.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "snippets"
-                ],
-                "summary": "Create a snippet",
-                "parameters": [
-                    {
-                        "description": "Snippet payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.CreateSnippetRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/models.Snippet"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/snippets/{id}": {
-            "put": {
-                "description": "Edit title, command, and tags. Owner can edit user snippets; Manage capability required to edit globals.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "snippets"
-                ],
-                "summary": "Update a snippet",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Snippet ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Snippet payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateSnippetRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Snippet"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Same ownership and capability rules as update.",
-                "tags": [
-                    "snippets"
-                ],
-                "summary": "Delete a snippet",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Snippet ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/ws/status": {
-            "get": {
-                "description": "WebSocket endpoint that pushes server status at specified intervals",
-                "tags": [
-                    "system"
-                ],
-                "summary": "Subscribe to server status via WebSocket",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Update interval (e.g., '5s', '1s'). Default: 5s, Min: 1s, 0 means one-shot",
-                        "name": "interval",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "101": {
-                        "description": "Switching Protocols",
-                        "schema": {
-                            "type": "string"
                         }
                     }
                 }
@@ -3851,6 +1615,115 @@
                 }
             }
         },
+        "/connections/{id}/command": {
+            "post": {
+                "description": "Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Execute a command on a bidirectional datasource",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command to execute",
+                        "name": "command",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ExecuteCommandRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ExecuteCommandResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - connection does not support write",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Connection not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/connections/{id}/discover-devices": {
+            "post": {
+                "description": "Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devices"
+                ],
+                "summary": "Discover devices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DiscoverDevicesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/connections/{id}/discovered-values": {
             "put": {
                 "description": "Stores a column's distinct values on the connection (streams/sockets have no engine-side DISTINCT, so values are captured client-side at authoring time). Design capability required.",
@@ -4217,6 +2090,68 @@
                 }
             }
         },
+        "/controls/{id}/execute": {
+            "post": {
+                "description": "Executes the command configured on a control component, using either schema-based or legacy template interpolation",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "controls"
+                ],
+                "summary": "Execute a control component command",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Control (Chart) ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Control value",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ExecuteControlRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ExecuteCommandResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - not a control or missing connection",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Control not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboards": {
             "get": {
                 "description": "Get a paginated list of dashboards with optional filtering. Use include_datasources=true to get data source names for each dashboard.",
@@ -4326,6 +2261,178 @@
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboards/export": {
+            "post": {
+                "description": "Returns a JSON bundle containing the selected dashboards plus all components and connections they reference.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Export dashboards as a portable bundle",
+                "parameters": [
+                    {
+                        "description": "Dashboard IDs to export",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportBundle"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboards/export/preview": {
+            "post": {
+                "description": "Returns counts of entities that would be included in an export of the given dashboards",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Preview a dashboard export",
+                "parameters": [
+                    {
+                        "description": "Dashboard IDs to preview",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExportPreview"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboards/import/apply": {
+            "post": {
+                "description": "Writes the bundle's objects into the target namespace. Identical objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly opts out; blocked objects cause the whole apply to refuse.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Apply an import bundle",
+                "parameters": [
+                    {
+                        "description": "Bundle, target namespace, and per-object overwrite decisions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportApplyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportApplyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboards/import/preflight": {
+            "post": {
+                "description": "Classifies each object in the bundle as identical/conflict/new/blocked so the UI can show what would change before the user commits.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Preflight an import bundle",
+                "parameters": [
+                    {
+                        "description": "Bundle and target namespace",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportPreflightRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportPreflightResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -5162,6 +3269,646 @@
                 }
             }
         },
+        "/device-types": {
+            "get": {
+                "description": "List device types with optional filtering and pagination",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "List device types",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by protocol",
+                        "name": "protocol",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Show only built-in types",
+                        "name": "built_in_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeviceTypeListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new device type template",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "Create a device type",
+                "parameters": [
+                    {
+                        "description": "Device type to create",
+                        "name": "device_type",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateDeviceTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeviceType"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/device-types/categories": {
+            "get": {
+                "description": "Get the list of valid device categories",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "Get valid device categories",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/device-types/control-types": {
+            "get": {
+                "description": "Get the list of valid control UI types (toggle, scalar, button, text, plug, dimmer)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "Get valid control types",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/device-types/{id}": {
+            "get": {
+                "description": "Get a device type by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "Get a device type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeviceType"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update an existing device type",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "Update a device type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "device_type",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateDeviceTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeviceType"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a device type by ID",
+                "tags": [
+                    "device-types"
+                ],
+                "summary": "Delete a device type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/devices": {
+            "get": {
+                "description": "List devices with optional filtering and pagination",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devices"
+                ],
+                "summary": "List devices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by device type ID",
+                        "name": "device_type_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by connection ID",
+                        "name": "connection_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by room",
+                        "name": "room",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by enabled status",
+                        "name": "enabled",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeviceListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new device instance",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devices"
+                ],
+                "summary": "Create a device",
+                "parameters": [
+                    {
+                        "description": "Device to create",
+                        "name": "device",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateDeviceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Device"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/devices/import": {
+            "post": {
+                "description": "Bulk import devices from discovery",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devices"
+                ],
+                "summary": "Import devices",
+                "parameters": [
+                    {
+                        "description": "Devices to import",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ImportDevicesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Device"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/devices/{id}": {
+            "get": {
+                "description": "Get a device by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devices"
+                ],
+                "summary": "Get a device",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Device"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update an existing device",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "devices"
+                ],
+                "summary": "Update a device",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "device",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateDeviceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Device"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a device by ID",
+                "tags": [
+                    "devices"
+                ],
+                "summary": "Delete a device",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/edgelake-terminal/execute": {
             "post": {
                 "description": "Optional extension endpoint — only mounted when the admin setting `extensions.edgelake_terminal.enabled` is true. Returns 403 when the extension is disabled. The command is forwarded verbatim to the EdgeLake node via the `command` HTTP header (AnyLog REST contract); the response body is returned as a UTF-8 string for the terminal page to render. Per-call `timeout_seconds` (clamped to [1, 300]) overrides the connection's default; on deadline expiry the handler returns 504 with a clarified message.",
@@ -5270,6 +4017,391 @@
                 }
             }
         },
+        "/frigate/{connection_id}/cameras": {
+            "get": {
+                "description": "Returns camera names from a Frigate NVR connection",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get Frigate camera list",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/event/{event_id}/clip": {
+            "get": {
+                "description": "Returns the MP4 clip for a detection event (supports Range headers)",
+                "produces": [
+                    "video/mp4"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get event clip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "event_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/event/{event_id}/snapshot": {
+            "get": {
+                "description": "Returns the JPEG snapshot for a detection event",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get event snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "event_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/events/{camera}": {
+            "get": {
+                "description": "Returns recent detection events for a camera",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get camera events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Camera name",
+                        "name": "camera",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Max events to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/info": {
+            "get": {
+                "description": "Returns connection metadata needed for direct WebSocket access (go2rtc MSE)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get Frigate connection info",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/live/{camera}": {
+            "get": {
+                "description": "Proxies the JSMPEG WebSocket stream for a camera through the backend",
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Proxy Frigate JSMPEG live stream",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Camera name",
+                        "name": "camera",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/frigate/{connection_id}/review/{review_id}/thumbnail": {
+            "get": {
+                "description": "Returns the WebP thumbnail for a review segment",
+                "produces": [
+                    "image/webp"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get review thumbnail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Review segment ID",
+                        "name": "review_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Camera name (required — encoded into the thumbnail filename)",
+                        "name": "camera",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/reviews": {
+            "get": {
+                "description": "Returns Frigate review segments, defaulted to unreviewed alerts. Used by the Frigate Alerts widget.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get camera review segments",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max reviews to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by camera name",
+                        "name": "camera",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by severity (alert, detection)",
+                        "name": "severity",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Include reviewed (1) or only unreviewed (0)",
+                        "name": "reviewed",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/reviews/viewed": {
+            "post": {
+                "description": "Marks one or more Frigate review segments as reviewed (viewed), removing them from unreviewed listings",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Mark review segments as reviewed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Review IDs to mark: { ids: string[] }",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/frigate/{connection_id}/snapshot/{camera}": {
+            "get": {
+                "description": "Returns the latest JPEG snapshot for a camera",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "Frigate"
+                ],
+                "summary": "Get camera snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "connection_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Camera name",
+                        "name": "camera",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Check if the server and dependencies are healthy",
@@ -5359,6 +4491,849 @@
                         "description": "SSE stream",
                         "schema": {
                             "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/namespaces": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "List namespaces",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.NamespaceListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Create a namespace",
+                "parameters": [
+                    {
+                        "description": "Namespace to create",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateNamespaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Namespace"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/namespaces/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Get a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Namespace"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Update a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateNamespaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Namespace"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Delete a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/namespaces/{id}/usage": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "Get namespace usage counts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.NamespaceUsage"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/catalog": {
+            "get": {
+                "description": "Returns connection types, chart/control/display subtypes, and device types in one payload. This is what the AI builder and MCP server consume so they never duplicate enum lists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Unified type catalog (single source of truth)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/registry.Catalog"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/catalog.md": {
+            "get": {
+                "description": "Same data as /catalog but formatted as a markdown document. Useful for embedding directly in an LLM system prompt or pasting into chat.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Catalog rendered as markdown",
+                "responses": {
+                    "200": {
+                        "description": "Markdown document",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/categories": {
+            "get": {
+                "description": "Get all available categories with their type counts",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "List all connection type categories",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListCategoriesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/components": {
+            "get": {
+                "description": "Returns registered component types. Pass ?category=chart, ?category=control, or ?category=display to filter; omit for all. Hidden types are included so legacy editors still work.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "List component subtypes (chart/control/display)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter: chart, control, display",
+                        "name": "category",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListComponentTypesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/components/{typeId}": {
+            "get": {
+                "description": "Returns metadata for a single component subtype like \"chart.bar\" or \"control.toggle\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Get a single component type by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Component type ID",
+                        "name": "typeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/registry.ComponentTypeInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/connections": {
+            "get": {
+                "description": "Get all registered adapter types with their capabilities and configuration schema",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "List all available connection types",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by category (e.g., 'db', 'stream', 'api')",
+                        "name": "category",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListConnectionTypesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/connections/{typeId}": {
+            "get": {
+                "description": "Get details about a specific adapter type including configuration schema",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Get a specific connection type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Type ID (e.g., 'db.postgres', 'stream.websocket-bidir')",
+                        "name": "typeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/registry.TypeInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Type not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/connections/{typeId}/guidance": {
+            "get": {
+                "description": "Returns the cheat-sheet describing how to write query_config for a given connection adapter type — implicit row caps, supported DSL keywords, common pitfalls, etc. Sourced from the same connectionguidance package the chat agent reads. Accepts either a registry type id (e.g. \"store.tsstore\") or the legacy short type (\"tsstore\"); legacy values are mapped server-side so existing UI callers keep working.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "Per-type query-config conventions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type ('tsstore', 'prometheus')",
+                        "name": "typeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ConnectionTypeGuidanceResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/registry/integrations": {
+            "get": {
+                "description": "Integrations group related connection / chart / control / display types so admins can enable or disable them as a bundle from the settings UI. Pass ?include_disabled=true to see every integration regardless of the current enabled_types setting.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "registry"
+                ],
+                "summary": "List registered integrations",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "If true, returns all integrations even if disabled",
+                        "name": "include_disabled",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListIntegrationsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings": {
+            "get": {
+                "description": "Get all settings that can be modified by administrators",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Get all user-configurable settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SettingsListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/settings/{key}": {
+            "get": {
+                "description": "Get a single setting by key",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Get a single setting",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Setting key",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ConfigItem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update the value of a user-configurable setting",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Update a setting",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Setting key",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New value for the setting",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateSettingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ConfigItem"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/snippets": {
+            "get": {
+                "description": "Returns the merged set of user-scoped snippets owned by the caller plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`). Each record carries a `can_edit` flag derived from the caller's capabilities — global snippets are only editable by users with Manage capability.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "List snippets visible to the caller for a given host surface",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host surface key (e.g. edgelake-terminal)",
+                        "name": "context",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SnippetListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a user snippet (default) or a global snippet (requires Manage capability). The `scope` field is immutable after creation — promote a user snippet to global by deleting and re-creating.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Create a snippet",
+                "parameters": [
+                    {
+                        "description": "Snippet payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateSnippetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Snippet"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/snippets/{id}": {
+            "put": {
+                "description": "Edit title, command, and tags. Owner can edit user snippets; Manage capability required to edit globals.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Update a snippet",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snippet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Snippet payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateSnippetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Snippet"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Same ownership and capability rules as update.",
+                "tags": [
+                    "snippets"
+                ],
+                "summary": "Delete a snippet",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snippet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -6206,6 +6181,31 @@
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/ws/status": {
+            "get": {
+                "description": "WebSocket endpoint that pushes server status at specified intervals",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Subscribe to server status via WebSocket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Update interval (e.g., '5s', '1s'). Default: 5s, Min: 1s, 0 means one-shot",
+                        "name": "interval",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }

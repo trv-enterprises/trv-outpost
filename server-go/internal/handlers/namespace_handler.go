@@ -32,7 +32,7 @@ func NewNamespaceHandler(svc *service.NamespaceService) *NamespaceHandler {
 // @Param body body models.CreateNamespaceRequest true "Namespace to create"
 // @Success 201 {object} models.Namespace
 // @Failure 400 {object} map[string]string
-// @Router /api/namespaces [post]
+// @Router /namespaces [post]
 func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
 	var req models.CreateNamespaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -54,7 +54,7 @@ func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
 // @Param id path string true "Namespace ID"
 // @Success 200 {object} models.Namespace
 // @Failure 404 {object} map[string]string
-// @Router /api/namespaces/{id} [get]
+// @Router /namespaces/{id} [get]
 func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 	ns, err := h.service.GetByID(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -73,7 +73,7 @@ func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 // @Tags namespaces
 // @Produce json
 // @Success 200 {object} models.NamespaceListResponse
-// @Router /api/namespaces [get]
+// @Router /namespaces [get]
 func (h *NamespaceHandler) ListNamespaces(c *gin.Context) {
 	resp, err := h.service.List(c.Request.Context())
 	if err != nil {
@@ -93,7 +93,7 @@ func (h *NamespaceHandler) ListNamespaces(c *gin.Context) {
 // @Success 200 {object} models.Namespace
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
-// @Router /api/namespaces/{id} [put]
+// @Router /namespaces/{id} [put]
 func (h *NamespaceHandler) UpdateNamespace(c *gin.Context) {
 	var req models.UpdateNamespaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,7 +125,7 @@ func (h *NamespaceHandler) UpdateNamespace(c *gin.Context) {
 // @Success 204 "No Content"
 // @Failure 404 {object} map[string]string
 // @Failure 409 {object} map[string]interface{}
-// @Router /api/namespaces/{id} [delete]
+// @Router /namespaces/{id} [delete]
 func (h *NamespaceHandler) DeleteNamespace(c *gin.Context) {
 	usage, err := h.service.Delete(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -158,7 +158,7 @@ func (h *NamespaceHandler) DeleteNamespace(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Namespace ID"
 // @Success 200 {object} models.NamespaceUsage
-// @Router /api/namespaces/{id}/usage [get]
+// @Router /namespaces/{id}/usage [get]
 func (h *NamespaceHandler) GetUsage(c *gin.Context) {
 	ns, err := h.service.GetByID(c.Request.Context(), c.Param("id"))
 	if err != nil {

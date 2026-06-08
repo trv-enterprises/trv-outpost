@@ -3752,6 +3752,50 @@ info:
   title: TRV Outpost API
   version: "1.0"
 paths:
+  /ai/availability:
+    get:
+      description: Returns per-surface availability flags. `enabled` is a legacy alias
+        for `component_agent_enabled`. Both AI surfaces require the unified `ai.enabled`
+        admin setting AND an Anthropic key at server start; they share that single
+        gate.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AIAvailabilityResponse'
+      summary: AI availability
+      tags:
+      - ai
+  /ai/debug:
+    get:
+      description: Stream real-time debug events from the AI agent including LLM requests,
+        responses, and tool calls
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+      summary: Connect to AI debug WebSocket
+      tags:
+      - debug
+  /ai/debug/status:
+    get:
+      description: Get the current status of the AI debug system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get debug status
+      tags:
+      - debug
   /ai/sessions:
     post:
       consumes:
@@ -3946,6 +3990,43 @@ paths:
       summary: Subscribe to AI session events via WebSocket
       tags:
       - ai
+  /ai/usage:
+    get:
+      description: 'Per-user Assistant token usage: today vs effective cap + a 30-day
+        history. Only the Dashboard Assistant is metered.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AIUsageResponse'
+      summary: AI API usage (Dashboard Assistant)
+      tags:
+      - ai
+  /ai/usage/{guid}/override:
+    put:
+      consumes:
+      - application/json
+      description: Admin-only. Raises (or clears) a user's daily Assistant token caps.
+        Scope "today" applies only for the current UTC day; "ongoing" persists.
+      parameters:
+      - description: User GUID
+        in: path
+        name: guid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Set/clear a user's Assistant budget override
+      tags:
+      - ai
   /alerts:
     get:
       produces:
@@ -4023,88 +4104,7 @@ paths:
       summary: Mark an alert seen (dismiss)
       tags:
       - Alerts
-  /api/ai/availability:
-    get:
-      description: Returns per-surface availability flags. `enabled` is a legacy alias
-        for `component_agent_enabled`. Both AI surfaces require the unified `ai.enabled`
-        admin setting AND an Anthropic key at server start; they share that single
-        gate.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.AIAvailabilityResponse'
-      summary: AI availability
-      tags:
-      - ai
-  /api/ai/debug:
-    get:
-      description: Stream real-time debug events from the AI agent including LLM requests,
-        responses, and tool calls
-      produces:
-      - application/json
-      responses:
-        "101":
-          description: Switching Protocols
-          schema:
-            type: string
-      summary: Connect to AI debug WebSocket
-      tags:
-      - debug
-  /api/ai/debug/status:
-    get:
-      description: Get the current status of the AI debug system
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get debug status
-      tags:
-      - debug
-  /api/ai/usage:
-    get:
-      description: 'Per-user Assistant token usage: today vs effective cap + a 30-day
-        history. Only the Dashboard Assistant is metered.'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.AIUsageResponse'
-      summary: AI API usage (Dashboard Assistant)
-      tags:
-      - ai
-  /api/ai/usage/{guid}/override:
-    put:
-      consumes:
-      - application/json
-      description: Admin-only. Raises (or clears) a user's daily Assistant token caps.
-        Scope "today" applies only for the current UTC day; "ongoing" persists.
-      parameters:
-      - description: User GUID
-        in: path
-        name: guid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Set/clear a user's Assistant budget override
-      tags:
-      - ai
-  /api/api-keys:
+  /api-keys:
     get:
       produces:
       - application/json
@@ -4156,7 +4156,7 @@ paths:
       summary: Create an API key for the calling user
       tags:
       - api-keys
-  /api/api-keys/{id}:
+  /api-keys/{id}:
     delete:
       parameters:
       - description: API key ID
@@ -4182,7 +4182,7 @@ paths:
       summary: Revoke an API key
       tags:
       - api-keys
-  /api/api-keys/all:
+  /api-keys/all:
     get:
       produces:
       - application/json
@@ -4208,1520 +4208,6 @@ paths:
       summary: List every API key in the deployment (admin)
       tags:
       - api-keys
-  /api/connections/{id}/command:
-    post:
-      consumes:
-      - application/json
-      description: Send a command to a datasource that supports write operations (e.g.,
-        stream.websocket-bidir)
-      parameters:
-      - description: Connection ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Command to execute
-        in: body
-        name: command
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.ExecuteCommandRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ExecuteCommandResponse'
-        "400":
-          description: Bad request - connection does not support write
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Connection not found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Execute a command on a bidirectional datasource
-      tags:
-      - datasources
-  /api/connections/{id}/discover-devices:
-    post:
-      description: Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)
-      parameters:
-      - description: Connection ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.DiscoverDevicesResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Discover devices
-      tags:
-      - devices
-  /api/controls/{id}/execute:
-    post:
-      consumes:
-      - application/json
-      description: Executes the command configured on a control component, using either
-        schema-based or legacy template interpolation
-      parameters:
-      - description: Control (Chart) ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Control value
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.ExecuteControlRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ExecuteCommandResponse'
-        "400":
-          description: Bad request - not a control or missing connection
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Control not found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Execute a control component command
-      tags:
-      - controls
-  /api/dashboards/export:
-    post:
-      consumes:
-      - application/json
-      description: Returns a JSON bundle containing the selected dashboards plus all
-        components and connections they reference.
-      parameters:
-      - description: Dashboard IDs to export
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.ExportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.ExportBundle'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Export dashboards as a portable bundle
-      tags:
-      - dashboards
-  /api/dashboards/export/preview:
-    post:
-      consumes:
-      - application/json
-      description: Returns counts of entities that would be included in an export
-        of the given dashboards
-      parameters:
-      - description: Dashboard IDs to preview
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.ExportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.ExportPreview'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Preview a dashboard export
-      tags:
-      - dashboards
-  /api/dashboards/import/apply:
-    post:
-      consumes:
-      - application/json
-      description: Writes the bundle's objects into the target namespace. Identical
-        objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly
-        opts out; blocked objects cause the whole apply to refuse.
-      parameters:
-      - description: Bundle, target namespace, and per-object overwrite decisions
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.ImportApplyRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.ImportApplyResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Apply an import bundle
-      tags:
-      - dashboards
-  /api/dashboards/import/preflight:
-    post:
-      consumes:
-      - application/json
-      description: Classifies each object in the bundle as identical/conflict/new/blocked
-        so the UI can show what would change before the user commits.
-      parameters:
-      - description: Bundle and target namespace
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.ImportPreflightRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.ImportPreflightResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Preflight an import bundle
-      tags:
-      - dashboards
-  /api/device-types:
-    get:
-      description: List device types with optional filtering and pagination
-      parameters:
-      - description: Filter by category
-        in: query
-        name: category
-        type: string
-      - description: Filter by protocol
-        in: query
-        name: protocol
-        type: string
-      - description: Show only built-in types
-        in: query
-        name: built_in_only
-        type: boolean
-      - description: Page number
-        in: query
-        name: page
-        type: integer
-      - description: Page size
-        in: query
-        name: page_size
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.DeviceTypeListResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: List device types
-      tags:
-      - device-types
-    post:
-      consumes:
-      - application/json
-      description: Create a new device type template
-      parameters:
-      - description: Device type to create
-        in: body
-        name: device_type
-        required: true
-        schema:
-          $ref: '#/definitions/models.CreateDeviceTypeRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.DeviceType'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Create a device type
-      tags:
-      - device-types
-  /api/device-types/{id}:
-    delete:
-      description: Delete a device type by ID
-      parameters:
-      - description: Device type ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Delete a device type
-      tags:
-      - device-types
-    get:
-      description: Get a device type by ID
-      parameters:
-      - description: Device type ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.DeviceType'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get a device type
-      tags:
-      - device-types
-    put:
-      consumes:
-      - application/json
-      description: Update an existing device type
-      parameters:
-      - description: Device type ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: device_type
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateDeviceTypeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.DeviceType'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Update a device type
-      tags:
-      - device-types
-  /api/device-types/categories:
-    get:
-      description: Get the list of valid device categories
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: string
-            type: array
-      summary: Get valid device categories
-      tags:
-      - device-types
-  /api/device-types/control-types:
-    get:
-      description: Get the list of valid control UI types (toggle, scalar, button,
-        text, plug, dimmer)
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get valid control types
-      tags:
-      - device-types
-  /api/devices:
-    get:
-      description: List devices with optional filtering and pagination
-      parameters:
-      - description: Filter by device type ID
-        in: query
-        name: device_type_id
-        type: string
-      - description: Filter by connection ID
-        in: query
-        name: connection_id
-        type: string
-      - description: Filter by room
-        in: query
-        name: room
-        type: string
-      - description: Filter by enabled status
-        in: query
-        name: enabled
-        type: boolean
-      - description: Page number
-        in: query
-        name: page
-        type: integer
-      - description: Page size
-        in: query
-        name: page_size
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.DeviceListResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: List devices
-      tags:
-      - devices
-    post:
-      consumes:
-      - application/json
-      description: Create a new device instance
-      parameters:
-      - description: Device to create
-        in: body
-        name: device
-        required: true
-        schema:
-          $ref: '#/definitions/models.CreateDeviceRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.Device'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Create a device
-      tags:
-      - devices
-  /api/devices/{id}:
-    delete:
-      description: Delete a device by ID
-      parameters:
-      - description: Device ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Delete a device
-      tags:
-      - devices
-    get:
-      description: Get a device by ID
-      parameters:
-      - description: Device ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Device'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get a device
-      tags:
-      - devices
-    put:
-      consumes:
-      - application/json
-      description: Update an existing device
-      parameters:
-      - description: Device ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: device
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateDeviceRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Device'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Update a device
-      tags:
-      - devices
-  /api/devices/import:
-    post:
-      consumes:
-      - application/json
-      description: Bulk import devices from discovery
-      parameters:
-      - description: Devices to import
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/models.ImportDevicesRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            items:
-              $ref: '#/definitions/models.Device'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Import devices
-      tags:
-      - devices
-  /api/frigate/{connection_id}/cameras:
-    get:
-      description: Returns camera names from a Frigate NVR connection
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get Frigate camera list
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/event/{event_id}/clip:
-    get:
-      description: Returns the MP4 clip for a detection event (supports Range headers)
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: Event ID
-        in: path
-        name: event_id
-        required: true
-        type: string
-      produces:
-      - video/mp4
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-      summary: Get event clip
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/event/{event_id}/snapshot:
-    get:
-      description: Returns the JPEG snapshot for a detection event
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: Event ID
-        in: path
-        name: event_id
-        required: true
-        type: string
-      produces:
-      - image/jpeg
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-      summary: Get event snapshot
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/events/{camera}:
-    get:
-      description: Returns recent detection events for a camera
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: Camera name
-        in: path
-        name: camera
-        required: true
-        type: string
-      - default: 10
-        description: Max events to return
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-      summary: Get camera events
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/info:
-    get:
-      description: Returns connection metadata needed for direct WebSocket access
-        (go2rtc MSE)
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get Frigate connection info
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/live/{camera}:
-    get:
-      description: Proxies the JSMPEG WebSocket stream for a camera through the backend
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: Camera name
-        in: path
-        name: camera
-        required: true
-        type: string
-      responses: {}
-      summary: Proxy Frigate JSMPEG live stream
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/review/{review_id}/thumbnail:
-    get:
-      description: Returns the WebP thumbnail for a review segment
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: Review segment ID
-        in: path
-        name: review_id
-        required: true
-        type: string
-      - description: Camera name (required — encoded into the thumbnail filename)
-        in: query
-        name: camera
-        required: true
-        type: string
-      produces:
-      - image/webp
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-      summary: Get review thumbnail
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/reviews:
-    get:
-      description: Returns Frigate review segments, defaulted to unreviewed alerts.
-        Used by the Frigate Alerts widget.
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - default: 20
-        description: Max reviews to return
-        in: query
-        name: limit
-        type: integer
-      - description: Filter by camera name
-        in: query
-        name: camera
-        type: string
-      - description: Filter by severity (alert, detection)
-        in: query
-        name: severity
-        type: string
-      - default: 0
-        description: Include reviewed (1) or only unreviewed (0)
-        in: query
-        name: reviewed
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-      summary: Get camera review segments
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/reviews/viewed:
-    post:
-      consumes:
-      - application/json
-      description: Marks one or more Frigate review segments as reviewed (viewed),
-        removing them from unreviewed listings
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: 'Review IDs to mark: { ids: string[] }'
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Mark review segments as reviewed
-      tags:
-      - Frigate
-  /api/frigate/{connection_id}/snapshot/{camera}:
-    get:
-      description: Returns the latest JPEG snapshot for a camera
-      parameters:
-      - description: Connection ID
-        in: path
-        name: connection_id
-        required: true
-        type: string
-      - description: Camera name
-        in: path
-        name: camera
-        required: true
-        type: string
-      produces:
-      - image/jpeg
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-      summary: Get camera snapshot
-      tags:
-      - Frigate
-  /api/namespaces:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.NamespaceListResponse'
-      summary: List namespaces
-      tags:
-      - namespaces
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Namespace to create
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.CreateNamespaceRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.Namespace'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Create a namespace
-      tags:
-      - namespaces
-  /api/namespaces/{id}:
-    delete:
-      parameters:
-      - description: Namespace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete a namespace
-      tags:
-      - namespaces
-    get:
-      parameters:
-      - description: Namespace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Namespace'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get a namespace
-      tags:
-      - namespaces
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Namespace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateNamespaceRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Namespace'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Update a namespace
-      tags:
-      - namespaces
-  /api/namespaces/{id}/usage:
-    get:
-      parameters:
-      - description: Namespace ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.NamespaceUsage'
-      summary: Get namespace usage counts
-      tags:
-      - namespaces
-  /api/registry/catalog:
-    get:
-      description: Returns connection types, chart/control/display subtypes, and device
-        types in one payload. This is what the AI builder and MCP server consume so
-        they never duplicate enum lists.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/registry.Catalog'
-      summary: Unified type catalog (single source of truth)
-      tags:
-      - registry
-  /api/registry/catalog.md:
-    get:
-      description: Same data as /catalog but formatted as a markdown document. Useful
-        for embedding directly in an LLM system prompt or pasting into chat.
-      produces:
-      - text/plain
-      responses:
-        "200":
-          description: Markdown document
-          schema:
-            type: string
-      summary: Catalog rendered as markdown
-      tags:
-      - registry
-  /api/registry/categories:
-    get:
-      description: Get all available categories with their type counts
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ListCategoriesResponse'
-      summary: List all connection type categories
-      tags:
-      - registry
-  /api/registry/components:
-    get:
-      description: Returns registered component types. Pass ?category=chart, ?category=control,
-        or ?category=display to filter; omit for all. Hidden types are included so
-        legacy editors still work.
-      parameters:
-      - description: 'Filter: chart, control, display'
-        in: query
-        name: category
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ListComponentTypesResponse'
-      summary: List component subtypes (chart/control/display)
-      tags:
-      - registry
-  /api/registry/components/{typeId}:
-    get:
-      description: Returns metadata for a single component subtype like "chart.bar"
-        or "control.toggle".
-      parameters:
-      - description: Component type ID
-        in: path
-        name: typeId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/registry.ComponentTypeInfo'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get a single component type by ID
-      tags:
-      - registry
-  /api/registry/connections:
-    get:
-      description: Get all registered adapter types with their capabilities and configuration
-        schema
-      parameters:
-      - description: Filter by category (e.g., 'db', 'stream', 'api')
-        in: query
-        name: category
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ListConnectionTypesResponse'
-      summary: List all available connection types
-      tags:
-      - registry
-  /api/registry/connections/{typeId}:
-    get:
-      description: Get details about a specific adapter type including configuration
-        schema
-      parameters:
-      - description: Type ID (e.g., 'db.postgres', 'stream.websocket-bidir')
-        in: path
-        name: typeId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/registry.TypeInfo'
-        "404":
-          description: Type not found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get a specific connection type
-      tags:
-      - registry
-  /api/registry/connections/{typeId}/guidance:
-    get:
-      description: Returns the cheat-sheet describing how to write query_config for
-        a given connection adapter type — implicit row caps, supported DSL keywords,
-        common pitfalls, etc. Sourced from the same connectionguidance package the
-        chat agent reads. Accepts either a registry type id (e.g. "store.tsstore")
-        or the legacy short type ("tsstore"); legacy values are mapped server-side
-        so existing UI callers keep working.
-      parameters:
-      - description: Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type
-          ('tsstore', 'prometheus')
-        in: path
-        name: typeId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ConnectionTypeGuidanceResponse'
-      summary: Per-type query-config conventions
-      tags:
-      - registry
-  /api/registry/integrations:
-    get:
-      description: Integrations group related connection / chart / control / display
-        types so admins can enable or disable them as a bundle from the settings UI.
-        Pass ?include_disabled=true to see every integration regardless of the current
-        enabled_types setting.
-      parameters:
-      - description: If true, returns all integrations even if disabled
-        in: query
-        name: include_disabled
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ListIntegrationsResponse'
-      summary: List registered integrations
-      tags:
-      - registry
-  /api/settings:
-    get:
-      consumes:
-      - application/json
-      description: Get all settings that can be modified by administrators
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SettingsListResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get all user-configurable settings
-      tags:
-      - settings
-  /api/settings/{key}:
-    get:
-      consumes:
-      - application/json
-      description: Get a single setting by key
-      parameters:
-      - description: Setting key
-        in: path
-        name: key
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.ConfigItem'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get a single setting
-      tags:
-      - settings
-    put:
-      consumes:
-      - application/json
-      description: Update the value of a user-configurable setting
-      parameters:
-      - description: Setting key
-        in: path
-        name: key
-        required: true
-        type: string
-      - description: New value for the setting
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateSettingRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.ConfigItem'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Update a setting
-      tags:
-      - settings
-  /api/snippets:
-    get:
-      description: Returns the merged set of user-scoped snippets owned by the caller
-        plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`).
-        Each record carries a `can_edit` flag derived from the caller's capabilities
-        — global snippets are only editable by users with Manage capability.
-      parameters:
-      - description: Host surface key (e.g. edgelake-terminal)
-        in: query
-        name: context
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SnippetListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: List snippets visible to the caller for a given host surface
-      tags:
-      - snippets
-    post:
-      consumes:
-      - application/json
-      description: Create a user snippet (default) or a global snippet (requires Manage
-        capability). The `scope` field is immutable after creation — promote a user
-        snippet to global by deleting and re-creating.
-      parameters:
-      - description: Snippet payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.CreateSnippetRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.Snippet'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "403":
-          description: Forbidden
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Create a snippet
-      tags:
-      - snippets
-  /api/snippets/{id}:
-    delete:
-      description: Same ownership and capability rules as update.
-      parameters:
-      - description: Snippet ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "403":
-          description: Forbidden
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Delete a snippet
-      tags:
-      - snippets
-    put:
-      consumes:
-      - application/json
-      description: Edit title, command, and tags. Owner can edit user snippets; Manage
-        capability required to edit globals.
-      parameters:
-      - description: Snippet ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Snippet payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateSnippetRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Snippet'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "403":
-          description: Forbidden
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Update a snippet
-      tags:
-      - snippets
-  /api/ws/status:
-    get:
-      description: WebSocket endpoint that pushes server status at specified intervals
-      parameters:
-      - description: 'Update interval (e.g., ''5s'', ''1s''). Default: 5s, Min: 1s,
-          0 means one-shot'
-        in: query
-        name: interval
-        type: string
-      responses:
-        "101":
-          description: Switching Protocols
-          schema:
-            type: string
-      summary: Subscribe to server status via WebSocket
-      tags:
-      - system
   /auth/logout:
     post:
       responses:
@@ -6324,6 +4810,80 @@ paths:
       summary: Update user configuration
       tags:
       - config
+  /connections/{id}/command:
+    post:
+      consumes:
+      - application/json
+      description: Send a command to a datasource that supports write operations (e.g.,
+        stream.websocket-bidir)
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Command to execute
+        in: body
+        name: command
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ExecuteCommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ExecuteCommandResponse'
+        "400":
+          description: Bad request - connection does not support write
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Connection not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Execute a command on a bidirectional datasource
+      tags:
+      - datasources
+  /connections/{id}/discover-devices:
+    post:
+      description: Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DiscoverDevicesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Discover devices
+      tags:
+      - devices
   /connections/{id}/discovered-values:
     put:
       consumes:
@@ -6605,6 +5165,49 @@ paths:
       summary: List active streams
       tags:
       - connections
+  /controls/{id}/execute:
+    post:
+      consumes:
+      - application/json
+      description: Executes the command configured on a control component, using either
+        schema-based or legacy template interpolation
+      parameters:
+      - description: Control (Chart) ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Control value
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ExecuteControlRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ExecuteCommandResponse'
+        "400":
+          description: Bad request - not a control or missing connection
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Control not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Execute a control component command
+      tags:
+      - controls
   /dashboards:
     get:
       description: Get a paginated list of dashboards with optional filtering. Use
@@ -6814,6 +5417,123 @@ paths:
             additionalProperties: true
             type: object
       summary: Get dashboard variable candidates
+      tags:
+      - dashboards
+  /dashboards/export:
+    post:
+      consumes:
+      - application/json
+      description: Returns a JSON bundle containing the selected dashboards plus all
+        components and connections they reference.
+      parameters:
+      - description: Dashboard IDs to export
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExportBundle'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export dashboards as a portable bundle
+      tags:
+      - dashboards
+  /dashboards/export/preview:
+    post:
+      consumes:
+      - application/json
+      description: Returns counts of entities that would be included in an export
+        of the given dashboards
+      parameters:
+      - description: Dashboard IDs to preview
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ExportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExportPreview'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preview a dashboard export
+      tags:
+      - dashboards
+  /dashboards/import/apply:
+    post:
+      consumes:
+      - application/json
+      description: Writes the bundle's objects into the target namespace. Identical
+        objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly
+        opts out; blocked objects cause the whole apply to refuse.
+      parameters:
+      - description: Bundle, target namespace, and per-object overwrite decisions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ImportApplyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ImportApplyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Apply an import bundle
+      tags:
+      - dashboards
+  /dashboards/import/preflight:
+    post:
+      consumes:
+      - application/json
+      description: Classifies each object in the bundle as identical/conflict/new/blocked
+        so the UI can show what would change before the user commits.
+      parameters:
+      - description: Bundle and target namespace
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.ImportPreflightRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ImportPreflightResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preflight an import bundle
       tags:
       - dashboards
   /datasources:
@@ -7253,6 +5973,430 @@ paths:
       summary: Test a datasource connection
       tags:
       - datasources
+  /device-types:
+    get:
+      description: List device types with optional filtering and pagination
+      parameters:
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      - description: Filter by protocol
+        in: query
+        name: protocol
+        type: string
+      - description: Show only built-in types
+        in: query
+        name: built_in_only
+        type: boolean
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeviceTypeListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List device types
+      tags:
+      - device-types
+    post:
+      consumes:
+      - application/json
+      description: Create a new device type template
+      parameters:
+      - description: Device type to create
+        in: body
+        name: device_type
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateDeviceTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.DeviceType'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a device type
+      tags:
+      - device-types
+  /device-types/{id}:
+    delete:
+      description: Delete a device type by ID
+      parameters:
+      - description: Device type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a device type
+      tags:
+      - device-types
+    get:
+      description: Get a device type by ID
+      parameters:
+      - description: Device type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeviceType'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a device type
+      tags:
+      - device-types
+    put:
+      consumes:
+      - application/json
+      description: Update an existing device type
+      parameters:
+      - description: Device type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: device_type
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateDeviceTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeviceType'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a device type
+      tags:
+      - device-types
+  /device-types/categories:
+    get:
+      description: Get the list of valid device categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+      summary: Get valid device categories
+      tags:
+      - device-types
+  /device-types/control-types:
+    get:
+      description: Get the list of valid control UI types (toggle, scalar, button,
+        text, plug, dimmer)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get valid control types
+      tags:
+      - device-types
+  /devices:
+    get:
+      description: List devices with optional filtering and pagination
+      parameters:
+      - description: Filter by device type ID
+        in: query
+        name: device_type_id
+        type: string
+      - description: Filter by connection ID
+        in: query
+        name: connection_id
+        type: string
+      - description: Filter by room
+        in: query
+        name: room
+        type: string
+      - description: Filter by enabled status
+        in: query
+        name: enabled
+        type: boolean
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeviceListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List devices
+      tags:
+      - devices
+    post:
+      consumes:
+      - application/json
+      description: Create a new device instance
+      parameters:
+      - description: Device to create
+        in: body
+        name: device
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Device'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a device
+      tags:
+      - devices
+  /devices/{id}:
+    delete:
+      description: Delete a device by ID
+      parameters:
+      - description: Device ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a device
+      tags:
+      - devices
+    get:
+      description: Get a device by ID
+      parameters:
+      - description: Device ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Device'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a device
+      tags:
+      - devices
+    put:
+      consumes:
+      - application/json
+      description: Update an existing device
+      parameters:
+      - description: Device ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: device
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Device'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a device
+      tags:
+      - devices
+  /devices/import:
+    post:
+      consumes:
+      - application/json
+      description: Bulk import devices from discovery
+      parameters:
+      - description: Devices to import
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ImportDevicesRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            items:
+              $ref: '#/definitions/models.Device'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import devices
+      tags:
+      - devices
   /edgelake-terminal/execute:
     post:
       consumes:
@@ -7331,6 +6475,268 @@ paths:
       summary: Subscribe to dashboard events (SSE)
       tags:
       - Events
+  /frigate/{connection_id}/cameras:
+    get:
+      description: Returns camera names from a Frigate NVR connection
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Frigate camera list
+      tags:
+      - Frigate
+  /frigate/{connection_id}/event/{event_id}/clip:
+    get:
+      description: Returns the MP4 clip for a detection event (supports Range headers)
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: Event ID
+        in: path
+        name: event_id
+        required: true
+        type: string
+      produces:
+      - video/mp4
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: Get event clip
+      tags:
+      - Frigate
+  /frigate/{connection_id}/event/{event_id}/snapshot:
+    get:
+      description: Returns the JPEG snapshot for a detection event
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: Event ID
+        in: path
+        name: event_id
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: Get event snapshot
+      tags:
+      - Frigate
+  /frigate/{connection_id}/events/{camera}:
+    get:
+      description: Returns recent detection events for a camera
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: Camera name
+        in: path
+        name: camera
+        required: true
+        type: string
+      - default: 10
+        description: Max events to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: Get camera events
+      tags:
+      - Frigate
+  /frigate/{connection_id}/info:
+    get:
+      description: Returns connection metadata needed for direct WebSocket access
+        (go2rtc MSE)
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Frigate connection info
+      tags:
+      - Frigate
+  /frigate/{connection_id}/live/{camera}:
+    get:
+      description: Proxies the JSMPEG WebSocket stream for a camera through the backend
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: Camera name
+        in: path
+        name: camera
+        required: true
+        type: string
+      responses: {}
+      summary: Proxy Frigate JSMPEG live stream
+      tags:
+      - Frigate
+  /frigate/{connection_id}/review/{review_id}/thumbnail:
+    get:
+      description: Returns the WebP thumbnail for a review segment
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: Review segment ID
+        in: path
+        name: review_id
+        required: true
+        type: string
+      - description: Camera name (required — encoded into the thumbnail filename)
+        in: query
+        name: camera
+        required: true
+        type: string
+      produces:
+      - image/webp
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: Get review thumbnail
+      tags:
+      - Frigate
+  /frigate/{connection_id}/reviews:
+    get:
+      description: Returns Frigate review segments, defaulted to unreviewed alerts.
+        Used by the Frigate Alerts widget.
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - default: 20
+        description: Max reviews to return
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by camera name
+        in: query
+        name: camera
+        type: string
+      - description: Filter by severity (alert, detection)
+        in: query
+        name: severity
+        type: string
+      - default: 0
+        description: Include reviewed (1) or only unreviewed (0)
+        in: query
+        name: reviewed
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: Get camera review segments
+      tags:
+      - Frigate
+  /frigate/{connection_id}/reviews/viewed:
+    post:
+      consumes:
+      - application/json
+      description: Marks one or more Frigate review segments as reviewed (viewed),
+        removing them from unreviewed listings
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: 'Review IDs to mark: { ids: string[] }'
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Mark review segments as reviewed
+      tags:
+      - Frigate
+  /frigate/{connection_id}/snapshot/{camera}:
+    get:
+      description: Returns the latest JPEG snapshot for a camera
+      parameters:
+      - description: Connection ID
+        in: path
+        name: connection_id
+        required: true
+        type: string
+      - description: Camera name
+        in: path
+        name: camera
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: Get camera snapshot
+      tags:
+      - Frigate
   /health:
     get:
       description: Check if the server and dependencies are healthy
@@ -7393,6 +6799,583 @@ paths:
       summary: MCP SSE Connection
       tags:
       - MCP
+  /namespaces:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NamespaceListResponse'
+      summary: List namespaces
+      tags:
+      - namespaces
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Namespace to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateNamespaceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Namespace'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a namespace
+      tags:
+      - namespaces
+  /namespaces/{id}:
+    delete:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a namespace
+      tags:
+      - namespaces
+    get:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Namespace'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a namespace
+      tags:
+      - namespaces
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateNamespaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Namespace'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a namespace
+      tags:
+      - namespaces
+  /namespaces/{id}/usage:
+    get:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NamespaceUsage'
+      summary: Get namespace usage counts
+      tags:
+      - namespaces
+  /registry/catalog:
+    get:
+      description: Returns connection types, chart/control/display subtypes, and device
+        types in one payload. This is what the AI builder and MCP server consume so
+        they never duplicate enum lists.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/registry.Catalog'
+      summary: Unified type catalog (single source of truth)
+      tags:
+      - registry
+  /registry/catalog.md:
+    get:
+      description: Same data as /catalog but formatted as a markdown document. Useful
+        for embedding directly in an LLM system prompt or pasting into chat.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Markdown document
+          schema:
+            type: string
+      summary: Catalog rendered as markdown
+      tags:
+      - registry
+  /registry/categories:
+    get:
+      description: Get all available categories with their type counts
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListCategoriesResponse'
+      summary: List all connection type categories
+      tags:
+      - registry
+  /registry/components:
+    get:
+      description: Returns registered component types. Pass ?category=chart, ?category=control,
+        or ?category=display to filter; omit for all. Hidden types are included so
+        legacy editors still work.
+      parameters:
+      - description: 'Filter: chart, control, display'
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListComponentTypesResponse'
+      summary: List component subtypes (chart/control/display)
+      tags:
+      - registry
+  /registry/components/{typeId}:
+    get:
+      description: Returns metadata for a single component subtype like "chart.bar"
+        or "control.toggle".
+      parameters:
+      - description: Component type ID
+        in: path
+        name: typeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/registry.ComponentTypeInfo'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a single component type by ID
+      tags:
+      - registry
+  /registry/connections:
+    get:
+      description: Get all registered adapter types with their capabilities and configuration
+        schema
+      parameters:
+      - description: Filter by category (e.g., 'db', 'stream', 'api')
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListConnectionTypesResponse'
+      summary: List all available connection types
+      tags:
+      - registry
+  /registry/connections/{typeId}:
+    get:
+      description: Get details about a specific adapter type including configuration
+        schema
+      parameters:
+      - description: Type ID (e.g., 'db.postgres', 'stream.websocket-bidir')
+        in: path
+        name: typeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/registry.TypeInfo'
+        "404":
+          description: Type not found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a specific connection type
+      tags:
+      - registry
+  /registry/connections/{typeId}/guidance:
+    get:
+      description: Returns the cheat-sheet describing how to write query_config for
+        a given connection adapter type — implicit row caps, supported DSL keywords,
+        common pitfalls, etc. Sourced from the same connectionguidance package the
+        chat agent reads. Accepts either a registry type id (e.g. "store.tsstore")
+        or the legacy short type ("tsstore"); legacy values are mapped server-side
+        so existing UI callers keep working.
+      parameters:
+      - description: Type ID (e.g., 'store.tsstore', 'api.prometheus') or legacy type
+          ('tsstore', 'prometheus')
+        in: path
+        name: typeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ConnectionTypeGuidanceResponse'
+      summary: Per-type query-config conventions
+      tags:
+      - registry
+  /registry/integrations:
+    get:
+      description: Integrations group related connection / chart / control / display
+        types so admins can enable or disable them as a bundle from the settings UI.
+        Pass ?include_disabled=true to see every integration regardless of the current
+        enabled_types setting.
+      parameters:
+      - description: If true, returns all integrations even if disabled
+        in: query
+        name: include_disabled
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListIntegrationsResponse'
+      summary: List registered integrations
+      tags:
+      - registry
+  /settings:
+    get:
+      consumes:
+      - application/json
+      description: Get all settings that can be modified by administrators
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all user-configurable settings
+      tags:
+      - settings
+  /settings/{key}:
+    get:
+      consumes:
+      - application/json
+      description: Get a single setting by key
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ConfigItem'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a single setting
+      tags:
+      - settings
+    put:
+      consumes:
+      - application/json
+      description: Update the value of a user-configurable setting
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: New value for the setting
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateSettingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ConfigItem'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a setting
+      tags:
+      - settings
+  /snippets:
+    get:
+      description: Returns the merged set of user-scoped snippets owned by the caller
+        plus all global snippets, filtered to the requested `context` (e.g. `edgelake-terminal`).
+        Each record carries a `can_edit` flag derived from the caller's capabilities
+        — global snippets are only editable by users with Manage capability.
+      parameters:
+      - description: Host surface key (e.g. edgelake-terminal)
+        in: query
+        name: context
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SnippetListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List snippets visible to the caller for a given host surface
+      tags:
+      - snippets
+    post:
+      consumes:
+      - application/json
+      description: Create a user snippet (default) or a global snippet (requires Manage
+        capability). The `scope` field is immutable after creation — promote a user
+        snippet to global by deleting and re-creating.
+      parameters:
+      - description: Snippet payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateSnippetRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Snippet'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a snippet
+      tags:
+      - snippets
+  /snippets/{id}:
+    delete:
+      description: Same ownership and capability rules as update.
+      parameters:
+      - description: Snippet ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a snippet
+      tags:
+      - snippets
+    put:
+      consumes:
+      - application/json
+      description: Edit title, command, and tags. Owner can edit user snippets; Manage
+        capability required to edit globals.
+      parameters:
+      - description: Snippet ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Snippet payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateSnippetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Snippet'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a snippet
+      tags:
+      - snippets
   /system-users:
     get:
       produces:
@@ -7967,4 +7950,21 @@ paths:
       summary: Receive a ts-store webhook alert
       tags:
       - Webhooks
+  /ws/status:
+    get:
+      description: WebSocket endpoint that pushes server status at specified intervals
+      parameters:
+      - description: 'Update interval (e.g., ''5s'', ''1s''). Default: 5s, Min: 1s,
+          0 means one-shot'
+        in: query
+        name: interval
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+      summary: Subscribe to server status via WebSocket
+      tags:
+      - system
 swagger: "2.0"

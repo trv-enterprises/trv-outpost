@@ -73,7 +73,7 @@ type AIAvailabilityResponse struct {
 // @Tags         ai
 // @Produce      json
 // @Success      200  {object}  AIAvailabilityResponse
-// @Router       /api/ai/availability [get]
+// @Router       /ai/availability [get]
 func (h *AIAvailabilityHandler) GetAvailability(c *gin.Context) {
 	componentAgentEnabled := h.agent != nil
 	c.JSON(http.StatusOK, AIAvailabilityResponse{

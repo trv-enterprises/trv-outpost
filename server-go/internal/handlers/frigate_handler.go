@@ -132,7 +132,7 @@ func (h *FrigateHandler) proxyBinary(c *gin.Context, frigateURL string, contentT
 // @Produce json
 // @Param connection_id path string true "Connection ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/frigate/{connection_id}/cameras [get]
+// @Router /frigate/{connection_id}/cameras [get]
 func (h *FrigateHandler) GetCameras(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -177,7 +177,7 @@ func (h *FrigateHandler) GetCameras(c *gin.Context) {
 // @Param connection_id path string true "Connection ID"
 // @Param camera path string true "Camera name"
 // @Success 200 {file} binary
-// @Router /api/frigate/{connection_id}/snapshot/{camera} [get]
+// @Router /frigate/{connection_id}/snapshot/{camera} [get]
 func (h *FrigateHandler) GetSnapshot(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -204,7 +204,7 @@ func (h *FrigateHandler) GetSnapshot(c *gin.Context) {
 // @Param camera path string true "Camera name"
 // @Param limit query int false "Max events to return" default(10)
 // @Success 200 {array} map[string]interface{}
-// @Router /api/frigate/{connection_id}/events/{camera} [get]
+// @Router /frigate/{connection_id}/events/{camera} [get]
 func (h *FrigateHandler) GetEvents(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -252,7 +252,7 @@ func (h *FrigateHandler) GetEvents(c *gin.Context) {
 // @Param severity query string false "Filter by severity (alert, detection)"
 // @Param reviewed query int false "Include reviewed (1) or only unreviewed (0)" default(0)
 // @Success 200 {array} map[string]interface{}
-// @Router /api/frigate/{connection_id}/reviews [get]
+// @Router /frigate/{connection_id}/reviews [get]
 func (h *FrigateHandler) GetReviews(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -303,7 +303,7 @@ func (h *FrigateHandler) GetReviews(c *gin.Context) {
 // @Param review_id path string true "Review segment ID"
 // @Param camera query string true "Camera name (required — encoded into the thumbnail filename)"
 // @Success 200 {file} binary
-// @Router /api/frigate/{connection_id}/review/{review_id}/thumbnail [get]
+// @Router /frigate/{connection_id}/review/{review_id}/thumbnail [get]
 func (h *FrigateHandler) GetReviewThumbnail(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -343,7 +343,7 @@ func (h *FrigateHandler) GetReviewThumbnail(c *gin.Context) {
 // @Param connection_id path string true "Connection ID"
 // @Param body body object true "Review IDs to mark: { ids: string[] }"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/frigate/{connection_id}/reviews/viewed [post]
+// @Router /frigate/{connection_id}/reviews/viewed [post]
 func (h *FrigateHandler) MarkReviewsViewed(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -400,7 +400,7 @@ func (h *FrigateHandler) MarkReviewsViewed(c *gin.Context) {
 // @Param connection_id path string true "Connection ID"
 // @Param event_id path string true "Event ID"
 // @Success 200 {file} binary
-// @Router /api/frigate/{connection_id}/event/{event_id}/clip [get]
+// @Router /frigate/{connection_id}/event/{event_id}/clip [get]
 func (h *FrigateHandler) GetEventClip(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -426,7 +426,7 @@ func (h *FrigateHandler) GetEventClip(c *gin.Context) {
 // @Param connection_id path string true "Connection ID"
 // @Param event_id path string true "Event ID"
 // @Success 200 {file} binary
-// @Router /api/frigate/{connection_id}/event/{event_id}/snapshot [get]
+// @Router /frigate/{connection_id}/event/{event_id}/snapshot [get]
 func (h *FrigateHandler) GetEventSnapshot(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -451,7 +451,7 @@ func (h *FrigateHandler) GetEventSnapshot(c *gin.Context) {
 // @Produce json
 // @Param connection_id path string true "Connection ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/frigate/{connection_id}/info [get]
+// @Router /frigate/{connection_id}/info [get]
 func (h *FrigateHandler) GetInfo(c *gin.Context) {
 	baseURL, err := h.getFrigateBaseURL(c)
 	if err != nil {
@@ -488,7 +488,7 @@ var frigateWSUpgrader = websocket.Upgrader{
 // @Tags Frigate
 // @Param connection_id path string true "Connection ID"
 // @Param camera path string true "Camera name"
-// @Router /api/frigate/{connection_id}/live/{camera} [get]
+// @Router /frigate/{connection_id}/live/{camera} [get]
 func (h *FrigateHandler) ProxyLiveStream(c *gin.Context) {
 	connectionID := c.Param("connection_id")
 	camera := c.Param("camera")
