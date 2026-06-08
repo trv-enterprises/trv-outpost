@@ -65,6 +65,12 @@ the periodic silent refresh.
 
 Under `npm run dev` (Vite dev server) the client resolves a default identity automatically: it reuses a previously-cached user when one exists, otherwise the server's bootstrap chain picks one, so a fresh dev box lands on a working session without signing in. Production bundles skip this — a visitor with no API key, no cached GUID, and no admin default sees the sign-in stub instead. There is no in-header user-switching dropdown in either build; the header's avatar menu shows account actions (API keys, sign-out), not a user switcher.
 
+#### Bookmarking identities for dev & test
+
+With `auth.allow_legacy_guid` enabled (the norm for dev and test deployments — see the note under [Switching identity](#switching-identity-in-production) above), the `?user_id=<guid>` URL channel is the recommended way to drive identity locally. Bookmark a distinct launch URL per user — e.g. one for an admin, one for a view-only role, one for a kiosk user — and clicking a bookmark drops you straight into that identity. This is also the easiest hook for automation: a test runner just navigates to the right `?user_id=…` URL, no auth dance required.
+
+API keys can't live in a bookmark and Clerk SSO is unnecessary for general dev/test, so this legacy GUID path remains the pragmatic choice for that workflow. Keep `allow_legacy_guid` **off** in production, where Clerk or API keys are the real auth.
+
 ## Electron Desktop App
 
 When using the desktop application:
