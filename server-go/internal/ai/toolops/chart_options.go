@@ -92,7 +92,16 @@ func ChartOptionsSchema() map[string]interface{} {
 				"description": "number chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats.",
 			},
 			"numberUnit": map[string]interface{}{"type": "string", "description": "number chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\")."},
-			"numberSize": map[string]interface{}{"type": "integer", "description": "number chart: value font size in px. Size it to the tile HEIGHT, not the default — a good fit is ≈ 13px per cell of the panel's height (a 6-cell-tall tile → ~80px; an 8-cell → ~105px; 10-cell → ~130px). The default of 120 overflows a typical 6-cell tile. Also check WIDTH: the value must fit the tile at this size — size for the WIDEST value the tile will show (a percentage ≈ 6 chars \"100.0 %\"; a duration ≈ 11 chars \"000D 00H 00M\"); narrow tiles need a smaller size. **Give every number tile the SAME tile height and ONE shared numberSize across the dashboard** so they read uniformly — uniform heights let a single font size fit them all; pick the size for that height and the narrowest value, then apply it to every number component in the build. Decimals: use engineering judgment — decimals on a value >99 are usually noise (\"100 %\", not \"100.0 %\") and also widen the value; set numberDecimals accordingly."},
+			"numberSize": map[string]interface{}{
+				"type": "integer",
+				// Constrain to the same discrete size ladder the editor's
+				// dropdown offers (NUMBER_CHART_SIZES in the client). The model
+				// must pick ONE of these, not an arbitrary integer — off-grid
+				// values like 50/105/130 used to leak in from the "≈13px/cell"
+				// math below and then mismatch the dropdown in the editor.
+				"enum":        []int{12, 14, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400},
+				"description": "number chart: value font size in px. **Pick one of the allowed sizes (the enum) — do NOT invent an off-grid value.** Size it to the tile HEIGHT, not the default: estimate ≈ 13px per cell of the panel's height (a 6-cell-tall tile → ~80px; an 8-cell → ~105px; 10-cell → ~130px), then **round to the NEAREST allowed size** (e.g. 105 → 96, 130 → 120). The default of 120 overflows a typical 6-cell tile. Also check WIDTH: the value must fit the tile at this size — size for the WIDEST value the tile will show (a percentage ≈ 6 chars \"100.0 %\"; a duration ≈ 11 chars \"000D 00H 00M\"); narrow tiles need a smaller size. **Give every number tile the SAME tile height and ONE shared numberSize across the dashboard** so they read uniformly — uniform heights let a single font size fit them all; pick the size for that height and the narrowest value, then apply it to every number component in the build. Decimals: use engineering judgment — decimals on a value >99 are usually noise (\"100 %\", not \"100.0 %\") and also widen the value; set numberDecimals accordingly.",
+			},
 			// title is a real spec key (rendered inside the canvas for some
 			// chart types). Kept here so the Component agent's old `title`
 			// param has a home in the shared schema.

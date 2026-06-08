@@ -104,7 +104,6 @@
               "label": "Value size (px)",
               "default": "120",
               "options": [
-                { "value": "10", "label": "10 px" },
                 { "value": "12", "label": "12 px" },
                 { "value": "14", "label": "14 px" },
                 { "value": "16", "label": "16 px" },

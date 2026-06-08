@@ -6,11 +6,13 @@ import { useState, useEffect } from 'react';
 import { Modal, Select, SelectItem } from '@carbon/react';
 
 // Shared across the number-chart editor and admin settings. Covers roughly
-// "small label" to "presentation wall" sizes. The 10–20 range suits tiny
-// 1×1 / 2×1 tiles where a 24px value still overflowed; large steps near the
-// bottom because you pick those for specific panel dimensions, not for
-// fine-tuning. Keep in sync with the number_size enum in specs/number.json.
-export const NUMBER_CHART_SIZES = [10, 12, 14, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400];
+// "small label" to "presentation wall" sizes. The 12–20 range suits tiny
+// 1×1 / 2×1 tiles where a 24px value still overflowed (12px is the floor —
+// smaller is unreadable on a panel); large steps near the bottom because
+// you pick those for specific panel dimensions, not for fine-tuning. Keep
+// in sync with the number_size enum in specs/number.json and the numberSize
+// enum in server-go/internal/ai/toolops/chart_options.go.
+export const NUMBER_CHART_SIZES = [12, 14, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400];
 
 export const DEFAULT_NUMBER_CHART_SIZE = 120;
 
