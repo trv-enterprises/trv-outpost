@@ -63,7 +63,7 @@ the periodic silent refresh.
 
 ### Dev mode
 
-When the client is running under `npm run dev` (Vite dev server), the legacy user-switching dropdown is still visible in the header. Production bundles (built with `npm run build`) drop it entirely.
+Under `npm run dev` (Vite dev server) the client resolves a default identity automatically: it reuses a previously-cached user when one exists, otherwise the server's bootstrap chain picks one, so a fresh dev box lands on a working session without signing in. Production bundles skip this — a visitor with no API key, no cached GUID, and no admin default sees the sign-in stub instead. There is no in-header user-switching dropdown in either build; the header's avatar menu shows account actions (API keys, sign-out), not a user switcher.
 
 ## Electron Desktop App
 

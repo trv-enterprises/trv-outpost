@@ -303,11 +303,12 @@ and is editable.
 - The legacy `X-User-ID` header is **off by default** on new
   deployments (v0.17.6+). It is only accepted server-side when
   `auth.allow_legacy_guid` is true (set via `config.yaml` or the
-  `DASHBOARD_AUTH_ALLOW_LEGACY_GUID` env var). The dev-mode user
-  switcher is also gated to `import.meta.env.DEV` bundles, so
-  production SPAs never send it regardless. Keep it off in prod;
-  enable only for migration, dev, or single-user homelabs that
-  understand the trade-off.
+  `DASHBOARD_AUTH_ALLOW_LEGACY_GUID` env var). Dev-mode identity
+  selection (auto-resolving a default user) is gated to
+  `import.meta.env.DEV` bundles, so production SPAs never take that
+  path regardless. Keep the legacy header off in prod; enable only
+  for migration, dev, or single-user homelabs that understand the
+  trade-off.
 
 ## Troubleshooting
 
