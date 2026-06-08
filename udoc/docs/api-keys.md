@@ -82,6 +82,8 @@ Keys are stored in MongoDB's `api_keys` collection:
 
 ## See also
 
+- [API Overview](api-overview.md) — the REST API, the Swagger UI
+  explorer, and the Postman collection.
 - [MCP](mcp.md#authentication) — using a key with Claude Desktop
   via mcp-proxy.
 - [Logging In & User Selection](getting-started.md) — the browser
