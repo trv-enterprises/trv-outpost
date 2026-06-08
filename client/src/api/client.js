@@ -1252,23 +1252,43 @@ class APIClient {
     return '';
   }
 
+  // wsOrigin resolves the `ws(s)://host[:port]` prefix for WebSocket
+  // URLs. The subtlety: in Vite dev `this.baseURL` is '' (relative, so
+  // HTTP rides the same-origin dev proxy). Naively doing
+  // `this.baseURL.replace(/^https?:\/\//,'')` on an empty base yields
+  // an empty host → `ws:///…`, which the browser silently refuses to
+  // connect — the AI session WS never reaches the server and the
+  // Assistant "loses connection" / hangs. When the base is relative we
+  // therefore fall back to the current page origin (which Vite proxies
+  // to :3001 with `ws:true`, and which Caddy reverse-proxies on
+  // homelab), matching exactly how the same-origin HTTP calls resolve.
+  wsOrigin() {
+    let base = this.baseURL;
+    // Relative/empty base → use the page origin so we get a real host.
+    if (!base || base.startsWith('/')) {
+      if (typeof window !== 'undefined' && window.location?.origin) {
+        base = window.location.origin;
+      } else {
+        base = 'http://localhost:3001';
+      }
+    }
+    const wsProtocol = base.startsWith('https') ? 'wss' : 'ws';
+    const host = base.replace(/^https?:\/\//, '');
+    return `${wsProtocol}://${host}`;
+  }
+
   // Returns WebSocket URL for AI session events
   getAISessionWebSocketURL(sessionId) {
-    // Convert http(s) to ws(s)
-    const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws';
-    const host = this.baseURL.replace(/^https?:\/\//, '');
     const auth = this.streamAuthQuery();
     const qs = auth ? `?${auth}` : '';
-    return `${wsProtocol}://${host}/api/ai/sessions/${sessionId}/ws${qs}`;
+    return `${this.wsOrigin()}/api/ai/sessions/${sessionId}/ws${qs}`;
   }
 
   // Returns WebSocket URL for Frigate JSMPEG live stream proxy
   getFrigateLiveStreamUrl(connectionId, camera) {
-    const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws';
-    const host = this.baseURL.replace(/^https?:\/\//, '');
     const auth = this.streamAuthQuery();
     const qs = auth ? `?${auth}` : '';
-    return `${wsProtocol}://${host}/api/frigate/${connectionId}/live/${encodeURIComponent(camera)}${qs}`;
+    return `${this.wsOrigin()}/api/frigate/${connectionId}/live/${encodeURIComponent(camera)}${qs}`;
   }
 
   // Config endpoints

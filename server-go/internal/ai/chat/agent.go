@@ -447,16 +447,67 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 }
 
 // buildMessages converts persisted history + the new user content
-// into the Anthropic SDK's MessageParam slice. Step 5 replaces this
-// with the layered prompt assembly; this is the smoke-test shape.
+// into the Anthropic SDK's MessageParam slice.
+//
+// The critical invariant the Anthropic API enforces: a text content
+// block must be non-empty. Tool-call assistant turns are persisted
+// with Content="" plus a non-empty ToolCalls slice (see the loop in
+// ProcessMessage that calls AddAssistantMessage with the tool-only
+// turn). Naively replaying every stored message as a single
+// NewTextBlock(m.Content) therefore emits an empty text block for
+// those turns and the next API call 400s with
+// "messages: text content blocks must be non-empty". This bug only
+// bites on RESUMED sessions — a brand-new session has no tool-call
+// turn in its history yet, which is why it surfaces as "the first
+// prompt of a reopened conversation errors out."
+//
+// To replay faithfully we reconstruct the original block shape:
+//   - assistant turn with tool calls → optional text block (only if
+//     non-empty) + one tool_use block per ToolCall, immediately
+//     followed by a synthetic user turn carrying the matching
+//     tool_result blocks (the API requires every tool_use to be
+//     answered by a tool_result in the next turn).
+//   - plain assistant / user turns → a single text block, but ONLY
+//     when the content is non-empty. Empty-content turns with no
+//     tool calls carry no information and are skipped entirely
+//     rather than emitted as an illegal empty block.
 func buildMessages(history []models.AIMessage, newUserContent string) []anthropic.MessageParam {
 	messages := make([]anthropic.MessageParam, 0, len(history)+1)
 	for _, m := range history {
 		switch m.Role {
 		case models.AIMessageRoleUser:
+			if m.Content == "" {
+				continue
+			}
 			messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
 		case models.AIMessageRoleAssistant:
-			messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+			if len(m.ToolCalls) == 0 {
+				// Plain assistant turn — skip empty content rather
+				// than emit an illegal empty text block.
+				if m.Content == "" {
+					continue
+				}
+				messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+				continue
+			}
+			// Tool-call turn: rebuild the assistant blocks (optional
+			// text + tool_use blocks) and the paired tool_result
+			// user turn so the conversation stays API-valid.
+			assistantBlocks := make([]anthropic.ContentBlockParamUnion, 0, len(m.ToolCalls)+1)
+			if m.Content != "" {
+				assistantBlocks = append(assistantBlocks, anthropic.NewTextBlock(m.Content))
+			}
+			toolResults := make([]anthropic.ContentBlockParamUnion, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				// Input is persisted as a JSON string; hand it to the
+				// SDK as a raw message so it round-trips unchanged.
+				assistantBlocks = append(assistantBlocks,
+					anthropic.NewToolUseBlock(tc.ID, json.RawMessage(tc.Input), tc.Name))
+				toolResults = append(toolResults,
+					anthropic.NewToolResultBlock(tc.ID, tc.Output, false))
+			}
+			messages = append(messages, anthropic.NewAssistantMessage(assistantBlocks...))
+			messages = append(messages, anthropic.NewUserMessage(toolResults...))
 		}
 	}
 	if newUserContent != "" {
