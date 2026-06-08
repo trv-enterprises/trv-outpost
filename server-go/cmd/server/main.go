@@ -139,7 +139,7 @@ func main() {
 	router.Use(cors.New(corsConfig))
 
 	// Health check endpoint
-	router.GET("/health", healthCheck(mongodb))
+	router.GET("/health", healthCheck(mongodb, cfg.Auth.AllowLegacyGUID))
 
 	// Version endpoint
 	router.GET("/version", func(c *gin.Context) {
@@ -625,7 +625,7 @@ func main() {
 	api.Use(authMiddleware.Authorize())
 	{
 		// Health check
-		api.GET("/health", healthCheck(mongodb))
+		api.GET("/health", healthCheck(mongodb, cfg.Auth.AllowLegacyGUID))
 
 		// Auth routes (for getting current user capabilities)
 		auth := api.Group("/auth")
@@ -1118,7 +1118,7 @@ func main() {
 // @Success 200 {object} map[string]interface{}
 // @Failure 503 {object} map[string]interface{}
 // @Router /health [get]
-func healthCheck(mongodb *database.MongoDB) gin.HandlerFunc {
+func healthCheck(mongodb *database.MongoDB, legacyGUIDEnabled bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		status := gin.H{
 			"status":    "ok",
@@ -1141,6 +1141,22 @@ func healthCheck(mongodb *database.MongoDB) gin.HandlerFunc {
 			status["services"].(gin.H)["mongodb"] = gin.H{
 				"status": "healthy",
 			}
+		}
+
+		// Advisory warnings — non-fatal posture notes that don't degrade
+		// `status` but surface insecure-for-prod configuration so an
+		// operator (or a monitoring probe) can catch it without reading
+		// boot logs. The startup banner logs the same once; this makes it
+		// queryable for the lifetime of the process.
+		warnings := []gin.H{}
+		if legacyGUIDEnabled {
+			warnings = append(warnings, gin.H{
+				"code":    "legacy_guid_enabled",
+				"message": "Legacy GUID auth is enabled (auth.allow_legacy_guid=true): X-User-ID and ?user_id= are honored at /api/auth/session. Intended for dev/test; disable in production.",
+			})
+		}
+		if len(warnings) > 0 {
+			status["warnings"] = warnings
 		}
 
 		// Return appropriate status code
