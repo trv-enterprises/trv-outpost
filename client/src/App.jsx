@@ -158,7 +158,6 @@ function AppContent({ onDisconnect }) {
   // in the bootstrap / Clerk paths below are intentionally kept so
   // the existing identity-resolution flow isn't disturbed; nothing
   // currently reads the array.
-  // eslint-disable-next-line no-unused-vars
   const [_users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   // Goes true once the bootstrap chain has finished trying (success

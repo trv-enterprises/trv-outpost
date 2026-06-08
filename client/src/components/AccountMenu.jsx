@@ -19,9 +19,9 @@ import './AccountMenu.scss';
  * disconnect (electron).
  *
  * This menu is intentionally NOT a user switcher — production users
- * have one identity per browser. Dev-mode user switching lives in a
- * separate component (DevUserSwitcher) so the prod menu stays
- * focused on account actions.
+ * have one identity per browser, and dev-mode identity is resolved
+ * automatically (cached user / bootstrap chain), not via a header
+ * control. The menu stays focused on account actions.
  *
  * Props:
  *   currentUser     — { name, email, guid } | null
