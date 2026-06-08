@@ -42,7 +42,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	_ "github.com/trv-enterprises/trve-dashboard/docs"              // Swagger docs
+	swaggerdocs "github.com/trv-enterprises/trve-dashboard/docs"    // Swagger docs (init() registers the spec; also referenced to set Host per request)
 	"github.com/trv-enterprises/trve-dashboard/internal/connection" // Registers adapters via init() and exposes SetAllowInsecureTLS for deployment policy
 )
 
@@ -961,9 +961,25 @@ func main() {
 	// Status monitoring WebSocket (no auth required for monitoring tools)
 	router.GET("/api/ws/status", statusHandler.HandleStatusWebSocket)
 
-	// Swagger documentation
+	// Swagger documentation. The committed spec has a static @host
+	// (localhost:3001), but the UI is reached over many origins (homelab
+	// IP, Tailscale, Caddy on 443). Rewrite SwaggerInfo.Host/Schemes from
+	// the incoming request just before serving so the "Base URL" line and
+	// the "Try it out" target match however the user actually got here.
+	// swag.ReadDoc reads these fields at request time, so a per-request
+	// assignment is all that's needed.
 	if cfg.Swagger.Enabled {
-		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		router.GET("/swagger/*any", func(c *gin.Context) {
+			if c.Request.Host != "" {
+				swaggerdocs.SwaggerInfo.Host = c.Request.Host
+			}
+			scheme := "http"
+			if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
+				scheme = "https"
+			}
+			swaggerdocs.SwaggerInfo.Schemes = []string{scheme}
+			ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
+		})
 		fmt.Println("✓ Swagger UI enabled at http://localhost:3001/swagger/index.html")
 	}
 

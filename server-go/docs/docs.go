@@ -7240,7 +7240,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "payload_template": {
-                    "description": "Template with {{value}} placeholder",
+                    "description": "Template with a double-brace value placeholder (a 'value' token wrapped in double curly braces, replaced at send time)",
                     "type": "object",
                     "additionalProperties": true
                 },
@@ -7255,7 +7255,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "template": {
-                    "description": "Message template with {{value}}, {{target}} placeholders",
+                    "description": "Message template with {value}, {target} placeholders",
                     "type": "object",
                     "additionalProperties": true
                 },

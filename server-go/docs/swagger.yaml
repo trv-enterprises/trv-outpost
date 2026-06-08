@@ -761,7 +761,8 @@ definitions:
         type: string
       payload_template:
         additionalProperties: true
-        description: Template with {{value}} placeholder
+        description: Template with a double-brace value placeholder (a 'value' token
+          wrapped in double curly braces, replaced at send time)
         type: object
       target:
         description: Optional target identifier
@@ -772,7 +773,7 @@ definitions:
     properties:
       template:
         additionalProperties: true
-        description: Message template with {{value}}, {{target}} placeholders
+        description: Message template with {value}, {target} placeholders
         type: object
       value_map:
         additionalProperties: true

@@ -85,7 +85,7 @@ func IsValidControlUIType(controlType string) bool {
 // CommandDef defines how to format a command message for a specific control type
 // @Description Template for formatting control commands
 type CommandDef struct {
-	Template map[string]interface{} `json:"template" bson:"template"`               // Message template with {{value}}, {{target}} placeholders
+	Template map[string]interface{} `json:"template" bson:"template"`               // Message template with {value}, {target} placeholders
 	ValueMap map[string]interface{} `json:"value_map,omitempty" bson:"value_map"`   // Optional value mapping (e.g., true -> "ON", false -> "OFF")
 }
 

@@ -66,7 +66,7 @@ type ControlConfig struct {
 type CommandConfig struct {
 	Action          string                 `json:"action" bson:"action"`                                         // Command action name
 	Target          string                 `json:"target,omitempty" bson:"target,omitempty"`                     // Optional target identifier
-	PayloadTemplate map[string]interface{} `json:"payload_template,omitempty" bson:"payload_template,omitempty"` // Template with {{value}} placeholder
+	PayloadTemplate map[string]interface{} `json:"payload_template,omitempty" bson:"payload_template,omitempty"` // Template with a double-brace value placeholder (a 'value' token wrapped in double curly braces, replaced at send time)
 }
 
 // DisplayConfig defines configuration for display components
