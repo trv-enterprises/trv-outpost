@@ -4,6 +4,9 @@
 
 import { useEffect, useRef } from 'react';
 import { InlineLoading } from '@carbon/react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import AssistantToolCallCard from './AssistantToolCallCard';
 
 /**
@@ -107,14 +110,33 @@ function AssistantMessage({ message, expandToolCalls }) {
   );
 }
 
-// renderTextContent is the v1 stand-in for proper markdown
-// rendering. Splits on blank lines into paragraphs and renders
-// each as a <p>. Code fences and inline backticks land in step 11
-// when we add the markdown library.
+// Markdown component overrides — map the elements react-markdown emits
+// onto Carbon-token-styled DOM so the assistant's summaries
+// (headings, lists, bold, inline code, code fences, tables, links)
+// render properly instead of showing raw `**`/`##`/`-` syntax. Styling
+// lives in AssistantSidecard.scss under .assistant-message__markdown.
+// Links open in a new tab with noopener for safety; rehype-sanitize
+// strips any HTML the model might emit so this is XSS-safe.
+const MARKDOWN_COMPONENTS = {
+  a: ({ node: _node, ...props }) => (
+    <a {...props} target="_blank" rel="noopener noreferrer" />
+  ),
+};
+
+// renderTextContent renders the assistant's message body as GitHub-
+// flavored markdown. remark-gfm adds tables / strikethrough / autolinks;
+// rehype-sanitize guards against injected HTML.
 function renderTextContent(text) {
   if (!text) return null;
-  const paragraphs = String(text).split(/\n{2,}/);
-  return paragraphs.map((p, i) => (
-    <p key={i} className="assistant-message__paragraph">{p}</p>
-  ));
+  return (
+    <div className="assistant-message__markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        components={MARKDOWN_COMPONENTS}
+      >
+        {String(text)}
+      </ReactMarkdown>
+    </div>
+  );
 }

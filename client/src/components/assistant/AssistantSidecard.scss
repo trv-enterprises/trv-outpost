@@ -178,13 +178,108 @@
     }
   }
 
-  &__paragraph {
-    margin: 0;
-    line-height: 1.5;
+  // Rendered markdown body (react-markdown output). Tight, chat-sized
+  // spacing using Carbon tokens; no hardcoded colors so it tracks the
+  // active theme. First/last child margins are collapsed so the bubble
+  // doesn't get leading/trailing dead space.
+  &__markdown {
     font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--cds-text-primary);
+    word-break: break-word;
+    overflow-wrap: anywhere;
 
-    & + & {
-      margin-top: spacing.$spacing-03;
+    > :first-child { margin-top: 0; }
+    > :last-child { margin-bottom: 0; }
+
+    p {
+      margin: 0 0 spacing.$spacing-03;
+      line-height: 1.5;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      margin: spacing.$spacing-04 0 spacing.$spacing-02;
+      line-height: 1.3;
+      font-weight: 600;
+    }
+    h1 { font-size: 1.125rem; }
+    h2 { font-size: 1rem; }
+    h3, h4, h5, h6 { font-size: 0.9375rem; }
+
+    ul, ol {
+      margin: 0 0 spacing.$spacing-03;
+      padding-left: spacing.$spacing-05;
+    }
+    li {
+      margin: 0 0 spacing.$spacing-02;
+      line-height: 1.45;
+    }
+    li > ul, li > ol {
+      margin-top: spacing.$spacing-02;
+      margin-bottom: 0;
+    }
+
+    a {
+      color: var(--cds-link-primary);
+      text-decoration: underline;
+
+      &:hover { color: var(--cds-link-primary-hover); }
+    }
+
+    strong { font-weight: 600; }
+    em { font-style: italic; }
+
+    code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.8125rem;
+      background: var(--cds-layer-02);
+      border-radius: 3px;
+      padding: 0.05rem 0.3rem;
+    }
+
+    pre {
+      margin: 0 0 spacing.$spacing-03;
+      padding: spacing.$spacing-03 spacing.$spacing-04;
+      background: var(--cds-layer-02);
+      border: 1px solid var(--cds-border-subtle-01);
+      border-radius: 4px;
+      overflow-x: auto;
+
+      code {
+        background: none;
+        padding: 0;
+        font-size: 0.8125rem;
+        line-height: 1.45;
+      }
+    }
+
+    blockquote {
+      margin: 0 0 spacing.$spacing-03;
+      padding-left: spacing.$spacing-04;
+      border-left: 2px solid var(--cds-border-subtle-01);
+      color: var(--cds-text-secondary);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 spacing.$spacing-03;
+      font-size: 0.8125rem;
+    }
+    th, td {
+      border: 1px solid var(--cds-border-subtle-01);
+      padding: spacing.$spacing-02 spacing.$spacing-03;
+      text-align: left;
+    }
+    th {
+      background: var(--cds-layer-02);
+      font-weight: 600;
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px solid var(--cds-border-subtle-01);
+      margin: spacing.$spacing-04 0;
     }
   }
 }
