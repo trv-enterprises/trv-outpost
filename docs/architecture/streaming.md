@@ -150,6 +150,57 @@ ts-store doesn't have a "retained state" concept the way MQTT does
 when full), so there's no `latestByTopic` cache. Subscribers that
 need initial data get a bounded time-range pull when they connect.
 
+### Backfill & per-value history
+
+A streaming panel paints initial history with a one-shot REST
+backfill before the live stream takes over (`client/src/hooks/useData.js`,
+`runBackfillThenConnect`). The backfill query is one of two shapes:
+
+- **Count-based** — `{ raw: 'newest', params: { limit: N } }`. Pulls
+  the newest *N* records, **unfiltered at the source**.
+- **Time-based** — `{ raw: 'since:<window>' }`. Pulls *every* record in
+  the time window. Emitted automatically when the panel has a
+  **sliding window** set.
+
+These are different contracts, and the difference matters when a panel
+is filtered by a **dashboard variable**:
+
+> **Recommended topology: one connection per numeric source.** True
+> numeric machine time-series should relate to a single source — a
+> separate ts-store / connection per machine. Mixing many sources into
+> one stream complicates sequence integrity and backfill.
+>
+> **The shared-stream exception (dashboard variables).** The
+> dashboard-variable feature exists precisely to slice a stream the user
+> *doesn't* control the topology of (one connection, many values; the
+> variable picks one). Two ways to keep per-value history complete:
+>
+> 1. **Source-side filter (preferred).** Bind the ts-store `filter`
+>    param to the dashboard variable (the Filter row in the editor's
+>    Query section, set to "Dashboard variable"). ts-store's `filter` is
+>    a substring match that **counts matches, not candidates** — so a
+>    filtered `newest <N>` returns *N records of the selected value*, and
+>    the same filter rides on the backfill query. No sparsity, with or
+>    without a window. (The filter is not field-scoped, but these data
+>    sets carry few label fields, so a substring isolates a source
+>    reliably.) The literal `{{dashboard-variable}}` token is stored;
+>    `resolveFilterParam` in the Go adapter swaps it for the chosen value
+>    at query time, on both the REST and websocket paths.
+> 2. **Sliding window.** A time-based `since:<window>` backfill returns
+>    every record in the window for *every* value, so each selected value
+>    gets full history even though the client filter still does the
+>    final narrowing.
+>
+> Without either, a client-side-only variable filter on an unfiltered
+> count-based `newest <N>` gets thinned to ≈ *N/M* records for the
+> selected value when the stream interleaves *M* values — sparse initial
+> history. (Issue #18.)
+
+The editor surfaces an inline hint on exactly this at-risk shape
+(tsstore-streaming + client-side variable filter + no source filter + no
+window), pointing to the source-side Filter or a window. Polling / SQL /
+API panels re-query per value and never have this problem.
+
 ## SSE handler
 
 `internal/handlers/stream_handler.go` is the HTTP endpoint clients

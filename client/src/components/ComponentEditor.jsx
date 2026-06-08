@@ -318,6 +318,7 @@ const DEFAULT_CHART_OPTIONS = {
   chartSmooth: true,
   chartShowDataLabels: false,
   chartShowZoomSlider: false,
+  xAxisLabelRotate: 0, // x-axis category label angle (deg): 0 | 30 | 45 | 90
 };
 
 /**
@@ -601,6 +602,35 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest
   const [tsstoreLimit, setTsstoreLimit] = useState(100);
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
+  // TSStore source-side filter. ts-store's `filter` is a plain SUBSTRING match
+  // over the whole record (NOT field-scoped) — but the data sets this targets
+  // have very few label fields, so a general substring is fine in practice.
+  // Filtering at the source (ts-store counts MATCHES, not candidates) is what
+  // lets a variable-filtered streaming/limit query return full per-value
+  // history instead of the sparse client-thinned result (#18).
+  const [tsstoreFilter, setTsstoreFilter] = useState('');               // literal substring
+  const [tsstoreFilterSource, setTsstoreFilterSource] = useState('literal'); // 'literal' | 'variable'
+  const [tsstoreFilterIgnoreCase, setTsstoreFilterIgnoreCase] = useState(false);
+
+  // Build the ts-store source-side filter params for a query_config. Returns
+  // {} when no filter is set. In 'variable' mode the literal
+  // {{dashboard-variable}} token is stored; the server resolves it to the
+  // active value at query time (see resolveFilterParam in the Go adapter).
+  // Single source of truth for the four sites that assemble tsstore params
+  // (preview, codegen, save, custom-code preview) + the backfill.
+  const buildTsstoreFilterParams = useCallback(() => {
+    const value = tsstoreFilterSource === 'variable'
+      ? DASHBOARD_VARIABLE_TOKEN
+      : (tsstoreFilter || '').trim();
+    if (!value) return {};
+    const params = { filter: value };
+    if (tsstoreFilterIgnoreCase) params.filter_ignore_case = true;
+    return params;
+  }, [tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase]);
+
+  // True when the tsstore filter is bound to the dashboard variable — used to
+  // mark uses_dashboard_variable and to gate the #18 backfill substitution.
+  const tsstoreFilterUsesVariable = tsstoreFilterSource === 'variable';
 
   // EdgeLake query configuration (for raw mode database param)
   const [edgelakeDatabase, setEdgelakeDatabase] = useState('');
@@ -929,6 +959,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         setTsstoreSinceDuration('1h');
         setTsstoreLimit(chart.query_config?.params?.limit || 100);
       }
+      // Restore the source-side filter. A filter equal to the variable token
+      // restores in 'variable' mode (shows the chip); any other non-empty value
+      // restores as a literal substring. Applies to all tsstore subtypes
+      // (newest/oldest/since + streaming transport).
+      const savedFilter = chart.query_config?.params?.filter;
+      if (typeof savedFilter === 'string' && savedFilter !== '') {
+        if (savedFilter === DASHBOARD_VARIABLE_TOKEN) {
+          setTsstoreFilterSource('variable');
+          setTsstoreFilter('');
+        } else {
+          setTsstoreFilterSource('literal');
+          setTsstoreFilter(savedFilter);
+        }
+        setTsstoreFilterIgnoreCase(!!chart.query_config?.params?.filter_ignore_case);
+      }
       // EdgeLake query config initialization. Like tsstore above, the
       // type field is documentary, not authoritative: agent-built
       // EdgeLake charts commonly save query_config.type:"sql" while
@@ -1013,6 +1058,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:') ? 'since' : (loadedTsRaw || 'since');
       const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
       const loadedTsstoreLimit = chart.query_config?.params?.limit || 100;
+      const loadedTsFilter = chart.query_config?.params?.filter;
+      const loadedTsstoreFilterSource = loadedTsFilter === DASHBOARD_VARIABLE_TOKEN ? 'variable' : 'literal';
+      const loadedTsstoreFilter = (typeof loadedTsFilter === 'string' && loadedTsFilter !== DASHBOARD_VARIABLE_TOKEN) ? loadedTsFilter : '';
+      const loadedTsstoreFilterIgnoreCase = !!chart.query_config?.params?.filter_ignore_case;
       // Mirror the setEdgelakeDatabase restore above: the database param
       // is the source of truth, not the documentary query_config.type
       // (agent-built EdgeLake charts save type:"sql"). Snapshot must match
@@ -1038,6 +1087,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreQueryType: loadedTsstoreQueryType,
         tsstoreSinceDuration: loadedTsstoreSinceDuration,
         tsstoreLimit: loadedTsstoreLimit,
+        tsstoreFilter: loadedTsstoreFilter,
+        tsstoreFilterSource: loadedTsstoreFilterSource,
+        tsstoreFilterIgnoreCase: loadedTsstoreFilterIgnoreCase,
         edgelakeDatabase: loadedEdgelakeDatabase,
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
@@ -1102,6 +1154,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreQueryType: 'newest',
         tsstoreSinceDuration: '1h',
         tsstoreLimit: 100,
+        tsstoreFilter: '',
+        tsstoreFilterSource: 'literal',
+        tsstoreFilterIgnoreCase: false,
         edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
@@ -1173,6 +1228,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       tsstoreQueryType,
       tsstoreSinceDuration,
       tsstoreLimit,
+      tsstoreFilter,
+      tsstoreFilterSource,
+      tsstoreFilterIgnoreCase,
       edgelakeDatabase,
       xAxisColumn,
       xAxisLabel,
@@ -1214,7 +1272,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -1407,6 +1465,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               setTsstoreQueryType('newest');
               setTsstoreLimit(100);
               setTsstoreSinceDuration('1h');
+              setTsstoreFilter('');
+              setTsstoreFilterSource('literal');
+              setTsstoreFilterIgnoreCase(false);
             }
             break;
           case 'edgelake':
@@ -1573,6 +1634,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTsstoreQueryType('newest');
     setTsstoreLimit(100);
     setTsstoreSinceDuration('1h');
+    setTsstoreFilter('');
+    setTsstoreFilterSource('literal');
+    setTsstoreFilterIgnoreCase(false);
     setEdgelakeDatabase('');
     setParserPreset('none');
     setParserDataPath('');
@@ -1775,6 +1839,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // plenty for schema preview.
         rawQuery = 'newest';
         queryParams = { limit: (variableBoundFilter && !effectiveVarValue) ? 1000 : (tsstoreLimit || 100) };
+        // Apply the source-side filter unless we're discovering distinct
+        // values for the picker (variable bound + no value yet) — in that
+        // case a variable filter would resolve to nothing and starve the harvest.
+        if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
+          Object.assign(queryParams, buildTsstoreFilterParams());
+        }
       } else if (isSocket) {
         rawQuery = ''; // Raw socket has no query API — adapter collects from the live stream
       } else if (isTSStore) {
@@ -1787,6 +1857,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           // For 'newest' or 'oldest', use the configured limit
           rawQuery = tsstoreQueryType;
           queryParams = { limit: tsstoreLimit };
+        }
+        if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
+          Object.assign(queryParams, buildTsstoreFilterParams());
         }
       } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
         queryParams = { database: edgelakeDatabase };
@@ -1864,27 +1937,34 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Build queryParams based on datasource type (same logic as fetchPreview)
     let queryParams = {};
     let rawQuery = queryRaw;
+    // Source-side filter params (shared with backfill below).
+    const tsstoreFilterParams = buildTsstoreFilterParams();
     if (isTSStoreStreaming) {
-      // Streaming TS-STORE — no query needed, data arrives via SSE
+      // Streaming TS-STORE — no query needed, data arrives via SSE. The
+      // source-side filter still rides on the live stream params.
       rawQuery = '';
-      queryParams = {};
+      queryParams = { ...tsstoreFilterParams };
     } else if (isTSStore) {
       if (tsstoreQueryType === 'since') {
         // For 'since' queries, don't limit - fetch all data in time window
         rawQuery = `since:${tsstoreSinceDuration}`;
-        queryParams = {};
+        queryParams = { ...tsstoreFilterParams };
       } else {
         // For 'newest' or 'oldest', use the configured limit
         rawQuery = tsstoreQueryType;
-        queryParams = { limit: tsstoreLimit };
+        queryParams = { limit: tsstoreLimit, ...tsstoreFilterParams };
       }
     } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
       queryParams = { database: edgelakeDatabase };
     }
 
     // Inject the preview value so the rendered preview's own useData fetch
-    // resolves the {{dashboard-variable}} token (same as the preview-fetch path).
-    if (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) {
+    // resolves the {{dashboard-variable}} token — in raw OR in the filter param
+    // (the filter token is resolved server-side via the dashboard_variable param).
+    const usesVarToken =
+      (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) ||
+      queryParams.filter === DASHBOARD_VARIABLE_TOKEN;
+    if (usesVarToken) {
       queryParams = { ...queryParams, dashboard_variable: previewVariableValue };
     }
 
@@ -1912,8 +1992,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       ? { dataPath: parserDataPath, timestampField: parserTimestampField, timestampScale: parserTimestampScale }
       : null;
 
-    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue]);
+    return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2000,7 +2080,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           : queryRaw,
         type: queryType,
         params: selectedDatasource?.type === 'tsstore'
-          ? (tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit })
+          ? { ...(tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit }), ...buildTsstoreFilterParams() }
           : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
             ? { database: edgelakeDatabase }
             : {}
@@ -2081,7 +2161,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       uses_dashboard_variable:
         usesDashboardVariable ||
         (typeof queryRaw === 'string' && queryRaw.includes(DASHBOARD_VARIABLE_TOKEN)) ||
-        filters.some((f) => typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN),
+        filters.some((f) => typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN) ||
+        tsstoreFilterUsesVariable,
       options: (() => {
         if (chartType === 'banded_bar') {
           return { ...chartOptions, bandedBarStyle };
@@ -2980,6 +3061,64 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           </div>
                         )}
                       </div>
+                      {/* Source-side FILTER row — mirrors the SQL WHERE
+                          value-source pattern: [Value | Dashboard variable]
+                          then the value (literal text or a bound-variable
+                          chip). ts-store's filter is a plain SUBSTRING over
+                          the whole record (NOT field-scoped); the targeted
+                          data sets have very few label fields, so a general
+                          substring is fine. Applied at the source so a
+                          variable-filtered limited/streaming query returns
+                          full per-value history (#18). */}
+                      <div className="tsstore-query-row tsstore-filter-row">
+                        <div className="tsstore-query-row__col tsstore-filter-col">
+                          <label className="cds--label" htmlFor="tsstore-filter-value">Filter (substring, optional)</label>
+                          <div className="tsstore-filter-controls">
+                            {dashboardVariableEnabled && (
+                              <Select
+                                id="tsstore-filter-source"
+                                labelText=""
+                                hideLabel
+                                size="md"
+                                value={tsstoreFilterSource}
+                                onChange={(e) => setTsstoreFilterSource(e.target.value)}
+                                className="tsstore-filter-source-select"
+                              >
+                                <SelectItem value="literal" text="Value" />
+                                <SelectItem value="variable" text="Dashboard variable" />
+                              </Select>
+                            )}
+                            {tsstoreFilterSource === 'variable' ? (
+                              <Tag type="purple" size="md" className="value-variable-chip" title="Bound to the dashboard variable at view time">
+                                {DASHBOARD_VARIABLE_TOKEN}
+                              </Tag>
+                            ) : (
+                              <TextInput
+                                id="tsstore-filter-value"
+                                labelText=""
+                                hideLabel
+                                size="md"
+                                placeholder="e.g. Warehouse"
+                                value={tsstoreFilter}
+                                onChange={(e) => setTsstoreFilter(e.target.value)}
+                                className="tsstore-filter-value-input"
+                              />
+                            )}
+                          </div>
+                          <Checkbox
+                            id="tsstore-filter-ignore-case"
+                            labelText="Ignore case"
+                            checked={tsstoreFilterIgnoreCase}
+                            onChange={(_, { checked }) => setTsstoreFilterIgnoreCase(checked)}
+                          />
+                          <p className="editor-info-hint">
+                            Matches records containing this text anywhere in the
+                            record (substring, not field-specific), filtered at the
+                            source. Binding it to the dashboard variable returns full
+                            history for the selected value.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ) : selectedDatasource.type === 'sql' && queryMode === 'visual' ? (
                     <SQLQueryBuilder
@@ -3285,6 +3424,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       chart_smooth: chartOptions.chartSmooth !== false,
                       chart_show_data_labels: Boolean(chartOptions.chartShowDataLabels),
                       chart_show_zoom_slider: Boolean(chartOptions.chartShowZoomSlider),
+                      x_axis_label_rotate: chartOptions.xAxisLabelRotate ?? 0,
                       show_symbol: chartOptions.showSymbol !== false,
                       // perf
                       sampling: chartOptions.sampling || 'off',
@@ -3413,6 +3553,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'chart_smooth': updateChartOption('chartSmooth', value); break;
                         case 'chart_show_data_labels': updateChartOption('chartShowDataLabels', value); break;
                         case 'chart_show_zoom_slider': updateChartOption('chartShowZoomSlider', value); break;
+                        // Select values arrive as strings; store a number so the
+                        // render's Number() coercion + axis rotate stay clean.
+                        case 'x_axis_label_rotate': updateChartOption('xAxisLabelRotate', Number(value) || 0); break;
                         case 'show_symbol': updateChartOption('showSymbol', value); break;
                         case 'sampling': updateChartOption('sampling', value); break;
                         case 'y_left_min':
@@ -3931,6 +4074,26 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       Enable to show only recent data (e.g., last 5 minutes). Useful for streaming/real-time charts.
                     </p>
                   )}
+                  {/* #18: a tsstore-streaming panel filtered ONLY by a
+                      client-side dashboard variable backfills count-based
+                      ("newest N"), unfiltered at the source, then thins
+                      client-side — so the selected value gets ~N/M records when
+                      the stream interleaves M values. Two fixes: set a source-
+                      side Filter bound to the variable (above; ts-store counts
+                      matches, so each value gets full history), or set a sliding
+                      window (time-based backfill). Only nudge on the at-risk
+                      shape: streaming + client-side variable filter + NO source
+                      filter + window off. */}
+                  {!slidingWindowEnabled && isTSStoreStreaming && variableBoundFilter && !tsstoreFilterUsesVariable && (
+                    <InlineNotification
+                      lowContrast
+                      kind="info"
+                      hideCloseButton
+                      title="Filter at the source for full per-value history"
+                      subtitle="This panel filters a streaming connection by a dashboard variable client-side only. The history backfill isn't filtered at the source, so each value can load with sparse history. Bind the Filter field (in the Query section) to the dashboard variable, or set a sliding window, to get full per-value history. (For numeric machine data, a separate connection per source avoids this entirely.)"
+                      style={{ marginTop: '0.5rem', maxWidth: '100%' }}
+                    />
+                  )}
                 </div>
                 )}
 
@@ -4213,7 +4376,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           : queryRaw,
                         type: queryType,
                         params: selectedDatasource?.type === 'tsstore'
-                          ? (tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit })
+                          ? {
+                              ...(tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit }),
+                              ...buildTsstoreFilterParams(),
+                              // Resolve the filter token for the custom-code preview.
+                              ...(tsstoreFilterUsesVariable ? { dashboard_variable: previewVariableValue } : {}),
+                            }
                           : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
                             ? { database: edgelakeDatabase }
                             : {}
@@ -4553,7 +4721,7 @@ export function getStaticChartCode(chartType) {
 // below). `_columnAliases` / `_chartId` were used by the deleted dataview
 // branch — kept as positional placeholders so the call site's arg order
 // is untouched.
-export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', _columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, _chartId = '', isTSStoreStreaming = false, useSpecCodegen = false) {
+export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryType, xAxisCol, yAxisCols, transforms = {}, chartOptions = {}, queryParams = {}, seriesCol = '', _columnAliases = {}, isStreaming = false, slidingWindow = null, parserConfig = null, _chartId = '', isTSStoreStreaming = false, useSpecCodegen = false, tsstoreFilterParams = {}) {
   const yAxisStr = yAxisCols.length > 0 ? yAxisCols.map(c => `'${c}'`).join(', ') : "'value'";
   const { filters = [], aggregation = null, sortBy = '', sortOrder = 'desc', limit = 0, xAxisFormat = 'chart', xAxisLabel = '', yAxisLabel = '', yAxisLabels = [], chartName = '' } = transforms;
 
@@ -4583,6 +4751,14 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
   // which is confusing and was the previous behavior. Leave it off and
   // let the loader-level value take effect.
   const extraOptions = [];
+  // Serialize the source-side filter as JS object-literal entries so it can be
+  // merged into a backfill's `params`. The filter (literal or the
+  // {{dashboard-variable}} token) is applied AT THE SOURCE, so ts-store returns
+  // up to `limit` MATCHING records — closing the #18 sparsity even without a
+  // sliding window. (#18)
+  const filterEntries = Object.entries(tsstoreFilterParams || {})
+    .map(([k, v]) => `${k}: ${JSON.stringify(v)}`);
+  const filterFragment = filterEntries.length ? `, ${filterEntries.join(', ')}` : '';
   if (isStreaming && slidingWindow?.duration > 0) {
     // Sliding-window backfill: pull every record from the last N
     // seconds so the chart isn't blank while waiting for the next
@@ -4592,7 +4768,7 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
     const sinceStr = dur >= 3600 && dur % 3600 === 0 ? `${dur / 3600}h`
       : dur >= 60 && dur % 60 === 0 ? `${dur / 60}m`
       : `${dur}s`;
-    extraOptions.push(`backfill: { raw: 'since:${sinceStr}', type: '${queryType}', params: {} }`);
+    extraOptions.push(`backfill: { raw: 'since:${sinceStr}', type: '${queryType}', params: {${filterFragment ? ` ${filterEntries.join(', ')} ` : ''}} }`);
   } else if (isTSStoreStreaming) {
     // No sliding window set, but ts-store can still serve a quick
     // "latest N" backfill so the chart paints immediately instead of
@@ -4602,7 +4778,7 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
     // default if no backfill is emitted at all, so this generator path
     // is mostly about the gauge/number override.
     const limit = (chartType === 'gauge' || chartType === 'number') ? 1 : 100;
-    extraOptions.push(`backfill: { raw: 'newest', type: '${queryType}', params: { limit: ${limit} } }`);
+    extraOptions.push(`backfill: { raw: 'newest', type: '${queryType}', params: { limit: ${limit}${filterFragment} } }`);
   }
   if (parserConfig && (parserConfig.dataPath || parserConfig.timestampField)) {
     const parts = [];

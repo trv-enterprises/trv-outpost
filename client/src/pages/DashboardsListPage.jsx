@@ -27,9 +27,11 @@ import {
   Tag,
   Tooltip,
   Checkbox,
-  Dropdown
+  Dropdown,
+  OverflowMenu,
+  OverflowMenuItem
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View, Reset } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
@@ -43,6 +45,7 @@ import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
+import '../components/shared/FilterOverflowMenu.scss';
 import './DashboardsListPage.scss';
 
 /**
@@ -99,6 +102,10 @@ function DashboardsListPage() {
   // Single-select connection filter. 'all' = no filter; otherwise the
   // connection id we're matching against any panel's component refs.
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.connection || 'all');
+  // Variable-driven only: when on, keep only dashboards that define and
+  // enable dashboard variables (settings.variables_enabled + variables[],
+  // via dashboardUsesVariable). Lives in the ⋮ filter overflow.
+  const [variableOnly, setVariableOnly] = useState(savedFilters.variableOnly || false);
   // Export mode layers a selection UI on top of the table. When on:
   // the Create button hides, rows show a checkbox, and a batch-action
   // bar at the top of the list shows selection count + Export button.
@@ -117,6 +124,7 @@ function DashboardsListPage() {
       tags: tagFilter,
       namespaces: namespaceFilter,
       connection: connectionFilter,
+      variableOnly,
     });
     // View mode stays in listPrefs (it's UI-local, not shared with
     // View-mode). Sort moved to per-user server config so the two
@@ -124,7 +132,7 @@ function DashboardsListPage() {
     setListPrefs('dashboards', {
       view: viewMode,
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, connectionFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, connectionFilter, variableOnly]);
 
   // Fetch dashboards, charts, and connections from API
   useEffect(() => {
@@ -430,6 +438,11 @@ function DashboardsListPage() {
       });
     }
 
+    // Variable-driven only: keep dashboards that define + enable variables.
+    if (variableOnly) {
+      result = result.filter((d) => dashboardUsesVariable(d));
+    }
+
     // Filter by search term (matches name, description, or connection names)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -485,7 +498,7 @@ function DashboardsListPage() {
     });
 
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, viewMode, tileOrder, charts, connections, tagFilter, namespaceFilter, connectionFilter]);
+  }, [dashboards, searchTerm, sortKey, sortDirection, viewMode, tileOrder, charts, connections, tagFilter, namespaceFilter, connectionFilter, variableOnly]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
@@ -593,18 +606,44 @@ function DashboardsListPage() {
             }}
             size="md"
           />
+          {/* Overflow (⋮) menu for facet toggles — mirrors the components
+              list/picker. Holds "Variable dashboards only". Sits BEFORE the
+              reset button so reset stays the rightmost filter control. */}
+          <OverflowMenu
+            renderIcon={() => <OverflowMenuVertical size={20} />}
+            flipped
+            direction="bottom"
+            align="bottom-end"
+            iconDescription="Filter options"
+            menuOptionsClass="filter-overflow-options"
+            className={`filter-overflow-trigger${variableOnly ? ' filter-overflow-trigger--active' : ''}`}
+          >
+            <OverflowMenuItem
+              itemText={
+                <span className="filter-overflow-item">
+                  {variableOnly
+                    ? <Checkmark size={16} />
+                    : <span style={{ width: 16, display: 'inline-block' }} />}
+                  <span>Variable dashboards only</span>
+                </span>
+              }
+              onClick={() => setVariableOnly((v) => !v)}
+            />
+          </OverflowMenu>
           <ResetFiltersButton
             active={
               !!searchTerm ||
               namespaceFilter.length > 0 ||
               tagFilter.length > 0 ||
-              connectionFilter !== 'all'
+              connectionFilter !== 'all' ||
+              variableOnly
             }
             onReset={() => {
               setSearchTerm('');
               setNamespaceFilter([]);
               setTagFilter([]);
               setConnectionFilter('all');
+              setVariableOnly(false);
             }}
           />
           {viewMode === 'tile' && (

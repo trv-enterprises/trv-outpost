@@ -484,6 +484,18 @@ export function buildOption(values, data, helpers = {}) {
     xAxis.nameLocation = 'middle';
     xAxis.nameGap = 30;
   }
+  // X-axis label rotation. Rotating angled category labels lets long
+  // names fit where horizontal ones would overlap and get dropped.
+  // We rotate ONLY — we deliberately do NOT force `interval: 0`: letting
+  // ECharts keep its automatic label-thinning means a chart with many
+  // categories (e.g. a streaming/timestamp x-axis with hundreds of
+  // points) still drops labels instead of stacking them into an
+  // unreadable smear. This matches the original custom-code behavior.
+  // Stored as a number of degrees (0 = horizontal = unchanged behavior).
+  const xLabelRotate = Number(opts?.xAxisLabelRotate) || 0;
+  if (xLabelRotate !== 0) {
+    xAxis.axisLabel = { ...(xAxis.axisLabel || {}), rotate: xLabelRotate };
+  }
 
   // Grid edge budget. ECharts doesn't auto-reserve plot space for
   // legends — they overlay the canvas. We bump the grid edge on the

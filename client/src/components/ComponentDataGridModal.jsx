@@ -21,11 +21,19 @@ import { formatCellValue } from '../utils/dataTransforms';
  * inside the chart panel); otherwise DataContext is null and the modal
  * shows an empty-state notice.
  */
-export default function ComponentDataGridModal({ open, chart, onClose }) {
+export default function ComponentDataGridModal({ open, chart, onClose, data: dataProp, loading: loadingProp, error: errorProp, hasData: hasDataProp }) {
+  // Prefer data passed as props (captured by the caller INSIDE the
+  // DataContext provider, where it's reliably available). Fall back to
+  // reading context directly for any legacy caller. The prop path exists
+  // because this modal portals to document.body (and Carbon's <Modal>
+  // portals again); under React 19 a doubly-portaled subtree can read a
+  // stale/empty DataContext even though the provider is an ancestor in the
+  // virtual tree. Capturing in the parent and passing down sidesteps that.
   const ctx = useContext(DataContext);
-  const data = ctx?.data;
-  const loading = ctx?.loading;
-  const error = ctx?.error;
+  const hasCtx = hasDataProp !== undefined ? hasDataProp : ctx !== null;
+  const data = dataProp !== undefined ? dataProp : ctx?.data;
+  const loading = loadingProp !== undefined ? loadingProp : ctx?.loading;
+  const error = errorProp !== undefined ? errorProp : ctx?.error;
 
   const columnAliases = chart?.data_mapping?.column_aliases || {};
   const visibleColumnsConfig = chart?.data_mapping?.visible_columns || null;
@@ -185,7 +193,7 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
       className="chart-data-grid-modal"
     >
       <div style={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
-        {!ctx && (
+        {!hasCtx && (
           <InlineNotification
             kind="warning"
             title="No data context"
@@ -194,12 +202,12 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
             hideCloseButton
           />
         )}
-        {ctx && loading && !data && (
+        {hasCtx && loading && !data && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Loading description="Loading data..." withOverlay={false} />
           </div>
         )}
-        {ctx && error && !data && (
+        {hasCtx && error && !data && (
           <InlineNotification
             kind="error"
             title="Data error"
@@ -208,10 +216,10 @@ export default function ComponentDataGridModal({ open, chart, onClose }) {
             hideCloseButton
           />
         )}
-        {ctx && data && latestRowObjs.length === 0 && (
+        {hasCtx && data && latestRowObjs.length === 0 && (
           <div style={{ color: '#6f6f6f', padding: '1rem', textAlign: 'center' }}>No data.</div>
         )}
-        {ctx && data && latestRowObjs.length > 0 && (
+        {hasCtx && data && latestRowObjs.length > 0 && (
           <div className="ag-theme-quartz-dark" style={{ flex: 1, minHeight: 0 }}>
             <AgGridReact
               ref={gridRef}

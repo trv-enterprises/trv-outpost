@@ -209,6 +209,24 @@ Server-side filtering (optional, any raw mode):
   - params.filter            — substring match against record JSON
   - params.filter_ignore_case — case-insensitive variant (bool)
 
+NOTE: filter is a plain SUBSTRING over the whole record, NOT a
+field-scoped predicate. In practice ts-store records carry very few
+label fields, so a general substring (e.g. a location/host value)
+reliably isolates one source without false matches.
+
+ts-store counts MATCHES, not candidates: "newest" with limit=1000 and
+a filter returns up to 1000 records THAT MATCH (it scans more behind
+the scenes). This is why source-side filter is the right tool when one
+stream interleaves many values (e.g. many machines): a client-side
+filter on an unfiltered "newest 1000" leaves only ~1000/M rows for the
+selected value, but params.filter returns the full 1000 for it.
+
+Dashboard variable: set params.filter to the literal token
+"{{dashboard-variable}}" to bind the source-side filter to the active
+dashboard variable — the server substitutes the chosen value at query
+time. Prefer this over a client-side variable filter for ts-store so
+filtered panels get complete per-value history (incl. backfill).
+
 Anything richer (per-column predicates, math, GROUP BY) must be
 done client-side via data_mapping.filters or by pulling a wider
 window with since/range and aggregating in the component.

@@ -253,6 +253,29 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
   );
 }
 
+// Reads DataContext at THIS level — a direct child of the loader's
+// provider, the same place ChartPanelActions reads it successfully — and
+// passes the live data snapshot into the modal as props. The modal itself
+// portals to document.body (twice, via createPortal + Carbon <Modal>);
+// under React 19 a doubly-portaled subtree can fail to read an ancestor
+// context, which is what made the data table show "No data context" even
+// though the chart (a non-portaled sibling) had data. Capturing here and
+// forwarding sidesteps the portal boundary entirely.
+function DataModalWithContext({ chart, open, onClose }) {
+  const ctx = useContext(DataContext);
+  return (
+    <ComponentDataGridModal
+      open={open}
+      chart={chart}
+      onClose={onClose}
+      hasData={ctx !== null}
+      data={ctx?.data ?? null}
+      loading={ctx?.loading ?? false}
+      error={ctx?.error ?? null}
+    />
+  );
+}
+
 export default function ComponentPanelWithActions({ chart, loaderProps }) {
   const [dataModalOpen, setDataModalOpen] = useState(false);
   const captureRef = useRef(null);
@@ -273,9 +296,9 @@ export default function ComponentPanelWithActions({ chart, loaderProps }) {
               showDataModalAction={showDataModalAction}
             />
             {dataModalOpen && (
-              <ComponentDataGridModal
-                open={dataModalOpen}
+              <DataModalWithContext
                 chart={chart}
+                open={dataModalOpen}
                 onClose={() => setDataModalOpen(false)}
               />
             )}

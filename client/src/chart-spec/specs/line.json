@@ -148,6 +148,20 @@
               "label": "Show point markers",
               "default": true,
               "helperText": "Turn off for dense time series to get a clean line."
+            },
+            {
+              "id": "x_axis_label_rotate",
+              "binds": "options.xAxisLabelRotate",
+              "type": "enum",
+              "label": "X-axis label angle",
+              "helperText": "Rotate x-axis labels so long category names fit better. Best for charts with few categories; with many categories ECharts still thins labels to avoid overlap.",
+              "default": 0,
+              "options": [
+                { "value": 0, "label": "Horizontal" },
+                { "value": 30, "label": "30°" },
+                { "value": 45, "label": "45°" },
+                { "value": 90, "label": "Vertical (90°)" }
+              ]
             }
           ]
         },

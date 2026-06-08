@@ -662,6 +662,42 @@
       }
     }
 
+    // Source-side FILTER row. Full-width single column: the value-source
+    // dropdown sits inline with the value field / variable chip, with the
+    // ignore-case checkbox and hint stacked below.
+    .tsstore-filter-row {
+      .tsstore-filter-col {
+        flex: 1 1 100%;
+      }
+
+      .tsstore-filter-controls {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: spacing.$spacing-03;
+        margin-top: spacing.$spacing-02;
+
+        .tsstore-filter-source-select {
+          flex: 0 0 auto;
+          min-width: 9rem;
+        }
+
+        .tsstore-filter-value-input {
+          flex: 1 1 0;
+          min-width: 0;
+        }
+
+        // The bound-variable chip aligns with the input height.
+        .value-variable-chip {
+          flex: 0 0 auto;
+        }
+      }
+
+      .cds--checkbox-wrapper {
+        margin-top: spacing.$spacing-03;
+      }
+    }
+
     .query-header {
       display: flex;
       justify-content: space-between;

@@ -190,6 +190,49 @@ func TestDashboardVariableValue(t *testing.T) {
 	}
 }
 
+func TestResolveFilterParam(t *testing.T) {
+	cases := []struct {
+		name   string
+		params map[string]interface{}
+		want   string
+	}{
+		{"no_filter", map[string]interface{}{}, ""},
+		{"empty_filter", map[string]interface{}{"filter": ""}, ""},
+		{"literal_filter", map[string]interface{}{"filter": "Warehouse"}, "Warehouse"},
+		{
+			"token_with_value",
+			map[string]interface{}{"filter": DashboardVariableToken, DashboardVariableParam: "Warehouse"},
+			"Warehouse",
+		},
+		{
+			// Token but no value supplied → unfiltered, NOT the literal token
+			// (which would match nothing in ts-store's substring filter).
+			"token_without_value",
+			map[string]interface{}{"filter": DashboardVariableToken},
+			"",
+		},
+		{
+			"token_with_empty_value",
+			map[string]interface{}{"filter": DashboardVariableToken, DashboardVariableParam: ""},
+			"",
+		},
+		{
+			// A literal that merely contains the token text is passed through
+			// verbatim (only an EXACT token binds to the variable).
+			"partial_token_literal",
+			map[string]interface{}{"filter": "pre{{dashboard-variable}}", DashboardVariableParam: "X"},
+			"pre{{dashboard-variable}}",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveFilterParam(tc.params); got != tc.want {
+				t.Fatalf("resolveFilterParam = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDeriveVariableColumn(t *testing.T) {
 	cases := []struct {
 		name       string

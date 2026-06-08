@@ -531,9 +531,13 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
         try {
           const result = await queryData(connectionId, effectiveBackfill, false);
           if (mountedRef.current && result.data?.columns && result.data?.rows) {
-            // Convert columnar result to record objects for processStreamRecord
+            // Convert columnar result to record objects for processStreamRecord.
+            // ts-store backfill ('newest' / 'since:' both hit /data/newest) returns
+            // newest-first (descending timestamp). The chart trusts row order and
+            // never sorts (line.js builds a category x-axis straight from arrival
+            // order), so feed oldest-first to paint left-to-right like SQL charts.
             const { columns, rows } = result.data;
-            rows.forEach(row => {
+            [...rows].reverse().forEach(row => {
               const record = {};
               columns.forEach((col, i) => { record[col] = row[i]; });
               processStreamRecord(record);

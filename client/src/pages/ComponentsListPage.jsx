@@ -533,29 +533,11 @@ function ComponentsListPage() {
             }}
             size="md"
           />
-          <ResetFiltersButton
-            active={
-              !!searchTerm ||
-              namespaceFilter.length > 0 ||
-              selectedTypes !== null ||
-              tagFilter.length > 0 ||
-              connectionFilter !== 'all' ||
-              variableOnly ||
-              customCodeOnly
-            }
-            onReset={() => {
-              setSearchTerm('');
-              setNamespaceFilter([]);
-              setSelectedTypes(null);
-              setTagFilter([]);
-              setConnectionFilter('all');
-              setVariableOnly(false);
-              setCustomCodeOnly(false);
-            }}
-          />
           {/* Overflow (⋮) menu for facet toggles. Mirrors the dashboard
               viewer's three-dot menu. Holds the "Variable-driven only" toggle
-              (checkmark when active); room for more facet toggles later. */}
+              (checkmark when active); room for more facet toggles later.
+              Sits BEFORE the reset button so reset stays the rightmost
+              control in the filter group. */}
           <OverflowMenu
             renderIcon={() => <OverflowMenuVertical size={20} />}
             flipped
@@ -588,6 +570,26 @@ function ComponentsListPage() {
               onClick={() => setCustomCodeOnly((v) => !v)}
             />
           </OverflowMenu>
+          <ResetFiltersButton
+            active={
+              !!searchTerm ||
+              namespaceFilter.length > 0 ||
+              selectedTypes !== null ||
+              tagFilter.length > 0 ||
+              connectionFilter !== 'all' ||
+              variableOnly ||
+              customCodeOnly
+            }
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setSelectedTypes(null);
+              setTagFilter([]);
+              setConnectionFilter('all');
+              setVariableOnly(false);
+              setCustomCodeOnly(false);
+            }}
+          />
           {viewMode === 'tile' && (
             <SortMenu
               sortKey={sortKey}

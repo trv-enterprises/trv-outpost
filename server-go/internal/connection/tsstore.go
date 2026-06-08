@@ -173,7 +173,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		hasExplicitLimit = true
 	}
 
-	filter, _ := query.Params["filter"].(string)
+	filter := resolveFilterParam(query.Params)
 	filterIgnoreCase, _ := query.Params["filter_ignore_case"].(bool)
 
 	var objects []dataResponse
@@ -534,7 +534,7 @@ func (a *TSStoreAdapter) buildWebSocketURL(query registry.Query) (string, error)
 		params.Set("format", "compact")
 	}
 
-	if filter, ok := query.Params["filter"].(string); ok && filter != "" {
+	if filter := resolveFilterParam(query.Params); filter != "" {
 		params.Set("filter", filter)
 		if ignoreCase, ok := query.Params["filter_ignore_case"].(bool); ok && ignoreCase {
 			params.Set("filter_ignore_case", "true")
@@ -738,7 +738,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 	}
 
 	// Get filter params
-	filter, _ := query.Params["filter"].(string)
+	filter := resolveFilterParam(query.Params)
 	filterIgnoreCase, _ := query.Params["filter_ignore_case"].(bool)
 
 	var objects []dataResponse

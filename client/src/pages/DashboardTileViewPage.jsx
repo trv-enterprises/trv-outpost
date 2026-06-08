@@ -13,7 +13,7 @@ import {
   Dropdown,
   Tag,
 } from '@carbon/react';
-import { Dashboard, StarFilled, Reset } from '@carbon/icons-react';
+import { Dashboard, StarFilled, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import TagFilter from '../components/shared/TagFilter';
@@ -21,7 +21,9 @@ import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
+import { dashboardUsesVariable } from '../utils/dashboardVariable';
 import { syncKioskFromUrl, getKioskDashboardIds, isKioskActive } from '../utils/kioskMode';
+import '../components/shared/FilterOverflowMenu.scss';
 import './DashboardTileViewPage.scss';
 
 /**
@@ -63,6 +65,8 @@ function DashboardTileViewPage() {
   const [tagFilter, setTagFilter] = useState(Array.isArray(persistedFilters.tags) ? persistedFilters.tags : []);
   // Single-select connection filter. 'all' = no filter.
   const [connectionFilter, setConnectionFilter] = useState(persistedFilters.connection || 'all');
+  // Variable-driven only: keep dashboards that define + enable variables.
+  const [variableOnly, setVariableOnly] = useState(!!persistedFilters.variableOnly);
   // Sort mode for the tile grid. 'manual' means honour the user's
   // drag-reorder; any other value disables drag and applies a key+dir
   // sort. Defaults to 'manual' for backwards-compat (existing users with
@@ -120,7 +124,8 @@ function DashboardTileViewPage() {
       searchTerm ||
       namespaceFilter.length > 0 ||
       tagFilter.length > 0 ||
-      connectionFilter !== 'all'
+      connectionFilter !== 'all' ||
+      variableOnly
     );
     try {
       if (hasAny) {
@@ -129,6 +134,7 @@ function DashboardTileViewPage() {
           namespaces: namespaceFilter,
           tags: tagFilter,
           connection: connectionFilter,
+          variableOnly,
         }));
       } else {
         sessionStorage.removeItem('tile:filters');
@@ -136,7 +142,7 @@ function DashboardTileViewPage() {
     } catch {
       // quota / disabled — non-fatal, filters just don't survive.
     }
-  }, [searchTerm, namespaceFilter, tagFilter, connectionFilter]);
+  }, [searchTerm, namespaceFilter, tagFilter, connectionFilter, variableOnly]);
 
   const fetchUserConfig = async () => {
     const userGuid = apiClient.getCurrentUserGuid();
@@ -400,6 +406,10 @@ function DashboardTileViewPage() {
       });
     }
 
+    if (variableOnly) {
+      result = result.filter(d => dashboardUsesVariable(d));
+    }
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(d =>
@@ -412,7 +422,7 @@ function DashboardTileViewPage() {
     // Mode tile page and the dashboard viewer's prev/next arrows
     // walk dashboards in the same sequence.
     return orderDashboardsForViewer(result, tileOrder, { key: sortKey, direction: sortDirection });
-  }, [kioskIds, dashboards, namespaceFilter, tagFilter, connectionFilter, charts, searchTerm, tileOrder, sortKey, sortDirection]);
+  }, [kioskIds, dashboards, namespaceFilter, tagFilter, connectionFilter, variableOnly, charts, searchTerm, tileOrder, sortKey, sortDirection]);
 
   if (loading) {
     return (
@@ -484,18 +494,44 @@ function DashboardTileViewPage() {
               }}
               size="md"
             />
+            {/* Overflow (⋮) menu for facet toggles — mirrors the dashboards
+                list. "Variable dashboards only". Sits BEFORE the reset button
+                so reset stays the rightmost filter control. */}
+            <OverflowMenu
+              renderIcon={() => <OverflowMenuVertical size={20} />}
+              flipped
+              direction="bottom"
+              align="bottom-end"
+              iconDescription="Filter options"
+              menuOptionsClass="filter-overflow-options"
+              className={`filter-overflow-trigger${variableOnly ? ' filter-overflow-trigger--active' : ''}`}
+            >
+              <OverflowMenuItem
+                itemText={
+                  <span className="filter-overflow-item">
+                    {variableOnly
+                      ? <Checkmark size={16} />
+                      : <span style={{ width: 16, display: 'inline-block' }} />}
+                    <span>Variable dashboards only</span>
+                  </span>
+                }
+                onClick={() => setVariableOnly((v) => !v)}
+              />
+            </OverflowMenu>
             <ResetFiltersButton
               active={
                 !!searchTerm ||
                 namespaceFilter.length > 0 ||
                 tagFilter.length > 0 ||
-                connectionFilter !== 'all'
+                connectionFilter !== 'all' ||
+                variableOnly
               }
               onReset={() => {
                 setSearchTerm('');
                 setNamespaceFilter([]);
                 setTagFilter([]);
                 setConnectionFilter('all');
+                setVariableOnly(false);
               }}
             />
             <SortMenu

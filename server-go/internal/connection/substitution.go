@@ -30,6 +30,28 @@ const DashboardVariableParam = "dashboard_variable"
 var ErrDashboardVariableNotSet = errors.New("dashboard variable not set")
 
 // dashboardVariableValue extracts the active variable value from a params map,
+// resolveFilterParam reads the "filter" param and, when it is exactly the
+// DashboardVariableToken, replaces it with the active dashboard-variable value.
+// ts-store's filter is a plain substring (not field-scoped), so an author who
+// binds the filter to the dashboard variable stores the literal token; this
+// swaps it for the chosen value at query time. Returns the resolved substring
+// (empty string means "no filter"). When the token is present but no value was
+// supplied, returns "" so the query runs unfiltered rather than matching the
+// literal "{{dashboard-variable}}" text (which would match nothing).
+func resolveFilterParam(params map[string]interface{}) string {
+	filter, _ := params["filter"].(string)
+	if filter == "" {
+		return ""
+	}
+	if filter == DashboardVariableToken {
+		if value, ok := dashboardVariableValue(params); ok {
+			return value
+		}
+		return "" // token but no value → unfiltered
+	}
+	return filter
+}
+
 // reporting whether the token should be substituted (present + non-empty).
 func dashboardVariableValue(params map[string]interface{}) (string, bool) {
 	if params == nil {

@@ -326,27 +326,8 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
             }}
             size="md"
           />
-          <ResetFiltersButton
-            active={
-              !!searchTerm ||
-              namespaceFilter.length > 0 ||
-              tagFilter.length > 0 ||
-              connectionFilter !== 'all' ||
-              variableOnly ||
-              customCodeOnly ||
-              !sameTypeSet(selectedTypes, categoryToTypeSet(initialCategory))
-            }
-            onReset={() => {
-              setSearchTerm('');
-              setNamespaceFilter([]);
-              setTagFilter([]);
-              setConnectionFilter('all');
-              setSelectedTypes(categoryToTypeSet(initialCategory));
-              setVariableOnly(false);
-              setCustomCodeOnly(false);
-            }}
-          />
-          {/* Overflow (⋮) menu for facet toggles — same as the components list. */}
+          {/* Overflow (⋮) menu for facet toggles — same as the components list.
+              Sits BEFORE the reset button so reset stays rightmost. */}
           <OverflowMenu
             renderIcon={() => <OverflowMenuVertical size={20} />}
             flipped
@@ -379,6 +360,26 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
               onClick={() => setCustomCodeOnly((v) => !v)}
             />
           </OverflowMenu>
+          <ResetFiltersButton
+            active={
+              !!searchTerm ||
+              namespaceFilter.length > 0 ||
+              tagFilter.length > 0 ||
+              connectionFilter !== 'all' ||
+              variableOnly ||
+              customCodeOnly ||
+              !sameTypeSet(selectedTypes, categoryToTypeSet(initialCategory))
+            }
+            onReset={() => {
+              setSearchTerm('');
+              setNamespaceFilter([]);
+              setTagFilter([]);
+              setConnectionFilter('all');
+              setSelectedTypes(categoryToTypeSet(initialCategory));
+              setVariableOnly(false);
+              setCustomCodeOnly(false);
+            }}
+          />
           <SortMenu
             sortKey={sortKey}
             sortDirection={sortDirection}
