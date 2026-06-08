@@ -3748,7 +3748,14 @@ info:
   contact:
     email: support@example.com
     name: Dashboard Team
-  description: Dashboard system with AI-powered chart generation
+  description: |-
+    Dashboard system with AI-powered chart generation.
+
+    **Auth:** click **Authorize** and enter `Bearer <token>`, where
+    `<token>` is either a `trve_…` API key (Manage → System Users →
+    Generate, or POST /api/api-keys) or an interactive session JWT.
+    The same value is sent as the `Authorization` header on every
+    "Try it out" call.
   title: TRV Outpost API
   version: "1.0"
 paths:
@@ -7967,4 +7974,11 @@ paths:
       summary: Subscribe to server status via WebSocket
       tags:
       - system
+securityDefinitions:
+  BearerAuth:
+    description: 'Type "Bearer" followed by a space and your token (a trve_… API key
+      or a session JWT). Example: "Bearer trve_abc123".'
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

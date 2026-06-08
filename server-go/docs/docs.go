@@ -11281,6 +11281,14 @@ const docTemplate = `{
                 }
             }
         }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and your token (a trve_… API key or a session JWT). Example: \"Bearer trve_abc123\".",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
     }
 }`
 
@@ -11291,7 +11299,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api",
 	Schemes:          []string{},
 	Title:            "TRV Outpost API",
-	Description:      "Dashboard system with AI-powered chart generation",
+	Description:      "Dashboard system with AI-powered chart generation.\n\n**Auth:** click **Authorize** and enter `Bearer <token>`, where\n`<token>` is either a `trve_…` API key (Manage → System Users →\nGenerate, or POST /api/api-keys) or an interactive session JWT.\nThe same value is sent as the `Authorization` header on every\n\"Try it out\" call.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 }

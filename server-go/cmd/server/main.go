@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,6 +42,7 @@ import (
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/swaggo/swag"
 
 	swaggerdocs "github.com/trv-enterprises/trve-dashboard/docs"    // Swagger docs (init() registers the spec; also referenced to set Host per request)
 	"github.com/trv-enterprises/trve-dashboard/internal/connection" // Registers adapters via init() and exposes SetAllowInsecureTLS for deployment policy
@@ -48,11 +50,21 @@ import (
 
 // @title TRV Outpost API
 // @version 1.0
-// @description Dashboard system with AI-powered chart generation
+// @description Dashboard system with AI-powered chart generation.
+// @description
+// @description **Auth:** click **Authorize** and enter `Bearer <token>`, where
+// @description `<token>` is either a `trve_…` API key (Manage → System Users →
+// @description Generate, or POST /api/api-keys) or an interactive session JWT.
+// @description The same value is sent as the `Authorization` header on every
+// @description "Try it out" call.
 // @contact.name Dashboard Team
 // @contact.email support@example.com
 // @host localhost:3001
 // @BasePath /api
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and your token (a trve_… API key or a session JWT). Example: "Bearer trve_abc123".
 func main() {
 	// Load configuration
 	cfg, err := config.Load()
@@ -969,6 +981,7 @@ func main() {
 	// swag.ReadDoc reads these fields at request time, so a per-request
 	// assignment is all that's needed.
 	if cfg.Swagger.Enabled {
+		swaggerUI := ginSwagger.WrapHandler(swaggerFiles.Handler)
 		router.GET("/swagger/*any", func(c *gin.Context) {
 			if c.Request.Host != "" {
 				swaggerdocs.SwaggerInfo.Host = c.Request.Host
@@ -978,7 +991,21 @@ func main() {
 				scheme = "https"
 			}
 			swaggerdocs.SwaggerInfo.Schemes = []string{scheme}
-			ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
+
+			// doc.json: serve a copy with a global security requirement
+			// injected. The spec declares the BearerAuth scheme (so the UI
+			// shows an Authorize button), but swaggo has no global-security
+			// annotation — without a top-level `security` block the UI won't
+			// attach the Authorization header to "Try it out" calls, so every
+			// authenticated request 401s even after you Authorize. Inject it
+			// here once and apply to all operations. Genuinely-public routes
+			// (/health, etc.) still work because the auth middleware allows
+			// them; the lock is advisory, not enforced by the spec.
+			if strings.HasSuffix(c.Request.URL.Path, "/doc.json") {
+				serveSecuredDocJSON(c)
+				return
+			}
+			swaggerUI(c)
 		})
 		fmt.Println("✓ Swagger UI enabled at http://localhost:3001/swagger/index.html")
 	}
@@ -1123,6 +1150,31 @@ func healthCheck(mongodb *database.MongoDB) gin.HandlerFunc {
 			c.JSON(http.StatusServiceUnavailable, status)
 		}
 	}
+}
+
+// serveSecuredDocJSON renders the Swagger spec (with the per-request Host /
+// Schemes already applied) and injects a top-level `security` requirement
+// referencing the BearerAuth scheme. swaggo declares the scheme via
+// @securityDefinitions but has no global-security annotation, so without
+// this the Swagger UI's "Authorize" button exists yet the Authorization
+// header is never sent on "Try it out" — every authenticated call 401s.
+// Injecting global security here (rather than annotating all ~143
+// operations) keeps the lock on every endpoint with no per-handler churn.
+func serveSecuredDocJSON(c *gin.Context) {
+	doc, err := swag.ReadDoc(swaggerdocs.SwaggerInfo.InstanceName())
+	if err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	var spec map[string]interface{}
+	if err := json.Unmarshal([]byte(doc), &spec); err != nil {
+		// Fall back to the raw doc rather than 500 — better a working UI
+		// without the global lock than no spec at all.
+		c.String(http.StatusOK, doc)
+		return
+	}
+	spec["security"] = []map[string][]string{{"BearerAuth": {}}}
+	c.JSON(http.StatusOK, spec)
 }
 
 // resolveDocsPath finds the Docusaurus build output relative to the server
