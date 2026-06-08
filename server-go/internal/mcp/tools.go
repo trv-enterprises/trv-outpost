@@ -290,8 +290,15 @@ func (r *ToolRegistry) registerConnectionTools() {
 			if err != nil {
 				return nil, err
 			}
+			// Sanitize secrets before they reach the agent (the toolops
+			// path above does the same). Never hand a live api_key /
+			// password to a model or into an exportable transcript.
+			masked := make([]*models.Connection, len(conns))
+			for i, c := range conns {
+				masked[i] = c.SanitizeForAPI()
+			}
 			return map[string]interface{}{
-				"connections": conns,
+				"connections": masked,
 				"count":       total,
 			}, nil
 		},
@@ -317,7 +324,15 @@ func (r *ToolRegistry) registerConnectionTools() {
 			if r.toolops != nil {
 				return r.toolops.GetConnection(context.Background(), toolops.GetConnectionInput{ID: id})
 			}
-			return r.connectionService.GetConnection(context.Background(), id)
+			conn, err := r.connectionService.GetConnection(context.Background(), id)
+			if err != nil {
+				return nil, err
+			}
+			if conn == nil {
+				return nil, nil
+			}
+			// Sanitize secrets before returning to the agent.
+			return conn.SanitizeForAPI(), nil
 		},
 	)
 

@@ -6,6 +6,18 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.3] — 2026-06-08
+
+### Fixed
+
+- **Security: AI/MCP connection tools no longer expose secrets.** The
+  `list_connections` and `get_connection` tools (used by the Dashboard
+  Assistant, the MCP endpoint, and external agents) returned raw connection
+  records — including TSStore `api_key`, SQL/MQTT/Prometheus passwords, and
+  API auth credentials — in cleartext to the model and into the exportable
+  session transcript. They now apply the same `SanitizeForAPI` masking the
+  REST API already used, so no agent surface ever receives live credentials.
+
 ## [0.28.2] — 2026-06-08
 
 Swagger usability, an Assistant bug fix, and docs/UX polish. No breaking

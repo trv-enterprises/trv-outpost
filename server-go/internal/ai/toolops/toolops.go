@@ -153,8 +153,18 @@ func (t *Toolset) ListConnections(ctx context.Context) (*ListConnectionsOutput, 
 	if err != nil {
 		return nil, err
 	}
+	// Sanitize before the records reach the model. The agent never
+	// needs live credentials — and the tool result is persisted into
+	// the session transcript, which can be exported, so an unmasked
+	// api_key/password here leaks in cleartext. SanitizeForAPI masks
+	// every secret field (TSStore api_key, SQL/MQTT/Prometheus
+	// passwords, API auth creds/headers/body, etc.).
+	masked := make([]*models.Connection, len(conns))
+	for i, c := range conns {
+		masked[i] = c.SanitizeForAPI()
+	}
 	return &ListConnectionsOutput{
-		Connections: conns,
+		Connections: masked,
 		Count:       total,
 	}, nil
 }
@@ -188,10 +198,14 @@ func (t *Toolset) GetConnection(ctx context.Context, in GetConnectionInput) (*Ge
 	if err != nil {
 		return nil, err
 	}
-	out := &GetConnectionOutput{Connection: conn}
+	// Sanitize before returning — the agent never needs live
+	// credentials and the result is persisted/exportable. Compute
+	// guidance from the raw record (type id only), then mask.
+	out := &GetConnectionOutput{}
 	if conn != nil {
 		out.GuidanceType = conn.GetEffectiveTypeID()
 		out.Guidance, _ = connectionguidance.Get(out.GuidanceType)
+		out.Connection = conn.SanitizeForAPI()
 	}
 	return out, nil
 }
