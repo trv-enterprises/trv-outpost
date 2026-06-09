@@ -5,7 +5,13 @@ data visualization dashboards with AI-powered component generation,
 real-time streaming, and smart device control, built by a technologist
 that has been building complex system for over 40 years. This was my first
 large development using Claude Code to assist me in the development, 
-testing, and documentation.
+testing, and documentation. 
+
+The dashboards have visualization, control and display. Control and Display are
+dependant on specific technologies in my homelab. These areas will be more generalized
+in the future. The component types can be turned off. The Vissulaization layer on
+the otherhand was the primary motivation to this repo and should be able to be used
+in most any environment.
 
 ## What it does
 
