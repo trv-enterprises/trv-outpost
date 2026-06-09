@@ -3,7 +3,7 @@
 A full-stack application for creating, managing, and viewing dynamic
 data visualization dashboards with AI-powered component generation,
 real-time streaming, and smart device control, built by a technologist
-that has been building complex system for over 30 years.This was my first
+that has been building complex system for over 40 years. This was my first
 large development using Claude Code to assist me in the development, 
 testing, and documentation.
 
