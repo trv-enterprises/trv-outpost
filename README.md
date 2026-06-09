@@ -62,7 +62,7 @@ testing, and documentation.
 ## High-level architecture
 
 ```
-┌───────────────────────────────────────────────────┐  ┌──────────────────────┐
+┌────────────────────────────────────────────────────┐  ┌──────────────────────┐
 │            React frontend (Vite, :5173)            │  │  External AI agents  │
 │       Carbon · ECharts · React Router              │  │  (Claude Desktop +   │
 │  Design mode  │ View mode  │ Manage mode           │  │   other MCP clients  │
