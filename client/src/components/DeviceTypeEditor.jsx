@@ -322,7 +322,7 @@ function DeviceTypeEditor({ deviceType, onSave, onClose }) {
           {/* Command templates per supported type */}
           {supportedTypes.map(type => (
             <div key={type} style={{ borderLeft: '2px solid var(--cds-border-subtle-01)', paddingLeft: '1rem', marginBottom: '0.75rem' }}>
-              <Tag type="cyan" size="sm" style={{ marginBottom: '0.5rem' }}>{type}</Tag>
+              <Tag type="blue" size="sm" style={{ marginBottom: '0.5rem' }}>{type}</Tag>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <TextArea
                   id={`cmd-template-${type}`}

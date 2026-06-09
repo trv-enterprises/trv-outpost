@@ -502,8 +502,8 @@ function DashboardsListPage() {
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
+    // (tags now render under the name in the name cell — no separate column)
     { key: 'namespace', header: 'Namespace', isSortable: true },
-    { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'panels', header: 'Panels', isSortable: true },
     { key: 'connections', header: 'Connections', isSortable: false },
@@ -945,28 +945,6 @@ function DashboardsListPage() {
                                 </TableCell>
                               );
                             }
-                            if (cell.info.header === 'tags') {
-                              const cellTags = Array.isArray(cell.value) ? cell.value : [];
-                              return (
-                                <TableCell key={cell.id} className="tags-cell">
-                                  {cellTags.map((t) => (
-                                    <Tag
-                                      key={t}
-                                      type="cyan"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
-                                      }}
-                                      title={`Filter by ${t}`}
-                                      style={{ cursor: 'pointer' }}
-                                    >
-                                      {t}
-                                    </Tag>
-                                  ))}
-                                </TableCell>
-                              );
-                            }
                             if (cell.info.header === 'panels') {
                               return (
                                 <TableCell key={cell.id} className="panels-cell" onClick={(e) => e.stopPropagation()}>
@@ -987,32 +965,54 @@ function DashboardsListPage() {
                             if (cell.info.header === 'actions') {
                               return (
                                 <TableCell key={cell.id} className="actions-cell">
-                                  <IconButton
-                                    kind="ghost"
-                                    label="View"
-                                    onClick={(e) => handleView(e, dashboard)}
-                                    size="sm"
-                                  >
-                                    <View size={16} />
-                                  </IconButton>
-                                  <IconButton
-                                    kind="ghost"
-                                    label="Delete"
-                                    onClick={(e) => handleDelete(e, dashboard)}
-                                    size="sm"
-                                  >
-                                    <TrashCan size={16} />
-                                  </IconButton>
+                                  <div className="actions-wrapper">
+                                    <IconButton
+                                      kind="ghost"
+                                      label="View"
+                                      onClick={(e) => handleView(e, dashboard)}
+                                      size="sm"
+                                    >
+                                      <View size={16} />
+                                    </IconButton>
+                                    <IconButton
+                                      kind="ghost"
+                                      label="Delete"
+                                      onClick={(e) => handleDelete(e, dashboard)}
+                                      size="sm"
+                                    >
+                                      <TrashCan size={16} />
+                                    </IconButton>
+                                  </div>
                                 </TableCell>
                               );
                             }
                             if (cell.info.header === 'name') {
+                              const dashTags = dashboard.tags || [];
                               return (
                                 <TableCell key={cell.id} className="name-cell">
                                   <div className="name-cell__name">
                                     <span>{cell.value}</span>
                                     <VariableIndicator active={dashboardUsesVariable(dashboard)} />
                                   </div>
+                                  {dashTags.length > 0 && (
+                                    <div className="name-cell__tags">
+                                      {dashTags.map((t) => (
+                                        <Tag
+                                          key={t}
+                                          type="blue"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
+                                          }}
+                                          title={`Filter by ${t}`}
+                                          style={{ cursor: 'pointer' }}
+                                        >
+                                          {t}
+                                        </Tag>
+                                      ))}
+                                    </div>
+                                  )}
                                 </TableCell>
                               );
                             }

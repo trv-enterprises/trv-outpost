@@ -27,25 +27,26 @@ import { Add, TrashCan, Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceChip from '../components/shared/NamespaceChip';
-import { NAMESPACE_DEFAULT_COLOR } from '../utils/namespaceColor';
+import { NAMESPACE_DEFAULT_COLOR, namespaceChipStyle, canonicalNamespaceColor } from '../utils/namespaceColor';
 import './NamespacesPage.scss';
 
-// Carbon-safe palette for the color picker. Users pick one of these
-// rather than typing hex — keeps the visual palette consistent and
-// avoids the "I typed a hex that nobody can read on dark theme" trap.
+// Namespace color palette — ONE preset per distinct Carbon tag color, so the
+// picker is a true 1:1 key: each swatch is rendered as the actual Carbon tag
+// color the chip will use (via namespaceChipStyle), and what you pick is
+// exactly the chip you get. The stored `value` is the canonical hex for that
+// Carbon color (kept for back-compat with existing namespace records, which
+// store a hex; namespaceColor.js maps it to the tag color at render). The
+// redundant old presets (Warm→red, Cool→purple, Yellow→warm-gray, Black→
+// cool-gray) were dropped — they collapsed onto these.
 const NAMESPACE_PALETTE = [
   { name: 'Gray',    value: '#6f6f6f' },
   { name: 'Blue',    value: '#0f62fe' },
   { name: 'Cyan',    value: '#1192e8' },
   { name: 'Teal',    value: '#009d9a' },
   { name: 'Green',   value: '#24a148' },
-  { name: 'Warm',    value: '#ff832b' },
   { name: 'Red',     value: '#da1e28' },
   { name: 'Magenta', value: '#d02670' },
   { name: 'Purple',  value: '#8a3ffc' },
-  { name: 'Yellow',  value: '#f1c21b' },
-  { name: 'Cool',    value: '#6929c4' },
-  { name: 'Black',   value: '#393939' },
 ];
 
 function NamespacesPage() {
@@ -85,7 +86,9 @@ function NamespacesPage() {
     setEditing(ns);
     setFormName(ns.name);
     setFormDescription(ns.description || '');
-    setFormColor(ns.color || NAMESPACE_DEFAULT_COLOR);
+    // Normalize legacy/dropped colors to the surviving palette swatch so the
+    // picker highlights the right one (and re-saving stores the canonical hex).
+    setFormColor(canonicalNamespaceColor(ns.color || NAMESPACE_DEFAULT_COLOR));
     setFormError(null);
     setModalOpen(true);
   };
@@ -288,7 +291,10 @@ function NamespacesPage() {
                   aria-label={c.name}
                   title={c.name}
                   className={`namespaces-page__swatch ${formColor === c.value ? 'is-selected' : ''}`}
-                  style={{ backgroundColor: c.value }}
+                  // Render the swatch as the mapped Carbon tag color (the chip's
+                  // real color), not the raw hex — so the picker previews exactly
+                  // what the chip will look like.
+                  style={{ backgroundColor: namespaceChipStyle(c.value).backgroundColor }}
                   onClick={() => setFormColor(c.value)}
                 />
               ))}

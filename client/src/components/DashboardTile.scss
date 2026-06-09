@@ -276,14 +276,17 @@
       }
     }
 
+    // Match the Carbon Tag tokens for the equivalent colors (gray comps,
+    // blue conns). Theme-aware tokens only — no hardcoded hex fallbacks, so
+    // these follow the active theme like a real <Tag>.
     .tile-count-pill--comp .count-list-popover__trigger {
-      background-color: var(--cds-tag-background-gray, #525252);
-      color: var(--cds-tag-color-gray, #f4f4f4);
+      background-color: var(--cds-tag-background-gray);
+      color: var(--cds-tag-color-gray);
     }
 
     .tile-count-pill--conn .count-list-popover__trigger {
-      background-color: var(--cds-tag-background-blue, #0043ce);
-      color: var(--cds-tag-color-blue, #d0e2ff);
+      background-color: var(--cds-tag-background-blue);
+      color: var(--cds-tag-color-blue);
     }
 
     // Descriptive chips (namespace, refresh-interval, user tags).

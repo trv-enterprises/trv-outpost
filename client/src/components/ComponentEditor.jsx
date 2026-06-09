@@ -3948,7 +3948,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               <Tag type="purple">{filter.field}</Tag>
                               <Tag type="gray">{FILTER_OPERATORS.find(op => op.id === filter.op)?.label || filter.op}</Tag>
                               {!['isNull', 'isNotNull'].includes(filter.op) && (
-                                <Tag type="cyan">{String(filter.value)}</Tag>
+                                <Tag type="blue">{String(filter.value)}</Tag>
                               )}
                               <IconButton
                                 label="Remove filter"

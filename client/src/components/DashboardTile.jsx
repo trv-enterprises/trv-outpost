@@ -247,7 +247,7 @@ function DashboardTile({
             {(dashboard.tags || []).map((t) => (
               <Tag
                 key={`tag-${t}`}
-                type="cyan"
+                type="blue"
                 size="sm"
                 onClick={
                   onTagClick

@@ -482,6 +482,31 @@
     }
   }
 
+  // Component column pill right-aligned so it hugs the Component|Type border,
+  // sitting next to the (left-aligned) Type pill — the two read as a pair. A
+  // ':' connector sits in the cell's existing right-edge space (the colon is
+  // absolutely positioned at the right edge so it doesn't widen the column).
+  .component-cell--right {
+    text-align: right;
+    position: relative;
+
+    .component-cell__pair-colon {
+      position: absolute;
+      right: spacing.$spacing-02;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--cds-text-secondary);
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    // Reserve just enough room for the colon so the pill doesn't sit under it,
+    // using the cell's existing right padding rather than adding column width.
+    .cds--tag {
+      margin-right: spacing.$spacing-03;
+    }
+  }
+
   // Cap Description so it stops greedily absorbing width; the surplus then
   // flows to Name. The blurb WRAPS to use the row's two-line height (matching
   // the name+tags height), clamping to 2 lines with an ellipsis; full text on

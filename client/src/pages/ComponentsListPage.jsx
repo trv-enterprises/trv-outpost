@@ -412,6 +412,16 @@ function ComponentsListPage() {
       if (sortKey === 'connection') {
         aVal = connections[a.connection_id || a.datasource_id] || '';
         bVal = connections[b.connection_id || b.datasource_id] || '';
+      } else if (sortKey === 'component_type' || sortKey === 'chart_type') {
+        // Component + Type are two columns, but BOTH sort by the same composite
+        // key: component_type FIRST so all charts (then controls, then displays)
+        // group together, then by subtype within each group (chart/LINE,
+        // chart/BAR, ...). So sorting by either column keeps charts contiguous
+        // instead of the old behavior where a Type sort interleaved
+        // chart/control/display by subtype.
+        const sub = (c) => c.chart_type || c.control_config?.control_type || c.display_config?.display_type || '';
+        aVal = `${a.component_type || 'chart'}:${sub(a)}`;
+        bVal = `${b.component_type || 'chart'}:${sub(b)}`;
       } else if (sortKey === 'dashboards') {
         // Handle dashboards count sorting
         aVal = dashboardCounts[a.id] || 0;
@@ -674,7 +684,7 @@ function ComponentsListPage() {
                           {(chart.tags || []).map((t) => (
                             <Tag
                               key={`ct-${t}`}
-                              type="cyan"
+                              type="blue"
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -817,7 +827,7 @@ function ComponentsListPage() {
                                       {chartTags.map((t) => (
                                         <Tag
                                           key={t}
-                                          type="cyan"
+                                          type="blue"
                                           size="sm"
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -838,10 +848,16 @@ function ComponentsListPage() {
                               const tagType = cell.value === 'control' ? 'purple' : cell.value === 'display' ? 'teal' : 'blue';
                               const tagLabel = cell.value === 'control' ? 'CONTROL' : cell.value === 'display' ? 'DISPLAY' : 'CHART';
                               return (
-                                <TableCell key={cell.id}>
+                                // Right-aligned so the Component pill hugs the
+                                // Component|Type border, with a ':' connector after
+                                // it (in the cell's existing right-edge space — no
+                                // extra column width) signalling it pairs with the
+                                // Type pill.
+                                <TableCell key={cell.id} className="component-cell--right">
                                   <Tag type={tagType} size="md">
                                     {tagLabel}
                                   </Tag>
+                                  <span className="component-cell__pair-colon" aria-hidden="true">:</span>
                                 </TableCell>
                               );
                             }
