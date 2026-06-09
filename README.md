@@ -7,9 +7,9 @@ that has been building complex system for over 40 years. This was my first
 large development using Claude Code to assist me in the development, 
 testing, and documentation. 
 
-The dashboards have visualization, control and display. Control and Display are
+The dashboards have visualizations, controls and displays. Controls and displays are
 dependant on specific technologies in my homelab. These areas will be more generalized
-in the future. The component types can be turned off. The Vissulaization layer on
+in the future. The component types can be turned off. The visulization layer on
 the otherhand was the primary motivation to this repo and should be able to be used
 in most any environment.
 
