@@ -255,6 +255,37 @@
       }
     }
 
+    // Navigable comps/conns pills: the CountListPopover trigger is a link by
+    // default; on the tile we style it to read like the Carbon Tag chips it
+    // replaces (gray for comps, blue for conns) so the navigable and read-only
+    // variants look identical. Only the cursor + hover hint that it's clickable.
+    .tile-count-pill .count-list-popover__trigger {
+      display: inline-flex;
+      align-items: center;
+      height: 1.25rem;
+      padding: 0 spacing.$spacing-03;
+      border-radius: 0.9375rem;
+      font-size: 0.75rem;
+      font-weight: 400;
+      text-decoration: none;
+      color: var(--cds-text-primary);
+
+      &:hover {
+        filter: brightness(1.15);
+        text-decoration: none;
+      }
+    }
+
+    .tile-count-pill--comp .count-list-popover__trigger {
+      background-color: var(--cds-tag-background-gray, #525252);
+      color: var(--cds-tag-color-gray, #f4f4f4);
+    }
+
+    .tile-count-pill--conn .count-list-popover__trigger {
+      background-color: var(--cds-tag-background-blue, #0043ce);
+      color: var(--cds-tag-color-blue, #d0e2ff);
+    }
+
     // Descriptive chips (namespace, refresh-interval, user tags).
     // Pinned to exactly 3 rows tall: tiles with 0–3 rows of tags
     // reserve the same vertical space (so tile bottoms align across

@@ -7,6 +7,7 @@ import { Tag, Tooltip } from '@carbon/react';
 import { Dashboard, DataBase, Information, Time, Copy } from '@carbon/icons-react';
 import NamespaceChip from './shared/NamespaceChip';
 import VariableIndicator from './shared/VariableIndicator';
+import CountListPopover from './shared/CountListPopover';
 import { dashboardUsesVariable } from '../utils/dashboardVariable';
 import './DashboardTile.scss';
 
@@ -65,6 +66,15 @@ function DashboardTile({
   // means tags are display-only.
   onTagClick,
 
+  // Optional: when provided, the comps / conns anchor pills become navigable
+  // CountListPopover dropdowns — clicking the count opens a list of the
+  // dashboard's components / connections, and clicking an item calls the
+  // handler (callers navigate to the design editor). Absent → the pills stay
+  // read-only hover Tooltips. Callers gate these (e.g. view mode passes them
+  // only when the user has design privileges).
+  onComponentClick,
+  onConnectionClick,
+
   // Pass-through className for extra styling at the call site.
   className = '',
 }) {
@@ -73,17 +83,36 @@ function DashboardTile({
   // empty placeholders) and components that point at a deleted
   // connection. Single-pass through panels for both the count and the
   // tooltip label.
-  const connectionsForDashboard = (() => {
+  // Distinct connections as { id, label } so the popover can navigate to each
+  // connection's editor. De-duped by connection id. (connectionsForDashboard
+  // keeps the name list for the read-only tooltip + the count.)
+  const connectionItems = (() => {
     const out = [];
     const seen = new Set();
     for (const panel of dashboard.panels || []) {
       if (!panel.component_id) continue;
       const comp = componentMap[panel.component_id];
-      if (!comp?.connection_id) continue;
-      const name = connectionMap[comp.connection_id];
-      if (!name || seen.has(name)) continue;
-      seen.add(name);
-      out.push(name);
+      const connId = comp?.connection_id;
+      if (!connId || seen.has(connId) || !connectionMap[connId]) continue;
+      seen.add(connId);
+      out.push({ id: connId, label: connectionMap[connId] });
+    }
+    return out;
+  })();
+  const connectionsForDashboard = connectionItems.map((c) => c.label);
+
+  // Distinct components placed on the dashboard, as { id, label }, so the
+  // popover can navigate to each component's editor. Panels pointing at a
+  // deleted component are dropped (nothing to navigate to). De-duped by id.
+  const componentItems = (() => {
+    const out = [];
+    const seen = new Set();
+    for (const panel of dashboard.panels || []) {
+      if (!panel.component_id || seen.has(panel.component_id)) continue;
+      const comp = componentMap[panel.component_id];
+      if (!comp) continue;
+      seen.add(panel.component_id);
+      out.push({ id: panel.component_id, label: comp.title || comp.name || '(unnamed)' });
     }
     return out;
   })();
@@ -168,7 +197,6 @@ function DashboardTile({
         <div className="tile-header">
           <div className="tile-name-row">
             <h3 className="tile-name">{dashboard.name}</h3>
-            <VariableIndicator active={dashboardUsesVariable(dashboard)} />
           </div>
           <IdCopyButton id={dashboard.id} />
           {descriptionMode === 'tooltip' && dashboard.description && (
@@ -243,36 +271,68 @@ function DashboardTile({
               overflow menu) sits on the right side of the same row. */}
           <div className="tile-footer">
           <div className="tile-tags tile-tags--anchor">
+            {/* Comps pill — navigable popover when onComponentClick is supplied
+                (designers); read-only hover tooltip otherwise. */}
             {(dashboard.panels || []).length > 0 && (
-              <Tooltip
-                label={componentNamesLabel}
-                align="bottom"
-                autoAlign
-                enterDelayMs={150}
-                className="tooltip-multiline"
-              >
-                <Tag type="gray" size="sm">
-                  {componentPanels.length} comp
-                  {componentPanels.length === 1 ? '' : 's'}
-                </Tag>
-              </Tooltip>
+              onComponentClick ? (
+                <CountListPopover
+                  className="tile-count-pill tile-count-pill--comp"
+                  count={`${componentPanels.length} comp${componentPanels.length === 1 ? '' : 's'}`}
+                  heading="Components"
+                  items={componentItems}
+                  onItemClick={(item) => onComponentClick(item)}
+                  emptyLabel="No components"
+                />
+              ) : (
+                <Tooltip
+                  label={componentNamesLabel}
+                  align="bottom"
+                  autoAlign
+                  enterDelayMs={150}
+                  className="tooltip-multiline"
+                >
+                  <Tag type="gray" size="sm">
+                    {componentPanels.length} comp
+                    {componentPanels.length === 1 ? '' : 's'}
+                  </Tag>
+                </Tooltip>
+              )
             )}
 
+            {/* Conns pill — navigable popover when onConnectionClick is supplied;
+                read-only hover tooltip otherwise. */}
             {connectionsForDashboard.length > 0 && (
-              <Tooltip
-                label={connectionsForDashboard.join('\n')}
-                align="bottom"
-                autoAlign
-                enterDelayMs={150}
-                className="tooltip-multiline"
-              >
-                <Tag type="blue" size="sm">
-                  <DataBase size={12} />
-                  {connectionsForDashboard.length} conn
-                  {connectionsForDashboard.length === 1 ? '' : 's'}
-                </Tag>
-              </Tooltip>
+              onConnectionClick ? (
+                <CountListPopover
+                  className="tile-count-pill tile-count-pill--conn"
+                  count={`${connectionsForDashboard.length} conn${connectionsForDashboard.length === 1 ? '' : 's'}`}
+                  heading="Connections"
+                  items={connectionItems}
+                  onItemClick={(item) => onConnectionClick(item)}
+                  emptyLabel="No connections"
+                />
+              ) : (
+                <Tooltip
+                  label={connectionsForDashboard.join('\n')}
+                  align="bottom"
+                  autoAlign
+                  enterDelayMs={150}
+                  className="tooltip-multiline"
+                >
+                  <Tag type="blue" size="sm">
+                    <DataBase size={12} />
+                    {connectionsForDashboard.length} conn
+                    {connectionsForDashboard.length === 1 ? '' : 's'}
+                  </Tag>
+                </Tooltip>
+              )
             )}
+
+            {/* "var" tag — marks a dashboard that defines + enables variables.
+                Sits after the conn tag in the anchor row. Shared tile, so this
+                renders in both design-mode (lists/tiles) and view-mode
+                (sidebar/picker). Renders nothing when not variable-driven. */}
+            <VariableIndicator active={dashboardUsesVariable(dashboard)} />
           </div>
 
             {actions !== null && <div className="tile-actions">{actions}</div>}

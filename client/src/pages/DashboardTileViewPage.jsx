@@ -37,7 +37,7 @@ import './DashboardTileViewPage.scss';
  * - Auto-refresh indicator
  * - Data sources used
  */
-function DashboardTileViewPage() {
+function DashboardTileViewPage({ canDesign = false }) {
   const navigate = useNavigate();
   const [dashboards, setDashboards] = useState([]);
   const [charts, setCharts] = useState({});
@@ -586,6 +586,8 @@ function DashboardTileViewPage() {
                 showRefreshInterval
                 descriptionMode="inline"
                 className={isDefault ? 'dashboard-tile--default' : ''}
+                onComponentClick={canDesign ? ((item) => navigate(`/design/components/${item.id}`)) : undefined}
+                onConnectionClick={canDesign ? ((item) => navigate(`/design/connections/${item.id}`)) : undefined}
                 draggable={isManual}
                 onDragStart={isManual ? (e) => handleDragStart(e, dashboard.id) : undefined}
                 onDragOver={isManual ? (e) => handleDragOver(e, dashboard.id) : undefined}

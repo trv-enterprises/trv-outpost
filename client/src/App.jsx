@@ -972,7 +972,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/design/extensions/edgelake-terminal" element={<EdgeLakeTerminalPage />} />
 
           {/* View Mode Routes */}
-          <Route path="/view/dashboards" element={<DashboardTileViewPage />} />
+          <Route path="/view/dashboards" element={<DashboardTileViewPage canDesign={userCapabilities.can_design} />} />
           <Route path="/view/dashboards/:id" element={<DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />} />
           {/* /kiosk is handled by an early return above (it bypasses the app
               shell entirely), so no Route entry is needed here. */}

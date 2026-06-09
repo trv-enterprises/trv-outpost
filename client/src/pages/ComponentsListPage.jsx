@@ -918,6 +918,28 @@ function ComponentsListPage() {
                                 </TableCell>
                               );
                             }
+                            if (cell.info.header === 'connection') {
+                              // Link the connection name to its editor. Plain
+                              // text when there's no connection ('None').
+                              const connId = chart?.connection_id;
+                              return (
+                                <TableCell key={cell.id} className="connection-cell" onClick={(e) => e.stopPropagation()}>
+                                  {connId && connections[connId] ? (
+                                    <Link
+                                      href={`/design/connections/${connId}`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        navigate(`/design/connections/${connId}`);
+                                      }}
+                                    >
+                                      {connections[connId]}
+                                    </Link>
+                                  ) : (
+                                    cell.value
+                                  )}
+                                </TableCell>
+                              );
+                            }
                             return <TableCell key={cell.id}>{cell.value}</TableCell>;
                           })}
                         </TableRow>

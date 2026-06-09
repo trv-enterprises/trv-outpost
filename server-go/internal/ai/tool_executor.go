@@ -16,11 +16,11 @@ import (
 
 // ToolExecutor handles executing AI tools and updating charts
 type ToolExecutor struct {
-	componentRepo      ComponentRepository
+	componentRepo  ComponentRepository
 	connectionRepo ConnectionRepoIface
 	connectionSvc  ConnectionServiceIface
 	deviceTypeRepo DeviceTypeRepository
-	componentHub       *hub.ComponentHub
+	componentHub   *hub.ComponentHub
 }
 
 // ComponentRepository interface for chart operations
@@ -53,11 +53,11 @@ type ConnectionServiceIface interface {
 // NewToolExecutor creates a new tool executor
 func NewToolExecutor(componentRepo ComponentRepository, connRepo ConnectionRepoIface, connSvc ConnectionServiceIface, dtRepo DeviceTypeRepository, componentHub *hub.ComponentHub) *ToolExecutor {
 	return &ToolExecutor{
-		componentRepo:      componentRepo,
+		componentRepo:  componentRepo,
 		connectionRepo: connRepo,
 		connectionSvc:  connSvc,
 		deviceTypeRepo: dtRepo,
-		componentHub:       componentHub,
+		componentHub:   componentHub,
 	}
 }
 
@@ -418,8 +418,8 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		XAxisLabel   *string             `json:"x_axis_label,omitempty"`
 		XAxisFormat  *string             `json:"x_axis_format,omitempty"`
 		YAxis        *[]string           `json:"y_axis,omitempty"`
-		YAxisLabel   *string             `json:"y_axis_label,omitempty"`   // legacy single label
-		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"`  // per-column labels (preferred)
+		YAxisLabel   *string             `json:"y_axis_label,omitempty"`  // legacy single label
+		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"` // per-column labels (preferred)
 		GroupBy      *string             `json:"group_by,omitempty"`
 		BandColumns  *models.BandColumns `json:"band_columns,omitempty"`
 	}
@@ -515,9 +515,11 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 // executeUpdateQueryConfig updates query configuration
 func (e *ToolExecutor) executeUpdateQueryConfig(ctx context.Context, chartID string, chartVersion int, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		Query           *string `json:"query,omitempty"`
-		QueryType       *string `json:"query_type,omitempty"`
-		RefreshInterval *int    `json:"refresh_interval,omitempty"`
+		Query            *string                `json:"query,omitempty"`
+		QueryType        *string                `json:"query_type,omitempty"`
+		RefreshInterval  *int                   `json:"refresh_interval,omitempty"`
+		PrometheusParams map[string]interface{} `json:"prometheus_params,omitempty"`
+		EdgeLakeParams   map[string]interface{} `json:"edgelake_params,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -544,6 +546,24 @@ func (e *ToolExecutor) executeUpdateQueryConfig(ctx context.Context, chartID str
 	}
 	if params.QueryType != nil {
 		chart.QueryConfig.Type = *params.QueryType
+	}
+	// Adapter-specific query params (prometheus_params / edgelake_params).
+	// These carry the bits the adapter keys behavior on — e.g. Prometheus
+	// query_type ("instant" vs "range"), start/end/step; EdgeLake database.
+	// Previously the tool SCHEMA advertised these but the executor dropped
+	// them, so query_config.params stayed {} and the Prometheus adapter
+	// silently defaulted to a RANGE query even when the agent asked for an
+	// instant one — turning a 7-bar snapshot into a 7×N time series.
+	if params.PrometheusParams != nil || params.EdgeLakeParams != nil {
+		if chart.QueryConfig.Params == nil {
+			chart.QueryConfig.Params = make(map[string]interface{})
+		}
+		for k, v := range params.PrometheusParams {
+			chart.QueryConfig.Params[k] = v
+		}
+		for k, v := range params.EdgeLakeParams {
+			chart.QueryConfig.Params[k] = v
+		}
 	}
 	// RefreshInterval is stored in Options for now
 	if params.RefreshInterval != nil {

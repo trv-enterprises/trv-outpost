@@ -698,6 +698,35 @@
       }
     }
 
+    // Prometheus query-type (raw/PromQL mode): Single Instance / Range radios,
+    // with Time Range + Step shown to the RIGHT only for Range. Quarter-row
+    // layout — radios | time range | step | (empty spacer) — each column 25%.
+    .prometheus-query-type {
+      margin-top: spacing.$spacing-05;
+
+      .prometheus-query-type__row {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: spacing.$spacing-05;
+      }
+
+      // Each column is a fixed quarter of the row, so the radios stay in the
+      // first 1/4 and the range fields land in the 2nd and 3rd 1/4 when shown.
+      .prometheus-query-type__col {
+        flex: 0 0 calc(25% - #{spacing.$spacing-05});
+        min-width: 0;
+
+        .cds--select {
+          width: 100%;
+        }
+      }
+
+      .prometheus-query-type__hint {
+        margin-top: spacing.$spacing-04;
+      }
+    }
+
     .query-header {
       display: flex;
       justify-content: space-between;

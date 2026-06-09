@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -811,6 +811,8 @@ function DashboardsListPage() {
                   onTagClick={(t) => {
                     if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
                   }}
+                  onComponentClick={(item) => navigate(`/design/components/${item.id}`)}
+                  onConnectionClick={(item) => navigate(`/design/connections/${item.id}`)}
                   badge={exportMode ? (
                     <div onClick={(e) => e.stopPropagation()}>
                       <Checkbox
@@ -968,23 +970,16 @@ function DashboardsListPage() {
                             if (cell.info.header === 'panels') {
                               return (
                                 <TableCell key={cell.id} className="panels-cell" onClick={(e) => e.stopPropagation()}>
+                                  {/* Single-column: just components. Connections
+                                      now have their own linked column, so the
+                                      popover no longer needs a second section. */}
                                   <CountListPopover
                                     count={cell.value}
                                     className="panels-count"
-                                    sections={[
-                                      {
-                                        heading: 'Components',
-                                        items: getComponentItems(dashboard),
-                                        emptyLabel: 'No components on this dashboard',
-                                        onItemClick: (item) => navigate(`/design/components/${item.id}`),
-                                      },
-                                      {
-                                        heading: 'Connections',
-                                        items: getConnectionItems(dashboard),
-                                        emptyLabel: 'No connections',
-                                        onItemClick: (item) => navigate(`/design/connections/${item.id}`),
-                                      },
-                                    ]}
+                                    heading="Components"
+                                    items={getComponentItems(dashboard)}
+                                    emptyLabel="No components on this dashboard"
+                                    onItemClick={(item) => navigate(`/design/components/${item.id}`)}
                                   />
                                 </TableCell>
                               );
@@ -1018,6 +1013,33 @@ function DashboardsListPage() {
                                     <span>{cell.value}</span>
                                     <VariableIndicator active={dashboardUsesVariable(dashboard)} />
                                   </div>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'connections') {
+                              // Keep the comma-separated name list, but make each
+                              // name a link to that connection's editor.
+                              const connItems = getConnectionItems(dashboard);
+                              return (
+                                <TableCell key={cell.id} className="connections-cell" onClick={(e) => e.stopPropagation()}>
+                                  {connItems.length === 0 ? (
+                                    '-'
+                                  ) : (
+                                    connItems.map((c, i) => (
+                                      <Fragment key={c.id}>
+                                        <Link
+                                          href={`/design/connections/${c.id}`}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            navigate(`/design/connections/${c.id}`);
+                                          }}
+                                        >
+                                          {c.label}
+                                        </Link>
+                                        {i < connItems.length - 1 ? <span>, </span> : null}
+                                      </Fragment>
+                                    ))
+                                  )}
                                 </TableCell>
                               );
                             }

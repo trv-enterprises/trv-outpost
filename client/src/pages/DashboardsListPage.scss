@@ -331,6 +331,16 @@
     cursor: pointer;
   }
 
+  // Connections cell — comma-separated connection links. Carbon Link defaults
+  // to inline-block, which makes each link + comma wrap as its own box (the
+  // comma drops to its own line). Force inline flow so names + commas wrap as
+  // normal text.
+  .connections-cell {
+    .cds--link {
+      display: inline;
+    }
+  }
+
   // Export-mode bulk action bar — sits between the toolbar and the
   // table so the selected count stays visible while scrolling.
   .export-mode-bar {

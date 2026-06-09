@@ -97,6 +97,7 @@ const PrometheusQueryBuilder = ({
   onParamsChange,
   onExecute,
   initialQuery: _initialQuery = '',
+  initialParams = null,
   disabled = false
 }) => {
   // Schema state
@@ -114,10 +115,11 @@ const PrometheusQueryBuilder = ({
   const [rateFunction, setRateFunction] = useState('');
   const [rateWindow, setRateWindow] = useState('5m');
 
-  // Query type and time range
-  const [queryType, setQueryType] = useState('range'); // 'range' or 'instant'
-  const [timeRange, setTimeRange] = useState('1h');
-  const [step, setStep] = useState('1m');
+  // Query type and time range. Seed from initialParams so reopening a saved
+  // component reflects its stored instant/range choice + window/step.
+  const [queryType, setQueryType] = useState(initialParams?.query_type || 'range'); // 'range' or 'instant'
+  const [timeRange, setTimeRange] = useState(initialParams?.time_range || '1h');
+  const [step, setStep] = useState(initialParams?.step || '1m');
 
   // Generated query
   const [generatedQuery, setGeneratedQuery] = useState('');

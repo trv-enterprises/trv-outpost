@@ -71,7 +71,10 @@ export default function CountListPopover({
 
   return (
     <span ref={ref} className="count-list-popover">
-      <Popover open={open} align="bottom" onRequestClose={() => setOpen(false)} dropShadow>
+      {/* autoAlign lets Carbon flip/shift the popover when the preferred
+          "bottom" placement would overflow the viewport — without it, a tile
+          near the left (or right) edge clips the content off-screen. */}
+      <Popover open={open} align="bottom" autoAlign onRequestClose={() => setOpen(false)} dropShadow>
         <button
           type="button"
           className={`count-list-popover__trigger ${className} ${hasAny ? '' : 'count-list-popover__trigger--empty'}`}

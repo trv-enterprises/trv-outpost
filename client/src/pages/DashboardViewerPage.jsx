@@ -2407,6 +2407,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               <ArrowLeft size={20} />
             </IconButton>
           )}
+          {/* Edit (design) mode gets a back arrow in front of the name too,
+              mirroring view mode's arrow. It behaves exactly like Cancel —
+              exitEditMode prompts to discard unsaved changes, then navigates
+              back to wherever the user came from. */}
+          {!isFullscreen && isEditMode && (
+            <IconButton
+              kind="ghost"
+              label="Cancel"
+              align="bottom"
+              onClick={exitEditMode}
+            >
+              <ArrowLeft size={20} />
+            </IconButton>
+          )}
           <div className="dashboard-info">
             {isEditMode ? (
               <div className="dashboard-name-wrapper">

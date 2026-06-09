@@ -8,6 +8,8 @@ import {
   TextInput,
   TextArea,
   Toggle,
+  RadioButtonGroup,
+  RadioButton,
   Select,
   SelectItem,
   MultiSelect,
@@ -302,6 +304,7 @@ const DEFAULT_CHART_OPTIONS = {
   gaugeWarningThreshold: 70,  // Where yellow zone starts (%)
   gaugeDangerThreshold: 90,   // Where red zone starts (%)
   gaugeUnit: '',              // Unit suffix (e.g., '°F', '%')
+  gaugeDecimals: 'auto',      // Center-value decimal places ('auto' = up to 2)
   // Number (single-value display) options. numberSize stays unset on
   // create so the editor can lazy-populate it from the admin default;
   // once the user saves/edits it's always a concrete number.
@@ -602,6 +605,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest
   const [tsstoreLimit, setTsstoreLimit] = useState(100);
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
+
+  // Prometheus query configuration. The source of truth for query_config.params
+  // on a Prometheus component. 'instant' = a single snapshot (current value per
+  // series — gauges, number tiles, "current value per label" bars). 'range' = a
+  // time series; only then do start/step matter. Previously the editor dropped
+  // these (raw mode had no control; visual mode's onParamsChange was a stub), so
+  // params saved {} and the adapter defaulted to range — wrong for instant charts.
+  const [promQueryType, setPromQueryType] = useState('range'); // 'instant' | 'range'
+  const [promTimeRange, setPromTimeRange] = useState('1h');     // range window (start = now-<this>)
+  const [promStep, setPromStep] = useState('1m');               // range resolution step
   // TSStore source-side filter. ts-store's `filter` is a plain SUBSTRING match
   // over the whole record (NOT field-scoped) — but the data sets this targets
   // have very few label fields, so a general substring is fine in practice.
@@ -631,6 +644,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // True when the tsstore filter is bound to the dashboard variable — used to
   // mark uses_dashboard_variable and to gate the #18 backfill substitution.
   const tsstoreFilterUsesVariable = tsstoreFilterSource === 'variable';
+
+  // Assemble query_config.params for a Prometheus component. 'instant' carries
+  // only query_type (start/end/step are meaningless for a snapshot); 'range'
+  // adds the window + step. Single source of truth for the save + preview paths.
+  const buildPrometheusParams = useCallback(() => {
+    if (promQueryType === 'instant') {
+      return { query_type: 'instant' };
+    }
+    return { query_type: 'range', start: `now-${promTimeRange}`, end: 'now', step: promStep };
+  }, [promQueryType, promTimeRange, promStep]);
 
   // EdgeLake query configuration (for raw mode database param)
   const [edgelakeDatabase, setEdgelakeDatabase] = useState('');
@@ -974,6 +997,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         }
         setTsstoreFilterIgnoreCase(!!chart.query_config?.params?.filter_ignore_case);
       }
+      // Prometheus query config: restore instant/range + window/step from the
+      // saved params. Restore whenever a Prometheus query_type param is present
+      // (documentary type may say "prometheus" or "sql"/"api" on agent-built
+      // charts). A range start of "now-1h" maps back to time_range "1h".
+      const promQt = chart.query_config?.params?.query_type;
+      if (promQt === 'instant' || promQt === 'range') {
+        setPromQueryType(promQt);
+        const start = chart.query_config?.params?.start;
+        if (typeof start === 'string' && start.startsWith('now-')) {
+          setPromTimeRange(start.slice(4));
+        }
+        if (chart.query_config?.params?.step) {
+          setPromStep(chart.query_config.params.step);
+        }
+      }
       // EdgeLake query config initialization. Like tsstore above, the
       // type field is documentary, not authoritative: agent-built
       // EdgeLake charts commonly save query_config.type:"sql" while
@@ -1062,6 +1100,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTsstoreFilterSource = loadedTsFilter === DASHBOARD_VARIABLE_TOKEN ? 'variable' : 'literal';
       const loadedTsstoreFilter = (typeof loadedTsFilter === 'string' && loadedTsFilter !== DASHBOARD_VARIABLE_TOKEN) ? loadedTsFilter : '';
       const loadedTsstoreFilterIgnoreCase = !!chart.query_config?.params?.filter_ignore_case;
+      // Prometheus params — mirror the setProm* restore above so the snapshot
+      // matches state and the form doesn't read dirty on load.
+      const loadedPromQt = chart.query_config?.params?.query_type;
+      const loadedPromQueryType = (loadedPromQt === 'instant' || loadedPromQt === 'range') ? loadedPromQt : 'range';
+      const loadedPromStart = chart.query_config?.params?.start;
+      const loadedPromTimeRange = (typeof loadedPromStart === 'string' && loadedPromStart.startsWith('now-')) ? loadedPromStart.slice(4) : '1h';
+      const loadedPromStep = chart.query_config?.params?.step || '1m';
       // Mirror the setEdgelakeDatabase restore above: the database param
       // is the source of truth, not the documentary query_config.type
       // (agent-built EdgeLake charts save type:"sql"). Snapshot must match
@@ -1086,6 +1131,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryType: loadedQueryType,
         tsstoreQueryType: loadedTsstoreQueryType,
         tsstoreSinceDuration: loadedTsstoreSinceDuration,
+        promQueryType: loadedPromQueryType,
+        promTimeRange: loadedPromTimeRange,
+        promStep: loadedPromStep,
         tsstoreLimit: loadedTsstoreLimit,
         tsstoreFilter: loadedTsstoreFilter,
         tsstoreFilterSource: loadedTsstoreFilterSource,
@@ -1153,6 +1201,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryType: 'sql',
         tsstoreQueryType: 'newest',
         tsstoreSinceDuration: '1h',
+        promQueryType: 'range',
+        promTimeRange: '1h',
+        promStep: '1m',
         tsstoreLimit: 100,
         tsstoreFilter: '',
         tsstoreFilterSource: 'literal',
@@ -1228,6 +1279,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       tsstoreQueryType,
       tsstoreSinceDuration,
       tsstoreLimit,
+      promQueryType,
+      promTimeRange,
+      promStep,
       tsstoreFilter,
       tsstoreFilterSource,
       tsstoreFilterIgnoreCase,
@@ -1272,7 +1326,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -1465,6 +1519,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               setTsstoreQueryType('newest');
               setTsstoreLimit(100);
               setTsstoreSinceDuration('1h');
+              setPromQueryType('range');
+              setPromTimeRange('1h');
+              setPromStep('1m');
               setTsstoreFilter('');
               setTsstoreFilterSource('literal');
               setTsstoreFilterIgnoreCase(false);
@@ -1634,6 +1691,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTsstoreQueryType('newest');
     setTsstoreLimit(100);
     setTsstoreSinceDuration('1h');
+    setPromQueryType('range');
+    setPromTimeRange('1h');
+    setPromStep('1m');
     setTsstoreFilter('');
     setTsstoreFilterSource('literal');
     setTsstoreFilterIgnoreCase(false);
@@ -1861,6 +1921,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
           Object.assign(queryParams, buildTsstoreFilterParams());
         }
+      } else if (selectedDatasource?.type === 'prometheus') {
+        // Preview must use the chosen instant/range so the editor shows the
+        // same shape the saved chart will render. (Raw mode's radio group;
+        // visual mode keeps using its own builder execution.)
+        queryParams = buildPrometheusParams();
       } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
         queryParams = { database: edgelakeDatabase };
       }
@@ -1954,6 +2019,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         rawQuery = tsstoreQueryType;
         queryParams = { limit: tsstoreLimit, ...tsstoreFilterParams };
       }
+    } else if (selectedDatasource?.type === 'prometheus') {
+      queryParams = buildPrometheusParams();
     } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
       queryParams = { database: edgelakeDatabase };
     }
@@ -1993,7 +2060,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2081,9 +2148,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         type: queryType,
         params: selectedDatasource?.type === 'tsstore'
           ? { ...(tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit }), ...buildTsstoreFilterParams() }
-          : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
-            ? { database: edgelakeDatabase }
-            : {}
+          : selectedDatasource?.type === 'prometheus'
+            ? buildPrometheusParams()
+            : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
+              ? { database: edgelakeDatabase }
+              : {}
       } : null,
       data_mapping: selectedConnectionId ? {
         x_axis: xAxisColumn,
@@ -3142,10 +3211,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     <PrometheusQueryBuilder
                       connectionId={selectedConnectionId}
                       onQueryChange={(query) => setQueryRaw(query)}
-                      onParamsChange={(_params) => {
-                        // Store params for use in query execution
-                        // These will be passed via query_config.params
+                      onParamsChange={(params) => {
+                        // Capture the builder's instant/range + window/step into
+                        // the shared Prometheus state so they reach
+                        // query_config.params on save. (Previously a no-op stub —
+                        // the params were silently dropped → adapter defaulted to
+                        // range even for instant charts.)
+                        if (params?.query_type) setPromQueryType(params.query_type);
+                        if (typeof params?.start === 'string' && params.start.startsWith('now-')) {
+                          setPromTimeRange(params.start.slice(4));
+                        }
+                        if (params?.step) setPromStep(params.step);
                       }}
+                      initialParams={{ query_type: promQueryType, time_range: promTimeRange, step: promStep }}
                       onExecute={(response) => {
                         if (response.success && response.result_set) {
                           setPreviewData(response.result_set);
@@ -3277,13 +3355,85 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           deployment has dashboard variables enabled, so the
                           author can author a variable-driven query. Fetching a
                           query that contains the token opens the value picker
-                          automatically (no separate "set a value" step). */}
+                          automatically (no separate "set a value" step). Sits
+                          directly under the query box, ABOVE the Prometheus
+                          query-type radios. */}
                       {dashboardVariableEnabled && (
                         <VariablePills
                           tokens={DASHBOARD_VARIABLE_TOKENS}
                           onInsert={insertTokenIntoQuery}
                           hint="Insert variable:"
                         />
+                      )}
+                      {/* Prometheus query type — raw (PromQL) mode. Single
+                          Instance = a snapshot (current value per series; pick
+                          for gauges, number tiles, "current value per label"
+                          bars). Range = a time series. Time Range + Step appear
+                          to the RIGHT of the radios ONLY for Range — they're
+                          meaningless for a single instant. Quarter-row layout:
+                          radios | time range | step | (empty). Without this the
+                          params saved empty and the adapter defaulted to range,
+                          producing repeating timestamps on a snapshot. */}
+                      {selectedDatasource.type === 'prometheus' && (
+                        <div className="prometheus-query-type">
+                          <div className="prometheus-query-type__row">
+                            <div className="prometheus-query-type__col">
+                              <RadioButtonGroup
+                                legendText="Query type"
+                                name="prom-query-type"
+                                valueSelected={promQueryType}
+                                onChange={(value) => setPromQueryType(value)}
+                              >
+                                <RadioButton labelText="Single Instance" value="instant" id="prom-qt-instant" />
+                                <RadioButton labelText="Range" value="range" id="prom-qt-range" />
+                              </RadioButtonGroup>
+                            </div>
+                            {promQueryType === 'range' && (
+                              <>
+                                <div className="prometheus-query-type__col">
+                                  <Select
+                                    id="prom-time-range"
+                                    labelText="Time Range"
+                                    value={promTimeRange}
+                                    onChange={(e) => setPromTimeRange(e.target.value)}
+                                  >
+                                    <SelectItem value="5m" text="Last 5 minutes" />
+                                    <SelectItem value="15m" text="Last 15 minutes" />
+                                    <SelectItem value="30m" text="Last 30 minutes" />
+                                    <SelectItem value="1h" text="Last 1 hour" />
+                                    <SelectItem value="3h" text="Last 3 hours" />
+                                    <SelectItem value="6h" text="Last 6 hours" />
+                                    <SelectItem value="12h" text="Last 12 hours" />
+                                    <SelectItem value="24h" text="Last 24 hours" />
+                                    <SelectItem value="2d" text="Last 2 days" />
+                                    <SelectItem value="7d" text="Last 7 days" />
+                                  </Select>
+                                </div>
+                                <div className="prometheus-query-type__col">
+                                  <Select
+                                    id="prom-step"
+                                    labelText="Step"
+                                    value={promStep}
+                                    onChange={(e) => setPromStep(e.target.value)}
+                                  >
+                                    <SelectItem value="15s" text="15s" />
+                                    <SelectItem value="30s" text="30s" />
+                                    <SelectItem value="1m" text="1m" />
+                                    <SelectItem value="5m" text="5m" />
+                                    <SelectItem value="15m" text="15m" />
+                                    <SelectItem value="1h" text="1h" />
+                                  </Select>
+                                </div>
+                                <div className="prometheus-query-type__col" aria-hidden="true" />
+                              </>
+                            )}
+                          </div>
+                          <p className="editor-info-hint prometheus-query-type__hint">
+                            Single Instance returns one current value per series
+                            (gauges, number tiles, current-value-per-label bars).
+                            Range returns a time series over the selected window.
+                          </p>
+                        </div>
                       )}
                     </>
                   )}
@@ -3347,6 +3497,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       gauge_warning_threshold: chartOptions.gaugeWarningThreshold,
                       gauge_danger_threshold: chartOptions.gaugeDangerThreshold,
                       gauge_unit: chartOptions.gaugeUnit,
+                      gauge_decimals: chartOptions.gaugeDecimals ?? 'auto',
                       gauge_line_thickness: chartOptions.gaugeLineThickness ?? 8,
                     }}
                     onFieldChange={(fieldId, value) => {
@@ -3359,6 +3510,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'gauge_warning_threshold': updateChartOption('gaugeWarningThreshold', value); break;
                         case 'gauge_danger_threshold': updateChartOption('gaugeDangerThreshold', value); break;
                         case 'gauge_unit': updateChartOption('gaugeUnit', value); break;
+                        case 'gauge_decimals': updateChartOption('gaugeDecimals', value); break;
                         case 'gauge_line_thickness': updateChartOption('gaugeLineThickness', value); break;
                         default: break;
                       }
@@ -4382,9 +4534,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               // Resolve the filter token for the custom-code preview.
                               ...(tsstoreFilterUsesVariable ? { dashboard_variable: previewVariableValue } : {}),
                             }
-                          : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
-                            ? { database: edgelakeDatabase }
-                            : {}
+                          : selectedDatasource?.type === 'prometheus'
+                            ? buildPrometheusParams()
+                            : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
+                              ? { database: edgelakeDatabase }
+                              : {}
                       } : null}
                       dataMapping={selectedConnectionId ? {
                         connection_id: selectedConnectionId,

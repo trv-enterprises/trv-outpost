@@ -87,7 +87,7 @@
     {
       "id": "chart_options_extras",
       "label": "Appearance",
-      "layout": "row-2",
+      "layout": "row-3",
       "fields": [
         {
           "id": "gauge_unit",
@@ -96,6 +96,22 @@
           "label": "Unit Suffix",
           "default": "",
           "placeholder": "e.g., °F, %, psi"
+        },
+        {
+          "id": "gauge_decimals",
+          "binds": "options.gaugeDecimals",
+          "type": "enum",
+          "label": "Decimal places",
+          "default": "auto",
+          "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals.",
+          "options": [
+            { "value": "auto", "label": "Auto" },
+            { "value": "0", "label": "0" },
+            { "value": "1", "label": "1" },
+            { "value": "2", "label": "2" },
+            { "value": "3", "label": "3" },
+            { "value": "4", "label": "4" }
+          ]
         },
         {
           "id": "gauge_line_thickness",

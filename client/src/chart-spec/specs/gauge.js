@@ -59,7 +59,23 @@ export function buildOption(values, data) {
   const thicknessPct = toNumber(opts.gaugeLineThickness, 8);
   const axisWidth = Math.max(6, Math.round(thicknessPct * 1.5));
 
-  const detailFormatter = (v) => `${v}${unit ? unit : ''}`;
+  // Decimal places for the center value. Matches the number chart's
+  // semantics (number-formats.js formatPlain): 'auto' (default) = up to 2
+  // places, a number = exactly that many. Without this the raw float
+  // prints in full (e.g. 11.390740740742459).
+  const decimals = opts.gaugeDecimals;
+  const formatValue = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return `${v}`;
+    if (decimals != null && decimals !== 'auto') {
+      const places = Number(decimals);
+      if (Number.isFinite(places)) {
+        return n.toLocaleString('en-US', { minimumFractionDigits: places, maximumFractionDigits: places });
+      }
+    }
+    return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  };
+  const detailFormatter = (v) => `${formatValue(v)}${unit ? unit : ''}`;
 
   return {
     backgroundColor: TRANSPARENT_BG,

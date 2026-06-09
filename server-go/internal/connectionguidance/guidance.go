@@ -74,7 +74,23 @@ query_config shape for Prometheus:
       }
     }
 
-Pick "instant" for single-current-value queries (gauges, number/stat panels, pie charts) and "range" for time-series (line/area/bar over time).
+Choose query_type by the chart's X-AXIS, not its chart type:
+  - "instant" → ONE snapshot. Use whenever the x-axis is a LABEL/category
+    (deployment, pod, instance, mode) or there is no x-axis at all
+    (gauge, number/stat, pie). A BAR chart of "current value per
+    deployment" is INSTANT — its x-axis is the deployment label, not
+    time. Returns one row per series.
+  - "range" → a TIME SERIES. Use only when the x-axis is TIME (a
+    line/area/bar trending a value OVER TIME). Returns one row per
+    (series × timestamp).
+
+Common mistake: defaulting a bar chart to "range" because it's a bar
+chart. If the bars are categories (deployments, nodes, modes) and you
+want their CURRENT values, that's "instant" — a range query turns 7
+bars into 7×N rows with repeating timestamps and renders as garbage.
+
+ALWAYS set query_type explicitly. Omitting it defaults to "range",
+which is wrong for every label-axis / single-value chart.
 
 Return columns:
 - range queries: timestamp (unix seconds), value (number), plus one column per PromQL label when the query produces multiple series.
