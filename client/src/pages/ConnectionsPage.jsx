@@ -307,9 +307,9 @@ function ConnectionsPage() {
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
+    // (tags now render under the name in the name cell — no separate column)
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'type', header: 'Type', isSortable: true },
-    { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'components', header: 'Components', isSortable: true },
     { key: 'updated_at', header: 'Last modified', isSortable: true },
@@ -604,28 +604,6 @@ function ConnectionsPage() {
                                 </TableCell>
                               );
                             }
-                            if (cell.info.header === 'tags') {
-                              const cellTags = Array.isArray(cell.value) ? cell.value : [];
-                              return (
-                                <TableCell key={cell.id} className="tags-cell">
-                                  {cellTags.map((t) => (
-                                    <Tag
-                                      key={t}
-                                      type="blue"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
-                                      }}
-                                      title={`Filter by ${t}`}
-                                      style={{ cursor: 'pointer' }}
-                                    >
-                                      {t}
-                                    </Tag>
-                                  ))}
-                                </TableCell>
-                              );
-                            }
                             if (cell.info.header === 'components') {
                               const items = componentNames[connection.id] || [];
                               return (
@@ -652,6 +630,35 @@ function ConnectionsPage() {
                                   >
                                     <TrashCan size={16} />
                                   </IconButton>
+                                </TableCell>
+                              );
+                            }
+                            if (cell.info.header === 'name') {
+                              const connTags = connection.tags || [];
+                              return (
+                                <TableCell key={cell.id} className="name-cell">
+                                  <div className="name-cell__name">
+                                    <span>{cell.value}</span>
+                                  </div>
+                                  {connTags.length > 0 && (
+                                    <div className="name-cell__tags">
+                                      {connTags.map((t) => (
+                                        <Tag
+                                          key={t}
+                                          type="blue"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
+                                          }}
+                                          title={`Filter by ${t}`}
+                                          style={{ cursor: 'pointer' }}
+                                        >
+                                          {t}
+                                        </Tag>
+                                      ))}
+                                    </div>
+                                  )}
                                 </TableCell>
                               );
                             }

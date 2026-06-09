@@ -8,6 +8,11 @@
 @use '@carbon/styles/scss/theme' as theme with (
   $theme: themes.$g100
 );
+// Component-specific TAG tokens are a separate group that theme.theme() does
+// NOT emit — so --cds-tag-* fell back to white-theme (light) values, making
+// every <Tag> render light-bg/dark-text instead of the g100 dark-bg/light-text.
+// Pull the g100 values from the generated tag-token maps and emit them below.
+@use '@carbon/themes/scss/generated/tag-tokens' as tagtokens;
 
 // Set g100 theme CSS custom properties globally (including portals)
 :root {
@@ -15,6 +20,29 @@
 
   // Fix button-disabled - extract from g100 theme map (theme-aware)
   --cds-button-disabled: #{map.get(themes.$g100, 'button-disabled')};
+
+  // g100 tag tokens (dark-bg / light-text). Without these, Carbon Tags fall
+  // back to the white-theme light pills. Emit bg + text for every color.
+  --cds-tag-background-blue: #{map.get(tagtokens.$tag-background-blue, g-100)};
+  --cds-tag-color-blue: #{map.get(tagtokens.$tag-color-blue, g-100)};
+  --cds-tag-background-cool-gray: #{map.get(tagtokens.$tag-background-cool-gray, g-100)};
+  --cds-tag-color-cool-gray: #{map.get(tagtokens.$tag-color-cool-gray, g-100)};
+  --cds-tag-background-cyan: #{map.get(tagtokens.$tag-background-cyan, g-100)};
+  --cds-tag-color-cyan: #{map.get(tagtokens.$tag-color-cyan, g-100)};
+  --cds-tag-background-gray: #{map.get(tagtokens.$tag-background-gray, g-100)};
+  --cds-tag-color-gray: #{map.get(tagtokens.$tag-color-gray, g-100)};
+  --cds-tag-background-green: #{map.get(tagtokens.$tag-background-green, g-100)};
+  --cds-tag-color-green: #{map.get(tagtokens.$tag-color-green, g-100)};
+  --cds-tag-background-magenta: #{map.get(tagtokens.$tag-background-magenta, g-100)};
+  --cds-tag-color-magenta: #{map.get(tagtokens.$tag-color-magenta, g-100)};
+  --cds-tag-background-purple: #{map.get(tagtokens.$tag-background-purple, g-100)};
+  --cds-tag-color-purple: #{map.get(tagtokens.$tag-color-purple, g-100)};
+  --cds-tag-background-red: #{map.get(tagtokens.$tag-background-red, g-100)};
+  --cds-tag-color-red: #{map.get(tagtokens.$tag-color-red, g-100)};
+  --cds-tag-background-teal: #{map.get(tagtokens.$tag-background-teal, g-100)};
+  --cds-tag-color-teal: #{map.get(tagtokens.$tag-color-teal, g-100)};
+  --cds-tag-background-warm-gray: #{map.get(tagtokens.$tag-background-warm-gray, g-100)};
+  --cds-tag-color-warm-gray: #{map.get(tagtokens.$tag-color-warm-gray, g-100)};
 }
 
 // Global InlineNotification styling - force low contrast with visible text

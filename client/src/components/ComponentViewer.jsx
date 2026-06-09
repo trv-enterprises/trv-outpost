@@ -68,7 +68,7 @@ export default function ComponentViewer({ componentId, onEdit, onDelete }) {
           <div className="component-tags">
             <Tag type="blue">{component.system}</Tag>
             <span className="tag-separator">/</span>
-            <Tag type="cyan">{component.source}</Tag>
+            <Tag type="blue">{component.source}</Tag>
           </div>
           {component.description && (
             <p className="component-description">{component.description}</p>

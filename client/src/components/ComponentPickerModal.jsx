@@ -432,7 +432,7 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                         {itemTags.map(t => (
                           <Tag
                             key={t}
-                            type="cyan"
+                            type="blue"
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();

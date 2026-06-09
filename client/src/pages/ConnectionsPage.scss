@@ -385,11 +385,30 @@
     margin: 0;
   }
 
-  // Tags column in list view — chips wrap within the cell
-  .tags-cell {
+  // Name column: connection name with its tags wrapped UNDER the name (mirrors
+  // the components list — no separate Tags column). Same preferred + min width
+  // as the components list name cell.
+  .name-cell {
     vertical-align: top;
-    .cds--tag {
-      margin: 2px;
+    width: 19.8%;
+    min-width: 13.5rem;
+
+    &__name {
+      line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+    }
+
+    &__tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: spacing.$spacing-02;
+      margin-top: spacing.$spacing-02;
+
+      .cds--tag {
+        margin: 0;
+      }
     }
   }
 

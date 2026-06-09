@@ -85,7 +85,10 @@ export default function NamespacePicker() {
                 : <span style={{ width: 14, display: 'inline-block' }} />}
               <span
                 className="namespace-picker__item-swatch"
-                style={{ backgroundColor: ns.color || NAMESPACE_DEFAULT_COLOR }}
+                // Match the chip exactly: use the mapped Carbon tag-background
+                // color (not the raw hex) so the dropdown reads as a true key
+                // for the chips it represents.
+                style={{ backgroundColor: namespaceChipStyle(ns).backgroundColor }}
               />
               <span className="namespace-picker__item-name">{ns.name}</span>
             </span>

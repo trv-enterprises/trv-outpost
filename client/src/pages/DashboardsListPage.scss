@@ -280,8 +280,17 @@
 
   // Actions cell
   .actions-cell {
-    width: 48px;
     text-align: right;
+    padding-right: 8px !important;
+  }
+
+  // Action icons laid out inline (horizontal), matching the components list —
+  // a fixed-narrow cell was forcing the View/Delete icons to stack vertically.
+  .actions-wrapper {
+    display: inline-flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
 
     .cds--btn--icon-only {
       color: #f4f4f4 !important;
@@ -302,19 +311,12 @@
   }
 
   // Tags column in list view — chips wrap within the cell
-  .tags-cell {
-    vertical-align: top;
-    .cds--tag {
-      margin: 2px;
-    }
-  }
-
-  // Name column: dashboard name plus an optional "var" indicator when the
-  // dashboard has the dashboard-variable feature turned on (mirrors the
-  // components list name cell). Give Name a solid preferred + min width so
-  // the table's auto-layout stops wrapping longer names onto a second line
-  // (same fix as the components list).
+  // Name column: dashboard name + optional "var" indicator, with the
+  // dashboard's tags wrapped UNDER the name (mirrors the components list — no
+  // separate Tags column). Give Name a solid preferred + min width so the
+  // table's auto-layout stops wrapping longer names onto a second line.
   .name-cell {
+    vertical-align: top;
     width: 19.8%;
     min-width: 13.5rem;
   }
@@ -323,6 +325,17 @@
     display: flex;
     align-items: center;
     gap: spacing.$spacing-03;
+  }
+
+  .name-cell__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: spacing.$spacing-02;
+    margin-top: spacing.$spacing-02;
+
+    .cds--tag {
+      margin: 0;
+    }
   }
 
   // Panels column: count is hoverable to reveal a tooltip listing
@@ -334,8 +347,11 @@
   // Connections cell — comma-separated connection links. Carbon Link defaults
   // to inline-block, which makes each link + comma wrap as its own box (the
   // comma drops to its own line). Force inline flow so names + commas wrap as
-  // normal text.
+  // normal text. Give the column ~20% more minimum width so connection names
+  // have room before wrapping.
   .connections-cell {
+    min-width: 12rem; // ~20% above the prior ~10rem auto-layout baseline
+
     .cds--link {
       display: inline;
     }
