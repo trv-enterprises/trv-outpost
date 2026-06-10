@@ -6,6 +6,37 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.4] — 2026-06-09
+
+### Added
+
+- **Per-series color override on line/area/bar charts.** Each y-series can
+  now be assigned a specific color from the Carbon categorical palette (by
+  swatch in the editor, or by number/name/hex via the AI agent) instead of
+  relying on the automatic palette. Pivot charts are excluded — their series
+  are only known at runtime. Stored as a parallel `y_axis_colors` array.
+- **Prometheus instant/range query UI.** The connection/query editor exposes
+  an explicit instant-vs-range toggle, with range step controls.
+- **Gauge decimal places.** Gauge components can specify how many decimals to
+  render on the value readout.
+
+### Changed
+
+- **Single-root theme palette.** The Carbon categorical (multi-series) colors
+  now resolve from one place — `client/src/config/theme.js` (`APP_THEME`) —
+  and the app correctly uses the Carbon **dark** categorical palette (it was
+  previously rendering the light variant on the dark canvas). A future theme
+  switch is a one-line change.
+- **Design-mode list polish + tag colors.** Consistent tag coloring and list
+  refinements across the design-mode pages.
+
+### Fixed
+
+- **Line/area pivot rendering.** Fixed sawtooth/misaligned series and
+  all-one-color area fills when a chart pivots on a series column.
+- **Chart x-axis label rotation** and **data-table panel portal** rendering
+  fixes; source-side variable filtering for streaming charts.
+
 ## [0.28.3] — 2026-06-08
 
 ### Fixed
