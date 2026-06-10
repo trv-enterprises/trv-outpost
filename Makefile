@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test security-scan outdated
+.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test security-scan outdated version-check
 
 # Configuration
 REGISTRY := ghcr.io
@@ -194,6 +194,25 @@ version-bump: ## Update package.json version (use with VERSION=vX.Y.Z)
 	echo "Updating client/package.json to $$PKG_VERSION..."; \
 	cd client && npm version --no-git-tag-version $$PKG_VERSION
 	@echo "✓ Version updated"
+
+# Guard against the About-dialog version drifting from the released version.
+# The About dialog reads client/package.json `version` for "Client version".
+# Manual releases (not `make release`) skip version-bump, which is how the
+# client version froze at 0.28.3 through 0.28.4/0.29.0/0.29.1 while build.json
+# advanced. This check fails if package.json's version doesn't match the latest
+# git tag, so a stale client version can't ship unnoticed. Run it before tagging.
+version-check: ## Verify client/package.json version matches the latest git tag
+	@PKG=$$(cd client && node -p "require('./package.json').version"); \
+	TAG=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); \
+	if [ -z "$$TAG" ]; then echo "no git tag found - skipping version-check"; exit 0; fi; \
+	if [ "$$PKG" != "$$TAG" ]; then \
+		echo "VERSION DRIFT: client/package.json is $$PKG but the latest tag is v$$TAG."; \
+		echo "  The About dialog shows package.json version as 'Client version', so it would"; \
+		echo "  display $$PKG instead of $$TAG. Run 'make version-bump VERSION=v$$TAG' (or use"; \
+		echo "  'make release', which bumps it) and commit before tagging."; \
+		exit 1; \
+	fi; \
+	echo "client/package.json ($$PKG) matches latest tag (v$$TAG)"
 
 release-tag: ## Create and push git tag (use with VERSION=vX.Y.Z)
 	@if [ "$(VERSION)" = "dev" ] || [ -z "$(VERSION)" ]; then \
