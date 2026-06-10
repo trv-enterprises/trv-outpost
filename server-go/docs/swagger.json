@@ -7167,6 +7167,13 @@
                         "type": "string"
                     }
                 },
+                "y_axis_colors": {
+                    "description": "Per-column series color overrides (resolved hex; \"\" = auto palette). Index-aligned to YAxis, same parallel-array pattern as YAxisLabels (the wire y_axis is a string array). Not applied to pivot charts (Series set). Omitted when no column has an explicit color.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "y_axis_label": {
                     "description": "Legacy single y-axis label — kept for backwards compat. Prefer YAxisLabels (plural) going forward; this is populated from YAxisLabels[0] on save.",
                     "type": "string"
