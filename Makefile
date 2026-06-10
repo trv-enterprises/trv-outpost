@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release
+.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test
 
 # Configuration
 REGISTRY := ghcr.io
@@ -38,6 +38,19 @@ build-server: ## Build server binaries (multi-arch)
 	@echo "Building server binaries..."
 	cd server-go && make release-build VERSION=$(VERSION) BUILD_NUM=$(BUILD_NUM)
 	@echo "✓ Server binaries built"
+
+test: ## Run the Go test suite (gates `release`). Includes the SQL verb-guard security tests.
+	@echo "Running Go test suite..."
+	cd server-go && go test ./... || { echo "✗ Go tests FAILED — release blocked."; exit 1; }
+	@echo "✓ Go tests pass"
+	@# Belt-and-suspenders: the /query SQL verb-guard is a security control.
+	@# Fail the release loudly if its guard or tests have been removed, so a
+	@# future refactor can't silently drop the protection (see
+	@# docs/design-notes/query-verb-guard.md).
+	@test -f server-go/internal/connection/sqlguard.go || { echo "✗ SECURITY: sqlguard.go is missing — the /query verb guard has been removed. Release blocked."; exit 1; }
+	@test -f server-go/internal/connection/sqlguard_test.go || { echo "✗ SECURITY: sqlguard_test.go is missing — the verb-guard tests have been removed. Release blocked."; exit 1; }
+	@grep -q 'connection.MustGuard' server-go/internal/service/connection_service.go || { echo "✗ SECURITY: QueryConnection no longer calls connection.MustGuard — the /query verb guard is not wired. Release blocked."; exit 1; }
+	@echo "✓ /query SQL verb-guard present and wired"
 
 api-docs: ## Regenerate Swagger spec + Postman collection from Go annotations
 	@echo "Regenerating Swagger spec..."
@@ -147,6 +160,7 @@ release: ## Full release: build, tarballs, commit, tag, push (use with VERSION=v
 	@echo "============================================"
 	@echo "Starting release $(VERSION)+$(BUILD_NUM)"
 	@echo "============================================"
+	@$(MAKE) test
 	@$(MAKE) api-docs-check
 	@$(MAKE) version-bump VERSION=$(VERSION)
 	@$(MAKE) tarballs VERSION=$(VERSION)
