@@ -120,13 +120,15 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
  * cleanly without a Mongo migration.
  */
 function normalizeYEntry(e) {
-  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined };
-  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined };
+  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined, color: '' };
+  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined, color: '' };
   return {
     column: typeof e.column === 'string' ? e.column : '',
     label: typeof e.label === 'string' ? e.label : '',
     stack: Boolean(e.stack),
     axis: e.axis === 'right' ? 'right' : e.axis === 'left' ? 'left' : undefined,
+    // Optional per-series color override (resolved hex; '' = auto palette).
+    color: typeof e.color === 'string' ? e.color : '',
   };
 }
 
@@ -148,22 +150,25 @@ function buildSeriesForColumn(entry, idx, ctx) {
   // fill (areaStyle) use it. ECharts' areaStyle does NOT inherit itemStyle.color
   // — left empty, every fill falls back to a default, so a multi-series area
   // chart painted all fills the same color. Set the fill explicitly.
+  // An explicit per-series color override (entry.color, a resolved hex) ALWAYS
+  // wins — over the dual-axis blue/purple convention and the auto palette alike.
+  // Empty → fall through to the automatic coloring.
+  const overrideColor = (typeof entry.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(entry.color))
+    ? entry.color
+    : null;
   let seriesColor;
   if (dualAxis) {
-    // Side: explicit `axis` wins; otherwise default first column left,
-    // second column right (matches legacy convention).
+    // Side assignment still applies (yAxisIndex) regardless of color.
     const sideRight = entry.axis === 'right' || (entry.axis == null && idx === 1);
     series.yAxisIndex = sideRight ? 1 : 0;
-    seriesColor = sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR;
+    seriesColor = overrideColor || (sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR);
   } else if (stackedCount === 1 && idx === 0 && !entry.stack) {
-    // Single-axis, single-column, unstacked → force blue for parity
-    // with the legacy single-series default.
-    seriesColor = LEFT_AXIS_COLOR;
+    // Single-axis, single-column, unstacked → blue default (or the override).
+    seriesColor = overrideColor || LEFT_AXIS_COLOR;
   } else {
-    // Single-axis, multi-column (or stacked) → walk the Carbon
-    // categorical palette by series index so series stay on-brand and
-    // visually distinct.
-    seriesColor = categoricalColor(idx);
+    // Single-axis, multi-column (or stacked) → Carbon categorical palette by
+    // series index (or the override).
+    seriesColor = overrideColor || categoricalColor(idx);
   }
   series.itemStyle = { color: seriesColor };
   if (chartType === 'area') {
@@ -332,11 +337,19 @@ export function buildOption(values, data, helpers = {}) {
   // which shape the record was saved in. When the entry already
   // carries a label, the inline one wins.
   const rawYLabels = Array.isArray(values?.data_mapping?.y_axis_labels) ? values.data_mapping.y_axis_labels : [];
+  // Per-column color override is parked in a parallel array
+  // `data_mapping.y_axis_colors` (same shape/reason as y_axis_labels — the
+  // wire y_axis is a string array). Merge it onto the normalized entries; an
+  // inline entry.color (object-form record) still wins if present.
+  const rawYColors = Array.isArray(values?.data_mapping?.y_axis_colors) ? values.data_mapping.y_axis_colors : [];
   const yEntries = rawYAxis
     .map((e, i) => {
       const norm = normalizeYEntry(e);
       if (!norm.label && typeof rawYLabels[i] === 'string') {
         norm.label = rawYLabels[i];
+      }
+      if (!norm.color && typeof rawYColors[i] === 'string') {
+        norm.color = rawYColors[i];
       }
       return norm;
     })

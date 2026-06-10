@@ -8,6 +8,13 @@
 // Runs as part of `npm run verify:chart-spec` (chained into build).
 
 import { buildOption } from '../src/chart-spec/specs/line.js';
+import { CATEGORICAL_PALETTE } from '../src/config/theme.js';
+
+// Resolve categorical colors from the active-theme palette (config/theme.js)
+// so these assertions follow a theme switch instead of pinning Light-theme hex.
+const CAT0 = CATEGORICAL_PALETTE[0];
+const CAT1 = CATEGORICAL_PALETTE[1];
+const CAT2 = CATEGORICAL_PALETTE[2];
 
 const FAILURES = [];
 
@@ -92,12 +99,12 @@ const data = {
   const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
   check('case 3: yAxis stays single (not array)', !Array.isArray(opt.yAxis));
   check('case 3: three series', opt.series?.length === 3);
-  // Multi-series single-axis walks the Carbon categorical palette by
-  // index (purple70, cyan50, teal70 …) — on-brand and distinct, not the
+  // Multi-series single-axis walks the active-theme Carbon categorical
+  // palette by index (config/theme.js) — on-brand and distinct, not the
   // ECharts default and not all-unset.
-  check('case 3: series 0 categorical purple70', opt.series[0]?.itemStyle?.color === '#6929c4');
-  check('case 3: series 1 categorical cyan50', opt.series[1]?.itemStyle?.color === '#1192e8');
-  check('case 3: series 2 categorical teal70', opt.series[2]?.itemStyle?.color === '#005d5d');
+  check('case 3: series 0 categorical [0]', opt.series[0]?.itemStyle?.color === CAT0);
+  check('case 3: series 1 categorical [1]', opt.series[1]?.itemStyle?.color === CAT1);
+  check('case 3: series 2 categorical [2]', opt.series[2]?.itemStyle?.color === CAT2);
 }
 
 // --- Case 4: stacked subset (3 cols, two stacked, one not) ---
@@ -238,10 +245,13 @@ const data = {
   const opt = buildOption(values, pivotData, { formatCellValue, chartType: 'line' });
   check('case 11: pivot creates one series per distinct value', opt.series?.length === 2);
   check('case 11: series named after pivot values', opt.series[0]?.name === 'A' && opt.series[1]?.name === 'B');
-  // Each pivot series walks the categorical palette by its own index —
-  // regression guard: they previously all shared idx 0 (same color).
-  check('case 11: pivot series 0 categorical purple70', opt.series[0]?.itemStyle?.color === '#6929c4');
-  check('case 11: pivot series 1 categorical cyan50', opt.series[1]?.itemStyle?.color === '#1192e8');
+  // Pivot series get categorical colors assigned by PROMINENCE (magnitude
+  // rank), not array order — the largest-magnitude series gets CAT0, etc.
+  // Here site B (20,22) outweighs A (10,12), so B→CAT0 and A→CAT1.
+  // Regression guard: they previously all shared idx 0 (same color), and
+  // they must be DISTINCT palette colors.
+  check('case 11: pivot series A (lesser) categorical [1]', opt.series[0]?.itemStyle?.color === CAT1);
+  check('case 11: pivot series B (greater) categorical [0]', opt.series[1]?.itemStyle?.color === CAT0);
 }
 
 // --- Case 12: area chart type ---

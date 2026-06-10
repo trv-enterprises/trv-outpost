@@ -420,6 +420,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		YAxis        *[]string           `json:"y_axis,omitempty"`
 		YAxisLabel   *string             `json:"y_axis_label,omitempty"`  // legacy single label
 		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"` // per-column labels (preferred)
+		YAxisColors  *[]string           `json:"y_axis_colors,omitempty"` // per-column color override (index|name|hex)
 		GroupBy      *string             `json:"group_by,omitempty"`
 		BandColumns  *models.BandColumns `json:"band_columns,omitempty"`
 	}
@@ -482,6 +483,15 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		if len(*params.YAxisLabels) > 0 {
 			chart.DataMapping.YAxisLabel = (*params.YAxisLabels)[0]
 		}
+	}
+	if params.YAxisColors != nil {
+		// Resolve each token (index | Carbon name | hex) to a canonical hex.
+		// Unrecognized/empty → "" (auto palette for that column).
+		resolved := make([]string, len(*params.YAxisColors))
+		for i, tok := range *params.YAxisColors {
+			resolved[i] = resolveSeriesColor(tok)
+		}
+		chart.DataMapping.YAxisColors = resolved
 	}
 	if params.GroupBy != nil {
 		chart.DataMapping.GroupBy = *params.GroupBy

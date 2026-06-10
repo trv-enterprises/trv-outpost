@@ -2025,11 +2025,14 @@
   // the X-axis subsection above.
   .spec-yacl__row {
     display: grid;
+    // column 1/4 | label 1/4 | color (start of the 4th quarter) | stack |
+    // spacer (1fr) | remove. Color comes before In-stack — it reads as a
+    // series property alongside the label.
     grid-template-columns:
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
-      auto 1fr auto;
-    grid-template-areas: 'column label stack . remove';
+      auto auto 1fr auto;
+    grid-template-areas: 'column label color stack . remove';
     gap: spacing.$spacing-05;
     align-items: end;
 
@@ -2037,6 +2040,8 @@
     .spec-yacl__label  { grid-area: label; }
     .spec-yacl__axis   { grid-area: axis; }
     .spec-yacl__stack  { grid-area: stack; }
+    .spec-yacl__color  { grid-area: color; display: flex; flex-direction: column; gap: spacing.$spacing-02; }
+    .spec-yacl__color-label { font-size: 0.75rem; color: var(--cds-text-secondary); }
     .spec-yacl__remove { grid-area: remove; }
 
     @media (max-width: 720px) {
@@ -2044,6 +2049,7 @@
       grid-template-areas:
         'column remove'
         'label  label'
+        'color color'
         'stack stack';
     }
   }
@@ -2054,19 +2060,22 @@
   // single-axis row so column edges still align with the X-axis
   // subsection above.
   &--dual .spec-yacl__row {
+    // column 1/4 | label 1/4 | axis 1/4 | color (start of the 4th quarter) |
+    // spacer | remove.
     grid-template-columns:
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
-      1fr auto;
-    grid-template-areas: 'column label axis . remove';
+      auto 1fr auto;
+    grid-template-areas: 'column label axis color . remove';
 
     @media (max-width: 720px) {
       grid-template-columns: 1fr auto;
       grid-template-areas:
         'column remove'
         'label  label'
-        'axis   axis';
+        'axis   axis'
+        'color  color';
     }
   }
 

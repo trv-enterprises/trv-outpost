@@ -5,6 +5,7 @@
 import { Select, SelectItem, TextInput, Checkbox, IconButton, Button } from '@carbon/react';
 import { Add, Close } from '@carbon/icons-react';
 import { useSpecRenderContext } from '../SpecContext';
+import ColorSwatchPicker from '../../components/shared/ColorSwatchPicker';
 
 /**
  * Free list of Y-axis column entries. Each entry is
@@ -39,18 +40,23 @@ export default function YAxisColumnsListField({ field }) {
   const modeFieldId = field.modeFieldId || 'multipleYAxis';
   const maxInDualAxis = field.maxInDualAxis ?? 2;
   const isDualAxis = Boolean(formState[modeFieldId]);
+  // Per-series color is meaningless for a PIVOT (the series are determined at
+  // runtime by the pivot column's distinct values) — so hide the picker when a
+  // pivot/series column is set; those charts use the automatic palette.
+  const isPivot = Boolean(formState.series_column);
 
   const raw = Array.isArray(formState[field.id]) ? formState[field.id] : [];
   // Normalize legacy/loose shapes. A bare string (legacy y_axis: ['a','b'])
   // becomes a default entry; partial objects fill in defaults too.
   const entries = raw.map((e) => {
-    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left' };
-    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left' };
+    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left', color: '' };
+    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left', color: '' };
     return {
       column: typeof e.column === 'string' ? e.column : '',
       label: typeof e.label === 'string' ? e.label : '',
       stack: Boolean(e.stack),
       axis: e.axis === 'right' ? 'right' : 'left',
+      color: typeof e.color === 'string' ? e.color : '',
     };
   });
 
@@ -66,7 +72,7 @@ export default function YAxisColumnsListField({ field }) {
 
   const addEntry = () => {
     const nextAxis = isDualAxis && entries.length === 1 ? 'right' : 'left';
-    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis }];
+    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis, color: '' }];
     onFieldChange(field.id, next);
   };
 
@@ -137,6 +143,17 @@ export default function YAxisColumnsListField({ field }) {
                   labelText="In stack"
                   checked={entry.stack}
                   onChange={(_e, { checked }) => updateEntry(i, { stack: checked })}
+                />
+              </div>
+            )}
+            {/* Per-series color override. Hidden for pivots (runtime series). */}
+            {!isPivot && (
+              <div className="spec-yacl__color">
+                {i === 0 && <span className="spec-yacl__color-label">Color</span>}
+                <ColorSwatchPicker
+                  value={entry.color}
+                  onChange={(hex) => updateEntry(i, { color: hex })}
+                  label={`${entry.column || 'Series'} color`}
                 />
               </div>
             )}

@@ -516,6 +516,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [yAxisColumns, setYAxisColumns] = useState([]);
   const [yAxisLabel, setYAxisLabel] = useState(''); // Legacy single y-axis label — kept for back-compat; use yAxisLabels for new code.
   const [yAxisLabels, setYAxisLabels] = useState([]); // Per-column y-axis labels. Index matches yAxisColumns. Empty entries fall back to column name.
+  // Per-column series color overrides (resolved hex; '' = auto palette). Index
+  // matches yAxisColumns, same parallel-array pattern as yAxisLabels. Saved into
+  // the object-form y_axis entries' `color` field.
+  const [yAxisColors, setYAxisColors] = useState([]);
   const [groupByColumn, setGroupByColumn] = useState('');
   const [seriesColumn, setSeriesColumn] = useState(''); // Column that identifies each series (e.g., location) - used for time bucket partitioning
 
@@ -793,6 +797,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setXAxisLabel('');
       setYAxisLabel('');
       setYAxisLabels([]);
+        setYAxisColors([]);
     }
 
     // Clear time bucket if not applicable
@@ -889,10 +894,25 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setXAxisColumn(chart.data_mapping?.x_axis || '');
       setXAxisLabel(chart.data_mapping?.x_axis_label || '');
       setXAxisFormat(chart.data_mapping?.x_axis_format || 'chart');
-      setYAxisColumns(chart.data_mapping?.y_axis || []);
+      // y_axis may be the new object form ({column,label,stack,axis,color}[]) or
+      // the legacy string array. Extract the column strings for the (string-typed)
+      // yAxisColumns state, and harvest per-column color + label from objects.
+      const loadedYAxis = chart.data_mapping?.y_axis || [];
+      const loadedYCols = loadedYAxis.map((e) => (typeof e === 'string' ? e : (e?.column || '')));
+      // Per-column colors: prefer the parallel y_axis_colors array; fall back to
+      // inline entry.color if a record was ever saved in object form.
+      const rawYColors = chart.data_mapping?.y_axis_colors;
+      const loadedYColors = loadedYCols.map((_c, i) => {
+        if (Array.isArray(rawYColors) && typeof rawYColors[i] === 'string') return rawYColors[i];
+        const e = loadedYAxis[i];
+        return (typeof e === 'object' && typeof e?.color === 'string') ? e.color : '';
+      });
+      setYAxisColumns(loadedYCols);
+      setYAxisColors(loadedYColors);
       setYAxisLabel(chart.data_mapping?.y_axis_label || '');
-      // Prefer the new per-column array; fall back to seeding from the legacy
-      // single label (position 0) so existing charts keep their label.
+      // Labels live in y_axis_labels (the per-column source of truth), falling
+      // back to the legacy single label. (Same computation as loadedYAxisLabels
+      // used for the dirty-tracking snapshot, so load doesn't read dirty.)
       const loadedLabels = chart.data_mapping?.y_axis_labels;
       if (Array.isArray(loadedLabels) && loadedLabels.length > 0) {
         setYAxisLabels(loadedLabels);
@@ -900,6 +920,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         setYAxisLabels([chart.data_mapping.y_axis_label]);
       } else {
         setYAxisLabels([]);
+        setYAxisColors([]);
       }
       setGroupByColumn(chart.data_mapping?.group_by || '');
       setSeriesColumn(chart.data_mapping?.series || '');
@@ -1142,7 +1163,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
         xAxisFormat: chart.data_mapping?.x_axis_format || 'chart',
-        yAxisColumns: chart.data_mapping?.y_axis || [],
+        // Match the extracted state set above (strings + per-column colors) so
+        // the dirty-tracking baseline equals the live state on load.
+        yAxisColumns: loadedYCols,
+        yAxisColors: loadedYColors,
         yAxisLabel: chart.data_mapping?.y_axis_label || '',
         yAxisLabels: loadedYAxisLabels,
         groupByColumn: chart.data_mapping?.group_by || '',
@@ -1213,6 +1237,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         xAxisLabel: '',
         xAxisFormat: 'auto',
         yAxisColumns: [],
+        yAxisColors: [],
         yAxisLabel: '',
         yAxisLabels: [],
         groupByColumn: '',
@@ -1292,6 +1317,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       yAxisColumns,
       yAxisLabel,
       yAxisLabels,
+      yAxisColors,
       groupByColumn,
       seriesColumn,
       filters,
@@ -1327,7 +1353,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
     tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
-    xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels,
+    xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
@@ -1669,6 +1695,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setYAxisColumns([]);
     setYAxisLabel('');
     setYAxisLabels([]);
+        setYAxisColors([]);
     setGroupByColumn('');
     setSeriesColumn('');
     setFilters([]);
@@ -2060,7 +2087,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildPrometheusParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2161,7 +2188,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // Strip empty-column placeholders before saving. The spec-driven
         // y_axis_columns_list keeps unfilled new rows around so the user
         // can pick a column, but they shouldn't reach the wire — same for
-        // their index-aligned labels.
+        // their index-aligned labels + colors.
         y_axis: yAxisColumns.filter((c) => typeof c === 'string' && c.length > 0),
         // y_axis_label kept for back-compat; y_axis_labels is the new per-column source of truth.
         y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
@@ -2172,6 +2199,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           const keep = yAxisColumns.map((c, i) => (typeof c === 'string' && c.length > 0 ? i : -1)).filter((i) => i >= 0);
           const aligned = keep.map((i) => yAxisLabels[i] || '');
           return aligned.length > 0 ? aligned : undefined;
+        })(),
+        // Per-column series colors — parallel string array, index-aligned to the
+        // FILTERED y_axis (same realignment + pattern as y_axis_labels). '' = auto.
+        // Omitted when no column has an explicit color, to keep records lean.
+        y_axis_colors: (() => {
+          const keep = yAxisColumns.map((c, i) => (typeof c === 'string' && c.length > 0 ? i : -1)).filter((i) => i >= 0);
+          const aligned = keep.map((i) => (Array.isArray(yAxisColors) ? yAxisColors[i] : '') || '');
+          return aligned.some((c) => c) ? aligned : undefined;
         })(),
         group_by: groupByColumn || '',
         series: seriesColumn || '', // Column for series partitioning in time buckets
@@ -3551,6 +3586,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         label: (Array.isArray(yAxisLabels) ? yAxisLabels[i] : '') || '',
                         stack: Boolean(chartOptions.chartStacked),
                         axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
+                        // Per-column color override (index-aligned yAxisColors).
+                        color: (Array.isArray(yAxisColors) ? yAxisColors[i] : '') || '',
                       })),
                       x_axis_column: xAxisColumn,
                       x_axis_label: xAxisLabel || '',
@@ -3669,8 +3706,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           //     until per-column stack lands in codegen.
                           const cols = (value || []).map((e) => (typeof e?.column === 'string' ? e.column : ''));
                           const labels = (value || []).map((e) => (typeof e?.label === 'string' ? e.label : ''));
+                          const colors = (value || []).map((e) => (typeof e?.color === 'string' ? e.color : ''));
                           setYAxisColumns(cols);
                           setYAxisLabels(labels);
+                          setYAxisColors(colors);
                           const anyStacked = (value || []).some((e) => e?.stack);
                           updateChartOption('chartStacked', anyStacked);
                           break;
@@ -4493,6 +4532,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               label: (Array.isArray(yAxisLabels) ? yAxisLabels[i] : '') || '',
                               stack: Boolean(chartOptions.chartStacked),
                               axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
+                              color: (Array.isArray(yAxisColors) ? yAxisColors[i] : '') || '',
                             }))
                             .filter((e) => e.column && e.column.length > 0),
                           // Dual-axis is the user's explicit choice only;

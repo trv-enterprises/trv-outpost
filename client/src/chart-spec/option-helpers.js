@@ -2,6 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { CATEGORICAL_PALETTE, CATEGORICAL_NAMES } from '../config/theme.js';
+
 // Shared ECharts-option helpers for spec-driven chart buildOption
 // functions (line/bar/area/gauge/...). Anything every chart's option
 // literal wants — color tokens, value formatting, reading values out of
@@ -31,26 +33,12 @@ export const COLOR_TEXT_SECONDARY = '#c6c6c6';
 // ECharts' own default palette (off-brand). Resolve series colors by
 // position into this array (wrapping past 14).
 //
-// Source: @carbon/colors via carbon-charts'
-// scss/_color-palette.scss "14" map. Token name kept in the trailing
-// comment so the mapping back to Carbon stays auditable; the renderer
-// references CATEGORICAL_COLORS by index, never raw hex.
-export const CATEGORICAL_COLORS = [
-  '#6929c4', // purple70
-  '#1192e8', // cyan50
-  '#005d5d', // teal70
-  '#9f1853', // magenta70
-  '#fa4d56', // red50
-  '#520408', // red90
-  '#198038', // green60
-  '#002d9c', // blue80
-  '#ee5396', // magenta50
-  '#b28600', // yellow50
-  '#009d9a', // teal50
-  '#012749', // cyan90
-  '#8a3800', // orange70
-  '#a56eff', // purple50
-];
+// Carbon's categorical data-viz palette for the ACTIVE THEME. The Light and
+// Dark variants + the active-theme selection live in ONE place — src/config/
+// theme.js (APP_THEME). We re-export it here as CATEGORICAL_COLORS so existing
+// importers are unchanged. The renderer references it by index, never raw hex.
+// To switch the whole app's series colors: change APP_THEME in config/theme.js.
+export const CATEGORICAL_COLORS = CATEGORICAL_PALETTE;
 
 /**
  * Color for the Nth series (0-based) from the Carbon categorical
@@ -60,6 +48,44 @@ export const CATEGORICAL_COLORS = [
  */
 export function categoricalColor(i) {
   return CATEGORICAL_COLORS[((i % CATEGORICAL_COLORS.length) + CATEGORICAL_COLORS.length) % CATEGORICAL_COLORS.length];
+}
+
+// Named, numbered palette for the per-series color picker + agent. Each entry:
+// { number (1-based), name (Carbon name), hex }. number/name are the vocabulary
+// a user or the AI uses ("color 1", "purple70"); hex is what gets stored on
+// y_axis[].color. DERIVED from the active-theme palette (config/theme.js) so it
+// stays in lockstep with the auto series colors and follows a theme switch.
+export const SERIES_COLOR_PALETTE = CATEGORICAL_PALETTE.map((hex, i) => ({
+  number: i + 1,
+  name: CATEGORICAL_NAMES[i],
+  hex,
+}));
+
+/**
+ * Resolve a series-color token to a canonical hex from SERIES_COLOR_PALETTE.
+ * Accepts:
+ *   - a 1-based palette NUMBER (1-14), as number or numeric string ("6")
+ *   - a Carbon NAME ("purple70", case-insensitive)
+ *   - a HEX ("#6929c4") — returned as-is (lowercased) if it's a 7-char hex
+ * Returns the resolved hex, or null when the token is empty/unrecognized
+ * (caller then falls back to the automatic palette).
+ * @param {string|number} token
+ * @returns {string|null}
+ */
+export function resolveSeriesColor(token) {
+  if (token == null || token === '') return null;
+  if (typeof token === 'string' && /^#[0-9a-fA-F]{6}$/.test(token)) {
+    return token.toLowerCase();
+  }
+  // numeric index (1-based)
+  const n = Number(token);
+  if (Number.isInteger(n) && n >= 1 && n <= SERIES_COLOR_PALETTE.length) {
+    return SERIES_COLOR_PALETTE[n - 1].hex;
+  }
+  // Carbon name
+  const name = String(token).trim().toLowerCase();
+  const byName = SERIES_COLOR_PALETTE.find((c) => c.name.toLowerCase() === name);
+  return byName ? byName.hex : null;
 }
 
 // CARBON_COLORS is the same palette as a single named object. Spec-driven

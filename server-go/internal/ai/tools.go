@@ -93,6 +93,7 @@ Control types and their UI config:
 					"y_axis":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Columns for Y axis"},
 					"y_axis_label":   map[string]interface{}{"type": "string", "description": "Legacy single Y-axis label. Prefer y_axis_labels (plural, one per y column). For two y-columns they split left/right; for 3+ y-columns omit y_axis_labels entirely — the legend carries series identity."},
 					"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels; [0] goes on the left axis, [1] on the right axis for dual-axis charts. Omit for 3+ y columns."},
+					"y_axis_colors":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\", \"cyan50\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar) — e.g. vary line color across charts instead of all-blue. NOT for pivot charts (series column set): those are colored automatically. Omit to keep the default palette."},
 					"group_by":       map[string]interface{}{"type": "string", "description": "Column to group data by"},
 					"band_columns": map[string]interface{}{
 						"type":        "object",
