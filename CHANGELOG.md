@@ -8,19 +8,27 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.29.1] — 2026-06-10
 
-### Fixed
+### Changed
 
-- **Clerk browser sign-in broken by the v0.29.0 `js-cookie` override.** v0.29.0
-  forced `js-cookie` to `^3.0.8` to clear a security advisory, but
-  `@clerk/shared` (Clerk's browser SDK) is the *only* consumer of `js-cookie`
-  and pins `3.0.5` exactly. The 3.0.6 cookie-attribute change made Clerk's
-  cookie writes fail (`__clerk_test_etld rejected for invalid domain`), killing
-  the session — `/api/auth/refresh` then returned 401. Removed the override so
-  Clerk runs its tested `js-cookie@3.0.5`. The advisory (GHSA-qjx8-664m-686j) is
-  recorded in `security/accepted-vulns.yaml`: Clerk is the sole consumer, the
-  prototype-hijack needs attacker-controlled `assign()` input that doesn't occur
-  in Clerk's session-cookie usage, so practical exposure is negligible — it's
-  Clerk's dependency to bump (do not re-force it via npm overrides).
+- **Removed an over-applied `js-cookie` npm override.** v0.29.0 forced
+  `js-cookie` to `^3.0.8` to clear a security advisory, but `@clerk/shared`
+  (Clerk's browser SDK) is the *only* consumer of `js-cookie` in the tree and
+  pins `3.0.5` exactly — forcing it off its tested version is bad practice. The
+  override is removed so Clerk runs its tested `js-cookie@3.0.5`. The advisory
+  (GHSA-qjx8-664m-686j) is recorded in `security/accepted-vulns.yaml`: Clerk is
+  the sole consumer, the prototype-hijack needs attacker-controlled `assign()`
+  input that doesn't occur in Clerk's session-cookie usage, so practical
+  exposure is negligible — it's Clerk's dependency to bump (do not re-force it
+  via npm overrides).
+
+### Note
+
+- An earlier draft of this entry claimed v0.29.1 *fixed a Clerk login failure*.
+  That was incorrect: the affected environment was running an older client that
+  predates the override, so the override was never the cause. The Clerk sign-in
+  issue remains a separate, open investigation (environmental — Clerk cookie
+  handling on a bare-IP/HTTP origin, plus a deploy mismatch where the client
+  image lagged the server). This release does not address it.
 
 ## [0.29.0] — 2026-06-10
 
