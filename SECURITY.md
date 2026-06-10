@@ -66,6 +66,50 @@ entry to the registry with a justification you'd defend in an audit,
 not by silencing the scanner. To remediate instead, bump the Go
 toolchain / dependency and the finding disappears on the next scan.
 
+## Dependency freshness
+
+The vulnerability scans above are **reactive** — they only fire when a
+dependency has a published advisory. A dependency can be many versions
+behind with no CVE and the scans stay silent. To catch that proactively:
+
+```
+make outdated
+```
+
+reports every dependency behind its latest version (`npm outdated` +
+`go list -u -m all`), **reconciled against the deliberate-pins
+registry**:
+
+> **[`security/pinned-versions.yaml`](security/pinned-versions.yaml)**
+
+- **HELD** — a dependency we are *deliberately* keeping below latest,
+  with a recorded reason (migration cost, peer constraint, known
+  regression) and a `review_on` date. These don't read as "action
+  needed."
+- **REVIEW OVERDUE** — a held pin past its review date; re-evaluate.
+- **AVAILABLE** — behind latest and *not* a documented hold; a normal
+  bump candidate.
+
+`make outdated` is **informational** — it never blocks a release. It's a
+**cadence** check, not a gate.
+
+**Recommended cadence (manual, no new infra):** run `make outdated`
+**monthly** (and before any release where you have headroom). Bump the
+low-risk AVAILABLE items (patch/minor, dev-only tooling) freely; for a
+major-version jump you're intentionally deferring, add it to
+`pinned-versions.yaml` with a reason and a review date so the next run
+shows it as HELD rather than nagging. Re-confirm or clear HELD entries
+when their `review_on` passes.
+
+**If this earns automation later:** the GitHub-native option is
+[Dependabot](https://docs.github.com/code-security/dependabot) (free,
+OSS, config-only — a `.github/dependabot.yml` that opens grouped update
+PRs on a schedule) or [Renovate](https://docs.renovatebot.com/) (more
+configurable, supports the same "grouped, scheduled" model and could be
+taught to respect the pins registry). Not set up today — the monthly
+`make outdated` ritual is the current, zero-infra approach. Revisit if
+the manual cadence slips.
+
 ## Known security posture
 
 A few intentional design decisions worth knowing about:

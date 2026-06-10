@@ -1,0 +1,108 @@
+# Deliberate dependency pins
+# ==========================
+# The source of truth for dependencies we are KNOWINGLY holding below the
+# latest available version, and WHY. This is the companion to
+# accepted-vulns.yaml: that file records accepted *vulnerabilities*; this file
+# records accepted *staleness* — "yes, we know X is behind; here's the reason
+# we haven't moved, and when to re-check."
+#
+# `make outdated` reconciles `npm outdated` / `go list -u -m all` against this
+# file: a dep listed here (and not past its review date) is reported as
+# "Held (see registry)"; anything else behind latest is "Available — review".
+#
+# This is NOT a list of every out-of-date dep. Routine minor/patch drift does
+# not belong here — that's what `make outdated` surfaces for a normal bump.
+# Only add an entry when there is a DELIBERATE reason to stay behind a version
+# you could otherwise take (usually a major-version boundary with a migration
+# cost, a peer-dependency constraint, or a known regression in the newer line).
+#
+# ── Entry schema ─────────────────────────────────────────────────────────────
+#   name:        REQUIRED. package name exactly as the ecosystem reports it.
+#   ecosystem:   REQUIRED. npm | go
+#   held_at:     REQUIRED. the major line / version we are staying on (for humans).
+#   latest:      OPTIONAL. the latest line we're declining (as of review_on).
+#   reason:      REQUIRED. why we hold — migration cost, peer constraint, regression.
+#   review_on:   REQUIRED. ISO date to re-evaluate the hold. Past this date,
+#                `make outdated` flags it as "review overdue" so a hold is never
+#                indefinite-by-neglect.
+#   blocker:     OPTIONAL. the concrete thing that must change first
+#                (e.g. "React 19.3 bump", "antd v6 breaking-change audit").
+
+pins:
+  - name: "@clerk/clerk-react"
+    ecosystem: npm
+    held_at: "5.x"
+    latest: "5.x (clerk-react 4.x exists but is a different/older product line; npm 'latest' tag currently 5.61.3, which is OLDER than our 5.61.6)"
+    reason: >
+      Clerk's React SDK pins a narrow react peer (~19.2.3 line). Our react is
+      held at 19.2.0 (see the react entry), so we navigate Clerk installs with
+      --legacy-peer-deps. Staying on the 5.x line that matches our React; do not
+      jump SDK major lines without re-checking the react peer + auth smoke test.
+      Note: npm sometimes publishes a 'latest' tag (5.61.3) older than our pin
+      (5.61.6) — being "behind latest" here can be a tag artifact, not staleness.
+    review_on: 2026-09-01
+    blocker: "Coordinated React + Clerk peer-range bump; auth (Clerk) smoke test"
+
+  - name: react
+    ecosystem: npm
+    held_at: "19.2.0"
+    latest: "19.2.7 (wanted) — 19.x"
+    reason: >
+      Held at 19.2.0 to stay inside @clerk/clerk-react's narrow peer range and
+      avoid churning the large Carbon/Ant/react-router tree. The 19.2.x patch
+      bumps are low-risk but coupled to the Clerk peer dance, so move react +
+      react-dom + Clerk together, not piecemeal.
+    review_on: 2026-09-01
+    blocker: "Move react + react-dom + @clerk/clerk-react in one coordinated PR"
+
+  - name: antd
+    ecosystem: npm
+    held_at: "5.x"
+    latest: "6.x"
+    reason: >
+      antd 6 is a major with breaking API + design-token changes. We use antd
+      only in a few places alongside Carbon (the primary design system); a v6
+      migration is a deliberate effort, not a freshness bump. No security driver.
+    review_on: 2026-09-01
+    blocker: "antd v6 breaking-change audit across our usage"
+
+  - name: vite
+    ecosystem: npm
+    held_at: "7.x"
+    latest: "8.x"
+    reason: >
+      Vite 8 is a major (config + plugin-API changes). Build is stable on 7.x;
+      hold until @vitejs/plugin-react and the rest of the build chain have
+      settled v8 support, then bump the build toolchain together.
+    review_on: 2026-09-01
+    blocker: "@vitejs/plugin-react v8 support + a build smoke test"
+
+  - name: "@vitejs/plugin-react"
+    ecosystem: npm
+    held_at: "5.x"
+    latest: "6.x"
+    reason: "Couples to the Vite 7→8 bump; move with vite, not independently."
+    review_on: 2026-09-01
+    blocker: "Vite 8 bump (see the vite entry)"
+
+  - name: eslint
+    ecosystem: npm
+    held_at: "9.x"
+    latest: "10.x"
+    reason: >
+      ESLint 10 is a major (flat-config + rule changes). Lint is dev-only
+      (no runtime/security impact). Bump alongside the eslint-plugin-* set,
+      which also have new majors, so the lint config moves as one unit.
+    review_on: 2026-09-01
+    blocker: "Coordinated bump of eslint + @eslint/js + eslint-plugin-react-* with a lint run"
+
+  - name: react-grid-layout
+    ecosystem: npm
+    held_at: "1.x"
+    latest: "2.x"
+    reason: >
+      Core of the dashboard grid. v2 is a major; the grid is load-bearing for
+      every dashboard layout, so a bump needs a focused layout/drag regression
+      pass, not a routine update. No security driver.
+    review_on: 2026-09-01
+    blocker: "react-grid-layout v2 layout/drag-resize regression test"

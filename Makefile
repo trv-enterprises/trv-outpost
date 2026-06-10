@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test security-scan
+.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test security-scan outdated
 
 # Configuration
 REGISTRY := ghcr.io
@@ -103,6 +103,23 @@ security-scan: ## Run dependency + secret scans (gitleaks/npm-audit block; govul
 	fi
 	@echo "✓ Security scans complete (secret + critical-dep gate passed)"
 	@echo "  Accepted-vulnerability registry: security/accepted-vulns.yaml"
+	@echo "──────────────────────────────────────────────────────────────"
+
+# Dependency freshness report. INFORMATIONAL — never blocks a release; it's a
+# cadence check (run it monthly, see SECURITY.md). Reconciles `npm outdated` /
+# `go list -u -m all` against security/pinned-versions.yaml so deliberate holds
+# show as HELD and only undocumented drift shows as AVAILABLE-to-bump.
+outdated: ## Report deps behind latest, reconciled against pinned-versions.yaml (informational)
+	@echo "── Dependency freshness ──────────────────────────────────────"
+	@if [ -d client/node_modules ]; then \
+		(cd client && npm outdated --json 2>/dev/null || true) | python3 security/outdated-report.py --ecosystem npm; \
+	else \
+		echo "⚠ client/node_modules absent — run 'cd client && npm install' to report npm freshness"; \
+	fi
+	@echo ""
+	@(cd server-go && go list -u -m -json all 2>/dev/null) | python3 security/outdated-report.py --ecosystem go
+	@echo "ℹ Bump candidates appear under AVAILABLE. To hold one deliberately,"
+	@echo "  add an entry to security/pinned-versions.yaml with a reason + review date."
 	@echo "──────────────────────────────────────────────────────────────"
 
 api-docs: ## Regenerate Swagger spec + Postman collection from Go annotations
