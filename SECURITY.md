@@ -16,9 +16,20 @@ The codebase is scanned with three tools:
 | `govulncheck` | `server-go/` Go module + reachable-symbol vulns in stdlib + imports | `cd server-go && govulncheck ./...` |
 | `gitleaks` | Repo tree + full git history (committed secrets) | `gitleaks detect --no-banner` |
 
-Run the full set before tagging a release. They take a few minutes
-combined and have caught real issues — see
-[Last full scan](#last-full-scan) below.
+These run automatically as part of the release gate — `make release`
+calls `make security-scan` (after the test suite, before tagging).
+**Gate policy:**
+
+- **gitleaks** (committed secrets) — **blocks** the release on any leak.
+- **npm audit** — **blocks** on `critical` only; `high`/`moderate`/`low`
+  are reported but don't block (review + remediate on your own cadence).
+- **govulncheck** — **reports only**, never blocks. Output is reconciled
+  against the accepted-vulnerability registry (below) so consciously
+  accepted findings don't clutter the actionable list. Only
+  **symbol-reachable** findings are shown as actionable.
+
+Run `make security-scan` directly any time. A missing tool fails the
+gate unless `SECURITY_SCAN_ALLOW_MISSING=1`.
 
 `govulncheck` reports vulnerabilities in three reachability tiers:
 
@@ -29,26 +40,31 @@ combined and have caught real issues — see
 3. **In a transitive module** — an indirect dependency carries the
    vuln. Lowest priority.
 
-## Last full scan
+## Accepted-vulnerability registry
 
-**Date:** 2026-05-03
-**Result:** 0 reachable vulnerabilities across npm, Go, and secrets.
+Vulnerabilities we have **consciously accepted** — because their blast
+radius does not affect this system, or remediation is gated on an
+upstream/toolchain bump we don't yet have — live in a structured,
+code-reviewed registry:
 
-### Acknowledged unreachable findings
+> **[`security/accepted-vulns.yaml`](security/accepted-vulns.yaml)**
 
-`govulncheck` flags 3 lower-tier vulnerabilities that we have
-reviewed and accepted as not exploitable in this codebase. They
-will continue to appear on each scan until upstream patches reach
-our dependency graph; that's expected.
+Each entry records the advisory ID, scanner, affected module, who
+accepted it, when, an **expiry date** (exceptions are never permanent —
+they force periodic re-review), and the justification (why the blast
+radius doesn't reach us). The release scan reconciles scanner output
+against this file (`security/reconcile-scan.py`):
 
-| Advisory | Module | Why unreachable here |
-|---|---|---|
-| [GO-2026-4503](https://pkg.go.dev/vuln/GO-2026-4503) | `filippo.io/edwards25519@v1.1.0` | Indirect transitive dep. The vulnerable code path is not reached by any caller in our dependency graph. Fixed in `v1.1.1`; will resolve when an ancestor releases a bumped pin. |
-| [GO-2025-4135](https://pkg.go.dev/vuln/GO-2025-4135) | `golang.org/x/crypto/ssh/agent` | We do not use the `ssh/agent` package. The MongoDB driver pulls in `golang.org/x/crypto` for other primitives. |
-| [GO-2025-4134](https://pkg.go.dev/vuln/GO-2025-4134) | `golang.org/x/crypto/ssh` | We do not open SSH connections. Same incidental import as above. |
+- a finding listed in the registry (and not expired) → reported as
+  **Known-accepted**, kept out of the actionable list;
+- any finding **not** in the registry → reported as **ACTIONABLE**;
+- an **expired** exception → flagged loudly and treated as actionable
+  again (re-affirm or remediate).
 
-If you re-run the scan and see additional findings beyond these
-three, treat them as new and triage.
+**Accepting a vulnerability is an explicit risk decision** — add an
+entry to the registry with a justification you'd defend in an audit,
+not by silencing the scanner. To remediate instead, bump the Go
+toolchain / dependency and the finding disappears on the next scan.
 
 ## Known security posture
 

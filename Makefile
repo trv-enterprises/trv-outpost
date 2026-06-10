@@ -88,17 +88,21 @@ security-scan: ## Run dependency + secret scans (gitleaks/npm-audit block; govul
 	else \
 		echo "⚠ client/node_modules absent — run 'cd client && npm install' to audit; skipped"; \
 	fi
-	@# 3. govulncheck — Go module + stdlib. REPORTS only, never blocks.
+	@# 3. govulncheck — Go module + stdlib. REPORTS only (reconciled against the
+	@#    accepted-vulns registry so known-accepted findings don't clutter the
+	@#    actionable list). Symbol-reachable findings only. Never blocks the
+	@#    release on its own; an EXPIRED exception is flagged loudly (review it).
 	@if command -v govulncheck >/dev/null 2>&1; then \
-		echo "→ govulncheck (Go deps + stdlib, report-only)..."; \
-		(cd server-go && govulncheck ./... 2>&1 | grep -E "Vulnerability #|Found in:|Fixed in:|No vulnerabilities" | head -60) || true; \
-		echo "ℹ govulncheck is report-only — review findings; remediate via Go toolchain / dep bumps. Not blocking the release."; \
+		echo "→ govulncheck (Go deps + stdlib) → reconcile against accepted-vulns registry..."; \
+		(cd server-go && govulncheck -json ./... 2>/dev/null) | python3 security/reconcile-scan.py --scanner govulncheck || true; \
+		echo "ℹ govulncheck is report-only — actionable findings above are remediated via Go toolchain / dep bumps. Not blocking the release."; \
 	elif [ "$(SECURITY_SCAN_ALLOW_MISSING)" = "1" ]; then \
 		echo "⚠ govulncheck not installed — skipped (SECURITY_SCAN_ALLOW_MISSING=1)"; \
 	else \
 		echo "✗ govulncheck not installed (go install golang.org/x/vuln/cmd/govulncheck@latest). Release blocked; set SECURITY_SCAN_ALLOW_MISSING=1 to override locally."; exit 1; \
 	fi
 	@echo "✓ Security scans complete (secret + critical-dep gate passed)"
+	@echo "  Accepted-vulnerability registry: security/accepted-vulns.yaml"
 	@echo "──────────────────────────────────────────────────────────────"
 
 api-docs: ## Regenerate Swagger spec + Postman collection from Go annotations
