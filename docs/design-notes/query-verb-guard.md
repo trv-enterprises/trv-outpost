@@ -235,6 +235,44 @@ Two layers:
 
 ---
 
+## Breach testing — a real bypass found and fixed
+
+After the first implementation, we ran active breach attempts through the live
+API (not just unit tests). One **real bypass** surfaced:
+
+**Type-confusion bypass (fixed).** The guard originally gated on the
+*client-supplied* `query.Type` (`req.Query.Type == sql || edgelake`). But the
+adapter is chosen by the **connection's** type, and the SQL adapter runs
+`query.Raw` **regardless of `query.Type`** — it never reads that field for
+dispatch. So an attacker could send `{"raw":"DROP TABLE …","type":"api"}` to a
+SQL connection: the guard's condition was false (skip), but the SQL adapter ran
+the DROP anyway. Confirmed live — the DROP reached Postgres (failed only on a
+foreign-key dependency, `pq: cannot drop table`, not on the guard).
+
+**Fix:** gate on `ds.Type` (the connection's own type, server-side and
+trustworthy) via `connection.MustGuard(...)`, never on `query.Type`. The
+gating decision now lives in one tested helper (`MustGuard` +
+`TestMustGuard`), with the connection-type set as the single source of truth.
+Verified: every `query.Type` value (`api`, `prometheus`, `tsstore`, omitted,
+bogus) on a SQL connection is now blocked.
+
+**Other vectors tested and found safe (no change needed):**
+
+- **Encoding/evasion** — lowercase, leading whitespace/newlines, leading
+  comments, CTE-hidden writes, stacked statements, `EXPLAIN ANALYZE DELETE`,
+  `INSERT … RETURNING`, trailing comments — all correctly classified and
+  blocked.
+- **Write smuggled in `params`** — inert. `params` values are passed via the
+  driver's parameterized API (bound data), never concatenated into SQL.
+- **Sibling endpoints** — `/variable-values` (SQL + EdgeLake) builds its query
+  via `BuildDistinctQuery`, which validates `column`/`table` against a strict
+  `IsSafeIdentifier` allowlist and quotes them — no raw-SQL injection. The
+  tsstore/API distinct paths and `"newest"` use hardcoded raw.
+  `SaveDiscoveredValues` does a repo write, no SQL.
+- **AI / MCP `query_connection` tool** — calls the same service
+  `QueryConnection`, so it **inherits the guard** automatically (all three AI
+  call sites). No separate adapter bypass for the agents.
+
 ## Files
 
 | File | Change |

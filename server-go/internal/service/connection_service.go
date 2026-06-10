@@ -1305,10 +1305,17 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 	// Server-side verb guard: /query is a no-capability endpoint (View Mode
 	// renders every non-streaming chart through it), so it can't be defended
 	// by capability gating. Refuse write/DDL verbs here so a replayed or
-	// tampered request can't run an INSERT/DELETE/DROP. SQL-family types only;
-	// other connection types (api/mqtt/prometheus/...) pass through untouched.
+	// tampered request can't run an INSERT/DELETE/DROP.
+	//
+	// CRITICAL: gate on the CONNECTION's type (ds.Type, server-side and
+	// trustworthy), NOT req.Query.Type. The adapter is chosen by the
+	// connection, and the SQL adapter runs query.Raw regardless of the
+	// client-supplied query.Type — so trusting query.Type here is a
+	// type-confusion bypass (set type:"api" on a SQL connection and the
+	// guard would skip while the SQL adapter still runs the DROP).
+	// SQL-family connections only; api/mqtt/prometheus/... can't run raw SQL.
 	// Runs before adapter creation so a blocked query never opens a connection.
-	if req.Query.Type == models.QueryTypeSQL || req.Query.Type == models.QueryTypeEdgeLake {
+	if connection.MustGuard(string(ds.Type)) {
 		policy := connection.WritePolicy{} // zero value = strict read-only
 		if s.queryGuardPolicy != nil {
 			policy = s.queryGuardPolicy(ctx)

@@ -163,3 +163,26 @@ func TestClassifyAndAuthorizePolicyOn(t *testing.T) {
 		}
 	}
 }
+
+// TestMustGuard locks in the type-confusion bypass fix: the guard gates on the
+// CONNECTION type, and exactly the SQL-running types are guarded. A breach test
+// (2026-06-09) found that gating on the client-supplied query.Type let a caller
+// set query.Type:"api" on a SQL connection to skip the guard while the SQL
+// adapter still ran the statement. These connection types must always guard;
+// the rest must not (they can't run raw SQL, so guarding them would wrongly
+// reject legitimate non-SQL queries).
+func TestMustGuard(t *testing.T) {
+	guarded := []string{"sql", "edgelake"}
+	notGuarded := []string{"api", "mqtt", "prometheus", "tsstore", "csv", "socket", "frigate", "", "SQL", "sqlx", "EDGELAKE"}
+
+	for _, ct := range guarded {
+		if !MustGuard(ct) {
+			t.Errorf("connection type %q must be guarded (runs raw SQL)", ct)
+		}
+	}
+	for _, ct := range notGuarded {
+		if MustGuard(ct) {
+			t.Errorf("connection type %q must NOT be guarded (cannot run raw SQL, or is a non-canonical type string)", ct)
+		}
+	}
+}

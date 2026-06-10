@@ -40,6 +40,25 @@ type WritePolicy struct {
 	AllowDelete bool
 }
 
+// GuardedConnectionTypes is the set of connection types whose adapters execute
+// raw SQL and therefore MUST run through the verb guard. Keep this keyed on the
+// CONNECTION type (server-side, trustworthy) — NOT the client-supplied
+// query.Type. The SQL/EdgeLake adapters run query.Raw regardless of query.Type,
+// so gating on query.Type is a type-confusion bypass (a caller sets
+// query.Type:"api" on a SQL connection and the guard would skip while the
+// adapter still runs the DROP). Found and fixed during breach testing 2026-06-09.
+var GuardedConnectionTypes = map[string]bool{
+	"sql":      true,
+	"edgelake": true,
+}
+
+// MustGuard reports whether a connection of the given type runs raw SQL and so
+// must be verb-guarded. `connType` is the connection's own type string
+// (models.ConnectionType), not the request's query type.
+func MustGuard(connType string) bool {
+	return GuardedConnectionTypes[connType]
+}
+
 // Verb is the classified leading operation of a single SQL statement.
 type Verb int
 
