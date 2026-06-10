@@ -51,3 +51,26 @@ exceptions:
       symbol-reachable only, so this never surfaces as actionable). No data flow
       from our code touches it. Kept as an explicit, audited acceptance.
     remediation: Fixed in edwards25519 v1.1.1; resolves when an ancestor module bumps its pin.
+
+  - id: GHSA-qjx8-664m-686j
+    scanner: npm-audit
+    module: js-cookie (transitive, via @clerk/shared)
+    accepted_by: Tom Viviano
+    accepted_on: 2026-06-10
+    expires_on: 2026-09-01
+    reason: >
+      js-cookie's ONLY consumer in our tree is @clerk/shared (Clerk's browser
+      SDK) — our own code never imports it. @clerk/shared pins js-cookie@3.0.5
+      EXACTLY. We briefly overrode it to 3.0.8 (the patched line) in v0.29.0
+      and it BROKE Clerk login (the 3.0.6 cookie-attribute change caused Clerk's
+      cookie writes to be rejected — "__clerk_test_etld rejected for invalid
+      domain"). Reverted the override in v0.29.1. The advisory (per-instance
+      prototype hijack in assign() enabling cookie-attribute injection) requires
+      attacker-controlled input into a js-cookie instance's assign(); in Clerk's
+      usage js-cookie only writes Clerk's own session cookies with Clerk-
+      controlled attributes, so the practical exposure here is negligible.
+      This is Clerk's dependency to fix.
+    remediation: >
+      Bump @clerk/clerk-react / @clerk/shared once Clerk ships a release that
+      pins a patched js-cookie (>=3.0.6). Do NOT force it via npm overrides —
+      that breaks Clerk's cookie handling.
