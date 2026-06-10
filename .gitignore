@@ -63,3 +63,7 @@ server-go/dashboard-agent
 # Mongo backups (mongodump output) — keep out of git
 backups/
 .claude/scheduled_tasks.lock
+
+# Python bytecode (security/reconcile-scan.py etc.)
+__pycache__/
+*.pyc
