@@ -6,6 +6,46 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.29.0] — 2026-06-10
+
+### Security
+
+- **Server-side SQL verb guard on the connection query endpoint.**
+  `POST /api/connections/:id/query` executed client-supplied SQL verbatim.
+  Because it's a no-capability endpoint that View Mode uses to render every
+  non-streaming chart, it couldn't be defended by capability gating — a
+  replayed/tampered request could swap a `SELECT` for an `INSERT`/`DELETE`/
+  `DROP`. A new guard classifies SQL on `sql`/`edgelake` connections:
+  `SELECT`/`WITH`(→read) always allowed; `INSERT`/`UPDATE`/`DELETE` only with
+  an explicit admin opt-in (`query_guard.allow_insert`/`_update`/`_delete`,
+  default off → strict read-only); DDL always refused; multi-statement bodies
+  refused. The guard keys off the connection's type (server-side), closing a
+  type-confusion bypass. Defense-in-depth atop least-privilege DB credentials.
+  See `docs/design-notes/query-verb-guard.md`.
+- **All known dependency vulnerabilities cleared.** Go toolchain 1.26.2→1.26.4
+  plus `x/net`→0.53.0 and `go-jose/v3`→3.0.5 (govulncheck: 0 reachable);
+  `react-router-dom`→7.17.0 and a `js-cookie`→3.0.8 override (npm audit: 0).
+
+### Added
+
+- **Release-gating security tooling.** `make security-scan` runs
+  gitleaks/npm-audit/govulncheck as part of `make release` (gitleaks +
+  npm-critical block; govulncheck reports), reconciled against a new
+  accepted-vulnerability registry (`security/accepted-vulns.yaml`). `make test`
+  now gates the release too, with tripwires that fail the build if the verb
+  guard is removed.
+- **Dependency-freshness check.** `make outdated` reports deps behind latest,
+  reconciled against a deliberate-pins registry (`security/pinned-versions.yaml`)
+  so intentional holds read as "held," not "action needed."
+
+### Documentation
+
+- **Auth model + deployment-mode clarity.** `auth-modes.md` now leads with a
+  two-authentication-models table (JWT-session vs API-key) and a
+  three-deployment-modes table (Clerk SSO / legacy-GUID dev / API-key-only
+  headless), including the headless bootstrap recipe. `udoc/docs/api-keys.md`
+  documents browser-kiosk setup (`?key=trve_…`, persists until revoked).
+
 ## [0.28.4] — 2026-06-09
 
 ### Added
