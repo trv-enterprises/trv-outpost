@@ -6,6 +6,29 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.29.2] — 2026-06-10
+
+### Fixed
+
+- **Browser sessions no longer die ~15 minutes after sign-in.** The client's
+  production API base was an absolute `http://<host>:3001`, a different origin
+  (port) from the page Caddy serves on `:80`. API reads worked (Bearer header,
+  CORS-allowed) but the httpOnly `trve_refresh` cookie (`SameSite=Lax`) is never
+  sent on a cross-origin request, so `POST /api/auth/refresh` always returned
+  401 ("No refresh cookie"); once the 15-minute access token expired, every call
+  401'd and the dashboard went blank. The client now uses a **relative,
+  same-origin API base** so `/api/*` (including `/api/auth/refresh`) rides the
+  same origin Caddy proxies — `SameSite=Lax` + same-origin works over HTTP.
+  Affected any reverse-proxied deployment reached by host/IP (e.g. Clerk login
+  on the homelab); Clerk auth itself was fine — the cross-origin refresh cookie
+  was the bug. Electron is unaffected (explicit server URL + API-key auth).
+  `VITE_API_URL` remains the escape hatch for a remote-API deployment.
+- **About dialog showed a stale "Client version."** It reads
+  `client/package.json` `version`, which froze at 0.28.3 because manual releases
+  skipped `make version-bump` (only the build number advanced). Bumped, and added
+  a `make version-check` guard that fails a release if the package.json version
+  doesn't match the latest tag, so it can't drift again.
+
 ## [0.29.1] — 2026-06-10
 
 ### Changed
