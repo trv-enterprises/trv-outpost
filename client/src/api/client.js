@@ -17,26 +17,28 @@ const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  // Vite dev: use a RELATIVE base ('') so /api/* rides Vite's dev proxy
-  // (vite.config.js proxies /api → :3001). That keeps requests SAME-ORIGIN
-  // with the :5173 app, which is required for the httpOnly refresh cookie
-  // (SameSite=Lax, credentials:'same-origin') to be stored on
-  // /api/auth/session and sent on /api/auth/refresh. With the previous
-  // absolute http://host:3001 base, the cookie-bearing auth calls were
-  // cross-origin from :5173, the refresh cookie was never stored, and the
-  // session went dead ~15 min later (access-token TTL) → blank dashboard.
-  // This mirrors how the homelab serves it: Caddy reverse-proxies /api to
-  // the server, so the browser sees a single origin there too.
-  if (import.meta.env.DEV) {
-    return '';
-  }
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host) {
-      return `http://${host}:3001`;
-    }
-  }
-  return 'http://localhost:3001';
+  // Default: a RELATIVE base ('') so every /api/* call is SAME-ORIGIN with the
+  // page that served the SPA. This is required for the httpOnly refresh cookie
+  // (Path=/api/auth, SameSite=Lax) to be stored on /api/auth/session and sent
+  // back on /api/auth/refresh.
+  //
+  // It works in BOTH environments because /api is same-origin in both:
+  //   - Dev: vite.config.js proxies /api → :3001, so /api/* rides the :5173 app.
+  //   - Prod (Caddy / homelab): Caddy reverse-proxies /api → server:3001 on the
+  //     same origin (e.g. http://host/api/* alongside the SPA at http://host/).
+  //
+  // The OLD prod fallback returned an ABSOLUTE `http://${host}:3001` base. That
+  // is a different ORIGIN (different port) from the page, so the cookie-bearing
+  // auth calls were cross-origin: the refresh cookie was never sent, every
+  // /api/auth/refresh 401'd, and the session went dead ~15 min later (access-
+  // token TTL) → streams 401, blank dashboard. Confirmed live on pre-prod 2026-
+  // 06-10 (page on :80, client calling :3001). Always go same-origin instead.
+  //
+  // Escape hatch: set VITE_API_URL (handled above) for the rare case where the
+  // SPA must point at a remote API on a different origin — that deployment must
+  // also configure CORS + a SameSite=None;Secure refresh cookie to keep auth
+  // working across origins.
+  return '';
 };
 
 const API_BASE_URL = getApiBaseUrl();
