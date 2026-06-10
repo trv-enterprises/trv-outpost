@@ -716,6 +716,14 @@ const (
 	// variable token but no value was supplied. The panel should prompt the
 	// user to pick a value rather than showing an error.
 	QueryErrorVariableNotSet = "dashboard_variable_not_set"
+
+	// QueryErrorWriteNotAllowed indicates the server-side verb guard refused
+	// the SQL statement: a write verb (INSERT/UPDATE/DELETE) without the
+	// matching admin opt-in, a DDL statement (always refused), or a
+	// multi-statement / unclassifiable body. The client should surface the
+	// returned Error verbatim and not retry. Protects /query against
+	// replay/body-tampering that swaps in a write or DDL statement.
+	QueryErrorWriteNotAllowed = "write_not_allowed"
 )
 
 // VariableValuesRequest asks for the distinct values of a column on a

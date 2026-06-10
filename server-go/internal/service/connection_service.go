@@ -49,6 +49,20 @@ type ConnectionService struct {
 	repo          *repository.ConnectionRepository
 	componentRepo *repository.ComponentRepository
 	deviceRepo    *repository.DeviceRepository
+
+	// queryGuardPolicy resolves the admin write-verb policy for the /query
+	// verb guard. Wired once at startup (after SettingsService exists) via
+	// SetQueryGuardPolicy. Nil → strict read-only (the safe default), so a
+	// missing wire can never accidentally permit writes.
+	queryGuardPolicy func(ctx context.Context) connection.WritePolicy
+}
+
+// SetQueryGuardPolicy wires the closure that resolves the SQL write-verb
+// policy (the query_guard.allow_* admin settings) for the /query guard.
+// Called once at startup after SettingsService exists. When unset, the guard
+// uses the zero-value WritePolicy (strict read-only).
+func (s *ConnectionService) SetQueryGuardPolicy(fn func(ctx context.Context) connection.WritePolicy) {
+	s.queryGuardPolicy = fn
 }
 
 // NewConnectionService creates a new connection service. The component
@@ -1286,6 +1300,26 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 	}
 	if ds == nil {
 		return nil, fmt.Errorf("connection not found")
+	}
+
+	// Server-side verb guard: /query is a no-capability endpoint (View Mode
+	// renders every non-streaming chart through it), so it can't be defended
+	// by capability gating. Refuse write/DDL verbs here so a replayed or
+	// tampered request can't run an INSERT/DELETE/DROP. SQL-family types only;
+	// other connection types (api/mqtt/prometheus/...) pass through untouched.
+	// Runs before adapter creation so a blocked query never opens a connection.
+	if req.Query.Type == models.QueryTypeSQL || req.Query.Type == models.QueryTypeEdgeLake {
+		policy := connection.WritePolicy{} // zero value = strict read-only
+		if s.queryGuardPolicy != nil {
+			policy = s.queryGuardPolicy(ctx)
+		}
+		if gErr := connection.ClassifyAndAuthorize(req.Query.Raw, policy); gErr != nil {
+			return &models.QueryResponse{
+				Success:   false,
+				Error:     connection.GuardErrorMessage(gErr),
+				ErrorCode: models.QueryErrorWriteNotAllowed,
+			}, nil
+		}
 	}
 
 	// Create connection adapter
