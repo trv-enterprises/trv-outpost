@@ -139,27 +139,38 @@ function buildSeriesForColumn(entry, idx, ctx) {
     type: chartType === 'area' ? 'line' : chartType,
     data,
   };
-  if (chartType === 'area') series.areaStyle = {};
   if ((chartType === 'line' || chartType === 'area') && smooth) series.smooth = true;
   if (showSymbol === false) series.showSymbol = false;
   if (sampling && sampling !== 'off') series.sampling = sampling;
   if (showDataLabels) series.label = { show: true, position: 'top' };
+
+  // Resolve this series' color first so BOTH the line (itemStyle) and the area
+  // fill (areaStyle) use it. ECharts' areaStyle does NOT inherit itemStyle.color
+  // — left empty, every fill falls back to a default, so a multi-series area
+  // chart painted all fills the same color. Set the fill explicitly.
+  let seriesColor;
   if (dualAxis) {
     // Side: explicit `axis` wins; otherwise default first column left,
     // second column right (matches legacy convention).
     const sideRight = entry.axis === 'right' || (entry.axis == null && idx === 1);
     series.yAxisIndex = sideRight ? 1 : 0;
-    series.itemStyle = { color: sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR };
+    seriesColor = sideRight ? RIGHT_AXIS_COLOR : LEFT_AXIS_COLOR;
   } else if (stackedCount === 1 && idx === 0 && !entry.stack) {
     // Single-axis, single-column, unstacked → force blue for parity
     // with the legacy single-series default.
-    series.itemStyle = { color: LEFT_AXIS_COLOR };
+    seriesColor = LEFT_AXIS_COLOR;
   } else {
     // Single-axis, multi-column (or stacked) → walk the Carbon
-    // categorical palette by series index so columns stay on-brand and
-    // visually distinct. (Previously left unset → ECharts' default
-    // off-brand palette.)
-    series.itemStyle = { color: categoricalColor(idx) };
+    // categorical palette by series index so series stay on-brand and
+    // visually distinct.
+    seriesColor = categoricalColor(idx);
+  }
+  series.itemStyle = { color: seriesColor };
+  if (chartType === 'area') {
+    // Translucent fill matching the series color, so overlapping (non-stacked)
+    // areas show THROUGH the ones in front — every band stays visible. Matches
+    // the proven custom-code look.
+    series.areaStyle = { color: seriesColor, opacity: 0.18 };
   }
   if (entry.stack) series.stack = STACK_GROUP;
   return series;
@@ -363,12 +374,32 @@ export function buildOption(values, data, helpers = {}) {
   // to a concrete preset from the data (span → time-only/date+time,
   // collision → add seconds, non-timestamp → 'raw' passthrough); every
   // explicit preset is honored unchanged.
+  const opts = values?.options || {};
   const xColIdx = columnIndex(xAxisCol);
-  const xValues = xColIdx >= 0 ? rows.map((r) => r[xColIdx]) : [];
+
+  // X-axis category values. When pivoting (seriesCol set), the rows are the
+  // pivot column's groups concatenated (e.g. all `iowait` rows, then all `irq`
+  // rows, …), so the same timestamps repeat once per series. Building the
+  // category axis from every row would create N×(#series) slots and the series
+  // (each only #timestamps long) would mis-align positionally — the classic
+  // "line crammed into the left / sawtooth" render. So when pivoting, build the
+  // category axis from the DISTINCT x-values (first-seen order). Non-pivot keeps
+  // the 1:1 row→category mapping it always had.
+  let rawXForAxis;
+  if (seriesCol && xColIdx >= 0) {
+    const seenX = new Set();
+    rawXForAxis = [];
+    rows.forEach((r) => {
+      const xv = r[xColIdx];
+      if (!seenX.has(xv)) { seenX.add(xv); rawXForAxis.push(xv); }
+    });
+  } else {
+    rawXForAxis = xColIdx >= 0 ? rows.map((r) => r[xColIdx]) : [];
+  }
   const resolvedXFormat = xAxisFormat === 'auto'
-    ? resolveAutoXFormat(xValues, xAxisCol, formatCellValue)
+    ? resolveAutoXFormat(rawXForAxis, xAxisCol, formatCellValue)
     : xAxisFormat;
-  const categories = xValues.map((v) => {
+  const categories = rawXForAxis.map((v) => {
     if (!formatCellValue) return v;
     // 'raw' (auto-detected non-timestamp) → show the value as-is.
     if (resolvedXFormat === 'raw') return v;
@@ -378,13 +409,13 @@ export function buildOption(values, data, helpers = {}) {
   // Compose series. When seriesCol is set, partition rows by that
   // column's values; the first y entry's column supplies the value.
   // When seriesCol is empty, one series per y entry.
-  const opts = values?.options || {};
   const smooth = opts.chartSmooth !== false;
   const showSymbol = opts.showSymbol !== false;
   const showDataLabels = Boolean(opts.chartShowDataLabels);
   const sampling = opts.sampling || 'off';
 
   let series = [];
+  let pivotColorOrder = null; // explicit per-series palette for pivot charts
   if (seriesCol) {
     const seriesIdx = columnIndex(seriesCol);
     const yCol = yEntries[0]?.column;
@@ -396,16 +427,38 @@ export function buildOption(values, data, helpers = {}) {
         const v = r[seriesIdx];
         if (v != null && !seen.has(v)) { seen.add(v); seriesValues.push(v); }
       });
-      series = seriesValues.map((sv, svIdx) => {
-        const seriesRows = rows.filter((r) => r[seriesIdx] === sv);
-        return buildSeriesForColumn(
+      // Align each series' values to the SHARED (deduped) category axis by
+      // x-value, not positionally — each series only has #timestamps points but
+      // the data must line up under the right category. Index rawXForAxis once.
+      const xPos = new Map();
+      rawXForAxis.forEach((xv, i) => { if (!xPos.has(xv)) xPos.set(xv, i); });
+
+      // First pass: build each pivot group's aligned data + its magnitude.
+      const groups = seriesValues.map((sv) => {
+        const aligned = new Array(rawXForAxis.length).fill(null);
+        rows.forEach((r) => {
+          if (r[seriesIdx] !== sv) return;
+          const pos = xPos.get(r[xColIdx]);
+          if (pos != null) aligned[pos] = r[yIdx];
+        });
+        const magnitude = aligned.reduce((m, v) => (v != null && v > m ? v : m), -Infinity);
+        return { sv, aligned, magnitude };
+      });
+
+      // Assign palette colors by PROMINENCE, not pivot order: the most prevalent
+      // area (largest magnitude) gets categorical color #0, the least gets the
+      // last. Rank groups by magnitude descending → that rank is the color index.
+      const rankByMag = [...groups].sort((a, b) => b.magnitude - a.magnitude);
+      const colorIdxOf = new Map();
+      rankByMag.forEach((g, rank) => colorIdxOf.set(g.sv, rank));
+
+      series = groups.map((g) => {
+        const built = buildSeriesForColumn(
           { column: yCol, stack: yEntries[0]?.stack || false, axis: 'left' },
-          // Pass the pivot index so each split series walks the
-          // categorical palette (svIdx), not all sharing idx 0.
-          svIdx,
+          colorIdxOf.get(g.sv), // color index = magnitude rank (prominent → #0)
           {
             columnIndex,
-            rows: seriesRows,
+            rows: [], // data supplied explicitly below
             dualAxis: false,
             stackedCount: seriesValues.length,
             smooth,
@@ -413,10 +466,19 @@ export function buildOption(values, data, helpers = {}) {
             sampling,
             showDataLabels,
             chartType,
-            seriesName: String(sv),
+            seriesName: String(g.sv),
           },
         );
+        built.data = g.aligned;
+        return built;
       });
+      // The carbon-dark ECharts theme carries a top-level `color` palette that
+      // ECharts applies to series + legend BY SERIES-ARRAY POSITION, which
+      // overrides per-series itemStyle for the legend swatch. Emit an explicit
+      // option.color in series-array order (each series' prominence-ranked
+      // color) so the theme palette is overridden and the legend + areas both
+      // follow the prominence ranking.
+      pivotColorOrder = groups.map((g) => categoricalColor(colorIdxOf.get(g.sv)));
     }
   } else {
     series = yEntries.map((entry, i) => buildSeriesForColumn(entry, i, {
@@ -525,6 +587,9 @@ export function buildOption(values, data, helpers = {}) {
     yAxis,
     series,
   };
+  // Override the theme's series-position palette so pivot series + legend follow
+  // the prominence-ranked colors (biggest area → categorical color #0).
+  if (pivotColorOrder) option.color = pivotColorOrder;
 
   if (legend) option.legend = legend;
   if (visualMap) option.visualMap = visualMap;
