@@ -16,9 +16,20 @@ The codebase is scanned with three tools:
 | `govulncheck` | `server-go/` Go module + reachable-symbol vulns in stdlib + imports | `cd server-go && govulncheck ./...` |
 | `gitleaks` | Repo tree + full git history (committed secrets) | `gitleaks detect --no-banner` |
 
-Run the full set before tagging a release. They take a few minutes
-combined and have caught real issues — see
-[Last full scan](#last-full-scan) below.
+These run automatically as part of the release gate — `make release`
+calls `make security-scan` (after the test suite, before tagging).
+**Gate policy:**
+
+- **gitleaks** (committed secrets) — **blocks** the release on any leak.
+- **npm audit** — **blocks** on `critical` only; `high`/`moderate`/`low`
+  are reported but don't block (review + remediate on your own cadence).
+- **govulncheck** — **reports only**, never blocks. Output is reconciled
+  against the accepted-vulnerability registry (below) so consciously
+  accepted findings don't clutter the actionable list. Only
+  **symbol-reachable** findings are shown as actionable.
+
+Run `make security-scan` directly any time. A missing tool fails the
+gate unless `SECURITY_SCAN_ALLOW_MISSING=1`.
 
 `govulncheck` reports vulnerabilities in three reachability tiers:
 
@@ -29,26 +40,75 @@ combined and have caught real issues — see
 3. **In a transitive module** — an indirect dependency carries the
    vuln. Lowest priority.
 
-## Last full scan
+## Accepted-vulnerability registry
 
-**Date:** 2026-05-03
-**Result:** 0 reachable vulnerabilities across npm, Go, and secrets.
+Vulnerabilities we have **consciously accepted** — because their blast
+radius does not affect this system, or remediation is gated on an
+upstream/toolchain bump we don't yet have — live in a structured,
+code-reviewed registry:
 
-### Acknowledged unreachable findings
+> **[`security/accepted-vulns.yaml`](security/accepted-vulns.yaml)**
 
-`govulncheck` flags 3 lower-tier vulnerabilities that we have
-reviewed and accepted as not exploitable in this codebase. They
-will continue to appear on each scan until upstream patches reach
-our dependency graph; that's expected.
+Each entry records the advisory ID, scanner, affected module, who
+accepted it, when, an **expiry date** (exceptions are never permanent —
+they force periodic re-review), and the justification (why the blast
+radius doesn't reach us). The release scan reconciles scanner output
+against this file (`security/reconcile-scan.py`):
 
-| Advisory | Module | Why unreachable here |
-|---|---|---|
-| [GO-2026-4503](https://pkg.go.dev/vuln/GO-2026-4503) | `filippo.io/edwards25519@v1.1.0` | Indirect transitive dep. The vulnerable code path is not reached by any caller in our dependency graph. Fixed in `v1.1.1`; will resolve when an ancestor releases a bumped pin. |
-| [GO-2025-4135](https://pkg.go.dev/vuln/GO-2025-4135) | `golang.org/x/crypto/ssh/agent` | We do not use the `ssh/agent` package. The MongoDB driver pulls in `golang.org/x/crypto` for other primitives. |
-| [GO-2025-4134](https://pkg.go.dev/vuln/GO-2025-4134) | `golang.org/x/crypto/ssh` | We do not open SSH connections. Same incidental import as above. |
+- a finding listed in the registry (and not expired) → reported as
+  **Known-accepted**, kept out of the actionable list;
+- any finding **not** in the registry → reported as **ACTIONABLE**;
+- an **expired** exception → flagged loudly and treated as actionable
+  again (re-affirm or remediate).
 
-If you re-run the scan and see additional findings beyond these
-three, treat them as new and triage.
+**Accepting a vulnerability is an explicit risk decision** — add an
+entry to the registry with a justification you'd defend in an audit,
+not by silencing the scanner. To remediate instead, bump the Go
+toolchain / dependency and the finding disappears on the next scan.
+
+## Dependency freshness
+
+The vulnerability scans above are **reactive** — they only fire when a
+dependency has a published advisory. A dependency can be many versions
+behind with no CVE and the scans stay silent. To catch that proactively:
+
+```
+make outdated
+```
+
+reports every dependency behind its latest version (`npm outdated` +
+`go list -u -m all`), **reconciled against the deliberate-pins
+registry**:
+
+> **[`security/pinned-versions.yaml`](security/pinned-versions.yaml)**
+
+- **HELD** — a dependency we are *deliberately* keeping below latest,
+  with a recorded reason (migration cost, peer constraint, known
+  regression) and a `review_on` date. These don't read as "action
+  needed."
+- **REVIEW OVERDUE** — a held pin past its review date; re-evaluate.
+- **AVAILABLE** — behind latest and *not* a documented hold; a normal
+  bump candidate.
+
+`make outdated` is **informational** — it never blocks a release. It's a
+**cadence** check, not a gate.
+
+**Recommended cadence (manual, no new infra):** run `make outdated`
+**monthly** (and before any release where you have headroom). Bump the
+low-risk AVAILABLE items (patch/minor, dev-only tooling) freely; for a
+major-version jump you're intentionally deferring, add it to
+`pinned-versions.yaml` with a reason and a review date so the next run
+shows it as HELD rather than nagging. Re-confirm or clear HELD entries
+when their `review_on` passes.
+
+**If this earns automation later:** the GitHub-native option is
+[Dependabot](https://docs.github.com/code-security/dependabot) (free,
+OSS, config-only — a `.github/dependabot.yml` that opens grouped update
+PRs on a schedule) or [Renovate](https://docs.renovatebot.com/) (more
+configurable, supports the same "grouped, scheduled" model and could be
+taught to respect the pins registry). Not set up today — the monthly
+`make outdated` ritual is the current, zero-infra approach. Revisit if
+the manual cadence slips.
 
 ## Known security posture
 
@@ -73,3 +133,25 @@ A few intentional design decisions worth knowing about:
   mode) as a privileged capability — only users with `design`
   capability can write component code, and viewers cannot mutate
   it. Don't grant `design` to untrusted users.
+- **The connection query endpoint enforces a server-side SQL verb
+  guard.** `POST /api/connections/:id/query` executes client-supplied
+  SQL and is a no-capability endpoint (View Mode renders every
+  non-streaming chart through it), so it cannot be defended by
+  capability gating. The realistic threat is replay/body-tamper:
+  swapping a legitimate request's `raw` for an `INSERT`/`DELETE`/`DROP`.
+  A guard in `connection_service.go:QueryConnection` (running for
+  **every** caller — View, Design, the AI/MCP `query_connection` tool,
+  and raw replays alike) classifies the statement on `sql` + `edgelake`
+  connections: `SELECT`/`WITH(→read)` is always allowed; DDL
+  (`DROP`/`ALTER`/`CREATE`/`TRUNCATE`/`GRANT`/…) is **always refused**;
+  `INSERT`/`UPDATE`/`DELETE` are refused unless an admin opts in via the
+  `query_guard.allow_insert`/`_update`/`_delete` settings (default off →
+  strict read-only); multi-statement bodies are rejected. The guard keys
+  off the **connection's** type (server-side), never the client-supplied
+  `query.Type` — a deliberate choice that closed a type-confusion bypass
+  found in breach testing. It is **defense-in-depth**: the primary defense
+  remains **least-privilege (read-only) database credentials** on each
+  connection, and the guard does **not** restrict read queries, so a
+  viewer can still run arbitrary `SELECT`s (scope those with DB grants).
+  Full rationale, threat model, and the rejected designs are in
+  [docs/design-notes/query-verb-guard.md](docs/design-notes/query-verb-guard.md).

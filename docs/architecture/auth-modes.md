@@ -1,17 +1,141 @@
 # Authentication & Authorization architecture
 
-> **As of v0.17.0**, the dashboard runs a two-layer model: external
-> credentials are traded once at a single bootstrap endpoint for our
-> own short-lived JWT pair, then every request rides our JWT. API
-> keys are the one exception — they're long-lived service credentials
-> validated on every request, no bootstrap dance. Authorization is
-> a synchronous claim check, no DB round-trip on the hot path.
-
 This page is the developer-facing map of the auth surface. For
 admin-facing setup, see [Clerk Sign-In](../../udoc/docs/clerk-sso.md)
 and [API Keys](../../udoc/docs/api-keys.md).
 
-## The two-layer model
+## Two authentication models (read this first)
+
+**Both models give you a persistent logged-in session** — the difference is
+*what carries the session* and *how long it lives*, not whether one exists.
+Most confusion comes from the word "session" meaning two things, so to be
+exact: below, **"JWT exchange"** means the specific Clerk→JWT bootstrap, and
+**"session"** means the plain-English persistent-login state (which *both*
+models provide).
+
+| | **JWT-session model** | **API-key model** |
+|---|---|---|
+| **Who uses it** | Interactive **browser** sign-in (Clerk, or dev-mode GUID) | Long-lived device/service logins: **kiosks**, ts-store webhooks, MCP clients, cron scripts. **A browser uses this too** when given a key (the kiosk pattern). |
+| **How the session starts** | Inbound credential (Clerk JWT / GUID) is traded **once** at `POST /api/auth/session` for the app's own JWT pair | The **API key itself is the session** — supply it once (via `?key=trve_…` in the browser, or the Electron setup screen) and it's stored + reused. No JWT exchange. |
+| **What's resent on each call** | The app's short-lived **access JWT** (`Authorization: Bearer <jwt>`). The original Clerk credential is **not** resent. | The **raw API key** (`Authorization: Bearer trve_…`) — resent verbatim on **every** request. |
+| **How long the session lasts** | The access JWT expires (default 15 min) and is silently refreshed via an httpOnly cookie; sign-out revokes the refresh family. | **Persists indefinitely — until an admin deletes the key** (immediate revocation). No expiry, no refresh. This is exactly the "stay logged in until the key is revoked" behavior kiosks want. |
+| **Where the credential persists** | Access token in memory; refresh token in an httpOnly cookie | Browser: the key in `localStorage`. Electron: the key encrypted in `electron-store` (OS keychain via `safeStorage`). |
+| **Server validation per call** | Verify JWT signature + exp (no DB hit) | Validate the key against the `api_keys` collection (one indexed lookup) |
+
+### Answering the common questions
+
+- **Does an API key give you a persistent session?**
+  **Yes.** This is the kiosk story: supply a key once and you stay logged
+  in **until the key is revoked** — no expiry, no re-login. The browser
+  stores the key in `localStorage` and re-applies it on the next launch
+  (`client.js`: `setApiKey` writes it, the constructor reads it back); the
+  Electron app stores it encrypted and re-applies it on each start. The key
+  doesn't create a *JWT* session, but it absolutely is a session in the
+  ordinary sense — a durable, persisted logged-in state.
+
+- **Can the API-key method be used from a browser?**
+  **Yes.** The per-call middleware accepts `Authorization: Bearer trve_…`
+  from *any* caller, browser or not (`middleware/auth.go::Authenticate`,
+  the `trve_` branch). Today the only way to *get* a key into a browser
+  session is the `?key=trve_…` URL param (or the Electron setup screen) —
+  there's no "paste your key" login form in the browser. Once set, it
+  persists and behaves identically to a service principal.
+
+- **How is it resent on each call?**
+  The frontend stamps the raw key into the `Authorization: Bearer trve_…`
+  header (or the `?st=trve_…` query param for EventSource/WebSocket) on
+  **every** request, and the server re-validates it against the `api_keys`
+  collection each time. See `client.js` `request()` (`if (this.apiKey)
+  headers['Authorization'] = 'Bearer ' + this.apiKey`). Contrast the
+  JWT-session model, where the **access JWT** — not the original Clerk
+  credential — is what gets resent.
+
+- **How does this relate to `POST /api/auth/session` and Clerk?**
+  An API key does **not** go through the JWT exchange — it is not traded
+  for an access/refresh JWT. The middleware checks the API-key shape
+  (`trve_…`) **first**, before Clerk, so a key authenticates as its owner
+  regardless of whether Clerk is configured. Calling `/api/auth/session`
+  with a key *will* return a claims payload (the `apikey` IdP resolves it),
+  but the frontend doesn't swap to a JWT afterward — it keeps sending the
+  key. So you don't "log in" separately with a key; **the key is the login.**
+
+> **One word, two meanings.** "Session" can mean (a) the specific
+> **JWT exchange** at `/api/auth/session`, or (b) a persistent logged-in
+> **state**. API keys skip (a) but fully provide (b). Earlier phrasing in
+> this doc that said API keys "aren't a session" meant only sense (a) — an
+> API key *is* a session in sense (b), and a longer-lived one than the JWT.
+> Likewise, "the API key is resent on every call" is **correct** — that's
+> the whole model — it just isn't how Clerk/browser login behaves.
+
+Authorization (what a principal is *allowed* to do) is identical for both
+models: a synchronous capability check on the resolved claims, no DB
+round-trip on the hot path. See [Authorization](#authorization-how-claims-become-decisions).
+
+## Three deployment modes (which credentials a deployment accepts)
+
+The two models above are *how* a credential authenticates. **A deployment
+also chooses which credential channels it accepts** — and that's a separate
+axis, controlled by two settings. The combinations give three practical
+postures. API-key auth is **always on** (it can't be disabled); the two
+human-login channels each have an on/off switch:
+
+| | **Clerk SSO** | **Legacy GUID (dev)** | **API-key only (headless)** |
+|---|---|---|---|
+| **`CLERK_SECRET_KEY` env** | **set** | unset | unset |
+| **`auth.allow_legacy_guid`** | `false` (recommended) | **`true`** | `false` |
+| **Human signs in via** | Clerk's hosted sign-in screen (real auth: email/SSO/MFA) | A user-picker dropdown — anyone who knows a GUID becomes that user (**no password**) | **Nothing** — there is no human login. Entry is by API key only. |
+| **Browser kiosk** | Add a `?key=trve_…` API key (kiosk has no human to sign in) | `?key=trve_…`, **or** `?user_id=<guid>`, **or** the `default_browser_user_guid` setting for zero-touch | `?key=trve_…` only |
+| **Zero-touch default user** (`default_browser_user_guid`) | ✗ (needs the legacy GUID channel) | ✓ | ✗ (needs the legacy GUID channel) |
+| **Intended for** | Real multi-user deployments, small teams, demos | **Local dev only** (`npm run dev` user switcher) — never production | Pure kiosk / headless / appliance deployments where every client is a service principal |
+| **This is the default in** | — | `config.development.yaml` (`allow_legacy_guid: true`) | **`config.yaml` (production)** — Clerk unset + `allow_legacy_guid: false` |
+
+**Reading the table:**
+
+- **Clerk SSO** — the only mode with real, password/SSO-backed human
+  authentication. Set the two `CLERK_*` env vars; leave legacy GUID off so a
+  header-asserted identity can't bypass Clerk. This is the recommended
+  posture for any deployment with human users.
+- **Legacy GUID (dev)** — `X-User-ID` / `?user_id=` are honored. This is an
+  *identity assertion*, not authentication: **anyone who knows a GUID
+  becomes that user.** It exists for the dev user-switcher and migration.
+  **Do not enable in production.** The server prints a `⚠️` warning at
+  startup when it's on.
+- **API-key only (headless)** — the production default. With Clerk unset and
+  legacy GUID off, the **only** credential that authenticates is a `trve_…`
+  API key. There is no human sign-in screen at all. Right for an appliance /
+  kiosk fleet where every client is a service principal.
+
+**Two things to know about API-key-only mode:**
+
+1. **No human login means you need a way to mint the first/admin API key.**
+   You can't reach *Manage → API Keys* to create a key without already being
+   authenticated. The simplest bootstrap is to **lean on the dev login
+   channel once**:
+
+   1. Start the server with `auth.allow_legacy_guid: true` (or
+      `DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true`).
+   2. Sign in as an admin user via the GUID picker and mint an admin API key
+      in *Manage → API Keys*. Copy the `trve_…` token.
+   3. Set `auth.allow_legacy_guid: false` and restart.
+
+   Now legacy GUID is closed, Clerk is off, and you hold a working admin key —
+   the deployment is API-key-only and you're still able to administer it.
+   (Alternatively, seed an `api_keys` row directly if you're provisioning the
+   database out-of-band.)
+2. **A few routes stay public regardless of mode** — auth is bypassed for
+   `/api/health`, `/api/config/system` (GET), `/api/settings/:key` (GET),
+   `/api/ai/availability` (GET), and `/api/frigate/` GETs (camera media for
+   `<img>`/`<video>` tags). These are read-only/non-sensitive by design, but
+   if "API key for everything" is a hard requirement, these are the
+   documented exceptions. See [the route-rules table](#the-route-rules-table).
+
+## The JWT-session model (browser sign-in)
+
+This is the flow for the **JWT-session model** — Clerk or GUID sign-in
+in a browser. The **API-key model skips this entire diagram**: an API key
+is validated directly by the middleware on each call (the dashed path at
+the bottom) and never visits the bootstrap endpoint or the session
+service.
 
 ```
                        ┌─────────────────────────────────────┐
@@ -85,7 +209,7 @@ Shipped providers:
 
 | Provider | File | Recognizes | Use case |
 |---|---|---|---|
-| `apikey` | `idp/apikey.go` | `Authorization: Bearer trve_…` or `?key=trve_…` | Service principals, kiosks bootstrapping into a session |
+| `apikey` | `idp/apikey.go` | `Authorization: Bearer trve_…` or `?key=trve_…` | Service principals + kiosks. **Note:** the `apikey` IdP resolves a key *at* `/auth/session`, but API-key clients don't trade it for a JWT — they keep sending the key per-call (see [Two authentication models](#two-authentication-models-read-this-first)). This IdP entry mainly lets `/auth/session` echo the identity; the key remains the session. |
 | `clerk` | `idp/clerk.go` | Clerk session JWT | Browser sign-in for small teams, demos |
 | `legacy-guid` | `idp/legacy.go` | `X-User-ID` header or `?user_id=` query | Dev mode user switcher, kiosk URL bookmarks |
 
@@ -254,20 +378,33 @@ const session = await apiClient.createSession();
 `createSession` forwards whatever inbound credential is available
 (Clerk JWT via `tokenProvider`, API key via `setApiKey`, GUID via
 `setCurrentUser`) to `POST /api/auth/session`. The server's IdP
-registry decides which channel wins. The response carries the
-access token and a `User` record; the refresh token rides an
-httpOnly cookie set by the same response.
+registry decides which channel wins.
 
-After bootstrap, `apiClient.request()` attaches the credential on
+**The response differs by model** (see [Two authentication models](#two-authentication-models-read-this-first)):
+
+- **Session-token model** (Clerk / GUID): the response carries an
+  **access token** + a `User` record, and sets the httpOnly refresh
+  cookie. From here on, `request()` resends the **access JWT**.
+- **API-key model**: the frontend keeps the key set via `setApiKey`.
+  `createSession` still returns claims, but the client does **not** adopt
+  a JWT — it goes on resending the **raw key**. (For a pure API-key
+  client like a kiosk, `createSession` is effectively just an identity
+  echo; the auth that matters is the per-call key.)
+
+After bootstrap, `apiClient.request()` attaches **one** credential on
 every call, using this precedence:
 
-1. **API key** if one is set — kiosk-style long-lived auth, no
-   refresh dance, dies only when admin revokes
-2. **Access JWT** otherwise — browser users with no personal API key
+1. **API key** if one is set (`this.apiKey`) → `Authorization: Bearer
+   trve_…`. Long-lived, no refresh dance, dies only when an admin
+   revokes. Skips JWT refresh entirely.
+2. **Access JWT** otherwise → `Authorization: Bearer <jwt>`, auto-
+   refreshed on a `401 hint:"refresh"`.
 
 API keys win precedence because their lifecycle (admin-revokes-by-
 delete) is the right semantic for always-on displays. JWT refresh
-cycles would silently kill a kiosk after 7 idle days.
+cycles would silently kill a kiosk after 7 idle days. **Note this is the
+per-call credential the frontend resends — for an API key that is the
+key itself, not a JWT.**
 
 ### EventSource / WebSocket
 

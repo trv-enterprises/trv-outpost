@@ -148,3 +148,28 @@ settings:
     category: ai
     description: "Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Takes effect on next server restart. Per-deployment choice; not per-user."
     value: "sonnet"
+
+  # ─── Query verb-guard (server-side write protection) ───────────────────
+  # POST /api/connections/:id/query executes client-supplied SQL and is a
+  # no-capability endpoint (View Mode renders charts through it), so it can't
+  # be defended by capability gating. The server-side guard classifies the
+  # statement: SELECT / WITH(→SELECT) are always allowed; DDL (DROP/ALTER/
+  # CREATE/TRUNCATE/GRANT/…) is ALWAYS refused; multi-statement bodies are
+  # rejected. These three flags individually opt INTO the matching write verb,
+  # deployment-wide. Default off = strict read-only. Applies to `sql` and
+  # `edgelake` connection queries only. Takes effect on the next query (no
+  # restart needed). Primary real defense remains least-privilege DB creds.
+  - key: query_guard.allow_insert
+    category: security
+    description: "Allow INSERT statements through the connection /query endpoint (sql + edgelake). Default OFF (read-only). DDL is never allowed regardless of this flag."
+    value: false
+
+  - key: query_guard.allow_update
+    category: security
+    description: "Allow UPDATE statements through the connection /query endpoint (sql + edgelake). Default OFF (read-only). DDL is never allowed regardless of this flag."
+    value: false
+
+  - key: query_guard.allow_delete
+    category: security
+    description: "Allow DELETE statements through the connection /query endpoint (sql + edgelake). Default OFF (read-only). DDL is never allowed regardless of this flag."
+    value: false

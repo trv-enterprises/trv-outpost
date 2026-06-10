@@ -294,6 +294,27 @@ func main() {
 		fmt.Println("✓ User-configurable settings synced to MongoDB")
 	}
 
+	// Wire the /query verb-guard policy. The three query_guard.allow_* admin
+	// settings (default false → strict read-only) decide whether INSERT/UPDATE/
+	// DELETE may run through the query endpoint; DDL is always refused by the
+	// guard regardless. Read per-request (cheap keyed Mongo point-read); a
+	// read error falls back to false so a settings outage can't permit writes.
+	connectionService.SetQueryGuardPolicy(func(ctx context.Context) connection.WritePolicy {
+		readBool := func(key string) bool {
+			if s, err := settingsService.GetSetting(ctx, key); err == nil && s != nil {
+				if v, ok := s.Value.(bool); ok {
+					return v
+				}
+			}
+			return false
+		}
+		return connection.WritePolicy{
+			AllowInsert: readBool("query_guard.allow_insert"),
+			AllowUpdate: readBool("query_guard.allow_update"),
+			AllowDelete: readBool("query_guard.allow_delete"),
+		}
+	})
+
 	// Wire the registry TypeFilter on top of the settings service. The
 	// adapter implements both EnabledTypesProvider (for the filter) and
 	// EnabledTypesUpdater (for the seed routine). The filter's Invalidate

@@ -1,0 +1,53 @@
+# Accepted-vulnerability registry
+# ================================
+# The single source of truth for vulnerabilities we have CONSCIOUSLY ACCEPTED
+# because their blast radius does not affect this system (or remediation is
+# gated on an upstream/toolchain bump we don't yet have). The release security
+# scan (`make security-scan`) reconciles scanner output against this file:
+#   - a finding whose ID is listed here (and not expired) → reported as
+#     "Known-accepted", suppressed from the actionable list.
+#   - any finding NOT listed here → reported as "ACTIONABLE".
+#
+# This file is human-authored and code-reviewed. Adding an entry is an explicit
+# risk-acceptance decision — write the justification as if defending it in an
+# audit. Reconciliation tooling: security/reconcile-scan.py.
+#
+# ── Entry schema ─────────────────────────────────────────────────────────────
+#   id:            REQUIRED. The scanner's advisory ID, matched verbatim against
+#                  scan output. govulncheck → "GO-YYYY-NNNN". npm audit → the
+#                  GHSA id ("GHSA-xxxx-...") or advisory URL fragment.
+#   scanner:       REQUIRED. one of: govulncheck | npm-audit | gitleaks
+#   module:        REQUIRED. the affected module/package (for humans).
+#   accepted_by:   REQUIRED. who made the risk-acceptance decision.
+#   accepted_on:   REQUIRED. ISO date (YYYY-MM-DD) the exception was granted.
+#   expires_on:    REQUIRED. ISO date after which this exception is INVALID and
+#                  the finding becomes actionable again (forces periodic re-review;
+#                  an exception is never permanent). Re-affirm or remediate by then.
+#   reason:        REQUIRED. why the blast radius does not affect THIS system.
+#                  Be specific about the unreachable path / unused feature / why
+#                  the fix is gated.
+#   remediation:   OPTIONAL. the known fix (e.g. "Go 1.26.4" / "bump x to vN"),
+#                  so re-review is a quick "is the fix available to us yet?".
+#
+# gitleaks: secret leaks are NEVER accepted via this file. A committed secret is
+# always actionable (rotate + purge). gitleaks entries exist only to suppress
+# documented FALSE POSITIVES (e.g. a fixture that looks like a key but isn't);
+# use sparingly and justify hard.
+
+exceptions:
+  # GO-2025-4134 / GO-2025-4135 (golang.org/x/crypto/ssh*) were here but are now
+  # fully resolved by the golang.org/x/* bump on 2026-06-10 — no longer reported
+  # by govulncheck, so they need no exception. Removed rather than left stale.
+  - id: GO-2026-4503
+    scanner: govulncheck
+    module: filippo.io/edwards25519@v1.1.0
+    accepted_by: Tom Viviano
+    accepted_on: 2026-05-03
+    expires_on: 2026-09-01
+    reason: >
+      Indirect transitive dependency. The vulnerable code path is not reached by
+      any caller in our dependency graph — govulncheck reports it below the
+      symbol-reachable tier (the reconcile script's actionable list is
+      symbol-reachable only, so this never surfaces as actionable). No data flow
+      from our code touches it. Kept as an explicit, audited acceptance.
+    remediation: Fixed in edwards25519 v1.1.1; resolves when an ancestor module bumps its pin.

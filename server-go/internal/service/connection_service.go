@@ -49,6 +49,20 @@ type ConnectionService struct {
 	repo          *repository.ConnectionRepository
 	componentRepo *repository.ComponentRepository
 	deviceRepo    *repository.DeviceRepository
+
+	// queryGuardPolicy resolves the admin write-verb policy for the /query
+	// verb guard. Wired once at startup (after SettingsService exists) via
+	// SetQueryGuardPolicy. Nil → strict read-only (the safe default), so a
+	// missing wire can never accidentally permit writes.
+	queryGuardPolicy func(ctx context.Context) connection.WritePolicy
+}
+
+// SetQueryGuardPolicy wires the closure that resolves the SQL write-verb
+// policy (the query_guard.allow_* admin settings) for the /query guard.
+// Called once at startup after SettingsService exists. When unset, the guard
+// uses the zero-value WritePolicy (strict read-only).
+func (s *ConnectionService) SetQueryGuardPolicy(fn func(ctx context.Context) connection.WritePolicy) {
+	s.queryGuardPolicy = fn
 }
 
 // NewConnectionService creates a new connection service. The component
@@ -1286,6 +1300,33 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 	}
 	if ds == nil {
 		return nil, fmt.Errorf("connection not found")
+	}
+
+	// Server-side verb guard: /query is a no-capability endpoint (View Mode
+	// renders every non-streaming chart through it), so it can't be defended
+	// by capability gating. Refuse write/DDL verbs here so a replayed or
+	// tampered request can't run an INSERT/DELETE/DROP.
+	//
+	// CRITICAL: gate on the CONNECTION's type (ds.Type, server-side and
+	// trustworthy), NOT req.Query.Type. The adapter is chosen by the
+	// connection, and the SQL adapter runs query.Raw regardless of the
+	// client-supplied query.Type — so trusting query.Type here is a
+	// type-confusion bypass (set type:"api" on a SQL connection and the
+	// guard would skip while the SQL adapter still runs the DROP).
+	// SQL-family connections only; api/mqtt/prometheus/... can't run raw SQL.
+	// Runs before adapter creation so a blocked query never opens a connection.
+	if connection.MustGuard(string(ds.Type)) {
+		policy := connection.WritePolicy{} // zero value = strict read-only
+		if s.queryGuardPolicy != nil {
+			policy = s.queryGuardPolicy(ctx)
+		}
+		if gErr := connection.ClassifyAndAuthorize(req.Query.Raw, policy); gErr != nil {
+			return &models.QueryResponse{
+				Success:   false,
+				Error:     connection.GuardErrorMessage(gErr),
+				ErrorCode: models.QueryErrorWriteNotAllowed,
+			}, nil
+		}
 	}
 
 	// Create connection adapter

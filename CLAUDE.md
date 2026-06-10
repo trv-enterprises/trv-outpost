@@ -466,6 +466,9 @@ Global settings managed by administrators through the Settings page in Manage mo
 | `dashboard_command_connection` | dashboard | MQTT connection ID used for dashboard commands |
 | `enabled_types` | availability | Allowlist of integrations + connection / chart / control / display types available in this deployment. Edited via the hierarchical Type Availability modal; see the type-availability gating section. |
 | `known_types` | availability | Server-maintained ledger of every type/integration the system has seen across upgrades. Hidden from the settings UI. New types in upgrades auto-enable on first boot; admin disables persist. |
+| `query_guard.allow_insert` | security | Allow INSERT through the connection `/query` endpoint (sql + edgelake). Default OFF. The server-side verb guard refuses writes unless the matching flag is on; DDL (DROP/ALTER/CREATE/…) is always refused. Protects `/query` against replay/body-tamper. Applies on next query (no restart). |
+| `query_guard.allow_update` | security | Allow UPDATE through the connection `/query` endpoint (sql + edgelake). Default OFF. See `query_guard.allow_insert`. |
+| `query_guard.allow_delete` | security | Allow DELETE through the connection `/query` endpoint (sql + edgelake). Default OFF. See `query_guard.allow_insert`. |
 
 **Adding a new admin setting:**
 1. Add entry to `server-go/config/user-configurable.yaml` with key, category, description, value
