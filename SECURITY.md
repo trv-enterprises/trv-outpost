@@ -73,3 +73,25 @@ A few intentional design decisions worth knowing about:
   mode) as a privileged capability — only users with `design`
   capability can write component code, and viewers cannot mutate
   it. Don't grant `design` to untrusted users.
+- **The connection query endpoint enforces a server-side SQL verb
+  guard.** `POST /api/connections/:id/query` executes client-supplied
+  SQL and is a no-capability endpoint (View Mode renders every
+  non-streaming chart through it), so it cannot be defended by
+  capability gating. The realistic threat is replay/body-tamper:
+  swapping a legitimate request's `raw` for an `INSERT`/`DELETE`/`DROP`.
+  A guard in `connection_service.go:QueryConnection` (running for
+  **every** caller — View, Design, the AI/MCP `query_connection` tool,
+  and raw replays alike) classifies the statement on `sql` + `edgelake`
+  connections: `SELECT`/`WITH(→read)` is always allowed; DDL
+  (`DROP`/`ALTER`/`CREATE`/`TRUNCATE`/`GRANT`/…) is **always refused**;
+  `INSERT`/`UPDATE`/`DELETE` are refused unless an admin opts in via the
+  `query_guard.allow_insert`/`_update`/`_delete` settings (default off →
+  strict read-only); multi-statement bodies are rejected. The guard keys
+  off the **connection's** type (server-side), never the client-supplied
+  `query.Type` — a deliberate choice that closed a type-confusion bypass
+  found in breach testing. It is **defense-in-depth**: the primary defense
+  remains **least-privilege (read-only) database credentials** on each
+  connection, and the guard does **not** restrict read queries, so a
+  viewer can still run arbitrary `SELECT`s (scope those with DB grants).
+  Full rationale, threat model, and the rejected designs are in
+  [docs/design-notes/query-verb-guard.md](docs/design-notes/query-verb-guard.md).
