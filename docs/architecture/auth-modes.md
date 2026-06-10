@@ -71,6 +71,64 @@ Authorization (what a principal is *allowed* to do) is identical for both
 models: a synchronous capability check on the resolved claims, no DB
 round-trip on the hot path. See [Authorization](#authorization-how-claims-become-decisions).
 
+## Three deployment modes (which credentials a deployment accepts)
+
+The two models above are *how* a credential authenticates. **A deployment
+also chooses which credential channels it accepts** — and that's a separate
+axis, controlled by two settings. The combinations give three practical
+postures. API-key auth is **always on** (it can't be disabled); the two
+human-login channels each have an on/off switch:
+
+| | **Clerk SSO** | **Legacy GUID (dev)** | **API-key only (headless)** |
+|---|---|---|---|
+| **`CLERK_SECRET_KEY` env** | **set** | unset | unset |
+| **`auth.allow_legacy_guid`** | `false` (recommended) | **`true`** | `false` |
+| **Human signs in via** | Clerk's hosted sign-in screen (real auth: email/SSO/MFA) | A user-picker dropdown — anyone who knows a GUID becomes that user (**no password**) | **Nothing** — there is no human login. Entry is by API key only. |
+| **Browser kiosk** | Add a `?key=trve_…` API key (kiosk has no human to sign in) | `?key=trve_…`, **or** `?user_id=<guid>`, **or** the `default_browser_user_guid` setting for zero-touch | `?key=trve_…` only |
+| **Zero-touch default user** (`default_browser_user_guid`) | ✗ (needs the legacy GUID channel) | ✓ | ✗ (needs the legacy GUID channel) |
+| **Intended for** | Real multi-user deployments, small teams, demos | **Local dev only** (`npm run dev` user switcher) — never production | Pure kiosk / headless / appliance deployments where every client is a service principal |
+| **This is the default in** | — | `config.development.yaml` (`allow_legacy_guid: true`) | **`config.yaml` (production)** — Clerk unset + `allow_legacy_guid: false` |
+
+**Reading the table:**
+
+- **Clerk SSO** — the only mode with real, password/SSO-backed human
+  authentication. Set the two `CLERK_*` env vars; leave legacy GUID off so a
+  header-asserted identity can't bypass Clerk. This is the recommended
+  posture for any deployment with human users.
+- **Legacy GUID (dev)** — `X-User-ID` / `?user_id=` are honored. This is an
+  *identity assertion*, not authentication: **anyone who knows a GUID
+  becomes that user.** It exists for the dev user-switcher and migration.
+  **Do not enable in production.** The server prints a `⚠️` warning at
+  startup when it's on.
+- **API-key only (headless)** — the production default. With Clerk unset and
+  legacy GUID off, the **only** credential that authenticates is a `trve_…`
+  API key. There is no human sign-in screen at all. Right for an appliance /
+  kiosk fleet where every client is a service principal.
+
+**Two things to know about API-key-only mode:**
+
+1. **No human login means you need a way to mint the first/admin API key.**
+   You can't reach *Manage → API Keys* to create a key without already being
+   authenticated. The simplest bootstrap is to **lean on the dev login
+   channel once**:
+
+   1. Start the server with `auth.allow_legacy_guid: true` (or
+      `DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true`).
+   2. Sign in as an admin user via the GUID picker and mint an admin API key
+      in *Manage → API Keys*. Copy the `trve_…` token.
+   3. Set `auth.allow_legacy_guid: false` and restart.
+
+   Now legacy GUID is closed, Clerk is off, and you hold a working admin key —
+   the deployment is API-key-only and you're still able to administer it.
+   (Alternatively, seed an `api_keys` row directly if you're provisioning the
+   database out-of-band.)
+2. **A few routes stay public regardless of mode** — auth is bypassed for
+   `/api/health`, `/api/config/system` (GET), `/api/settings/:key` (GET),
+   `/api/ai/availability` (GET), and `/api/frigate/` GETs (camera media for
+   `<img>`/`<video>` tags). These are read-only/non-sensitive by design, but
+   if "API key for everything" is a hard requirement, these are the
+   documented exceptions. See [the route-rules table](#the-route-rules-table).
+
 ## The JWT-session model (browser sign-in)
 
 This is the flow for the **JWT-session model** — Clerk or GUID sign-in
