@@ -166,6 +166,22 @@ or local DNS) or `DOMAIN=dash.example.com` (public hostname).
 > have no DNS, an `/etc/hosts` entry on each client machine
 > (`<ip>  dash.lan`) is enough.
 
+**Choosing the cert source — `CADDY_TLS_DIRECTIVE`:** for HTTPS that
+isn't public Let's Encrypt, set this env var to a `tls` block Caddy
+injects into its config (empty by default = today's behavior). Two
+common cases:
+
+- **Tailscale `.ts.net` hostname** (publicly-trusted cert, **no browser
+  warning**, no ACME challenge — ideal for a tailnet):
+  ```
+  DOMAIN=<node>.<tailnet>.ts.net
+  CADDY_TLS_DIRECTIVE="tls { get_certificate tailscale }"
+  ```
+  Requires `tailscaled` reachable from the client container and "HTTPS
+  Certificates" enabled on the tailnet (Tailscale admin → DNS).
+- **Internal CA for an intranet hostname** (one-time per-device root-CA
+  trust): `CADDY_TLS_DIRECTIVE="tls internal"`.
+
 **Gotchas:**
 
 - **Don't prefix `DOMAIN` with `https://`** — it's a site *address*, not

@@ -1,6 +1,26 @@
 {$DOMAIN:localhost} {
     encode gzip
 
+    # Optional TLS directive, injected from the environment. Empty by default
+    # → today's behavior (HTTP on :80 for DOMAIN=:80/localhost, or public ACME
+    # when DOMAIN is a public hostname). The deployer can supply a `tls { … }`
+    # block to choose the cert source for HTTPS. Caddy substitutes {$ENV}
+    # placeholders verbatim before parsing, so a multi-line value works.
+    #
+    # Examples (set via the CADDY_TLS_DIRECTIVE env var on the client container):
+    #   - Tailscale (.ts.net) cert — publicly-trusted, zero browser warning,
+    #     no ACME challenge; needs tailscaled reachable from the container and
+    #     "HTTPS Certificates" enabled on the tailnet:
+    #         DOMAIN=<node>.<tailnet>.ts.net
+    #         CADDY_TLS_DIRECTIVE=tls {
+    #             get_certificate tailscale
+    #         }
+    #   - Internal CA cert for a HOSTNAME (one-time per-device root-CA trust):
+    #         CADDY_TLS_DIRECTIVE=tls internal
+    # Do NOT use a bare-IP DOMAIN for HTTPS — the resulting IP-SAN cert is
+    # rejected by Chromium/Firefox at the handshake. Use a hostname.
+    {$CADDY_TLS_DIRECTIVE}
+
     # API proxy to Go backend
     handle /api/* {
         reverse_proxy server:3001

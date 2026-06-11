@@ -27,6 +27,10 @@ services:
       - "${HTTPS_PORT:-443}:443"
     environment:
       - DOMAIN=${DOMAIN:-localhost}
+      # Optional TLS directive injected into the Caddyfile (empty = today's
+      # behavior). See .env.example — e.g. a Tailscale or `tls internal` block
+      # for HTTPS cert sources other than public ACME.
+      - CADDY_TLS_DIRECTIVE=${CADDY_TLS_DIRECTIVE:-}
     volumes:
       - caddy_data:/data
       - caddy_config:/config
