@@ -6217,6 +6217,10 @@
             "description": "Per-surface AI availability flags for the SPA bootstrap.",
             "type": "object",
             "properties": {
+                "assistant_model": {
+                    "description": "AssistantModel is the Dashboard Assistant's resolved model for display,\nwith the \"claude-\" prefix stripped (e.g. \"opus-4-8\", \"sonnet-4-6\", or a\npinned ID like \"opus-4-20250514\"). Lets the UI show the real model\ninstead of a hardcoded guess. Empty when AI is off / unreadable.",
+                    "type": "string"
+                },
                 "chat_agent_enabled": {
                     "type": "boolean"
                 },

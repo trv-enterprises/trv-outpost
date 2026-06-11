@@ -43,6 +43,7 @@ export function AIAvailabilityProvider({ children }) {
     enabled: false,
     componentAgentEnabled: false,
     chatAgentEnabled: false,
+    assistantModel: '',
     loading: true,
   });
 
@@ -64,6 +65,7 @@ export function AIAvailabilityProvider({ children }) {
           enabled: componentAgentEnabled,
           componentAgentEnabled,
           chatAgentEnabled,
+          assistantModel: res?.assistant_model || '',
           loading: false,
         });
       })
@@ -75,6 +77,7 @@ export function AIAvailabilityProvider({ children }) {
           enabled: false,
           componentAgentEnabled: false,
           chatAgentEnabled: false,
+          assistantModel: '',
           loading: false,
         });
       });

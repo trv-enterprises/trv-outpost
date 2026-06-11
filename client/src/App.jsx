@@ -120,11 +120,14 @@ function AIBuilderGate() {
 // AppContent's body is outside the provider, so it can't call
 // useNamespaces directly — this child component bridges the gap.
 //
-// Step 9 ships the chrome only; modelLabel is a static placeholder
-// for now and will pull from /api/ai/availability once that endpoint
-// surfaces the model (step 8+ work, deferred to keep step 9 focused).
+// Small wrapper around AssistantSidecard that lives INSIDE the
+// NamespaceProvider tree so it can read activeNamespace via context.
+// modelLabel comes from /api/ai/availability (assistant_model, e.g.
+// "opus-4-8") so the header shows the real model; falls back to "sonnet"
+// only for older servers that don't surface it.
 function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onRequestClose, currentUser }) {
   const { activeNamespace } = useNamespaces();
+  const { assistantModel } = useAIAvailability();
   return (
     <AssistantSidecard
       open={open}
@@ -133,7 +136,7 @@ function AssistantSidecardWithNamespace({ open, width, minWidth, onResize, onReq
       onResize={onResize}
       onRequestClose={onRequestClose}
       namespace={activeNamespace || 'default'}
-      modelLabel="sonnet"
+      modelLabel={assistantModel || 'sonnet'}
       userName={currentUser?.name || currentUser?.guid || null}
     />
   );

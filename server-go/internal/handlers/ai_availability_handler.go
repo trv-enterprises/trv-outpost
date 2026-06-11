@@ -6,9 +6,11 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
 
@@ -65,6 +67,11 @@ type AIAvailabilityResponse struct {
 	Enabled               bool `json:"enabled"`
 	ComponentAgentEnabled bool `json:"component_agent_enabled"`
 	ChatAgentEnabled      bool `json:"chat_agent_enabled"`
+	// AssistantModel is the Dashboard Assistant's resolved model for display,
+	// with the "claude-" prefix stripped (e.g. "opus-4-8", "sonnet-4-6", or a
+	// pinned ID like "opus-4-20250514"). Lets the UI show the real model
+	// instead of a hardcoded guess. Empty when AI is off / unreadable.
+	AssistantModel string `json:"assistant_model,omitempty"`
 }
 
 // GetAvailability godoc
@@ -76,9 +83,27 @@ type AIAvailabilityResponse struct {
 // @Router       /ai/availability [get]
 func (h *AIAvailabilityHandler) GetAvailability(c *gin.Context) {
 	componentAgentEnabled := h.agent != nil
+
+	// Resolve the Dashboard Assistant's model for display. Read the live
+	// admin setting, resolve aliases (sonnet/opus → concrete ID) the same way
+	// the agent does at boot, and strip the "claude-" prefix so the UI shows
+	// e.g. "opus-4-8" rather than "claude-opus-4-8". Only meaningful when the
+	// chat agent is up; empty otherwise.
+	var assistantModel string
+	if h.chatAgentReady && h.settingsService != nil {
+		adminValue := ""
+		if s, err := h.settingsService.GetSetting(c.Request.Context(), "assistant.model"); err == nil && s != nil {
+			if v, ok := s.Value.(string); ok {
+				adminValue = v
+			}
+		}
+		assistantModel = strings.TrimPrefix(chat.ResolveModelID(adminValue), "claude-")
+	}
+
 	c.JSON(http.StatusOK, AIAvailabilityResponse{
 		Enabled:               componentAgentEnabled,
 		ComponentAgentEnabled: componentAgentEnabled,
 		ChatAgentEnabled:      h.chatAgentReady,
+		AssistantModel:        assistantModel,
 	})
 }
