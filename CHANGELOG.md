@@ -6,6 +6,22 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.29.3] — 2026-06-10
+
+### Added
+
+- **`CADDY_TLS_DIRECTIVE` — env-gated TLS cert source for the bundled Caddy.**
+  The client image's baked Caddyfile now accepts an optional `tls` directive
+  injected from the environment (empty by default → unchanged behavior), so a
+  deployer can choose how Caddy obtains its HTTPS cert without editing the image.
+  Use `CADDY_TLS_DIRECTIVE="tls { get_certificate tailscale }"` with a
+  `.ts.net` `DOMAIN` for a publicly-trusted Tailscale cert (no browser warning),
+  or `CADDY_TLS_DIRECTIVE="tls internal"` for an internal-CA hostname cert.
+  Verified against the stock `caddy:2-alpine` (v2.11.4) — the `tailscale` cert
+  manager is built in, no plugin needed. Documented in `.env.example` + README.
+  **Do not use a bare-IP `DOMAIN` for HTTPS** — the IP-SAN cert is rejected by
+  Chrome/Firefox; use a hostname.
+
 ## [0.29.2] — 2026-06-10
 
 ### Fixed
