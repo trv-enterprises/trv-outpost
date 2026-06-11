@@ -99,6 +99,9 @@ local code change.
 | `DASHBOARD_SERVER_MODE` | `release` | Gin mode (release/debug) |
 | `DASHBOARD_MONGODB_URI` | `mongodb://mongodb:27017` | MongoDB connection string |
 | `DASHBOARD_MONGODB_DATABASE` | `dashboard` | Database name |
+| `CADDY_TLS_DIRECTIVE` | _(empty)_ | TLS directive injected into the bundled Caddyfile, for HTTPS cert sources other than public ACME. Empty = today's behavior. E.g. `tls { get_certificate tailscale }` for a Tailscale `.ts.net` cert, or `tls internal` for an internal-CA hostname cert. See [Internal / Tailscale HTTPS](#internal--tailscale-https). |
+| `DASHBOARD_AUTH_COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS so the refresh cookie carries the `Secure` flag. Must match the scheme: a `Secure` cookie is dropped on a plain-HTTP origin, and an HTTP deployment needs this `false`. |
+| `HTTP_PORT` / `HTTPS_PORT` | `80` / `443` | Override the published host ports if those are taken. |
 
 ---
 
@@ -125,6 +128,35 @@ local code change.
 ### Local/Private Deployment
 
 Set `DOMAIN=localhost` - Caddy will use a self-signed certificate.
+
+### Internal / Tailscale HTTPS
+
+For an internal deployment reached by **hostname** (not a public domain, so
+public ACME can't validate it), set `CADDY_TLS_DIRECTIVE` to choose the cert
+source. Empty by default; the value is injected verbatim into the Caddyfile.
+
+- **Tailscale `.ts.net`** — a publicly-trusted cert from the local `tailscaled`,
+  **no browser warning**, no ACME challenge. Needs `tailscaled` reachable from
+  the Caddy container (mount `/var/run/tailscale/tailscaled.sock`) and "HTTPS
+  Certificates" enabled on the tailnet (admin console → DNS).
+  ```
+  DOMAIN=<node>.<tailnet>.ts.net
+  CADDY_TLS_DIRECTIVE=tls { get_certificate tailscale }
+  DASHBOARD_AUTH_COOKIE_SECURE=true
+  ```
+- **Internal CA for an intranet hostname** (one-time per-device root-CA trust):
+  ```
+  DOMAIN=dash.lan            # add to /etc/hosts or local DNS, pointing at the host
+  CADDY_TLS_DIRECTIVE=tls internal
+  DASHBOARD_AUTH_COOKIE_SECURE=true
+  ```
+
+> **Do not use a bare-IP `DOMAIN` for HTTPS.** Caddy issues an IP-SAN cert that
+> Chromium/Firefox reject at the handshake (only macOS native TLS tolerates it),
+> and Clerk can't establish a cookie domain on an IP. Always use a hostname.
+
+When you switch to HTTPS, set `DASHBOARD_AUTH_COOKIE_SECURE=true` (a `Secure`
+refresh cookie is dropped over plain HTTP).
 
 ### Custom Certificates
 
