@@ -44,6 +44,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"assistant_enabled_to_ai_enabled_v1", migrateAssistantEnabledToAIEnabled},
 		{"refresh_tile_font_size_description_v1", migrateRefreshTileFontSizeDescription},
 		{"drop_panel_pin_connection_v1", migrateDropPanelPinConnection},
+		{"prefix_restart_required_descriptions_v1", migratePrefixRestartRequiredDescriptions},
 	}
 
 	coll := db.Collection("migrations")
@@ -595,6 +596,36 @@ func migrateRefreshTileFontSizeDescription(ctx context.Context, db *mongo.Databa
 		return fmt.Errorf("refresh tile_font_size description: %w", err)
 	}
 	log.Printf("  settings: refreshed tile_font_size description (matched %d)", res.MatchedCount)
+	return nil
+}
+
+// migratePrefixRestartRequiredDescriptions refreshes the descriptions of the
+// restart-required settings so they LEAD with "Server Restart Required." — the
+// admin should see, at a glance in Manage → Settings, that changing one of
+// these won't take effect until the server restarts. These three are read once
+// at boot (ai.enabled gates AI construction; assistant.model resolves the chat
+// model; assistant.daily_token_budget is captured into the budget object), not
+// re-read per request. Same refresh-an-existing-description shape as the two
+// migrations above (the settings sync never overwrites an existing doc, so a
+// YAML edit alone doesn't reach already-seeded deployments). Idempotent: $set
+// to the current text; no-op on a fresh DB (the seed lands the new text).
+func migratePrefixRestartRequiredDescriptions(ctx context.Context, db *mongo.Database) error {
+	descs := map[string]string{
+		"ai.enabled":                  "Server Restart Required. AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that.",
+		"assistant.model":             "Server Restart Required. Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Per-deployment choice; not per-user.",
+		"assistant.daily_token_budget": "Server Restart Required. Per-user daily token budget for the Dashboard Assistant. Object with `input` and `output` keys. Counted in Anthropic tokens, resets at UTC midnight. Defaults to 1M input / 250k output — generous for most workflows; lower if costs run away, raise for power users. A user past either cap is refused new turns until the next UTC day; their conversation is not lost.",
+	}
+	for key, desc := range descs {
+		res, err := db.Collection("settings").UpdateOne(
+			ctx,
+			bson.M{"_id": key},
+			bson.M{"$set": bson.M{"description": desc}},
+		)
+		if err != nil {
+			return fmt.Errorf("refresh %s description: %w", key, err)
+		}
+		log.Printf("  settings: prefixed 'Server Restart Required' on %s description (matched %d)", key, res.MatchedCount)
+	}
 	return nil
 }
 

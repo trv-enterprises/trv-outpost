@@ -134,19 +134,19 @@ settings:
   # migrations.go::migrateAssistantEnabledToAIEnabled).
   - key: ai.enabled
     category: ai
-    description: "AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that. Restart required for changes to take effect."
+    description: "Server Restart Required. AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that."
     value: true
 
   - key: assistant.daily_token_budget
     category: ai
-    description: "Per-user daily token budget for the Dashboard Assistant. Object with `input` and `output` keys. Counted in Anthropic tokens, resets at UTC midnight. Defaults to 1M input / 250k output — generous for most workflows; lower if costs run away, raise for power users. A user past either cap is refused new turns until the next UTC day; their conversation is not lost."
+    description: "Server Restart Required. Per-user daily token budget for the Dashboard Assistant. Object with `input` and `output` keys. Counted in Anthropic tokens, resets at UTC midnight. Defaults to 1M input / 250k output — generous for most workflows; lower if costs run away, raise for power users. A user past either cap is refused new turns until the next UTC day; their conversation is not lost."
     value:
       input: 1000000
       output: 250000
 
   - key: assistant.model
     category: ai
-    description: "Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Takes effect on next server restart. Per-deployment choice; not per-user."
+    description: "Server Restart Required. Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Per-deployment choice; not per-user."
     value: "sonnet"
 
   # ─── Query verb-guard (server-side write protection) ───────────────────
