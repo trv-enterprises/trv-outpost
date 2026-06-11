@@ -151,11 +151,20 @@ its automatic HTTPS off its site address, so this one value is the lever:
 |---|---|
 | `localhost` *(default)* | Serves HTTP on `:80`; a self-signed cert is also available on `:443` (accept the browser warning). No DNS/ACME. |
 | `:80` | HTTP only, no TLS. |
-| a **bare IP** (e.g. `192.168.1.50`) | **HTTPS via Caddy's internal self-signed CA**, with an automatic HTTP→HTTPS redirect. Browsers warn until you trust the CA — fine for internal/LAN use. |
-| a **hostname** (e.g. `dash.example.com`) | **HTTPS via Let's Encrypt** (ACME). Needs public DNS pointing at the host + ports 80/443 reachable. |
+| a **bare IP** (e.g. `192.168.1.50`) | **Not recommended — see below.** Caddy issues an internal-CA cert with an IP SAN; Chrome and Firefox reject the handshake for IP-address certs from a private CA, so the site is unreachable in real browsers even though macOS's native TLS (and `curl`) may accept it. Use a hostname instead. |
+| a **hostname** (e.g. `dash.lan` or `dash.example.com`) | **HTTPS that browsers accept.** For an *internal* name, add it to `/etc/hosts` (or a local DNS server) pointing at the host's IP — Caddy issues an internal-CA cert for the **hostname** (trust Caddy's root CA once to drop the warning). For a *public* name with public DNS + reachable 80/443, Caddy gets a **Let's Encrypt** cert automatically (no warning). |
 
-Set it in `.env`: `DOMAIN=192.168.1.50` (bare IP) or
-`DOMAIN=dash.example.com` (public hostname).
+Set it in `.env`: `DOMAIN=dash.lan` (internal hostname via `/etc/hosts`
+or local DNS) or `DOMAIN=dash.example.com` (public hostname).
+
+> **Why a hostname, not a bare IP?** Two independent reasons, both
+> learned the hard way: (1) **TLS** — Chromium/Firefox reject internal-CA
+> certs that carry an *IP* SAN, so bare-IP HTTPS fails the handshake in
+> real browsers. (2) **Clerk** — Clerk's session cookies need a valid
+> cookie *domain*, which a bare IP can't provide (`__clerk_test_etld …
+> rejected for invalid domain`). A hostname fixes both at once. If you
+> have no DNS, an `/etc/hosts` entry on each client machine
+> (`<ip>  dash.lan`) is enough.
 
 **Gotchas:**
 

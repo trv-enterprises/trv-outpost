@@ -543,7 +543,15 @@ dashboard — our server only verifies the Clerk JWT (no
 
 ### Migration checklist: `http://<ip>` → `https://<host>`
 
-1. Stand up HTTPS in Caddy (set `DOMAIN` to the hostname + a cert).
+**Use a hostname, not a bare IP.** Bare-IP HTTPS fails two ways:
+Chromium/Firefox reject Caddy's internal-CA cert when it carries an *IP*
+SAN (the handshake fails in real browsers even if macOS's native TLS /
+`curl` accepts it), and Clerk can't establish a cookie domain on an IP.
+With no DNS, an `/etc/hosts` entry (`<ip>  dash.lan`) on each client
+machine is enough to get a real hostname.
+
+1. Stand up HTTPS in Caddy (set `DOMAIN` to the **hostname** — internal
+   name via `/etc/hosts`/local DNS, or a public name for Let's Encrypt).
 2. Keep SPA + `/api` **same-origin** (Caddy proxies `/api`) — no client
    change needed; the relative base inherits the new scheme.
 3. Set `DASHBOARD_AUTH_COOKIE_SECURE=true` (now that it's HTTPS).
