@@ -104,6 +104,17 @@ local code change.
 
 ## HTTPS Configuration
 
+> **Auth, CORS, cookies & origins:** the behavior that matters when you
+> change scheme/origin (HTTP→HTTPS, IP→hostname, single- vs split-origin)
+> — CORS defaults, the `SameSite`/`Secure` refresh-cookie rules, the
+> `ws://`→`wss://` handling, Clerk's separate origin + secure-context
+> requirements, and a step-by-step `http://<ip>` → `https://<host>`
+> migration checklist — is documented in
+> [Origins, CORS, cookies & HTTPS](architecture/auth-modes.md#origins-cors-cookies--https).
+> **Key gotcha:** keep the SPA and `/api` on **one origin** (Caddy proxies
+> `/api`); a cross-origin API base silently breaks the `SameSite=Lax`
+> refresh cookie even with permissive CORS.
+
 ### Public Domain (Automatic Let's Encrypt)
 
 1. Point your DNS to your server's IP

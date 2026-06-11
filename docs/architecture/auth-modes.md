@@ -435,6 +435,124 @@ page-level data fetches don't fire until bootstrap completes. The
 event is only needed for context/provider components that mount
 above the router.
 
+## Origins, CORS, cookies & HTTPS
+
+This section is the reference for how the auth surface behaves across
+origins and schemes — the things that bite during a deployment/serving
+change (e.g. moving from `http://<ip>` to `https://<host>`). It was
+written after a real incident; read the **CORS ≠ cookies** note first.
+
+### CORS is NOT what authenticates — don't confuse it with the cookie
+
+The single most important distinction: **CORS controls whether the
+browser lets your JS *read a response* from another origin. SameSite
+controls whether the browser *attaches a cookie* to a request.** They
+are independent. You can have permissive, correct CORS
+(`Access-Control-Allow-Credentials: true`, origin echoed) and the
+session still breaks — because a `SameSite=Lax` cookie is **never sent
+on a cross-origin XHR**, no matter what CORS says.
+
+> **Incident (2026-06-10):** the SPA was served at `http://host/` (port
+> 80, via Caddy) but the client called the API at `http://host:3001` —
+> a *different origin* (port). Bearer-header API reads worked (CORS
+> allowed them). But `POST /api/auth/refresh` always 401'd with "No
+> refresh cookie": the `trve_refresh` httpOnly cookie (`SameSite=Lax`)
+> was never sent on the cross-origin request, so once the 15-minute
+> access token expired the session died. **The fix was making the client
+> same-origin** (relative API base → `/api/*` rides the page origin that
+> Caddy proxies), NOT touching CORS. See `client.js` `getApiBaseUrl()`.
+
+**Rule of thumb:** keep the SPA and `/api` on **one origin** (Caddy
+reverse-proxies `/api` → `server:3001` on the same host/scheme/port the
+SPA is served from). Then the `Lax` cookie is same-origin and just
+works. The client defaults to a **relative** API base to guarantee this.
+
+### CORS configuration
+
+| Aspect | Behavior | Source |
+|---|---|---|
+| **Default posture** | **Permissive.** `config.yaml` ships `cors.allowed_origins` containing `"*"` with `allow_credentials: true`. The server detects the wildcard and installs an `AllowOriginFunc` that **echoes any origin back** (spec-compliant credentialed wildcard). So by default **no origin is blocked.** | `cmd/server/main.go` (~120), `config/config.yaml` |
+| **Make it strict** | Set `DASHBOARD_CORS_ALLOWED_ORIGINS` to an explicit list **without `*`**. Then the server uses `AllowOrigins = [list]` and the gin-cors library enforces it. | env → `cors.allowed_origins` |
+| **Matching (strict mode)** | **Exact full-origin string**, scheme- and port-sensitive. `http://` ≠ `https://` (list both if both are used). No normalization. | gin-contrib/cors |
+| **Port in the origin** | Browsers omit the port for defaults: list `https://host` (not `:443`), `http://host` (not `:80`). Non-default ports appear explicitly (`http://host:5173`). | browser Origin header |
+| **Env var naming** | Viper prefix `DASHBOARD`, dots→underscores. So `cors.allowed_origins` → `DASHBOARD_CORS_ALLOWED_ORIGINS`. | `config/config.go` (`SetEnvPrefix`) |
+
+The deploy compose sets **no CORS override**, so prod/pre-prod run the
+permissive default unless you add the env var.
+
+### The refresh cookie & SameSite
+
+The `trve_refresh` cookie is set by `/api/auth/session` (`Path=/api/auth`):
+
+| Setting | Default | Env override |
+|---|---|---|
+| `auth.cookie_secure` | `false` (so it works over plain HTTP) | `DASHBOARD_AUTH_COOKIE_SECURE` |
+| `auth.cookie_samesite` | `lax` | `DASHBOARD_AUTH_COOKIE_SAMESITE` (`lax`\|`strict`\|`none`) |
+
+- **Same-origin deployment (the norm — Caddy single origin):** `Lax` +
+  default-`secure` is correct. Over HTTP, `cookie_secure: false` is
+  required (a `Secure` cookie is **silently dropped on a plain-HTTP
+  origin**). Over HTTPS, set `cookie_secure: true`.
+- **Split SPA/API origins (e.g. `app.example.com` + `api.example.com`):**
+  this is the only case that needs cross-site cookies. You must set
+  `cookie_samesite=none` **and** `cookie_secure=true` (SameSite=None
+  requires Secure, which requires HTTPS) **and** a strict CORS allowlist.
+  Don't reach for this unless you genuinely split origins — same-origin
+  is simpler and safer.
+
+### WebSocket / SSE streaming
+
+- **Scheme is derived, not hardcoded.** `client.js` `wsOrigin()` picks
+  `wss://` on an HTTPS page and `ws://` on HTTP, from the page origin —
+  so **no mixed-content block under HTTPS**. SSE (`EventSource`) rides
+  the same relative `/api/*` base. Nothing to change for HTTPS.
+- **No WS-level origin enforcement.** All `websocket.Upgrader`
+  `CheckOrigin` functions `return true` (`streaming/inbound_handler.go`,
+  `handlers/status_handler.go`, `handlers/ai_session_handler.go`). WS
+  won't block on origin; the only WS concern is the scheme above.
+- **Caveat:** `VITE_API_URL`, if set to an absolute `http://…` base,
+  overrides the relative base and would reintroduce mixed content under
+  HTTPS. Leave it **unset** for the Caddy single-origin deployment.
+
+### No CSP
+
+There is **no `Content-Security-Policy`** header set (server or Caddy),
+so there's no `connect-src` allowlist to maintain when origins change.
+
+### Clerk's own origin & secure-context requirements
+
+Clerk enforces checks **independent of our CORS**, in the Clerk
+dashboard — our server only verifies the Clerk JWT (no
+`authorizedParties` passed today):
+
+- **Allowed origins:** when the access origin changes (e.g.
+  `http://<ip>` → `https://<host>`), add the new origin in the **Clerk
+  dashboard**. Dev (`pk_test_`) instances are permissive but still
+  validate.
+- **Secure context (HTTPS):** Clerk uses `crypto.subtle` (Web Crypto)
+  for cookie hashing, which browsers expose **only in a secure context**
+  (HTTPS or localhost). On plain HTTP you'll see `secure-context: false`
+  / `can't access property "digest"` warnings and a `__clerk_test_etld
+  ... rejected for invalid domain` cookie warning (the latter also from
+  bare-IP origins). Clerk degrades but generally keeps working; **HTTPS
+  clears both.** (`navigator.clipboard` — e.g. the About-dialog copy
+  button — is disabled on HTTP for the same secure-context reason.)
+- **Production:** dev (`pk_test_`) instances have usage limits and must
+  not front prod. Switch to a `pk_live_` **production** Clerk instance
+  for any production deployment.
+
+### Migration checklist: `http://<ip>` → `https://<host>`
+
+1. Stand up HTTPS in Caddy (set `DOMAIN` to the hostname + a cert).
+2. Keep SPA + `/api` **same-origin** (Caddy proxies `/api`) — no client
+   change needed; the relative base inherits the new scheme.
+3. Set `DASHBOARD_AUTH_COOKIE_SECURE=true` (now that it's HTTPS).
+4. Add the new `https://<host>` origin in the **Clerk dashboard**.
+5. (Optional) Tighten CORS via `DASHBOARD_CORS_ALLOWED_ORIGINS` if you
+   want to drop the permissive `*`.
+6. Leave `VITE_API_URL` unset; don't introduce a split-origin API unless
+   you also switch to `SameSite=None; Secure` + strict CORS.
+
 ## Enterprise self-host considerations
 
 The product is shipped as container images and self-hosted by the
