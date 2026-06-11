@@ -133,6 +133,65 @@ to enable the AI Builder, enable Clerk sign-in, change ports — copy
 `.env.example` to `.env` and edit. The defaults are tuned for "I want
 to see the dashboard on my laptop right now."
 
+#### Enabling HTTPS
+
+The `caddy` service in the compose file **is** the client image
+(`outpost-client`) — it bundles [Caddy](https://caddyserver.com/) + the
+built SPA + a baked-in `Caddyfile`. There's no separate web server:
+**Caddy serves the SPA and reverse-proxies the API on a single origin**
+(it proxies `/api/*`, `/health`, `/swagger/*`, `/mcp/*`, `/docs` to the
+Go server; everything else falls through to the SPA). That single-origin
+design is why CORS and cross-site-cookie issues don't arise in this
+topology — the browser only ever talks to one origin.
+
+**HTTPS is controlled entirely by the `DOMAIN` env var** — Caddy keys
+its automatic HTTPS off its site address, so this one value is the lever:
+
+| `DOMAIN` | Result |
+|---|---|
+| `localhost` *(default)* | Serves HTTP on `:80`; a self-signed cert is also available on `:443` (accept the browser warning). No DNS/ACME. |
+| `:80` | HTTP only, no TLS. |
+| a **bare IP** (e.g. `192.168.1.50`) | **HTTPS via Caddy's internal self-signed CA**, with an automatic HTTP→HTTPS redirect. Browsers warn until you trust the CA — fine for internal/LAN use. |
+| a **hostname** (e.g. `dash.example.com`) | **HTTPS via Let's Encrypt** (ACME). Needs public DNS pointing at the host + ports 80/443 reachable. |
+
+Set it in `.env`: `DOMAIN=192.168.1.50` (bare IP) or
+`DOMAIN=dash.example.com` (public hostname).
+
+**Gotchas:**
+
+- **Don't prefix `DOMAIN` with `https://`** — it's a site *address*, not
+  a URL. Use the bare IP or hostname.
+- **Port 443 must be published.** `docker-compose.deploy.yml` already
+  maps both `80:80` and `443:443`, so the bundled compose is fine. If
+  you write your own compose (or an orchestration role that gates
+  HTTPS), make sure 443 is mapped — TLS is unreachable otherwise even
+  with `DOMAIN` set.
+- **Self-signed = browser warning** in IP/internal mode. To remove it,
+  trust Caddy's root CA, extractable from the container at
+  `/data/caddy/pki/authorities/local/root.crt`.
+- **Certs persist in the `caddy_data` volume** (`/data`). Don't wipe it
+  casually — the internal CA (and any device trust you've set up)
+  regenerates if you do.
+- **Testing TLS:** don't use macOS's built-in `curl` — its LibreSSL
+  mishandles IP-address SNI and returns spurious `tlsv1 alert internal
+  error` / exit 35 even when Caddy is fine. Use a browser, or
+  `openssl s_client -servername <host> -connect <host>:443`.
+
+**The client is HTTPS-ready as shipped** (≥ v0.29.2): it uses a relative
+same-origin API base and derives the WebSocket scheme from the page
+(`wss://` under HTTPS), so there's no mixed-content gotcha — **leave
+`VITE_API_URL` unset** (an absolute `http://…` base would reintroduce
+mixed content).
+
+**Clerk sign-in needs HTTPS** (Clerk uses `crypto.subtle`, which browsers
+only expose in a secure context). Clerk also enforces its **own** origin
+allowlist in the Clerk dashboard, independent of this app — when you
+change the deploy origin, add the new origin there.
+
+For the full origins/CORS/cookie/HTTPS reference (and an
+`http://<ip>` → `https://<host>` migration checklist), see
+[Origins, CORS, cookies & HTTPS](docs/architecture/auth-modes.md#origins-cors-cookies--https).
+
 ### Option 2 — Native (run Go + React directly for development)
 
 For active development on the codebase. Starts the Go server and
