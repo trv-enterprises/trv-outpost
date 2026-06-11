@@ -11289,6 +11289,10 @@ const docTemplate = `{
                 "lastError": {},
                 "subscriberCount": {
                     "type": "integer"
+                },
+                "terminal": {
+                    "description": "Terminal is true when LastError is a non-retryable start failure (e.g.\na rejected api-key) — the client should stop reconnecting and surface it.",
+                    "type": "boolean"
                 }
             }
         }

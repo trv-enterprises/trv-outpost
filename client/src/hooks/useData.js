@@ -511,6 +511,16 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
             if (mountedRef.current) {
               setReconnecting(true);
             }
+          },
+          // Terminal stream failure (e.g. a rejected ts-store api-key): the
+          // manager has stopped reconnecting. Show the actionable message
+          // immediately (bypass the reconnect grace period) so the panel
+          // doesn't spin forever on a config that can't recover on its own.
+          onError: (info) => {
+            if (mountedRef.current) {
+              setReconnecting(false);
+              setError(new Error(info?.message || 'Stream connection failed'));
+            }
           }
         }
       );

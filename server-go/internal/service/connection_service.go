@@ -55,6 +55,14 @@ type ConnectionService struct {
 	// SetQueryGuardPolicy. Nil → strict read-only (the safe default), so a
 	// missing wire can never accidentally permit writes.
 	queryGuardPolicy func(ctx context.Context) connection.WritePolicy
+
+	// onConfigChanged is called after a connection's config is updated, so the
+	// stream manager can drop any cached/failed stream for it and rebuild with
+	// the new config (e.g. the admin fixes a rejected api-key and re-saves —
+	// no server restart needed). Wired via SetConfigChangeHook; nil = no-op.
+	// A closure rather than a *streaming.Manager keeps the service free of a
+	// streaming import (and any cycle risk).
+	onConfigChanged func(connectionID string)
 }
 
 // SetQueryGuardPolicy wires the closure that resolves the SQL write-verb
@@ -63,6 +71,13 @@ type ConnectionService struct {
 // uses the zero-value WritePolicy (strict read-only).
 func (s *ConnectionService) SetQueryGuardPolicy(fn func(ctx context.Context) connection.WritePolicy) {
 	s.queryGuardPolicy = fn
+}
+
+// SetConfigChangeHook wires the callback invoked after a connection's config
+// changes (typically streamManager.InvalidateStream). Called once at startup
+// after the stream manager exists.
+func (s *ConnectionService) SetConfigChangeHook(fn func(connectionID string)) {
+	s.onConfigChanged = fn
 }
 
 // NewConnectionService creates a new connection service. The component
@@ -288,6 +303,13 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, id string, req
 
 	if err := s.repo.Update(ctx, id, connection); err != nil {
 		return nil, fmt.Errorf("error updating connection: %w", err)
+	}
+
+	// Drop any cached/failed stream so the next subscribe rebuilds with the new
+	// config — lets an admin fix a rejected api-key and re-save without a
+	// server restart.
+	if s.onConfigChanged != nil {
+		s.onConfigChanged(id)
 	}
 
 	return connection, nil

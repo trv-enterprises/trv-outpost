@@ -362,6 +362,11 @@ func main() {
 	streamManager := streaming.NewManager(connectionRepo, streaming.DefaultManagerConfig())
 	fmt.Println("✓ StreamManager initialized for socket datasource streaming")
 
+	// On a connection-config change, drop its cached/failed stream so the next
+	// subscribe rebuilds with the new config (e.g. fixing a rejected api-key
+	// and re-saving works without a server restart).
+	connectionService.SetConfigChangeHook(streamManager.InvalidateStream)
+
 	// Initialize inbound WebSocket handler for ts-store push connections
 	inboundHandler := streaming.GetInboundHandler()
 	_ = inboundHandler // Used in routes below

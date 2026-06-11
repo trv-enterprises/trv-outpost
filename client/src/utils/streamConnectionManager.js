@@ -375,6 +375,30 @@ class StreamConnectionManager {
       connection.reconnecting = true;
       connection.reconnectAttempts++;
 
+      // On the FIRST error of an episode, find out WHY the stream failed.
+      // EventSource.onerror exposes no HTTP status/body, so probe the
+      // stream-status endpoint: if the server reports a TERMINAL failure
+      // (e.g. a rejected ts-store api-key), there's no point reconnecting —
+      // surface the actionable message to subscribers and stop. This kills
+      // the "many errors per second" loop a misconfigured connection caused.
+      if (connection.reconnectAttempts === 1 && typeof apiClient.getStreamStatus === 'function') {
+        apiClient.getStreamStatus(connectionId).then((status) => {
+          if (status && status.terminal && this.connections.has(connectionId)) {
+            const message = status.last_error || 'Stream connection failed';
+            console.warn(`[StreamConnectionManager] Terminal stream failure for ${connectionId}: ${message} — not reconnecting`);
+            // Cancel the pending backoff reconnect and stop the loop.
+            if (connection.reconnectTimeout) {
+              clearTimeout(connection.reconnectTimeout);
+              connection.reconnectTimeout = null;
+            }
+            connection.reconnecting = false;
+            const subs = this.subscribers.get(connectionId);
+            if (subs) subs.forEach(sub => sub.onError({ message, terminal: true }));
+            this._cleanup(connectionId);
+          }
+        }).catch(() => { /* status probe failed → fall through to normal backoff */ });
+      }
+
       // On the FIRST error of an episode, the cause is often a stale/
       // expired access token in the ?st= query (the token is frozen into
       // the URL at open time and can't update on a live EventSource). A

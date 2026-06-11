@@ -87,7 +87,11 @@ func (ts *TSStoreStream) Start(ctx context.Context) error {
 	// Create push connection with ts-store
 	if err := ts.createPushConnection(streamCtx); err != nil {
 		inboundHandler.Unsubscribe(ts.connectionID, ts.inboundChan)
-		return fmt.Errorf("failed to create push connection: %w", err)
+		ts.mu.Lock()
+		ts.lastError = err
+		ts.mu.Unlock()
+		// Preserve the typed *StreamStartError for errors.As at the Manager.
+		return err
 	}
 
 	ts.mu.Lock()
@@ -237,14 +241,26 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("failed to call ts-store API: %w", err)
+		// Pre-HTTP failure (DNS, dial, timeout) — transient, worth retrying.
+		return &StreamStartError{Code: 0, Terminal: false,
+			Message: fmt.Sprintf("could not reach ts-store at %s: %v", ts.config.BaseURL(), err)}
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("ts-store API error (status %d): %s", resp.StatusCode, string(body))
+		// Classify: auth failures are TERMINAL (a missing/wrong api_key won't
+		// self-heal, so don't retry in a loop); everything else is transient.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			msg := fmt.Sprintf("ts-store API key rejected by store '%s' (HTTP %d) — the api_key is missing or invalid in this store's keys.json on the ts-store host", ts.config.StoreName, resp.StatusCode)
+			if ts.config.APIKey == "" {
+				msg = fmt.Sprintf("ts-store store '%s' requires an API key but none is configured on this connection (HTTP %d)", ts.config.StoreName, resp.StatusCode)
+			}
+			return &StreamStartError{Code: resp.StatusCode, Terminal: true, Message: msg}
+		}
+		return &StreamStartError{Code: resp.StatusCode, Terminal: false,
+			Message: fmt.Sprintf("ts-store API error (status %d): %s", resp.StatusCode, string(body))}
 	}
 
 	// Parse response

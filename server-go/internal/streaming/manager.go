@@ -18,6 +18,7 @@ import (
 // Manager orchestrates multiple streaming connections
 type Manager struct {
 	streams      map[string]Streamer
+	failed       map[string]*failedStream // connections whose last start failed (backoff memory)
 	mu           sync.RWMutex
 	repo         *repository.ConnectionRepository
 	config       ManagerConfig
@@ -25,11 +26,24 @@ type Manager struct {
 	cancelFunc   context.CancelFunc
 }
 
+// failedStream remembers a stream whose Start failed so the Manager doesn't
+// re-dial the upstream on every subscribe (the source of the "many errors per
+// second" loop). A terminal failure (auth) is never retried automatically; a
+// transient failure is retried only once nextRetry has passed.
+type failedStream struct {
+	err       error
+	terminal  bool
+	attempts  int
+	nextRetry time.Time
+}
+
 // ManagerConfig holds configuration for the stream manager
 type ManagerConfig struct {
 	BufferSize          int           // Records to buffer per stream (default 100)
 	CleanupGracePeriod  time.Duration // Time to keep stream alive with no subscribers (default 60s)
 	CleanupInterval     time.Duration // How often to check for cleanup (default 30s)
+	RetryBaseDelay      time.Duration // Backoff base for transient start failures (default 1s)
+	RetryMaxDelay       time.Duration // Backoff cap (default 30s)
 }
 
 // DefaultManagerConfig returns default manager configuration
@@ -38,6 +52,8 @@ func DefaultManagerConfig() ManagerConfig {
 		BufferSize:          100,
 		CleanupGracePeriod:  60 * time.Second,
 		CleanupInterval:     30 * time.Second,
+		RetryBaseDelay:      1 * time.Second,
+		RetryMaxDelay:       30 * time.Second,
 	}
 }
 
@@ -45,8 +61,16 @@ func DefaultManagerConfig() ManagerConfig {
 func NewManager(repo *repository.ConnectionRepository, config ManagerConfig) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	if config.RetryBaseDelay <= 0 {
+		config.RetryBaseDelay = 1 * time.Second
+	}
+	if config.RetryMaxDelay <= 0 {
+		config.RetryMaxDelay = 30 * time.Second
+	}
+
 	m := &Manager{
 		streams:    make(map[string]Streamer),
+		failed:     make(map[string]*failedStream),
 		repo:       repo,
 		config:     config,
 		ctx:        ctx,
@@ -62,25 +86,21 @@ func NewManager(repo *repository.ConnectionRepository, config ManagerConfig) *Ma
 // SubscribeWithTopics creates or gets a stream for the datasource and subscribes with specific topic filters.
 // For MQTT streams, this subscribes only to the requested topics at the broker level.
 // For non-MQTT streams, topics are ignored and it behaves like SubscribeAndGetChannel.
-func (m *Manager) SubscribeWithTopics(ctx context.Context, connectionID string, topics []string) chan models.Record {
+func (m *Manager) SubscribeWithTopics(ctx context.Context, connectionID string, topics []string) (chan models.Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Check if stream already exists
-	stream, exists := m.streams[connectionID]
-	if !exists {
-		stream = m.createStream(ctx, connectionID)
-		if stream == nil {
-			return nil
-		}
+	stream, err := m.getOrCreateStream(ctx, connectionID)
+	if err != nil {
+		return nil, err
 	}
 
 	// If MQTT stream, use topic-aware subscription
 	if mqttStream, ok := stream.(*MQTTStream); ok && len(topics) > 0 {
-		return mqttStream.SubscribeWithTopics(topics)
+		return mqttStream.SubscribeWithTopics(topics), nil
 	}
 
-	return stream.Subscribe()
+	return stream.Subscribe(), nil
 }
 
 // GetBufferFiltered returns buffered records filtered by topic patterns (for MQTT streams).
@@ -101,17 +121,81 @@ func (m *Manager) GetBufferFiltered(connectionID string, topics []string) []mode
 	return stream.GetBuffer()
 }
 
-// createStream creates and starts a new stream for the given datasource.
-// Must be called with m.mu held. Returns nil on failure.
-func (m *Manager) createStream(ctx context.Context, connectionID string) Streamer {
+// getOrCreateStream returns a live stream for the connection, applying the
+// failed-stream backoff gate so a broken connection (e.g. a tsstore stream with
+// a rejected api-key) doesn't get re-dialed on every subscribe. Must be called
+// with m.mu held. Returns the live stream, or an error describing why it can't
+// be established (the cached error within the backoff window, or a fresh start
+// failure).
+func (m *Manager) getOrCreateStream(ctx context.Context, connectionID string) (Streamer, error) {
+	if stream, exists := m.streams[connectionID]; exists {
+		return stream, nil
+	}
+
+	// Honor the backoff/terminal memory before re-dialing.
+	if f, ok := m.failed[connectionID]; ok {
+		if f.terminal {
+			return nil, f.err // never auto-retry an auth failure
+		}
+		if time.Now().Before(f.nextRetry) {
+			return nil, f.err // still cooling down — return cached error, no re-dial
+		}
+		// past the cooldown → fall through and retry
+	}
+
+	stream, err := m.createStream(ctx, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	return stream, nil
+}
+
+// backoffDelay computes the exponential backoff for the Nth transient failure.
+func (m *Manager) backoffDelay(attempts int) time.Duration {
+	d := m.config.RetryBaseDelay << uint(attempts-1) // base * 2^(attempts-1)
+	if d <= 0 || d > m.config.RetryMaxDelay {
+		return m.config.RetryMaxDelay
+	}
+	return d
+}
+
+// recordFailure remembers a start failure so subscribes within the backoff
+// window (or forever, when terminal) return the cached error instead of
+// re-dialing the upstream.
+func (m *Manager) recordFailure(connectionID string, err error) {
+	prev := m.failed[connectionID]
+	attempts := 1
+	if prev != nil {
+		attempts = prev.attempts + 1
+	}
+	terminal := false
+	if se, ok := AsStreamStartError(err); ok {
+		terminal = se.Terminal
+	}
+	f := &failedStream{err: err, terminal: terminal, attempts: attempts}
+	if !terminal {
+		f.nextRetry = time.Now().Add(m.backoffDelay(attempts))
+	}
+	m.failed[connectionID] = f
+}
+
+// createStream creates and starts a new stream for the given datasource. Must
+// be called with m.mu held. On failure it records the failure for backoff and
+// returns the error (so callers can surface it); on success it caches the live
+// stream and clears any prior failure memory.
+func (m *Manager) createStream(ctx context.Context, connectionID string) (Streamer, error) {
+	fail := func(err error) (Streamer, error) {
+		log.Printf("[StreamManager] Failed to start stream for %s: %v", connectionID, err)
+		m.recordFailure(connectionID, err)
+		return nil, err
+	}
+
 	ds, err := m.repo.FindByID(ctx, connectionID)
 	if err != nil {
-		log.Printf("[StreamManager] Failed to get datasource: %v", err)
-		return nil
+		return fail(&StreamStartError{Terminal: false, Message: fmt.Sprintf("could not load connection %s: %v", connectionID, err)})
 	}
 	if ds == nil {
-		log.Printf("[StreamManager] Datasource not found: %s", connectionID)
-		return nil
+		return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s not found", connectionID)})
 	}
 
 	streamConfig := StreamConfig{
@@ -122,55 +206,47 @@ func (m *Manager) createStream(ctx context.Context, connectionID string) Streame
 	switch ds.Type {
 	case models.ConnectionTypeSocket:
 		if ds.Config.Socket == nil {
-			log.Printf("[StreamManager] Datasource %s has no socket configuration", connectionID)
-			return nil
+			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s has no socket configuration", connectionID)})
 		}
 		stream = NewStream(connectionID, ds.Config.Socket, streamConfig)
 
 	case models.ConnectionTypeTSStore:
 		if ds.Config.TSStore == nil {
-			log.Printf("[StreamManager] Datasource %s has no TSStore configuration", connectionID)
-			return nil
+			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s has no ts-store configuration", connectionID)})
 		}
 		stream = NewTSStoreStream(connectionID, ds.Config.TSStore, streamConfig)
 
 	case models.ConnectionTypeMQTT:
 		if ds.Config.MQTT == nil {
-			log.Printf("[StreamManager] Datasource %s has no MQTT configuration", connectionID)
-			return nil
+			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s has no MQTT configuration", connectionID)})
 		}
 		stream = NewMQTTStream(connectionID, ds.Config.MQTT, streamConfig)
 
 	default:
-		log.Printf("[StreamManager] Datasource %s is not a streaming type (got: %s)", connectionID, ds.Type)
-		return nil
+		return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s is not a streaming type (got: %s)", connectionID, ds.Type)})
 	}
 
 	if err := stream.Start(m.ctx); err != nil {
-		log.Printf("[StreamManager] Failed to start stream: %v", err)
-		return nil
+		return fail(err)
 	}
 
 	m.streams[connectionID] = stream
+	delete(m.failed, connectionID) // success clears failure memory
 	log.Printf("[StreamManager] Created stream for datasource %s (type: %s)", connectionID, ds.Type)
-	return stream
+	return stream, nil
 }
 
 // SubscribeAndGetChannel creates or gets a stream for the datasource and returns a bidirectional channel
 // This is useful when the caller needs to pass the channel to Unsubscribe later
-func (m *Manager) SubscribeAndGetChannel(ctx context.Context, connectionID string) chan models.Record {
+func (m *Manager) SubscribeAndGetChannel(ctx context.Context, connectionID string) (chan models.Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stream, exists := m.streams[connectionID]
-	if !exists {
-		stream = m.createStream(ctx, connectionID)
-		if stream == nil {
-			return nil
-		}
+	stream, err := m.getOrCreateStream(ctx, connectionID)
+	if err != nil {
+		return nil, err
 	}
-
-	return stream.Subscribe()
+	return stream.Subscribe(), nil
 }
 
 // Subscribe creates or gets a stream for the datasource and returns a subscriber channel
@@ -178,14 +254,10 @@ func (m *Manager) Subscribe(ctx context.Context, connectionID string) (<-chan mo
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stream, exists := m.streams[connectionID]
-	if !exists {
-		stream = m.createStream(ctx, connectionID)
-		if stream == nil {
-			return nil, fmt.Errorf("failed to create stream for datasource %s", connectionID)
-		}
+	stream, err := m.getOrCreateStream(ctx, connectionID)
+	if err != nil {
+		return nil, err
 	}
-
 	return stream.Subscribe(), nil
 }
 
@@ -216,23 +288,50 @@ func (m *Manager) GetBuffer(connectionID string) []models.Record {
 	return stream.GetBuffer()
 }
 
-// GetStreamStatus returns status information for a stream
+// GetStreamStatus returns status information for a stream. When no live stream
+// exists but the last start failed, it reports Connected:false with the failure
+// error (and whether it's terminal) so the SSE client can show an actionable
+// message and stop reconnecting.
 func (m *Manager) GetStreamStatus(connectionID string) *StreamStatus {
 	m.mu.RLock()
 	stream, exists := m.streams[connectionID]
+	f := m.failed[connectionID]
 	m.mu.RUnlock()
 
-	if !exists {
-		return nil
+	if exists {
+		return &StreamStatus{
+			ConnectionID:    connectionID,
+			Connected:       stream.IsConnected(),
+			SubscriberCount: stream.SubscriberCount(),
+			BufferCount:     stream.BufferCount(),
+			LastError:       stream.LastError(),
+		}
 	}
 
-	return &StreamStatus{
-		ConnectionID:    connectionID,
-		Connected:       stream.IsConnected(),
-		SubscriberCount: stream.SubscriberCount(),
-		BufferCount:     stream.BufferCount(),
-		LastError:       stream.LastError(),
+	if f != nil {
+		return &StreamStatus{
+			ConnectionID: connectionID,
+			Connected:    false,
+			LastError:    f.err,
+			Terminal:     f.terminal,
+		}
 	}
+
+	return nil
+}
+
+// InvalidateStream clears any cached live stream and failure/backoff memory for
+// a connection. Call this when the connection's config changes (e.g. the admin
+// fixes a rejected api-key and re-saves) so the next subscribe rebuilds the
+// stream with the new config — no server restart needed.
+func (m *Manager) InvalidateStream(connectionID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if stream, ok := m.streams[connectionID]; ok {
+		stream.Stop()
+		delete(m.streams, connectionID)
+	}
+	delete(m.failed, connectionID)
 }
 
 // StreamStatus contains status information for a stream
@@ -242,6 +341,9 @@ type StreamStatus struct {
 	SubscriberCount int
 	BufferCount     int
 	LastError       error
+	// Terminal is true when LastError is a non-retryable start failure (e.g.
+	// a rejected api-key) — the client should stop reconnecting and surface it.
+	Terminal bool
 }
 
 // ListStreams returns a list of active stream IDs

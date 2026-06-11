@@ -1163,6 +1163,14 @@ class APIClient {
     return this.request('/api/ai/availability');
   }
 
+  // Stream status for a connection — { connected, last_error, terminal, ... }.
+  // EventSource.onerror exposes no HTTP status/body, so the stream manager
+  // fetches this on a stream failure to learn WHY (e.g. a terminal "api-key
+  // rejected") and whether to stop reconnecting.
+  async getStreamStatus(connectionId) {
+    return this.request(`/api/connections/${connectionId}/stream/status`, { connectionId });
+  }
+
   // AI API Usage (admin) — per-user Dashboard Assistant token usage +
   // per-user budget override. Manage-gated server-side.
   async getAIUsage() {

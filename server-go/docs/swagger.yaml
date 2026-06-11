@@ -3757,6 +3757,11 @@ definitions:
       lastError: {}
       subscriberCount:
         type: integer
+      terminal:
+        description: |-
+          Terminal is true when LastError is a non-retryable start failure (e.g.
+          a rejected api-key) — the client should stop reconnecting and surface it.
+        type: boolean
     type: object
 host: localhost:3001
 info:

@@ -67,14 +67,14 @@ func (h *StreamHandler) StreamConnection(c *gin.Context) {
 	// Subscribe to the stream — for MQTT, this subscribes only to the requested topics
 	// at the broker level and routes only matching records to this channel
 	var recordCh chan models.Record
+	var subErr error
 	if len(topicFilters) > 0 {
-		recordCh = h.manager.SubscribeWithTopics(c.Request.Context(), connectionID, topicFilters)
+		recordCh, subErr = h.manager.SubscribeWithTopics(c.Request.Context(), connectionID, topicFilters)
 	} else {
-		recordCh = h.manager.SubscribeAndGetChannel(c.Request.Context(), connectionID)
+		recordCh, subErr = h.manager.SubscribeAndGetChannel(c.Request.Context(), connectionID)
 	}
-	if recordCh == nil {
-		log.Printf("[StreamHandler] Subscribe error for %s", connectionID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to subscribe to stream"})
+	if subErr != nil || recordCh == nil {
+		respondStreamSubscribeError(c, connectionID, subErr)
 		return
 	}
 
@@ -180,6 +180,7 @@ func (h *StreamHandler) GetStreamStatus(c *gin.Context) {
 		"subscriber_count": status.SubscriberCount,
 		"buffer_count":     status.BufferCount,
 		"last_error":       errorToString(status.LastError),
+		"terminal":         status.Terminal,
 	})
 }
 
@@ -267,9 +268,9 @@ func (h *StreamHandler) StreamAggregatedConnection(c *gin.Context) {
 	}
 
 	// Ensure the raw stream is active (subscribes to start it if needed)
-	rawCh := h.manager.SubscribeAndGetChannel(c.Request.Context(), connectionID)
-	if rawCh == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start stream"})
+	rawCh, subErr := h.manager.SubscribeAndGetChannel(c.Request.Context(), connectionID)
+	if subErr != nil || rawCh == nil {
+		respondStreamSubscribeError(c, connectionID, subErr)
 		return
 	}
 	// We don't need the raw channel, just need the stream active
@@ -369,4 +370,32 @@ func errorToString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// respondStreamSubscribeError emits a structured error for a stream that
+// couldn't be started, so the SSE client can show an actionable message and
+// decide whether to keep retrying:
+//   - Terminal failures (e.g. a rejected ts-store api-key) → 422 with
+//     terminal:true. The client should STOP reconnecting and surface the message.
+//   - Transient failures (network, 5xx) → 503 with terminal:false. The client
+//     may retry on its normal backoff.
+// The body shape is {error, code, terminal} for both. `err` may be nil (very
+// old paths) — treated as a generic transient failure.
+func respondStreamSubscribeError(c *gin.Context, connectionID string, err error) {
+	msg := "failed to subscribe to stream"
+	code := 0
+	terminal := false
+	if err != nil {
+		msg = err.Error()
+		if se, ok := streaming.AsStreamStartError(err); ok {
+			code = se.Code
+			terminal = se.Terminal
+		}
+	}
+	status := http.StatusServiceUnavailable // 503 — transient, client may retry
+	if terminal {
+		status = http.StatusUnprocessableEntity // 422 — terminal, client should stop
+	}
+	log.Printf("[StreamHandler] Subscribe error for %s (terminal=%v, code=%d): %s", connectionID, terminal, code, msg)
+	c.JSON(status, gin.H{"error": msg, "code": code, "terminal": terminal})
 }
