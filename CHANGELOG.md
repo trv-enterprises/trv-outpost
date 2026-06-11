@@ -6,6 +6,32 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.29.4] — 2026-06-11
+
+### Fixed
+
+- **Streaming connections fail loudly and recoverably instead of spamming.** A
+  tsstore stream with a missing/wrong api-key used to fail many times per second
+  with no backoff and no useful UI error (the server re-dialed ts-store on every
+  subscribe; the real 401 was discarded; the client reconnected forever). Now:
+  the server classifies the failure (auth = terminal, network/5xx = transient),
+  remembers it with exponential backoff so it stops re-dialing, returns a
+  structured error (422 terminal / 503 transient) with an actionable message
+  ("ts-store API key rejected/missing"), and the client shows that message once
+  and stops reconnecting on a terminal failure. **Re-saving the connection with
+  a corrected key recovers it without a server restart.** Field-verified.
+- **Dashboard Assistant panel showed the wrong model.** The header rendered a
+  hardcoded "sonnet" regardless of the configured model. It now shows the real
+  model from `/api/ai/availability` (e.g. `opus-4-8`, with the `claude-` prefix
+  stripped).
+
+### Changed
+
+- **Restart-required settings say so up front.** The Manage → Settings
+  descriptions for `ai.enabled`, `assistant.model`, and
+  `assistant.daily_token_budget` now lead with "Server Restart Required." (these
+  are read once at boot). Existing deployments are updated via migration.
+
 ## [0.29.3] — 2026-06-10
 
 ### Added
