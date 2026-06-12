@@ -179,6 +179,26 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 	var objects []dataResponse
 	var err error
 
+	// Range variable (structured path, auto-apply): consume the active range
+	// directly (no token in query.Raw). Relative → native since:<token>;
+	// absolute → a [from,to] range fetch.
+	if spec, ok := resolveRange(query.Params); ok {
+		if tr, valid := tsstoreRangeFromSpec(spec); valid {
+			if !hasExplicitLimit {
+				limit = 100000
+			}
+			if tr.Relative {
+				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase)
+			} else {
+				objects, err = a.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return a.toRegistryResultSet(ctx, objects)
+		}
+	}
+
 	queryType := query.Raw
 	if queryType == "" {
 		queryType = "newest"
@@ -528,6 +548,16 @@ func (a *TSStoreAdapter) buildWebSocketURL(query registry.Query) (string, error)
 	} else if f, ok := query.Params["from"].(float64); ok {
 		from = strconv.FormatInt(int64(f), 10)
 	}
+	// Range variable (structured path): a live stream clamps only the START —
+	// backfill from the window's `from` (Unix ns), then continue live. Relative
+	// intents resolve to an absolute start server-side.
+	if spec, ok := resolveRange(query.Params); ok {
+		if rf, _, rerr := rangeAbsolute(spec); rerr == nil {
+			if t, perr := time.Parse(time.RFC3339, rf); perr == nil {
+				from = strconv.FormatInt(t.UnixNano(), 10)
+			}
+		}
+	}
 	params.Set("from", from)
 
 	if a.config.DataType == models.TSStoreDataTypeSchema {
@@ -743,6 +773,27 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 
 	var objects []dataResponse
 	var err error
+
+	// Range variable (structured path, auto-apply): the active range takes
+	// precedence over the raw newest/since:/range: dispatch. Relative → native
+	// since:<token>; absolute → a [from,to] range fetch (epoch seconds). This is
+	// the live ts-store path (factory → NewTSStoreDataSource).
+	if spec, ok := resolveRange(query.Params); ok {
+		if tr, valid := tsstoreRangeFromSpec(spec); valid {
+			if !hasExplicitLimit {
+				limit = 100000
+			}
+			if tr.Relative {
+				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase)
+			} else {
+				objects, err = t.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return t.toResultSet(ctx, objects)
+		}
+	}
 
 	queryType := query.Raw
 	if queryType == "" {
@@ -1242,6 +1293,17 @@ func (t *TSStoreDataSource) buildWebSocketURL(query models.Query) (string, error
 		from = strconv.FormatInt(f, 10)
 	} else if f, ok := query.Params["from"].(float64); ok {
 		from = strconv.FormatInt(int64(f), 10)
+	}
+	// Range variable (structured path): a live stream has no fixed upper bound,
+	// so a range clamps only the START — backfill from the window's `from`
+	// instant, then continue live. ts-store's `from` is a Unix nanosecond
+	// timestamp. Relative intents resolve to an absolute start server-side.
+	if spec, ok := resolveRange(query.Params); ok {
+		if rf, _, rerr := rangeAbsolute(spec); rerr == nil {
+			if t, perr := time.Parse(time.RFC3339, rf); perr == nil {
+				from = strconv.FormatInt(t.UnixNano(), 10)
+			}
+		}
 	}
 	params.Set("from", from)
 

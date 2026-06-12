@@ -40,7 +40,7 @@ import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
 import MQTTTopicSelector from './MQTTTopicSelector';
 import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
-import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, isTimestampColumn, extractRangeColumn, stripRangePredicate } from '../utils/dataTransforms';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
@@ -420,7 +420,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   showActions = true,
   className = '',
   onValidityChange,
-  onDirtyChange
+  onDirtyChange,
+  // Reports whether ANY nested modal (connection picker, chart-type, value
+  // pickers) is open, so a parent modal can release its focus trap — otherwise
+  // the parent's trap fights the nested modal (Search rejects keystrokes, the
+  // tag dropdown opens-then-closes).
+  onNestedModalChange,
 }, ref) {
   // Basic info
   const [name, setName] = useState('');
@@ -1370,6 +1375,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   }, [name, onValidityChange]);
 
+  // Notify the parent modal when a nested modal opens/closes so it can drop its
+  // focus trap (which otherwise steals focus from the nested modal's inputs).
+  const anyNestedModalOpen = chartTypeModalOpen || connectionPickerOpen || valuePickerOpen || clientValuePickerOpen;
+  useEffect(() => {
+    if (onNestedModalChange) onNestedModalChange(anyNestedModalOpen);
+  }, [anyNestedModalOpen, onNestedModalChange]);
+
   // Update selectedDatasource when ID changes
   useEffect(() => {
     if (selectedConnectionId && connections.length > 0) {
@@ -1975,6 +1987,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       if (typeof rawQuery === 'string' && rawQuery.includes(DASHBOARD_VARIABLE_TOKEN)) {
         queryParams = { ...queryParams, dashboard_variable: effectiveVarValue };
       }
+      // Range token: drop the `<col> {{range-variable}}` predicate for the
+      // preview so it runs UNBOUNDED — the range only scopes data at view time,
+      // and a seeded window could land on an empty period and hide the shape.
+      if (typeof rawQuery === 'string' && rawQuery.includes(RANGE_VARIABLE_TOKEN)) {
+        rawQuery = stripRangePredicate(rawQuery);
+      }
+
+      // Cap SQL/EdgeLake PREVIEWS at a small limit (the results table only shows
+      // the first handful) regardless of the component's own LIMIT — the saved
+      // component keeps its real LIMIT for the dashboard.
+      if (queryLanguageOwnsClientSideOps && typeof rawQuery === 'string') {
+        rawQuery = rawQuery.replace(/\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*$/i, '') + '\nLIMIT 100';
+      }
 
       const data = await apiClient.queryConnection(selectedConnectionId, {
         query: {
@@ -2003,7 +2028,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         pruneStaleColumnSelections(cols);
 
         if (!xAxisColumn && cols.length > 0) {
-          setXAxisColumn(cols[0]);
+          // Prefer the column the range variable binds (`<col> {{range-variable}}`)
+          // as the x-axis — a range-scoped chart is time-series on that column.
+          // Else prefer a timestamp-looking column, else the first column.
+          const rangeCol = extractRangeColumn(queryRaw);
+          const tsCol = cols.find((c) => isTimestampColumn(c));
+          setXAxisColumn(
+            (rangeCol && cols.includes(rangeCol) && rangeCol) ||
+            tsCol ||
+            cols[0]
+          );
         }
         if (yAxisColumns.length === 0 && cols.length > 1) {
           setYAxisColumns([cols[1]]);
@@ -3228,6 +3262,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     <SQLQueryBuilder
                       connectionId={selectedConnectionId}
                       allowDashboardVariable={dashboardVariableEnabled}
+                      allowRangeVariable={dashboardVariableEnabled}
                       onQueryChange={(query) => setQueryRaw(query)}
                       onExecute={(response) => {
                         if (response.success && response.result_set) {

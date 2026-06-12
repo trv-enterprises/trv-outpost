@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../api/client';
 import { candidateLabel, tagValues } from '../utils/tagValueByPrefix';
+import { isValidRangeIntent, parseRangeIntent } from '../utils/rangePresets';
 
 /**
  * useDashboardVariable — runtime state + resolution for the dashboard-variable
@@ -59,6 +60,20 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
 
   const filterVariableName = filterVariable?.name || null;
 
+  // The single range-mode variable (v1 allows at most one). Independent of the
+  // connection_swap + filter variables — all three may coexist. The range
+  // variable holds a canonical absolute { from, to } pair (ISO instants)
+  // substituted server-side into time-series queries (SQL/EdgeLake via the
+  // {{range_from}}/{{range_to}} tokens; ts-store/Prometheus via structured
+  // params).
+  const rangeVariable = useMemo(() => {
+    if (!globalEnabled || !settings.variables_enabled) return null;
+    const list = Array.isArray(settings.variables) ? settings.variables : [];
+    return list.find((v) => v && v.mode === 'range') || null;
+  }, [globalEnabled, settings.variables_enabled, settings.variables]);
+
+  const rangeVariableName = rangeVariable?.name || null;
+
   const [candidates, setCandidates] = useState([]);
   // The selected connection_id for the active variable (null = none selected).
   const [selectedConnId, setSelectedConnId] = useState(null);
@@ -68,6 +83,12 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
   // string, persisted the same way as the connection value (URL + userConfig).
   const [filterValue, setFilterValueState] = useState(null);
   const filterLoadedForRef = useRef(null);
+
+  // The active value for the range variable: { from, to } absolute ISO instants,
+  // or null when unset. Persisted as a nested object under the variable name
+  // (URL carries the pair as var_<name>_from / var_<name>_to).
+  const [rangeValue, setRangeValueState] = useState(null);
+  const rangeLoadedForRef = useRef(null);
 
   // Fetch candidate connections whenever the active variable changes.
   useEffect(() => {
@@ -235,6 +256,91 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     [dashboardId, filterVariableName, setSearchParam],
   );
 
+  // Resolve the initial range value once, when the range variable is known.
+  // The stored value is the range INTENT: { type:'relative', token } or
+  // { type:'absolute', from, to } (+optional step for Prometheus). URL param
+  // (var_<name>, JSON-encoded) wins, then the per-user saved intent, then the
+  // variable's DefaultPreset as a relative intent.
+  useEffect(() => {
+    if (!dashboardId || !rangeVariableName) {
+      setRangeValueState(null);
+      return;
+    }
+    const resolveKey = `${dashboardId}::${rangeVariableName}`;
+    if (rangeLoadedForRef.current === resolveKey) return;
+    rangeLoadedForRef.current = resolveKey;
+
+    const fromUrl = getSearchParam?.()?.get(`var_${rangeVariableName}`);
+    const parsed = parseRangeIntent(fromUrl);
+    if (parsed) {
+      setRangeValueState(parsed);
+      return;
+    }
+
+    // Default window when nothing is set yet (no URL, no saved value): a
+    // standard last-24h relative window — a light pull that gives a visual
+    // baseline. The author's default_preset wins if set, else 24h. (For a
+    // Prometheus range dashboard the picker adds the default step.)
+    const fallback = () => {
+      const preset = rangeVariable?.range?.default_preset || '24h';
+      return { type: 'relative', token: preset };
+    };
+
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) {
+      setRangeValueState(fallback());
+      return;
+    }
+    apiClient
+      .getUserConfig(userGuid)
+      .then((cfg) => {
+        const saved = cfg?.settings?.dashboard_variable_values?.[dashboardId]?.[rangeVariableName];
+        setRangeValueState(isValidRangeIntent(saved) ? saved : fallback());
+      })
+      .catch(() => setRangeValueState(fallback()));
+  }, [dashboardId, rangeVariableName, rangeVariable, getSearchParam]);
+
+  // Set + persist the range INTENT (pass null to clear). The header UI builds
+  // the intent (preset → relative, custom → absolute) before calling this — the
+  // hook stays dumb about resolution. Persisted as a JSON URL param + userConfig
+  // (stale-id pruning), mirroring the other setters.
+  const setRangeValue = useCallback(
+    (next) => {
+      if (!dashboardId || !rangeVariableName) return;
+      const v = isValidRangeIntent(next) ? next : null;
+      setRangeValueState(v);
+
+      setSearchParam?.(`var_${rangeVariableName}`, v ? JSON.stringify(v) : null);
+
+      const userGuid = apiClient.getCurrentUserGuid();
+      if (!userGuid) return; // anonymous → URL-only persistence
+
+      Promise.all([
+        apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
+        apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+      ]).then(([cfg, dashboardsRes]) => {
+        const existing = cfg?.settings?.dashboard_variable_values || {};
+        const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];
+        const liveIds = new Set(liveList.map((d) => d.id).filter(Boolean));
+        liveIds.add(dashboardId);
+
+        const pruned = {};
+        for (const [dashId, vals] of Object.entries(existing)) {
+          if (liveIds.has(dashId)) pruned[dashId] = vals;
+        }
+        const dashVals = { ...(pruned[dashboardId] || {}) };
+        if (v) dashVals[rangeVariableName] = v;
+        else delete dashVals[rangeVariableName];
+        pruned[dashboardId] = dashVals;
+
+        apiClient
+          .updateUserConfig(userGuid, { dashboard_variable_values: pruned })
+          .catch(() => {});
+      });
+    },
+    [dashboardId, rangeVariableName, setSearchParam],
+  );
+
   // Resolve a panel's effective connection_id for connection-swap. When the
   // variable is active and a connection is selected, EVERY panel follows it —
   // the connection IS the variable, so any panel is repointed. A panel that
@@ -331,8 +437,14 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     filterValue,
     /** set + persist the filter value (pass null/'' to clear) */
     setFilterValue,
-    /** true when EITHER variable mode is active for this dashboard */
-    active: !!variable || !!filterVariable,
+    /** the active range-mode variable definition, or null when inactive */
+    rangeVariable,
+    /** the active range value ({ from, to } ISO instants), or null when unset */
+    rangeValue,
+    /** set + persist the range value (pass { from, to } or null to clear) */
+    setRangeValue,
+    /** true when ANY variable mode is active for this dashboard */
+    active: !!variable || !!filterVariable || !!rangeVariable,
   };
 }
 

@@ -126,7 +126,7 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, dashboardVariableValue = null, children = null }) {
+export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, dashboardVariableValue = null, rangeValue = null, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
@@ -151,17 +151,24 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // token in raw with no value set lets the server return a structured "not
   // set" state. The query identity changes only when the value changes, so
   // useData's effect re-runs on selection.
+  //
+  // The range variable rides the SAME mechanism: when a range is active we add
+  // the structured range INTENT (params.range = {type:'relative',token} |
+  // {type:'absolute',from,to}). SQL/EdgeLake authors opt in via a
+  // `<col> {{range-variable}}` WHERE condition (the server expands it to a
+  // bounded predicate); ts-store/Prometheus auto-apply the window. The extra
+  // param is harmless for components that ignore it.
   const effectiveQuery = useMemo(() => {
     const base = queryConfig || dataMapping?.query_config || { raw: '', type: 'sql' };
-    if (typeof base.raw !== 'string' || !base.raw.includes(DASHBOARD_VARIABLE_TOKEN)) return base;
-    return {
-      ...base,
-      params: {
-        ...(base.params || {}),
-        dashboard_variable: dashboardVariableValue ?? '',
-      },
-    };
-  }, [queryConfig, dataMapping?.query_config, dashboardVariableValue]);
+    const hasVarToken = typeof base.raw === 'string' && base.raw.includes(DASHBOARD_VARIABLE_TOKEN);
+    const hasRange = !!(rangeValue && rangeValue.type);
+    if (!hasVarToken && !hasRange) return base;
+
+    const params = { ...(base.params || {}) };
+    if (hasVarToken) params.dashboard_variable = dashboardVariableValue ?? '';
+    if (hasRange) params.range = rangeValue;
+    return { ...base, params };
+  }, [queryConfig, dataMapping?.query_config, dashboardVariableValue, rangeValue]);
 
   // Determine if we need to fetch data ourselves
   // Fetch data when: connectionId is available AND no data prop was provided

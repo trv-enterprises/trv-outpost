@@ -8337,12 +8337,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "mode": {
-                    "description": "\"connection_swap\" | \"filter_value\"",
+                    "description": "\"connection_swap\" | \"filter\" | \"range\"",
                     "type": "string"
                 },
                 "name": {
-                    "description": "stable key (v1: the fixed token \"dashboard-variable\")",
+                    "description": "stable key (fixed token: \"dashboard-variable\" for connection_swap/filter, \"dashboard-range\" for range)",
                     "type": "string"
+                },
+                "range": {
+                    "$ref": "#/definitions/models.RangeConfig"
                 }
             }
         },
@@ -9378,6 +9381,26 @@ const docTemplate = `{
                 "QueryTypeEdgeLake",
                 "QueryTypeMQTT"
             ]
+        },
+        "models.RangeConfig": {
+            "type": "object",
+            "properties": {
+                "allow_absolute": {
+                    "description": "AllowAbsolute toggles the absolute from/to picker. Nil → treated as true.",
+                    "type": "boolean"
+                },
+                "default_preset": {
+                    "description": "DefaultPreset is the preset applied on first load when no URL/saved value.\nEmpty → no default (picker shows unset; token components show the\n\"select a range\" empty-state).",
+                    "type": "string"
+                },
+                "presets": {
+                    "description": "Presets offered in the header dropdown — relative windows resolved to\nabsolute instants at apply time. Empty → a sensible default set. Stored as\nduration-ish tokens the CLIENT understands (\"1h\",\"6h\",\"24h\",\"7d\",\"30d\").",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
         },
         "models.ReferenceLevel": {
             "type": "object",

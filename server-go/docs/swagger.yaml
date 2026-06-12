@@ -1591,11 +1591,14 @@ definitions:
         description: UI label, e.g. "Site"
         type: string
       mode:
-        description: '"connection_swap" | "filter_value"'
+        description: '"connection_swap" | "filter" | "range"'
         type: string
       name:
-        description: 'stable key (v1: the fixed token "dashboard-variable")'
+        description: 'stable key (fixed token: "dashboard-variable" for connection_swap/filter,
+          "dashboard-range" for range)'
         type: string
+      range:
+        $ref: '#/definitions/models.RangeConfig'
     type: object
   models.DataAggregation:
     description: Aggregation configuration for data transformation
@@ -2338,6 +2341,27 @@ definitions:
     - QueryTypePrometheus
     - QueryTypeEdgeLake
     - QueryTypeMQTT
+  models.RangeConfig:
+    properties:
+      allow_absolute:
+        description: AllowAbsolute toggles the absolute from/to picker. Nil → treated
+          as true.
+        type: boolean
+      default_preset:
+        description: |-
+          DefaultPreset is the preset applied on first load when no URL/saved value.
+          Empty → no default (picker shows unset; token components show the
+          "select a range" empty-state).
+        type: string
+      presets:
+        description: |-
+          Presets offered in the header dropdown — relative windows resolved to
+          absolute instants at apply time. Empty → a sensible default set. Stored as
+          duration-ish tokens the CLIENT understands ("1h","6h","24h","7d","30d").
+        items:
+          type: string
+        type: array
+    type: object
   models.ReferenceLevel:
     properties:
       kind:

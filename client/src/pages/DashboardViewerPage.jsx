@@ -56,6 +56,7 @@ import VariableValuePickerModal from '../components/VariableValuePickerModal';
 import ComponentPanelWithActions from '../components/ComponentPanelWithActions';
 import ComponentExpandModal from '../components/ComponentExpandModal';
 import DashboardGrid from '../components/DashboardGrid';
+import DashboardRangePicker from '../components/DashboardRangePicker';
 import { ControlRenderer } from '../components/controls';
 import FrigateCameraViewer from '../components/frigate/FrigateCameraViewer';
 import FrigateAlertsGrid from '../components/frigate/FrigateAlertsGrid';
@@ -71,7 +72,7 @@ import apiClient, { API_BASE } from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
-import { DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
@@ -206,6 +207,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
     setFilterValue: setDashFilterValue,
+    rangeVariable: dashRangeVariable,
+    rangeValue: dashRangeValue,
+    setRangeValue: setDashRangeValue,
   } = useDashboardVariable({
     dashboard,
     globalEnabled: dashboardVariableEnabled,
@@ -351,6 +355,17 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [editableVariableValueSource, setEditableVariableValueSource] = useState('static');
   const [editableVariableOptions, setEditableVariableOptions] = useState([]);
   const [editableVariableDefault, setEditableVariableDefault] = useState('');
+  // Range variable authoring (an INDEPENDENT variable, fixed name
+  // "dashboard-range"). It coexists with the connection_swap/filter variable
+  // above — a dashboard can carry both. The header shows the range picker after
+  // the connection/filter control; time-series components opt in via the
+  // {{range_from}}/{{range_to}} tokens (SQL/EdgeLake) or pick up the window
+  // automatically (ts-store/Prometheus). Presets are duration tokens ("1h",
+  // "24h"); the format that renders the tokens is per-component, not here.
+  const [editableRangeEnabled, setEditableRangeEnabled] = useState(false);
+  const [editableRangeLabel, setEditableRangeLabel] = useState('');
+  const [editableRangePresets, setEditableRangePresets] = useState([]);
+  const [editableRangeDefaultPreset, setEditableRangeDefaultPreset] = useState('');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [varsModalOpen, setVarsModalOpen] = useState(false);
   // Draft buffers for the Settings and Vars modals. Inputs edit the draft, NOT
@@ -390,6 +405,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         valueSource: editableVariableValueSource,
         options: editableVariableOptions,
         defaultValue: editableVariableDefault,
+        rangeEnabled: editableRangeEnabled,
+        rangeLabel: editableRangeLabel,
+        rangePresets: editableRangePresets,
+        rangeDefaultPreset: editableRangeDefaultPreset,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -681,6 +700,74 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // The connection type backing discovery (drives path + whether regenerate is
   // offered). Set by the discovery effect.
   const [discoveryConnType, setDiscoveryConnType] = useState(null);
+
+  // Connection ids backing RANGE-scoped components: a SQL/EdgeLake component
+  // whose query carries the {{range-variable}} token, OR any tsstore/Prometheus
+  // component (those auto-apply the window). Used to (a) detect a mixed-type
+  // range dashboard (error) and (b) decide whether to show the Prometheus step
+  // field. Only meaningful when a range variable is active.
+  const rangeScopedConnIds = useMemo(() => {
+    if (!dashRangeVariable) return [];
+    const ids = new Set();
+    for (const panel of panels || []) {
+      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
+      if (!comp || !comp.connection_id) continue;
+      const raw = comp.query_config?.raw;
+      if (typeof raw === 'string' && raw.includes(RANGE_VARIABLE_TOKEN)) {
+        ids.add(comp.connection_id);
+      }
+      // tsstore/Prometheus auto-apply — but we can't know type without the
+      // connection record; the resolver effect below classifies all referenced
+      // connections and keeps the time-series ones.
+    }
+    // Also include every referenced connection so the resolver can classify
+    // tsstore/Prometheus (auto-apply) panels; non-time types are dropped there.
+    for (const panel of panels || []) {
+      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
+      if (comp?.connection_id) ids.add(comp.connection_id);
+    }
+    return [...ids];
+  }, [dashRangeVariable, panels, chartsMap]);
+
+  // Resolved { type } per range-relevant connection, the distinct type set, and
+  // derived flags: mixed-type (error) + whether the dashboard is Prometheus
+  // (shows the step field). A range dashboard should be single-type.
+  const [rangeConnTypes, setRangeConnTypes] = useState(null); // string[] | null
+  useEffect(() => {
+    let cancelled = false;
+    if (!dashRangeVariable || rangeScopedConnIds.length === 0) {
+      setRangeConnTypes(null);
+      return undefined;
+    }
+    (async () => {
+      const conns = await Promise.all(
+        rangeScopedConnIds.map((id) => apiClient.getConnection(id).catch(() => null)),
+      );
+      if (cancelled) return;
+      // Keep only time-series-capable types (those a range can scope).
+      const TIME_TYPES = new Set(['sql', 'edgelake', 'tsstore', 'prometheus']);
+      const types = [...new Set(
+        conns.map((c) => c?.type || c?.config?.type).filter((t) => TIME_TYPES.has(t)),
+      )];
+      setRangeConnTypes(types);
+    })();
+    return () => { cancelled = true; };
+  }, [dashRangeVariable, rangeScopedConnIds]);
+
+  const rangeMixedType = Array.isArray(rangeConnTypes) && rangeConnTypes.length > 1;
+  const rangeIsPrometheus = Array.isArray(rangeConnTypes) && rangeConnTypes.length === 1 && rangeConnTypes[0] === 'prometheus';
+
+  // Surface the mixed-type guard once per dashboard.
+  const rangeMixedWarnedRef = useRef(null);
+  useEffect(() => {
+    if (!rangeMixedType) return;
+    const key = `${dashboard?.id || ''}`;
+    if (rangeMixedWarnedRef.current === key) return;
+    rangeMixedWarnedRef.current = key;
+    const msg = `This dashboard's time-range variable spans more than one connection type (${rangeConnTypes.join(', ')}). A range dashboard must be single-type — the range may not apply correctly.`;
+    pushToast({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
+    addNotification({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
+  }, [rangeMixedType, rangeConnTypes, dashboard?.id, pushToast, addNotification]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1679,12 +1766,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditableRefreshInterval(
       dashboard?.settings?.refresh_interval == null ? 30 : dashboard.settings.refresh_interval
     );
-    // Dashboard-variable authoring state. v1 carries a single variable (fixed
-    // token); read whichever mode is defined and populate the matching fields.
-    setEditableVariablesEnabled(!!dashboard?.settings?.variables_enabled);
+    // Dashboard-variable authoring state. The connection/filter variable and the
+    // range variable are INDEPENDENT; each toggle reflects the presence of its
+    // OWN variable, NOT the shared `variables_enabled` master gate (which is true
+    // when EITHER exists — keying the filter toggle off it falsely turns the
+    // filter section on for a range-only dashboard).
     {
       const vars = dashboard?.settings?.variables || [];
       const v0 = vars.find((v) => v?.mode === 'filter') || vars.find((v) => v?.mode === 'connection_swap') || null;
+      setEditableVariablesEnabled(!!v0);
       setEditableVariableMode(v0?.mode || 'connection_swap');
       setEditableVariableLabel(v0?.label || '');
       setEditableVariableTags(v0?.connection_swap?.tags || []);
@@ -1694,6 +1784,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setEditableVariableValueSource(v0?.filter_value?.value_source || 'static');
       setEditableVariableOptions(v0?.filter_value?.options || []);
       setEditableVariableDefault(v0?.filter_value?.default_value || '');
+      // The range variable is independent (own fixed name "dashboard-range").
+      const vr = vars.find((v) => v?.mode === 'range') || null;
+      setEditableRangeEnabled(!!vr);
+      setEditableRangeLabel(vr?.label || '');
+      setEditableRangePresets(vr?.range?.presets || []);
+      setEditableRangeDefaultPreset(vr?.range?.default_preset || '');
     }
     setEditHasChanges(false);
     setZoom(100);
@@ -1795,16 +1891,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       // (theme, is_public, allow_export, title_scale) round-trip
       // unchanged. We only overwrite the fields the user can actually
       // edit now.
-      const updatedSettings = {
-        ...dashboard.settings,
-        layout_dimension: currentDimension,
-        scale_percent: scalePercent,
-        refresh_interval: editableRefreshInterval,
-        variables_enabled: editableVariablesEnabled,
-        // Persist the single variable (fixed token name) when the feature is
-        // enabled; clear it otherwise so a disabled dashboard carries no stale
-        // definition. The type-specific config block is keyed by the mode.
-        variables: editableVariablesEnabled ? [
+      // Build the dashboard-variable list from the two INDEPENDENT authoring
+      // surfaces: the connection_swap/filter variable (gated by
+      // editableVariablesEnabled, fixed name "dashboard-variable") AND the range
+      // variable (gated by editableRangeEnabled, fixed name "dashboard-range").
+      // They coexist — the header renders both controls — so the array can hold
+      // one or both. variables_enabled is the master feature gate and is on when
+      // EITHER surface is enabled.
+      const builtVariables = [];
+      if (editableVariablesEnabled) {
+        builtVariables.push(
           editableVariableMode === 'filter'
             ? {
                 name: 'dashboard-variable',
@@ -1831,7 +1927,27 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   label_tag_prefix: (editableVariableLabelTagPrefix || '').trim(),
                 },
               },
-        ] : [],
+        );
+      }
+      if (editableRangeEnabled) {
+        builtVariables.push({
+          name: 'dashboard-range',
+          label: editableRangeLabel || 'Range',
+          mode: 'range',
+          range: {
+            presets: editableRangePresets || [],
+            default_preset: (editableRangeDefaultPreset || '').trim(),
+          },
+        });
+      }
+
+      const updatedSettings = {
+        ...dashboard.settings,
+        layout_dimension: currentDimension,
+        scale_percent: scalePercent,
+        refresh_interval: editableRefreshInterval,
+        variables_enabled: editableVariablesEnabled || editableRangeEnabled,
+        variables: builtVariables,
       };
       const payload = {
         name: editableName,
@@ -2470,12 +2586,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               const vLabel = dashVariable.label || 'Variable';
               return (
                 <div className="dashboard-variable-picker">
-                  <span className="dashboard-variable-label">{vLabel}:</span>
                   <Dropdown
                     id="dashboard-variable-picker"
                     size="sm"
                     titleText={vLabel}
-                    label={`${vLabel}: select…`}
+                    label="Select…"
                     items={items}
                     itemToString={(item) => candidateLabel(item, labelPrefix)}
                     selectedItem={selected}
@@ -2495,7 +2610,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               if (cfg.value_source === 'freetext') {
                 return (
                   <div className="dashboard-variable-picker">
-                    <span className="dashboard-variable-label">{label}:</span>
                     <TextInput
                       id="dashboard-filter-variable"
                       size="sm"
@@ -2524,12 +2638,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               const showRegenerate = cfg.value_source === 'connection' && discoveryIsStream;
               return (
                 <div className="dashboard-variable-picker" ref={filterDropdownRef}>
-                  <span className="dashboard-variable-label">{label}:</span>
                   <Dropdown
                     id="dashboard-filter-variable"
                     size="sm"
                     titleText={label}
-                    label={loading ? 'Loading…' : `${label}: select…`}
+                    label={loading ? 'Loading…' : 'Select…'}
                     items={options}
                     disabled={loading || regenerating}
                     itemToString={(item) => (item == null ? '' : String(item))}
@@ -2555,6 +2668,19 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 </div>
               );
             })()}
+
+            {/* Range-type variable picker. A [from, to] time window the viewer
+                chooses, clamping time-series panels. Renders AFTER the
+                connection + filter pickers. Presets resolve to absolute
+                instants; "Custom…" reveals absolute from/to inputs. */}
+            {!isEditMode && dashRangeVariable && (
+              <DashboardRangePicker
+                variable={dashRangeVariable}
+                value={dashRangeValue}
+                onChange={setDashRangeValue}
+                showStep={rangeIsPrometheus}
+              />
+            )}
           </div>
         </div>
 
@@ -2898,15 +3024,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 align="bottom-end"
                 iconDescription="Dashboard actions"
               >
-                {/* Edit lives in the overflow for PLAIN viewers (reclaims
-                    header space). In the design workflow (fromDesign) a
-                    prominent ghost Edit button is shown instead — see above. */}
-                {canDesign && !fromDesign && (
-                  <OverflowMenuItem
-                    itemText="Edit"
-                    onClick={enterEditMode}
-                  />
-                )}
+                {/* No "Edit" item here in view mode: it's redundant with the
+                    Design mode switch (which opens this dashboard in the editor)
+                    and was inconsistent. The design workflow (fromDesign) still
+                    shows a prominent ghost Edit button — see above. */}
                 {canDesign && (
                   <OverflowMenuItem
                     itemText={savingThumbnail ? "Saving..." : "Save Thumbnail"}
@@ -2962,6 +3083,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           dashboardVariableText={dashboardVariableText}
           variableValues={variableValues}
           dashboardVariableValue={dashFilterValue}
+          rangeValue={dashRangeValue}
           dashboardCommand={dashboardCommand}
           canControl={canControl}
           refreshTick={refreshTick}
@@ -3205,6 +3327,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                                 // variable-driven panels render instead of
                                 // failing on an unsubstituted token.
                                 dashboardVariableValue: dashFilterValue,
+                                // Edit-mode preview also honors the active range
+                                // window so time-series panels render the same
+                                // clamp the viewer would apply.
+                                rangeValue: dashRangeValue,
                                 dataRefreshInterval: !isEditMode && dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                                 refreshTick,
                               }}
@@ -3476,6 +3602,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             setEditableVariableValueSource(varsDraft.valueSource);
             setEditableVariableOptions(varsDraft.options);
             setEditableVariableDefault(varsDraft.defaultValue);
+            setEditableRangeEnabled(varsDraft.rangeEnabled);
+            setEditableRangeLabel(varsDraft.rangeLabel);
+            setEditableRangePresets(varsDraft.rangePresets);
+            setEditableRangeDefaultPreset(varsDraft.rangeDefaultPreset);
             setEditHasChanges(true);
           }
           setVarsModalOpen(false);
@@ -3594,6 +3724,58 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   />
                 </>
               )}
+            </>
+          )}
+
+          {/* Time-range variable — an INDEPENDENT variable that coexists with
+              the one above. A [from, to] window the viewer picks in the header
+              (after the connection/filter control), clamping time-series panels. */}
+          <hr style={{ border: 'none', borderTop: '1px solid var(--cds-border-subtle-01)', margin: '1rem 0' }} />
+          <Toggle
+            id="settings-range-enabled"
+            size="sm"
+            labelText="Time range variable"
+            labelA="Off"
+            labelB="On"
+            toggled={!!varsDraft?.rangeEnabled}
+            onToggle={(checked) => setVarsDraft((d) => ({ ...d, rangeEnabled: checked }))}
+          />
+          {varsDraft?.rangeEnabled && (
+            <>
+              <TextInput
+                id="settings-range-label"
+                labelText="Range label"
+                value={varsDraft?.rangeLabel ?? ''}
+                onChange={(e) => setVarsDraft((d) => ({ ...d, rangeLabel: e.target.value }))}
+                placeholder="e.g. Time range"
+                helperText="Shown next to the range picker in the header."
+              />
+              <TagInput
+                id="settings-range-presets"
+                label="Presets (duration tokens)"
+                value={varsDraft?.rangePresets ?? []}
+                onChange={(p) => setVarsDraft((d) => ({ ...d, rangePresets: p }))}
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', margin: '0' }}>
+                Tokens like <code>1h</code>, <code>6h</code>, <code>24h</code>, <code>7d</code>, <code>30d</code>
+                {' '}(units m/h/d/w). Leave empty for a default set. Each resolves to an absolute
+                window ending &ldquo;now&rdquo; when picked. A <code>+n</code> offset / absolute-pair
+                builder is coming later.
+              </p>
+              <TextInput
+                id="settings-range-default-preset"
+                labelText="Default preset (optional)"
+                value={varsDraft?.rangeDefaultPreset ?? ''}
+                onChange={(e) => setVarsDraft((d) => ({ ...d, rangeDefaultPreset: e.target.value }))}
+                placeholder="e.g. 24h"
+                helperText="Applied on first load when no shared URL / saved window."
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', margin: '0' }}>
+                Components opt in: SQL/EdgeLake queries use the
+                {' '}<code>{'{{range_from}}'}</code> / <code>{'{{range_to}}'}</code> tokens (plus a
+                per-component Range format); ts-store and Prometheus panels pick up the window
+                automatically.
+              </p>
             </>
           )}
         </div>

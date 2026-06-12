@@ -19,7 +19,7 @@ import {
 import { Add, TrashCan, Play, Copy } from '@carbon/icons-react';
 import api from '../api/client';
 import { copyTextToClipboard } from '../utils/clipboard';
-import { DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, stripRangePredicate } from '../utils/dataTransforms';
 import './SQLQueryBuilder.scss';
 
 /**
@@ -45,6 +45,10 @@ const SQLQueryBuilder = ({
   // of a literal — emitting the bare {{dashboard-variable}} token UNQUOTED so
   // the server substitutes it as a bound parameter at view time.
   allowDashboardVariable = false,
+  // When true, a WHERE condition can bind to the dashboard RANGE variable —
+  // emitting `<column> {{range-variable}}` so the server expands it into a
+  // bounded time predicate (BETWEEN) at view time using the selected window.
+  allowRangeVariable = false,
 }) => {
   // Schema state
   const [schema, setSchema] = useState(null);
@@ -57,7 +61,7 @@ const SQLQueryBuilder = ({
   const [whereConditions, setWhereConditions] = useState([]);
   const [groupByColumns, setGroupByColumns] = useState([]); // Columns to group by
   const [orderBy, setOrderBy] = useState({ column: '', direction: 'ASC' });
-  const [limit, setLimit] = useState(100);
+  const [limit, setLimit] = useState(1000);
   const [offset, setOffset] = useState(0);
 
   // Generated query
@@ -124,6 +128,8 @@ const SQLQueryBuilder = ({
     // WHERE clause
     if (whereConditions.length > 0) {
       const validConditions = whereConditions.filter(c => {
+        // A range condition only needs a column — the token owns the operator.
+        if (c.valueSource === 'range') return !!c.column;
         if (!c.column || !c.operator) return false;
         // Variable-bound and null-check conditions don't need a literal value.
         if (c.valueSource === 'variable') return true;
@@ -133,6 +139,12 @@ const SQLQueryBuilder = ({
       if (validConditions.length > 0) {
         const whereParts = validConditions.map((c, idx) => {
           const prefix = idx > 0 ? ` ${c.logic || 'AND'} ` : '';
+          // Range binding: emit `<column> {{range-variable}}` (column-visible).
+          // The server expands `<col> {{range-variable}}` into a bounded
+          // predicate (BETWEEN) using the active window. No operator/value here.
+          if (c.valueSource === 'range') {
+            return `${prefix}${c.column} ${RANGE_VARIABLE_TOKEN}`;
+          }
           // Dashboard-variable binding: emit the bare token UNQUOTED so the
           // server substitutes it as a bound parameter (NOT a quoted literal).
           const value = c.valueSource === 'variable'
@@ -153,9 +165,28 @@ const SQLQueryBuilder = ({
       query += `\nGROUP BY ${groupByColumns.join(', ')}`;
     }
 
-    // ORDER BY clause
+    const rangeCol = whereConditions.find((c) => c.valueSource === 'range' && c.column)?.column;
+    const autoRangeOrder = !orderBy.column && rangeCol;
+
+    if (autoRangeOrder && limit > 0) {
+      // Range time-series with a LIMIT and no explicit ORDER BY: keep the MOST
+      // RECENT `limit` rows of the window (ORDER BY DESC + LIMIT), then re-sort
+      // ASCENDING for chronological display. Wrapping in a subquery does both in
+      // one statement — no renderer-side sort needed.
+      //   SELECT * FROM ( <inner> ORDER BY col DESC LIMIT n ) sub ORDER BY col ASC
+      let inner = `${query}\nORDER BY ${rangeCol} DESC\nLIMIT ${limit}`;
+      if (offset > 0) inner += ` OFFSET ${offset}`;
+      query = `SELECT * FROM (\n${inner}\n) range_window\nORDER BY ${rangeCol} ASC`;
+      return query;
+    }
+
+    // ORDER BY clause. An explicit author choice wins. Otherwise, when a range
+    // condition is present (and no LIMIT to bound it), auto-order by the range
+    // column ASC so a time-series chart plots points chronologically.
     if (orderBy.column) {
       query += `\nORDER BY ${orderBy.column} ${orderBy.direction}`;
+    } else if (rangeCol) {
+      query += `\nORDER BY ${rangeCol} ASC`;
     }
 
     // LIMIT and OFFSET
@@ -242,8 +273,19 @@ const SQLQueryBuilder = ({
     setExecuting(true);
     setQueryResults(null);
     try {
+      // Build the PREVIEW query (distinct from the saved/runtime query):
+      //  - Drop any `<col> {{range-variable}}` predicate — the range only scopes
+      //    data at view time; a seeded window could land on an empty period and
+      //    hide the data's shape. The preview should show representative rows.
+      //  - Cap at a small PREVIEW limit (100) regardless of the component's own
+      //    LIMIT — the results table only shows the first handful anyway, and the
+      //    saved component keeps its real LIMIT for the dashboard.
+      const PREVIEW_LIMIT = 100;
+      let previewQuery = stripRangePredicate(generatedQuery)
+        .replace(/\s+LIMIT\s+\d+(\s+OFFSET\s+\d+)?\s*$/i, '');
+      previewQuery += `\nLIMIT ${PREVIEW_LIMIT}`;
       const response = await api.queryConnection(connectionId, {
-        query: { raw: generatedQuery, type: 'sql' }
+        query: { raw: previewQuery, type: 'sql' }
       });
       setQueryResults(response);
       if (onExecute) {
@@ -515,25 +557,29 @@ const SQLQueryBuilder = ({
                     and the pair wraps together (never a staircase), leaving the
                     value field to take the remaining row width. */}
                 <div className="condition-ops">
-                  <Select
-                    id={`operator-${index}`}
-                    labelText=""
-                    hideLabel
-                    size="sm"
-                    value={condition.operator}
-                    onChange={(e) => updateWhereCondition(index, 'operator', e.target.value)}
-                    disabled={disabled}
-                    className="operator-select"
-                  >
-                    {operators.map(op => (
-                      <SelectItem key={op.id} value={op.id} text={op.label} />
-                    ))}
-                  </Select>
-                  {/* Value-source picker: a literal the author types, or the
-                      dashboard variable (bound at view time). Only offered when
-                      the deployment has dashboard variables enabled, and not for
-                      null-checks (which take no value). */}
-                  {allowDashboardVariable && condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
+                  {/* A range condition owns its operator (BETWEEN, built
+                      server-side), so the operator Select is hidden for it. */}
+                  {condition.valueSource !== 'range' && (
+                    <Select
+                      id={`operator-${index}`}
+                      labelText=""
+                      hideLabel
+                      size="sm"
+                      value={condition.operator}
+                      onChange={(e) => updateWhereCondition(index, 'operator', e.target.value)}
+                      disabled={disabled}
+                      className="operator-select"
+                    >
+                      {operators.map(op => (
+                        <SelectItem key={op.id} value={op.id} text={op.label} />
+                      ))}
+                    </Select>
+                  )}
+                  {/* Value-source picker: a literal the author types, the
+                      dashboard variable, or the range variable (a time window
+                      bound at view time). Offered when the deployment has the
+                      matching variables enabled, and not for null-checks. */}
+                  {(allowDashboardVariable || allowRangeVariable) && condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
                     <Select
                       id={`value-source-${index}`}
                       labelText=""
@@ -545,11 +591,16 @@ const SQLQueryBuilder = ({
                       className="value-source-select"
                     >
                       <SelectItem value="literal" text="Value" />
-                      <SelectItem value="variable" text="Dashboard variable" />
+                      {allowDashboardVariable && <SelectItem value="variable" text="Dashboard variable" />}
+                      {allowRangeVariable && <SelectItem value="range" text="Range variable" />}
                     </Select>
                   )}
                 </div>
-                {condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
+                {condition.valueSource === 'range' ? (
+                  <Tag type="teal" size="sm" className="value-variable-chip" title="Bound to the dashboard time range at view time — expands to a BETWEEN predicate on this column">
+                    {RANGE_VARIABLE_TOKEN}
+                  </Tag>
+                ) : condition.operator !== 'IS NULL' && condition.operator !== 'IS NOT NULL' && (
                   condition.valueSource === 'variable' ? (
                     <Tag type="purple" size="sm" className="value-variable-chip" title="Bound to the dashboard variable at view time">
                       {DASHBOARD_VARIABLE_TOKEN}

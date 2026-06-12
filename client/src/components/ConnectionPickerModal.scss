@@ -104,14 +104,22 @@
     // lighter than our layer-01 rows). Sortable headers (Name/Namespace/Type)
     // cover that with their sort button, but NON-sortable ones (Tags,
     // Description) leave the thead's $layer-accent showing as a lighter band.
-    // Force layer-01 on thead + th + the header-label + sort button so every
-    // header cell matches uniformly.
+    // We want the header SLIGHTLY DARKER than the layer-01 rows but still
+    // LIGHTER than the #161616 modal shell — a tonal step that sits between the
+    // two existing tokens (no Carbon token lives in that gap). color-mix keeps
+    // it theme-DERIVED (a blend of the two semantic layers) rather than a raw
+    // hardcoded hex, so it still tracks the active theme. Force it on thead + th
+    // + the header-label + sort button so every header cell matches uniformly.
     .cds--data-table thead,
     .cds--data-table thead th,
     .cds--data-table thead .cds--table-header-label,
     .cds--data-table thead .cds--table-sort,
     .cds--data-table thead .cds--table-sort__header {
-      background-color: var(--cds-layer-01, #262626) !important;
+      background-color: color-mix(
+        in srgb,
+        var(--cds-layer-01, #262626) 60%,
+        var(--cds-background, #161616)
+      ) !important;
     }
 
     // Sticky header: pinned within .cds--data-table-content while rows scroll.
