@@ -349,21 +349,36 @@ const data = {
     mk(rows), { formatCellValue: fmt, chartType: 'line' },
   ).xAxis.data;
 
-  // Same-minute → auto adds seconds (HH:MM:SS, all distinct).
+  // TODAY's date — the "same-day, recent" path collapses to time-only (the date
+  // is obvious in context). Built from now so the test tracks the recency rule:
+  // auto only drops the date when every point is from today. (Fixed past dates
+  // would correctly be treated as "not today" and get the date — see below.)
+  const today = new Date();
+  const todayUTC = (h, m, s) => Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), h, m, s);
+
+  // Same-minute (today) → auto adds seconds (HH:MM:SS, all distinct).
   const sameMin = run([
-    [Date.UTC(2026, 0, 1, 14, 6, 5), 1],
-    [Date.UTC(2026, 0, 1, 14, 6, 25), 2],
-    [Date.UTC(2026, 0, 1, 14, 6, 50), 3],
+    [todayUTC(14, 6, 5), 1],
+    [todayUTC(14, 6, 25), 2],
+    [todayUTC(14, 6, 50), 3],
   ]);
   check('case 18: auto + same-minute → seconds', new Set(sameMin).size === 3 && sameMin[0].split(':').length === 3);
 
-  // Minutes apart, same day → time-only (HH:MM), no date, no seconds.
+  // Minutes apart, same day (today) → time-only (HH:MM), no date, no seconds.
   const minutesApart = run([
-    [Date.UTC(2026, 0, 1, 14, 6, 0), 1],
-    [Date.UTC(2026, 0, 1, 14, 8, 0), 2],
-    [Date.UTC(2026, 0, 1, 14, 10, 0), 3],
+    [todayUTC(14, 6, 0), 1],
+    [todayUTC(14, 8, 0), 2],
+    [todayUTC(14, 10, 0), 3],
   ]);
   check('case 18: auto + minutes-apart → time-only', minutesApart.every((l) => /^\d{1,2}:\d{2}$/.test(l)));
+
+  // Minutes apart but NOT today (old data) → includes the date so it's not
+  // ambiguous which day. This is the recency rule the range feature added.
+  const oldMinutesApart = run([
+    [Date.UTC(2026, 0, 1, 14, 6, 0), 1],
+    [Date.UTC(2026, 0, 1, 14, 8, 0), 2],
+  ]);
+  check('case 18: auto + old minutes-apart → includes date', oldMinutesApart.every((l) => l.includes('/')));
 
   // Spanning >1 day → includes the date.
   const daysApart = run([
