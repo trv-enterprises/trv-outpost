@@ -78,7 +78,10 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
     return 'raw';
   }
 
-  // (2) Span: parse to epoch ms via Date; ≥ 24h → include the date.
+  // (2) Include the date when either the data SPANS ≥ 1 day OR it isn't from
+  // today — a bare time-only label ('3:40 AM') is ambiguous for data that is
+  // days old (which day?). Only collapse to time-only when every point is from
+  // today (same-day recent), where the date is obvious in context.
   const times = xValues
     .map((v) => {
       const t = v instanceof Date ? v.getTime() : Date.parse(v) || Number(v);
@@ -86,9 +89,17 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
     })
     .filter((t) => t != null);
   let base = 'chart_time';
-  if (times.length >= 2) {
-    const span = Math.max(...times) - Math.min(...times);
-    if (span >= 24 * 60 * 60 * 1000) base = 'chart'; // ≥ 1 day → date + time
+  if (times.length >= 1) {
+    const span = times.length >= 2 ? Math.max(...times) - Math.min(...times) : 0;
+    const now = new Date();
+    const isToday = (ms) => {
+      const d = new Date(ms);
+      return d.getFullYear() === now.getFullYear()
+        && d.getMonth() === now.getMonth()
+        && d.getDate() === now.getDate();
+    };
+    const allToday = times.every(isToday);
+    if (span >= 24 * 60 * 60 * 1000 || !allToday) base = 'chart'; // date + time
   }
 
   // (3) Collision → add seconds, but only if seconds actually resolves it.

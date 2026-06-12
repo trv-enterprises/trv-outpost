@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -163,6 +164,24 @@ func (a *PrometheusAdapter) Query(ctx context.Context, query registry.Query) (*r
 		}
 	}
 
+	// Range variable (structured path, auto-apply): a range-scoped Prometheus
+	// component becomes a RANGE query over the selected window. ONLY for
+	// components whose query_type is range — an INSTANT query is a point-in-time
+	// snapshot and a time window is meaningless for it, so the range is NOT
+	// applied and the component stays instant. Relative intents resolve to
+	// absolute RFC3339 start/end (so d/w windows work — see promRangeFromSpec);
+	// step comes from the range variable, falling back to the component's step.
+	if params.QueryType != models.PrometheusQueryTypeInstant {
+		if spec, ok := resolveRange(query.Params); ok {
+			if start, end, step, valid := promRangeFromSpec(spec, params.Step); valid {
+				params.Start = start
+				params.End = end
+				params.Step = step
+				params.QueryType = models.PrometheusQueryTypeRange
+			}
+		}
+	}
+
 	if params.QueryType == models.PrometheusQueryTypeInstant {
 		return a.executeInstantQueryRegistry(ctx, query.Raw, params)
 	}
@@ -243,7 +262,9 @@ func (a *PrometheusAdapter) executeRangeQueryRegistry(ctx context.Context, promQ
 	queryParams.Set("query", promQL)
 	queryParams.Set("start", strconv.FormatInt(startTime.Unix(), 10))
 	queryParams.Set("end", strconv.FormatInt(endTime.Unix(), 10))
-	queryParams.Set("step", params.Step)
+	// Clamp the step so a wide window with a fine step doesn't exceed
+	// Prometheus's 11,000-point cap (which fails the whole query).
+	queryParams.Set("step", clampPromStep(startTime, endTime, params.Step))
 
 	reqURL := endpoint + "?" + queryParams.Encode()
 	resp, err := a.doRequestInternal(ctx, reqURL)
@@ -511,6 +532,24 @@ func (p *PrometheusDataSource) Query(ctx context.Context, query models.Query) (*
 		}
 	}
 
+	// Range variable (structured path, auto-apply): a range-scoped Prometheus
+	// component becomes a RANGE query over the selected window. ONLY for
+	// components whose query_type is range — an INSTANT query is a point-in-time
+	// snapshot and a time window is meaningless for it, so the range is NOT
+	// applied. Relative intents resolve to absolute RFC3339 start/end (so d/w
+	// windows work); step comes from the range variable, falling back to the
+	// component's configured step.
+	if params.QueryType != models.PrometheusQueryTypeInstant {
+		if spec, ok := resolveRange(query.Params); ok {
+			if start, end, step, valid := promRangeFromSpec(spec, params.Step); valid {
+				params.Start = start
+				params.End = end
+				params.Step = step
+				params.QueryType = models.PrometheusQueryTypeRange
+			}
+		}
+	}
+
 	// Execute appropriate query type
 	if params.QueryType == models.PrometheusQueryTypeInstant {
 		return p.executeInstantQuery(ctx, query.Raw, params)
@@ -538,7 +577,9 @@ func (p *PrometheusDataSource) executeRangeQuery(ctx context.Context, promQL str
 	queryParams.Set("query", promQL)
 	queryParams.Set("start", strconv.FormatInt(startTime.Unix(), 10))
 	queryParams.Set("end", strconv.FormatInt(endTime.Unix(), 10))
-	queryParams.Set("step", params.Step)
+	// Clamp the step so a wide window with a fine step doesn't exceed
+	// Prometheus's 11,000-point cap (which fails the whole query).
+	queryParams.Set("step", clampPromStep(startTime, endTime, params.Step))
 
 	reqURL := endpoint + "?" + queryParams.Encode()
 
@@ -585,6 +626,61 @@ func (p *PrometheusDataSource) parseTime(timeStr string) (time.Time, error) {
 	return parsePromTime(timeStr)
 }
 
+// promDayWeekPattern matches a duration token whose unit is days or weeks,
+// which Go's time.ParseDuration does NOT support (it tops out at hours).
+var promDayWeekPattern = regexp.MustCompile(`^(\d+)([dw])$`)
+
+// promMaxPoints is the per-timeseries sample cap a range query may request.
+// Prometheus's hard limit is 11,000 ("exceeded maximum resolution"); we clamp
+// below it for margin so a wide window with a fine step doesn't fail outright.
+const promMaxPoints = 10000
+
+// clampPromStep raises `step` when the window/step would exceed promMaxPoints,
+// so a wide window with a fine step (e.g. 30d @ 1m = 43,200 points) coarsens
+// automatically instead of failing the whole query (Grafana-style). The user's
+// step is a FLOOR — it's only ever raised, never lowered. Returns the original
+// step on any parse trouble (defensive — let Prometheus decide).
+func clampPromStep(start, end time.Time, step string) string {
+	d, err := parsePromDuration(step)
+	if err != nil || d <= 0 {
+		return step
+	}
+	window := end.Sub(start)
+	if window <= 0 {
+		return step
+	}
+	points := window / d
+	if points <= promMaxPoints {
+		return step
+	}
+	// Smallest whole-second step that fits the point budget, rounded UP.
+	minStep := window / promMaxPoints
+	secs := int64(minStep.Seconds())
+	if minStep > time.Duration(secs)*time.Second {
+		secs++ // round up so we stay under the cap
+	}
+	if secs < 1 {
+		secs = 1
+	}
+	return fmt.Sprintf("%ds", secs)
+}
+
+// parsePromDuration is time.ParseDuration extended to accept `d` (days) and `w`
+// (weeks) by expanding them to hours first — so relative windows like "7d" /
+// "30d" / "2w" parse instead of erroring (the cause of "invalid duration: -7d",
+// which made a 7d/30d range return NOTHING rather than the recent data).
+func parsePromDuration(s string) (time.Duration, error) {
+	if m := promDayWeekPattern.FindStringSubmatch(s); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		hours := n * 24
+		if m[2] == "w" {
+			hours = n * 24 * 7
+		}
+		return time.ParseDuration(fmt.Sprintf("%dh", hours))
+	}
+	return time.ParseDuration(s)
+}
+
 // parsePromTime is the shared time-string parser used by both
 // PrometheusAdapter and PrometheusDataSource. It accepts:
 //
@@ -613,14 +709,14 @@ func parsePromTime(timeStr string) (time.Time, error) {
 		offset := strings.TrimPrefix(timeStr, "now")
 		if len(offset) > 0 {
 			if offset[0] == '-' {
-				d, err := time.ParseDuration(offset[1:])
+				d, err := parsePromDuration(offset[1:])
 				if err != nil {
 					return time.Time{}, fmt.Errorf("invalid duration: %s", offset)
 				}
 				return now.Add(-d), nil
 			}
 			if offset[0] == '+' {
-				d, err := time.ParseDuration(offset[1:])
+				d, err := parsePromDuration(offset[1:])
 				if err != nil {
 					return time.Time{}, fmt.Errorf("invalid duration: %s", offset)
 				}
@@ -633,7 +729,7 @@ func parsePromTime(timeStr string) (time.Time, error) {
 	// Bare duration: "-1h", "+30m", "1h". Treat as offset from now
 	// (unsigned = past, to match Grafana / most monitoring UIs).
 	if timeStr[0] == '-' || timeStr[0] == '+' {
-		if d, err := time.ParseDuration(timeStr[1:]); err == nil {
+		if d, err := parsePromDuration(timeStr[1:]); err == nil {
 			now := time.Now()
 			if timeStr[0] == '-' {
 				return now.Add(-d), nil
@@ -641,7 +737,7 @@ func parsePromTime(timeStr string) (time.Time, error) {
 			return now.Add(d), nil
 		}
 	}
-	if d, err := time.ParseDuration(timeStr); err == nil {
+	if d, err := parsePromDuration(timeStr); err == nil {
 		// "1h" style — ambiguous, but "past 1h" is the overwhelmingly
 		// common intent in dashboard query params.
 		return time.Now().Add(-d), nil

@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // DashboardVariableToken is the fixed sentinel a component author writes into a
@@ -23,11 +25,48 @@ const DashboardVariableToken = "{{dashboard-variable}}"
 // client leaves the literal token in Query.Raw and supplies the value here.
 const DashboardVariableParam = "dashboard_variable"
 
+// RangeVariableToken is the single sentinel a SQL/EdgeLake component author
+// writes (via the WHERE-condition builder) immediately AFTER the column to
+// time-bound: `… WHERE ts {{range-variable}} …`. At view time the server reads
+// the column to the LEFT, resolves the active range to absolute instants, and
+// rewrites `<col> {{range-variable}}` into a bounded predicate in the adapter's
+// dialect (SQL `col BETWEEN $1 AND $2`, EdgeLake `col >= '…' AND col <= '…'`).
+// ts-store/Prometheus have no WHERE clause — they auto-apply the window from
+// RangeParam directly and never see this token.
+const RangeVariableToken = "{{range-variable}}"
+
+// RangeParam is the key under which the client passes the active range INTENT —
+// a structured value, not pre-resolved instants:
+//
+//	{ "type": "relative", "token": "1h", "step": "1m" }   // last 1h/24h/1d (+step for Prometheus)
+//	{ "type": "absolute", "from": "<RFC3339>", "to": "<RFC3339>", "step": "1m" }
+//
+// SQL/EdgeLake resolve a relative intent to absolute instants server-side;
+// ts-store/Prometheus may consume the relative token natively.
+const RangeParam = "range"
+
+// reservedQueryParams are param keys consumed by token substitution / structured
+// range handling — they must NOT be appended as stray positional bind args by
+// the SQL adapters.
+var reservedQueryParams = map[string]bool{
+	DashboardVariableParam: true,
+	RangeParam:             true,
+}
+
 // ErrDashboardVariableNotSet is returned when a query contains the
 // DashboardVariableToken but no value was supplied in Query.Params. The adapter
 // must NEVER send the literal token to the database; callers surface this as a
 // friendly "select a value" empty-state on the panel.
 var ErrDashboardVariableNotSet = errors.New("dashboard variable not set")
+
+// ErrRangeNotSet is returned when a query carries the RangeVariableToken but no
+// range window was supplied (or it can't be resolved). The adapter refuses the
+// query; callers surface a friendly "select a range" empty-state.
+var ErrRangeNotSet = errors.New("dashboard range not set")
+
+// ErrRangeMalformed is returned when the RangeVariableToken has no safe column
+// identifier to its left (it must be authored as `<column> {{range-variable}}`).
+var ErrRangeMalformed = errors.New("range token must follow a column name")
 
 // dashboardVariableValue extracts the active variable value from a params map,
 // resolveFilterParam reads the "filter" param and, when it is exactly the
@@ -68,39 +107,289 @@ func dashboardVariableValue(params map[string]interface{}) (string, bool) {
 	return s, true
 }
 
-// substituteSQLToken replaces each DashboardVariableToken occurrence in raw with
-// the driver-correct positional placeholder, returning the rewritten SQL plus
-// the bound args in OCCURRENCE ORDER. Building args in occurrence order (rather
-// than by ranging a map) is what makes positional binding deterministic — it
-// simultaneously fixes the latent random-map-order bug in the old code path.
+// paramString reads a string-ish param value ("" when absent/nil).
+func paramString(params map[string]interface{}, key string) string {
+	raw, ok := params[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", raw)
+}
+
+// RangeSpec is the decoded range INTENT from params.range. Exactly one of
+// (Token) / (From,To) is meaningful depending on Type. Step is Prometheus-only.
+type RangeSpec struct {
+	Type  string // "relative" | "absolute"
+	Token string // relative duration token, e.g. "1h" (Type=="relative")
+	From  string // RFC3339 (Type=="absolute")
+	To    string // RFC3339 (Type=="absolute")
+	Step  string // optional Prometheus step, e.g. "1m"
+}
+
+// resolveRange decodes params.range into a RangeSpec. ok is false when no range
+// is present or the value is unusable. params.range is a map (JSON object) as
+// delivered by the client through Query.Params.
+func resolveRange(params map[string]interface{}) (RangeSpec, bool) {
+	if params == nil {
+		return RangeSpec{}, false
+	}
+	raw, ok := params[RangeParam]
+	if !ok || raw == nil {
+		return RangeSpec{}, false
+	}
+	m, ok := raw.(map[string]interface{})
+	if !ok {
+		return RangeSpec{}, false
+	}
+	asStr := func(k string) string {
+		if v, ok := m[k]; ok && v != nil {
+			return fmt.Sprintf("%v", v)
+		}
+		return ""
+	}
+	spec := RangeSpec{
+		Type:  asStr("type"),
+		Token: asStr("token"),
+		From:  asStr("from"),
+		To:    asStr("to"),
+		Step:  asStr("step"),
+	}
+	switch spec.Type {
+	case "relative":
+		if spec.Token == "" {
+			return RangeSpec{}, false
+		}
+	case "absolute":
+		if spec.From == "" || spec.To == "" {
+			return RangeSpec{}, false
+		}
+	default:
+		return RangeSpec{}, false
+	}
+	return spec, true
+}
+
+// relativeTokenPattern parses a relative duration token like "1h", "30m",
+// "7d", "2w" into a count + unit.
+var relativeTokenPattern = regexp.MustCompile(`^(\d+)\s*([mhdw])$`)
+
+// resolveRelativeToAbsolute converts a relative token ("1h", "24h", "7d") into
+// an absolute [from, to] window ending at `now`, both as UTC RFC3339. Returns an
+// error for an unparseable token. Units: m=minute, h=hour, d=day, w=week.
+func resolveRelativeToAbsolute(token string, now time.Time) (from, to string, err error) {
+	mt := relativeTokenPattern.FindStringSubmatch(strings.TrimSpace(token))
+	if mt == nil {
+		return "", "", fmt.Errorf("%w: unparseable relative range token %q", ErrRangeNotSet, token)
+	}
+	n, _ := strconv.Atoi(mt[1])
+	if n <= 0 {
+		return "", "", fmt.Errorf("%w: non-positive relative range token %q", ErrRangeNotSet, token)
+	}
+	var unit time.Duration
+	switch mt[2] {
+	case "m":
+		unit = time.Minute
+	case "h":
+		unit = time.Hour
+	case "d":
+		unit = 24 * time.Hour
+	case "w":
+		unit = 7 * 24 * time.Hour
+	}
+	dur := time.Duration(n) * unit
+	end := now.UTC()
+	return end.Add(-dur).Format(time.RFC3339), end.Format(time.RFC3339), nil
+}
+
+// tsstoreRange describes how a ts-store adapter should fetch a range window.
+// Relative intents use ts-store's native `since:<token>` (newest-since); absolute
+// intents use a [fromEpoch, toEpoch] range fetch.
+type tsstoreRange struct {
+	Relative  bool
+	Since     string // relative token, e.g. "1h" (Relative)
+	FromEpoch int64  // absolute lower bound, Unix seconds
+	ToEpoch   int64  // absolute upper bound, Unix seconds
+}
+
+// tsstoreRangeFromSpec maps a RangeSpec to a tsstoreRange. ok is false when the
+// spec can't be resolved (unparseable relative token / unparseable absolute
+// instants).
+func tsstoreRangeFromSpec(spec RangeSpec) (tsstoreRange, bool) {
+	switch spec.Type {
+	case "relative":
+		if relativeTokenPattern.FindStringSubmatch(strings.TrimSpace(spec.Token)) == nil {
+			return tsstoreRange{}, false
+		}
+		return tsstoreRange{Relative: true, Since: spec.Token}, true
+	case "absolute":
+		ft, ferr := time.Parse(time.RFC3339, spec.From)
+		tt, terr := time.Parse(time.RFC3339, spec.To)
+		if ferr != nil || terr != nil {
+			return tsstoreRange{}, false
+		}
+		return tsstoreRange{FromEpoch: ft.Unix(), ToEpoch: tt.Unix()}, true
+	default:
+		return tsstoreRange{}, false
+	}
+}
+
+// promRangeFromSpec maps a RangeSpec to Prometheus start/end/step strings.
+// Relative intents use the native `now-<token>` / `now` form (parsePromTime
+// accepts it); absolute intents use the two RFC3339 instants. step falls back
+// to the supplied default (the component's configured step) when the spec
+// carries none. Returns ok=false only when a relative token is unparseable.
 //
-// If raw contains the token but no value was supplied, returns
-// ErrDashboardVariableNotSet so the adapter can refuse the query rather than
-// sending the literal token to the database.
+// Relative intents resolve to ABSOLUTE RFC3339 start/end (via
+// resolveRelativeToAbsolute) rather than the `now-<token>` string form —
+// Prometheus's time parser is backed by Go's time.ParseDuration, which only
+// supports up to hours and REJECTS `d`/`w` (so `now-7d`/`now-30d` would error
+// and the query would return nothing, not even recent data). Resolving to
+// concrete instants sidesteps that entirely.
+func promRangeFromSpec(spec RangeSpec, defaultStep string) (start, end, step string, ok bool) {
+	step = spec.Step
+	if step == "" {
+		step = defaultStep
+	}
+	switch spec.Type {
+	case "relative":
+		from, to, err := resolveRelativeToAbsolute(spec.Token, time.Now())
+		if err != nil {
+			return "", "", "", false
+		}
+		return from, to, step, true
+	case "absolute":
+		return spec.From, spec.To, step, true
+	default:
+		return "", "", "", false
+	}
+}
+
+// rangeAbsolute resolves any RangeSpec to a concrete [from, to] UTC RFC3339
+// window. Relative intents resolve against time.Now(); absolute intents are
+// normalized to UTC RFC3339 (so adapters get a consistent literal).
+func rangeAbsolute(spec RangeSpec) (from, to string, err error) {
+	if spec.Type == "relative" {
+		return resolveRelativeToAbsolute(spec.Token, time.Now())
+	}
+	// absolute: normalize to UTC RFC3339 (defensive — pass through on parse fail).
+	norm := func(s string) string {
+		if t, e := time.Parse(time.RFC3339, s); e == nil {
+			return t.UTC().Format(time.RFC3339)
+		}
+		return s
+	}
+	return norm(spec.From), norm(spec.To), nil
+}
+
+// trailingIdentPattern captures a SQL identifier (optionally dotted/quoted) at
+// the END of a string — the column immediately preceding {{range-variable}}.
+// Allows surrounding double-quotes/backticks so a quoted column round-trips.
+var trailingIdentPattern = regexp.MustCompile(
+	"([A-Za-z_\"`][A-Za-z0-9_.\"`]*)\\s*$")
+
+// substituteSQLToken is the single-token (dashboard-variable) entry, preserved
+// for the value-discovery call path + tests. Replaces each token occurrence with
+// a positional placeholder in occurrence order.
 func substituteSQLToken(driver, raw string, value string, hasValue bool) (string, []interface{}, error) {
-	count := strings.Count(raw, DashboardVariableToken)
-	if count == 0 {
+	if !strings.Contains(raw, DashboardVariableToken) {
 		return raw, nil, nil
 	}
 	if !hasValue {
 		return "", nil, ErrDashboardVariableNotSet
 	}
-
-	args := make([]interface{}, 0, count)
+	var args []interface{}
 	var b strings.Builder
-	rest := raw
 	idx := 1
 	for {
-		pos := strings.Index(rest, DashboardVariableToken)
+		pos := strings.Index(raw, DashboardVariableToken)
 		if pos < 0 {
-			b.WriteString(rest)
+			b.WriteString(raw)
 			break
 		}
-		b.WriteString(rest[:pos])
+		b.WriteString(raw[:pos])
 		b.WriteString(sqlPlaceholder(driver, idx))
 		args = append(args, value)
 		idx++
-		rest = rest[pos+len(DashboardVariableToken):]
+		raw = raw[pos+len(DashboardVariableToken):]
+	}
+	return b.String(), args, nil
+}
+
+// substituteAllSQLTokens rewrites BOTH the dashboard-variable token and the
+// range token in ONE left-to-right pass, so positional placeholders ($1/$2/$3…)
+// number in true occurrence order regardless of interleaving (load-bearing for
+// positional drivers — never split into per-token passes).
+//
+//   - {{dashboard-variable}}        → one placeholder, bound to the variable value.
+//   - <col> {{range-variable}}      → `<col> BETWEEN <ph> AND <ph>`, two args
+//     (from,to). The column is the identifier immediately to the LEFT of the
+//     token, which is consumed from the already-emitted output. A missing/unsafe
+//     left identifier → ErrRangeMalformed.
+//
+// Returns ErrDashboardVariableNotSet / ErrRangeNotSet when a token is present but
+// its value/window is absent, so the adapter refuses rather than leaking a token.
+func substituteAllSQLTokens(driver, raw string, params map[string]interface{}) (string, []interface{}, error) {
+	dvValue, dvHas := dashboardVariableValue(params)
+	rangeSpec, rangeOK := resolveRange(params)
+
+	// Up-front presence-vs-value validation for clear errors.
+	if strings.Contains(raw, DashboardVariableToken) && !dvHas {
+		return "", nil, ErrDashboardVariableNotSet
+	}
+	if strings.Contains(raw, RangeVariableToken) && !rangeOK {
+		return "", nil, ErrRangeNotSet
+	}
+
+	var rFrom, rTo string
+	if rangeOK {
+		f, t, err := rangeAbsolute(rangeSpec)
+		if err != nil {
+			return "", nil, err
+		}
+		rFrom, rTo = f, t
+	}
+
+	var args []interface{}
+	var b strings.Builder
+	idx := 1
+	for len(raw) > 0 {
+		dvPos := strings.Index(raw, DashboardVariableToken)
+		rgPos := strings.Index(raw, RangeVariableToken)
+		if dvPos < 0 && rgPos < 0 {
+			b.WriteString(raw)
+			break
+		}
+		// Pick the earliest token.
+		rangeFirst := rgPos >= 0 && (dvPos < 0 || rgPos < dvPos)
+		if rangeFirst {
+			// Emit text up to the token; the column is the trailing identifier
+			// of what we just emitted. Pull it back out of the buffer.
+			emitted := b.String() + raw[:rgPos]
+			m := trailingIdentPattern.FindStringSubmatchIndex(emitted)
+			if m == nil {
+				return "", nil, ErrRangeMalformed
+			}
+			col := emitted[m[2]:m[3]]
+			if !IsSafeIdentifier(strings.Trim(col, "\"`")) {
+				return "", nil, ErrRangeMalformed
+			}
+			// Rebuild the buffer without the trailing column, then append the
+			// expanded predicate using the column.
+			b.Reset()
+			b.WriteString(emitted[:m[2]])
+			ph1 := sqlPlaceholder(driver, idx)
+			ph2 := sqlPlaceholder(driver, idx+1)
+			b.WriteString(fmt.Sprintf("%s BETWEEN %s AND %s", col, ph1, ph2))
+			args = append(args, rFrom, rTo)
+			idx += 2
+			raw = raw[rgPos+len(RangeVariableToken):]
+		} else {
+			b.WriteString(raw[:dvPos])
+			b.WriteString(sqlPlaceholder(driver, idx))
+			args = append(args, dvValue)
+			idx++
+			raw = raw[dvPos+len(DashboardVariableToken):]
+		}
 	}
 	return b.String(), args, nil
 }
@@ -148,6 +437,53 @@ func substituteEdgeLakeToken(raw string, value string, hasValue bool) (string, e
 		return "", ErrDashboardVariableNotSet
 	}
 	return strings.ReplaceAll(raw, DashboardVariableToken, escapeEdgeLakeValue(value)), nil
+}
+
+// edgeLakeRangePattern captures the column immediately before the range token:
+// `<col> {{range-variable}}`. The column may be dotted/quoted; it's validated
+// with IsSafeIdentifier before use.
+var edgeLakeRangePattern = regexp.MustCompile(
+	"([A-Za-z_\"`][A-Za-z0-9_.\"`]*)\\s*" + regexp.QuoteMeta(RangeVariableToken))
+
+// substituteEdgeLakeRange rewrites `<col> {{range-variable}}` into the
+// AnyLog-safe bounded predicate `col >= '<from>' AND col <= '<to>'`. EdgeLake
+// has no bind params and rejects much standard date SQL (BETWEEN-with-params,
+// EXTRACT, CAST, …) — see the edgelake-sql-restrictions notes — so we emit two
+// escaped literal comparisons. Escaping is the sole injection defense (the
+// from/to come from the dashboard, but defense-in-depth is cheap). Returns
+// ErrRangeNotSet / ErrRangeMalformed mirroring the SQL path.
+func substituteEdgeLakeRange(raw string, params map[string]interface{}) (string, error) {
+	if !strings.Contains(raw, RangeVariableToken) {
+		return raw, nil
+	}
+	spec, ok := resolveRange(params)
+	if !ok {
+		return "", ErrRangeNotSet
+	}
+	from, to, err := rangeAbsolute(spec)
+	if err != nil {
+		return "", err
+	}
+
+	var outErr error
+	out := edgeLakeRangePattern.ReplaceAllStringFunc(raw, func(match string) string {
+		m := edgeLakeRangePattern.FindStringSubmatch(match)
+		col := m[1]
+		if !IsSafeIdentifier(strings.Trim(col, "\"`")) {
+			outErr = ErrRangeMalformed
+			return match
+		}
+		return fmt.Sprintf("%s >= '%s' AND %s <= '%s'",
+			col, escapeEdgeLakeValue(from), col, escapeEdgeLakeValue(to))
+	})
+	if outErr != nil {
+		return "", outErr
+	}
+	// Any token left unconsumed means it had no valid column to its left.
+	if strings.Contains(out, RangeVariableToken) {
+		return "", ErrRangeMalformed
+	}
+	return out, nil
 }
 
 // ---- Variable value discovery (distinct values for the picker) ----------

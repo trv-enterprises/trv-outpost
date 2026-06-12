@@ -45,6 +45,45 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
   const timestampFormat = chart?.data_mapping?.x_axis_format || 'short';
 
   const allColumns = data?.columns || [];
+
+  // Sub-minute detection for 'auto': scan the timestamp column for the smallest
+  // gap between consecutive values. When the data is finer than a minute, the
+  // minute-resolution 'auto' label would hide the distinction (several rows show
+  // the same HH:MM), so we upgrade 'auto' to its seconds-aware variant. Only
+  // affects 'auto' — explicit presets are honored verbatim. Computed once per
+  // data change (cheap: a single pass with an early exit once we've seen a
+  // sub-minute gap).
+  const autoSubMinute = useMemo(() => {
+    if (timestampFormat !== 'auto') return false;
+    const rows = data?.rows;
+    if (!Array.isArray(rows) || rows.length < 2) return false;
+    const tsCol = allColumns.indexOf('timestamp') >= 0
+      ? allColumns.indexOf('timestamp')
+      : allColumns.findIndex((c) => /^(time|ts)$|time(stamp)?/i.test(c));
+    if (tsCol < 0) return false;
+    let prev = null;
+    for (let i = 0; i < rows.length; i++) {
+      const v = rows[i]?.[tsCol];
+      const t = v instanceof Date ? v.getTime() : Date.parse(v) || Number(v);
+      if (!Number.isFinite(t)) continue;
+      if (prev != null) {
+        const gap = Math.abs(t - prev);
+        if (gap > 0 && gap < 60 * 1000) return true; // < 1 minute → seconds matter
+      }
+      prev = t;
+    }
+    return false;
+    // allColumns derived from data?.columns; keying on data is sufficient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, timestampFormat]);
+
+  // The format actually passed to formatCellValue. For 'auto' + sub-minute data
+  // we swap in the seconds-aware auto so the table can disambiguate rows that
+  // share a minute. (formatCellValue maps 'auto_seconds' → date+time+seconds
+  // or time+seconds by recency, mirroring the plain 'auto' rule.)
+  const effectiveTimestampFormat = (timestampFormat === 'auto' && autoSubMinute)
+    ? 'auto_seconds'
+    : timestampFormat;
   // When the chart hasn't explicitly chosen a column order via
   // visible_columns, hoist the time + numeric-value columns to the
   // front — most data tables here are time-series, and the reader
@@ -153,7 +192,7 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
         valueFormatter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col, { timestampFormat });
+          const f = formatCellValue(v, col, { timestampFormat: effectiveTimestampFormat });
           return f == null ? '' : String(f);
         },
         // Cell tooltip — uses the formatted display value so the tooltip
@@ -161,7 +200,7 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
         tooltipValueGetter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col, { timestampFormat });
+          const f = formatCellValue(v, col, { timestampFormat: effectiveTimestampFormat });
           return f == null ? '' : String(f);
         },
         minWidth: isNumCol ? 100 : isTimeCol ? 170 : 120,
@@ -170,7 +209,7 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
     // columnAliases intentionally excluded — it doesn't change during a
     // modal session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, timestampFormat]);
+  }, [columnsKey, effectiveTimestampFormat]);
 
   const defaultColDef = useMemo(() => ({
     sortable: true,

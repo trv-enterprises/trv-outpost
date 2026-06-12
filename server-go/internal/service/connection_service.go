@@ -1371,6 +1371,8 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 		errorCode := ""
 		if errors.Is(err, connection.ErrDashboardVariableNotSet) {
 			errorCode = models.QueryErrorVariableNotSet
+		} else if errors.Is(err, connection.ErrRangeNotSet) {
+			errorCode = models.QueryErrorRangeNotSet
 		}
 		return &models.QueryResponse{
 			Success:   false,

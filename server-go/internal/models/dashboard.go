@@ -253,11 +253,12 @@ type DashboardSettings struct {
 // what the value drives. v1 implements connection_swap only; filter_value is a
 // designed-but-unbuilt seam.
 type DashboardVariable struct {
-	Name           string                `json:"name" bson:"name"`   // stable key (v1: the fixed token "dashboard-variable")
+	Name           string                `json:"name" bson:"name"`   // stable key (fixed token: "dashboard-variable" for connection_swap/filter, "dashboard-range" for range)
 	Label          string                `json:"label" bson:"label"` // UI label, e.g. "Site"
-	Mode           string                `json:"mode" bson:"mode"`   // "connection_swap" | "filter_value"
+	Mode           string                `json:"mode" bson:"mode"`   // "connection_swap" | "filter" | "range"
 	ConnectionSwap *ConnectionSwapConfig `json:"connection_swap,omitempty" bson:"connection_swap,omitempty"`
 	FilterValue    *FilterValueConfig    `json:"filter_value,omitempty" bson:"filter_value,omitempty"`
+	Range          *RangeConfig          `json:"range,omitempty" bson:"range,omitempty"`
 }
 
 // ConnectionSwapConfig configures a connection_swap variable: the dropdown lists
@@ -311,10 +312,34 @@ type FilterValueConfig struct {
 	ValueTable  string `json:"value_table,omitempty" bson:"value_table,omitempty"`
 }
 
+// RangeConfig configures a range variable: a [from, to] absolute time window the
+// viewer picks in the header, restricting time-series components. The variable's
+// active value is canonical absolute instants (RFC3339); relative presets
+// ("last 1h") are UI sugar resolved to concrete from/to before apply. The window
+// is connection-agnostic — the ONLY per-connection knowledge is the substitution
+// FORMAT, declared per-component on ChartQueryConfig.RangeFormat, not here.
+//
+// Components opt in explicitly: SQL/EdgeLake authors write {{range_from}} /
+// {{range_to}} tokens into the query (substituted server-side); ts-store and
+// Prometheus panels pick up the window automatically from structured params.
+type RangeConfig struct {
+	// Presets offered in the header dropdown — relative windows resolved to
+	// absolute instants at apply time. Empty → a sensible default set. Stored as
+	// duration-ish tokens the CLIENT understands ("1h","6h","24h","7d","30d").
+	Presets []string `json:"presets,omitempty" bson:"presets,omitempty"`
+	// DefaultPreset is the preset applied on first load when no URL/saved value.
+	// Empty → no default (picker shows unset; token components show the
+	// "select a range" empty-state).
+	DefaultPreset string `json:"default_preset,omitempty" bson:"default_preset,omitempty"`
+	// AllowAbsolute toggles the absolute from/to picker. Nil → treated as true.
+	AllowAbsolute *bool `json:"allow_absolute,omitempty" bson:"allow_absolute,omitempty"`
+}
+
 // Variable mode constants — the DashboardVariable.Mode discriminator.
 const (
 	VariableModeConnectionSwap = "connection_swap"
 	VariableModeFilter         = "filter"
+	VariableModeRange          = "range" // absolute time-window picker
 )
 
 // ValidateVariables enforces the v1 invariant that a dashboard carries at most
@@ -325,14 +350,20 @@ const (
 // query/filter value substitution) and never collide on the token. Returns nil
 // when the variable set is valid.
 func ValidateVariables(variables []DashboardVariable) error {
-	filterCount := 0
+	filterCount, rangeCount := 0, 0
 	for i := range variables {
-		if variables[i].Mode == VariableModeFilter {
+		switch variables[i].Mode {
+		case VariableModeFilter:
 			filterCount++
+		case VariableModeRange:
+			rangeCount++
 		}
 	}
 	if filterCount > 1 {
 		return fmt.Errorf("a dashboard may define at most one filter variable (found %d); the {{dashboard-variable}} token is a single fixed name", filterCount)
+	}
+	if rangeCount > 1 {
+		return fmt.Errorf("a dashboard may define at most one range variable (found %d); the {{range_from}}/{{range_to}} tokens are single fixed names", rangeCount)
 	}
 	return nil
 }

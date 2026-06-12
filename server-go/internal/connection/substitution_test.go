@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestEscapeEdgeLakeValue is the safety-critical test: EdgeLake has no bind
@@ -164,6 +165,246 @@ func TestSubstituteSQLToken_UnsetValueErrors(t *testing.T) {
 	if !errors.Is(err, ErrDashboardVariableNotSet) {
 		t.Fatalf("expected ErrDashboardVariableNotSet, got %v", err)
 	}
+}
+
+// absoluteRange builds a params map carrying an absolute range intent.
+func absoluteRange(from, to string) map[string]interface{} {
+	return map[string]interface{}{
+		RangeParam: map[string]interface{}{"type": "absolute", "from": from, "to": to},
+	}
+}
+
+// relativeRange builds a params map carrying a relative range intent.
+func relativeRange(token string) map[string]interface{} {
+	return map[string]interface{}{
+		RangeParam: map[string]interface{}{"type": "relative", "token": token},
+	}
+}
+
+func TestResolveRelativeToAbsolute(t *testing.T) {
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		token    string
+		wantFrom string
+	}{
+		{"1h", "2026-06-11T11:00:00Z"},
+		{"24h", "2026-06-10T12:00:00Z"},
+		{"7d", "2026-06-04T12:00:00Z"},
+		{"30m", "2026-06-11T11:30:00Z"},
+		{"2w", "2026-05-28T12:00:00Z"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.token, func(t *testing.T) {
+			from, to, err := resolveRelativeToAbsolute(tc.token, now)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if from != tc.wantFrom {
+				t.Fatalf("from = %q, want %q", from, tc.wantFrom)
+			}
+			if to != "2026-06-11T12:00:00Z" {
+				t.Fatalf("to = %q, want now", to)
+			}
+		})
+	}
+	t.Run("bad_token", func(t *testing.T) {
+		if _, _, err := resolveRelativeToAbsolute("nonsense", now); !errors.Is(err, ErrRangeNotSet) {
+			t.Fatalf("expected ErrRangeNotSet, got %v", err)
+		}
+	})
+}
+
+func TestResolveRange(t *testing.T) {
+	t.Run("absolute", func(t *testing.T) {
+		spec, ok := resolveRange(absoluteRange("2026-06-11T00:00:00Z", "2026-06-11T06:00:00Z"))
+		if !ok || spec.Type != "absolute" || spec.From == "" || spec.To == "" {
+			t.Fatalf("got %+v ok=%v", spec, ok)
+		}
+	})
+	t.Run("relative", func(t *testing.T) {
+		spec, ok := resolveRange(relativeRange("1h"))
+		if !ok || spec.Type != "relative" || spec.Token != "1h" {
+			t.Fatalf("got %+v ok=%v", spec, ok)
+		}
+	})
+	t.Run("missing", func(t *testing.T) {
+		if _, ok := resolveRange(map[string]interface{}{}); ok {
+			t.Fatal("expected ok=false")
+		}
+	})
+	t.Run("absolute_missing_to", func(t *testing.T) {
+		p := map[string]interface{}{RangeParam: map[string]interface{}{"type": "absolute", "from": "x"}}
+		if _, ok := resolveRange(p); ok {
+			t.Fatal("expected ok=false")
+		}
+	})
+}
+
+// TestSubstituteAllSQLTokens_RangeExpand verifies the column-aware expansion:
+// `<col> {{range-variable}}` → `col BETWEEN $1 AND $2` with from/to bound args.
+func TestSubstituteAllSQLTokens_RangeExpand(t *testing.T) {
+	raw := "SELECT * FROM t WHERE ts " + RangeVariableToken + " ORDER BY ts"
+	got, args, err := substituteAllSQLTokens("postgres", raw, absoluteRange("2026-06-11T00:00:00Z", "2026-06-11T06:00:00Z"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "SELECT * FROM t WHERE ts BETWEEN $1 AND $2 ORDER BY ts"
+	if got != want {
+		t.Fatalf("sql = %q, want %q", got, want)
+	}
+	if len(args) != 2 || args[0] != "2026-06-11T00:00:00Z" || args[1] != "2026-06-11T06:00:00Z" {
+		t.Fatalf("args = %#v, want [from, to]", args)
+	}
+}
+
+// TestSubstituteAllSQLTokens_Interleaved is the load-bearing test: a range
+// condition before a dashboard-variable token must number $1/$2 (range) then $3
+// (variable) in true left-to-right occurrence order.
+func TestSubstituteAllSQLTokens_Interleaved(t *testing.T) {
+	raw := "WHERE ts " + RangeVariableToken + " AND host = " + DashboardVariableToken
+	params := absoluteRange("2026-06-11T00:00:00Z", "2026-06-11T06:00:00Z")
+	params[DashboardVariableParam] = "trv-srv-001"
+
+	got, args, err := substituteAllSQLTokens("postgres", raw, params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "WHERE ts BETWEEN $1 AND $2 AND host = $3"
+	if got != want {
+		t.Fatalf("sql = %q, want %q", got, want)
+	}
+	if len(args) != 3 ||
+		args[0] != "2026-06-11T00:00:00Z" ||
+		args[1] != "2026-06-11T06:00:00Z" ||
+		args[2] != "trv-srv-001" {
+		t.Fatalf("args = %#v, want [from, to, host]", args)
+	}
+}
+
+func TestSubstituteAllSQLTokens_RangeRelativeResolves(t *testing.T) {
+	raw := "WHERE ts " + RangeVariableToken
+	_, args, err := substituteAllSQLTokens("postgres", raw, relativeRange("1h"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Relative resolves to absolute instants; just confirm two RFC3339 args bound.
+	if len(args) != 2 {
+		t.Fatalf("args = %#v, want 2", args)
+	}
+	for _, a := range args {
+		if _, perr := time.Parse(time.RFC3339, a.(string)); perr != nil {
+			t.Fatalf("arg %q not RFC3339", a)
+		}
+	}
+}
+
+func TestSubstituteAllSQLTokens_RangeUnset(t *testing.T) {
+	raw := "WHERE ts " + RangeVariableToken
+	_, _, err := substituteAllSQLTokens("postgres", raw, map[string]interface{}{})
+	if !errors.Is(err, ErrRangeNotSet) {
+		t.Fatalf("expected ErrRangeNotSet, got %v", err)
+	}
+}
+
+func TestSubstituteAllSQLTokens_RangeMalformed(t *testing.T) {
+	// No safe identifier to the left of the token.
+	raw := "WHERE (1=1) " + RangeVariableToken
+	_, _, err := substituteAllSQLTokens("postgres", raw, absoluteRange("2026-06-11T00:00:00Z", "2026-06-11T06:00:00Z"))
+	if !errors.Is(err, ErrRangeMalformed) {
+		t.Fatalf("expected ErrRangeMalformed, got %v", err)
+	}
+}
+
+func TestSubstituteEdgeLakeRange(t *testing.T) {
+	t.Run("no_token_passthrough", func(t *testing.T) {
+		raw := "select * from t where x = 1"
+		got, err := substituteEdgeLakeRange(raw, map[string]interface{}{})
+		if err != nil || got != raw {
+			t.Fatalf("got (%q, %v), want passthrough", got, err)
+		}
+	})
+	t.Run("expands_predicate", func(t *testing.T) {
+		raw := "select * from t where ts " + RangeVariableToken + " limit 10"
+		got, err := substituteEdgeLakeRange(raw, absoluteRange("2026-06-11T00:00:00Z", "2026-06-11T06:00:00Z"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(got, RangeVariableToken) {
+			t.Fatalf("token not substituted: %q", got)
+		}
+		want := "select * from t where ts >= '2026-06-11T00:00:00Z' AND ts <= '2026-06-11T06:00:00Z' limit 10"
+		if got != want {
+			t.Fatalf("got %q\nwant %q", got, want)
+		}
+	})
+	t.Run("unset_errors", func(t *testing.T) {
+		raw := "where ts " + RangeVariableToken
+		if _, err := substituteEdgeLakeRange(raw, map[string]interface{}{}); !errors.Is(err, ErrRangeNotSet) {
+			t.Fatalf("expected ErrRangeNotSet, got %v", err)
+		}
+	})
+	t.Run("malformed_errors", func(t *testing.T) {
+		raw := "where (x) " + RangeVariableToken
+		if _, err := substituteEdgeLakeRange(raw, absoluteRange("2026-06-11T00:00:00Z", "2026-06-11T06:00:00Z")); !errors.Is(err, ErrRangeMalformed) {
+			t.Fatalf("expected ErrRangeMalformed, got %v", err)
+		}
+	})
+}
+
+func TestTsstoreRangeFromSpec(t *testing.T) {
+	t.Run("relative", func(t *testing.T) {
+		tr, ok := tsstoreRangeFromSpec(RangeSpec{Type: "relative", Token: "1h"})
+		if !ok || !tr.Relative || tr.Since != "1h" {
+			t.Fatalf("got %+v ok=%v", tr, ok)
+		}
+	})
+	t.Run("absolute_epoch", func(t *testing.T) {
+		tr, ok := tsstoreRangeFromSpec(RangeSpec{Type: "absolute", From: "2026-06-11T00:00:00Z", To: "2026-06-11T06:00:00Z"})
+		if !ok || tr.Relative || tr.FromEpoch != 1781136000 || tr.ToEpoch != 1781157600 {
+			t.Fatalf("got %+v ok=%v", tr, ok)
+		}
+	})
+}
+
+func TestPromRangeFromSpec(t *testing.T) {
+	// Relative intents resolve to ABSOLUTE RFC3339 start/end (Prometheus rejects
+	// d/w in the now-<dur> form), with the step. Verify the window math + step.
+	t.Run("relative_1h_with_default_step", func(t *testing.T) {
+		start, end, step, ok := promRangeFromSpec(RangeSpec{Type: "relative", Token: "1h"}, "1m")
+		if !ok || step != "1m" {
+			t.Fatalf("ok=%v step=%q", ok, step)
+		}
+		s, e := mustRFC3339(t, start), mustRFC3339(t, end)
+		if d := e.Sub(s); d != time.Hour {
+			t.Fatalf("window = %v, want 1h", d)
+		}
+	})
+	// 7d must NOT fail (the bug was time.ParseDuration rejecting d/w → no data).
+	t.Run("relative_7d_resolves", func(t *testing.T) {
+		start, end, _, ok := promRangeFromSpec(RangeSpec{Type: "relative", Token: "7d"}, "1h")
+		if !ok {
+			t.Fatal("7d should resolve to an absolute window")
+		}
+		s, e := mustRFC3339(t, start), mustRFC3339(t, end)
+		if d := e.Sub(s); d != 7*24*time.Hour {
+			t.Fatalf("window = %v, want 168h", d)
+		}
+	})
+	t.Run("absolute_with_spec_step", func(t *testing.T) {
+		start, end, step, ok := promRangeFromSpec(RangeSpec{Type: "absolute", From: "a", To: "b", Step: "30s"}, "1m")
+		if !ok || start != "a" || end != "b" || step != "30s" {
+			t.Fatalf("got (%q,%q,%q) ok=%v", start, end, step, ok)
+		}
+	})
+}
+
+func mustRFC3339(t *testing.T, s string) time.Time {
+	t.Helper()
+	v, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("not RFC3339: %q (%v)", s, err)
+	}
+	return v
 }
 
 func TestDashboardVariableValue(t *testing.T) {

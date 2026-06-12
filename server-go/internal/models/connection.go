@@ -717,6 +717,11 @@ const (
 	// user to pick a value rather than showing an error.
 	QueryErrorVariableNotSet = "dashboard_variable_not_set"
 
+	// QueryErrorRangeNotSet indicates the query references the range tokens
+	// ({{range_from}}/{{range_to}}) but no range window was supplied. The panel
+	// should prompt the user to pick a time range rather than showing an error.
+	QueryErrorRangeNotSet = "dashboard_range_not_set"
+
 	// QueryErrorWriteNotAllowed indicates the server-side verb guard refused
 	// the SQL statement: a write verb (INSERT/UPDATE/DELETE) without the
 	// matching admin opt-in, a DDL statement (always refused), or a

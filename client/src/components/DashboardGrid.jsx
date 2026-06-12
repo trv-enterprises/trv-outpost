@@ -51,6 +51,7 @@ function DashboardGrid({
   dashboardVariableText = '',
   variableValues = {},
   dashboardVariableValue = null,
+  rangeValue = null,
   dashboardCommand = null,
   canControl = false,
   refreshTick = 0,
@@ -186,6 +187,11 @@ function DashboardGrid({
               <div
                 key={panel.id}
                 data-panel-id={panel.id}
+                // Native hover tooltip shows the component NAME (the internal
+                // identifier) when a component is involved — the canvas shows the
+                // display TITLE, so the hover surfaces the name behind it. Text
+                // panels have no component, so no tooltip.
+                title={hasChart ? (chart?.name || undefined) : undefined}
                 className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''}`}
                 style={{
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
@@ -241,6 +247,7 @@ function DashboardGrid({
                               dataRefreshInterval: dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
                               refreshTick,
                               dashboardVariableValue,
+                              rangeValue,
                             }}
                           />
                         </div>
@@ -271,6 +278,7 @@ DashboardGrid.propTypes = {
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,
+  rangeValue: PropTypes.object,
   dashboardCommand: PropTypes.object,
   canControl: PropTypes.bool,
   refreshTick: PropTypes.number,

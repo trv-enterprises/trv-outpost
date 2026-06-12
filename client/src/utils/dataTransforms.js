@@ -477,18 +477,30 @@ export function formatTimestamp(value, format = 'short', options = {}) {
   if (format === 'relative') return formatRelativeTime(date);
   if (format === 'iso') return date.toISOString();
 
-  // chart_auto (and the bare 'auto' alias) picks time-vs-date based on
-  // the age of the value. The line/area/bar specs resolve 'auto' to a
-  // concrete preset at the series level (resolveAutoXFormat) before
-  // calling here; this branch is the graceful fallback for any other
-  // path that passes 'auto' straight through (legacy codegen, custom
-  // code) — it degrades to a sensible single-value format rather than
-  // hitting the unknown-preset warning.
-  if (format === 'chart_auto' || format === 'auto') {
-    const now = Date.now();
-    const diffHours = Math.abs(now - date.getTime()) / (1000 * 60 * 60);
-    const sub = diffHours < 24 ? '__chart_auto_time' : '__chart_auto_date';
-    return getFormatter(sub, locale, timezone).format(date);
+  // chart_auto (and the bare 'auto' alias) is the per-CELL auto format (the
+  // table view, tooltips, any caller that passes 'auto' straight through). The
+  // line/area/bar specs resolve 'auto' to a concrete preset at the SERIES level
+  // (resolveAutoXFormat, span-based) before calling here — that's the chart axis
+  // and is allowed to differ (axis optimizes for label density).
+  //
+  // The rule here: NEVER drop information for data that isn't from today. A
+  // same-day timestamp shows time-only ('3:40 AM' — the date is obvious in
+  // context); anything else shows date + time ('6/1, 3:40 AM') so a value that
+  // is days old is never ambiguous about WHICH day. (The old age-based rule
+  // dropped the time for old data → "Jun 1", losing the time entirely.)
+  if (format === 'chart_auto' || format === 'auto' || format === 'auto_seconds') {
+    const now = new Date();
+    const sameDay = date.getFullYear() === now.getFullYear()
+      && date.getMonth() === now.getMonth()
+      && date.getDate() === now.getDate();
+    // 'auto_seconds' is the sub-minute variant (the table view upgrades to it
+    // when consecutive timestamps are < 1 min apart) — same date-vs-time rule,
+    // but with seconds so rows sharing a minute stay distinguishable.
+    const withSeconds = format === 'auto_seconds';
+    const preset = sameDay
+      ? (withSeconds ? 'chart_time_seconds' : 'chart_time')
+      : (withSeconds ? 'chart_datetime_seconds' : 'chart');
+    return getFormatter(preset, locale, timezone).format(date);
   }
 
   const formatter = getFormatter(format, locale, timezone);
@@ -570,18 +582,10 @@ function formatRelativeTime(date) {
 export function formatCellValue(value, columnName = '', options = {}) {
   if (value === null || value === undefined) return '';
 
-  // Check if column name suggests it's a timestamp. Match the time-ish
-  // word only as a WHOLE SEGMENT (bounded by start/end or a . _ -
-  // delimiter), not as any substring — otherwise `uptime.sec`,
-  // `downtime`, `update_count`, etc. falsely match "time"/"update" and
-  // get rendered as dates. `timestamp` and real time columns
-  // (start_time, event.timestamp, created_at, ts, date, …) still match.
-  const isTimestampColumn = /(^|[._-])(timestamp|datetime|time|date|created|updated|ts)([._-]|$)/i.test(columnName);
-
   // Check if value looks like a timestamp
   const timestampType = detectTimestampType(value);
 
-  if (isTimestampColumn || timestampType) {
+  if (isTimestampColumn(columnName) || timestampType) {
     const format = options.timestampFormat || 'short';
     return formatTimestamp(value, format, options);
   }
@@ -649,6 +653,67 @@ export function formatDataForDisplay(data, options = {}) {
 export const DASHBOARD_VARIABLE_TOKEN = '{{dashboard-variable}}';
 
 /**
+ * The range-variable sentinel. Authored via the WHERE-condition builder, written
+ * immediately AFTER the bound column (`ts {{range-variable}}`). At view time the
+ * server reads the column to its left, resolves the active range window, and
+ * rewrites `<col> {{range-variable}}` into a bounded predicate in the connection's
+ * dialect (SQL `BETWEEN`, EdgeLake `>=/<=`). ts-store/Prometheus auto-apply the
+ * window structurally and never see this token.
+ */
+export const RANGE_VARIABLE_TOKEN = '{{range-variable}}';
+
+/**
+ * isTimestampColumn — heuristic: does a column NAME look like a timestamp?
+ * Matches a time-ish word only as a WHOLE SEGMENT (bounded by start/end or a
+ * `. _ -` delimiter), so `uptime.sec` / `downtime` / `update_count` don't
+ * falsely match, while `timestamp`, `start_time`, `event.timestamp`,
+ * `created_at`, `ts`, `date` do. Exported so the editor can default the x-axis /
+ * range column consistently with how cells are rendered.
+ */
+export function isTimestampColumn(columnName = '') {
+  return /(^|[._-])(timestamp|datetime|time|date|created|updated|ts)([._-]|$)/i.test(columnName);
+}
+
+/**
+ * extractRangeColumn — pull the column bound to the range variable out of a raw
+ * SQL/EdgeLake query authored as `<col> {{range-variable}}`. Returns the column
+ * identifier (possibly dotted/quoted, trimmed of quotes) or null when the token
+ * isn't present / has no identifier to its left.
+ */
+export function extractRangeColumn(rawQuery = '') {
+  if (typeof rawQuery !== 'string' || !rawQuery.includes(RANGE_VARIABLE_TOKEN)) return null;
+  const m = /([A-Za-z_"`][A-Za-z0-9_."`]*)\s*\{\{range-variable\}\}/.exec(rawQuery);
+  if (!m) return null;
+  return m[1].replace(/["`]/g, '');
+}
+
+/**
+ * stripRangePredicate — remove a `<col> {{range-variable}}` predicate from a raw
+ * SQL query so it can run UNBOUNDED for an editor preview (the range only scopes
+ * data at view time; for "what does this data look like?" the window is noise and
+ * may land on an empty period). Handles the predicate joined by AND/OR (drops the
+ * adjacent connector) and the sole-condition case (drops a now-empty WHERE).
+ *
+ * Conservative: only rewrites the specific `<ident> {{range-variable}}` shape the
+ * WHERE-builder emits. Returns the query unchanged when the token isn't present.
+ */
+export function stripRangePredicate(rawQuery = '') {
+  if (typeof rawQuery !== 'string' || !rawQuery.includes(RANGE_VARIABLE_TOKEN)) return rawQuery;
+  const ident = '[A-Za-z_"`][A-Za-z0-9_."`]*';
+  const tok = '\\{\\{range-variable\\}\\}';
+  let q = rawQuery;
+  // `AND <col> {{range-variable}}` or `OR <col> {{range-variable}}` (preceding connector).
+  q = q.replace(new RegExp(`\\s+(?:AND|OR)\\s+${ident}\\s*${tok}`, 'gi'), '');
+  // `<col> {{range-variable}} AND|OR ` (following connector — when it's first).
+  q = q.replace(new RegExp(`${ident}\\s*${tok}\\s+(?:AND|OR)\\s+`, 'gi'), '');
+  // Sole condition: `WHERE <col> {{range-variable}}` → drop the WHERE entirely.
+  q = q.replace(new RegExp(`\\s+WHERE\\s+${ident}\\s*${tok}`, 'gi'), '');
+  // Any stragglers (defensive): bare `<col> {{range-variable}}`.
+  q = q.replace(new RegExp(`${ident}\\s*${tok}`, 'gi'), '');
+  return q;
+}
+
+/**
  * Build transforms configuration from chart data_mapping
  * This converts the database data_mapping format to the transforms format
  * used by transformData()
@@ -660,12 +725,16 @@ export const DASHBOARD_VARIABLE_TOKEN = '{{dashboard-variable}}';
  *   the filter is dropped (no filter applied → show all).
  * @returns {Object|null} - Transforms config or null if no transforms needed
  */
-export function buildTransformsFromMapping(dataMapping, dashboardVariableValue = null) {
+export function buildTransformsFromMapping(dataMapping, dashboardVariableValue = null, rangeFilter = null) {
   if (!dataMapping) return null;
 
   const { filters, aggregation, sort_by, sort_order, limit, sliding_window } = dataMapping;
   const hasSlidingWindow = sliding_window?.duration > 0 && sliding_window?.timestamp_col;
-  const hasTransforms = (filters?.length > 0) || aggregation?.type || sort_by || (limit > 0) || hasSlidingWindow;
+  // rangeFilter = { column, from, to } (absolute instants) for client-side
+  // parity on streaming panels: clamp `column` to [from, to] the same way the
+  // server's range expansion clamps the batch query.
+  const hasRangeFilter = rangeFilter?.column && rangeFilter?.from && rangeFilter?.to;
+  const hasTransforms = (filters?.length > 0) || aggregation?.type || sort_by || (limit > 0) || hasSlidingWindow || hasRangeFilter;
 
   if (!hasTransforms) return null;
 
@@ -684,18 +753,29 @@ export function buildTransformsFromMapping(dataMapping, dashboardVariableValue =
     return acc;
   }, []);
 
+  const builtFilters = resolvedFilters.map(f => ({
+    field: f.field,
+    op: f.op,
+    value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'
+      ? f.value.split(',').map(v => v.trim())
+      : f.value
+  }));
+
+  // Append the range clamp as gte+lte on the range column (epoch-ms bounds so
+  // the comparison works for numeric epoch and ISO-string columns alike).
+  if (hasRangeFilter) {
+    const fromMs = new Date(rangeFilter.from).getTime();
+    const toMs = new Date(rangeFilter.to).getTime();
+    builtFilters.push({ field: rangeFilter.column, op: 'gte', value: fromMs });
+    builtFilters.push({ field: rangeFilter.column, op: 'lte', value: toMs });
+  }
+
   return {
     slidingWindow: hasSlidingWindow ? {
       duration: sliding_window.duration,
       timestampCol: sliding_window.timestamp_col
     } : null,
-    filters: resolvedFilters.map(f => ({
-      field: f.field,
-      op: f.op,
-      value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'
-        ? f.value.split(',').map(v => v.trim())
-        : f.value
-    })),
+    filters: builtFilters,
     aggregation: aggregation?.type ? aggregation : null,
     sortBy: sort_by || null,
     sortOrder: sort_order || 'desc',

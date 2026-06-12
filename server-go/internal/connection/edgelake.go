@@ -131,12 +131,18 @@ func (a *EdgeLakeAdapter) Query(ctx context.Context, query registry.Query) (*reg
 		return nil, fmt.Errorf("database parameter is required for EdgeLake queries")
 	}
 
-	// Substitute the dashboard-variable token (if any). EdgeLake has no bind
-	// params — the command interpolates the query into a double-quoted AnyLog
-	// SQL string — so the value is ESCAPED (this is the sole injection vector
-	// for this adapter; see substituteEdgeLakeToken / escapeEdgeLakeValue).
+	// Substitute the dashboard-variable token AND the range token (if any).
+	// EdgeLake has no bind params — the command interpolates the query into a
+	// double-quoted AnyLog SQL string — so every value is ESCAPED (the sole
+	// injection vector for this adapter; see escapeEdgeLakeValue). A range
+	// condition `<col> {{range-variable}}` expands to an AnyLog-safe
+	// `col >= '<from>' AND col <= '<to>'` predicate.
 	value, hasValue := dashboardVariableValue(query.Params)
 	substituted, err := substituteEdgeLakeToken(query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+	substituted, err = substituteEdgeLakeRange(substituted, query.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -672,8 +678,24 @@ func (e *EdgeLakeDataSource) Query(ctx context.Context, query models.Query) (*mo
 		return nil, fmt.Errorf("database parameter is required for EdgeLake queries")
 	}
 
+	// Substitute the dashboard-variable token AND the range token (if any).
+	// EdgeLake has no bind params — values are interpolated into a double-quoted
+	// AnyLog SQL string — so every value is ESCAPED (see escapeEdgeLakeValue). A
+	// range condition `<col> {{range-variable}}` expands to an AnyLog-safe
+	// `col >= '<from>' AND col <= '<to>'` predicate. Matches the registry
+	// EdgeLakeAdapter path; this legacy path is the TypeID-less fallback.
+	value, hasValue := dashboardVariableValue(query.Params)
+	substituted, err := substituteEdgeLakeToken(query.Raw, value, hasValue)
+	if err != nil {
+		return nil, err
+	}
+	substituted, err = substituteEdgeLakeRange(substituted, query.Params)
+	if err != nil {
+		return nil, err
+	}
+
 	// Build the EdgeLake SQL command
-	command := fmt.Sprintf(`sql %s format = json "%s"`, database, query.Raw)
+	command := fmt.Sprintf(`sql %s format = json "%s"`, database, substituted)
 
 	// Determine if this should be a distributed query
 	distributed := e.config.UseDistributedQuery

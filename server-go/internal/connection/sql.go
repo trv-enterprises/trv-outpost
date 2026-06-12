@@ -202,19 +202,16 @@ func (a *SQLAdapter) Query(ctx context.Context, query registry.Query) (*registry
 		}
 	}
 
-	// Substitute the dashboard-variable token (if any) into the SQL as a
-	// driver-correct bound parameter — injection-safe and dialect-correct.
-	// The token scan builds args in occurrence order, which is what makes
-	// positional binding deterministic (any pre-existing param-map iteration
-	// is random-order; today the only such param is a single `limit`,
-	// order-irrelevant, so appending it after the substituted args is safe).
-	value, hasValue := dashboardVariableValue(query.Params)
-	raw, args, err := substituteSQLToken(a.driver, query.Raw, value, hasValue)
+	// Substitute the dashboard-variable AND range tokens (if any) into the SQL
+	// as driver-correct bound parameters — injection-safe and dialect-correct.
+	// A single left-to-right scan numbers placeholders in occurrence order, so
+	// interleaved range/variable tokens bind correctly for positional drivers.
+	raw, args, err := substituteAllSQLTokens(a.driver, query.Raw, query.Params)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range query.Params {
-		if k == DashboardVariableParam {
+		if reservedQueryParams[k] {
 			continue // consumed by token substitution above
 		}
 		args = append(args, v)
@@ -279,15 +276,15 @@ func (a *SQLAdapter) Stream(ctx context.Context, query registry.Query) (<-chan r
 		}
 	}
 
-	// Substitute the dashboard-variable token (if any) as a bound parameter,
-	// matching the batch Query path. Args are built in occurrence order.
-	value, hasValue := dashboardVariableValue(query.Params)
-	raw, args, err := substituteSQLToken(a.driver, query.Raw, value, hasValue)
+	// Substitute the dashboard-variable AND range tokens (if any) as bound
+	// parameters, matching the batch Query path. A single left-to-right scan
+	// numbers placeholders in occurrence order.
+	raw, args, err := substituteAllSQLTokens(a.driver, query.Raw, query.Params)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range query.Params {
-		if k == DashboardVariableParam {
+		if reservedQueryParams[k] {
 			continue // consumed by token substitution above
 		}
 		args = append(args, v)
@@ -541,17 +538,18 @@ func NewSQLDataSource(config *models.SQLConfig) (*SQLDataSource, error) {
 
 // Query executes a SQL query and returns normalized results
 func (s *SQLDataSource) Query(ctx context.Context, query models.Query) (*models.ResultSet, error) {
-	// Substitute the dashboard-variable token (if any) into the SQL as a
-	// driver-correct bound parameter — injection-safe, dialect-correct, and
-	// built in occurrence order. (This is the live SQL path the factory wires
-	// for ConnectionTypeSQL — see CreateFromConfig → NewSQLDataSource.)
-	value, hasValue := dashboardVariableValue(query.Params)
-	raw, args, err := substituteSQLToken(s.config.Driver, query.Raw, value, hasValue)
+	// Substitute the dashboard-variable AND range tokens (if any) into the SQL
+	// as driver-correct bound parameters — injection-safe, dialect-correct, and
+	// built in occurrence order via a single left-to-right scan (so interleaved
+	// range/variable tokens number correctly for positional drivers). This is
+	// the live SQL path the factory wires for ConnectionTypeSQL — see
+	// CreateFromConfig → NewSQLDataSource.
+	raw, args, err := substituteAllSQLTokens(s.config.Driver, query.Raw, query.Params)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range query.Params {
-		if k == DashboardVariableParam {
+		if reservedQueryParams[k] {
 			continue // consumed by token substitution above
 		}
 		args = append(args, v)
@@ -606,15 +604,14 @@ func (s *SQLDataSource) Query(ctx context.Context, query models.Query) (*models.
 
 // Stream executes a SQL query and streams results
 func (s *SQLDataSource) Stream(ctx context.Context, query models.Query) (<-chan models.Record, error) {
-	// Substitute the dashboard-variable token (if any) as a bound parameter,
-	// matching the batch Query path.
-	value, hasValue := dashboardVariableValue(query.Params)
-	raw, args, err := substituteSQLToken(s.config.Driver, query.Raw, value, hasValue)
+	// Substitute the dashboard-variable AND range tokens (if any) as bound
+	// parameters, matching the batch Query path (single occurrence-order scan).
+	raw, args, err := substituteAllSQLTokens(s.config.Driver, query.Raw, query.Params)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range query.Params {
-		if k == DashboardVariableParam {
+		if reservedQueryParams[k] {
 			continue // consumed by token substitution above
 		}
 		args = append(args, v)

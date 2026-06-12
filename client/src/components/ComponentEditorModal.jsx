@@ -22,6 +22,11 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
   const [isValid, setIsValid] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
+  // When a nested modal (connection picker, chart-type, value pickers) is open,
+  // drop THIS modal's focus trap — otherwise its trap steals focus back from the
+  // nested modal's Search input / tag dropdown (keystrokes rejected, dropdown
+  // opens-then-closes).
+  const [nestedModalOpen, setNestedModalOpen] = useState(false);
   const editorRef = useRef(null);
 
   // Reset state when modal opens — increment key to force ComponentEditor remount
@@ -136,6 +141,7 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
         className="component-editor-modal"
         preventCloseOnClickOutside
         isFullWidth
+        focusTrap={!nestedModalOpen}
       >
         <div className="component-editor-content">
           <ComponentEditor
@@ -148,6 +154,7 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
             showActions={false}
             onValidityChange={setIsValid}
             onDirtyChange={setIsDirty}
+            onNestedModalChange={setNestedModalOpen}
           />
         </div>
       </Modal>
