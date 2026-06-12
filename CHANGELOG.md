@@ -6,6 +6,45 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.30.0] — 2026-06-12
+
+### Added
+
+- **Range dashboard variable.** A third dashboard-variable type, `range`: a
+  header time-window picker that scopes time-series components to a chosen
+  `[from, to]` window across **SQL, EdgeLake, ts-store, and Prometheus**, each
+  expanding the window in its own dialect. The dashboard sends the user's
+  *intent* (relative "last 24h" or an absolute from→to); SQL/EdgeLake resolve
+  relative→absolute server-side and substitute a bounded predicate, while
+  ts-store/Prometheus map to their native forms. SQL/EdgeLake authors opt in via
+  a WHERE-condition value-source "Range variable" (`<col> {{range-variable}}`);
+  ts-store/Prometheus auto-apply. Defaults to last 24h (Prometheus 1h step),
+  offers relative presets + an absolute date/time picker, guards against mixing
+  connection types, and makes the range column the x-axis default.
+
+### Fixed
+
+- **Prometheus day/week windows.** `7d` / `30d` relative windows returned no
+  data (Go's duration parser rejects `d`/`w`); they now resolve correctly.
+- **Prometheus point cap.** A wide window with a fine step exceeded Prometheus's
+  11,000-point limit and failed the whole query; the step now auto-coarsens to
+  fit (Grafana-style), and the picker shows the effective step.
+- **Prometheus instant vs range.** The range variable now applies only to
+  range-type components; instant queries stay instant.
+- **`auto` timestamp format.** No longer drops information for not-today data
+  (shows date + time) and adds seconds for sub-minute data on both the chart
+  axis and the table view.
+- **Connection-picker modal.** The Search and "Filter by tag" controls were
+  unusable (the parent editor modal's focus trap stole focus); fixed by
+  releasing the trap while a nested modal is open.
+
+### Changed
+
+- Editor preview strips the range predicate for a representative sample and caps
+  rows; range charts auto-order most-recent-N then chronological. Removed the
+  redundant view-mode "Edit" overflow item; panel hover now shows the component
+  name.
+
 ## [0.29.4] — 2026-06-11
 
 ### Fixed
