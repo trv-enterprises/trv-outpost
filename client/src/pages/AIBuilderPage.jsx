@@ -12,9 +12,7 @@ import {
   Tag,
   TextInput,
   Modal,
-  Link,
-  OverflowMenu,
-  OverflowMenuItem
+  Link
 } from '@carbon/react';
 import {
   ArrowLeft,
@@ -22,12 +20,12 @@ import {
   User,
   Save,
   Close,
-  Information,
-  Download
+  Information
 } from '@carbon/icons-react';
 import AiIcon from '../components/icons/AiIcon';
 import AIComponentPreview from '../components/AIComponentPreview';
 import AgentToolCallCard from '../components/shared/AgentToolCallCard';
+import AgentSettingsMenu from '../components/shared/AgentSettingsMenu';
 import AgentWelcome from '../components/shared/AgentWelcome';
 import {
   exportAsMarkdown as exportConversationMarkdown,
@@ -139,6 +137,10 @@ function AIBuilderPage() {
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [initialMessageSent, setInitialMessageSent] = useState(false);
+  // Local-only pref: open tool-call cards expanded by default. Session-scoped
+  // (not persisted) — the component editor has no preferences store like the
+  // Assistant's. Mirrors the Assistant's "Expand tool calls by default".
+  const [expandToolCalls, setExpandToolCalls] = useState(false);
   const messagesEndRef = useRef(null);
 
   const {
@@ -364,7 +366,7 @@ function AIBuilderPage() {
           {message.tool_calls && message.tool_calls.length > 0 && (
             <div className="tool-calls">
               {message.tool_calls.map((tool, i) => (
-                <AgentToolCallCard key={tool.id || i} toolCall={tool} />
+                <AgentToolCallCard key={tool.id || i} toolCall={tool} defaultOpen={expandToolCalls} />
               ))}
             </div>
           )}
@@ -395,25 +397,14 @@ function AIBuilderPage() {
           {connected && <Tag type="green" size="sm">Connected</Tag>}
         </div>
         <div className="header-actions">
-          <OverflowMenu
-            size="md"
-            renderIcon={Download}
-            iconDescription="Export conversation"
-            flipped
-            className="ai-builder-export-menu"
-            aria-label="Export conversation"
-          >
-            <OverflowMenuItem
-              itemText="Export as Markdown"
-              onClick={handleExportMarkdown}
-              disabled={!hasMessages}
-            />
-            <OverflowMenuItem
-              itemText="Export as JSON"
-              onClick={handleExportJson}
-              disabled={!hasMessages}
-            />
-          </OverflowMenu>
+          <AgentSettingsMenu
+            label="Component AI settings"
+            // Export items disable on an empty conversation (pass undefined).
+            onExportMarkdown={hasMessages ? handleExportMarkdown : undefined}
+            onExportJson={hasMessages ? handleExportJson : undefined}
+            expandToolCalls={expandToolCalls}
+            onToggleExpandToolCalls={() => setExpandToolCalls((v) => !v)}
+          />
           <Button
             kind="secondary"
             renderIcon={Close}

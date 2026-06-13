@@ -162,8 +162,6 @@ export default function AssistantSidecard({
               onExportJson={hasMessages ? handleExportJson : undefined}
               expandToolCalls={prefs.expandToolCalls}
               onToggleExpandToolCalls={prefs.toggleExpandToolCalls}
-              showTokenUsage={prefs.showTokenUsage}
-              onToggleShowTokenUsage={prefs.toggleShowTokenUsage}
             />
             <IconButton
               kind="ghost"
@@ -237,14 +235,6 @@ export default function AssistantSidecard({
             Send
           </Button>
         </div>
-        {prefs.showTokenUsage && (
-          <div className="assistant-sidecard__token-usage">
-            Token usage counters will appear here once per-turn
-            usage events are broadcast over the session WebSocket
-            (small follow-up commit; server already tracks the
-            exact counts via response.Usage).
-          </div>
-        )}
       </footer>
     </aside>
   );
