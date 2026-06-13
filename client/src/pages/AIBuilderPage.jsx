@@ -28,6 +28,7 @@ import {
 import AiIcon from '../components/icons/AiIcon';
 import AIComponentPreview from '../components/AIComponentPreview';
 import AgentToolCallCard from '../components/shared/AgentToolCallCard';
+import AgentWelcome from '../components/shared/AgentWelcome';
 import {
   exportAsMarkdown as exportConversationMarkdown,
   exportAsJson as exportConversationJson,
@@ -447,55 +448,20 @@ function AIBuilderPage() {
               <>
                 {/* Welcome message if no messages */}
                 {messages.length === 0 && (
-                  <div className="welcome-message">
-                    <AiIcon size={48} />
-                    <h3>Welcome to AI Component Builder</h3>
-                    <p>
-                      Describe the component you want to create, and I'll help you build it.
-                      I can create charts, displays, and controls.
-                    </p>
-                    <div className="suggestions">
-                      <p className="suggestions-label">Try one of these:</p>
-                      <div className="suggestion-buttons">
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Create a bar chart showing sales by region')}
-                        >
-                          Bar chart for sales
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Make a line chart for temperature over time')}
-                        >
-                          Line chart for temperature
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Create a toggle control to turn a device on/off via MQTT')}
-                        >
-                          Toggle control for MQTT
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Create a slider to set brightness level')}
-                        >
-                          Dimmer slider control
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Add a zoom slider below the chart')}
-                        >
-                          Add a zoom slider
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Format the x-axis to show time only (HH:MM AM/PM)')}
-                        >
-                          Format x-axis as time
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <AgentWelcome
+                    icon={<AiIcon size={48} />}
+                    heading="Welcome to AI Component Builder"
+                    description="Describe the component you want to create, and I'll help you build it. I can create charts, displays, and controls."
+                    suggestions={[
+                      { label: 'Bar chart for sales', prompt: 'Create a bar chart showing sales by region' },
+                      { label: 'Line chart for temperature', prompt: 'Make a line chart for temperature over time' },
+                      { label: 'Toggle control for MQTT', prompt: 'Create a toggle control to turn a device on/off via MQTT' },
+                      { label: 'Dimmer slider control', prompt: 'Create a slider to set brightness level' },
+                      { label: 'Add a zoom slider', prompt: 'Add a zoom slider below the chart' },
+                      { label: 'Format x-axis as time', prompt: 'Format the x-axis to show time only (HH:MM AM/PM)' },
+                    ]}
+                    onSuggestion={setInput}
+                  />
                 )}
 
                 {/* Message history */}

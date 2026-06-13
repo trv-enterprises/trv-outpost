@@ -208,6 +208,7 @@ export default function AssistantSidecard({
           thinking={session.thinking}
           streamingContent={session.streamingContent}
           expandToolCalls={prefs.expandToolCalls}
+          onSuggestion={setDraft}
         />
       </div>
 

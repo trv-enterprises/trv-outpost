@@ -8,6 +8,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import AssistantToolCallCard from './AssistantToolCallCard';
+import AgentWelcome from '../shared/AgentWelcome';
+import AiIcon from '../icons/AiIcon';
 
 /**
  * AssistantMessageList — renders the persisted conversation. User
@@ -35,6 +37,7 @@ export default function AssistantMessageList({
   thinking,
   streamingContent,
   expandToolCalls = false,
+  onSuggestion,
 }) {
   const scrollerRef = useRef(null);
 
@@ -48,11 +51,18 @@ export default function AssistantMessageList({
   if ((!messages || messages.length === 0) && !streamingContent) {
     return (
       <div className="assistant-messagelist assistant-messagelist--empty">
-        <p>Ask the assistant anything about your dashboard deployment.</p>
-        <p className="assistant-messagelist__hint">
-          Try: <em>&quot;list my connections&quot;</em>, <em>&quot;what dashboards do I have?&quot;</em>, or
-          <em> &quot;create a chart from MQTT topic home/temp&quot;</em>.
-        </p>
+        <AgentWelcome
+          icon={<AiIcon size={48} />}
+          heading="Dashboard Assistant"
+          description="Ask anything about your dashboard deployment — your connections, components, and dashboards — or have me build something."
+          suggestions={[
+            { label: 'List my connections', prompt: 'List my connections' },
+            { label: 'What dashboards do I have?', prompt: 'What dashboards do I have?' },
+            { label: 'Chart from an MQTT topic', prompt: 'Create a chart from MQTT topic home/temp' },
+            { label: 'Summarize a dashboard', prompt: 'Summarize one of my dashboards' },
+          ]}
+          onSuggestion={onSuggestion}
+        />
       </div>
     );
   }
