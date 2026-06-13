@@ -12,7 +12,9 @@ import {
   Tag,
   TextInput,
   Modal,
-  Link
+  Link,
+  OverflowMenu,
+  OverflowMenuItem
 } from '@carbon/react';
 import {
   ArrowLeft,
@@ -20,10 +22,16 @@ import {
   User,
   Save,
   Close,
-  Information
+  Information,
+  Download
 } from '@carbon/icons-react';
 import AiIcon from '../components/icons/AiIcon';
 import AIComponentPreview from '../components/AIComponentPreview';
+import AgentToolCallCard from '../components/shared/AgentToolCallCard';
+import {
+  exportAsMarkdown as exportConversationMarkdown,
+  exportAsJson as exportConversationJson,
+} from '../components/shared/exportAgentConversation';
 import { useAISession } from '../hooks/useAISession';
 import apiClient from '../api/client';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
@@ -303,6 +311,27 @@ function AIBuilderPage() {
     }
   };
 
+  // Export the conversation as Markdown / JSON. Secrets in tool-call args and
+  // results are masked by the shared exporter (issue #40). Disabled until the
+  // transcript has at least one message.
+  const hasMessages = messages && messages.length > 0;
+  const handleExportMarkdown = useCallback(() => {
+    exportConversationMarkdown({
+      title: 'Component AI — Edit with AI',
+      filePrefix: 'component-ai',
+      messages,
+      namespace: component?.namespace,
+    });
+  }, [messages, component?.namespace]);
+  const handleExportJson = useCallback(() => {
+    exportConversationJson({
+      title: 'Component AI — Edit with AI',
+      filePrefix: 'component-ai',
+      messages,
+      namespace: component?.namespace,
+    });
+  }, [messages, component?.namespace]);
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -334,9 +363,7 @@ function AIBuilderPage() {
           {message.tool_calls && message.tool_calls.length > 0 && (
             <div className="tool-calls">
               {message.tool_calls.map((tool, i) => (
-                <Tag key={i} type="blue" size="sm">
-                  {tool.name}
-                </Tag>
+                <AgentToolCallCard key={tool.id || i} toolCall={tool} />
               ))}
             </div>
           )}
@@ -362,11 +389,30 @@ function AIBuilderPage() {
             <AiIcon size={24} />
             {isNewChart
               ? `Create ${componentType === 'control' ? 'Control' : componentType === 'display' ? 'Display' : componentType === 'chart' ? 'Chart' : 'Component'} with AI`
-              : 'Edit Component with AI'}
+              : 'Edit with AI'}
           </h1>
           {connected && <Tag type="green" size="sm">Connected</Tag>}
         </div>
         <div className="header-actions">
+          <OverflowMenu
+            size="md"
+            renderIcon={Download}
+            iconDescription="Export conversation"
+            flipped
+            className="ai-builder-export-menu"
+            aria-label="Export conversation"
+          >
+            <OverflowMenuItem
+              itemText="Export as Markdown"
+              onClick={handleExportMarkdown}
+              disabled={!hasMessages}
+            />
+            <OverflowMenuItem
+              itemText="Export as JSON"
+              onClick={handleExportJson}
+              disabled={!hasMessages}
+            />
+          </OverflowMenu>
           <Button
             kind="secondary"
             renderIcon={Close}

@@ -192,9 +192,11 @@
           line-height: 1.5;
         }
 
+        // Stacked AgentToolCallCard rows (shared component) — full-width,
+        // collapsible. Column layout, not the old inline-Tag wrap.
         .tool-calls {
           display: flex;
-          flex-wrap: wrap;
+          flex-direction: column;
           gap: spacing.$spacing-02;
           margin-top: spacing.$spacing-03;
         }
