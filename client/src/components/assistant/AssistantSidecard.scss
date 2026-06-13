@@ -119,6 +119,15 @@
   }
 }
 
+// Live per-session token counter, shown under the composer when the user
+// enables "Show token usage" in the cog menu (issue #55).
+.assistant-sidecard__token-usage {
+  margin-top: spacing.$spacing-03;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper);
+  line-height: 1.4;
+}
+
 .assistant-messagelist {
   flex: 1 1 auto;
   display: flex;

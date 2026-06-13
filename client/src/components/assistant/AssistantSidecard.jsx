@@ -162,6 +162,8 @@ export default function AssistantSidecard({
               onExportJson={hasMessages ? handleExportJson : undefined}
               expandToolCalls={prefs.expandToolCalls}
               onToggleExpandToolCalls={prefs.toggleExpandToolCalls}
+              showTokenUsage={prefs.showTokenUsage}
+              onToggleShowTokenUsage={prefs.toggleShowTokenUsage}
             />
             <IconButton
               kind="ghost"
@@ -235,6 +237,15 @@ export default function AssistantSidecard({
             Send
           </Button>
         </div>
+        {prefs.showTokenUsage && session.tokenUsage && (
+          <div className="assistant-sidecard__token-usage">
+            Tokens this session: {session.tokenUsage.input.toLocaleString()} in
+            {' · '}
+            {session.tokenUsage.output.toLocaleString()} out
+            {' · '}
+            {(session.tokenUsage.input + session.tokenUsage.output).toLocaleString()} total
+          </div>
+        )}
       </footer>
     </aside>
   );

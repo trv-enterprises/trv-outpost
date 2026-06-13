@@ -4,10 +4,8 @@
 
 // The Assistant's cog menu is now the shared AgentSettingsMenu, used by both
 // AI surfaces (issue #40 parity). This thin wrapper keeps the Assistant's call
-// site unchanged. "Show token usage" was dropped from the menu — the live
-// per-session display was never wired (issue #55); the related props are
-// accepted-and-ignored so callers don't break, and can be removed once #55
-// re-introduces a working item.
+// site unchanged and passes through "Show token usage" (live per-session
+// counter — issue #55; the Component editor omits it).
 import AgentSettingsMenu from '../shared/AgentSettingsMenu';
 
 export default function AssistantSettingsMenu({
@@ -16,9 +14,7 @@ export default function AssistantSettingsMenu({
   onExportJson,
   expandToolCalls,
   onToggleExpandToolCalls,
-  // eslint-disable-next-line no-unused-vars
   showTokenUsage,
-  // eslint-disable-next-line no-unused-vars
   onToggleShowTokenUsage,
 }) {
   return (
@@ -29,6 +25,8 @@ export default function AssistantSettingsMenu({
       onExportJson={onExportJson}
       expandToolCalls={expandToolCalls}
       onToggleExpandToolCalls={onToggleExpandToolCalls}
+      showTokenUsage={showTokenUsage}
+      onToggleShowTokenUsage={onToggleShowTokenUsage}
     />
   );
 }

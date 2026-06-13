@@ -26,9 +26,10 @@ import './AgentSettingsMenu.scss';
  * onToggleExpandToolCalls. Export items render disabled (not hidden) when their
  * handler is falsy so the affordance is visible on an empty conversation.
  *
- * NOTE: "Show token usage" was removed from this menu — the live per-session
- * usage display was never wired end-to-end (issue #55). Re-add a gated item
- * here when that lands; the per-user daily buckets already exist server-side.
+ * "Show token usage" renders only when onToggleShowTokenUsage is supplied —
+ * the Dashboard Assistant wires it (live per-session counter, issue #55); the
+ * Component editor omits it (its surface doesn't broadcast usage yet), so the
+ * item simply doesn't appear there.
  */
 export default function AgentSettingsMenu({
   label = 'Settings',
@@ -37,6 +38,8 @@ export default function AgentSettingsMenu({
   onExportJson,
   expandToolCalls,
   onToggleExpandToolCalls,
+  showTokenUsage,
+  onToggleShowTokenUsage,
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -120,22 +123,36 @@ export default function AgentSettingsMenu({
             </>
           )}
 
+          {(onToggleExpandToolCalls || onToggleShowTokenUsage) && (
+            <div className="agent-settings-menu__divider" />
+          )}
           {onToggleExpandToolCalls && (
-            <>
-              <div className="agent-settings-menu__divider" />
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={!!expandToolCalls}
-                className="agent-settings-menu__item"
-                onClick={() => onToggleExpandToolCalls?.()}
-              >
-                <span className="agent-settings-menu__check">
-                  {expandToolCalls && <Checkmark size={16} />}
-                </span>
-                <span>Expand tool calls by default</span>
-              </button>
-            </>
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={!!expandToolCalls}
+              className="agent-settings-menu__item"
+              onClick={() => onToggleExpandToolCalls?.()}
+            >
+              <span className="agent-settings-menu__check">
+                {expandToolCalls && <Checkmark size={16} />}
+              </span>
+              <span>Expand tool calls by default</span>
+            </button>
+          )}
+          {onToggleShowTokenUsage && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={!!showTokenUsage}
+              className="agent-settings-menu__item"
+              onClick={() => onToggleShowTokenUsage?.()}
+            >
+              <span className="agent-settings-menu__check">
+                {showTokenUsage && <Checkmark size={16} />}
+              </span>
+              <span>Show token usage</span>
+            </button>
           )}
         </div>
       )}
