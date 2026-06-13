@@ -350,25 +350,29 @@ const data = {
   ).xAxis.data;
 
   // TODAY's date — the "same-day, recent" path collapses to time-only (the date
-  // is obvious in context). Built from now so the test tracks the recency rule:
-  // auto only drops the date when every point is from today. (Fixed past dates
-  // would correctly be treated as "not today" and get the date — see below.)
-  const today = new Date();
-  const todayUTC = (h, m, s) => Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), h, m, s);
+  // is obvious in context). resolveAutoXFormat compares LOCAL date components, so
+  // build these from the LOCAL calendar day anchored at noon — noon can't cross a
+  // day boundary into yesterday/tomorrow in any timezone, so this stays "today"
+  // regardless of where/when the test runs. (Building via Date.UTC of the UTC day
+  // was the bug: near midnight UTC the UTC day differs from the local day → the
+  // "today" timestamp read as not-today and got a date.) Fixed past dates below
+  // still correctly read as not-today and get the date.
+  const now = new Date();
+  const todayLocal = (h, m, s) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, s).getTime();
 
   // Same-minute (today) → auto adds seconds (HH:MM:SS, all distinct).
   const sameMin = run([
-    [todayUTC(14, 6, 5), 1],
-    [todayUTC(14, 6, 25), 2],
-    [todayUTC(14, 6, 50), 3],
+    [todayLocal(12, 6, 5), 1],
+    [todayLocal(12, 6, 25), 2],
+    [todayLocal(12, 6, 50), 3],
   ]);
   check('case 18: auto + same-minute → seconds', new Set(sameMin).size === 3 && sameMin[0].split(':').length === 3);
 
   // Minutes apart, same day (today) → time-only (HH:MM), no date, no seconds.
   const minutesApart = run([
-    [todayUTC(14, 6, 0), 1],
-    [todayUTC(14, 8, 0), 2],
-    [todayUTC(14, 10, 0), 3],
+    [todayLocal(12, 6, 0), 1],
+    [todayLocal(12, 8, 0), 2],
+    [todayLocal(12, 10, 0), 3],
   ]);
   check('case 18: auto + minutes-apart → time-only', minutesApart.every((l) => /^\d{1,2}:\d{2}$/.test(l)));
 

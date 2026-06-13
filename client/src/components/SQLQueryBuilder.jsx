@@ -13,8 +13,6 @@ import {
   InlineNotification,
   Tag,
   IconButton,
-  Accordion,
-  AccordionItem,
 } from '@carbon/react';
 import { Add, TrashCan, Play, Copy } from '@carbon/icons-react';
 import api from '../api/client';
@@ -66,7 +64,6 @@ const SQLQueryBuilder = ({
 
   // Generated query
   const [generatedQuery, setGeneratedQuery] = useState('');
-  const [queryResults, setQueryResults] = useState(null);
   const [executing, setExecuting] = useState(false);
 
   // Fetch schema when datasource changes
@@ -271,7 +268,6 @@ const SQLQueryBuilder = ({
     if (!generatedQuery || !connectionId) return;
 
     setExecuting(true);
-    setQueryResults(null);
     try {
       // Build the PREVIEW query (distinct from the saved/runtime query):
       //  - Drop any `<col> {{range-variable}}` predicate — the range only scopes
@@ -287,12 +283,15 @@ const SQLQueryBuilder = ({
       const response = await api.queryConnection(connectionId, {
         query: { raw: previewQuery, type: 'sql' }
       });
-      setQueryResults(response);
+      // No local results table — the editor (onExecute) owns the single preview.
       if (onExecute) {
         onExecute(response);
       }
     } catch (err) {
-      setQueryResults({ success: false, error: err.message });
+      // Surface the failure through the editor's single error path too.
+      if (onExecute) {
+        onExecute({ success: false, error: err.message });
+      }
     } finally {
       setExecuting(false);
     }
@@ -732,47 +731,12 @@ const SQLQueryBuilder = ({
         </div>
       )}
 
-      {/* Query Results */}
-      {queryResults && (
-        <Accordion>
-          <AccordionItem title={`Results (${queryResults.success ? queryResults.result_set?.rows?.length || 0 : 'Error'} rows)`}>
-            {queryResults.success ? (
-              <div className="results-table-wrapper">
-                <table className="results-table">
-                  <thead>
-                    <tr>
-                      {queryResults.result_set?.columns?.map(col => (
-                        <th key={col}>{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {queryResults.result_set?.rows?.slice(0, 20).map((row, idx) => (
-                      <tr key={idx}>
-                        {row.map((cell, cellIdx) => (
-                          <td key={cellIdx}>{cell !== null ? String(cell) : 'NULL'}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {queryResults.result_set?.rows?.length > 20 && (
-                  <p className="results-truncated">
-                    Showing 20 of {queryResults.result_set.rows.length} rows
-                  </p>
-                )}
-              </div>
-            ) : (
-              <InlineNotification
-                kind="error"
-                title="Query Error"
-                subtitle={queryResults.error}
-                hideCloseButton
-              />
-            )}
-          </AccordionItem>
-        </Accordion>
-      )}
+      {/* Query results are NOT rendered here. The single source of truth is the
+          editor's bottom preview table (ComponentEditor's filteredPreviewData),
+          which reflects client-side processing (filters/agg) too — Execute feeds
+          it via onExecute, and the editor auto-scrolls to it. Errors surface in
+          the editor's "Sample Failed" notification (onExecute sets previewError).
+          A second results table here was redundant + filter-unaware (issue #31). */}
     </div>
   );
 };

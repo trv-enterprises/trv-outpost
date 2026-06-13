@@ -740,6 +740,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const [availableColumns, setAvailableColumns] = useState([]);
+  // The single query-results table lives at the bottom of the Data Mapping tab
+  // (it's filter-aware). It's easy to miss after running a query, so we scroll
+  // to it when a NEW run lands. Keyed on previewData (a fresh fetch), NOT on the
+  // filtered memo — otherwise editing filters would yank the page each keystroke.
+  const previewRef = useRef(null);
+  useEffect(() => {
+    if (previewData && previewRef.current) {
+      previewRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [previewData]);
 
   // Code editor
   const [componentCode, setComponentCode] = useState('');
@@ -4473,7 +4483,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 )}
 
                 {filteredPreviewData && (
-                  <div className="data-preview">
+                  <div className="data-preview" ref={previewRef}>
                     <h4>
                       {filteredPreviewData.metadata?.filtered ? (
                         <>Filtered Results ({filteredPreviewData.rows?.length || 0} of {filteredPreviewData.metadata?.original_row_count || 0} rows)</>
