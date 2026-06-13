@@ -71,7 +71,13 @@ const dashboardBuilderFlow = `# Build flow
 
 1. Confirm the target connection exists and is the type you expected
    (` + "`" + `get_connection` + "`" + `). If the runtime context didn't specify one,
-   ` + "`" + `list_connections` + "`" + ` first and pick a sensible match — or ask.
+   ` + "`" + `list_connections` + "`" + ` first. **If two or more connections
+   plausibly match the request (e.g. several expose a temperature
+   field for "a temp chart"), do NOT pick one — call
+   ` + "`" + `request_clarification` + "`" + ` listing the candidates by name and
+   type and let the user choose.** Guessing the wrong source builds a
+   confidently-wrong chart on the wrong data. Use a connection
+   silently only when EXACTLY ONE matches (or the context named it).
 2. Discover the data shape (` + "`" + `get_connection_schema` + "`" + ` for SQL /
    Prometheus, ` + "`" + `list_mqtt_topics` + "`" + ` / ` + "`" + `list_edgelake_tables` + "`" + ` / etc
    for other types). You need to know what fields and metrics are
