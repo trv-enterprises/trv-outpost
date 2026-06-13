@@ -1058,7 +1058,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 					"description": {Type: "string", Description: "Description"},
 					"namespace":   {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
 					"panels":      {Type: "array", Description: "Array of panel objects. Each panel is {id, x, y, w, h, and exactly one of: component_id (reference an existing component), text_config (inline text — see tool description for schema), or neither (empty placeholder)}."},
-					"settings":    {Type: "object", Description: "Dashboard settings (theme, refresh_interval, layout_dimension, etc)"},
+					"settings":    {Type: "object", Description: "Dashboard settings: theme, refresh_interval (ms), timezone, layout_dimension, title_scale, scale_percent, is_public, allow_export. Dashboard variables: set variables_enabled=true and variables=[{name, label, mode, ...}] where mode is connection_swap | filter | range. filter variables substitute the {{dashboard-variable}} token in component queries; range variables substitute {{range-variable}} (written as `<column> {{range-variable}}`). See the dashboard-builder prompt's \"Dashboard variables\" section for the full shape and authoring contract."},
 					"tags":        {Type: "array", Description: "Tags"},
 				},
 				Required: []string{"name"},
@@ -1094,7 +1094,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 					"name":        {Type: "string", Description: "New name"},
 					"description": {Type: "string", Description: "New description"},
 					"panels":      {Type: "array", Description: "New panel array (replaces existing). Each panel is {id, x, y, w, h, and exactly one of: component_id, text_config, or neither}. See create_dashboard for text_config schema."},
-					"settings":    {Type: "object", Description: "New settings"},
+					"settings":    {Type: "object", Description: "New settings (same shape as create_dashboard, including variables_enabled + variables[] for dashboard variables). Replaces the whole settings object — fetch the dashboard first if you only want to add variables to existing settings."},
 					"tags":        {Type: "array", Description: "New tags"},
 				},
 				Required: []string{"id"},
@@ -1294,14 +1294,78 @@ func parsePanels(panelsRaw []interface{}) []models.DashboardPanel {
 }
 
 func parseSettings(settingsRaw map[string]interface{}) models.DashboardSettings {
-	return models.DashboardSettings{
-		Theme:           getString(settingsRaw, "theme"),
-		RefreshInterval: getInt(settingsRaw, "refresh_interval"),
-		TimeZone:        getString(settingsRaw, "timezone"),
-		DefaultView:     getString(settingsRaw, "default_view"),
-		IsPublic:        getBool(settingsRaw, "is_public"),
-		AllowExport:     getBool(settingsRaw, "allow_export"),
+	s := models.DashboardSettings{
+		Theme:            getString(settingsRaw, "theme"),
+		RefreshInterval:  getInt(settingsRaw, "refresh_interval"),
+		TimeZone:         getString(settingsRaw, "timezone"),
+		DefaultView:      getString(settingsRaw, "default_view"),
+		IsPublic:         getBool(settingsRaw, "is_public"),
+		AllowExport:      getBool(settingsRaw, "allow_export"),
+		LayoutDimension:  getString(settingsRaw, "layout_dimension"),
+		TitleScale:       getInt(settingsRaw, "title_scale"),
+		ScalePercent:     getInt(settingsRaw, "scale_percent"),
+		VariablesEnabled: getBool(settingsRaw, "variables_enabled"),
 	}
+	if varsRaw, ok := settingsRaw["variables"].([]interface{}); ok {
+		s.Variables = parseDashboardVariables(varsRaw)
+	}
+	return s
+}
+
+// parseDashboardVariables maps the loosely-typed settings.variables[] payload
+// onto the model. Mirrors the chat assistant's schema; the substitution tokens
+// ({{dashboard-variable}}, {{range-variable}}) are authored into component
+// queries, not here.
+func parseDashboardVariables(arr []interface{}) []models.DashboardVariable {
+	vars := make([]models.DashboardVariable, 0, len(arr))
+	for _, item := range arr {
+		raw, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		v := models.DashboardVariable{
+			Name:  getString(raw, "name"),
+			Label: getString(raw, "label"),
+			Mode:  getString(raw, "mode"),
+		}
+		if cs := getMap(raw, "connection_swap"); cs != nil {
+			cfg := &models.ConnectionSwapConfig{
+				SchemaStrict:   getString(cs, "schema_strict"),
+				SameNamespace:  getBool(cs, "same_namespace"),
+				LabelTagPrefix: getString(cs, "label_tag_prefix"),
+			}
+			if tagsRaw, ok := cs["tags"].([]interface{}); ok {
+				cfg.Tags = parseStringArray(tagsRaw)
+			}
+			v.ConnectionSwap = cfg
+		}
+		if fv := getMap(raw, "filter"); fv != nil {
+			cfg := &models.FilterValueConfig{
+				ValueSource:  getString(fv, "value_source"),
+				DefaultValue: getString(fv, "default_value"),
+				ValueColumn:  getString(fv, "value_column"),
+				ValueTable:   getString(fv, "value_table"),
+			}
+			if optsRaw, ok := fv["options"].([]interface{}); ok {
+				cfg.Options = parseStringArray(optsRaw)
+			}
+			v.FilterValue = cfg
+		}
+		if rg := getMap(raw, "range"); rg != nil {
+			cfg := &models.RangeConfig{
+				DefaultPreset: getString(rg, "default_preset"),
+			}
+			if presetsRaw, ok := rg["presets"].([]interface{}); ok {
+				cfg.Presets = parseStringArray(presetsRaw)
+			}
+			if allow, ok := rg["allow_absolute"].(bool); ok {
+				cfg.AllowAbsolute = &allow
+			}
+			v.Range = cfg
+		}
+		vars = append(vars, v)
+	}
+	return vars
 }
 
 func parseQueryConfig(qc map[string]interface{}) *models.ChartQueryConfig {

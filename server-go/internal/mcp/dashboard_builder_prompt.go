@@ -161,6 +161,44 @@ Alternative: use ` + "`xAxis.type: 'time'`" + ` and pass series data as
 all the label/tooltip formatting on its own — no manual formatter
 needed.
 
+# Dashboard variables (interactive scoping)
+
+A dashboard variable is a header dropdown the VIEWER picks at view time
+to re-scope panels — switch which host a board shows, filter to one
+site, or change the time window — without editing the dashboard. Build
+them when the user asks for "let me pick the host", "add a site
+filter", "make the time range selectable", or one board that works for
+any of their machines. Define them in ` + "`" + `settings.variables[]` + "`" + ` and set
+` + "`" + `settings.variables_enabled: true` + "`" + ` on ` + "`" + `create_dashboard` + "`" + ` /
+` + "`" + `update_dashboard` + "`" + `. Three modes:
+
+- **connection_swap** — dropdown lists connections discovered by tag
+  match; selecting one repoints every variable-driven panel's
+  connection. NO query token. Config:
+  ` + "`" + `connection_swap: { tags: [...], schema_strict, same_namespace, label_tag_prefix }` + "`" + `.
+  Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+- **filter** — a value the viewer picks/types, substituted into the
+  query wherever you wrote the ` + "`" + `{{dashboard-variable}}` + "`" + ` token. Author
+  the component's ` + "`" + `query_config.raw` + "`" + ` as e.g.
+  ` + "`" + `SELECT ... FROM metrics WHERE site = {{dashboard-variable}}` + "`" + ` — the
+  server binds the live value as a SQL param / escaped EdgeLake literal
+  (injection-safe; never concatenate it yourself). Config:
+  ` + "`" + `filter: { value_source: "static"|"freetext"|"connection", options, default_value, value_column, value_table }` + "`" + `.
+  AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+- **range** — a [from, to] time window the viewer picks. SQL/EdgeLake
+  panels opt in by writing the time column then the token:
+  ` + "`" + `... WHERE ts {{range-variable}}` + "`" + `. ts-store and Prometheus panels
+  apply the window AUTOMATICALLY (no token). Config:
+  ` + "`" + `range: { presets: ["1h","6h","24h","7d","30d"], default_preset, allow_absolute }` + "`" + `.
+  AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-range"` + "`" + `.
+
+Flow: write the matching token into the ` + "`" + `query_config.raw` + "`" + ` of the
+components the variable should drive (connection_swap needs none) when
+you create them, then define the variable in ` + "`" + `settings.variables` + "`" + ` and
+set ` + "`" + `variables_enabled: true` + "`" + `. A component carrying a token but no
+matching enabled variable renders a "select a value/range"
+empty-state, so only token the components you mean to drive.
+
 # Things to avoid
 
 - Don't call ` + "`" + `get_type_catalog` + "`" + ` — the catalog is already embedded

@@ -199,6 +199,37 @@ Schema discovery still goes through get_schema (or the type-specific schema
 tools for backward compat) — guidance covers query_config wrapping, not data
 shape.
 
+## Dashboard variable tokens — make a component respond to a dashboard variable
+
+Dashboards can carry **variables**: a header dropdown the viewer picks to
+re-scope panels at view time (filter to one site, pick a time window, etc.).
+A component opts into a variable by writing a TOKEN into its query; the server
+substitutes the live value when the dashboard runs the component. You set the
+token via **update_query_config** (it goes in the query's raw text). You do NOT
+define the variable here — that lives on the dashboard. Your job in the
+component editor is just to author the token so the component is variable-ready.
+Two tokens (only for SQL / EdgeLake connections that take a raw query):
+
+- ` + "`{{dashboard-variable}}`" + ` — a filter VALUE the viewer picks. Write it as a
+  comparison operand: ` + "`SELECT ... FROM metrics WHERE site = {{dashboard-variable}}`" + `.
+  The server binds the chosen value as a SQL parameter / escaped EdgeLake
+  literal (injection-safe — never concatenate it yourself). Use this when the
+  user says "let the dashboard filter this by X" or "make this respond to the
+  site picker."
+- ` + "`{{range-variable}}`" + ` — a time WINDOW the viewer picks. Write it immediately
+  AFTER the time column: ` + "`SELECT ... WHERE ts {{range-variable}}`" + `. The server
+  rewrites ` + "`ts {{range-variable}}`" + ` into a bounded predicate. Use this when the
+  user wants the component to honor the dashboard's time-range picker. (ts-store
+  and Prometheus components get the window automatically — no token; only
+  SQL/EdgeLake need it.)
+
+A component carrying a token only renders once a matching variable is enabled on
+the dashboard it's placed on; standalone (or with no matching variable) it shows
+a "select a value/range" empty-state. So only add a token when the user
+actually wants this component driven by a dashboard variable. Add the token
+ONLY for connection types that run a raw SQL/EdgeLake query — don't put it in a
+streaming/MQTT/Prometheus query_config.
+
 ## ECharts Reference
 
 Users can browse ECharts examples at: https://echarts.apache.org/examples/en/index.html

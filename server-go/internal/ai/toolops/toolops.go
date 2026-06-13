@@ -493,6 +493,30 @@ func (t *Toolset) CreateDashboard(ctx context.Context, in CreateDashboardInput) 
 	return t.Dashboards.CreateDashboard(ctx, &in.Request)
 }
 
+type UpdateDashboardInput struct {
+	ID      string
+	Request models.UpdateDashboardRequest
+}
+
+// UpdateDashboard patches an existing dashboard in place. Only the fields
+// set in the request are changed — UpdateDashboardRequest uses pointer
+// fields, so a nil field leaves the stored value untouched. When Panels is
+// provided it REPLACES the whole panel array (fetch first to add a subset).
+//
+// Shared by the Assistant and MCP so both modify dashboards through one
+// code path — mirrors UpdateComponent above. This is the seam variable
+// authoring rides on: an agent adds settings.variables[] to an existing
+// dashboard by patching Settings here.
+func (t *Toolset) UpdateDashboard(ctx context.Context, in UpdateDashboardInput) (*models.Dashboard, error) {
+	if t.Dashboards == nil {
+		return nil, fmt.Errorf("dashboard service not wired")
+	}
+	if in.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	return t.Dashboards.UpdateDashboard(ctx, in.ID, &in.Request)
+}
+
 // ─── Type catalog ─────────────────────────────────────────────────
 
 // GetCatalogOutput is the deployment-wide unified catalog.

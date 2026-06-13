@@ -275,6 +275,27 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapCreateDashboard(ops),
 	})
 
+	reg.Register(Tool{
+		Name:        "update_dashboard",
+		Description: "Update an existing dashboard. Only the fields you provide are changed; omit a field to leave it untouched. When `panels` is provided it REPLACES the entire panel array — call get_dashboard first if you only want to add or modify a subset. Use this to add dashboard variables to an existing dashboard: fetch it, then patch `settings` with `variables_enabled` + `variables` (see create_dashboard's settings schema and the system prompt's \"Dashboard variables\" section). Do NOT call this on a dashboard the user is actively editing (mode: EDIT in the current view) — your write would overwrite their unsaved local changes; tell them to commit or discard first.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id":          map[string]interface{}{"type": "string", "description": "Dashboard ID to update"},
+				"name":        map[string]interface{}{"type": "string", "description": "New name (unique per namespace)"},
+				"namespace":   map[string]interface{}{"type": "string", "description": "Move the dashboard to a different namespace; omit to leave unchanged"},
+				"description": map[string]interface{}{"type": "string"},
+				"panels":      dashboardPanelsSchema(),
+				"settings":    dashboardSettingsSchema(),
+				"tags":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Replaces the existing tag list"},
+				"metadata":    map[string]interface{}{"type": "object"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapUpdateDashboard(ops),
+	})
+
 	// Tier B: the catalog is big (every type with config + metadata)
 	// and isn't relevant to most conversations. Load it on demand.
 	reg.Register(Tool{
@@ -494,6 +515,82 @@ func dashboardSettingsSchema() map[string]interface{} {
 			},
 			"is_public":   map[string]interface{}{"type": "boolean"},
 			"allow_export": map[string]interface{}{"type": "boolean"},
+			"variables_enabled": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Per-dashboard on/off gate for dashboard variables (the header dropdown that re-scopes panels at view time). Set true whenever you define `variables`; when false the viewer ignores them entirely.",
+			},
+			"variables": dashboardVariablesSchema(),
+		},
+	}
+}
+
+// dashboardVariablesSchema describes settings.variables[] — the dashboard
+// variable definitions that drive the header dropdowns. Three modes:
+//
+//   - connection_swap: dropdown lists tag-matched connections; selecting one
+//     repoints every variable-driven panel's connection. No query tokens.
+//   - filter: a value the user picks/types, substituted server-side into a
+//     component query wherever the author wrote the `{{dashboard-variable}}`
+//     token (bound as a SQL param / escaped EdgeLake literal). At most ONE
+//     filter variable per dashboard (the token is a single fixed name).
+//   - range: a [from, to] time window restricting time-series panels. SQL /
+//     EdgeLake panels opt in by writing `<column> {{range-variable}}` after
+//     the time column; ts-store / Prometheus panels pick the window up
+//     automatically. At most ONE range variable per dashboard.
+//
+// To author a variable-driven component, write the matching token into the
+// component's query_config.raw (filter: `... WHERE site = {{dashboard-variable}}`;
+// range: `... WHERE ts {{range-variable}}`) when you create the component,
+// then define the variable here and set variables_enabled=true.
+func dashboardVariablesSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Dashboard variable definitions. See the system prompt's \"Dashboard variables\" section for the authoring contract and query tokens.",
+		"items": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Stable key. Use the fixed token name: \"dashboard-variable\" for connection_swap/filter, \"dashboard-range\" for range.",
+				},
+				"label": map[string]interface{}{"type": "string", "description": "UI label shown next to the header dropdown, e.g. \"Site\" or \"Time range\"."},
+				"mode": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"connection_swap", "filter", "range"},
+					"description": "What the variable drives. connection_swap repoints panel connections; filter substitutes a value into queries via {{dashboard-variable}}; range applies a time window via {{range-variable}}.",
+				},
+				"connection_swap": map[string]interface{}{
+					"type":        "object",
+					"description": "Required when mode=connection_swap.",
+					"properties": map[string]interface{}{
+						"tags":             map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "OR-matched discovery tags; the dropdown lists connections carrying any of these."},
+						"schema_strict":    map[string]interface{}{"type": "string", "enum": []string{"type_only", "superset", "exact"}, "description": "How strictly a candidate connection's schema must match the reference. Default type_only."},
+						"same_namespace":   map[string]interface{}{"type": "boolean", "description": "Restrict candidates to the dashboard's namespace. Default false."},
+						"label_tag_prefix": map[string]interface{}{"type": "string", "description": "Derive each dropdown label from a prefixed connection tag, e.g. \"host\" → label is the value of the connection's \"host:\" tag."},
+					},
+				},
+				"filter": map[string]interface{}{
+					"type":        "object",
+					"description": "Required when mode=filter. Components opt in by writing the {{dashboard-variable}} token into query_config.raw.",
+					"properties": map[string]interface{}{
+						"value_source":  map[string]interface{}{"type": "string", "enum": []string{"static", "freetext", "connection"}, "description": "static = pick from options; freetext = type a value; connection = options discovered live from the bound column. Default static."},
+						"options":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Selectable values for value_source=static; fallback list for connection."},
+						"default_value": map[string]interface{}{"type": "string"},
+						"value_column":  map[string]interface{}{"type": "string", "description": "For value_source=connection: column whose distinct values populate the picker."},
+						"value_table":   map[string]interface{}{"type": "string", "description": "For value_source=connection: source table for distinct-value discovery."},
+					},
+				},
+				"range": map[string]interface{}{
+					"type":        "object",
+					"description": "Required when mode=range. Components opt in by writing `<column> {{range-variable}}` (SQL/EdgeLake); ts-store/Prometheus panels apply it automatically.",
+					"properties": map[string]interface{}{
+						"presets":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Relative-window tokens in the dropdown: \"1h\", \"6h\", \"24h\", \"7d\", \"30d\". Empty = a sensible default set."},
+						"default_preset": map[string]interface{}{"type": "string", "description": "Preset applied on first load, e.g. \"24h\"."},
+						"allow_absolute": map[string]interface{}{"type": "boolean", "description": "Offer the absolute from/to picker. Default true."},
+					},
+				},
+			},
+			"required": []string{"name", "label", "mode"},
 		},
 	}
 }
@@ -720,6 +817,31 @@ func wrapCreateDashboard(ops *toolops.Toolset) ToolHandler {
 			req.Namespace = env.Caller.Namespace
 		}
 		out, err := ops.CreateDashboard(ctx, toolops.CreateDashboardInput{Request: req})
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapUpdateDashboard(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		// id is a top-level arg; the rest map onto the pointer-field
+		// UpdateDashboardRequest so omitted keys stay nil (untouched).
+		var envelope struct {
+			ID string `json:"id"`
+			models.UpdateDashboardRequest
+		}
+		if err := json.Unmarshal(args, &envelope); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if envelope.ID == "" {
+			return "", fmt.Errorf("id is required")
+		}
+		out, err := ops.UpdateDashboard(ctx, toolops.UpdateDashboardInput{
+			ID:      envelope.ID,
+			Request: envelope.UpdateDashboardRequest,
+		})
 		if err != nil {
 			return "", err
 		}
