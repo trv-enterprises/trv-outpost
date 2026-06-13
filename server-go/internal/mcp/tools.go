@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -816,17 +817,32 @@ func (r *ToolRegistry) registerComponentTools() {
 				UseCustomCode: getBool(args, "use_custom_code"),
 				UsesDashboardVariable: getBool(args, "uses_dashboard_variable"),
 			}
+			// Nested model objects decode field-complete via their json tags
+			// (decodeInto), so new model fields reach MCP without a parser
+			// change — see issue #54.
 			if qc, ok := args["query_config"].(map[string]interface{}); ok {
-				req.QueryConfig = parseQueryConfig(qc)
+				req.QueryConfig = &models.ChartQueryConfig{}
+				if err := decodeInto(qc, req.QueryConfig); err != nil {
+					return nil, fmt.Errorf("invalid query_config: %w", err)
+				}
 			}
 			if dm, ok := args["data_mapping"].(map[string]interface{}); ok {
-				req.DataMapping = parseDataMapping(dm)
+				req.DataMapping = &models.ChartDataMapping{}
+				if err := decodeInto(dm, req.DataMapping); err != nil {
+					return nil, fmt.Errorf("invalid data_mapping: %w", err)
+				}
 			}
 			if cc, ok := args["control_config"].(map[string]interface{}); ok {
-				req.ControlConfig = parseControlConfig(cc)
+				req.ControlConfig = &models.ControlConfig{}
+				if err := decodeInto(cc, req.ControlConfig); err != nil {
+					return nil, fmt.Errorf("invalid control_config: %w", err)
+				}
 			}
 			if dc, ok := args["display_config"].(map[string]interface{}); ok {
-				req.DisplayConfig = parseDisplayConfig(dc)
+				req.DisplayConfig = &models.DisplayConfig{}
+				if err := decodeInto(dc, req.DisplayConfig); err != nil {
+					return nil, fmt.Errorf("invalid display_config: %w", err)
+				}
 			}
 			if opts, ok := args["options"].(map[string]interface{}); ok {
 				req.Options = opts
@@ -893,17 +909,31 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				v := getBool(args, "use_custom_code")
 				req.UseCustomCode = &v
 			}
+			// Nested model objects decode field-complete via decodeInto — see
+			// issue #54.
 			if qc, ok := args["query_config"].(map[string]interface{}); ok {
-				req.QueryConfig = parseQueryConfig(qc)
+				req.QueryConfig = &models.ChartQueryConfig{}
+				if err := decodeInto(qc, req.QueryConfig); err != nil {
+					return nil, fmt.Errorf("invalid query_config: %w", err)
+				}
 			}
 			if dm, ok := args["data_mapping"].(map[string]interface{}); ok {
-				req.DataMapping = parseDataMapping(dm)
+				req.DataMapping = &models.ChartDataMapping{}
+				if err := decodeInto(dm, req.DataMapping); err != nil {
+					return nil, fmt.Errorf("invalid data_mapping: %w", err)
+				}
 			}
 			if cc, ok := args["control_config"].(map[string]interface{}); ok {
-				req.ControlConfig = parseControlConfig(cc)
+				req.ControlConfig = &models.ControlConfig{}
+				if err := decodeInto(cc, req.ControlConfig); err != nil {
+					return nil, fmt.Errorf("invalid control_config: %w", err)
+				}
 			}
 			if dc, ok := args["display_config"].(map[string]interface{}); ok {
-				req.DisplayConfig = parseDisplayConfig(dc)
+				req.DisplayConfig = &models.DisplayConfig{}
+				if err := decodeInto(dc, req.DisplayConfig); err != nil {
+					return nil, fmt.Errorf("invalid display_config: %w", err)
+				}
 			}
 			if opts, ok := args["options"].(map[string]interface{}); ok {
 				req.Options = &opts
@@ -1070,11 +1100,17 @@ func (r *ToolRegistry) registerDashboardTools() {
 				Description: getString(args, "description"),
 				Namespace:   getString(args, "namespace"),
 			}
+			// panels + settings decode field-complete via decodeInto (incl.
+			// settings.variables[], layout_dimension, scale fields) — issue #54.
 			if panelsRaw, ok := args["panels"].([]interface{}); ok {
-				req.Panels = parsePanels(panelsRaw)
+				if err := decodeInto(panelsRaw, &req.Panels); err != nil {
+					return nil, fmt.Errorf("invalid panels: %w", err)
+				}
 			}
 			if settingsRaw, ok := args["settings"].(map[string]interface{}); ok {
-				req.Settings = parseSettings(settingsRaw)
+				if err := decodeInto(settingsRaw, &req.Settings); err != nil {
+					return nil, fmt.Errorf("invalid settings: %w", err)
+				}
 			}
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
@@ -1110,11 +1146,17 @@ func (r *ToolRegistry) registerDashboardTools() {
 				req.Description = &desc
 			}
 			if panelsRaw, ok := args["panels"].([]interface{}); ok {
-				panels := parsePanels(panelsRaw)
+				var panels []models.DashboardPanel
+				if err := decodeInto(panelsRaw, &panels); err != nil {
+					return nil, fmt.Errorf("invalid panels: %w", err)
+				}
 				req.Panels = &panels
 			}
 			if settingsRaw, ok := args["settings"].(map[string]interface{}); ok {
-				settings := parseSettings(settingsRaw)
+				var settings models.DashboardSettings
+				if err := decodeInto(settingsRaw, &settings); err != nil {
+					return nil, fmt.Errorf("invalid settings: %w", err)
+				}
 				req.Settings = &settings
 			}
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
@@ -1157,6 +1199,22 @@ func getString(m map[string]interface{}, key string) string {
 		return v
 	}
 	return ""
+}
+
+// decodeInto round-trips a JSON-RPC arg value (a map/slice of JSON-native
+// types) into a typed model struct via the struct's own json tags. This is
+// the field-complete alternative to the hand-rolled parse* helpers: every
+// json-tagged field on dst is populated automatically, so a new field on the
+// model flows through to MCP with no parser change (the silent-drop bug class
+// — see issue #54). args values originate from the standard-library JSON-RPC
+// decode, so a Marshal→Unmarshal is lossless and cannot fail on type mismatch
+// that the model's own Unmarshal wouldn't also reject.
+func decodeInto(raw interface{}, dst interface{}) error {
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, dst)
 }
 
 func getInt(m map[string]interface{}, key string) int {
@@ -1267,203 +1325,11 @@ func parseConnectionConfig(dsType models.ConnectionType, configMap map[string]in
 	return config
 }
 
-func parsePanels(panelsRaw []interface{}) []models.DashboardPanel {
-	panels := make([]models.DashboardPanel, 0, len(panelsRaw))
-	for _, p := range panelsRaw {
-		if pm, ok := p.(map[string]interface{}); ok {
-			panel := models.DashboardPanel{
-				ID:          getString(pm, "id"),
-				X:           getInt(pm, "x"),
-				Y:           getInt(pm, "y"),
-				W:           getInt(pm, "w"),
-				H:           getInt(pm, "h"),
-				ComponentID: getString(pm, "component_id"),
-			}
-			if tc, ok := pm["text_config"].(map[string]interface{}); ok {
-				panel.TextConfig = &models.PanelTextConfig{
-					Content:        getString(tc, "content"),
-					DisplayContent: getString(tc, "display_content"),
-					Size:           tc["size"],
-					Align:          getString(tc, "align"),
-				}
-			}
-			panels = append(panels, panel)
-		}
-	}
-	return panels
-}
-
-func parseSettings(settingsRaw map[string]interface{}) models.DashboardSettings {
-	s := models.DashboardSettings{
-		Theme:            getString(settingsRaw, "theme"),
-		RefreshInterval:  getInt(settingsRaw, "refresh_interval"),
-		TimeZone:         getString(settingsRaw, "timezone"),
-		DefaultView:      getString(settingsRaw, "default_view"),
-		IsPublic:         getBool(settingsRaw, "is_public"),
-		AllowExport:      getBool(settingsRaw, "allow_export"),
-		LayoutDimension:  getString(settingsRaw, "layout_dimension"),
-		TitleScale:       getInt(settingsRaw, "title_scale"),
-		ScalePercent:     getInt(settingsRaw, "scale_percent"),
-		VariablesEnabled: getBool(settingsRaw, "variables_enabled"),
-	}
-	if varsRaw, ok := settingsRaw["variables"].([]interface{}); ok {
-		s.Variables = parseDashboardVariables(varsRaw)
-	}
-	return s
-}
-
-// parseDashboardVariables maps the loosely-typed settings.variables[] payload
-// onto the model. Mirrors the chat assistant's schema; the substitution tokens
-// ({{dashboard-variable}}, {{range-variable}}) are authored into component
-// queries, not here.
-func parseDashboardVariables(arr []interface{}) []models.DashboardVariable {
-	vars := make([]models.DashboardVariable, 0, len(arr))
-	for _, item := range arr {
-		raw, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		v := models.DashboardVariable{
-			Name:  getString(raw, "name"),
-			Label: getString(raw, "label"),
-			Mode:  getString(raw, "mode"),
-		}
-		if cs := getMap(raw, "connection_swap"); cs != nil {
-			cfg := &models.ConnectionSwapConfig{
-				SchemaStrict:   getString(cs, "schema_strict"),
-				SameNamespace:  getBool(cs, "same_namespace"),
-				LabelTagPrefix: getString(cs, "label_tag_prefix"),
-			}
-			if tagsRaw, ok := cs["tags"].([]interface{}); ok {
-				cfg.Tags = parseStringArray(tagsRaw)
-			}
-			v.ConnectionSwap = cfg
-		}
-		if fv := getMap(raw, "filter"); fv != nil {
-			cfg := &models.FilterValueConfig{
-				ValueSource:  getString(fv, "value_source"),
-				DefaultValue: getString(fv, "default_value"),
-				ValueColumn:  getString(fv, "value_column"),
-				ValueTable:   getString(fv, "value_table"),
-			}
-			if optsRaw, ok := fv["options"].([]interface{}); ok {
-				cfg.Options = parseStringArray(optsRaw)
-			}
-			v.FilterValue = cfg
-		}
-		if rg := getMap(raw, "range"); rg != nil {
-			cfg := &models.RangeConfig{
-				DefaultPreset: getString(rg, "default_preset"),
-			}
-			if presetsRaw, ok := rg["presets"].([]interface{}); ok {
-				cfg.Presets = parseStringArray(presetsRaw)
-			}
-			if allow, ok := rg["allow_absolute"].(bool); ok {
-				cfg.AllowAbsolute = &allow
-			}
-			v.Range = cfg
-		}
-		vars = append(vars, v)
-	}
-	return vars
-}
-
-func parseQueryConfig(qc map[string]interface{}) *models.ChartQueryConfig {
-	return &models.ChartQueryConfig{
-		Raw:    getString(qc, "raw"),
-		Type:   getString(qc, "type"),
-		Params: getMap(qc, "params"),
-	}
-}
-
-func parseDataMapping(dm map[string]interface{}) *models.ChartDataMapping {
-	mapping := &models.ChartDataMapping{
-		XAxis:     getString(dm, "x_axis"),
-		GroupBy:   getString(dm, "group_by"),
-		LabelCol:  getString(dm, "label_col"),
-		SortBy:    getString(dm, "sort_by"),
-		SortOrder: getString(dm, "sort_order"),
-		Limit:     getInt(dm, "limit"),
-	}
-	if yAxisRaw, ok := dm["y_axis"].([]interface{}); ok {
-		mapping.YAxis = parseStringArray(yAxisRaw)
-	}
-	if filtersRaw, ok := dm["filters"].([]interface{}); ok {
-		filters := make([]models.DataFilter, 0, len(filtersRaw))
-		for _, f := range filtersRaw {
-			if fm, ok := f.(map[string]interface{}); ok {
-				filters = append(filters, models.DataFilter{
-					Field: getString(fm, "field"),
-					Op:    getString(fm, "op"),
-					Value: fm["value"],
-				})
-			}
-		}
-		mapping.Filters = filters
-	}
-	if aggRaw, ok := dm["aggregation"].(map[string]interface{}); ok {
-		mapping.Aggregation = &models.DataAggregation{
-			Type:   getString(aggRaw, "type"),
-			SortBy: getString(aggRaw, "sort_by"),
-			Field:  getString(aggRaw, "field"),
-			Count:  getInt(aggRaw, "count"),
-		}
-	}
-	if bandsRaw, ok := dm["band_columns"].(map[string]interface{}); ok {
-		mapping.BandColumns = parseBandColumns(bandsRaw)
-	}
-	return mapping
-}
-
-// parseBandColumns maps the loosely-typed band_columns payload onto the model.
-// Only chart_type "banded_bar" consumes it; ignored on other chart types. The
-// three schemes (sd / minmaxmean / spc) share this flat struct — only the keys
-// for the chosen scheme are populated. Mirrors the Component-agent schema in
-// internal/ai/tools.go and the Chat schema in chartDataMappingSchema.
-func parseBandColumns(b map[string]interface{}) *models.BandColumns {
-	return &models.BandColumns{
-		Scheme:       getString(b, "scheme"),
-		Mean:         getString(b, "mean"),
-		Plus1SD:      getString(b, "plus_1sd"),
-		Minus1SD:     getString(b, "minus_1sd"),
-		Plus2SD:      getString(b, "plus_2sd"),
-		Minus2SD:     getString(b, "minus_2sd"),
-		Min:          getString(b, "min"),
-		Max:          getString(b, "max"),
-		Target:       getString(b, "target"),
-		LowerControl: getString(b, "lower_control"),
-		UpperControl: getString(b, "upper_control"),
-		LowerLimit:   getString(b, "lower_limit"),
-		UpperLimit:   getString(b, "upper_limit"),
-	}
-}
-
-func parseControlConfig(cc map[string]interface{}) *models.ControlConfig {
-	out := &models.ControlConfig{
-		ControlType:  getString(cc, "control_type"),
-		DeviceTypeID: getString(cc, "device_type_id"),
-		Target:       getString(cc, "target"),
-	}
-	if ui, ok := cc["ui_config"].(map[string]interface{}); ok {
-		out.UIConfig = ui
-	}
-	return out
-}
-
-func parseDisplayConfig(dc map[string]interface{}) *models.DisplayConfig {
-	return &models.DisplayConfig{
-		DisplayType:         getString(dc, "display_type"),
-		FrigateConnectionID: getString(dc, "frigate_connection_id"),
-		DefaultCamera:       getString(dc, "default_camera"),
-		MqttConnectionID:    getString(dc, "mqtt_connection_id"),
-		AlertTopic:          getString(dc, "alert_topic"),
-		SnapshotInterval:    getInt(dc, "snapshot_interval"),
-		MaxThumbnails:       getInt(dc, "max_thumbnails"),
-		AlertSeverity:       getString(dc, "alert_severity"),
-		WeatherTopicPrefix:  getString(dc, "weather_topic_prefix"),
-		WeatherLocation:     getString(dc, "weather_location"),
-	}
-}
+// Panels, settings, query_config, data_mapping, control_config, and
+// display_config are decoded field-complete via decodeInto (Marshal→Unmarshal
+// into the model struct) at the create/update call sites — see issue #54. The
+// former hand-rolled parse* helpers for those objects were deleted because they
+// enumerated fields manually and silently dropped any the model gained later.
 
 // filterConnectionTypes applies the registry TypeFilter to a connection
 // type listing. Returns the input unchanged when no filter is wired.

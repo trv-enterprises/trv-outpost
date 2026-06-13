@@ -416,6 +416,7 @@ func chartDataMappingSchema() map[string]interface{} {
 			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: the first two y columns split across left/right axes; pair with options.yAxisRange.right."},
 			"y_axis_label":   map[string]interface{}{"type": "string", "description": "Display label for the Y axis (legacy single label; use y_axis_labels for dual-axis)."},
 			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels. [0] = left axis, [1] = right axis on dual-axis charts."},
+			"y_axis_colors":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar). NOT for pivot charts (series set) — those auto-color. Omit to keep the default palette."},
 			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
 			"group_by":       map[string]interface{}{"type": "string", "description": "Client-side grouping column."},
 			"label_col":      map[string]interface{}{"type": "string", "description": "Column used for pie/bar slice labels."},
