@@ -426,6 +426,25 @@ func chartDataMappingSchema() map[string]interface{} {
 			"sort_by":        map[string]interface{}{"type": "string"},
 			"sort_order":     map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
 			"limit":          map[string]interface{}{"type": "integer", "description": "Max rows the chart should render."},
+			"band_columns": map[string]interface{}{
+				"type":        "object",
+				"description": "Banded-bar per-row band mapping. ONLY used by chart_type 'banded_bar'; ignored elsewhere. Pick a `scheme`, then map that scheme's columns to row-column names. Each row carries its own band values (a per-row envelope that moves with the data) — there is no scalar/fixed-band convention. Schemes: 'sd' (±SD: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd), 'minmaxmean' (range: mean + min/max), 'spc' (control: target + lower_control/upper_control/lower_limit/upper_limit). Provide only the keys for the chosen scheme; the center column (mean for sd/minmaxmean, target for spc) is required.",
+				"properties": map[string]interface{}{
+					"scheme":        map[string]interface{}{"type": "string", "enum": []string{"sd", "minmaxmean", "spc"}, "description": "Band scheme. Default 'sd'."},
+					"mean":          map[string]interface{}{"type": "string", "description": "sd/minmaxmean center column (required for those schemes)."},
+					"plus_1sd":      map[string]interface{}{"type": "string", "description": "sd: +1 SD bound."},
+					"minus_1sd":     map[string]interface{}{"type": "string", "description": "sd: -1 SD bound."},
+					"plus_2sd":      map[string]interface{}{"type": "string", "description": "sd: +2 SD bound."},
+					"minus_2sd":     map[string]interface{}{"type": "string", "description": "sd: -2 SD bound."},
+					"min":           map[string]interface{}{"type": "string", "description": "minmaxmean: lower bound."},
+					"max":           map[string]interface{}{"type": "string", "description": "minmaxmean: upper bound."},
+					"target":        map[string]interface{}{"type": "string", "description": "spc center column (required for spc)."},
+					"lower_control": map[string]interface{}{"type": "string", "description": "spc: lower control limit."},
+					"upper_control": map[string]interface{}{"type": "string", "description": "spc: upper control limit."},
+					"lower_limit":   map[string]interface{}{"type": "string", "description": "spc: lower spec limit."},
+					"upper_limit":   map[string]interface{}{"type": "string", "description": "spc: upper spec limit."},
+				},
+			},
 		},
 	}
 }

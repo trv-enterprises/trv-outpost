@@ -792,7 +792,7 @@ func (r *ToolRegistry) registerComponentTools() {
 					"chart_type":      {Type: "string", Description: "Chart subtype (bar, line, pie, etc) — for chart components"},
 					"connection_id":   {Type: "string", Description: "Connection ID for data binding"},
 					"query_config":    {Type: "object", Description: "Query: {raw, type, params}"},
-					"data_mapping":    {Type: "object", Description: "Data mapping: {x_axis, y_axis, group_by, filters, aggregation, ...}"},
+					"data_mapping":    {Type: "object", Description: "Data mapping: {x_axis, y_axis, group_by, filters, aggregation, ...}. For chart_type 'banded_bar' set band_columns: {scheme: \"sd\"|\"minmaxmean\"|\"spc\", and the columns for that scheme — sd: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd; minmaxmean: mean + min/max; spc: target + lower_control/upper_control/lower_limit/upper_limit}. Each row carries its own band values; the center column is required."},
 					"control_config":  {Type: "object", Description: "Control config: {control_type, device_type_id, target, ui_config}"},
 					"display_config":  {Type: "object", Description: "Display config: {display_type, ...display-specific fields}"},
 					"component_code":  {Type: "string", Description: "React component code (for chart_type=custom or use_custom_code=true)"},
@@ -859,7 +859,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 					"chart_type":      {Type: "string", Description: "New chart subtype"},
 					"connection_id":   {Type: "string", Description: "New connection ID"},
 					"query_config":    {Type: "object", Description: "New query config"},
-					"data_mapping":    {Type: "object", Description: "New data mapping"},
+					"data_mapping":    {Type: "object", Description: "New data mapping. For chart_type 'banded_bar' include band_columns (see create_component's data_mapping description for the per-scheme keys)."},
 					"control_config":  {Type: "object", Description: "New control config"},
 					"display_config":  {Type: "object", Description: "New display config"},
 					"component_code":  {Type: "string", Description: "New component code. Last-resort field — prefer changing data_mapping / options / chart_type instead. Setting this with use_custom_code=true freezes the chart at this code; subsequent config tool calls won't update the rendering."},
@@ -1409,7 +1409,33 @@ func parseDataMapping(dm map[string]interface{}) *models.ChartDataMapping {
 			Count:  getInt(aggRaw, "count"),
 		}
 	}
+	if bandsRaw, ok := dm["band_columns"].(map[string]interface{}); ok {
+		mapping.BandColumns = parseBandColumns(bandsRaw)
+	}
 	return mapping
+}
+
+// parseBandColumns maps the loosely-typed band_columns payload onto the model.
+// Only chart_type "banded_bar" consumes it; ignored on other chart types. The
+// three schemes (sd / minmaxmean / spc) share this flat struct — only the keys
+// for the chosen scheme are populated. Mirrors the Component-agent schema in
+// internal/ai/tools.go and the Chat schema in chartDataMappingSchema.
+func parseBandColumns(b map[string]interface{}) *models.BandColumns {
+	return &models.BandColumns{
+		Scheme:       getString(b, "scheme"),
+		Mean:         getString(b, "mean"),
+		Plus1SD:      getString(b, "plus_1sd"),
+		Minus1SD:     getString(b, "minus_1sd"),
+		Plus2SD:      getString(b, "plus_2sd"),
+		Minus2SD:     getString(b, "minus_2sd"),
+		Min:          getString(b, "min"),
+		Max:          getString(b, "max"),
+		Target:       getString(b, "target"),
+		LowerControl: getString(b, "lower_control"),
+		UpperControl: getString(b, "upper_control"),
+		LowerLimit:   getString(b, "lower_limit"),
+		UpperLimit:   getString(b, "upper_limit"),
+	}
 }
 
 func parseControlConfig(cc map[string]interface{}) *models.ControlConfig {
