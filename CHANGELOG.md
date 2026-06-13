@@ -6,6 +6,22 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.30.1] — 2026-06-12
+
+### Fixed
+
+- **One query-results table + auto-scroll** in the component editor. SQL charts
+  showed the query-results preview in two places (the builder's own table and
+  the editor's bottom preview). Consolidated to one — the filter/aggregation-aware
+  bottom preview — and it now auto-scrolls into view after a query runs.
+- **Raw → Visual imports the existing SQL.** Switching a SQL query from Raw to
+  Visual used to start the builder empty (discarding the query). It now parses a
+  representable query into the builder (table, columns, WHERE incl. the
+  dashboard-variable / range-variable bindings, ORDER BY, LIMIT); queries it
+  can't round-trip (joins, subqueries, functions, OR/BETWEEN, …) are refused with
+  a clear message + "Switch to Raw mode" instead of an empty form and a slow
+  schema-fetch timeout.
+
 ## [0.30.0] — 2026-06-12
 
 ### Added
