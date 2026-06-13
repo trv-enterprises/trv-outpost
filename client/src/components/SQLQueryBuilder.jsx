@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Select,
   SelectItem,
@@ -20,6 +20,140 @@ import { copyTextToClipboard } from '../utils/clipboard';
 import { DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, stripRangePredicate } from '../utils/dataTransforms';
 import './SQLQueryBuilder.scss';
 
+// parseSimpleQuery is the conservative INVERSE of buildQuery: it turns a raw SQL
+// string back into the visual builder's state, but ONLY for the shape the builder
+// can represent (SELECT <cols|*> FROM <one table> [WHERE <ANDed simple conds>]
+// [GROUP BY ...] [ORDER BY <col> <dir>] [LIMIT n [OFFSET m]]). On ANYTHING it
+// can't faithfully round-trip it returns { ok:false, reason } rather than a wrong
+// guess — the caller then keeps the user in raw mode with a warning. Never claim
+// a clean parse of something the builder would mangle on the next edit.
+//
+// Refused shapes (non-exhaustive): JOINs, comma multi-table FROM, subqueries
+// (incl. the range most-recent-N wrap `SELECT * FROM (…) range_window …`),
+// functions/expressions in SELECT or WHERE (beyond a simple AGG(col) AS alias),
+// OR in WHERE, IN/BETWEEN/IS-NULL literal lists we don't model, UNION, HAVING,
+// CTEs. The {{dashboard-variable}} / {{range-variable}} tokens DO round-trip.
+function parseSimpleQuery(rawIn) {
+  const fail = (reason) => ({ ok: false, reason });
+  if (typeof rawIn !== 'string' || !rawIn.trim()) return fail('empty query');
+  // Normalize whitespace; keep it one-line for clause regexes.
+  let raw = rawIn.replace(/\s+/g, ' ').trim();
+  const lower = raw.toLowerCase();
+
+  // Hard bail on constructs we don't model.
+  if (/\bjoin\b/.test(lower)) return fail('joins are not supported in the visual builder');
+  if (/\bunion\b/.test(lower)) return fail('UNION is not supported in the visual builder');
+  if (/\bhaving\b/.test(lower)) return fail('HAVING is not supported in the visual builder');
+  if (/^\s*with\b/.test(lower)) return fail('CTEs (WITH) are not supported in the visual builder');
+  // Subquery / the range most-recent-N wrap: a "(" anywhere in the FROM..end
+  // region that isn't a simple IN-list. Cheapest safe signal: "from (".
+  if (/\bfrom\s*\(/.test(lower)) return fail('subqueries are not supported in the visual builder (edit in raw)');
+
+  // Must be a plain SELECT … FROM <table> …
+  const m = /^select\s+(.+?)\s+from\s+([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*)\s*(.*)$/i.exec(raw);
+  if (!m) return fail('not a simple SELECT … FROM <table> query');
+  const colsRaw = m[1].trim();
+  const table = m[2].trim();
+  let rest = (m[3] || '').trim();
+
+  // Multi-table FROM (comma before WHERE/GROUP/ORDER/LIMIT) → bail.
+  if (/^,/.test(rest)) return fail('multiple FROM tables are not supported in the visual builder');
+
+  // Columns: '*' or a comma list of <col> | <AGG(col) AS alias>.
+  let columns = [];
+  if (colsRaw !== '*') {
+    for (const part of splitTopLevel(colsRaw)) {
+      const p = part.trim();
+      const agg = /^(count|sum|avg|min|max)\s*\(\s*([a-z_][a-z0-9_.]*)\s*\)(?:\s+as\s+[a-z_][a-z0-9_]*)?$/i.exec(p);
+      if (agg) { columns.push({ column: agg[2], aggregate: agg[1].toUpperCase() }); continue; }
+      if (/^[a-z_][a-z0-9_.]*$/i.test(p)) { columns.push({ column: p, aggregate: '' }); continue; }
+      return fail(`column expression "${p}" can't be represented in the visual builder`);
+    }
+  }
+
+  // Pull off trailing clauses from `rest`, in reverse precedence.
+  const state = { table, columns, whereConditions: [], groupByColumns: [], orderBy: { column: '', direction: 'ASC' }, limit: 0, offset: 0 };
+
+  // LIMIT [OFFSET]
+  const lim = /\blimit\s+(\d+)(?:\s+offset\s+(\d+))?\s*$/i.exec(rest);
+  if (lim) {
+    state.limit = parseInt(lim[1], 10);
+    if (lim[2]) state.offset = parseInt(lim[2], 10);
+    rest = rest.slice(0, lim.index).trim();
+  }
+  // ORDER BY <col> [ASC|DESC]
+  const ord = /\border\s+by\s+([a-z_][a-z0-9_.]*)\s*(asc|desc)?\s*$/i.exec(rest);
+  if (ord) {
+    state.orderBy = { column: ord[1], direction: (ord[2] || 'ASC').toUpperCase() };
+    rest = rest.slice(0, ord.index).trim();
+  } else if (/\border\s+by\b/i.test(rest)) {
+    return fail('ORDER BY with multiple columns/expressions isn\'t supported in the visual builder');
+  }
+  // GROUP BY a,b,c
+  const grp = /\bgroup\s+by\s+(.+?)\s*$/i.exec(rest);
+  if (grp) {
+    const cols = splitTopLevel(grp[1]).map((c) => c.trim());
+    if (!cols.every((c) => /^[a-z_][a-z0-9_.]*$/i.test(c))) return fail('GROUP BY expression isn\'t supported in the visual builder');
+    state.groupByColumns = cols;
+    rest = rest.slice(0, grp.index).trim();
+  }
+  // WHERE (what remains must start with WHERE, or be empty)
+  if (rest) {
+    const w = /^where\s+(.+)$/i.exec(rest);
+    if (!w) return fail('unrecognized SQL after the table');
+    const conds = parseWhere(w[1]);
+    if (!conds.ok) return fail(conds.reason);
+    state.whereConditions = conds.conditions;
+  }
+  return { ok: true, state };
+}
+
+// splitTopLevel splits on top-level commas (ignores commas inside parens).
+function splitTopLevel(s) {
+  const out = []; let depth = 0, cur = '';
+  for (const ch of s) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+// parseWhere parses a WHERE body into builder conditions. Only AND-joined simple
+// `<col> <op> <value|token>` predicates (and the range token's `<col> {{range-variable}}`).
+// OR, IN/BETWEEN lists, IS NULL, functions → refuse.
+function parseWhere(body) {
+  const fail = (reason) => ({ ok: false, reason });
+  if (/\bor\b/i.test(body)) return fail('OR in WHERE isn\'t supported in the visual builder');
+  if (/\bbetween\b/i.test(body)) return fail('BETWEEN in WHERE isn\'t supported in the visual builder (use a range variable)');
+  if (/\bis\s+(not\s+)?null\b/i.test(body)) return fail('IS NULL conditions aren\'t supported in the visual builder');
+  const parts = body.split(/\s+and\s+/i).map((p) => p.trim()).filter(Boolean);
+  const conditions = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    const logic = i === 0 ? 'AND' : 'AND';
+    // Range token: `<col> {{range-variable}}`
+    const rng = new RegExp(`^([a-z_][a-z0-9_."\`]*)\\s*${RANGE_VARIABLE_TOKEN.replace(/[{}]/g, '\\$&')}$`, 'i').exec(p);
+    if (rng) { conditions.push({ column: rng[1].replace(/["`]/g, ''), operator: '=', value: '', logic, valueSource: 'range' }); continue; }
+    // `<col> <op> <value>` where op is one of the builder's operators.
+    const cm = /^([a-z_][a-z0-9_."`]*)\s*(=|!=|<>|>=|<=|>|<|like)\s*(.+)$/i.exec(p);
+    if (!cm) return fail(`condition "${p}" can't be represented in the visual builder`);
+    const col = cm[1].replace(/["`]/g, '');
+    const op = cm[2] === '<>' ? '!=' : cm[2].toUpperCase() === 'LIKE' ? 'LIKE' : cm[2];
+    let val = cm[3].trim();
+    // Dashboard-variable token (unquoted) → variable value-source.
+    if (val === DASHBOARD_VARIABLE_TOKEN) { conditions.push({ column: col, operator: op, value: '', logic, valueSource: 'variable' }); continue; }
+    // Quoted literal → strip quotes. Unquoted non-token (number) → keep.
+    const q = /^'(.*)'$/.exec(val);
+    if (q) val = q[1];
+    else if (/\(|\)|select/i.test(val)) return fail(`value "${val}" can't be represented in the visual builder`);
+    conditions.push({ column: col, operator: op, value: val, logic, valueSource: 'literal' });
+  }
+  return { ok: true, conditions };
+}
+
 /**
  * SQLQueryBuilder - Visual SQL SELECT statement builder
  *
@@ -32,12 +166,19 @@ import './SQLQueryBuilder.scss';
  * - Generated SQL preview
  * - Copy to clipboard
  * - Execute query
+ * - Best-effort PARSE of an incoming raw query (initialQuery) into the visual
+ *   state on mount, so switching raw→visual imports a representable query.
  */
 const SQLQueryBuilder = ({
   connectionId,
   onQueryChange,
   onExecute,
-  initialQuery: _initialQuery = '',
+  // Raw SQL to import into the visual state on mount (e.g. switching raw→visual).
+  // Best-effort: a representable query populates the builder; anything it can't
+  // round-trip is reported via onImportWarning and the builder stays empty so the
+  // forward codegen doesn't clobber the user's raw query with a mangled rebuild.
+  initialQuery = '',
+  onImportWarning,
   disabled = false,
   // When true, each WHERE condition can bind to the dashboard variable instead
   // of a literal — emitting the bare {{dashboard-variable}} token UNQUOTED so
@@ -73,11 +214,39 @@ const SQLQueryBuilder = ({
     }
   }, [connectionId]);
 
-  // Build query whenever options change
+  // Import the incoming raw query into the visual state ONCE on mount (e.g. when
+  // the user flips raw→visual). Best-effort: a representable query populates the
+  // builder; anything else leaves the builder empty and reports a warning so the
+  // forward codegen below doesn't overwrite the user's raw SQL with a rebuild.
+  const importedRef = useRef(false);
+  useEffect(() => {
+    if (importedRef.current) return;
+    importedRef.current = true;
+    if (!initialQuery || !initialQuery.trim()) return;
+    const res = parseSimpleQuery(initialQuery);
+    if (res.ok) {
+      const s = res.state;
+      setSelectedTable(s.table);
+      setSelectedColumns(s.columns);
+      setWhereConditions(s.whereConditions);
+      setGroupByColumns(s.groupByColumns);
+      setOrderBy(s.orderBy);
+      setLimit(s.limit);
+      setOffset(s.offset);
+    } else if (onImportWarning) {
+      onImportWarning(res.reason);
+    }
+  }, [initialQuery, onImportWarning]);
+
+  // Build query whenever options change. buildQuery returns '' when no table is
+  // selected, so on first mount (before import or a user table pick) it emits
+  // nothing — it never clobbers the incoming raw query with an empty SELECT.
   useEffect(() => {
     const query = buildQuery();
     setGeneratedQuery(query);
-    if (onQueryChange) {
+    // Only propagate a non-empty rebuild — an empty result here means "builder
+    // not configured yet," which must not overwrite the parent's raw query.
+    if (onQueryChange && query) {
       onQueryChange(query);
     }
   }, [selectedTable, selectedColumns, whereConditions, groupByColumns, orderBy, limit, offset]);
