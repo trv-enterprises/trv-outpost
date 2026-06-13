@@ -150,8 +150,46 @@ and the agents write `query_config.raw` with tokens, shipped in #24). Options:
    delete `buildQuery`/`parseSimpleQuery`. Existing components keep working via
    `raw` until re-saved (or a one-time migration parses `raw`→`intent` where
    `parseSimpleQuery`'s rules allow; un-parseable stays on `raw`).
+3.5. **`raw`→`intent` migration tool** (in-process). After slices 1-3 land
+   (server builder + parity test proven), run a best-effort migration over
+   stored components. See §5.1.
 4. **(Later) AI emits `intent`** + deployment flag to refuse `raw` → closes the
    arbitrary-SQL hole fully.
+
+### 5.1 raw→intent migration (slice 3.5)
+
+Port the client's existing reverse parser `parseSimpleQuery()`
+(`SQLQueryBuilder.jsx:36-109`, already shipped for the raw→visual toggle in
+v0.30.1) to Go and run it as an **in-process migration** (`migrations.go` —
+idempotent, runs on boot, no manual step; fits the framework per CLAUDE.md
+since it's a per-document parse + conditional `$set`/`$unset` sweep).
+
+Per component with a SQL/EdgeLake `query_config.raw`:
+- Parse `raw`. **If it fits the simple subset** → write `query_config.intent`
+  and **clear `raw`** (`$unset`/blank) — single source of truth; immediately
+  shrinks the arbitrary-SQL surface for that component (decided 2026-06-13:
+  clear, don't keep a backup copy).
+- **If it does NOT parse** (JOIN/CTE/HAVING/OR/BETWEEN/subquery/IN-expr — the
+  parser's documented bail cases) → leave `raw` untouched, no `intent`. These
+  are the advanced queries `raw` exists to hold; the server keeps running them
+  via the fallback path.
+
+Properties:
+- **Safety:** never destructive on un-parseable queries (they keep working).
+  Clearing `raw` only happens *after* a successful parse whose `intent`
+  round-trips back to equivalent SQL — the migration should re-`BuildSQL` the
+  parsed intent and compare to the original (normalized) before committing the
+  swap; mismatch → leave as `raw`. This makes the clear safe.
+- **Gated on parity:** must NOT run before slice 2's parity test passes, or it
+  could convert a query to an intent the server builds differently.
+- **Idempotent:** a component already on `intent` (no `raw`) is skipped.
+- **Reversible-in-aggregate:** because the clear is parity-checked, the built
+  SQL equals the original; nothing is lost even though the literal string is
+  gone.
+
+Not a hard requirement for the feature (the `raw` fallback means old components
+work un-migrated) — it's the cleanup that gets existing components onto the
+structured path and lets a deployment eventually refuse `raw`.
 
 ## 5. Backward compatibility
 
