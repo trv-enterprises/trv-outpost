@@ -412,6 +412,11 @@ func (t *Toolset) CreateComponent(ctx context.Context, in CreateComponentInput) 
 	if t.Components == nil {
 		return nil, fmt.Errorf("component service not wired")
 	}
+	// Stamp the AI-provenance tag server-side (issue #59) so every
+	// agent-created component is marked regardless of what the model did.
+	// NormalizeTags (via WithAITag) dedupes, so descriptive tags the model
+	// supplied are preserved and "ai" is never doubled.
+	in.Request.Tags = models.WithAITag(in.Request.Tags)
 	return t.Components.CreateComponent(ctx, &in.Request)
 }
 
@@ -490,6 +495,8 @@ func (t *Toolset) CreateDashboard(ctx context.Context, in CreateDashboardInput) 
 	if t.Dashboards == nil {
 		return nil, fmt.Errorf("dashboard service not wired")
 	}
+	// Stamp the AI-provenance tag server-side (issue #59); see CreateComponent.
+	in.Request.Tags = models.WithAITag(in.Request.Tags)
 	return t.Dashboards.CreateDashboard(ctx, &in.Request)
 }
 

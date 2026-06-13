@@ -850,6 +850,9 @@ func (r *ToolRegistry) registerComponentTools() {
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
+			// Stamp the AI-provenance tag server-side (issue #59). MCP creates
+			// directly via the service (not toolops), so apply it here too.
+			req.Tags = models.WithAITag(req.Tags)
 			out, err := r.componentService.CreateComponent(context.Background(), req)
 			if err != nil {
 				return nil, err
@@ -1115,6 +1118,8 @@ func (r *ToolRegistry) registerDashboardTools() {
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
+			// AI-provenance tag (issue #59) — MCP creates directly via service.
+			req.Tags = models.WithAITag(req.Tags)
 			return r.dashboardService.CreateDashboard(context.Background(), req)
 		},
 	)

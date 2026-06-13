@@ -9,6 +9,21 @@ import (
 	"strings"
 )
 
+// AITag is the provenance tag stamped on every component/dashboard created by
+// an AI surface (Dashboard Assistant, Component agent, MCP). It is applied
+// server-side, not by the model, so provenance is reliable and shows up in the
+// normal tag UI / filters — a lightweight alternative to a dedicated
+// "ai_generated" model field + panel badge.
+const AITag = "ai"
+
+// WithAITag returns the tag slice with AITag appended and normalized (deduped),
+// so AI create paths can mark provenance without clobbering caller-supplied
+// descriptive tags. Idempotent: a slice that already contains "ai" is unchanged
+// after normalization.
+func WithAITag(in []string) []string {
+	return NormalizeTags(append(append([]string{}, in...), AITag))
+}
+
 // NormalizeTags lowercases, trims, kebab-cases internal whitespace, dedupes,
 // drops empties, and returns a sorted slice. The goal is to prevent tag
 // fragmentation ("Home", "home", "HOME", "living room", "Living Room" all

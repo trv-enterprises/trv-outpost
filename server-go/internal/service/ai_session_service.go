@@ -164,6 +164,11 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 			Version: 1,
 			Status:  models.ComponentStatusDraft,
 			Name:    fmt.Sprintf("Untitled Chart %s", chartID[:8]),
+			// AI-provenance tag (issue #59): this draft is being authored by
+			// the Component AI agent. Stamped on NEW charts only — editing an
+			// existing user component via "Edit with AI" inherits its tags
+			// above and is not marked. Carries through draft → save.
+			Tags: []string{models.AITag},
 		}
 		chartVersion = 1
 
