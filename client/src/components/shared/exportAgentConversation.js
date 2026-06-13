@@ -182,16 +182,35 @@ function renderJson({ title, messages, namespace, modelLabel, user }) {
   );
 }
 
+// defaultExportBaseName is the suggested filename stem (no extension) shown to
+// the user when they choose to export. The user can rename it in the export
+// dialog; this is just the prefilled default.
+export function defaultExportBaseName(opts) {
+  return `${opts?.filePrefix || 'ai-conversation'}_${formatTimestamp()}`;
+}
+
+// resolveFilename builds the final filename. When the caller passes an explicit
+// `filename` (the user typed one in the export dialog), it's sanitized and used
+// (the extension is appended if missing); otherwise it falls back to the
+// timestamped default. This is what lets the user NAME the file on download.
+function resolveFilename(opts, ext) {
+  const typed = (opts.filename || '').trim();
+  const base = typed || defaultExportBaseName(opts);
+  // Strip a user-typed extension that matches, and any path separators.
+  const cleaned = base.replace(/[/\\]+/g, '-').replace(new RegExp(`\\.${ext}$`, 'i'), '');
+  return `${cleaned}.${ext}`;
+}
+
 /**
  * Trigger a Markdown download of the conversation. opts: { title, filePrefix,
- * messages, namespace, modelLabel, user }. No-op when there are no messages —
- * the menu should disable export before this, but defensive guard anyway.
+ * messages, namespace, modelLabel, user, filename? }. When `filename` is set
+ * (user named it in the export dialog) it's used; otherwise a timestamped
+ * default. No-op when there are no messages.
  */
 export function exportAsMarkdown(opts) {
   if (!opts?.messages || opts.messages.length === 0) return;
   const md = renderMarkdown(opts);
-  const name = `${opts.filePrefix || 'ai-conversation'}_${formatTimestamp()}.md`;
-  downloadBlob(md, 'text/markdown;charset=utf-8', name);
+  downloadBlob(md, 'text/markdown;charset=utf-8', resolveFilename(opts, 'md'));
 }
 
 /**
@@ -200,6 +219,5 @@ export function exportAsMarkdown(opts) {
 export function exportAsJson(opts) {
   if (!opts?.messages || opts.messages.length === 0) return;
   const json = renderJson(opts);
-  const name = `${opts.filePrefix || 'ai-conversation'}_${formatTimestamp()}.json`;
-  downloadBlob(json, 'application/json;charset=utf-8', name);
+  downloadBlob(json, 'application/json;charset=utf-8', resolveFilename(opts, 'json'));
 }

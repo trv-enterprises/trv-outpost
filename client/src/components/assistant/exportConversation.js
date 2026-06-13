@@ -11,6 +11,7 @@
 import {
   exportAsMarkdown as sharedExportAsMarkdown,
   exportAsJson as sharedExportAsJson,
+  defaultExportBaseName as sharedDefaultExportBaseName,
 } from '../shared/exportAgentConversation';
 
 const IDENTITY = { title: 'Dashboard Assistant', filePrefix: 'dashboard-assistant' };
@@ -21,4 +22,10 @@ export function exportAsMarkdown(opts) {
 
 export function exportAsJson(opts) {
   sharedExportAsJson({ ...IDENTITY, ...opts });
+}
+
+// Timestamped default base name (no extension) for the export-name dialog,
+// stamped with the Assistant identity.
+export function defaultExportBaseName() {
+  return sharedDefaultExportBaseName(IDENTITY);
 }

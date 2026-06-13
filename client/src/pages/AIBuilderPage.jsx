@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Button,
@@ -30,7 +30,9 @@ import AgentWelcome from '../components/shared/AgentWelcome';
 import {
   exportAsMarkdown as exportConversationMarkdown,
   exportAsJson as exportConversationJson,
+  defaultExportBaseName,
 } from '../components/shared/exportAgentConversation';
+import ExportNameModal from '../components/shared/ExportNameModal';
 import { useAISession } from '../hooks/useAISession';
 import apiClient from '../api/client';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
@@ -315,25 +317,29 @@ function AIBuilderPage() {
   };
 
   // Export the conversation as Markdown / JSON. Secrets in tool-call args and
-  // results are masked by the shared exporter (issue #40). Disabled until the
+  // results are masked by the shared exporter (issue #40). The cog items open a
+  // name dialog so the user can name the file at download time (#61); the
+  // actual download fires from the dialog's onConfirm. Disabled until the
   // transcript has at least one message.
   const hasMessages = messages && messages.length > 0;
-  const handleExportMarkdown = useCallback(() => {
-    exportConversationMarkdown({
+  const [exportFormat, setExportFormat] = useState(null); // 'md' | 'json' | null
+  const exportOpts = useMemo(
+    () => ({
       title: 'Component AI — Edit with AI',
       filePrefix: 'component-ai',
       messages,
       namespace: component?.namespace,
-    });
-  }, [messages, component?.namespace]);
-  const handleExportJson = useCallback(() => {
-    exportConversationJson({
-      title: 'Component AI — Edit with AI',
-      filePrefix: 'component-ai',
-      messages,
-      namespace: component?.namespace,
-    });
-  }, [messages, component?.namespace]);
+    }),
+    [messages, component?.namespace]
+  );
+  const handleExportConfirm = useCallback(
+    (filename) => {
+      const opts = { ...exportOpts, filename };
+      if (exportFormat === 'json') exportConversationJson(opts);
+      else exportConversationMarkdown(opts);
+    },
+    [exportOpts, exportFormat]
+  );
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return '';
@@ -399,9 +405,9 @@ function AIBuilderPage() {
         <div className="header-actions">
           <AgentSettingsMenu
             label="Component AI settings"
-            // Export items disable on an empty conversation (pass undefined).
-            onExportMarkdown={hasMessages ? handleExportMarkdown : undefined}
-            onExportJson={hasMessages ? handleExportJson : undefined}
+            // Export items open the name dialog (disabled on an empty convo).
+            onExportMarkdown={hasMessages ? () => setExportFormat('md') : undefined}
+            onExportJson={hasMessages ? () => setExportFormat('json') : undefined}
             expandToolCalls={expandToolCalls}
             onToggleExpandToolCalls={() => setExpandToolCalls((v) => !v)}
           />
@@ -570,6 +576,15 @@ function AIBuilderPage() {
         onKeepEditing={() => setShowDiscardDialog(false)}
         onDiscard={handleDiscard}
         body="You have unsaved changes. Are you sure you want to discard them? This action cannot be undone."
+      />
+
+      {/* Export name dialog — lets the user name the file at download time (#61) */}
+      <ExportNameModal
+        open={exportFormat !== null}
+        format={exportFormat || 'md'}
+        defaultName={defaultExportBaseName(exportOpts)}
+        onConfirm={handleExportConfirm}
+        onClose={() => setExportFormat(null)}
       />
     </div>
   );
