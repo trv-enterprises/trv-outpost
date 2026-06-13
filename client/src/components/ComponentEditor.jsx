@@ -34,7 +34,7 @@ import {
 import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, ChartLineData, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown, Information } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
 import { API_BASE } from '../api/client';
-import SQLQueryBuilder from './SQLQueryBuilder';
+import SQLQueryBuilder, { parseSimpleQuery } from './SQLQueryBuilder';
 import PrometheusQueryBuilder from './PrometheusQueryBuilder';
 import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
 import MQTTTopicSelector from './MQTTTopicSelector';
@@ -739,10 +739,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
-  // Warning when raw→visual import can't fully parse the SQL into the builder
-  // (joins/subqueries/etc.). The builder stays empty; we tell the user why and
-  // that their raw query is preserved (switch back to raw to keep it).
-  const [queryImportWarning, setQueryImportWarning] = useState(null);
   const [availableColumns, setAvailableColumns] = useState([]);
   // The single query-results table lives at the bottom of the Data Mapping tab
   // (it's filter-aware). It's easy to miss after running a query, so we scroll
@@ -2876,7 +2872,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         <ContentSwitcher
                           size="sm"
                           selectedIndex={queryMode === 'visual' ? 0 : 1}
-                          onChange={(e) => { setQueryImportWarning(null); setQueryMode(e.name); }}
+                          onChange={(e) => setQueryMode(e.name)}
                           className="query-mode-switcher"
                         >
                           <Switch name="visual" text="Visual" />
@@ -3273,37 +3269,52 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       </div>
                     </div>
                   ) : selectedDatasource.type === 'sql' && queryMode === 'visual' ? (
-                    <>
-                      {queryImportWarning && (
-                        <InlineNotification
-                          kind="warning"
-                          title="Couldn't import into the visual builder"
-                          subtitle={`${queryImportWarning}. Your raw query is preserved — switch back to Raw mode to keep it, or rebuild here.`}
-                          onCloseButtonClick={() => setQueryImportWarning(null)}
-                          lowContrast
-                          style={{ marginBottom: '0.5rem' }}
-                        />
-                      )}
-                      <SQLQueryBuilder
-                        connectionId={selectedConnectionId}
-                        allowDashboardVariable={dashboardVariableEnabled}
-                        allowRangeVariable={dashboardVariableEnabled}
-                        onQueryChange={(query) => setQueryRaw(query)}
-                        onExecute={(response) => {
-                          if (response.success && response.result_set) {
-                            setPreviewData(response.result_set);
-                            if (response.result_set.columns) {
-                              setAvailableColumns(response.result_set.columns);
+                    (() => {
+                      // Pre-check importability BEFORE mounting the builder. If
+                      // there's a non-empty raw query the visual builder can't
+                      // represent, show a warning + "Switch to Raw" instead of
+                      // mounting the builder — which would otherwise fire a slow
+                      // schema fetch (and a "Schema Error — timed out") under an
+                      // empty form the user shouldn't be looking at. (#52)
+                      const importCheck = queryRaw?.trim() ? parseSimpleQuery(queryRaw) : { ok: true };
+                      if (!importCheck.ok) {
+                        return (
+                          <div className="query-import-blocked">
+                            <InlineNotification
+                              kind="warning"
+                              title="This query can't be edited in the visual builder"
+                              subtitle={`${importCheck.reason}. Your raw query is unchanged — edit it in Raw mode.`}
+                              hideCloseButton
+                              lowContrast
+                              style={{ marginBottom: '0.5rem' }}
+                            />
+                            <Button kind="tertiary" size="sm" onClick={() => setQueryMode('raw')}>
+                              Switch to Raw mode
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return (
+                        <SQLQueryBuilder
+                          connectionId={selectedConnectionId}
+                          allowDashboardVariable={dashboardVariableEnabled}
+                          allowRangeVariable={dashboardVariableEnabled}
+                          onQueryChange={(query) => setQueryRaw(query)}
+                          onExecute={(response) => {
+                            if (response.success && response.result_set) {
+                              setPreviewData(response.result_set);
+                              if (response.result_set.columns) {
+                                setAvailableColumns(response.result_set.columns);
+                              }
+                              setPreviewError(null);
+                            } else {
+                              setPreviewError(response.error);
                             }
-                            setPreviewError(null);
-                          } else {
-                            setPreviewError(response.error);
-                          }
-                        }}
-                        initialQuery={queryRaw}
-                        onImportWarning={(reason) => setQueryImportWarning(reason)}
-                      />
-                    </>
+                          }}
+                          initialQuery={queryRaw}
+                        />
+                      );
+                    })()
                   ) : selectedDatasource.type === 'prometheus' && queryMode === 'visual' ? (
                     <PrometheusQueryBuilder
                       connectionId={selectedConnectionId}

@@ -33,7 +33,7 @@ import './SQLQueryBuilder.scss';
 // functions/expressions in SELECT or WHERE (beyond a simple AGG(col) AS alias),
 // OR in WHERE, IN/BETWEEN/IS-NULL literal lists we don't model, UNION, HAVING,
 // CTEs. The {{dashboard-variable}} / {{range-variable}} tokens DO round-trip.
-function parseSimpleQuery(rawIn) {
+export function parseSimpleQuery(rawIn) {
   const fail = (reason) => ({ ok: false, reason });
   if (typeof rawIn !== 'string' || !rawIn.trim()) return fail('empty query');
   // Normalize whitespace; keep it one-line for clause regexes.
@@ -174,11 +174,9 @@ const SQLQueryBuilder = ({
   onQueryChange,
   onExecute,
   // Raw SQL to import into the visual state on mount (e.g. switching raw→visual).
-  // Best-effort: a representable query populates the builder; anything it can't
-  // round-trip is reported via onImportWarning and the builder stays empty so the
-  // forward codegen doesn't clobber the user's raw query with a mangled rebuild.
+  // The PARENT pre-checks representability with parseSimpleQuery and only mounts
+  // this builder when the query is importable, so here we just parse + populate.
   initialQuery = '',
-  onImportWarning,
   disabled = false,
   // When true, each WHERE condition can bind to the dashboard variable instead
   // of a literal — emitting the bare {{dashboard-variable}} token UNQUOTED so
@@ -215,9 +213,9 @@ const SQLQueryBuilder = ({
   }, [connectionId]);
 
   // Import the incoming raw query into the visual state ONCE on mount (e.g. when
-  // the user flips raw→visual). Best-effort: a representable query populates the
-  // builder; anything else leaves the builder empty and reports a warning so the
-  // forward codegen below doesn't overwrite the user's raw SQL with a rebuild.
+  // the user flips raw→visual). The parent only mounts this builder for a query
+  // that parseSimpleQuery accepts, so this populates the form; a defensive parse
+  // failure simply leaves the builder empty.
   const importedRef = useRef(false);
   useEffect(() => {
     if (importedRef.current) return;
@@ -233,10 +231,8 @@ const SQLQueryBuilder = ({
       setOrderBy(s.orderBy);
       setLimit(s.limit);
       setOffset(s.offset);
-    } else if (onImportWarning) {
-      onImportWarning(res.reason);
     }
-  }, [initialQuery, onImportWarning]);
+  }, [initialQuery]);
 
   // Build query whenever options change. buildQuery returns '' when no table is
   // selected, so on first mount (before import or a user table pick) it emits
