@@ -82,6 +82,32 @@ func TestFilterResult_BadPathInstructiveError(t *testing.T) {
 	if !strings.Contains(err.Error(), "gjson") {
 		t.Errorf("error should clarify gjson (not jq) syntax, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "OBJECT") {
+		t.Errorf("object-root error should say the root is an OBJECT, got: %v", err)
+	}
+}
+
+// When the result ROOT is a JSON array, a bad object-key filter must get
+// array-appropriate guidance — not the old unhelpful "(result root is not an
+// object)" (issue #43 follow-up; the layout_dimensions case from the screenshot).
+func TestFilterResult_ArrayRootInstructiveError(t *testing.T) {
+	arrayJSON := `[{"name":"2K","cols":71},{"name":"HD","cols":53}]`
+	_, err := FilterResult(arrayJSON, "layout_dimensions")
+	if err == nil {
+		t.Fatal("expected error for object-key path against an array root")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "ARRAY") {
+		t.Errorf("array-root error should say the root is an ARRAY, got: %v", msg)
+	}
+	if strings.Contains(msg, "not an object") {
+		t.Errorf("array-root error must NOT use the old unhelpful wording, got: %v", msg)
+	}
+	// And a correct array path should work.
+	out, err := FilterResult(arrayJSON, "#.name")
+	if err != nil || !strings.Contains(out, "2K") {
+		t.Errorf("array path '#.name' = %q err=%v", out, err)
+	}
 }
 
 func TestFilterResult_StillLargeWarns(t *testing.T) {

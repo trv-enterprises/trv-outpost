@@ -335,8 +335,8 @@ func FilterResult(full, filter string) (string, error) {
 	res := gjson.Get(full, path)
 	if !res.Exists() {
 		return "", fmt.Errorf(
-			"filter %q matched nothing. The result uses gjson PATH syntax (not jq): top-level keys are [%s]. Examples: \"connections.#.name\", \"connections.#(type==\\\"sql\\\").name\", \"rows.0\", \"columns\". Retry with a path into one of those keys.",
-			filter, strings.Join(topLevelKeys(full), ", "),
+			"filter %q matched nothing. The result uses gjson PATH syntax (not jq). %s",
+			filter, shapeHint(full),
 		)
 	}
 	out := res.Raw
@@ -349,17 +349,39 @@ func FilterResult(full, filter string) (string, error) {
 	return out, nil
 }
 
-// topLevelKeys returns the top-level object keys of a JSON string (for the
-// instructive error). Empty when the root isn't an object.
-func topLevelKeys(full string) []string {
+// shapeHint describes the result's JSON ROOT so a failed filter gets
+// shape-appropriate, actionable guidance — an object lists its keys, an ARRAY
+// says to use index/wildcard paths (not object-key paths), and a scalar says no
+// filter is needed. Earlier this only handled objects and emitted an unhelpful
+// "(result root is not an object)" for array roots (issue #43 follow-up).
+func shapeHint(full string) string {
 	root := gjson.Parse(full)
-	if !root.IsObject() {
-		return []string{"(result root is not an object)"}
+	switch {
+	case root.IsObject():
+		var keys []string
+		root.ForEach(func(k, _ gjson.Result) bool {
+			keys = append(keys, k.String())
+			return true
+		})
+		return fmt.Sprintf(
+			"The root is an OBJECT with top-level keys [%s]. Path into one of those, e.g. %q, \"connections.#.name\", \"connections.#(type==\\\"sql\\\").name\". Retry with one of those keys.",
+			strings.Join(keys, ", "), firstOr(keys, "somekey"),
+		)
+	case root.IsArray():
+		n := len(root.Array())
+		return fmt.Sprintf(
+			"The root is an ARRAY of %d item(s) — there are NO top-level keys, so an object-key path won't match. Use index or wildcard paths: \"0\" (first item), \"#\" (count), \"#.<field>\" (a field across all items), \"#(<field>==\\\"x\\\")\" (filter). Retry with one of those.",
+			n,
+		)
+	default:
+		return "The root is a single scalar value — it has no sub-fields to filter; omit the filter to get it as-is."
 	}
-	var keys []string
-	root.ForEach(func(k, _ gjson.Result) bool {
-		keys = append(keys, k.String())
-		return true
-	})
-	return keys
+}
+
+// firstOr returns the first element of s, or fallback when s is empty.
+func firstOr(s []string, fallback string) string {
+	if len(s) > 0 {
+		return s[0]
+	}
+	return fallback
 }
