@@ -29,7 +29,8 @@ import {
   Checkbox,
   Dropdown,
   OverflowMenu,
-  OverflowMenuItem
+  OverflowMenuItem,
+  Modal
 } from '@carbon/react';
 import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -68,6 +69,10 @@ function DashboardsListPage() {
   const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Delete confirmation — Carbon danger Modal instead of window.confirm
+  // (the app forbids native dialogs; mirrors DevicesPage). #63-adjacent.
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
   // Sort state. Authoritative storage is per-user server config
   // (`dashboard_tile_sort`), shared with the View-mode tile page so a
@@ -300,15 +305,23 @@ function DashboardsListPage() {
     navigate(`/view/dashboards/${dashboard.id}`, { state: { fromDesign: true } });
   };
 
-  const handleDelete = async (e, dashboard) => {
+  const handleDelete = (e, dashboard) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${dashboard.name}"?`)) {
-      try {
-        await apiClient.deleteDashboard(dashboard.id);
-        fetchDashboards();
-      } catch (err) {
-        alert(`Error: ${err.message}`);
-      }
+    setDeleteTarget(dashboard);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await apiClient.deleteDashboard(deleteTarget.id);
+      setDeleteTarget(null);
+      fetchDashboards();
+    } catch (err) {
+      setError(`Failed to delete dashboard: ${err.message}`);
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1073,6 +1086,24 @@ function DashboardsListPage() {
         onClose={() => setImportModalOpen(false)}
         onImported={() => fetchData()}
       />
+
+      {/* Delete confirmation — Carbon danger Modal (no native confirm()) */}
+      <Modal
+        open={deleteTarget !== null}
+        danger
+        modalHeading="Delete dashboard"
+        primaryButtonText={deleting ? 'Deleting…' : 'Delete'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={deleting}
+        onRequestSubmit={handleDeleteConfirm}
+        onRequestClose={() => setDeleteTarget(null)}
+        size="sm"
+      >
+        <p>
+          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This
+          cannot be undone.
+        </p>
+      </Modal>
     </div>
   );
 }
