@@ -155,6 +155,14 @@ func buildSummary(toolName, resultID, rawResult string) string {
 	var parsed interface{}
 	if err := json.Unmarshal([]byte(rawResult), &parsed); err == nil {
 		if envelope, ok := parsed.(map[string]interface{}); ok {
+			// query_connection shape: {result_set:{columns,rows}} (or a bare
+			// {columns,rows}). Summarize with the column list, row count, and a
+			// sample row so the agent learns the shape WITHOUT making several
+			// get_full_result probe calls (issue #69). This is the dominant
+			// large-result source and the one that caused the worst flailing.
+			if cols, rows, ok := queryResultShape(envelope); ok {
+				return buildQueryResultSummary(toolName, resultID, cols, rows, len(rawResult))
+			}
 			// Common toolops envelope shapes: {<plural-name>: [...], count: N}.
 			for _, listKey := range []string{"connections", "components", "dashboards", "namespaces"} {
 				if items, ok := envelope[listKey].([]interface{}); ok {
@@ -193,6 +201,49 @@ func buildSummary(toolName, resultID, rawResult string) string {
 // used by every list-shaped tool result. Covers up to SummaryItemCap
 // entries inline; anything beyond gets a "and N more — call
 // get_full_result" tail.
+// queryResultShape extracts the columns + rows of a query_connection result.
+// Handles both {result_set:{columns,rows}} (the QueryResponse envelope) and a
+// bare {columns,rows}. Returns ok=false when the envelope isn't a tabular
+// result. Issue #69.
+func queryResultShape(envelope map[string]interface{}) (cols []interface{}, rows []interface{}, ok bool) {
+	src := envelope
+	if rs, isMap := envelope["result_set"].(map[string]interface{}); isMap {
+		src = rs
+	}
+	c, hasC := src["columns"].([]interface{})
+	r, hasR := src["rows"].([]interface{})
+	if hasC && hasR {
+		return c, r, true
+	}
+	return nil, nil, false
+}
+
+// buildQueryResultSummary describes a stored tabular query result by its COLUMN
+// list, ROW COUNT, and one sample row — the shape the agent needs to plan a
+// filter or decide it should aggregate instead of pulling raw rows. Without
+// this the agent burned several get_full_result calls just probing the shape
+// (issue #69). Note: for a large window the right move is usually to NOT pull
+// raw rows at all — narrow columns / aggregate (see issue #68).
+func buildQueryResultSummary(toolName, resultID string, cols, rows []interface{}, rawBytes int) string {
+	colNames := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if s, ok := c.(string); ok {
+			colNames = append(colNames, s)
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s returned a table: %d row(s) × %d column(s).\n", toolName, len(rows), len(colNames))
+	fmt.Fprintf(&b, "Columns: %s\n", strings.Join(colNames, ", "))
+	if len(rows) > 0 {
+		if sample, err := json.Marshal(rows[0]); err == nil {
+			fmt.Fprintf(&b, "Sample row [0]: %s\n", string(sample))
+		}
+	}
+	fmt.Fprintf(&b, "Stored as %s (%d bytes). To extract a slice use get_full_result(%q, filter) with a gjson path, e.g. \"result_set.rows.#.<colIndex>\" or \"result_set.columns\". For a SUMMARY over many rows, prefer narrowing the query (fewer columns / a coarser window) or aggregating rather than pulling every row.",
+		resultID, rawBytes, resultID)
+	return b.String()
+}
+
 func buildListSummary(toolName, listKey, resultID string, items []interface{}, count, rawBytes int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s returned %d %s.\n", toolName, count, listKey)

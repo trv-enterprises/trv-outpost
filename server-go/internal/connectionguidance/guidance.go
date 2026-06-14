@@ -207,11 +207,22 @@ query_config shapes:
     // Oldest N records (default cap = 10 rows)
     { "raw": "oldest", "type": "api", "params": { "limit": 100 } }
 
-    // All records since a unix-second timestamp (default cap = 100000)
+    // Records within a RELATIVE window — a Go DURATION (h/m/s; combine for
+    // days, e.g. 240h = 10 days). This is the form to use for "last N days".
+    { "raw": "since:240h", "type": "api", "params": { "limit": 5000 } }
+
+    // Records since an ABSOLUTE unix-second timestamp (default cap = 100000)
     { "raw": "since:1779900000", "type": "api", "params": { "limit": 5000 } }
 
-    // Records in a unix-second range (default cap = 100000)
+    // Records in an absolute unix-second range (default cap = 100000)
     { "raw": "range:1779900000:1779903600", "type": "api", "params": {} }
+
+  IMPORTANT: since: accepts EITHER a Go duration ("240h", "30m") for a
+  relative window OR a unix-SECOND integer for an absolute start. It does NOT
+  accept anything else — passing a date string, milliseconds, or a converted
+  value in the wrong form fails with: invalid since duration: missing unit.
+  For "last N days" prefer the duration form ("240h" for 10 days) — don't
+  hand-convert a date to a timestamp.
 
 Implicit row caps when params.limit is unset:
   - newest / oldest / default → 10
