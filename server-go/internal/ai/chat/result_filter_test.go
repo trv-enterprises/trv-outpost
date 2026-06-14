@@ -7,6 +7,8 @@ package chat
 import (
 	"strings"
 	"testing"
+
+	"github.com/tidwall/gjson"
 )
 
 const listJSON = `{"connections":[` +
@@ -110,8 +112,11 @@ func TestFilterResult_ArrayRootInstructiveError(t *testing.T) {
 	}
 }
 
-func TestFilterResult_StillLargeWarns(t *testing.T) {
-	// Build a result whose filtered slice exceeds the inline threshold.
+// FilterResult returns the raw filtered slice unmodified — it does NOT prepend
+// a warning or truncate. Over-threshold handling (re-store + summarize) is the
+// caller's job (wrapGetFullResult → ResultStore.Summarize), issue #67. This
+// test guards that FilterResult stays a pure extractor.
+func TestFilterResult_ReturnsRawSliceNoMutation(t *testing.T) {
 	var b strings.Builder
 	b.WriteString(`{"rows":[`)
 	for i := 0; i < 4000; i++ {
@@ -121,14 +126,17 @@ func TestFilterResult_StillLargeWarns(t *testing.T) {
 		b.WriteString(`["row-value-padding-xxxxxxxx"]`)
 	}
 	b.WriteString(`]}`)
-	out, err := FilterResult(b.String(), "rows")
+	full := b.String()
+	out, err := FilterResult(full, "rows")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) <= LargeResultThresholdBytes {
-		t.Skip("test data not large enough to exceed threshold")
+	if strings.HasPrefix(out, "// NOTE:") {
+		t.Errorf("FilterResult must NOT prepend a warning; size handling is the caller's job")
 	}
-	if !strings.HasPrefix(out, "// NOTE:") {
-		t.Errorf("oversized filtered result should be prefixed with a size warning, got prefix: %.40q", out)
+	// It should equal the exact gjson slice of "rows" — pure extraction.
+	want := gjson.Get(full, "rows").Raw
+	if out != want {
+		t.Errorf("FilterResult should return the raw slice unmodified")
 	}
 }

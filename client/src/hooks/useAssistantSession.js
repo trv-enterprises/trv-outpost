@@ -260,6 +260,14 @@ export default function useAssistantSession() {
 
   const clearChat = useCallback(() => {
     closeWebSocket();
+    // End the server-side session too, not just the client view (#67). Without
+    // this the old session lingers until TTL; explicitly cancel it so its
+    // server state is freed. Fire-and-forget — the UI reset shouldn't wait on
+    // (or fail on) the network call; a failure just falls back to TTL cleanup.
+    const prevId = sessionIdRef.current;
+    if (prevId) {
+      apiClient.cancelAISession(prevId).catch(() => {});
+    }
     setSessionId(null);
     sessionIdRef.current = null;
     setMessages([]);

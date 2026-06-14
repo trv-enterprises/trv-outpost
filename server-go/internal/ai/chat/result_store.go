@@ -339,14 +339,11 @@ func FilterResult(full, filter string) (string, error) {
 			filter, shapeHint(full),
 		)
 	}
-	out := res.Raw
-	if len(out) > LargeResultThresholdBytes {
-		return fmt.Sprintf(
-			"// NOTE: filtered result is still ~%dKB — narrow the filter further (e.g. add an index like \".0\" or select a single field) to avoid re-blowing context.\n%s",
-			len(out)/1024, out,
-		), nil
-	}
-	return out, nil
+	// Return the filtered slice raw. The CALLER (wrapGetFullResult) runs it
+	// back through the result store, so an over-threshold filtered result gets
+	// re-stored + summarized instead of dumped into context (issue #67) — the
+	// whole point of the store. Don't size-guard or warn here.
+	return res.Raw, nil
 }
 
 // shapeHint describes the result's JSON ROOT so a failed filter gets

@@ -956,12 +956,24 @@ func wrapGetFullResult() ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		// Apply the optional gjson filter to return only the requested slice
-		// (issue #43). No filter → verbatim, as before.
+		// No filter → verbatim (issue #43). Note: this verbatim return can be
+		// large; that's the caller explicitly asking for the whole thing.
 		if strings.TrimSpace(in.Filter) == "" {
 			return full, nil
 		}
-		return FilterResult(full, in.Filter)
+		filtered, ferr := FilterResult(full, in.Filter)
+		if ferr != nil {
+			return "", ferr
+		}
+		// If the FILTERED slice is still over the inline threshold, re-store it
+		// and hand back a summary + new result_id instead of dumping it into
+		// context (issue #67 — a 779KB filtered result blew the conversation).
+		// Summarize is a no-op (returns as-is) when the slice is already small.
+		sessionID := ""
+		if env.Session != nil {
+			sessionID = env.Session.ID
+		}
+		return env.ResultStore.Summarize(ctx, sessionID, "get_full_result", filtered)
 	}
 }
 
