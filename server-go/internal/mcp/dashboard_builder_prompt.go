@@ -86,6 +86,10 @@ const dashboardBuilderFlow = `# Build flow
    grid layout looks like. Respect the canvas size. If you're
    planning ≥6 panels, make the plan explicit in a brief internal
    note before creating anything.
+   **Panel sizing — gauges:** a gauge chart should never be smaller
+   than 8x8 cells, and it looks best SQUARE — keep w == h (8x8,
+   10x10, 12x12). When a gauge needs to be bigger, scale both axes
+   together to stay square rather than stretching one dimension.
 4. For **each chart component**, do this three-step sequence:
    a. ` + "`" + `create_component` + "`" + ` with component_type=chart, chart_type,
       connection_id, query_config, data_mapping, title. This creates
