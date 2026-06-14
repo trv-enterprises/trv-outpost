@@ -56,6 +56,7 @@ export default function AssistantMessageList({
           heading="Dashboard Assistant"
           description="Ask anything about your dashboard deployment — your connections, components, and dashboards — or have me build something."
           suggestions={[
+            { label: 'Build a 2K system-stats dashboard', prompt: 'Build me a 2K dashboard for my system stats' },
             { label: 'List my connections', prompt: 'List my connections' },
             { label: 'What dashboards do I have?', prompt: 'What dashboards do I have?' },
             { label: 'Chart from an MQTT topic', prompt: 'Create a chart from MQTT topic home/temp' },
