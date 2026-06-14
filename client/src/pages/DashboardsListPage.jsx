@@ -29,8 +29,7 @@ import {
   Checkbox,
   Dropdown,
   OverflowMenu,
-  OverflowMenuItem,
-  Modal
+  OverflowMenuItem
 } from '@carbon/react';
 import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -46,6 +45,7 @@ import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
+import DashboardDeleteModal from '../components/DashboardDeleteModal';
 import '../components/shared/FilterOverflowMenu.scss';
 import './DashboardsListPage.scss';
 
@@ -69,10 +69,9 @@ function DashboardsListPage() {
   const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Delete confirmation — Carbon danger Modal instead of window.confirm
-  // (the app forbids native dialogs; mirrors DevicesPage). #63-adjacent.
+  // Delete confirmation — DashboardDeleteModal (Carbon danger modal + orphaned-
+  // component cascade). Replaces the old window.confirm (#64) and adds #65.
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
   // Sort state. Authoritative storage is per-user server config
   // (`dashboard_tile_sort`), shared with the View-mode tile page so a
@@ -308,21 +307,6 @@ function DashboardsListPage() {
   const handleDelete = (e, dashboard) => {
     e.stopPropagation();
     setDeleteTarget(dashboard);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await apiClient.deleteDashboard(deleteTarget.id);
-      setDeleteTarget(null);
-      fetchDashboards();
-    } catch (err) {
-      setError(`Failed to delete dashboard: ${err.message}`);
-      setDeleteTarget(null);
-    } finally {
-      setDeleting(false);
-    }
   };
 
   const formatDate = (dateString) => {
@@ -1087,23 +1071,12 @@ function DashboardsListPage() {
         onImported={() => fetchData()}
       />
 
-      {/* Delete confirmation — Carbon danger Modal (no native confirm()) */}
-      <Modal
-        open={deleteTarget !== null}
-        danger
-        modalHeading="Delete dashboard"
-        primaryButtonText={deleting ? 'Deleting…' : 'Delete'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={deleting}
-        onRequestSubmit={handleDeleteConfirm}
-        onRequestClose={() => setDeleteTarget(null)}
-        size="sm"
-      >
-        <p>
-          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This
-          cannot be undone.
-        </p>
-      </Modal>
+      {/* Delete confirmation + orphaned-component cascade (#64, #65) */}
+      <DashboardDeleteModal
+        dashboard={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={fetchDashboards}
+      />
     </div>
   );
 }

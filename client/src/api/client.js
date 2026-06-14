@@ -808,9 +808,21 @@ class APIClient {
     });
   }
 
-  async deleteDashboard(id) {
+  // Components that would be orphaned (referenced by no other dashboard) if
+  // this dashboard is deleted → { orphaned_components: [{id, name}] }.
+  async getDashboardDeletePreview(id) {
+    return this.request(`/api/dashboards/${id}/delete-preview`);
+  }
+
+  // Delete a dashboard, optionally cascade-deleting chosen orphaned components.
+  // deleteComponentIds: array of component ids to also delete (each re-validated
+  // server-side as actually orphaned). Omit/empty → delete dashboard only.
+  async deleteDashboard(id, deleteComponentIds = []) {
     return this.request(`/api/dashboards/${id}`, {
       method: 'DELETE',
+      ...(deleteComponentIds.length > 0
+        ? { body: JSON.stringify({ delete_component_ids: deleteComponentIds }) }
+        : {}),
     });
   }
 
