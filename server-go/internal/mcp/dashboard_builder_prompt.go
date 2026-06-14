@@ -191,8 +191,12 @@ any of their machines. Define them in ` + "`" + `settings.variables[]` + "`" + `
   the component's ` + "`" + `query_config.raw` + "`" + ` as e.g.
   ` + "`" + `SELECT ... FROM metrics WHERE site = {{dashboard-variable}}` + "`" + ` — the
   server binds the live value as a SQL param / escaped EdgeLake literal
-  (injection-safe; never concatenate it yourself). Config:
-  ` + "`" + `filter: { value_source: "static"|"freetext"|"connection", options, default_value, value_column, value_table }` + "`" + `.
+  (injection-safe; never concatenate it yourself). Config goes under the
+  ` + "`" + `filter_value` + "`" + ` key (NOT ` + "`" + `filter` + "`" + ` — that name is dropped on
+  parse): ` + "`" + `filter_value: { value_source, options, default_value, value_column, value_table }` + "`" + `.
+  PREFER ` + "`" + `value_source: "connection"` + "`" + ` (options discovered live from
+  value_column of value_table, stays in sync with the data) over ` + "`" + `"static"` + "`" + `
+  (a fixed options list) unless the user wants a fixed set.
   AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-variable"` + "`" + `.
 - **range** — a [from, to] time window the viewer picks. SQL/EdgeLake
   panels opt in by writing the time column then the token:

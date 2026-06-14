@@ -599,11 +599,15 @@ func dashboardVariablesSchema() map[string]interface{} {
 						"label_tag_prefix": map[string]interface{}{"type": "string", "description": "Derive each dropdown label from a prefixed connection tag, e.g. \"host\" → label is the value of the connection's \"host:\" tag."},
 					},
 				},
-				"filter": map[string]interface{}{
+				// NOTE: the model field is `filter_value` (DashboardVariable.FilterValue).
+				// This key MUST match the json tag or the whole filter config is
+				// silently dropped on unmarshal and the variable falls back to
+				// static "from list" (issue #71).
+				"filter_value": map[string]interface{}{
 					"type":        "object",
-					"description": "Required when mode=filter. Components opt in by writing the {{dashboard-variable}} token into query_config.raw.",
+					"description": "Required when mode=filter. Components opt in by writing the {{dashboard-variable}} token into query_config.raw. PREFER value_source=connection (live distinct-value discovery from the data) over static unless the user asked for a fixed list.",
 					"properties": map[string]interface{}{
-						"value_source":  map[string]interface{}{"type": "string", "enum": []string{"static", "freetext", "connection"}, "description": "static = pick from options; freetext = type a value; connection = options discovered live from the bound column. Default static."},
+						"value_source":  map[string]interface{}{"type": "string", "enum": []string{"static", "freetext", "connection"}, "description": "connection = options discovered LIVE from value_column of value_table (preferred — stays in sync with the data); static = pick from a fixed options list; freetext = type a value. Default static, but use connection when the values come from the dataset."},
 						"options":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Selectable values for value_source=static; fallback list for connection."},
 						"default_value": map[string]interface{}{"type": "string"},
 						"value_column":  map[string]interface{}{"type": "string", "description": "For value_source=connection: column whose distinct values populate the picker."},
