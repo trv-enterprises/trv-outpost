@@ -25,7 +25,9 @@ package toolops
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/connectionguidance"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -443,6 +445,52 @@ func (t *Toolset) UpdateComponent(ctx context.Context, in UpdateComponentInput) 
 		return nil, fmt.Errorf("id is required")
 	}
 	return t.Components.UpdateComponent(ctx, in.ID, &in.Request)
+}
+
+type DeleteComponentInput struct {
+	ID string `json:"id"`
+}
+
+// DeleteComponent deletes a component (all versions). The service blocks the
+// delete when a dashboard still references it (ErrComponentInUse) — in that
+// case we surface a clear message naming the referencing dashboards so the
+// model can fix the references first instead of getting an opaque error.
+// Shared by the Assistant and MCP (MCP previously had its own copy).
+func (t *Toolset) DeleteComponent(ctx context.Context, in DeleteComponentInput) error {
+	if t.Components == nil {
+		return fmt.Errorf("component service not wired")
+	}
+	if in.ID == "" {
+		return fmt.Errorf("id is required")
+	}
+	usage, err := t.Components.DeleteComponent(ctx, in.ID)
+	if errors.Is(err, service.ErrComponentInUse) {
+		names := make([]string, 0)
+		if usage != nil {
+			for _, d := range usage.Dashboards {
+				names = append(names, d.Name)
+			}
+		}
+		return fmt.Errorf("cannot delete: component is still used by %d dashboard(s): %s. Remove the panel reference(s) first (update_dashboard), then delete", len(names), strings.Join(names, ", "))
+	}
+	return err
+}
+
+type DeleteDashboardInput struct {
+	ID string `json:"id"`
+}
+
+// DeleteDashboard deletes a dashboard (the panel grid). Components it
+// referenced are left intact (they may be reused elsewhere); deleting orphaned
+// components is a separate, explicit step. Shared by the Assistant and MCP.
+func (t *Toolset) DeleteDashboard(ctx context.Context, in DeleteDashboardInput) error {
+	if t.Dashboards == nil {
+		return fmt.Errorf("dashboard service not wired")
+	}
+	if in.ID == "" {
+		return fmt.Errorf("id is required")
+	}
+	return t.Dashboards.DeleteDashboard(ctx, in.ID)
 }
 
 // ─── Dashboards ───────────────────────────────────────────────────

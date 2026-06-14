@@ -233,6 +233,20 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapUpdateComponent(ops),
 	})
 
+	reg.Register(Tool{
+		Name:        "delete_component",
+		Description: "Delete a component (chart/control/display) by ID — all versions. Use this to clean up components you replaced or no longer need (e.g. orphaned/unplaced ones). BLOCKED if any dashboard still references it: the error names the referencing dashboards — remove those panel references first (update_dashboard) then retry. Confirm with the user before deleting components they didn't ask you to remove.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string", "description": "Component ID to delete"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapDeleteComponent(ops),
+	})
+
 	// ─── Dashboards ───
 	reg.Register(Tool{
 		Name:        "list_dashboards",
@@ -295,6 +309,20 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 			"required": []string{"id"},
 		},
 		Handler: wrapUpdateDashboard(ops),
+	})
+
+	reg.Register(Tool{
+		Name:        "delete_dashboard",
+		Description: "Delete a dashboard (the panel grid) by ID. The components it referenced are NOT deleted (they may be reused elsewhere) — delete any now-orphaned components separately with delete_component. Confirm with the user before deleting a dashboard they didn't ask you to remove.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string", "description": "Dashboard ID to delete"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapDeleteDashboard(ops),
 	})
 
 	// Tier B: the catalog is big (every type with config + metadata)
@@ -799,6 +827,32 @@ func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
 			return "", err
 		}
 		return jsonResult(out)
+	}
+}
+
+func wrapDeleteComponent(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.DeleteComponentInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if err := ops.DeleteComponent(ctx, in); err != nil {
+			return "", err
+		}
+		return jsonResult(map[string]interface{}{"deleted": true, "id": in.ID})
+	}
+}
+
+func wrapDeleteDashboard(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.DeleteDashboardInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if err := ops.DeleteDashboard(ctx, in); err != nil {
+			return "", err
+		}
+		return jsonResult(map[string]interface{}{"deleted": true, "id": in.ID})
 	}
 }
 
