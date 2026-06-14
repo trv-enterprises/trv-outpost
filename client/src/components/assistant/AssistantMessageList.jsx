@@ -60,6 +60,7 @@ export default function AssistantMessageList({
             { label: 'List my connections', prompt: 'List my connections' },
             { label: 'What dashboards do I have?', prompt: 'What dashboards do I have?' },
             { label: 'Chart from an MQTT topic', prompt: 'Create a chart from MQTT topic home/temp' },
+            { label: 'Summarize a dataset on a connection', prompt: 'Summarize a dataset on one of my connections' },
             { label: 'Summarize a dashboard', prompt: 'Summarize one of my dashboards' },
           ]}
           onSuggestion={onSuggestion}
