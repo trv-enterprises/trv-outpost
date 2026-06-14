@@ -8,13 +8,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
+
+// gjsonIndexRe rewrites a jq-style array index "[N]" into the gjson ".N" form,
+// so a model that types "rows[0]" out of jq habit still works. Used by
+// normalizeGjsonPath.
+var gjsonIndexRe = regexp.MustCompile(`\[(\d+)\]`)
 
 // LargeResultThresholdBytes is the cut-off above which a tool result
 // is stashed server-side instead of being inlined into the model's
@@ -148,6 +155,14 @@ func buildSummary(toolName, resultID, rawResult string) string {
 	var parsed interface{}
 	if err := json.Unmarshal([]byte(rawResult), &parsed); err == nil {
 		if envelope, ok := parsed.(map[string]interface{}); ok {
+			// query_connection shape: {result_set:{columns,rows}} (or a bare
+			// {columns,rows}). Summarize with the column list, row count, and a
+			// sample row so the agent learns the shape WITHOUT making several
+			// get_full_result probe calls (issue #69). This is the dominant
+			// large-result source and the one that caused the worst flailing.
+			if cols, rows, ok := queryResultShape(envelope); ok {
+				return buildQueryResultSummary(toolName, resultID, cols, rows, len(rawResult))
+			}
 			// Common toolops envelope shapes: {<plural-name>: [...], count: N}.
 			for _, listKey := range []string{"connections", "components", "dashboards", "namespaces"} {
 				if items, ok := envelope[listKey].([]interface{}); ok {
@@ -186,6 +201,49 @@ func buildSummary(toolName, resultID, rawResult string) string {
 // used by every list-shaped tool result. Covers up to SummaryItemCap
 // entries inline; anything beyond gets a "and N more — call
 // get_full_result" tail.
+// queryResultShape extracts the columns + rows of a query_connection result.
+// Handles both {result_set:{columns,rows}} (the QueryResponse envelope) and a
+// bare {columns,rows}. Returns ok=false when the envelope isn't a tabular
+// result. Issue #69.
+func queryResultShape(envelope map[string]interface{}) (cols []interface{}, rows []interface{}, ok bool) {
+	src := envelope
+	if rs, isMap := envelope["result_set"].(map[string]interface{}); isMap {
+		src = rs
+	}
+	c, hasC := src["columns"].([]interface{})
+	r, hasR := src["rows"].([]interface{})
+	if hasC && hasR {
+		return c, r, true
+	}
+	return nil, nil, false
+}
+
+// buildQueryResultSummary describes a stored tabular query result by its COLUMN
+// list, ROW COUNT, and one sample row — the shape the agent needs to plan a
+// filter or decide it should aggregate instead of pulling raw rows. Without
+// this the agent burned several get_full_result calls just probing the shape
+// (issue #69). Note: for a large window the right move is usually to NOT pull
+// raw rows at all — narrow columns / aggregate (see issue #68).
+func buildQueryResultSummary(toolName, resultID string, cols, rows []interface{}, rawBytes int) string {
+	colNames := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if s, ok := c.(string); ok {
+			colNames = append(colNames, s)
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s returned a table: %d row(s) × %d column(s).\n", toolName, len(rows), len(colNames))
+	fmt.Fprintf(&b, "Columns: %s\n", strings.Join(colNames, ", "))
+	if len(rows) > 0 {
+		if sample, err := json.Marshal(rows[0]); err == nil {
+			fmt.Fprintf(&b, "Sample row [0]: %s\n", string(sample))
+		}
+	}
+	fmt.Fprintf(&b, "Stored as %s (%d bytes). To extract a slice use get_full_result(%q, filter) with a gjson path, e.g. \"result_set.rows.#.<colIndex>\" or \"result_set.columns\". For a SUMMARY over many rows, prefer narrowing the query (fewer columns / a coarser window) or aggregating rather than pulling every row.",
+		resultID, rawBytes, resultID)
+	return b.String()
+}
+
 func buildListSummary(toolName, listKey, resultID string, items []interface{}, count, rawBytes int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s returned %d %s.\n", toolName, count, listKey)
@@ -295,4 +353,83 @@ func stringArrayField(obj map[string]interface{}, key string) []string {
 		}
 	}
 	return out
+}
+
+// normalizeGjsonPath makes the model's filter input tolerant of jq habits.
+// The model knows jq far better than gjson, so accept the most common jq-isms
+// and translate to gjson path syntax: a leading "." is optional in gjson
+// (".rows.0" → "rows.0"), and jq array-index "[0]" → ".0". We do NOT try to
+// translate full jq (pipes, select(), map()) — only these surface tweaks; the
+// tool description teaches gjson syntax directly.
+func normalizeGjsonPath(filter string) string {
+	p := strings.TrimSpace(filter)
+	p = strings.TrimPrefix(p, ".")
+	// "rows[0]" / "rows[0].name" → "rows.0" / "rows.0.name"
+	p = gjsonIndexRe.ReplaceAllString(p, ".$1")
+	// collapse any accidental double dots from the above
+	p = strings.ReplaceAll(p, "..", ".")
+	p = strings.TrimPrefix(p, ".")
+	return p
+}
+
+// FilterResult applies a gjson PATH filter to a stored result's JSON and
+// returns the extracted slice. On a non-matching/invalid path it returns an
+// instructive error naming the result's top-level keys so the model can
+// correct rather than fall back to a full fetch. When the filtered output is
+// still over the inline threshold it is returned WITH a one-line size warning
+// prepended (no re-store, no loop) — see issue #43.
+func FilterResult(full, filter string) (string, error) {
+	path := normalizeGjsonPath(filter)
+	if path == "" {
+		return full, nil // empty filter → whole result (defensive; handler guards too)
+	}
+	res := gjson.Get(full, path)
+	if !res.Exists() {
+		return "", fmt.Errorf(
+			"filter %q matched nothing. The result uses gjson PATH syntax (not jq). %s",
+			filter, shapeHint(full),
+		)
+	}
+	// Return the filtered slice raw. The CALLER (wrapGetFullResult) runs it
+	// back through the result store, so an over-threshold filtered result gets
+	// re-stored + summarized instead of dumped into context (issue #67) — the
+	// whole point of the store. Don't size-guard or warn here.
+	return res.Raw, nil
+}
+
+// shapeHint describes the result's JSON ROOT so a failed filter gets
+// shape-appropriate, actionable guidance — an object lists its keys, an ARRAY
+// says to use index/wildcard paths (not object-key paths), and a scalar says no
+// filter is needed. Earlier this only handled objects and emitted an unhelpful
+// "(result root is not an object)" for array roots (issue #43 follow-up).
+func shapeHint(full string) string {
+	root := gjson.Parse(full)
+	switch {
+	case root.IsObject():
+		var keys []string
+		root.ForEach(func(k, _ gjson.Result) bool {
+			keys = append(keys, k.String())
+			return true
+		})
+		return fmt.Sprintf(
+			"The root is an OBJECT with top-level keys [%s]. Path into one of those, e.g. %q, \"connections.#.name\", \"connections.#(type==\\\"sql\\\").name\". Retry with one of those keys.",
+			strings.Join(keys, ", "), firstOr(keys, "somekey"),
+		)
+	case root.IsArray():
+		n := len(root.Array())
+		return fmt.Sprintf(
+			"The root is an ARRAY of %d item(s) — there are NO top-level keys, so an object-key path won't match. Use index or wildcard paths: \"0\" (first item), \"#\" (count), \"#.<field>\" (a field across all items), \"#(<field>==\\\"x\\\")\" (filter). Retry with one of those.",
+			n,
+		)
+	default:
+		return "The root is a single scalar value — it has no sub-fields to filter; omit the filter to get it as-is."
+	}
+}
+
+// firstOr returns the first element of s, or fallback when s is empty.
+func firstOr(s []string, fallback string) string {
+	if len(s) > 0 {
+		return s[0]
+	}
+	return fallback
 }

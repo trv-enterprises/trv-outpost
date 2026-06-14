@@ -207,11 +207,22 @@ query_config shapes:
     // Oldest N records (default cap = 10 rows)
     { "raw": "oldest", "type": "api", "params": { "limit": 100 } }
 
-    // All records since a unix-second timestamp (default cap = 100000)
+    // Records within a RELATIVE window — a Go DURATION (h/m/s; combine for
+    // days, e.g. 240h = 10 days). This is the form to use for "last N days".
+    { "raw": "since:240h", "type": "api", "params": { "limit": 5000 } }
+
+    // Records since an ABSOLUTE unix-second timestamp (default cap = 100000)
     { "raw": "since:1779900000", "type": "api", "params": { "limit": 5000 } }
 
-    // Records in a unix-second range (default cap = 100000)
+    // Records in an absolute unix-second range (default cap = 100000)
     { "raw": "range:1779900000:1779903600", "type": "api", "params": {} }
+
+  IMPORTANT: since: accepts EITHER a Go duration ("240h", "30m") for a
+  relative window OR a unix-SECOND integer for an absolute start. It does NOT
+  accept anything else — passing a date string, milliseconds, or a converted
+  value in the wrong form fails with: invalid since duration: missing unit.
+  For "last N days" prefer the duration form ("240h" for 10 days) — don't
+  hand-convert a date to a timestamp.
 
 Implicit row caps when params.limit is unset:
   - newest / oldest / default → 10
@@ -300,6 +311,20 @@ query_config shape for generic REST APIs:
     }
 
 Return columns: derived from the records in data_path (or the top-level response if data_path is empty). Use get_connection_schema if the connection has a recorded schema; otherwise probe with query_connection limit=1 to see the actual response shape.
+
+Dashboard variable / filtering: a generic REST API has NO standard
+filter parameter — do NOT assume a query param like "?location=..."
+works. Unless you have PROVEN the API honors a specific param (by
+probing query_connection with and without it and seeing the response
+actually narrow), apply a dashboard variable CLIENT-SIDE: add a
+data_mapping.filter whose value is the literal token
+"{{dashboard-variable}}" (e.g. { field: "location", op: "eq", value:
+"{{dashboard-variable}}" }) — the viewer substitutes the active value
+and filters the fetched rows. Putting the token in the URL silently
+no-ops when the API ignores the param (every panel then shows ALL
+data). Contrast: ts-store HAS a real source-side params.filter (use it
+there); SQL/EdgeLake use the {{dashboard-variable}} token inside the
+query. Generic API → client-side filter is the safe default.
 `,
 
 	"file.csv": `

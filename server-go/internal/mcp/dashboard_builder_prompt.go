@@ -71,7 +71,13 @@ const dashboardBuilderFlow = `# Build flow
 
 1. Confirm the target connection exists and is the type you expected
    (` + "`" + `get_connection` + "`" + `). If the runtime context didn't specify one,
-   ` + "`" + `list_connections` + "`" + ` first and pick a sensible match — or ask.
+   ` + "`" + `list_connections` + "`" + ` first. **If two or more connections
+   plausibly match the request (e.g. several expose a temperature
+   field for "a temp chart"), do NOT pick one — call
+   ` + "`" + `request_clarification` + "`" + ` listing the candidates by name and
+   type and let the user choose.** Guessing the wrong source builds a
+   confidently-wrong chart on the wrong data. Use a connection
+   silently only when EXACTLY ONE matches (or the context named it).
 2. Discover the data shape (` + "`" + `get_connection_schema` + "`" + ` for SQL /
    Prometheus, ` + "`" + `list_mqtt_topics` + "`" + ` / ` + "`" + `list_edgelake_tables` + "`" + ` / etc
    for other types). You need to know what fields and metrics are
@@ -80,6 +86,9 @@ const dashboardBuilderFlow = `# Build flow
    grid layout looks like. Respect the canvas size. If you're
    planning ≥6 panels, make the plan explicit in a brief internal
    note before creating anything.
+   **Panel sizing — editor-enforced minimums (don't author below
+   these; the panel can't render smaller):** gauge 4x3, number 4x2,
+   bar/line/area/pie/scatter 6x4, dataview 8x3.
 4. For **each chart component**, do this three-step sequence:
    a. ` + "`" + `create_component` + "`" + ` with component_type=chart, chart_type,
       connection_id, query_config, data_mapping, title. This creates
@@ -160,6 +169,57 @@ Alternative: use ` + "`xAxis.type: 'time'`" + ` and pass series data as
 ` + "`[[epochMs, value], …]`" + ` pairs. That also works and ECharts handles
 all the label/tooltip formatting on its own — no manual formatter
 needed.
+
+# Dashboard variables (interactive scoping)
+
+A dashboard variable is a header dropdown the VIEWER picks at view time
+to re-scope panels — switch which host a board shows, filter to one
+site, or change the time window — without editing the dashboard. Build
+them when the user asks for "let me pick the host", "add a site
+filter", "make the time range selectable", or one board that works for
+any of their machines. Define them in ` + "`" + `settings.variables[]` + "`" + ` and set
+` + "`" + `settings.variables_enabled: true` + "`" + ` on ` + "`" + `create_dashboard` + "`" + ` /
+` + "`" + `update_dashboard` + "`" + `. Three modes:
+
+- **connection_swap** — dropdown lists connections discovered by tag
+  match; selecting one repoints every variable-driven panel's
+  connection. NO query token. Config:
+  ` + "`" + `connection_swap: { tags: [...], schema_strict, same_namespace, label_tag_prefix }` + "`" + `.
+  Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+- **filter** — a value the viewer picks/types, substituted into the
+  query wherever you wrote the ` + "`" + `{{dashboard-variable}}` + "`" + ` token. Author
+  the component's ` + "`" + `query_config.raw` + "`" + ` as e.g.
+  ` + "`" + `SELECT ... FROM metrics WHERE site = {{dashboard-variable}}` + "`" + ` — the
+  server binds the live value as a SQL param / escaped EdgeLake literal
+  (injection-safe; never concatenate it yourself). Config goes under the
+  ` + "`" + `filter_value` + "`" + ` key (NOT ` + "`" + `filter` + "`" + ` — that name is dropped on
+  parse): ` + "`" + `filter_value: { value_source, options, default_value, value_column, value_table }` + "`" + `.
+  PREFER ` + "`" + `value_source: "connection"` + "`" + ` (options discovered live from
+  value_column of value_table, stays in sync with the data) over ` + "`" + `"static"` + "`" + `
+  (a fixed options list) unless the user wants a fixed set.
+  AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+  WHERE the token goes depends on the adapter (read get_connection_type_guidance):
+  SQL/EdgeLake → in the query; ts-store → params.filter; **generic REST
+  API → do NOT assume a URL param like "?location=" works; filter
+  CLIENT-SIDE via a data_mapping.filters entry whose value is the token,
+  unless you've probed and confirmed the API honors the param.**
+- **range** — a [from, to] time window the viewer picks. SQL/EdgeLake
+  panels opt in by writing the time column then the token:
+  ` + "`" + `... WHERE ts {{range-variable}}` + "`" + `. ts-store and Prometheus panels
+  apply the window AUTOMATICALLY (no token). Config:
+  ` + "`" + `range: { presets: ["1h","6h","24h","7d","30d"], default_preset, allow_absolute }` + "`" + `.
+  AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-range"` + "`" + `.
+  **For a PROMETHEUS dashboard with range/time-series components, define
+  this range variable and set variables_enabled: true by default — the
+  range panels consume the window automatically, giving the viewer a
+  time-range control for free (no per-component token).**
+
+Flow: write the matching token into the ` + "`" + `query_config.raw` + "`" + ` of the
+components the variable should drive (connection_swap needs none) when
+you create them, then define the variable in ` + "`" + `settings.variables` + "`" + ` and
+set ` + "`" + `variables_enabled: true` + "`" + `. A component carrying a token but no
+matching enabled variable renders a "select a value/range"
+empty-state, so only token the components you mean to drive.
 
 # Things to avoid
 

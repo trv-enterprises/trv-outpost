@@ -68,7 +68,7 @@ Control types and their UI config:
 		},
 		{
 			Name:        "update_component_config",
-			Description: anthropic.String("Update basic component configuration like title, description and chart type. Note: Component name is set by the user when saving, do NOT try to set the name."),
+			Description: anthropic.String("Update basic component configuration like title, description, chart type, and tags. Note: Component name is set by the user when saving, do NOT try to set the name."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
 					"title":       map[string]interface{}{"type": "string", "description": "Component title — the user-facing display label, labeled 'Title' in the editor. Concise human-readable string like 'CPU Utilization' or 'Flow Rate by Location'. The same string MUST then be used verbatim for any ECharts title.text, in-code title constant, or update_chart_options.title — never the component name."},
@@ -77,6 +77,11 @@ Control types and their UI config:
 						"type":        "string",
 						"description": "Type of chart (only for chart components)",
 						"enum":        chartEnum,
+					},
+					"tags": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Descriptive tags for findability. ALWAYS set these. Use lowercase hyphenated tags covering the data SOURCE/integration (e.g. \"system-stats\", \"node-exporter\", \"prometheus\"), the HOST/dataset (e.g. \"trv-srv-001\"), and the METRIC the component shows (e.g. \"cpu\", \"memory\", \"temperature\"). Example: a CPU gauge from TRV-SRV-001 system stats → [\"cpu\", \"system-stats\", \"trv-srv-001\"]. (An \"ai\" provenance tag is added automatically — you don't need to include it.)",
 					},
 				},
 			},

@@ -172,6 +172,7 @@ const (
 	AIEventTypeError           = "error"             // Error occurred
 	AIEventTypeThinking        = "thinking"          // AI is processing
 	AIEventTypeStreaming       = "streaming"         // Streaming text content
+	AIEventTypeUsage           = "usage"             // Per-turn token usage
 )
 
 // AIEvent represents an SSE event sent to the client
@@ -218,4 +219,18 @@ type AIThinkingEvent struct {
 type AIStreamingEvent struct {
 	Content string `json:"content"` // Partial text content
 	Done    bool   `json:"done"`    // Whether streaming is complete
+}
+
+// AIUsageEvent is the data for a "usage" event: token counts for the API call
+// just completed (Input/Output) plus the running cumulative total for THIS
+// session so far. The agent makes multiple API calls per user turn (one per
+// tool round-trip), so each call emits one usage event and the client
+// accumulates / displays the session totals. The server-side per-user DAILY
+// buckets (chat_usage) are separate and cumulative across sessions; this event
+// is the live in-session counter only.
+type AIUsageEvent struct {
+	InputTokens         int `json:"input_tokens"`          // this API call
+	OutputTokens        int `json:"output_tokens"`         // this API call
+	SessionInputTokens  int `json:"session_input_tokens"`  // running total this session
+	SessionOutputTokens int `json:"session_output_tokens"` // running total this session
 }

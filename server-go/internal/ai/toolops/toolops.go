@@ -25,7 +25,9 @@ package toolops
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/connectionguidance"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -412,6 +414,11 @@ func (t *Toolset) CreateComponent(ctx context.Context, in CreateComponentInput) 
 	if t.Components == nil {
 		return nil, fmt.Errorf("component service not wired")
 	}
+	// Stamp the AI-provenance tag server-side (issue #59) so every
+	// agent-created component is marked regardless of what the model did.
+	// NormalizeTags (via WithAITag) dedupes, so descriptive tags the model
+	// supplied are preserved and "ai" is never doubled.
+	in.Request.Tags = models.WithAITag(in.Request.Tags)
 	return t.Components.CreateComponent(ctx, &in.Request)
 }
 
@@ -438,6 +445,52 @@ func (t *Toolset) UpdateComponent(ctx context.Context, in UpdateComponentInput) 
 		return nil, fmt.Errorf("id is required")
 	}
 	return t.Components.UpdateComponent(ctx, in.ID, &in.Request)
+}
+
+type DeleteComponentInput struct {
+	ID string `json:"id"`
+}
+
+// DeleteComponent deletes a component (all versions). The service blocks the
+// delete when a dashboard still references it (ErrComponentInUse) — in that
+// case we surface a clear message naming the referencing dashboards so the
+// model can fix the references first instead of getting an opaque error.
+// Shared by the Assistant and MCP (MCP previously had its own copy).
+func (t *Toolset) DeleteComponent(ctx context.Context, in DeleteComponentInput) error {
+	if t.Components == nil {
+		return fmt.Errorf("component service not wired")
+	}
+	if in.ID == "" {
+		return fmt.Errorf("id is required")
+	}
+	usage, err := t.Components.DeleteComponent(ctx, in.ID)
+	if errors.Is(err, service.ErrComponentInUse) {
+		names := make([]string, 0)
+		if usage != nil {
+			for _, d := range usage.Dashboards {
+				names = append(names, d.Name)
+			}
+		}
+		return fmt.Errorf("cannot delete: component is still used by %d dashboard(s): %s. Remove the panel reference(s) first (update_dashboard), then delete", len(names), strings.Join(names, ", "))
+	}
+	return err
+}
+
+type DeleteDashboardInput struct {
+	ID string `json:"id"`
+}
+
+// DeleteDashboard deletes a dashboard (the panel grid). Components it
+// referenced are left intact (they may be reused elsewhere); deleting orphaned
+// components is a separate, explicit step. Shared by the Assistant and MCP.
+func (t *Toolset) DeleteDashboard(ctx context.Context, in DeleteDashboardInput) error {
+	if t.Dashboards == nil {
+		return fmt.Errorf("dashboard service not wired")
+	}
+	if in.ID == "" {
+		return fmt.Errorf("id is required")
+	}
+	return t.Dashboards.DeleteDashboard(ctx, in.ID)
 }
 
 // ─── Dashboards ───────────────────────────────────────────────────
@@ -490,7 +543,33 @@ func (t *Toolset) CreateDashboard(ctx context.Context, in CreateDashboardInput) 
 	if t.Dashboards == nil {
 		return nil, fmt.Errorf("dashboard service not wired")
 	}
+	// Stamp the AI-provenance tag server-side (issue #59); see CreateComponent.
+	in.Request.Tags = models.WithAITag(in.Request.Tags)
 	return t.Dashboards.CreateDashboard(ctx, &in.Request)
+}
+
+type UpdateDashboardInput struct {
+	ID      string
+	Request models.UpdateDashboardRequest
+}
+
+// UpdateDashboard patches an existing dashboard in place. Only the fields
+// set in the request are changed — UpdateDashboardRequest uses pointer
+// fields, so a nil field leaves the stored value untouched. When Panels is
+// provided it REPLACES the whole panel array (fetch first to add a subset).
+//
+// Shared by the Assistant and MCP so both modify dashboards through one
+// code path — mirrors UpdateComponent above. This is the seam variable
+// authoring rides on: an agent adds settings.variables[] to an existing
+// dashboard by patching Settings here.
+func (t *Toolset) UpdateDashboard(ctx context.Context, in UpdateDashboardInput) (*models.Dashboard, error) {
+	if t.Dashboards == nil {
+		return nil, fmt.Errorf("dashboard service not wired")
+	}
+	if in.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	return t.Dashboards.UpdateDashboard(ctx, in.ID, &in.Request)
 }
 
 // ─── Type catalog ─────────────────────────────────────────────────

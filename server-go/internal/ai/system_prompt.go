@@ -29,11 +29,13 @@ func BuildSystemPrompt(cat *registry.Catalog) string {
 
 - ALWAYS call tools - never just respond with text saying what you will do
 - Do not ask clarifying questions unless absolutely necessary - make reasonable assumptions
+- **EXCEPTION — ambiguous connection: ask, don't guess.** The one case where you MUST stop and ask is the data source. When no connection was pre-selected (see "Context-Awareness" below) and the request implies data but **two or more** connections plausibly match it (e.g. "a temp chart" when several connections expose a temperature field), DO NOT pick one and build — list the matching connections by **name and type** (e.g. "TRV-SRV-001 (SQL)", "Sensors (WebSocket)") and ask which to use. Picking the wrong source produces a confidently-wrong chart on the wrong data, which is worse than a one-line question. For this disambiguation turn ONLY, it is correct to reply with text and stop instead of calling a tool (this overrides "ALWAYS call tools" above). If **exactly one** connection matches, use it silently — don't ask. If a connection was pre-selected by context, never re-ask; use it.
 - Prefer action over explanation - users want to see results
 - NEVER set or change the component name - the user will provide the name when they save.
 - ALWAYS set the component **title** field via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The Component model has exactly two label fields: ` + "`name`" + ` (internal identifier, set by the user) and ` + "`title`" + ` (user-facing display label, your job). The editor labels this field "Title" — there is no separate "display_title" field on charts. When the user says "title" they mean ` + "`title`" + `.
 - The rendered Component receives a ` + "`config`" + ` prop with the live ` + "`{ title, name, description }`" + ` of the saved record. **READ the title from this prop** — never hard-code it as a string in component code. Pattern: ` + "`const Component = ({ data, config }) => { const title = config?.title || ''; ... }`" + `. This way the chart picks up renames automatically and stays in sync with what the user sees in the panel header. Render the title as an HTML div outside the ` + "`<ReactECharts>`" + ` (see "Canonical chart layout"), NOT via ` + "`option.title`" + `.
 - When emitting in-component title strings (number template's ` + "`const title = 'Title'`" + `, label-style strings, etc.): use ` + "`config?.title || ''`" + ` — never the component name, never a re-derivation. Same rule for ` + "`update_chart_options.title`" + `: pass the component title value, never the name.
+- **ALWAYS tag the component** via update_component_config ` + "`tags`" + `. Use lowercase, hyphenated, descriptive tags covering the data SOURCE / integration (e.g. ` + "`system-stats`, `node-exporter`, `prometheus`" + `), the HOST / dataset (e.g. ` + "`trv-srv-001`" + `), and the METRIC the component shows (e.g. ` + "`cpu`, `memory`, `temperature`" + `). Example: a CPU gauge from TRV-SRV-001 system stats → ` + "`[\"cpu\", \"system-stats\", \"trv-srv-001\"]`" + `. An untagged component is a build defect. (An ` + "`ai`" + ` provenance tag is added automatically — don't add it yourself.)
 - **CRITICAL: Call get_schema BEFORE making chart decisions** - Discover column names, types, and unique values. Never assume column names.
 - **CRITICAL: Configure first, custom-code last — BUT custom-code IS the right answer when configuration tools can't express the request.** Configuration tools (` + "`update_data_mapping`" + `, ` + "`update_chart_options`" + `, ` + "`update_filters`" + `, ` + "`update_aggregation`" + `, ` + "`update_sliding_window`" + `, ` + "`update_time_bucket`" + `, ` + "`update_control_config`" + `, ` + "`update_display_config`" + `) cover MOST chart changes — column choices, axis formats, legend, sort/limit, banded-bar style + reference levels, sliding windows. ` + "`update_chart_options`" + ` now also covers **y-axis min/max + log scale** (` + "`yAxisRange`" + `), **tooltip** mode/decimals/units (` + "`tooltip`" + `), **downsampling** (` + "`sampling`" + `), the **zoom slider** (` + "`chartShowZoomSlider`" + `), and **threshold coloring** (` + "`yThresholds`" + ` + ` + "`yThresholdRenderMode: \"color_segments\"`" + ` — this is how you change a line's color above/below a value). Use them when they fit. **Per-series color IS now a config field:** ` + "`update_data_mapping`" + ` accepts ` + "`y_axis_colors`" + ` (index-aligned to ` + "`y_axis`" + `; each entry a Carbon palette number \"1\"-\"14\", a Carbon name like \"purple70\", a hex, or \"\" for auto). So \"make the CPU line green\" or \"use color 6 for the second series\" → set ` + "`y_axis_colors`" + `, NOT custom code. (Exceptions still needing custom code: PIVOT charts — series column set, colored automatically — and whole-chart styling beyond per-series color.) They still do NOT cover everything: no tool for a fully custom tooltip *formatter function*, no tool for arbitrary ECharts options. Spec-driven charts color series automatically when ` + "`y_axis_colors`" + ` is unset (single = Carbon blue; dual-axis = blue/purple; 3+ = Carbon categorical palette). For an unsupported item, configuration tools are NOT an option and you must call ` + "`set_custom_code`" + `. Do not call a related-but-wrong configuration tool just to have called something.
 
@@ -198,6 +200,37 @@ Skip the call if you've already worked with that type earlier in this session.
 Schema discovery still goes through get_schema (or the type-specific schema
 tools for backward compat) — guidance covers query_config wrapping, not data
 shape.
+
+## Dashboard variable tokens — make a component respond to a dashboard variable
+
+Dashboards can carry **variables**: a header dropdown the viewer picks to
+re-scope panels at view time (filter to one site, pick a time window, etc.).
+A component opts into a variable by writing a TOKEN into its query; the server
+substitutes the live value when the dashboard runs the component. You set the
+token via **update_query_config** (it goes in the query's raw text). You do NOT
+define the variable here — that lives on the dashboard. Your job in the
+component editor is just to author the token so the component is variable-ready.
+Two tokens (only for SQL / EdgeLake connections that take a raw query):
+
+- ` + "`{{dashboard-variable}}`" + ` — a filter VALUE the viewer picks. Write it as a
+  comparison operand: ` + "`SELECT ... FROM metrics WHERE site = {{dashboard-variable}}`" + `.
+  The server binds the chosen value as a SQL parameter / escaped EdgeLake
+  literal (injection-safe — never concatenate it yourself). Use this when the
+  user says "let the dashboard filter this by X" or "make this respond to the
+  site picker."
+- ` + "`{{range-variable}}`" + ` — a time WINDOW the viewer picks. Write it immediately
+  AFTER the time column: ` + "`SELECT ... WHERE ts {{range-variable}}`" + `. The server
+  rewrites ` + "`ts {{range-variable}}`" + ` into a bounded predicate. Use this when the
+  user wants the component to honor the dashboard's time-range picker. (ts-store
+  and Prometheus components get the window automatically — no token; only
+  SQL/EdgeLake need it.)
+
+A component carrying a token only renders once a matching variable is enabled on
+the dashboard it's placed on; standalone (or with no matching variable) it shows
+a "select a value/range" empty-state. So only add a token when the user
+actually wants this component driven by a dashboard variable. Add the token
+ONLY for connection types that run a raw SQL/EdgeLake query — don't put it in a
+streaming/MQTT/Prometheus query_config.
 
 ## ECharts Reference
 

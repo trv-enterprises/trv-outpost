@@ -45,6 +45,7 @@ import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
 import DashboardImportModal from '../components/DashboardImportModal';
+import DashboardDeleteModal from '../components/DashboardDeleteModal';
 import '../components/shared/FilterOverflowMenu.scss';
 import './DashboardsListPage.scss';
 
@@ -68,6 +69,9 @@ function DashboardsListPage() {
   const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Delete confirmation — DashboardDeleteModal (Carbon danger modal + orphaned-
+  // component cascade). Replaces the old window.confirm (#64) and adds #65.
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
   // Sort state. Authoritative storage is per-user server config
   // (`dashboard_tile_sort`), shared with the View-mode tile page so a
@@ -300,16 +304,9 @@ function DashboardsListPage() {
     navigate(`/view/dashboards/${dashboard.id}`, { state: { fromDesign: true } });
   };
 
-  const handleDelete = async (e, dashboard) => {
+  const handleDelete = (e, dashboard) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${dashboard.name}"?`)) {
-      try {
-        await apiClient.deleteDashboard(dashboard.id);
-        fetchDashboards();
-      } catch (err) {
-        alert(`Error: ${err.message}`);
-      }
-    }
+    setDeleteTarget(dashboard);
   };
 
   const formatDate = (dateString) => {
@@ -1072,6 +1069,13 @@ function DashboardsListPage() {
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
         onImported={() => fetchData()}
+      />
+
+      {/* Delete confirmation + orphaned-component cascade (#64, #65) */}
+      <DashboardDeleteModal
+        dashboard={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={fetchDashboards}
       />
     </div>
   );

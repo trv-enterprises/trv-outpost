@@ -1,0 +1,73 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Shared AI welcome / empty-state (AgentWelcome), used by both the Component
+// agent and the Dashboard Assistant. Theme-neutral Carbon tokens only so it
+// resolves under the active root theme (the old per-page copy hardcoded hex —
+// this is the corrected, token-based version; issue #40).
+
+@use '@carbon/react/scss/spacing' as spacing;
+@use '@carbon/react/scss/type' as type;
+
+.agent-welcome {
+  text-align: center;
+  padding: spacing.$spacing-07;
+  color: var(--cds-text-secondary);
+
+  &__icon svg {
+    color: var(--cds-icon-secondary);
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  &__heading {
+    @include type.type-style('heading-03');
+    color: var(--cds-text-primary);
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  &__description {
+    @include type.type-style('body-01');
+    margin-bottom: spacing.$spacing-05;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  &__suggestions {
+    text-align: left;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  &__suggestions-label {
+    @include type.type-style('label-01');
+    color: var(--cds-text-secondary);
+    margin-bottom: spacing.$spacing-03;
+    text-align: center;
+  }
+
+  &__suggestion-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-02;
+  }
+
+  &__suggestion-btn {
+    @include type.type-style('body-compact-01');
+    background-color: var(--cds-layer-02);
+    border: 1px solid var(--cds-border-subtle-02);
+    border-radius: 4px;
+    padding: spacing.$spacing-03 spacing.$spacing-04;
+    color: var(--cds-text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background-color: var(--cds-layer-hover-02);
+      border-color: var(--cds-border-interactive);
+      color: var(--cds-link-primary);
+    }
+  }
+}

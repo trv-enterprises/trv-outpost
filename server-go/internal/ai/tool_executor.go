@@ -344,9 +344,10 @@ func (e *ToolExecutor) executeUpdateControlConfig(ctx context.Context, chartID s
 // executeUpdateComponentConfig updates basic component configuration (not name - that's user-controlled)
 func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID string, chartVersion int, input json.RawMessage) (*ToolResult, error) {
 	var params struct {
-		Title       *string `json:"title,omitempty"`
-		Description *string `json:"description,omitempty"`
-		ChartType   *string `json:"chart_type,omitempty"`
+		Title       *string   `json:"title,omitempty"`
+		Description *string   `json:"description,omitempty"`
+		ChartType   *string   `json:"chart_type,omitempty"`
+		Tags        *[]string `json:"tags,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -390,6 +391,13 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 		}
 		chart.ChartType = *params.ChartType
 		updates = append(updates, "chart_type")
+	}
+	if params.Tags != nil {
+		// Preserve the auto-stamped "ai" provenance tag (issue #59): merge it
+		// with the model's descriptive tags rather than letting the model
+		// replace it away. NormalizeTags dedupes.
+		chart.Tags = models.WithAITag(*params.Tags)
+		updates = append(updates, "tags")
 	}
 
 	if len(updates) == 0 {

@@ -126,6 +126,7 @@ type SessionService interface {
 	SendThinkingEvent(sessionID string, thinking bool)
 	SendStreamingEvent(sessionID string, content string, done bool)
 	SendErrorEvent(sessionID string, err error, code string)
+	SendUsageEvent(sessionID string, inputTokens, outputTokens int)
 	BroadcastEvent(sessionID string, event *models.AIEvent)
 }
 
@@ -312,6 +313,14 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 				int64(response.Usage.OutputTokens),
 			)
 		}
+
+		// Broadcast the same counts to the session's clients for the live
+		// in-session "show token usage" display (issue #55). One event per
+		// API call; the service accumulates the session running total.
+		a.sessionSvc.SendUsageEvent(session.ID,
+			int(response.Usage.InputTokens),
+			int(response.Usage.OutputTokens),
+		)
 
 		textContent := ""
 		var toolUseBlocks []anthropic.ToolUseBlock

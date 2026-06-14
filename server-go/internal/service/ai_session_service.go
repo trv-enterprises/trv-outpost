@@ -36,6 +36,19 @@ type AISessionService struct {
 	// WebSocket client management
 	clients   map[string]map[string]*WSClient // sessionID -> clientID -> client
 	clientsMu sync.RWMutex
+
+	// Per-session cumulative token usage (input, output), for the live
+	// in-session "show token usage" display. Distinct from the per-user DAILY
+	// buckets in chat_usage (those are cumulative across sessions, for budget/
+	// audit). Keyed by sessionID; cleared when a session's last WS client
+	// unregisters so this can't grow unbounded.
+	usage   map[string]*sessionUsage
+	usageMu sync.Mutex
+}
+
+type sessionUsage struct {
+	input  int
+	output int
 }
 
 // NewAISessionService creates a new AI session service
@@ -45,6 +58,7 @@ func NewAISessionService(sessionRepo *repository.AISessionRepository, chartRepo 
 		chartRepo:     chartRepo,
 		dashboardRepo: dashboardRepo,
 		clients:       make(map[string]map[string]*WSClient),
+		usage:         make(map[string]*sessionUsage),
 	}
 }
 
@@ -150,6 +164,11 @@ func (s *AISessionService) CreateSession(ctx context.Context, req *models.Create
 			Version: 1,
 			Status:  models.ComponentStatusDraft,
 			Name:    fmt.Sprintf("Untitled Chart %s", chartID[:8]),
+			// AI-provenance tag (issue #59): this draft is being authored by
+			// the Component AI agent. Stamped on NEW charts only — editing an
+			// existing user component via "Edit with AI" inherits its tags
+			// above and is not marked. Carries through draft → save.
+			Tags: []string{models.AITag},
 		}
 		chartVersion = 1
 
@@ -466,6 +485,11 @@ func (s *AISessionService) UnregisterWSClient(client *WSClient) {
 		delete(sessionClients, client.ID)
 		if len(sessionClients) == 0 {
 			delete(s.clients, client.SessionID)
+			// Session has no more live clients — drop its cumulative usage
+			// so the map can't grow unbounded across many sessions.
+			s.usageMu.Lock()
+			delete(s.usage, client.SessionID)
+			s.usageMu.Unlock()
 		}
 		fmt.Printf("[WS] Client %s unregistered from session %s\n", client.ID, client.SessionID)
 	}
@@ -548,6 +572,35 @@ func (s *AISessionService) SendStreamingEvent(sessionID string, content string, 
 		Data: models.AIStreamingEvent{
 			Content: content,
 			Done:    done,
+		},
+		Timestamp: time.Now(),
+	})
+}
+
+// SendUsageEvent broadcasts the token usage for the API call just completed,
+// plus the running cumulative total for this session. Called once per API call
+// (the agent makes several per user turn). Accumulation is server-side so every
+// connected client of the session sees consistent totals regardless of when it
+// joined. The session's entry is cleared on last-client unregister.
+func (s *AISessionService) SendUsageEvent(sessionID string, inputTokens, outputTokens int) {
+	s.usageMu.Lock()
+	u := s.usage[sessionID]
+	if u == nil {
+		u = &sessionUsage{}
+		s.usage[sessionID] = u
+	}
+	u.input += inputTokens
+	u.output += outputTokens
+	sessionIn, sessionOut := u.input, u.output
+	s.usageMu.Unlock()
+
+	s.BroadcastEvent(sessionID, &models.AIEvent{
+		Type: models.AIEventTypeUsage,
+		Data: models.AIUsageEvent{
+			InputTokens:         inputTokens,
+			OutputTokens:        outputTokens,
+			SessionInputTokens:  sessionIn,
+			SessionOutputTokens: sessionOut,
 		},
 		Timestamp: time.Now(),
 	})

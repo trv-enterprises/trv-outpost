@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -232,6 +233,20 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapUpdateComponent(ops),
 	})
 
+	reg.Register(Tool{
+		Name:        "delete_component",
+		Description: "Delete a component (chart/control/display) by ID — all versions. Use this to clean up components you replaced or no longer need (e.g. orphaned/unplaced ones). BLOCKED if any dashboard still references it: the error names the referencing dashboards — remove those panel references first (update_dashboard) then retry. Confirm with the user before deleting components they didn't ask you to remove.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string", "description": "Component ID to delete"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapDeleteComponent(ops),
+	})
+
 	// ─── Dashboards ───
 	reg.Register(Tool{
 		Name:        "list_dashboards",
@@ -275,6 +290,41 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapCreateDashboard(ops),
 	})
 
+	reg.Register(Tool{
+		Name:        "update_dashboard",
+		Description: "Update an existing dashboard. Only the fields you provide are changed; omit a field to leave it untouched. When `panels` is provided it REPLACES the entire panel array — call get_dashboard first if you only want to add or modify a subset. Use this to add dashboard variables to an existing dashboard: fetch it, then patch `settings` with `variables_enabled` + `variables` (see create_dashboard's settings schema and the system prompt's \"Dashboard variables\" section). Do NOT call this on a dashboard the user is actively editing (mode: EDIT in the current view) — your write would overwrite their unsaved local changes; tell them to commit or discard first.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id":          map[string]interface{}{"type": "string", "description": "Dashboard ID to update"},
+				"name":        map[string]interface{}{"type": "string", "description": "New name (unique per namespace)"},
+				"namespace":   map[string]interface{}{"type": "string", "description": "Move the dashboard to a different namespace; omit to leave unchanged"},
+				"description": map[string]interface{}{"type": "string"},
+				"panels":      dashboardPanelsSchema(),
+				"settings":    dashboardSettingsSchema(),
+				"tags":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Replaces the existing tag list"},
+				"metadata":    map[string]interface{}{"type": "object"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapUpdateDashboard(ops),
+	})
+
+	reg.Register(Tool{
+		Name:        "delete_dashboard",
+		Description: "Delete a dashboard (the panel grid) by ID. The components it referenced are NOT deleted (they may be reused elsewhere) — delete any now-orphaned components separately with delete_component. Confirm with the user before deleting a dashboard they didn't ask you to remove.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string", "description": "Dashboard ID to delete"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: wrapDeleteDashboard(ops),
+	})
+
 	// Tier B: the catalog is big (every type with config + metadata)
 	// and isn't relevant to most conversations. Load it on demand.
 	reg.Register(Tool{
@@ -295,7 +345,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	// context.
 	reg.Register(Tool{
 		Name:        "get_full_result",
-		Description: "Retrieve the verbatim content of a previously-stored large tool result by its result_id. Only call this when the inline summary doesn't have what you need — fetching the full payload can consume significant context. result_id looks like `r_abc12345` and is returned in the summary of any large tool call.",
+		Description: "Retrieve a previously-stored large tool result by its result_id. PREFER passing a `filter` to extract just the slice you need — returning the whole payload can re-blow context. result_id looks like `r_abc12345` and is in the summary of any large tool call.",
 		Tier:        TierA,
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -303,6 +353,15 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"result_id": map[string]interface{}{
 					"type":        "string",
 					"description": "The result ID returned in the summary of a large tool call (e.g. r_abc12345).",
+				},
+				"filter": map[string]interface{}{
+					"type": "string",
+					"description": "Optional gjson PATH to extract only what you need (this is gjson syntax, NOT jq). " +
+						"Leave empty to get the whole result. Syntax: dot-path with `#` for arrays. " +
+						"Examples — list results `{connections:[...],count}`: `connections.#.name` (all names), " +
+						"`connections.#(type==\"sql\").name` (names where type==sql), `connections.0` (first), `count`. " +
+						"Query results `{columns:[...],rows:[[...]]}`: `columns`, `rows.0` (first row), `rows.#`(row count). " +
+						"Use the field names from the summary you already received. A wrong path returns an error listing the valid top-level keys.",
 				},
 			},
 			"required": []string{"result_id"},
@@ -395,6 +454,7 @@ func chartDataMappingSchema() map[string]interface{} {
 			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: the first two y columns split across left/right axes; pair with options.yAxisRange.right."},
 			"y_axis_label":   map[string]interface{}{"type": "string", "description": "Display label for the Y axis (legacy single label; use y_axis_labels for dual-axis)."},
 			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-column Y-axis labels. [0] = left axis, [1] = right axis on dual-axis charts."},
+			"y_axis_colors":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar). NOT for pivot charts (series set) — those auto-color. Omit to keep the default palette."},
 			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
 			"group_by":       map[string]interface{}{"type": "string", "description": "Client-side grouping column."},
 			"label_col":      map[string]interface{}{"type": "string", "description": "Column used for pie/bar slice labels."},
@@ -405,6 +465,25 @@ func chartDataMappingSchema() map[string]interface{} {
 			"sort_by":        map[string]interface{}{"type": "string"},
 			"sort_order":     map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
 			"limit":          map[string]interface{}{"type": "integer", "description": "Max rows the chart should render."},
+			"band_columns": map[string]interface{}{
+				"type":        "object",
+				"description": "Banded-bar per-row band mapping. ONLY used by chart_type 'banded_bar'; ignored elsewhere. Pick a `scheme`, then map that scheme's columns to row-column names. Each row carries its own band values (a per-row envelope that moves with the data) — there is no scalar/fixed-band convention. Schemes: 'sd' (±SD: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd), 'minmaxmean' (range: mean + min/max), 'spc' (control: target + lower_control/upper_control/lower_limit/upper_limit). Provide only the keys for the chosen scheme; the center column (mean for sd/minmaxmean, target for spc) is required.",
+				"properties": map[string]interface{}{
+					"scheme":        map[string]interface{}{"type": "string", "enum": []string{"sd", "minmaxmean", "spc"}, "description": "Band scheme. Default 'sd'."},
+					"mean":          map[string]interface{}{"type": "string", "description": "sd/minmaxmean center column (required for those schemes)."},
+					"plus_1sd":      map[string]interface{}{"type": "string", "description": "sd: +1 SD bound."},
+					"minus_1sd":     map[string]interface{}{"type": "string", "description": "sd: -1 SD bound."},
+					"plus_2sd":      map[string]interface{}{"type": "string", "description": "sd: +2 SD bound."},
+					"minus_2sd":     map[string]interface{}{"type": "string", "description": "sd: -2 SD bound."},
+					"min":           map[string]interface{}{"type": "string", "description": "minmaxmean: lower bound."},
+					"max":           map[string]interface{}{"type": "string", "description": "minmaxmean: upper bound."},
+					"target":        map[string]interface{}{"type": "string", "description": "spc center column (required for spc)."},
+					"lower_control": map[string]interface{}{"type": "string", "description": "spc: lower control limit."},
+					"upper_control": map[string]interface{}{"type": "string", "description": "spc: upper control limit."},
+					"lower_limit":   map[string]interface{}{"type": "string", "description": "spc: lower spec limit."},
+					"upper_limit":   map[string]interface{}{"type": "string", "description": "spc: upper spec limit."},
+				},
+			},
 		},
 	}
 }
@@ -494,6 +573,86 @@ func dashboardSettingsSchema() map[string]interface{} {
 			},
 			"is_public":   map[string]interface{}{"type": "boolean"},
 			"allow_export": map[string]interface{}{"type": "boolean"},
+			"variables_enabled": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Per-dashboard on/off gate for dashboard variables (the header dropdown that re-scopes panels at view time). Set true whenever you define `variables`; when false the viewer ignores them entirely.",
+			},
+			"variables": dashboardVariablesSchema(),
+		},
+	}
+}
+
+// dashboardVariablesSchema describes settings.variables[] — the dashboard
+// variable definitions that drive the header dropdowns. Three modes:
+//
+//   - connection_swap: dropdown lists tag-matched connections; selecting one
+//     repoints every variable-driven panel's connection. No query tokens.
+//   - filter: a value the user picks/types, substituted server-side into a
+//     component query wherever the author wrote the `{{dashboard-variable}}`
+//     token (bound as a SQL param / escaped EdgeLake literal). At most ONE
+//     filter variable per dashboard (the token is a single fixed name).
+//   - range: a [from, to] time window restricting time-series panels. SQL /
+//     EdgeLake panels opt in by writing `<column> {{range-variable}}` after
+//     the time column; ts-store / Prometheus panels pick the window up
+//     automatically. At most ONE range variable per dashboard.
+//
+// To author a variable-driven component, write the matching token into the
+// component's query_config.raw (filter: `... WHERE site = {{dashboard-variable}}`;
+// range: `... WHERE ts {{range-variable}}`) when you create the component,
+// then define the variable here and set variables_enabled=true.
+func dashboardVariablesSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Dashboard variable definitions. See the system prompt's \"Dashboard variables\" section for the authoring contract and query tokens.",
+		"items": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Stable key. Use the fixed token name: \"dashboard-variable\" for connection_swap/filter, \"dashboard-range\" for range.",
+				},
+				"label": map[string]interface{}{"type": "string", "description": "UI label shown next to the header dropdown, e.g. \"Site\" or \"Time range\"."},
+				"mode": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"connection_swap", "filter", "range"},
+					"description": "What the variable drives. connection_swap repoints panel connections; filter substitutes a value into queries via {{dashboard-variable}}; range applies a time window via {{range-variable}}.",
+				},
+				"connection_swap": map[string]interface{}{
+					"type":        "object",
+					"description": "Required when mode=connection_swap.",
+					"properties": map[string]interface{}{
+						"tags":             map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "OR-matched discovery tags; the dropdown lists connections carrying any of these."},
+						"schema_strict":    map[string]interface{}{"type": "string", "enum": []string{"type_only", "superset", "exact"}, "description": "How strictly a candidate connection's schema must match the reference. Default type_only."},
+						"same_namespace":   map[string]interface{}{"type": "boolean", "description": "Restrict candidates to the dashboard's namespace. Default false."},
+						"label_tag_prefix": map[string]interface{}{"type": "string", "description": "Derive each dropdown label from a prefixed connection tag, e.g. \"host\" → label is the value of the connection's \"host:\" tag."},
+					},
+				},
+				// NOTE: the model field is `filter_value` (DashboardVariable.FilterValue).
+				// This key MUST match the json tag or the whole filter config is
+				// silently dropped on unmarshal and the variable falls back to
+				// static "from list" (issue #71).
+				"filter_value": map[string]interface{}{
+					"type":        "object",
+					"description": "Required when mode=filter. Components opt in by writing the {{dashboard-variable}} token into query_config.raw. PREFER value_source=connection (live distinct-value discovery from the data) over static unless the user asked for a fixed list.",
+					"properties": map[string]interface{}{
+						"value_source":  map[string]interface{}{"type": "string", "enum": []string{"static", "freetext", "connection"}, "description": "connection = options discovered LIVE from value_column of value_table (preferred — stays in sync with the data); static = pick from a fixed options list; freetext = type a value. Default static, but use connection when the values come from the dataset."},
+						"options":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Selectable values for value_source=static; fallback list for connection."},
+						"default_value": map[string]interface{}{"type": "string"},
+						"value_column":  map[string]interface{}{"type": "string", "description": "For value_source=connection: column whose distinct values populate the picker."},
+						"value_table":   map[string]interface{}{"type": "string", "description": "For value_source=connection: source table for distinct-value discovery."},
+					},
+				},
+				"range": map[string]interface{}{
+					"type":        "object",
+					"description": "Required when mode=range. Components opt in by writing `<column> {{range-variable}}` (SQL/EdgeLake); ts-store/Prometheus panels apply it automatically.",
+					"properties": map[string]interface{}{
+						"presets":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Relative-window tokens in the dropdown: \"1h\", \"6h\", \"24h\", \"7d\", \"30d\". Empty = a sensible default set."},
+						"default_preset": map[string]interface{}{"type": "string", "description": "Preset applied on first load, e.g. \"24h\"."},
+						"allow_absolute": map[string]interface{}{"type": "boolean", "description": "Offer the absolute from/to picker. Default true."},
+					},
+				},
+			},
+			"required": []string{"name", "label", "mode"},
 		},
 	}
 }
@@ -671,6 +830,32 @@ func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
 	}
 }
 
+func wrapDeleteComponent(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.DeleteComponentInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if err := ops.DeleteComponent(ctx, in); err != nil {
+			return "", err
+		}
+		return jsonResult(map[string]interface{}{"deleted": true, "id": in.ID})
+	}
+}
+
+func wrapDeleteDashboard(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.DeleteDashboardInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if err := ops.DeleteDashboard(ctx, in); err != nil {
+			return "", err
+		}
+		return jsonResult(map[string]interface{}{"deleted": true, "id": in.ID})
+	}
+}
+
 func wrapUpdateComponent(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		// id rides alongside the patch fields in the tool args; pull it
@@ -720,6 +905,31 @@ func wrapCreateDashboard(ops *toolops.Toolset) ToolHandler {
 			req.Namespace = env.Caller.Namespace
 		}
 		out, err := ops.CreateDashboard(ctx, toolops.CreateDashboardInput{Request: req})
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapUpdateDashboard(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		// id is a top-level arg; the rest map onto the pointer-field
+		// UpdateDashboardRequest so omitted keys stay nil (untouched).
+		var envelope struct {
+			ID string `json:"id"`
+			models.UpdateDashboardRequest
+		}
+		if err := json.Unmarshal(args, &envelope); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		if envelope.ID == "" {
+			return "", fmt.Errorf("id is required")
+		}
+		out, err := ops.UpdateDashboard(ctx, toolops.UpdateDashboardInput{
+			ID:      envelope.ID,
+			Request: envelope.UpdateDashboardRequest,
+		})
 		if err != nil {
 			return "", err
 		}
@@ -792,6 +1002,7 @@ func wrapGetFullResult() ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		var in struct {
 			ResultID string `json:"result_id"`
+			Filter   string `json:"filter"`
 		}
 		if err := json.Unmarshal(args, &in); err != nil {
 			return "", fmt.Errorf("invalid args: %w", err)
@@ -803,7 +1014,24 @@ func wrapGetFullResult() ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		return full, nil
+		// No filter → verbatim (issue #43). Note: this verbatim return can be
+		// large; that's the caller explicitly asking for the whole thing.
+		if strings.TrimSpace(in.Filter) == "" {
+			return full, nil
+		}
+		filtered, ferr := FilterResult(full, in.Filter)
+		if ferr != nil {
+			return "", ferr
+		}
+		// If the FILTERED slice is still over the inline threshold, re-store it
+		// and hand back a summary + new result_id instead of dumping it into
+		// context (issue #67 — a 779KB filtered result blew the conversation).
+		// Summarize is a no-op (returns as-is) when the slice is already small.
+		sessionID := ""
+		if env.Session != nil {
+			sessionID = env.Session.ID
+		}
+		return env.ResultStore.Summarize(ctx, sessionID, "get_full_result", filtered)
 	}
 }
 

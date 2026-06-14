@@ -5073,7 +5073,13 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
     filters: ${JSON.stringify(filters.map(f => ({
       field: f.field,
       op: f.op,
-      value: f.op === 'in' || f.op === 'notIn' ? f.value.split(',').map(v => v.trim()) : f.value
+      // in/notIn want an array. The UI stores a comma-separated STRING; the AI
+      // (and the canonical form) stores an ARRAY already. Only split a string —
+      // splitting an array throws "f.value.split is not a function" and crashed
+      // the editor on AI-built components. Mirrors dataTransforms.js.
+      value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'
+        ? f.value.split(',').map(v => v.trim())
+        : f.value
     })))},
     aggregation: ${aggregation?.type ? JSON.stringify(aggregation) : 'null'},
     sortBy: ${sortBy ? `'${sortBy}'` : 'null'},

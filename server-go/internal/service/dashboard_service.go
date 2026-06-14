@@ -238,21 +238,146 @@ func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *
 
 // DeleteDashboard deletes a dashboard
 func (s *DashboardService) DeleteDashboard(ctx context.Context, id string) error {
-	// Check if dashboard exists
+	_, err := s.DeleteDashboardCascade(ctx, id, nil)
+	return err
+}
+
+// panelComponentIDs returns every component a dashboard references — the
+// panels' default ComponentID plus every ComponentOverride rule's ComponentID
+// (component-swap-by-variable). De-duplicated. Both kinds count as references
+// for orphan detection.
+func panelComponentIDs(d *models.Dashboard) []string {
+	if d == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var ids []string
+	add := func(cid string) {
+		if cid == "" || seen[cid] {
+			return
+		}
+		seen[cid] = true
+		ids = append(ids, cid)
+	}
+	for _, p := range d.Panels {
+		add(p.ComponentID)
+		for _, ov := range p.ComponentOverrides {
+			add(ov.ComponentID)
+		}
+	}
+	return ids
+}
+
+// DashboardOrphanPreview returns the components that would be left orphaned if
+// the given dashboard were deleted — i.e. components this dashboard references
+// (direct or via override) that NO OTHER dashboard references. These are the
+// components safe to offer for cascade deletion. A component still used by any
+// other dashboard is excluded.
+//
+// Correctness note: it scans ALL dashboards rather than the narrow
+// `panels.component_id` repo filter, because that filter misses
+// ComponentOverrides refs — a component used only via an override rule on
+// another dashboard must still count as "in use".
+func (s *DashboardService) DashboardOrphanPreview(ctx context.Context, id string) ([]EntityRef, error) {
+	target, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error finding dashboard: %w", err)
+	}
+	if target == nil {
+		return nil, fmt.Errorf("dashboard not found")
+	}
+
+	candidateIDs := panelComponentIDs(target)
+	if len(candidateIDs) == 0 {
+		return nil, nil
+	}
+
+	// Component IDs referenced by every OTHER dashboard (direct + override).
+	usedElsewhere, err := s.componentRefsExcluding(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	orphans := make([]EntityRef, 0)
+	for _, cid := range candidateIDs {
+		if usedElsewhere[cid] {
+			continue // still referenced by another dashboard — not orphaned
+		}
+		name := cid
+		if s.chartRepo != nil {
+			if comp, e := s.chartRepo.FindByID(ctx, cid); e == nil && comp != nil {
+				if comp.Title != "" {
+					name = comp.Title
+				} else if comp.Name != "" {
+					name = comp.Name
+				}
+			}
+		}
+		orphans = append(orphans, EntityRef{ID: cid, Name: name})
+	}
+	return orphans, nil
+}
+
+// componentRefsExcluding builds the set of component IDs referenced (direct or
+// via override) by all dashboards EXCEPT the one with excludeID.
+func (s *DashboardService) componentRefsExcluding(ctx context.Context, excludeID string) (map[string]bool, error) {
+	all, _, err := s.repo.List(ctx, models.DashboardQueryParams{Page: 1, PageSize: 1000})
+	if err != nil {
+		return nil, fmt.Errorf("error listing dashboards for orphan scan: %w", err)
+	}
+	used := map[string]bool{}
+	for i := range all {
+		if all[i].ID == excludeID {
+			continue
+		}
+		for _, cid := range panelComponentIDs(&all[i]) {
+			used[cid] = true
+		}
+	}
+	return used, nil
+}
+
+// DeleteDashboardCascade deletes a dashboard and, optionally, components it
+// referenced. deleteComponentIDs is the caller's chosen subset to also delete;
+// each is RE-VALIDATED as genuinely orphaned (referenced by no other dashboard)
+// before deletion, so a stale/tampered client list can never delete a
+// still-in-use component. Returns the IDs actually deleted.
+func (s *DashboardService) DeleteDashboardCascade(ctx context.Context, id string, deleteComponentIDs []string) ([]string, error) {
 	existing, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("error finding dashboard: %w", err)
+		return nil, fmt.Errorf("error finding dashboard: %w", err)
 	}
 	if existing == nil {
-		return fmt.Errorf("dashboard not found")
+		return nil, fmt.Errorf("dashboard not found")
 	}
 
-	err = s.repo.Delete(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete dashboard: %w", err)
+	// Resolve the true orphan set BEFORE deleting the dashboard (the scan
+	// excludes this dashboard, so its own refs don't keep a component alive).
+	var deleted []string
+	if len(deleteComponentIDs) > 0 && s.chartRepo != nil {
+		orphans, perr := s.DashboardOrphanPreview(ctx, id)
+		if perr != nil {
+			return nil, perr
+		}
+		orphanSet := map[string]bool{}
+		for _, o := range orphans {
+			orphanSet[o.ID] = true
+		}
+		for _, cid := range deleteComponentIDs {
+			if !orphanSet[cid] {
+				continue // not actually orphaned — refuse to delete it
+			}
+			if e := s.chartRepo.Delete(ctx, cid); e != nil {
+				return deleted, fmt.Errorf("failed to delete orphaned component %s: %w", cid, e)
+			}
+			deleted = append(deleted, cid)
+		}
 	}
 
-	return nil
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return deleted, fmt.Errorf("failed to delete dashboard: %w", err)
+	}
+	return deleted, nil
 }
 
 // GetVariableCandidates returns the selectable connections for a dashboard's

@@ -212,7 +212,15 @@ func (h *DashboardHandler) UpdateDashboard(c *gin.Context) {
 func (h *DashboardHandler) DeleteDashboard(c *gin.Context) {
 	id := c.Param("id")
 
-	err := h.service.DeleteDashboard(c.Request.Context(), id)
+	// Optional body: { "delete_component_ids": ["..."] } — components to also
+	// delete (cascade). Each is re-validated server-side as actually orphaned.
+	// Body is optional so a plain DELETE still works (delete dashboard only).
+	var body struct {
+		DeleteComponentIDs []string `json:"delete_component_ids"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	deleted, err := h.service.DeleteDashboardCascade(c.Request.Context(), id, body.DeleteComponentIDs)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
@@ -222,5 +230,32 @@ func (h *DashboardHandler) DeleteDashboard(c *gin.Context) {
 		return
 	}
 
+	if len(deleted) > 0 {
+		c.JSON(http.StatusOK, gin.H{"deleted_component_ids": deleted})
+		return
+	}
 	c.Status(http.StatusNoContent)
+}
+
+// GetDashboardDeletePreview returns the components that would be orphaned if
+// this dashboard were deleted (referenced by no other dashboard). The delete
+// confirmation UI uses it to offer cascade deletion.
+// @Summary Preview orphaned components for a dashboard delete
+// @Tags dashboards
+// @Param id path string true "Dashboard ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /dashboards/{id}/delete-preview [get]
+func (h *DashboardHandler) GetDashboardDeletePreview(c *gin.Context) {
+	id := c.Param("id")
+	orphans, err := h.service.DashboardOrphanPreview(c.Request.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"orphaned_components": orphans})
 }

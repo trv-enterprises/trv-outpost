@@ -41,6 +41,10 @@ export default function useAssistantSession() {
   const [warning, setWarning] = useState(null);
   const [error, setError] = useState(null);
   const [sending, setSending] = useState(false);
+  // Live token usage for the current session. The server sends cumulative
+  // session totals on each 'usage' event (issue #55), so we replace rather
+  // than accumulate client-side. null until the first turn completes.
+  const [tokenUsage, setTokenUsage] = useState(null);
 
   const sessionIdRef = useRef(null);
   const wsRef = useRef(null);
@@ -127,6 +131,14 @@ export default function useAssistantSession() {
         break;
       case 'thinking':
         setThinking(!!data.thinking);
+        break;
+      case 'usage':
+        // Server sends per-call deltas plus cumulative session totals; we
+        // display the session running total (issue #55).
+        setTokenUsage({
+          input: data.session_input_tokens ?? 0,
+          output: data.session_output_tokens ?? 0,
+        });
         break;
       case 'budget_warn':
         if (data.reason) setWarning(String(data.reason));
@@ -248,6 +260,14 @@ export default function useAssistantSession() {
 
   const clearChat = useCallback(() => {
     closeWebSocket();
+    // End the server-side session too, not just the client view (#67). Without
+    // this the old session lingers until TTL; explicitly cancel it so its
+    // server state is freed. Fire-and-forget — the UI reset shouldn't wait on
+    // (or fail on) the network call; a failure just falls back to TTL cleanup.
+    const prevId = sessionIdRef.current;
+    if (prevId) {
+      apiClient.cancelAISession(prevId).catch(() => {});
+    }
     setSessionId(null);
     sessionIdRef.current = null;
     setMessages([]);
@@ -255,6 +275,7 @@ export default function useAssistantSession() {
     setThinking(false);
     setError(null);
     setWarning(null);
+    setTokenUsage(null);
   }, [closeWebSocket]);
 
   // Tear down the WS on unmount so a closed sidecard doesn't leak.
@@ -268,6 +289,7 @@ export default function useAssistantSession() {
     sending,
     warning,
     error,
+    tokenUsage,
     sendMessage,
     clearChat,
   };
