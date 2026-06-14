@@ -8,13 +8,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
+
+// gjsonIndexRe rewrites a jq-style array index "[N]" into the gjson ".N" form,
+// so a model that types "rows[0]" out of jq habit still works. Used by
+// normalizeGjsonPath.
+var gjsonIndexRe = regexp.MustCompile(`\[(\d+)\]`)
 
 // LargeResultThresholdBytes is the cut-off above which a tool result
 // is stashed server-side instead of being inlined into the model's
@@ -295,4 +302,64 @@ func stringArrayField(obj map[string]interface{}, key string) []string {
 		}
 	}
 	return out
+}
+
+// normalizeGjsonPath makes the model's filter input tolerant of jq habits.
+// The model knows jq far better than gjson, so accept the most common jq-isms
+// and translate to gjson path syntax: a leading "." is optional in gjson
+// (".rows.0" → "rows.0"), and jq array-index "[0]" → ".0". We do NOT try to
+// translate full jq (pipes, select(), map()) — only these surface tweaks; the
+// tool description teaches gjson syntax directly.
+func normalizeGjsonPath(filter string) string {
+	p := strings.TrimSpace(filter)
+	p = strings.TrimPrefix(p, ".")
+	// "rows[0]" / "rows[0].name" → "rows.0" / "rows.0.name"
+	p = gjsonIndexRe.ReplaceAllString(p, ".$1")
+	// collapse any accidental double dots from the above
+	p = strings.ReplaceAll(p, "..", ".")
+	p = strings.TrimPrefix(p, ".")
+	return p
+}
+
+// FilterResult applies a gjson PATH filter to a stored result's JSON and
+// returns the extracted slice. On a non-matching/invalid path it returns an
+// instructive error naming the result's top-level keys so the model can
+// correct rather than fall back to a full fetch. When the filtered output is
+// still over the inline threshold it is returned WITH a one-line size warning
+// prepended (no re-store, no loop) — see issue #43.
+func FilterResult(full, filter string) (string, error) {
+	path := normalizeGjsonPath(filter)
+	if path == "" {
+		return full, nil // empty filter → whole result (defensive; handler guards too)
+	}
+	res := gjson.Get(full, path)
+	if !res.Exists() {
+		return "", fmt.Errorf(
+			"filter %q matched nothing. The result uses gjson PATH syntax (not jq): top-level keys are [%s]. Examples: \"connections.#.name\", \"connections.#(type==\\\"sql\\\").name\", \"rows.0\", \"columns\". Retry with a path into one of those keys.",
+			filter, strings.Join(topLevelKeys(full), ", "),
+		)
+	}
+	out := res.Raw
+	if len(out) > LargeResultThresholdBytes {
+		return fmt.Sprintf(
+			"// NOTE: filtered result is still ~%dKB — narrow the filter further (e.g. add an index like \".0\" or select a single field) to avoid re-blowing context.\n%s",
+			len(out)/1024, out,
+		), nil
+	}
+	return out, nil
+}
+
+// topLevelKeys returns the top-level object keys of a JSON string (for the
+// instructive error). Empty when the root isn't an object.
+func topLevelKeys(full string) []string {
+	root := gjson.Parse(full)
+	if !root.IsObject() {
+		return []string{"(result root is not an object)"}
+	}
+	var keys []string
+	root.ForEach(func(k, _ gjson.Result) bool {
+		keys = append(keys, k.String())
+		return true
+	})
+	return keys
 }

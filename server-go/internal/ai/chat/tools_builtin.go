@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -316,7 +317,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	// context.
 	reg.Register(Tool{
 		Name:        "get_full_result",
-		Description: "Retrieve the verbatim content of a previously-stored large tool result by its result_id. Only call this when the inline summary doesn't have what you need — fetching the full payload can consume significant context. result_id looks like `r_abc12345` and is returned in the summary of any large tool call.",
+		Description: "Retrieve a previously-stored large tool result by its result_id. PREFER passing a `filter` to extract just the slice you need — returning the whole payload can re-blow context. result_id looks like `r_abc12345` and is in the summary of any large tool call.",
 		Tier:        TierA,
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -324,6 +325,15 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 				"result_id": map[string]interface{}{
 					"type":        "string",
 					"description": "The result ID returned in the summary of a large tool call (e.g. r_abc12345).",
+				},
+				"filter": map[string]interface{}{
+					"type": "string",
+					"description": "Optional gjson PATH to extract only what you need (this is gjson syntax, NOT jq). " +
+						"Leave empty to get the whole result. Syntax: dot-path with `#` for arrays. " +
+						"Examples — list results `{connections:[...],count}`: `connections.#.name` (all names), " +
+						"`connections.#(type==\"sql\").name` (names where type==sql), `connections.0` (first), `count`. " +
+						"Query results `{columns:[...],rows:[[...]]}`: `columns`, `rows.0` (first row), `rows.#`(row count). " +
+						"Use the field names from the summary you already received. A wrong path returns an error listing the valid top-level keys.",
 				},
 			},
 			"required": []string{"result_id"},
@@ -934,6 +944,7 @@ func wrapGetFullResult() ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		var in struct {
 			ResultID string `json:"result_id"`
+			Filter   string `json:"filter"`
 		}
 		if err := json.Unmarshal(args, &in); err != nil {
 			return "", fmt.Errorf("invalid args: %w", err)
@@ -945,7 +956,12 @@ func wrapGetFullResult() ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		return full, nil
+		// Apply the optional gjson filter to return only the requested slice
+		// (issue #43). No filter → verbatim, as before.
+		if strings.TrimSpace(in.Filter) == "" {
+			return full, nil
+		}
+		return FilterResult(full, in.Filter)
 	}
 }
 
