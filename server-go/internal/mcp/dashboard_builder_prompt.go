@@ -198,12 +198,21 @@ any of their machines. Define them in ` + "`" + `settings.variables[]` + "`" + `
   value_column of value_table, stays in sync with the data) over ` + "`" + `"static"` + "`" + `
   (a fixed options list) unless the user wants a fixed set.
   AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+  WHERE the token goes depends on the adapter (read get_connection_type_guidance):
+  SQL/EdgeLake → in the query; ts-store → params.filter; **generic REST
+  API → do NOT assume a URL param like "?location=" works; filter
+  CLIENT-SIDE via a data_mapping.filters entry whose value is the token,
+  unless you've probed and confirmed the API honors the param.**
 - **range** — a [from, to] time window the viewer picks. SQL/EdgeLake
   panels opt in by writing the time column then the token:
   ` + "`" + `... WHERE ts {{range-variable}}` + "`" + `. ts-store and Prometheus panels
   apply the window AUTOMATICALLY (no token). Config:
   ` + "`" + `range: { presets: ["1h","6h","24h","7d","30d"], default_preset, allow_absolute }` + "`" + `.
   AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-range"` + "`" + `.
+  **For a PROMETHEUS dashboard with range/time-series components, define
+  this range variable and set variables_enabled: true by default — the
+  range panels consume the window automatically, giving the viewer a
+  time-range control for free (no per-component token).**
 
 Flow: write the matching token into the ` + "`" + `query_config.raw` + "`" + ` of the
 components the variable should drive (connection_swap needs none) when

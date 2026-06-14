@@ -311,6 +311,20 @@ query_config shape for generic REST APIs:
     }
 
 Return columns: derived from the records in data_path (or the top-level response if data_path is empty). Use get_connection_schema if the connection has a recorded schema; otherwise probe with query_connection limit=1 to see the actual response shape.
+
+Dashboard variable / filtering: a generic REST API has NO standard
+filter parameter — do NOT assume a query param like "?location=..."
+works. Unless you have PROVEN the API honors a specific param (by
+probing query_connection with and without it and seeing the response
+actually narrow), apply a dashboard variable CLIENT-SIDE: add a
+data_mapping.filter whose value is the literal token
+"{{dashboard-variable}}" (e.g. { field: "location", op: "eq", value:
+"{{dashboard-variable}}" }) — the viewer substitutes the active value
+and filters the fetched rows. Putting the token in the URL silently
+no-ops when the API ignores the param (every panel then shows ALL
+data). Contrast: ts-store HAS a real source-side params.filter (use it
+there); SQL/EdgeLake use the {{dashboard-variable}} token inside the
+query. Generic API → client-side filter is the safe default.
 `,
 
 	"file.csv": `
