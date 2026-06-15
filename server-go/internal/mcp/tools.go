@@ -793,7 +793,7 @@ func (r *ToolRegistry) registerComponentTools() {
 					"chart_type":      {Type: "string", Description: "Chart subtype (bar, line, pie, etc) — for chart components"},
 					"connection_id":   {Type: "string", Description: "Connection ID for data binding"},
 					"query_config":    {Type: "object", Description: "Query: {raw, type, params}"},
-					"data_mapping":    {Type: "object", Description: "Data mapping: {x_axis, y_axis, group_by, filters, aggregation, ...}. For chart_type 'banded_bar' set band_columns: {scheme: \"sd\"|\"minmaxmean\"|\"spc\", and the columns for that scheme — sd: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd; minmaxmean: mean + min/max; spc: target + lower_control/upper_control/lower_limit/upper_limit}. Each row carries its own band values; the center column is required."},
+					"data_mapping":    {Type: "object", Description: "Data mapping: {x_axis, y_axis, series, group_by, filters, aggregation, ...}. `series` is a SINGLE column name (string): when the result stacks multiple series in one column with a distinguishing label column (e.g. a Prometheus `sum by (mode)` query returns rows with a `mode` column, or any long-format table), set series to that label column to split into one line/bar per value. Omitting it renders all rows as a single merged series. (`group_by` is a separate, client-side grouping field — for multi-series from a label column, use `series`.) For chart_type 'banded_bar' set band_columns: {scheme: \"sd\"|\"minmaxmean\"|\"spc\", and the columns for that scheme — sd: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd; minmaxmean: mean + min/max; spc: target + lower_control/upper_control/lower_limit/upper_limit}. Each row carries its own band values; the center column is required."},
 					"control_config":  {Type: "object", Description: "Control config: {control_type, device_type_id, target, ui_config}"},
 					"display_config":  {Type: "object", Description: "Display config: {display_type, ...display-specific fields}"},
 					"component_code":  {Type: "string", Description: "React component code (for chart_type=custom or use_custom_code=true)"},
@@ -878,7 +878,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 					"chart_type":      {Type: "string", Description: "New chart subtype"},
 					"connection_id":   {Type: "string", Description: "New connection ID"},
 					"query_config":    {Type: "object", Description: "New query config"},
-					"data_mapping":    {Type: "object", Description: "New data mapping. For chart_type 'banded_bar' include band_columns (see create_component's data_mapping description for the per-scheme keys)."},
+					"data_mapping":    {Type: "object", Description: "New data mapping. For multiple series from a label column (e.g. a Prometheus `sum by (mode)` result), set `series` to that column name — see create_component's data_mapping description. For chart_type 'banded_bar' include band_columns (see create_component's data_mapping description for the per-scheme keys)."},
 					"control_config":  {Type: "object", Description: "New control config"},
 					"display_config":  {Type: "object", Description: "New display config"},
 					"component_code":  {Type: "string", Description: "New component code. Last-resort field — prefer changing data_mapping / options / chart_type instead. Setting this with use_custom_code=true freezes the chart at this code; subsequent config tool calls won't update the rendering."},
@@ -1204,6 +1204,44 @@ func getString(m map[string]interface{}, key string) string {
 		return v
 	}
 	return ""
+}
+
+// coerceStringifiedJSONArgs repairs a common MCP-client failure mode: some
+// clients (including LLMs emitting tool calls) encode an object- or
+// array-typed parameter as a JSON *string* — e.g. data_mapping arrives as
+// `"{\"x_axis\":\"ts\"}"` instead of `{"x_axis":"ts"}`. Our per-tool
+// handlers type-assert these params to map[string]interface{} /
+// []interface{}; a string fails that assertion and the field is SILENTLY
+// DROPPED (the chart is created with no query_config/data_mapping, then fails
+// downstream validation with a confusing error). Rather than make every
+// call site string-tolerant, normalize once here: any top-level arg whose
+// value is a string that parses as a JSON object or array is replaced with
+// the parsed value. Plain-string params (name, chart_type, raw SQL, etc.)
+// are left untouched — only strings that BOTH look like JSON (first
+// non-space rune is '{' or '[') AND parse cleanly are converted, so a SQL
+// string that happens to contain braces is never mangled (it won't parse).
+func coerceStringifiedJSONArgs(args map[string]interface{}) {
+	for k, v := range args {
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed[0] != '{' && trimmed[0] != '[' {
+			continue
+		}
+		var parsed interface{}
+		if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+			continue // not valid JSON — leave the string as-is
+		}
+		switch parsed.(type) {
+		case map[string]interface{}, []interface{}:
+			args[k] = parsed
+		}
+	}
 }
 
 // decodeInto round-trips a JSON-RPC arg value (a map/slice of JSON-native
