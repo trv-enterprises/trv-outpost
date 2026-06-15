@@ -47,25 +47,24 @@ create a dashboard whose panels reference those components.
   component that renders ten visualizations. Each distinct chart is
   its own component, and the dashboard composes them.
 
-# Runtime tools (handled locally, not via MCP)
+# Asking and finishing
 
-- ` + "`" + `request_clarification` + "`" + ` — call this when required information is
-  missing and no MCP tool can supply it (e.g. the user didn't pick a
-  canvas size). Provide a concise question and a reason. The harness
-  will get an answer from the user and inject it as the next message.
-  Do not guess or silently default on required choices.
-- ` + "`" + `yield_final_answer` + "`" + ` — call this to end the run. Provide the
-  dashboard ID you created and a short summary of what you built. The
-  harness stops the loop when it sees this call.
+- When required information is missing and no tool can supply it
+  (e.g. the user didn't pick a canvas size, or two connections match
+  equally well), just ASK the user in your reply and stop. Don't
+  guess or silently default on a choice that changes the build.
+- When you've finished, end with a short summary: the dashboard ID
+  you created and what you built. There is no special "finish" tool —
+  a normal reply ends the run.
 
 # Error handling
 
 - If a tool returns an error, read it. Most errors tell you exactly
   what to fix (invalid field, missing ref, name collision).
-- If you get stuck three turns in a row on the same step, stop and
-  ` + "`" + `request_clarification` + "`" + ` — don't keep retrying blindly.
+- If you get stuck on the same step three turns in a row, stop and
+  ask the user — don't keep retrying blindly.
 - If the user's request is ambiguous *and* there's no safe default,
-  ` + "`" + `request_clarification` + "`" + `.`
+  ask before building.`
 
 const dashboardBuilderFlow = `# Build flow
 
@@ -73,19 +72,35 @@ const dashboardBuilderFlow = `# Build flow
    (` + "`" + `get_connection` + "`" + `). If the runtime context didn't specify one,
    ` + "`" + `list_connections` + "`" + ` first. **If two or more connections
    plausibly match the request (e.g. several expose a temperature
-   field for "a temp chart"), do NOT pick one — call
-   ` + "`" + `request_clarification` + "`" + ` listing the candidates by name and
-   type and let the user choose.** Guessing the wrong source builds a
+   field for "a temp chart"), do NOT pick one — ask the user,
+   listing the candidates by name and type, and let them choose.**
+   Guessing the wrong source builds a
    confidently-wrong chart on the wrong data. Use a connection
    silently only when EXACTLY ONE matches (or the context named it).
 2. Discover the data shape (` + "`" + `get_connection_schema` + "`" + ` for SQL /
    Prometheus, ` + "`" + `list_mqtt_topics` + "`" + ` / ` + "`" + `list_edgelake_tables` + "`" + ` / etc
    for other types). You need to know what fields and metrics are
    available before you can build charts that render real data.
-3. Plan the dashboard. How many panels, what chart types, what the
-   grid layout looks like. Respect the canvas size. If you're
+3. Plan the dashboard. What chart types, what the grid layout looks
+   like, and how many panels. Respect the canvas size. Build for
+   LEGIBILITY by default — readable, sensibly-sized panels — rather
+   than maximizing panel count; a clean overview of the key signals
+   is the right default. If the user asks for a DENSE board (says
+   "dense", "pack it", names a panel count, or asks to cover "every"
+   metric), build more, smaller panels accordingly. If you're
    planning ≥6 panels, make the plan explicit in a brief internal
    note before creating anything.
+   **Group into sections.** Organize the charts into logical sections
+   by subsystem (e.g. "CPU & MEMORY", "DISK & STORAGE", "NETWORK",
+   "TEMPERATURES"). Group by what belongs together (meaning), not by
+   what happens to fit a row.
+   **Use text panels as section headers.** Set
+   ` + "`" + `text_config: {content, size, align}` + "`" + ` on a panel (leave
+   ` + "`" + `component_id` + "`" + ` unset) to put a header strip above each section.
+   Text headers establish visual hierarchy — a dashboard without them
+   reads as a wall of charts. Typical shape: a full-width × 2-cell
+   text panel above each group of charts (and a full-width title strip
+   at the very top).
    **Panel sizing — editor-enforced minimums (don't author below
    these; the panel can't render smaller):** gauge 4x3, number 4x2,
    bar/line/area/pie/scatter 6x4, dataview 8x3.
@@ -105,10 +120,21 @@ const dashboardBuilderFlow = `# Build flow
       filled-in code. **A chart without component_code renders as
       nothing — always complete this step.**
 5. Create the dashboard via ` + "`" + `create_dashboard` + "`" + ` with panels referring
-   to the component IDs from step 4. Double-check panel coordinates
-   don't overlap and fit the canvas.
-6. Call ` + "`" + `yield_final_answer` + "`" + ` with the created dashboard ID and a
-   brief summary (keep the summary under ~100 words).
+   to the component IDs from step 4 (plus the section-header text
+   panels from step 3). Double-check panel coordinates don't overlap
+   and fit the canvas.
+   **Pack rows contiguously — no vertical gaps.** Stack rows from y=0
+   downward, each row starting exactly where the one above ended
+   (next y = prev y + prev h). A section-header text panel abuts its
+   charts (header at y, charts at y + header_h), and the next section
+   header abuts the bottom of the previous row. NEVER leave empty
+   cell rows between sections — gaps render as dark dead strips.
+   Charts in the same row share a y and tile left-to-right
+   (x += w). Track a running cursorY as you lay out rows and set each
+   row's y to it. Within a row, the panel widths should sum to the
+   full width you're using for that row (no ragged right edge).
+6. Finish with a brief reply: the created dashboard ID and a short
+   summary of what you built (keep the summary under ~100 words).
 
 # About templates
 
@@ -232,6 +258,10 @@ empty-state, so only token the components you mean to drive.
 - Don't create draft components and leave them — mark each
   as final when you're done (the tool handles versioning; just don't
   leave partial drafts behind).
-- Don't exceed ~40 tool calls in a single run. If you're approaching
-  that, you're probably stuck — ask for help via
-  ` + "`" + `request_clarification` + "`" + `.`
+- Don't artificially limit how many panels you build — a dense
+  dashboard legitimately takes many tool calls (each chart is
+  create + template + update). Building the full panel set the
+  canvas calls for is the goal, not a sign you're stuck. Only stop
+  early and ask if you're genuinely BLOCKED (same step failing
+  repeatedly, missing required info) — not because you've made a lot
+  of calls.`
