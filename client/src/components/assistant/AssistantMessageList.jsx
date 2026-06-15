@@ -57,6 +57,8 @@ export default function AssistantMessageList({
           description="Ask anything about your dashboard deployment — your connections, components, and dashboards — or have me build something."
           suggestions={[
             { label: 'Build a 2K system-stats dashboard', prompt: 'Build me a 2K dashboard for my system stats' },
+            { label: 'Build a dense 4K overview (24+ panels)', prompt: 'Build a dense 4K dashboard for my system stats — use about 24 panels and cover every useful signal' },
+            { label: 'Build a 4K board at 150% scale', prompt: 'Build a 4K system-stats dashboard at 150% scale' },
             { label: 'List my connections', prompt: 'List my connections' },
             { label: 'What dashboards do I have?', prompt: 'What dashboards do I have?' },
             { label: 'Chart from an MQTT topic', prompt: 'Create a chart from MQTT topic home/temp' },
