@@ -16,7 +16,6 @@
  * unsubscribe();
  */
 
-import { API_BASE } from '../api/client';
 import apiClient from '../api/client';
 import { getStreamBufferSize } from './streamBufferConfig';
 
@@ -299,7 +298,13 @@ class StreamConnectionManager {
     const params = new URLSearchParams();
     if (topics) params.set('topics', topics);
     const queryString = [auth, params.toString()].filter(Boolean).join('&');
-    let url = `${API_BASE}/api/connections/${connectionId}/stream`;
+    // Use the LIVE resolved http origin (the configured instance), not the
+    // frozen API_BASE constant: API_BASE is '' (same-origin) which an
+    // EventSource can't use under Electron's file:// renderer, and it ignores
+    // the user's configured serverUrl entirely. httpOriginForApi() returns the
+    // configured absolute base (Electron → any instance) or the page origin
+    // (browser/homelab same-origin). See client.js (#77).
+    let url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream`;
     if (queryString) url += `?${queryString}`;
 
     console.log(`[StreamConnectionManager] Connecting to ${connectionId}${topics ? ` (topics: ${topics})` : ''}`);

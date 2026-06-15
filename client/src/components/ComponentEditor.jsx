@@ -33,7 +33,6 @@ import {
 } from '@carbon/react';
 import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, ChartLineData, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown, Information } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
-import { API_BASE } from '../api/client';
 import SQLQueryBuilder, { parseSimpleQuery } from './SQLQueryBuilder';
 import PrometheusQueryBuilder from './PrometheusQueryBuilder';
 import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
@@ -1475,7 +1474,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setClientValuePickerOpen(true);
     const authParam = apiClient.streamAuthQuery();
     const topicParam = (isMQTT && queryRaw) ? `&topics=${encodeURIComponent(queryRaw)}` : '';
-    const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
+    const sseUrl = `${apiClient.httpOriginForApi()}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
     const es = new EventSource(sseUrl);
     clientCaptureRef.current = es;
     const seen = new Set();
@@ -1841,7 +1840,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // helper centralizes the query-string shape).
         const authParam = apiClient.streamAuthQuery();
         const topicParam = queryRaw ? `&topics=${encodeURIComponent(queryRaw)}` : '';
-        const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
+        const sseUrl = `${apiClient.httpOriginForApi()}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
         const es = new EventSource(sseUrl);
         mqttCaptureRef.current = es;
         const rawRecords = [];

@@ -30,7 +30,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { queryData } from '../api/dataClient';
-import apiClient, { API_BASE } from '../api/client';
+import apiClient from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getStreamBufferSize } from '../utils/streamBufferConfig';
 import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
@@ -380,7 +380,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
 
       // Use fetch with streaming for POST endpoint
       abortController = new AbortController();
-      const url = `${API_BASE}/api/connections/${connectionId}/stream/aggregated`;
+      const url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream/aggregated`;
 
       try {
         // Build headers including user auth

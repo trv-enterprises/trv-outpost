@@ -1288,15 +1288,35 @@ class APIClient {
     let base = this.baseURL;
     // Relative/empty base → use the page origin so we get a real host.
     if (!base || base.startsWith('/')) {
-      if (typeof window !== 'undefined' && window.location?.origin) {
-        base = window.location.origin;
-      } else {
-        base = 'http://localhost:3001';
-      }
+      base = this.pageOriginForApi();
     }
     const wsProtocol = base.startsWith('https') ? 'wss' : 'ws';
     const host = base.replace(/^https?:\/\//, '');
     return `${wsProtocol}://${host}`;
+  }
+
+  // httpOriginForApi returns an ABSOLUTE http(s) base for endpoints that can't
+  // use a relative URL — notably EventSource (StreamConnectionManager). It
+  // resolves the SAME way the configured base does for every environment:
+  //   - configured/absolute baseURL (Electron pointing at any instance,
+  //     VITE_API_URL) → use it directly.
+  //   - relative/empty baseURL (browser dev via vite proxy, homelab via Caddy
+  //     same-origin) → the page origin, which serves /api on the same host.
+  // EventSource given a relative '/api/...' works in a browser (resolves
+  // against the http page) but NOT in Electron's file:// renderer — so stream
+  // consumers must call this, not interpolate API_BASE.
+  httpOriginForApi() {
+    const base = this.baseURL;
+    if (base && !base.startsWith('/')) return base; // absolute → use as-is
+    return this.pageOriginForApi();
+  }
+
+  // pageOriginForApi resolves the page's http(s) origin, refusing a non-http
+  // origin (Electron's file://) which can't host /api — last resort localhost.
+  pageOriginForApi() {
+    const origin = typeof window !== 'undefined' ? window.location?.origin : '';
+    if (origin && /^https?:/.test(origin)) return origin;
+    return 'http://localhost:3001';
   }
 
   // Returns WebSocket URL for AI session events
