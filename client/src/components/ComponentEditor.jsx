@@ -4298,7 +4298,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       size="sm"
                     />
                   </div>
-                  {slidingWindowEnabled && (
+                  {slidingWindowEnabled && (() => {
+                    // The window needs a timestamp column, which only exists
+                    // once a query has populated availableColumns (a saved
+                    // column counts). Until then, BOTH controls are disabled
+                    // and inert so the user can't set a length that can't be
+                    // saved (save requires a timestamp col, else it silently
+                    // drops the window). One helper line below explains why.
+                    const windowNeedsQuery = availableColumns.length === 0 && !slidingWindowTimestampCol;
+                    return (
+                    <>
                     <Grid narrow>
                       <Column lg={6} md={4} sm={4}>
                         <Select
@@ -4307,13 +4316,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           value={slidingWindowTimestampCol}
                           onChange={(e) => setSlidingWindowTimestampCol(e.target.value)}
                           disabled={availableColumns.length === 0}
-                          helperText={
-                            availableColumns.length === 0
-                              ? (slidingWindowTimestampCol
-                                  ? `Saved: ${slidingWindowTimestampCol}. Run a query to change it.`
-                                  : 'Run a query to populate column choices.')
-                              : undefined
-                          }
                         >
                           <SelectItem value="" text="Select timestamp column..." />
                           {/* Include the saved column even when availableColumns
@@ -4335,6 +4337,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           id="sliding-window-duration"
                           labelText="Window Length"
                           value={slidingWindowText}
+                          disabled={windowNeedsQuery}
                           onChange={(e) => {
                             const raw = e.target.value;
                             setSlidingWindowText(raw);
@@ -4348,14 +4351,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               setSlidingWindowDuration(secs);
                             }
                           }}
-                          invalid={!!slidingWindowError}
+                          invalid={!windowNeedsQuery && !!slidingWindowError}
                           invalidText={slidingWindowError}
                           placeholder="7d"
                           helperText="Units: s/m/h/d/w — e.g. 90m, 1h, 7d, 1w. Plain number = seconds. Max 30d."
                         />
                       </Column>
                     </Grid>
-                  )}
+                    {windowNeedsQuery && (
+                      <p className="editor-info-hint">Run a query to set the sliding window.</p>
+                    )}
+                    </>
+                    );
+                  })()}
                   {!slidingWindowEnabled && (
                     <p className="editor-info-hint">
                       Enable to show only recent data (e.g., last 5 minutes). Useful for streaming/real-time charts.
