@@ -6,6 +6,45 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.31.0] — 2026-06-16
+
+### Added
+
+- **banded_bar Chart Options subpanel** — zoom slider, smooth curves, point
+  markers, downsampling, y-axis range override, and tooltip config (previously
+  only Visual Style + Legend). Auto y-axis bounds round to whole numbers.
+- **banded_bar data-derived bands** via a scheme selector: `minmaxmean`
+  (min↔max envelope), `sd` (±1/±2 SD), `spc` (control limits).
+- **AI: variable-aware authoring** across the Component agent, Dashboard
+  Assistant, and MCP — agents emit dashboard-variable / range-variable tokens
+  and define `settings.variables`.
+- AI: `delete_component` / `delete_dashboard` tools; server-stamped "ai"
+  provenance tag; live per-session token-usage display.
+- Sliding-window field accepts `w/d/h/m/s` units (cap raised to 30d); ts-store
+  editor adds 14d + 30d "Last…" presets.
+- Dashboard range variable drives ts-store absolute from→to windows.
+
+### Changed
+
+- banded_bar capability synced across the type catalog and both AI prompts so
+  the agents use the native type instead of custom code.
+- Cadence-aware streaming sliding-window guidance; Prometheus alias lookup,
+  cheap metric discovery, and multi-series (`series`) mapping; per-adapter
+  filter-variable placement.
+- MCP coerces stringified JSON object/array params (no more silently dropped
+  `data_mapping` / `query_config`).
+
+### Fixed
+
+- ts-store range queries sent epoch seconds where the endpoint expects
+  nanoseconds → absolute from→to returned "No data". Now converted backend-side.
+- Spec-driven chart with empty `component_code` rendered blank / showed an
+  "Add chart" placeholder in the editor.
+- Streaming backfill fired one redundant query per panel on a shared connection
+  → multi-panel dashboards timed out; deduped + longer backfill timeout.
+- Electron SSE streams routed to `file://` instead of the configured instance.
+- Component editor crash on array-valued `in` / `notIn` filters.
+
 ## [0.30.1] — 2026-06-12
 
 ### Fixed
