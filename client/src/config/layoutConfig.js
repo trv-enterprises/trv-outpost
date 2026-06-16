@@ -92,7 +92,7 @@ export const COMPONENT_MIN_SIZES = {
   pie:       { w: 6, h: 4 },
   scatter:   { w: 6, h: 4 },
   gauge:     { w: 4, h: 3 },
-  dataview:  { w: 8, h: 3 },
+  dataview:  { w: 8, h: 8 },
   number:    { w: 4, h: 2 },
   custom:    { w: 4, h: 2 },
 
