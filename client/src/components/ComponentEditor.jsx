@@ -41,6 +41,11 @@ import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
 import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, isTimestampColumn, extractRangeColumn, stripRangePredicate } from '../utils/dataTransforms';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
+import { durationTokenToSeconds, secondsToDurationToken } from '../utils/rangePresets';
+
+// Sliding-window ceiling. The stored value is whole seconds; 30 days is a
+// sane upper bound (memory is really governed by the stream buffer size).
+const SLIDING_WINDOW_MAX_SECONDS = 30 * 86400; // 2,592,000
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -590,7 +595,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Sliding window for time-series data
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(false);
-  const [slidingWindowDuration, setSlidingWindowDuration] = useState(300); // Default 5 minutes
+  const [slidingWindowDuration, setSlidingWindowDuration] = useState(300); // Default 5 minutes (stored as whole seconds)
+  // Editable text for the window field — accepts duration tokens (7d, 90m,
+  // 45s, 1w) OR bare seconds. Kept separate from slidingWindowDuration so
+  // the user can type freely; on a valid parse we update the seconds state.
+  const [slidingWindowText, setSlidingWindowText] = useState('5m');
+  const [slidingWindowError, setSlidingWindowError] = useState('');
   const [slidingWindowTimestampCol, setSlidingWindowTimestampCol] = useState('');
 
   // Banded-bar column mapping — only used when chart_type === 'banded_bar'.
@@ -952,6 +962,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const sw = chart.data_mapping?.sliding_window;
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
       setSlidingWindowDuration(sw?.duration || 300);
+      setSlidingWindowText(secondsToDurationToken(sw?.duration || 300) || '5m');
+      setSlidingWindowError('');
       setSlidingWindowTimestampCol(sw?.timestamp_col || '');
       // Banded-bar column mapping. Empty defaults — the user picks
       // columns from the schema dropdown. Migrating an old chart that
@@ -4319,15 +4331,27 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         </Select>
                       </Column>
                       <Column lg={6} md={4} sm={4}>
-                        <NumberInput
+                        <TextInput
                           id="sliding-window-duration"
-                          label="Window Duration (seconds)"
-                          value={slidingWindowDuration}
-                          onChange={(e, { value }) => setSlidingWindowDuration(value)}
-                          min={10}
-                          max={86400}
-                          step={10}
-                          helperText="e.g., 300 = 5 min, 3600 = 1 hour"
+                          labelText="Window Length"
+                          value={slidingWindowText}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setSlidingWindowText(raw);
+                            const secs = durationTokenToSeconds(raw);
+                            if (secs == null || secs < 10) {
+                              setSlidingWindowError('Use s/m/h/d/w (e.g. 7d, 90m) or seconds; min 10s.');
+                            } else if (secs > SLIDING_WINDOW_MAX_SECONDS) {
+                              setSlidingWindowError('Max window is 30d.');
+                            } else {
+                              setSlidingWindowError('');
+                              setSlidingWindowDuration(secs);
+                            }
+                          }}
+                          invalid={!!slidingWindowError}
+                          invalidText={slidingWindowError}
+                          placeholder="7d"
+                          helperText="Units: s/m/h/d/w — e.g. 90m, 1h, 7d, 1w. Plain number = seconds. Max 30d."
                         />
                       </Column>
                     </Grid>

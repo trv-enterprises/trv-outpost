@@ -56,6 +56,37 @@ export function presetDurationMs(token) {
 }
 
 /**
+ * durationTokenToSeconds — parse a duration token (e.g. "7d", "90m", "45s",
+ * "1w") to whole seconds, or null if unparseable. Same unit set as
+ * presetDurationMs (s/m/h/d/w). A bare integer string is accepted as
+ * seconds ("3600" → 3600) so existing raw-seconds values still parse.
+ */
+export function durationTokenToSeconds(token) {
+  if (typeof token === 'number' && Number.isFinite(token)) return Math.round(token);
+  if (typeof token !== 'string') return null;
+  const t = token.trim();
+  if (/^\d+$/.test(t)) return parseInt(t, 10); // bare seconds
+  const ms = presetDurationMs(t);
+  return ms == null ? null : Math.round(ms / 1000);
+}
+
+/**
+ * secondsToDurationToken — render whole seconds as the largest CLEAN unit
+ * token (e.g. 604800 → "7d", 3600 → "1h", 90 → "90s"). Falls back to a
+ * seconds token when no larger unit divides evenly. Used to seed the
+ * window editor field from a stored seconds value.
+ */
+export function secondsToDurationToken(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const UNITS = [['w', 604800], ['d', 86400], ['h', 3600], ['m', 60], ['s', 1]];
+  for (const [unit, size] of UNITS) {
+    if (n % size === 0) return `${n / size}${unit}`;
+  }
+  return `${Math.round(n)}s`;
+}
+
+/**
  * resolvePreset — resolve a relative preset token to an absolute { from, to }
  * window ending at `now` (a Date, defaulting to the current time). Returns null
  * when the token can't be parsed (caller falls back to no range).
