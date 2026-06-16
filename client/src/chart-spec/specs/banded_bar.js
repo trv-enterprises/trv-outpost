@@ -26,6 +26,7 @@ import {
   COLOR_TEXT_SECONDARY,
   TRANSPARENT_BG,
   columnIndex,
+  makeValueFormatter,
 } from '../option-helpers.js';
 import { getScheme } from './band-schemes.js';
 
@@ -92,35 +93,67 @@ function buildLegend(legend) {
  * legend is hidden) bumps the grid edge on the legend's side so the plot
  * doesn't run under it — side legends reserve ~135px, matching line.js.
  */
-function baseOption(categories, yMin, yMax, legendPos, extra = {}) {
+function baseOption(categories, yMin, yMax, legendPos, opts = {}, extra = {}) {
   const gridTop = legendPos === 'top' ? 36 : 50;
   // grid.bottom: containLabel:true reserves the label height, so this is
   // the extra gap below. Flush (8px) so labels sit at the panel bottom;
   // +26 for a bottom legend. (Was a flat 40 → dead band, matching the
   // line/area/bar + scatter flush-bottom fix. banded_bar's x-axis has no
-  // axis name, so no name-room branch is needed.)
-  const gridBottom = legendPos === 'bottom' ? 34 : 8;
+  // axis name, so no name-room branch is needed.) When the zoom slider is
+  // on, reserve room for it at the floor (matches line.js: 43 base, +26
+  // for a bottom legend).
+  const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
+  const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
   const gridLeft = legendPos === 'left' ? 135 : 50;
   const gridRight = legendPos === 'right' ? 135 : 20;
-  return {
+
+  // Y-axis range override: opts.yAxisRange.left can pin min/max + log
+  // scale, otherwise fall back to the auto-computed band bounds. Only the
+  // left axis is meaningful — banded_bar is single-axis.
+  const range = (opts.yAxisRange && opts.yAxisRange.left) || {};
+  const yAxisDef = {
+    type: range.scale === 'log' ? 'log' : 'value',
+    min: range.min != null ? Number(range.min) : yMin,
+    max: range.max != null ? Number(range.max) : yMax,
+    axisLabel: { color: COLOR_TEXT_SECONDARY },
+    axisLine: { lineStyle: { color: AXIS_LINE } },
+    splitLine: { lineStyle: { color: SPLIT_LINE } },
+  };
+
+  // X-axis label angle (0 = horizontal default).
+  const rotate = Number(opts.xAxisLabelRotate) || 0;
+
+  const option = {
     backgroundColor: TRANSPARENT_BG,
     grid: { top: gridTop, left: gridLeft, right: gridRight, bottom: gridBottom, containLabel: true },
     xAxis: {
       type: 'category',
       data: categories,
-      axisLabel: { color: COLOR_TEXT_SECONDARY },
+      axisLabel: { color: COLOR_TEXT_SECONDARY, ...(rotate ? { rotate } : {}) },
       axisLine: { lineStyle: { color: AXIS_LINE } },
     },
-    yAxis: {
-      type: 'value',
-      min: yMin,
-      max: yMax,
-      axisLabel: { color: COLOR_TEXT_SECONDARY },
-      axisLine: { lineStyle: { color: AXIS_LINE } },
-      splitLine: { lineStyle: { color: SPLIT_LINE } },
-    },
+    yAxis: yAxisDef,
     ...extra,
   };
+
+  if (opts.chartShowZoomSlider) {
+    // Default to the FULL range; ChartShell merges on data updates so a
+    // user's pan/zoom isn't reset by streaming points (same as line.js).
+    option.dataZoom = [
+      {
+        type: 'slider', show: true, xAxisIndex: [0], start: 0, end: 100,
+        bottom: 8, height: 24,
+        backgroundColor: '#262626',
+        dataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.3 } },
+        selectedDataBackground: { lineStyle: { color: '#0f62fe' }, areaStyle: { color: '#0f62fe', opacity: 0.6 } },
+        handleStyle: { color: COLOR_PRIMARY },
+        textStyle: { color: COLOR_TEXT_SECONDARY },
+      },
+      { type: 'inside', xAxisIndex: [0], start: 0, end: 100 },
+    ];
+  }
+
+  return option;
 }
 
 /**
@@ -189,21 +222,29 @@ export function buildOption(values, data, helpers = {}) {
   const { legend, position: legendPos } = buildLegend(opts.legend);
 
   // Shared tooltip: header = x value, then center, then each pair's
-  // lower/upper readout labelled by the scheme.
+  // lower/upper readout labelled by the scheme. Honors opts.tooltip
+  // (mode/decimals/units): mode 'hidden' disables it; decimals/units
+  // drive the value formatting. The band-aware multi-line layout is kept
+  // regardless of mode (a banded chart's tooltip is inherently the whole
+  // envelope at the hovered x, not a single series).
+  const tt = opts.tooltip || {};
+  const fmtVal = makeValueFormatter(tt.decimals != null ? tt.decimals : 3, tt.units || '');
   const tooltipFormatter = (params) => {
     const i = params[0]?.dataIndex;
     if (i == null) return '';
-    const lines = [`<b>${categories[i]}</b>`, `${centerLabel}: ${centerVals[i].toFixed(3)}`];
+    const lines = [`<b>${categories[i]}</b>`, `${centerLabel}: ${fmtVal(centerVals[i])}`];
     for (const p of pairs) {
-      lines.push(`${p.label}: ${p.lower[i].toFixed(3)} / ${p.upper[i].toFixed(3)}`);
+      lines.push(`${p.label}: ${fmtVal(p.lower[i])} / ${fmtVal(p.upper[i])}`);
     }
     return lines.join('<br/>');
   };
-  const tooltip = {
-    trigger: 'axis', appendToBody: true,
-    backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
-    formatter: tooltipFormatter,
-  };
+  const tooltip = tt.mode === 'hidden'
+    ? { show: false }
+    : {
+        trigger: 'axis', appendToBody: true,
+        backgroundColor: TOOLTIP_BG, borderColor: TOOLTIP_BORDER, textStyle: { color: COLOR_TEXT },
+        formatter: tooltipFormatter,
+      };
 
   // Legend lists every rendered pair's label plus the center, inner→outer.
   // All styles (including column_box, which now draws the full scheme)
@@ -255,12 +296,20 @@ export function buildOption(values, data, helpers = {}) {
       }
     }
 
-    series.push({
-      name: centerLabel, type: 'line', data: centerVals, symbol: 'circle', symbolSize: 6,
+    // Center line honors the standard line display options: smooth curves
+    // (default on), point markers (default on), and downsampling.
+    const smooth = opts.chartSmooth !== false;
+    const showSymbol = opts.showSymbol !== false;
+    const sampling = opts.sampling && opts.sampling !== 'off' ? opts.sampling : undefined;
+    const centerSeries = {
+      name: centerLabel, type: 'line', data: centerVals,
+      symbol: showSymbol ? 'circle' : 'none', symbolSize: 6, smooth,
       lineStyle: { color: COLOR_PRIMARY, width: 2 }, itemStyle: { color: COLOR_PRIMARY },
-    });
+    };
+    if (sampling) centerSeries.sampling = sampling;
+    series.push(centerSeries);
 
-    return baseOption(categories, yMin, yMax, legendPos, {
+    return baseOption(categories, yMin, yMax, legendPos, opts, {
       tooltip,
       ...(legendBlock ? { legend: legendBlock } : {}),
       series,
@@ -341,7 +390,7 @@ export function buildOption(values, data, helpers = {}) {
     }
   });
 
-  return baseOption(categories, yMin, yMax, legendPos, {
+  return baseOption(categories, yMin, yMax, legendPos, opts, {
     tooltip,
     ...(legendBlock ? { legend: legendBlock } : {}),
     series,
