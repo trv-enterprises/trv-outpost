@@ -808,9 +808,21 @@ class APIClient {
     });
   }
 
-  async deleteDashboard(id) {
+  // Components that would be orphaned (referenced by no other dashboard) if
+  // this dashboard is deleted → { orphaned_components: [{id, name}] }.
+  async getDashboardDeletePreview(id) {
+    return this.request(`/api/dashboards/${id}/delete-preview`);
+  }
+
+  // Delete a dashboard, optionally cascade-deleting chosen orphaned components.
+  // deleteComponentIds: array of component ids to also delete (each re-validated
+  // server-side as actually orphaned). Omit/empty → delete dashboard only.
+  async deleteDashboard(id, deleteComponentIds = []) {
     return this.request(`/api/dashboards/${id}`, {
       method: 'DELETE',
+      ...(deleteComponentIds.length > 0
+        ? { body: JSON.stringify({ delete_component_ids: deleteComponentIds }) }
+        : {}),
     });
   }
 
@@ -1276,15 +1288,35 @@ class APIClient {
     let base = this.baseURL;
     // Relative/empty base → use the page origin so we get a real host.
     if (!base || base.startsWith('/')) {
-      if (typeof window !== 'undefined' && window.location?.origin) {
-        base = window.location.origin;
-      } else {
-        base = 'http://localhost:3001';
-      }
+      base = this.pageOriginForApi();
     }
     const wsProtocol = base.startsWith('https') ? 'wss' : 'ws';
     const host = base.replace(/^https?:\/\//, '');
     return `${wsProtocol}://${host}`;
+  }
+
+  // httpOriginForApi returns an ABSOLUTE http(s) base for endpoints that can't
+  // use a relative URL — notably EventSource (StreamConnectionManager). It
+  // resolves the SAME way the configured base does for every environment:
+  //   - configured/absolute baseURL (Electron pointing at any instance,
+  //     VITE_API_URL) → use it directly.
+  //   - relative/empty baseURL (browser dev via vite proxy, homelab via Caddy
+  //     same-origin) → the page origin, which serves /api on the same host.
+  // EventSource given a relative '/api/...' works in a browser (resolves
+  // against the http page) but NOT in Electron's file:// renderer — so stream
+  // consumers must call this, not interpolate API_BASE.
+  httpOriginForApi() {
+    const base = this.baseURL;
+    if (base && !base.startsWith('/')) return base; // absolute → use as-is
+    return this.pageOriginForApi();
+  }
+
+  // pageOriginForApi resolves the page's http(s) origin, refusing a non-http
+  // origin (Electron's file://) which can't host /api — last resort localhost.
+  pageOriginForApi() {
+    const origin = typeof window !== 'undefined' ? window.location?.origin : '';
+    if (origin && /^https?:/.test(origin)) return origin;
+    return 'http://localhost:3001';
   }
 
   // Returns WebSocket URL for AI session events

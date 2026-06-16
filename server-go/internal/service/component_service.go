@@ -329,14 +329,21 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 	// Keep the spec-driven one-liner in sync with chart_type. The stored
 	// code pins specName (e.g. <SpecDrivenChart specName="line" />), so a
 	// chart_type change must rewrite it or the chart renders as the old
-	// type. Only when the component is a spec-driven chart that isn't in
-	// custom-code mode and the caller didn't supply its own code this
-	// request — a custom chart or an explicit component_code edit is left
+	// type. A spec-driven (non-custom) chart must ALWAYS carry this stub —
+	// an empty component_code is un-renderable (blank panel + the editor
+	// treats the panel as empty). So regenerate when the component is a
+	// spec-driven chart not in custom-code mode AND either the caller
+	// didn't send its own code OR the resulting code is empty. The empty
+	// case matters: clearing custom code via component_code:"" (e.g. when
+	// converting a custom chart back to a native type) used to leave the
+	// stub blank because the request value was non-nil. Backfilling here
+	// makes "spec-driven chart with empty code" an impossible end state.
+	// A non-empty explicit component_code (a real custom edit) is left
 	// untouched.
 	if component.ComponentType == models.ComponentTypeChart &&
 		!component.UseCustomCode &&
-		req.ComponentCode == nil &&
-		registry.IsSpecDrivenChart(component.ChartType) {
+		registry.IsSpecDrivenChart(component.ChartType) &&
+		(req.ComponentCode == nil || component.ComponentCode == "") {
 		component.ComponentCode = componenttemplates.SpecDrivenOneLiner(component.ChartType)
 	}
 

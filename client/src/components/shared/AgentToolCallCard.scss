@@ -1,0 +1,80 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Styling for the shared AI tool-call row (AgentToolCallCard), used by both
+// the Dashboard Assistant and the in-editor Component agent. Theme-neutral
+// Carbon tokens only so it resolves correctly under the root theme.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.agent-toolcall {
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  background: var(--cds-layer-02);
+  overflow: hidden;
+
+  &__header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-02;
+    background: transparent;
+    border: none;
+    color: var(--cds-text-primary);
+    padding: spacing.$spacing-02 spacing.$spacing-03;
+    cursor: pointer;
+    font: inherit;
+
+    &:hover {
+      background: var(--cds-layer-hover-02);
+    }
+  }
+
+  &__chevron {
+    display: inline-flex;
+    color: var(--cds-icon-secondary);
+  }
+
+  &__icon {
+    color: var(--cds-icon-secondary);
+  }
+
+  &__name {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--cds-text-primary);
+  }
+
+  &__args {
+    flex: 1 1 auto;
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+
+  &__meta {
+    color: var(--cds-text-helper);
+    font-size: 0.7rem;
+  }
+
+  &__body {
+    border-top: 1px solid var(--cds-border-subtle-01);
+    padding: spacing.$spacing-03;
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+  }
+
+  &__section-label {
+    font-size: 0.6875rem;
+    color: var(--cds-text-helper);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: spacing.$spacing-02;
+  }
+}

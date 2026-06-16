@@ -22,8 +22,8 @@
     "has_aggregation": false,
     "has_sliding_window": false,
     "has_legend_config": true,
-    "has_tooltip_config": false,
-    "has_axis_range": false,
+    "has_tooltip_config": true,
+    "has_axis_range": true,
     "has_thresholds": false
   },
   "sections": [
@@ -96,6 +96,143 @@
                 { "value": "column_outlined", "label": "Column (outlined) — vertical column with band borders" },
                 { "value": "column_box", "label": "Column (box) — inner band only, line with tick at value" }
               ]
+            }
+          ]
+        },
+        {
+          "id": "display",
+          "label": "Display",
+          "helperText": "Smooth / markers apply to the center line (Time Series style).",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "chart_smooth",
+              "binds": "options.chartSmooth",
+              "type": "boolean",
+              "label": "Smooth curves",
+              "default": true
+            },
+            {
+              "id": "chart_show_zoom_slider",
+              "binds": "options.chartShowZoomSlider",
+              "type": "boolean",
+              "label": "Zoom slider",
+              "default": false
+            },
+            {
+              "id": "show_symbol",
+              "binds": "options.showSymbol",
+              "type": "boolean",
+              "label": "Show point markers",
+              "default": true,
+              "helperText": "Turn off for dense time series to get a clean line."
+            },
+            {
+              "id": "x_axis_label_rotate",
+              "binds": "options.xAxisLabelRotate",
+              "type": "enum",
+              "label": "X-axis label angle",
+              "helperText": "Rotate x-axis labels so long timestamps fit better.",
+              "default": 0,
+              "options": [
+                { "value": 0, "label": "Horizontal" },
+                { "value": 30, "label": "30°" },
+                { "value": 45, "label": "45°" },
+                { "value": 90, "label": "Vertical (90°)" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "perf",
+          "label": "Performance",
+          "helperText": "Downsampling for the center line on ≥10k-point series. LTTB preserves visual shape; average/max preserve statistics.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "sampling",
+              "binds": "options.sampling",
+              "type": "enum",
+              "label": "Downsampling",
+              "default": "off",
+              "options": [
+                { "value": "off", "label": "Off (render every point)" },
+                { "value": "lttb", "label": "LTTB (perceptual)" },
+                { "value": "average", "label": "Average" },
+                { "value": "max", "label": "Max" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "y_axis_range_left",
+          "label": "Y-axis range",
+          "helperText": "Auto scales to the band extent; set manual bounds to pin the axis.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "y_left_min",
+              "binds": "options.yAxisRange.left.min",
+              "type": "nullable_number",
+              "label": "Min",
+              "default": null,
+              "step": 1
+            },
+            {
+              "id": "y_left_max",
+              "binds": "options.yAxisRange.left.max",
+              "type": "nullable_number",
+              "label": "Max",
+              "default": null,
+              "step": 1
+            },
+            {
+              "id": "y_left_scale",
+              "binds": "options.yAxisRange.left.scale",
+              "type": "enum",
+              "label": "Scale",
+              "default": "linear",
+              "options": [
+                { "value": "linear", "label": "Linear" },
+                { "value": "log", "label": "Logarithmic" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "tooltip_config",
+          "label": "Tooltip",
+          "helperText": "Mode toggles the tooltip on hover; Decimals + Units format the band values inside.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "tooltip_mode",
+              "binds": "options.tooltip.mode",
+              "type": "enum",
+              "label": "Mode",
+              "default": "multi",
+              "options": [
+                { "value": "multi", "label": "Shown" },
+                { "value": "hidden", "label": "Hidden" }
+              ]
+            },
+            {
+              "id": "tooltip_decimals",
+              "binds": "options.tooltip.decimals",
+              "type": "nullable_number",
+              "label": "Decimals",
+              "default": null,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            {
+              "id": "tooltip_units",
+              "binds": "options.tooltip.units",
+              "type": "text",
+              "label": "Units suffix",
+              "default": "",
+              "placeholder": "e.g. %, °C, MB/s"
             }
           ]
         },

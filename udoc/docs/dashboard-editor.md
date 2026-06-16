@@ -70,6 +70,28 @@ Presets are configured by administrators in [System Settings](system-settings.md
 
 Changing the dimension preset is saved with the dashboard.
 
+## Asking the AI Assistant to build a dashboard
+
+The Dashboard Assistant builds dashboards from a plain-language request
+(e.g. *"Build me a 2K dashboard for my system stats"*). By default it builds
+for **legibility** — a clean overview with readable, sensibly-sized panels —
+because most dashboards are meant to be glanced at, not studied up close. If you
+want a **denser** board with more components, say so explicitly:
+
+- **Ask for density:** *"build a dense dashboard"* or *"pack it"* tells the
+  Assistant to use more, smaller panels.
+- **Name a panel count:** *"use about 24 panels"* or *"give me 30 components"*
+  sets the target directly — this is the most reliable way to control density.
+- **Ask for breadth:** *"cover every useful signal"* (e.g. saturation, error,
+  and restart metrics, not just CPU/memory/disk/network) pushes it past the
+  headline few.
+- **Use scale for a bigger surface:** *"build a 4K dashboard at 150% scale"*
+  builds against a larger effective canvas. Combine with a density request for a
+  wall-display board: *"a dense 4K board at 150%."*
+
+You can also start from one of the suggestion chips in the Assistant's welcome
+screen and edit the prompt before sending.
+
 ## Zoom
 
 Use the zoom controls to shrink the canvas for an overview or detailed work:

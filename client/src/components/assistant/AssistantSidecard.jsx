@@ -9,7 +9,8 @@ import useAssistantSession from '../../hooks/useAssistantSession';
 import useAssistantPreferences from '../../hooks/useAssistantPreferences';
 import AssistantMessageList from './AssistantMessageList';
 import AssistantSettingsMenu from './AssistantSettingsMenu';
-import { exportAsMarkdown, exportAsJson } from './exportConversation';
+import { exportAsMarkdown, exportAsJson, defaultExportBaseName } from './exportConversation';
+import ExportNameModal from '../shared/ExportNameModal';
 import './AssistantSidecard.scss';
 
 /**
@@ -57,22 +58,17 @@ export default function AssistantSidecard({
   // undefined as "disable this item" so empty conversations
   // surface the items as future-features rather than no-ops.
   const hasMessages = session.messages && session.messages.length > 0;
-  const handleExportMarkdown = useCallback(() => {
-    exportAsMarkdown({
-      messages: session.messages,
-      namespace,
-      modelLabel,
-      user: userName,
-    });
-  }, [session.messages, namespace, modelLabel, userName]);
-  const handleExportJson = useCallback(() => {
-    exportAsJson({
-      messages: session.messages,
-      namespace,
-      modelLabel,
-      user: userName,
-    });
-  }, [session.messages, namespace, modelLabel, userName]);
+  // Export name dialog: the cog items open it (set the format); the dialog's
+  // onConfirm runs the export with the user-chosen filename (#61).
+  const [exportFormat, setExportFormat] = useState(null); // 'md' | 'json' | null
+  const handleExportConfirm = useCallback(
+    (filename) => {
+      const opts = { messages: session.messages, namespace, modelLabel, user: userName, filename };
+      if (exportFormat === 'json') exportAsJson(opts);
+      else exportAsMarkdown(opts);
+    },
+    [exportFormat, session.messages, namespace, modelLabel, userName]
+  );
 
   const handleDragStart = useCallback((e) => {
     draggingRef.current = true;
@@ -155,11 +151,11 @@ export default function AssistantSidecard({
           <div className="assistant-sidecard__header-actions">
             <AssistantSettingsMenu
               onClearChat={session.clearChat}
-              // Pass undefined when there are no messages so the
-              // export items render as disabled rather than firing
-              // on an empty conversation.
-              onExportMarkdown={hasMessages ? handleExportMarkdown : undefined}
-              onExportJson={hasMessages ? handleExportJson : undefined}
+              // Pass undefined when there are no messages so the export items
+              // render as disabled rather than opening the dialog on an empty
+              // conversation. The items open the name dialog (#61).
+              onExportMarkdown={hasMessages ? () => setExportFormat('md') : undefined}
+              onExportJson={hasMessages ? () => setExportFormat('json') : undefined}
               expandToolCalls={prefs.expandToolCalls}
               onToggleExpandToolCalls={prefs.toggleExpandToolCalls}
               showTokenUsage={prefs.showTokenUsage}
@@ -208,6 +204,7 @@ export default function AssistantSidecard({
           thinking={session.thinking}
           streamingContent={session.streamingContent}
           expandToolCalls={prefs.expandToolCalls}
+          onSuggestion={setDraft}
         />
       </div>
 
@@ -236,15 +233,24 @@ export default function AssistantSidecard({
             Send
           </Button>
         </div>
-        {prefs.showTokenUsage && (
+        {prefs.showTokenUsage && session.tokenUsage && (
           <div className="assistant-sidecard__token-usage">
-            Token usage counters will appear here once per-turn
-            usage events are broadcast over the session WebSocket
-            (small follow-up commit; server already tracks the
-            exact counts via response.Usage).
+            Tokens this session: {session.tokenUsage.input.toLocaleString()} in
+            {' · '}
+            {session.tokenUsage.output.toLocaleString()} out
+            {' · '}
+            {(session.tokenUsage.input + session.tokenUsage.output).toLocaleString()} total
           </div>
         )}
       </footer>
+
+      <ExportNameModal
+        open={exportFormat !== null}
+        format={exportFormat || 'md'}
+        defaultName={defaultExportBaseName()}
+        onConfirm={handleExportConfirm}
+        onClose={() => setExportFormat(null)}
+      />
     </aside>
   );
 }

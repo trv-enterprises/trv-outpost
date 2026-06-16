@@ -197,7 +197,7 @@ func init() {
 		Category:    CategoryChart,
 		Subtype:     "banded_bar",
 		DisplayName: "Banded Bar Chart",
-		Description: "Time-series with horizontal reference bands at fixed Y values — Levey-Jennings / control-chart style. Each band is defined by a name + value + kind (line, dashed tick, or paired box edges that form a shaded band). Four visual styles: time_series (default — line + dots over a horizontal time axis with full-width reference bands), column_filled / column_outlined / column_box (single vertical column per timestamp).",
+		Description: "Time-series with a center line plus a PER-ROW shaded band whose edges come from the DATA (not fixed thresholds) — control-chart / Levey-Jennings style. Set data_mapping.band_columns to map each row's own columns to band roles; pick a scheme: 'sd' (center=mean + ±1/±2 SD columns), 'minmaxmean' (center=mean + min/max columns — use this for a min↔max envelope around an average), or 'spc' (center=target + lower/upper control + lower/upper limit columns). Each row carries its own band values, so the band tracks the data over time rather than sitting at a constant Y. Use this instead of hand-written custom code whenever the user wants a min/max (or ±SD, or control-limit) band around a series. Four visual styles: time_series (default — line + dots with the shaded band over a time axis), column_filled / column_outlined / column_box (single vertical column per timestamp).",
 		Capabilities: ComponentCapabilities{
 			CanRead:            true,
 			SupportsStreaming:  true,

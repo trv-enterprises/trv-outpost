@@ -136,11 +136,15 @@ function ComponentsListPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch charts, connections, and dashboards in parallel
+      // Fetch charts, connections, and dashboards in parallel.
+      // page_size:1000 on dashboards so the usage count below sees EVERY
+      // dashboard — the default page (20) was dropping referencing dashboards,
+      // making the count read 0 while the server's delete-guard (full scan)
+      // correctly found the reference.
       const [chartsData, connectionsData, dashboardsData] = await Promise.all([
         apiClient.getComponents(),
         apiClient.getConnections(),
-        apiClient.getDashboards()
+        apiClient.getDashboards({ page_size: 1000 })
       ]);
 
       if (chartsData.components) {
@@ -172,14 +176,27 @@ function ComponentsListPage() {
           if (!dashboard.panels) return;
           const dashboardLabel = dashboard.name || '(unnamed)';
           const seenInThisDashboard = new Set();
+          // A panel references a component both via its default component_id AND
+          // via any component-swap override rules — count both, so a component
+          // used only through an override still shows as in-use (matches the
+          // server's delete-guard, which considers overrides too).
+          const refIn = (panel) => {
+            const ids = [];
+            if (panel.component_id) ids.push(panel.component_id);
+            (panel.component_overrides || []).forEach(ov => {
+              if (ov.component_id) ids.push(ov.component_id);
+            });
+            return ids;
+          };
           dashboard.panels.forEach(panel => {
-            if (!panel.component_id) return;
-            counts[panel.component_id] = (counts[panel.component_id] || 0) + 1;
-            if (seenInThisDashboard.has(panel.component_id)) return;
-            seenInThisDashboard.add(panel.component_id);
-            // Store { id, label } so the count popover can navigate to each
-            // dashboard's editor.
-            (names[panel.component_id] = names[panel.component_id] || []).push({ id: dashboard.id, label: dashboardLabel });
+            refIn(panel).forEach(cid => {
+              counts[cid] = (counts[cid] || 0) + 1;
+              if (seenInThisDashboard.has(cid)) return;
+              seenInThisDashboard.add(cid);
+              // Store { id, label } so the count popover can navigate to each
+              // dashboard's editor.
+              (names[cid] = names[cid] || []).push({ id: dashboard.id, label: dashboardLabel });
+            });
           });
         });
         setDashboardCounts(counts);

@@ -170,7 +170,19 @@ function DashboardGrid({
               : panel.component_id;
             const chart = effectiveComponentId ? chartsMap[effectiveComponentId] : null;
             const hasText = !!panel.text_config;
-            const hasChart = !hasText && (!!chart?.component_code || chart?.component_type === 'control' || chart?.component_type === 'display');
+            // A panel has chart content when its component is a chart, control,
+            // or display. Spec-driven charts (use_custom_code=false) carry an
+            // EMPTY component_code — the render is synthesized from chart_type +
+            // data_mapping by the loader — so we must NOT gate on component_code.
+            // Custom-code charts also satisfy chart_type === 'chart'. The legacy
+            // `!!chart.component_code` term remains as a fallback for records
+            // that predate component_type being set.
+            const hasChart = !hasText && (
+              chart?.component_type === 'chart'
+              || chart?.component_type === 'control'
+              || chart?.component_type === 'display'
+              || !!chart?.component_code
+            );
             const hasContent = hasText || hasChart;
 
             const expandableDisplayTypes = new Set(['weather', 'frigate_camera']);

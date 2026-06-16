@@ -75,67 +75,9 @@
       height: 100%;
     }
 
-    .welcome-message {
-      text-align: center;
-      padding: spacing.$spacing-07;
-      color: var(--cds-text-secondary);
-
-      svg {
-        color: var(--cds-icon-secondary);
-        margin-bottom: spacing.$spacing-04;
-      }
-
-      h3 {
-        @include type.type-style('heading-03');
-        color: var(--cds-text-primary);
-        margin-bottom: spacing.$spacing-04;
-      }
-
-      p {
-        @include type.type-style('body-01');
-        margin-bottom: spacing.$spacing-05;
-        max-width: 500px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-
-      .suggestions {
-        text-align: left;
-        max-width: 400px;
-        margin: 0 auto;
-
-        .suggestions-label {
-          @include type.type-style('label-01');
-          color: var(--cds-text-secondary);
-          margin-bottom: spacing.$spacing-03;
-          text-align: center;
-        }
-
-        .suggestion-buttons {
-          display: flex;
-          flex-direction: column;
-          gap: spacing.$spacing-02;
-        }
-
-        .suggestion-btn {
-          @include type.type-style('body-compact-01');
-          background-color: #393939;
-          border: 1px solid #525252;
-          border-radius: 4px;
-          padding: spacing.$spacing-03 spacing.$spacing-04;
-          color: #f4f4f4;
-          cursor: pointer;
-          text-align: left;
-          transition: all 0.15s ease;
-
-          &:hover {
-            background-color: #4c4c4c;
-            border-color: #0f62fe;
-            color: #78a9ff;
-          }
-        }
-      }
-    }
+    // Welcome / empty-state styling moved to shared/AgentWelcome.scss
+    // (.agent-welcome) when it became a shared component — issue #40. The old
+    // copy here hardcoded hex; the shared version uses Carbon tokens.
 
     // Message styles
     .message {
@@ -192,9 +134,11 @@
           line-height: 1.5;
         }
 
+        // Stacked AgentToolCallCard rows (shared component) — full-width,
+        // collapsible. Column layout, not the old inline-Tag wrap.
         .tool-calls {
           display: flex;
-          flex-wrap: wrap;
+          flex-direction: column;
           gap: spacing.$spacing-02;
           margin-top: spacing.$spacing-03;
         }

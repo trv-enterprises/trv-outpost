@@ -68,7 +68,7 @@ import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import ComponentSwapRulesModal from '../components/ComponentSwapRulesModal';
 import AIPreflightModal from '../components/AIPreflightModal';
-import apiClient, { API_BASE } from '../api/client';
+import apiClient from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
@@ -848,7 +848,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setRegenModalOpen(true);
     setRegenerating(true);
     const authParam = apiClient.streamAuthQuery();
-    const sseUrl = `${API_BASE}/api/connections/${target.connId}/stream?${authParam}`;
+    const sseUrl = `${apiClient.httpOriginForApi()}/api/connections/${target.connId}/stream?${authParam}`;
     const es = new EventSource(sseUrl);
     regenerateCaptureRef.current = es;
     const values = [];

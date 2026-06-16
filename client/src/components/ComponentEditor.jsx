@@ -33,7 +33,6 @@ import {
 } from '@carbon/react';
 import { Play, Add, TrashCan, Close, Renew, ChartBar, ChartLine, ChartArea, ChartPie, ChartScatter, ChartLineData, Meter, Code, TableSplit, StringInteger, CaretUp, CaretDown, Information } from '@carbon/icons-react';
 import DynamicComponentLoader from './DynamicComponentLoader';
-import { API_BASE } from '../api/client';
 import SQLQueryBuilder, { parseSimpleQuery } from './SQLQueryBuilder';
 import PrometheusQueryBuilder from './PrometheusQueryBuilder';
 import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
@@ -42,6 +41,11 @@ import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
 import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, isTimestampColumn, extractRangeColumn, stripRangePredicate } from '../utils/dataTransforms';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
+import { durationTokenToSeconds, secondsToDurationToken } from '../utils/rangePresets';
+
+// Sliding-window ceiling. The stored value is whole seconds; 30 days is a
+// sane upper bound (memory is really governed by the stream buffer size).
+const SLIDING_WINDOW_MAX_SECONDS = 30 * 86400; // 2,592,000
 import apiClient from '../api/client';
 import TagInput from './shared/TagInput';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -591,7 +595,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // Sliding window for time-series data
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(false);
-  const [slidingWindowDuration, setSlidingWindowDuration] = useState(300); // Default 5 minutes
+  const [slidingWindowDuration, setSlidingWindowDuration] = useState(300); // Default 5 minutes (stored as whole seconds)
+  // Editable text for the window field — accepts duration tokens (7d, 90m,
+  // 45s, 1w) OR bare seconds. Kept separate from slidingWindowDuration so
+  // the user can type freely; on a valid parse we update the seconds state.
+  const [slidingWindowText, setSlidingWindowText] = useState('5m');
+  const [slidingWindowError, setSlidingWindowError] = useState('');
   const [slidingWindowTimestampCol, setSlidingWindowTimestampCol] = useState('');
 
   // Banded-bar column mapping — only used when chart_type === 'banded_bar'.
@@ -953,6 +962,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const sw = chart.data_mapping?.sliding_window;
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
       setSlidingWindowDuration(sw?.duration || 300);
+      setSlidingWindowText(secondsToDurationToken(sw?.duration || 300) || '5m');
+      setSlidingWindowError('');
       setSlidingWindowTimestampCol(sw?.timestamp_col || '');
       // Banded-bar column mapping. Empty defaults — the user picks
       // columns from the schema dropdown. Migrating an old chart that
@@ -1475,7 +1486,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setClientValuePickerOpen(true);
     const authParam = apiClient.streamAuthQuery();
     const topicParam = (isMQTT && queryRaw) ? `&topics=${encodeURIComponent(queryRaw)}` : '';
-    const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
+    const sseUrl = `${apiClient.httpOriginForApi()}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
     const es = new EventSource(sseUrl);
     clientCaptureRef.current = es;
     const seen = new Set();
@@ -1841,7 +1852,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // helper centralizes the query-string shape).
         const authParam = apiClient.streamAuthQuery();
         const topicParam = queryRaw ? `&topics=${encodeURIComponent(queryRaw)}` : '';
-        const sseUrl = `${API_BASE}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
+        const sseUrl = `${apiClient.httpOriginForApi()}/api/connections/${selectedConnectionId}/stream?${authParam}${topicParam}`;
         const es = new EventSource(sseUrl);
         mqttCaptureRef.current = es;
         const rawRecords = [];
@@ -3194,6 +3205,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               <SelectItem value="2d" text="Last 2 days" />
                               <SelectItem value="7d" text="Last 7 days" />
                               <SelectItem value="1w" text="Last 1 week" />
+                              <SelectItem value="14d" text="Last 14 days" />
+                              <SelectItem value="30d" text="Last 30 days" />
                             </Select>
                           </div>
                         ) : (
@@ -4287,7 +4300,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       size="sm"
                     />
                   </div>
-                  {slidingWindowEnabled && (
+                  {slidingWindowEnabled && (() => {
+                    // The window needs a timestamp column, which only exists
+                    // once a query has populated availableColumns (a saved
+                    // column counts). Until then, BOTH controls are disabled
+                    // and inert so the user can't set a length that can't be
+                    // saved (save requires a timestamp col, else it silently
+                    // drops the window). One helper line below explains why.
+                    const windowNeedsQuery = availableColumns.length === 0 && !slidingWindowTimestampCol;
+                    return (
+                    <>
                     <Grid narrow>
                       <Column lg={6} md={4} sm={4}>
                         <Select
@@ -4296,13 +4318,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           value={slidingWindowTimestampCol}
                           onChange={(e) => setSlidingWindowTimestampCol(e.target.value)}
                           disabled={availableColumns.length === 0}
-                          helperText={
-                            availableColumns.length === 0
-                              ? (slidingWindowTimestampCol
-                                  ? `Saved: ${slidingWindowTimestampCol}. Run a query to change it.`
-                                  : 'Run a query to populate column choices.')
-                              : undefined
-                          }
                         >
                           <SelectItem value="" text="Select timestamp column..." />
                           {/* Include the saved column even when availableColumns
@@ -4320,19 +4335,37 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         </Select>
                       </Column>
                       <Column lg={6} md={4} sm={4}>
-                        <NumberInput
+                        <TextInput
                           id="sliding-window-duration"
-                          label="Window Duration (seconds)"
-                          value={slidingWindowDuration}
-                          onChange={(e, { value }) => setSlidingWindowDuration(value)}
-                          min={10}
-                          max={86400}
-                          step={10}
-                          helperText="e.g., 300 = 5 min, 3600 = 1 hour"
+                          labelText="Window Length"
+                          value={slidingWindowText}
+                          disabled={windowNeedsQuery}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setSlidingWindowText(raw);
+                            const secs = durationTokenToSeconds(raw);
+                            if (secs == null || secs < 10) {
+                              setSlidingWindowError('Use s/m/h/d/w (e.g. 7d, 90m) or seconds; min 10s.');
+                            } else if (secs > SLIDING_WINDOW_MAX_SECONDS) {
+                              setSlidingWindowError('Max window is 30d.');
+                            } else {
+                              setSlidingWindowError('');
+                              setSlidingWindowDuration(secs);
+                            }
+                          }}
+                          invalid={!windowNeedsQuery && !!slidingWindowError}
+                          invalidText={slidingWindowError}
+                          placeholder="7d"
+                          helperText="Units: s/m/h/d/w — e.g. 90m, 1h, 7d, 1w. Plain number = seconds. Max 30d."
                         />
                       </Column>
                     </Grid>
-                  )}
+                    {windowNeedsQuery && (
+                      <p className="editor-info-hint">Run a query to set the sliding window.</p>
+                    )}
+                    </>
+                    );
+                  })()}
                   {!slidingWindowEnabled && (
                     <p className="editor-info-hint">
                       Enable to show only recent data (e.g., last 5 minutes). Useful for streaming/real-time charts.
@@ -5073,7 +5106,13 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
     filters: ${JSON.stringify(filters.map(f => ({
       field: f.field,
       op: f.op,
-      value: f.op === 'in' || f.op === 'notIn' ? f.value.split(',').map(v => v.trim()) : f.value
+      // in/notIn want an array. The UI stores a comma-separated STRING; the AI
+      // (and the canonical form) stores an ARRAY already. Only split a string —
+      // splitting an array throws "f.value.split is not a function" and crashed
+      // the editor on AI-built components. Mirrors dataTransforms.js.
+      value: (f.op === 'in' || f.op === 'notIn') && typeof f.value === 'string'
+        ? f.value.split(',').map(v => v.trim())
+        : f.value
     })))},
     aggregation: ${aggregation?.type ? JSON.stringify(aggregation) : 'null'},
     sortBy: ${sortBy ? `'${sortBy}'` : 'null'},

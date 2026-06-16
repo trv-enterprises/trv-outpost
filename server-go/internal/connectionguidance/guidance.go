@@ -31,12 +31,50 @@ import "strings"
 // the type. The fallback is intentionally instructive — it points
 // the agent at the next-best discovery method rather than just
 // returning an error.
+//
+// Lookup tolerates the bare last segment of a dotted TypeID: agents
+// (especially external MCP clients) routinely pass "prometheus",
+// "tsstore", or "mqtt" instead of the registry's "api.prometheus",
+// "store.tsstore", "stream.mqtt". An exact match wins; otherwise we
+// match on the suffix after the final dot, but only when that suffix
+// is unambiguous across the keyed types.
 func Get(typeID string) (string, bool) {
-	g, ok := guidance[typeID]
-	if !ok {
-		return strings.TrimSpace(genericFallback), false
+	if g, ok := guidance[typeID]; ok {
+		return strings.TrimSpace(g), true
 	}
-	return strings.TrimSpace(g), true
+	if resolved, ok := suffixAlias[typeID]; ok {
+		return strings.TrimSpace(guidance[resolved]), true
+	}
+	return strings.TrimSpace(genericFallback), false
+}
+
+// suffixAlias maps the unambiguous bare last segment of each keyed
+// dotted TypeID back to its full key. Built once from the guidance
+// map; suffixes shared by more than one key are omitted so an
+// ambiguous alias falls through to the generic fallback rather than
+// silently picking one.
+var suffixAlias = buildSuffixAlias()
+
+func buildSuffixAlias() map[string]string {
+	counts := map[string]int{}
+	for k := range guidance {
+		counts[suffixOf(k)]++
+	}
+	out := map[string]string{}
+	for k := range guidance {
+		s := suffixOf(k)
+		if s != k && counts[s] == 1 {
+			out[s] = k
+		}
+	}
+	return out
+}
+
+func suffixOf(typeID string) string {
+	if i := strings.LastIndex(typeID, "."); i >= 0 {
+		return typeID[i+1:]
+	}
+	return typeID
 }
 
 // List returns every typeID that has dedicated guidance. Useful for
@@ -97,6 +135,47 @@ Return columns:
 - instant queries: same shape, single row.
 
 To verify the actual return columns before committing, call query_connection with limit=1.
+
+Multiple series on ONE chart (the key mapping — get this wrong and every
+series collapses into a single merged line):
+A PromQL query that yields several series — e.g. sum by (mode)(...),
+sum by (device)(...), node_load1/5/15, or a label_replace(...) that
+synthesizes a label — returns those series STACKED in one result: the rows
+for series A, then the rows for series B, etc., with the distinguishing label
+as its OWN COLUMN (the column is named exactly after the PromQL label: "mode",
+"device", "instance", or whatever label_replace's dst_label is). It is NOT one
+column per series.
+To split them into separate lines, set data_mapping like:
+    {
+      "x_axis": "timestamp",
+      "y_axis": ["value"],
+      "series": "<label column>"   // e.g. "mode" or "device" — the field is
+                                   // named "series", a SINGLE column name
+                                   // (string), NOT "series_column", NOT
+                                   // "group_by"
+    }
+The viewer partitions rows by data_mapping.series, one line per distinct value.
+If you OMIT series, all the stacked rows render as one zig-zagging line — that's
+the "single merged line" symptom. So: whenever a range query has a "by (label)"
+clause or a label_replace, the chart's data_mapping.series MUST name that label
+column. Verify with query_connection limit=2: if you see a label column
+alongside timestamp/value, point "series" at it.
+For load1/5/15 specifically there is no shared label — each is a separate
+metric. Two options: (a) one y_axis column per metric by aliasing them into
+distinct columns, or (b) a single query
+label_replace(node_load1,"line","1m","","") or node_load{...} that carries a
+"line"/role label, then series:"line". Probe first to see which columns you get.
+
+Discovering metrics/labels — do NOT call get_connection_schema on Prometheus.
+A Prometheus instance commonly exposes thousands of metric names; the schema
+pull is large enough to blow a small context. Prefer narrow discovery:
+  - if your tool surface has list_prometheus_label_values, use it
+    (label="__name__" for metric names, label="<label>" for a label's values).
+  - otherwise query_connection against the standard label-values shape, e.g.
+    raw="count by (__name__)({__name__=~\".+\"})" type="prometheus"
+    params:{query_type:"instant"}, to enumerate metric names cheaply.
+Then write the PromQL directly and probe the final query with query_connection
+limit=1 only to confirm the column shape.
 `,
 
 	"sql.postgres": `
@@ -207,11 +286,22 @@ query_config shapes:
     // Oldest N records (default cap = 10 rows)
     { "raw": "oldest", "type": "api", "params": { "limit": 100 } }
 
-    // All records since a unix-second timestamp (default cap = 100000)
+    // Records within a RELATIVE window — a Go DURATION (h/m/s; combine for
+    // days, e.g. 240h = 10 days). This is the form to use for "last N days".
+    { "raw": "since:240h", "type": "api", "params": { "limit": 5000 } }
+
+    // Records since an ABSOLUTE unix-second timestamp (default cap = 100000)
     { "raw": "since:1779900000", "type": "api", "params": { "limit": 5000 } }
 
-    // Records in a unix-second range (default cap = 100000)
+    // Records in an absolute unix-second range (default cap = 100000)
     { "raw": "range:1779900000:1779903600", "type": "api", "params": {} }
+
+  IMPORTANT: since: accepts EITHER a Go duration ("240h", "30m") for a
+  relative window OR a unix-SECOND integer for an absolute start. It does NOT
+  accept anything else — passing a date string, milliseconds, or a converted
+  value in the wrong form fails with: invalid since duration: missing unit.
+  For "last N days" prefer the duration form ("240h" for 10 days) — don't
+  hand-convert a date to a timestamp.
 
 Implicit row caps when params.limit is unset:
   - newest / oldest / default → 10
@@ -300,6 +390,20 @@ query_config shape for generic REST APIs:
     }
 
 Return columns: derived from the records in data_path (or the top-level response if data_path is empty). Use get_connection_schema if the connection has a recorded schema; otherwise probe with query_connection limit=1 to see the actual response shape.
+
+Dashboard variable / filtering: a generic REST API has NO standard
+filter parameter — do NOT assume a query param like "?location=..."
+works. Unless you have PROVEN the API honors a specific param (by
+probing query_connection with and without it and seeing the response
+actually narrow), apply a dashboard variable CLIENT-SIDE: add a
+data_mapping.filter whose value is the literal token
+"{{dashboard-variable}}" (e.g. { field: "location", op: "eq", value:
+"{{dashboard-variable}}" }) — the viewer substitutes the active value
+and filters the fetched rows. Putting the token in the URL silently
+no-ops when the API ignores the param (every panel then shows ALL
+data). Contrast: ts-store HAS a real source-side params.filter (use it
+there); SQL/EdgeLake use the {{dashboard-variable}} token inside the
+query. Generic API → client-side filter is the safe default.
 `,
 
 	"file.csv": `

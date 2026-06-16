@@ -29,11 +29,17 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { queryData } from '../api/dataClient';
-import apiClient, { API_BASE } from '../api/client';
+import { queryData, queryBackfillShared } from '../api/dataClient';
+import apiClient from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getStreamBufferSize } from '../utils/streamBufferConfig';
 import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
+
+// Backfill queries can pull up to the full stream buffer (e.g. `newest
+// 1000`), which is heavier than a normal API call. Give them a longer
+// timeout than the 15s client default so a slow source (or a busy one at
+// dashboard mount) doesn't trip the timeout before the rows arrive.
+const BACKFILL_TIMEOUT_MS = 45_000;
 
 /**
  * Extract a nested value from an object using dot-notation path.
@@ -380,7 +386,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
 
       // Use fetch with streaming for POST endpoint
       abortController = new AbortController();
-      const url = `${API_BASE}/api/connections/${connectionId}/stream/aggregated`;
+      const url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream/aggregated`;
 
       try {
         // Build headers including user auth
@@ -539,7 +545,13 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
       if (effectiveBackfill && mountedRef.current && !backfillDoneRef.current) {
         backfillDoneRef.current = true;
         try {
-          const result = await queryData(connectionId, effectiveBackfill, false);
+          // Deduped across panels on the same connection: N identical
+          // panels share ONE backfill fetch instead of each issuing the
+          // same `newest <limit>` query (which overloaded the source and
+          // tripped the 15s default timeout — only the first few won the
+          // race). Backfills can be large, so give them a longer timeout
+          // than the default API call.
+          const result = await queryBackfillShared(connectionId, effectiveBackfill, { timeout: BACKFILL_TIMEOUT_MS });
           if (mountedRef.current && result.data?.columns && result.data?.rows) {
             // Convert columnar result to record objects for processStreamRecord.
             // ts-store backfill ('newest' / 'since:' both hit /data/newest) returns

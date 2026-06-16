@@ -400,6 +400,7 @@ func (h *Handler) handleToolsCall(params map[string]interface{}) (interface{}, e
 	if args == nil {
 		args = make(map[string]interface{})
 	}
+	coerceStringifiedJSONArgs(args)
 
 	log.Printf("[MCP] Calling tool: %s with args: %v", name, args)
 	result, err := h.registry.CallTool(name, args)

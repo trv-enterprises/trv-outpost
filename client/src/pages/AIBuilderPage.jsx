@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Button,
@@ -24,6 +24,15 @@ import {
 } from '@carbon/icons-react';
 import AiIcon from '../components/icons/AiIcon';
 import AIComponentPreview from '../components/AIComponentPreview';
+import AgentToolCallCard from '../components/shared/AgentToolCallCard';
+import AgentSettingsMenu from '../components/shared/AgentSettingsMenu';
+import AgentWelcome from '../components/shared/AgentWelcome';
+import {
+  exportAsMarkdown as exportConversationMarkdown,
+  exportAsJson as exportConversationJson,
+  defaultExportBaseName,
+} from '../components/shared/exportAgentConversation';
+import ExportNameModal from '../components/shared/ExportNameModal';
 import { useAISession } from '../hooks/useAISession';
 import apiClient from '../api/client';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
@@ -130,6 +139,10 @@ function AIBuilderPage() {
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [initialMessageSent, setInitialMessageSent] = useState(false);
+  // Local-only pref: open tool-call cards expanded by default. Session-scoped
+  // (not persisted) — the component editor has no preferences store like the
+  // Assistant's. Mirrors the Assistant's "Expand tool calls by default".
+  const [expandToolCalls, setExpandToolCalls] = useState(false);
   const messagesEndRef = useRef(null);
 
   const {
@@ -303,6 +316,31 @@ function AIBuilderPage() {
     }
   };
 
+  // Export the conversation as Markdown / JSON. Secrets in tool-call args and
+  // results are masked by the shared exporter (issue #40). The cog items open a
+  // name dialog so the user can name the file at download time (#61); the
+  // actual download fires from the dialog's onConfirm. Disabled until the
+  // transcript has at least one message.
+  const hasMessages = messages && messages.length > 0;
+  const [exportFormat, setExportFormat] = useState(null); // 'md' | 'json' | null
+  const exportOpts = useMemo(
+    () => ({
+      title: 'Component AI — Edit with AI',
+      filePrefix: 'component-ai',
+      messages,
+      namespace: component?.namespace,
+    }),
+    [messages, component?.namespace]
+  );
+  const handleExportConfirm = useCallback(
+    (filename) => {
+      const opts = { ...exportOpts, filename };
+      if (exportFormat === 'json') exportConversationJson(opts);
+      else exportConversationMarkdown(opts);
+    },
+    [exportOpts, exportFormat]
+  );
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -334,9 +372,7 @@ function AIBuilderPage() {
           {message.tool_calls && message.tool_calls.length > 0 && (
             <div className="tool-calls">
               {message.tool_calls.map((tool, i) => (
-                <Tag key={i} type="blue" size="sm">
-                  {tool.name}
-                </Tag>
+                <AgentToolCallCard key={tool.id || i} toolCall={tool} defaultOpen={expandToolCalls} />
               ))}
             </div>
           )}
@@ -362,11 +398,19 @@ function AIBuilderPage() {
             <AiIcon size={24} />
             {isNewChart
               ? `Create ${componentType === 'control' ? 'Control' : componentType === 'display' ? 'Display' : componentType === 'chart' ? 'Chart' : 'Component'} with AI`
-              : 'Edit Component with AI'}
+              : 'Edit with AI'}
           </h1>
           {connected && <Tag type="green" size="sm">Connected</Tag>}
         </div>
         <div className="header-actions">
+          <AgentSettingsMenu
+            label="Component AI settings"
+            // Export items open the name dialog (disabled on an empty convo).
+            onExportMarkdown={hasMessages ? () => setExportFormat('md') : undefined}
+            onExportJson={hasMessages ? () => setExportFormat('json') : undefined}
+            expandToolCalls={expandToolCalls}
+            onToggleExpandToolCalls={() => setExpandToolCalls((v) => !v)}
+          />
           <Button
             kind="secondary"
             renderIcon={Close}
@@ -401,55 +445,20 @@ function AIBuilderPage() {
               <>
                 {/* Welcome message if no messages */}
                 {messages.length === 0 && (
-                  <div className="welcome-message">
-                    <AiIcon size={48} />
-                    <h3>Welcome to AI Component Builder</h3>
-                    <p>
-                      Describe the component you want to create, and I'll help you build it.
-                      I can create charts, displays, and controls.
-                    </p>
-                    <div className="suggestions">
-                      <p className="suggestions-label">Try one of these:</p>
-                      <div className="suggestion-buttons">
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Create a bar chart showing sales by region')}
-                        >
-                          Bar chart for sales
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Make a line chart for temperature over time')}
-                        >
-                          Line chart for temperature
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Create a toggle control to turn a device on/off via MQTT')}
-                        >
-                          Toggle control for MQTT
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Create a slider to set brightness level')}
-                        >
-                          Dimmer slider control
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Add a zoom slider below the chart')}
-                        >
-                          Add a zoom slider
-                        </button>
-                        <button
-                          className="suggestion-btn"
-                          onClick={() => setInput('Format the x-axis to show time only (HH:MM AM/PM)')}
-                        >
-                          Format x-axis as time
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <AgentWelcome
+                    icon={<AiIcon size={48} />}
+                    heading="Welcome to AI Component Builder"
+                    description="Describe the component you want to create, and I'll help you build it. I can create charts, displays, and controls."
+                    suggestions={[
+                      { label: 'Bar chart for sales', prompt: 'Create a bar chart showing sales by region' },
+                      { label: 'Line chart for temperature', prompt: 'Make a line chart for temperature over time' },
+                      { label: 'Toggle control for MQTT', prompt: 'Create a toggle control to turn a device on/off via MQTT' },
+                      { label: 'Dimmer slider control', prompt: 'Create a slider to set brightness level' },
+                      { label: 'Add a zoom slider', prompt: 'Add a zoom slider below the chart' },
+                      { label: 'Format x-axis as time', prompt: 'Format the x-axis to show time only (HH:MM AM/PM)' },
+                    ]}
+                    onSuggestion={setInput}
+                  />
                 )}
 
                 {/* Message history */}
@@ -567,6 +576,15 @@ function AIBuilderPage() {
         onKeepEditing={() => setShowDiscardDialog(false)}
         onDiscard={handleDiscard}
         body="You have unsaved changes. Are you sure you want to discard them? This action cannot be undone."
+      />
+
+      {/* Export name dialog — lets the user name the file at download time (#61) */}
+      <ExportNameModal
+        open={exportFormat !== null}
+        format={exportFormat || 'md'}
+        defaultName={defaultExportBaseName(exportOpts)}
+        onConfirm={handleExportConfirm}
+        onClose={() => setExportFormat(null)}
       />
     </div>
   );

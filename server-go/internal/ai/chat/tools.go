@@ -8,10 +8,85 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
+
+// coercibleBoolKeys / coercibleIntKeys are the json field names on the AI
+// tool-arg structs whose Go type is bool / int. The model occasionally emits
+// these as JSON strings ("true", "500") despite the schema declaring boolean /
+// integer; the chat handlers unmarshal args into the strict request structs, so
+// a stringified scalar makes json.Unmarshal reject the WHOLE call (observed:
+// `use_custom_code: "true"` → "cannot unmarshal string into … of type bool",
+// which left the agent unable to switch a chart to custom code). We coerce only
+// these known scalar keys, by name, so legitimate string values (queries, IDs,
+// filter values like "500") are never touched. The public HTTP API keeps its
+// strict structs unchanged — this leniency is scoped to the AI dispatch path,
+// where the model is the unreliable producer. MCP already tolerates this via
+// its loose getBool/getInt helpers; this brings the chat surface to parity.
+var coercibleBoolKeys = map[string]bool{
+	"use_custom_code": true, "uses_dashboard_variable": true,
+	"variables_enabled": true, "allow_absolute": true,
+	"is_public": true, "allow_export": true, "same_namespace": true,
+}
+
+var coercibleIntKeys = map[string]bool{
+	"limit": true, "refresh_interval": true, "title_scale": true,
+	"scale_percent": true, "interval": true, "duration": true,
+	"count": true, "snapshot_interval": true, "max_thumbnails": true,
+	"page": true, "page_size": true,
+	"x": true, "y": true, "w": true, "h": true,
+}
+
+// coerceModelScalars rewrites stringified booleans/integers the model may emit
+// on known scalar keys back to real JSON bool/number, recursively. It is a
+// best-effort normalizer: on any decode error it returns the input unchanged so
+// a parse problem surfaces in the handler's own unmarshal rather than here.
+func coerceModelScalars(args json.RawMessage) json.RawMessage {
+	if len(args) == 0 {
+		return args
+	}
+	var v interface{}
+	if err := json.Unmarshal(args, &v); err != nil {
+		return args
+	}
+	coerceScalarsInPlace(v)
+	out, err := json.Marshal(v)
+	if err != nil {
+		return args
+	}
+	return out
+}
+
+func coerceScalarsInPlace(v interface{}) {
+	switch node := v.(type) {
+	case map[string]interface{}:
+		for k, child := range node {
+			if s, ok := child.(string); ok {
+				if coercibleBoolKeys[k] {
+					if b, err := strconv.ParseBool(s); err == nil {
+						node[k] = b
+						continue
+					}
+				}
+				if coercibleIntKeys[k] {
+					if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+						node[k] = n
+						continue
+					}
+				}
+				continue
+			}
+			coerceScalarsInPlace(child)
+		}
+	case []interface{}:
+		for _, child := range node {
+			coerceScalarsInPlace(child)
+		}
+	}
+}
 
 // Tier discriminates which prompt-assembly phase a tool's schema
 // loads in. Step 5 wires this to actual on-demand loading; for now
@@ -168,7 +243,10 @@ func (r *ToolRegistry) findTool(name string) *Tool {
 func (r *ToolRegistry) Dispatch(ctx context.Context, env *DispatchEnv, name string, args json.RawMessage) (string, error) {
 	for _, t := range r.tools {
 		if t.Name == name {
-			return t.Handler(ctx, env, args)
+			// Normalize stringified bool/int scalars the model sometimes
+			// emits before the handler's strict unmarshal — see
+			// coerceModelScalars (issue #56).
+			return t.Handler(ctx, env, coerceModelScalars(args))
 		}
 	}
 	return "", fmt.Errorf("unknown tool: %s", name)

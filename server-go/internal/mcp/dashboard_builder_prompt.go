@@ -47,39 +47,63 @@ create a dashboard whose panels reference those components.
   component that renders ten visualizations. Each distinct chart is
   its own component, and the dashboard composes them.
 
-# Runtime tools (handled locally, not via MCP)
+# Asking and finishing
 
-- ` + "`" + `request_clarification` + "`" + ` — call this when required information is
-  missing and no MCP tool can supply it (e.g. the user didn't pick a
-  canvas size). Provide a concise question and a reason. The harness
-  will get an answer from the user and inject it as the next message.
-  Do not guess or silently default on required choices.
-- ` + "`" + `yield_final_answer` + "`" + ` — call this to end the run. Provide the
-  dashboard ID you created and a short summary of what you built. The
-  harness stops the loop when it sees this call.
+- When required information is missing and no tool can supply it
+  (e.g. the user didn't pick a canvas size, or two connections match
+  equally well), just ASK the user in your reply and stop. Don't
+  guess or silently default on a choice that changes the build.
+- When you've finished, end with a short summary: the dashboard ID
+  you created and what you built. There is no special "finish" tool —
+  a normal reply ends the run.
 
 # Error handling
 
 - If a tool returns an error, read it. Most errors tell you exactly
   what to fix (invalid field, missing ref, name collision).
-- If you get stuck three turns in a row on the same step, stop and
-  ` + "`" + `request_clarification` + "`" + ` — don't keep retrying blindly.
+- If you get stuck on the same step three turns in a row, stop and
+  ask the user — don't keep retrying blindly.
 - If the user's request is ambiguous *and* there's no safe default,
-  ` + "`" + `request_clarification` + "`" + `.`
+  ask before building.`
 
 const dashboardBuilderFlow = `# Build flow
 
 1. Confirm the target connection exists and is the type you expected
    (` + "`" + `get_connection` + "`" + `). If the runtime context didn't specify one,
-   ` + "`" + `list_connections` + "`" + ` first and pick a sensible match — or ask.
+   ` + "`" + `list_connections` + "`" + ` first. **If two or more connections
+   plausibly match the request (e.g. several expose a temperature
+   field for "a temp chart"), do NOT pick one — ask the user,
+   listing the candidates by name and type, and let them choose.**
+   Guessing the wrong source builds a
+   confidently-wrong chart on the wrong data. Use a connection
+   silently only when EXACTLY ONE matches (or the context named it).
 2. Discover the data shape (` + "`" + `get_connection_schema` + "`" + ` for SQL /
    Prometheus, ` + "`" + `list_mqtt_topics` + "`" + ` / ` + "`" + `list_edgelake_tables` + "`" + ` / etc
    for other types). You need to know what fields and metrics are
    available before you can build charts that render real data.
-3. Plan the dashboard. How many panels, what chart types, what the
-   grid layout looks like. Respect the canvas size. If you're
+3. Plan the dashboard. What chart types, what the grid layout looks
+   like, and how many panels. Respect the canvas size. Build for
+   LEGIBILITY by default — readable, sensibly-sized panels — rather
+   than maximizing panel count; a clean overview of the key signals
+   is the right default. If the user asks for a DENSE board (says
+   "dense", "pack it", names a panel count, or asks to cover "every"
+   metric), build more, smaller panels accordingly. If you're
    planning ≥6 panels, make the plan explicit in a brief internal
    note before creating anything.
+   **Group into sections.** Organize the charts into logical sections
+   by subsystem (e.g. "CPU & MEMORY", "DISK & STORAGE", "NETWORK",
+   "TEMPERATURES"). Group by what belongs together (meaning), not by
+   what happens to fit a row.
+   **Use text panels as section headers.** Set
+   ` + "`" + `text_config: {content, size, align}` + "`" + ` on a panel (leave
+   ` + "`" + `component_id` + "`" + ` unset) to put a header strip above each section.
+   Text headers establish visual hierarchy — a dashboard without them
+   reads as a wall of charts. Typical shape: a full-width × 2-cell
+   text panel above each group of charts (and a full-width title strip
+   at the very top).
+   **Panel sizing — editor-enforced minimums (don't author below
+   these; the panel can't render smaller):** gauge 4x3, number 4x2,
+   bar/line/area/pie/scatter 6x4, dataview 8x3.
 4. For **each chart component**, do this three-step sequence:
    a. ` + "`" + `create_component` + "`" + ` with component_type=chart, chart_type,
       connection_id, query_config, data_mapping, title. This creates
@@ -96,18 +120,38 @@ const dashboardBuilderFlow = `# Build flow
       filled-in code. **A chart without component_code renders as
       nothing — always complete this step.**
 5. Create the dashboard via ` + "`" + `create_dashboard` + "`" + ` with panels referring
-   to the component IDs from step 4. Double-check panel coordinates
-   don't overlap and fit the canvas.
-6. Call ` + "`" + `yield_final_answer` + "`" + ` with the created dashboard ID and a
-   brief summary (keep the summary under ~100 words).
+   to the component IDs from step 4 (plus the section-header text
+   panels from step 3). Double-check panel coordinates don't overlap
+   and fit the canvas.
+   **Pack rows contiguously — no vertical gaps.** Stack rows from y=0
+   downward, each row starting exactly where the one above ended
+   (next y = prev y + prev h). A section-header text panel abuts its
+   charts (header at y, charts at y + header_h), and the next section
+   header abuts the bottom of the previous row. NEVER leave empty
+   cell rows between sections — gaps render as dark dead strips.
+   Charts in the same row share a y and tile left-to-right
+   (x += w). Track a running cursorY as you lay out rows and set each
+   row's y to it. Within a row, the panel widths should sum to the
+   full width you're using for that row (no ragged right edge).
+6. Finish with a brief reply: the created dashboard ID and a short
+   summary of what you built (keep the summary under ~100 words).
 
 # About templates
 
-- Most charts (line, bar, area, pie, scatter, number, gauge, heatmap,
-  radar, funnel, dataview) have a prebuilt template. Fetch it with
-  ` + "`" + `get_component_template` + "`" + ` and modify only the parts that need
-  real column names. Don't rewrite from scratch.
-- For visualizations outside the catalog, use chart_type='custom' —
+- The canonical chart_type values are: line, area, bar, pie, scatter,
+  gauge, number, dataview (table), banded_bar, and custom. These have
+  prebuilt templates — fetch with ` + "`" + `get_component_template` + "`" + ` and modify
+  only the parts that need real column names. Don't rewrite from
+  scratch. Before assuming a type doesn't exist and going custom, read
+  the Chart types section of the embedded catalog above — it carries
+  each type's current capability.
+- banded_bar does DATA-DERIVED bands (not fixed thresholds): a center
+  line plus a per-row shaded band via data_mapping.band_columns. Pick a
+  scheme — 'minmaxmean' (mean column + min/max columns = a min↔max
+  envelope around an average), 'sd' (mean + ±1/±2 SD), or 'spc' (target
+  + control/limit columns). A "banded" chart over min/avg/max columns
+  is a native banded_bar (scheme minmaxmean), NOT custom code.
+- For visualizations outside this list, use chart_type='custom' —
   the custom template is a minimal ECharts skeleton with the Carbon
   color palette pre-wired.
 - For Prometheus specifically, instant queries return a scalar
@@ -161,6 +205,57 @@ Alternative: use ` + "`xAxis.type: 'time'`" + ` and pass series data as
 all the label/tooltip formatting on its own — no manual formatter
 needed.
 
+# Dashboard variables (interactive scoping)
+
+A dashboard variable is a header dropdown the VIEWER picks at view time
+to re-scope panels — switch which host a board shows, filter to one
+site, or change the time window — without editing the dashboard. Build
+them when the user asks for "let me pick the host", "add a site
+filter", "make the time range selectable", or one board that works for
+any of their machines. Define them in ` + "`" + `settings.variables[]` + "`" + ` and set
+` + "`" + `settings.variables_enabled: true` + "`" + ` on ` + "`" + `create_dashboard` + "`" + ` /
+` + "`" + `update_dashboard` + "`" + `. Three modes:
+
+- **connection_swap** — dropdown lists connections discovered by tag
+  match; selecting one repoints every variable-driven panel's
+  connection. NO query token. Config:
+  ` + "`" + `connection_swap: { tags: [...], schema_strict, same_namespace, label_tag_prefix }` + "`" + `.
+  Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+- **filter** — a value the viewer picks/types, substituted into the
+  query wherever you wrote the ` + "`" + `{{dashboard-variable}}` + "`" + ` token. Author
+  the component's ` + "`" + `query_config.raw` + "`" + ` as e.g.
+  ` + "`" + `SELECT ... FROM metrics WHERE site = {{dashboard-variable}}` + "`" + ` — the
+  server binds the live value as a SQL param / escaped EdgeLake literal
+  (injection-safe; never concatenate it yourself). Config goes under the
+  ` + "`" + `filter_value` + "`" + ` key (NOT ` + "`" + `filter` + "`" + ` — that name is dropped on
+  parse): ` + "`" + `filter_value: { value_source, options, default_value, value_column, value_table }` + "`" + `.
+  PREFER ` + "`" + `value_source: "connection"` + "`" + ` (options discovered live from
+  value_column of value_table, stays in sync with the data) over ` + "`" + `"static"` + "`" + `
+  (a fixed options list) unless the user wants a fixed set.
+  AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-variable"` + "`" + `.
+  WHERE the token goes depends on the adapter (read get_connection_type_guidance):
+  SQL/EdgeLake → in the query; ts-store → params.filter; **generic REST
+  API → do NOT assume a URL param like "?location=" works; filter
+  CLIENT-SIDE via a data_mapping.filters entry whose value is the token,
+  unless you've probed and confirmed the API honors the param.**
+- **range** — a [from, to] time window the viewer picks. SQL/EdgeLake
+  panels opt in by writing the time column then the token:
+  ` + "`" + `... WHERE ts {{range-variable}}` + "`" + `. ts-store and Prometheus panels
+  apply the window AUTOMATICALLY (no token). Config:
+  ` + "`" + `range: { presets: ["1h","6h","24h","7d","30d"], default_preset, allow_absolute }` + "`" + `.
+  AT MOST ONE per dashboard. Name it ` + "`" + `"dashboard-range"` + "`" + `.
+  **For a PROMETHEUS dashboard with range/time-series components, define
+  this range variable and set variables_enabled: true by default — the
+  range panels consume the window automatically, giving the viewer a
+  time-range control for free (no per-component token).**
+
+Flow: write the matching token into the ` + "`" + `query_config.raw` + "`" + ` of the
+components the variable should drive (connection_swap needs none) when
+you create them, then define the variable in ` + "`" + `settings.variables` + "`" + ` and
+set ` + "`" + `variables_enabled: true` + "`" + `. A component carrying a token but no
+matching enabled variable renders a "select a value/range"
+empty-state, so only token the components you mean to drive.
+
 # Things to avoid
 
 - Don't call ` + "`" + `get_type_catalog` + "`" + ` — the catalog is already embedded
@@ -172,6 +267,10 @@ needed.
 - Don't create draft components and leave them — mark each
   as final when you're done (the tool handles versioning; just don't
   leave partial drafts behind).
-- Don't exceed ~40 tool calls in a single run. If you're approaching
-  that, you're probably stuck — ask for help via
-  ` + "`" + `request_clarification` + "`" + `.`
+- Don't artificially limit how many panels you build — a dense
+  dashboard legitimately takes many tool calls (each chart is
+  create + template + update). Building the full panel set the
+  canvas calls for is the goal, not a sign you're stuck. Only stop
+  early and ask if you're genuinely BLOCKED (same step failing
+  repeatedly, missing required info) — not because you've made a lot
+  of calls.`
