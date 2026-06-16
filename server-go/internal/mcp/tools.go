@@ -806,6 +806,14 @@ func (r *ToolRegistry) registerComponentTools() {
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
+			// Fail loud on the text-panel mistake: agents have tried to make
+			// section headers via create_component with a text_config arg (no
+			// such field → silently dropped → a blank component shell). Text
+			// panels are a panel-level text_config in create_dashboard, not a
+			// component. Redirect explicitly instead of accepting the no-op.
+			if _, hasText := args["text_config"]; hasText {
+				return nil, fmt.Errorf("text_config is not a component field — do NOT create a component for a section header or text label. Text/header panels are created inline on the dashboard: in create_dashboard (or update_dashboard), add a panel with text_config set and component_id left unset")
+			}
 			req := &models.CreateComponentRequest{
 				Name:          getString(args, "name"),
 				Description:   getString(args, "description"),

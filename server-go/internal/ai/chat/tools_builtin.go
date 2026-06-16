@@ -816,6 +816,17 @@ func wrapGetComponent(ops *toolops.Toolset) ToolHandler {
 func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		args = coerceStringifiedJSONFields(args)
+		// Fail loud on the text-panel mistake: agents have tried to make
+		// section headers by passing text_config to create_component (it has
+		// no such field, so it was silently dropped → a blank display shell,
+		// and the agent never knew). Text panels are NOT components — they're
+		// a panel-level text_config in create_dashboard. Redirect explicitly.
+		var probe map[string]json.RawMessage
+		if json.Unmarshal(args, &probe) == nil {
+			if _, hasText := probe["text_config"]; hasText {
+				return "", fmt.Errorf("text_config is not a component field — do NOT create a component for a section header or text label. Text/header panels are created inline on the dashboard: in create_dashboard (or update_dashboard), add a panel with `text_config` set and `component_id` left unset. Remove this create_component call and put the header text directly on the panel")
+			}
+		}
 		var req models.CreateComponentRequest
 		if err := json.Unmarshal(args, &req); err != nil {
 			return "", fmt.Errorf("invalid args: %w", err)

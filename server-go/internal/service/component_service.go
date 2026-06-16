@@ -79,6 +79,27 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 		componentType = models.ComponentTypeChart
 	}
 
+	// Reject type-incomplete components at the source. Each sub-type needs
+	// its discriminator; without it the component is a blank shell that
+	// renders as nothing (this is how agents' mistaken "text_config on a
+	// display component" headers slipped in — empty display_type, no
+	// content). Validating here covers all three AI surfaces + the editor,
+	// since they all funnel through this service method.
+	switch componentType {
+	case models.ComponentTypeDisplay:
+		if req.DisplayConfig == nil || req.DisplayConfig.DisplayType == "" {
+			return nil, fmt.Errorf("display component requires display_config.display_type (a blank display renders nothing). For a section header or text label, use a panel-level text_config on the dashboard instead of a component")
+		}
+	case models.ComponentTypeControl:
+		if req.ControlConfig == nil || req.ControlConfig.ControlType == "" {
+			return nil, fmt.Errorf("control component requires control_config.control_type")
+		}
+	case models.ComponentTypeChart:
+		if req.ChartType == "" {
+			return nil, fmt.Errorf("chart component requires chart_type (e.g. line, bar, gauge, dataview, banded_bar; or custom with use_custom_code)")
+		}
+	}
+
 	// Auto-codegen for structured charts: when the caller asks for a
 	// canonical chart_type with use_custom_code=false and didn't supply
 	// component_code, emit the spec-driven one-liner so the component
