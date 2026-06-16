@@ -16,11 +16,13 @@ import {
 } from '../option-helpers.js';
 
 /**
- * Build the legend block. Pie defaults to a vertical legend on the left
- * (matches legacy). Hidden when show:false.
+ * Build the legend block. Pie legend is OFF by default — slice labels are
+ * on (pieShowLabels) so a legend on top of them is redundant and clutters
+ * small pies. Shown only when explicitly enabled (legend.show === true).
+ * This default also governs AI-generated charts, which set neither field.
  */
 function buildLegend(legend) {
-  if (legend?.show === false) return undefined;
+  if (legend?.show !== true) return undefined;
   const pos = legend?.position || 'left';
   const block = { textStyle: { color: COLOR_TEXT_SECONDARY } };
   switch (pos) {

@@ -121,7 +121,8 @@
               "binds": "options.legend.show",
               "type": "boolean",
               "label": "Show legend",
-              "default": true
+              "default": false,
+              "helperText": "Off by default — slice labels already name each slice. Enable for a separate legend key."
             },
             {
               "id": "legend_position",
