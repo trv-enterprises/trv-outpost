@@ -800,4 +800,4 @@ Simulators run on a homelab host and expose the port range 21xxx:
 | CSV Server | 21083 | HTTP     |
 | PostgreSQL | 21432 | TCP      |
 
-The host is deployment-specific. Use the `homelab-deploy` MCP tools to resolve the current simulator host — don't hard-code an address here. See `simulators/README.md` for full documentation.
+The host is deployment-specific. Use the `homelab-deploy` MCP tools to resolve the current simulator host — don't hard-code an address here. The simulators now live in their own repo, [trv-outpost-sim](https://github.com/trv-enterprises/trv-outpost-sim) (local checkout: `~/Documents/GitHub/trv-outpost-sim`) — see its README for full documentation.

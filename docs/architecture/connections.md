@@ -177,8 +177,9 @@ MQTT broker adapter. Eclipse Paho v2 (`autopaho`) for the transport.
 
 ### `store.tsstore`
 
-ts-store is a Go-based time-series circular-buffer store (separate
-project in `simulators/` for local testing).
+ts-store is a Go-based time-series circular-buffer store (the
+simulators live in the [trv-outpost-sim](https://github.com/trv-enterprises/trv-outpost-sim)
+repo for local testing).
 
 - **Config**: base URL, API key, store name, ring size
 - **Capabilities**: read, stream (via WebSocket push)
