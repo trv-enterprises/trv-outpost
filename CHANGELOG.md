@@ -6,6 +6,34 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.31.2] — 2026-06-16
+
+### Fixed
+
+- **Editor: editing one panel no longer affects all panels.** AI-built
+  dashboards persisted every panel with an empty `id`; the editor keys all
+  per-panel operations (drag, resize, edit-target, delete, React keys) on
+  `panel.id`, so empty ids collided and every action hit the first panel
+  (editing one chart changed all, saves landed on the wrong panel). The
+  server now assigns a unique id to any panel missing one, on create and
+  update — existing empty-id dashboards self-heal on next save (#96).
+- **Editor: resizing/deleting a panel no longer reflows the whole grid.**
+  The edit-mode grid template was sized from panel extent, so any panel
+  change re-laid-out everything (resize past the edge ran away). Pinned the
+  editor grid + clamps to the fixed dimension budget (#92).
+- **Blank components can no longer be created.** `create_component` accepted
+  type-incomplete shells (a display with no display_type, etc.) — which is
+  how the AI's mistaken "text_config on a display component" headers slipped
+  in. The shared service now rejects type-incomplete components, and both AI
+  surfaces fail loud on a `text_config` arg, redirecting to panel-level text
+  panels (#93).
+
+### Changed
+
+- dataview minimum panel height raised 3→8 cells; pie minimum raised to
+  12×7, and pie legend now defaults OFF (slice labels already name each
+  slice — an AI pie no longer renders legend + labels both on) (#94).
+
 ## [0.31.1] — 2026-06-16
 
 ### Fixed
