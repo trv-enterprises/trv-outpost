@@ -3205,6 +3205,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               <SelectItem value="2d" text="Last 2 days" />
                               <SelectItem value="7d" text="Last 7 days" />
                               <SelectItem value="1w" text="Last 1 week" />
+                              <SelectItem value="14d" text="Last 14 days" />
+                              <SelectItem value="30d" text="Last 30 days" />
                             </Select>
                           </div>
                         ) : (
