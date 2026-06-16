@@ -43,11 +43,10 @@ const base = build({});
 check('baseline: returns an option with series', !!base && Array.isArray(base.series) && base.series.length > 0);
 check('baseline: no dataZoom by default', base.dataZoom === undefined);
 
-// ── Auto y-bounds are rounded to sensible precision (no float noise) ────
-// The data here (avg ~20-25, max 35) is in the 1–99 range → 2dp max.
-const decimals = (n) => { const s = String(n); const i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; };
-check('auto yMax rounded (≤2dp for <100)', decimals(base.yAxis.max) <= 2, `yMax=${base.yAxis.max}`);
-check('auto yMin rounded (≤2dp for <100)', decimals(base.yAxis.min) <= 2, `yMin=${base.yAxis.min}`);
+// ── Auto y-bounds: WHOLE numbers for normal-range data (no float noise) ─
+// The data here (range 10–35, span 25 ≥ 1) → both bounds whole integers.
+check('auto yMax is a whole number', Number.isInteger(base.yAxis.max), `yMax=${base.yAxis.max}`);
+check('auto yMin is a whole number', Number.isInteger(base.yAxis.min), `yMin=${base.yAxis.min}`);
 // Outward rounding: bounds must still contain the data extent (10 min, 35 max).
 check('auto yMax not below data max', base.yAxis.max >= 35);
 check('auto yMin not above data min', base.yAxis.min <= 10);

@@ -49,27 +49,13 @@ const TOOLTIP_BORDER = '#393939';
 const round4 = (n) => Number(n.toFixed(4));
 
 /**
- * Round an auto-computed axis bound to a sensible precision based on its
- * magnitude, so the explicit min/max labels don't show full float noise
- * (e.g. 66.15382275132275). Decimals scale down as the integer part
- * grows: 1–99 → 2dp, 100–999 → 1dp, ≥1000 → 0dp. Values below 1 keep
- * more precision (3dp) so small-scale series (fractions, rates) still
- * read. The bound is rounded OUTWARD (floor min / ceil max at the chosen
- * precision) so rounding never clips the data inside the padded range.
- * Whole numbers are returned unchanged — the rule only applies to values
- * that carry a fractional part.
+ * Round an auto-computed axis bound OUTWARD (floor the min, ceil the max)
+ * so the explicit min/max labels are clean, not full float noise (e.g.
+ * 66.15382275132275). `decimals` controls the precision; the bound is
+ * never pulled inward, so the padded data extent is never clipped.
  */
-function roundBound(value, dir) {
+function roundBound(value, dir, decimals) {
   if (!Number.isFinite(value)) return value;
-  // Only round values that actually carry decimals — a whole number is
-  // already clean and is left exactly as-is regardless of magnitude.
-  if (Number.isInteger(value)) return value;
-  const mag = Math.abs(value);
-  let decimals;
-  if (mag < 1) decimals = 3;
-  else if (mag < 100) decimals = 2;
-  else if (mag < 1000) decimals = 1;
-  else decimals = 0;
   const f = 10 ** decimals;
   return dir === 'up' ? Math.ceil(value * f) / f : Math.floor(value * f) / f;
 }
@@ -90,7 +76,23 @@ function computeYBounds(centerVals, resolvedPairs) {
   }
   const centerAvg = centerVals.reduce((a, b) => a + b, 0) / centerVals.length;
   const pad = Math.abs(centerAvg) * 0.10 || (hi - lo) * 0.10 || 1;
-  return { yMin: roundBound(lo - pad, 'down'), yMax: roundBound(hi + pad, 'up') };
+
+  // Axis bounds default to WHOLE numbers — clean labels that match the
+  // round gridlines ECharts draws between them. Exception: small-scale
+  // data (whole data range < 1, e.g. a 0.0–0.8 load/rate series) would
+  // collapse to a 0–1 axis and flatten the chart, so for those keep
+  // enough decimals to separate the bounds (scaled to the range size).
+  const range = hi - lo;
+  let decimals = 0;
+  if (range < 1) {
+    // ~2 significant figures below the leading digit of the range:
+    // range 0.5 → 2dp, 0.05 → 3dp, 0.005 → 4dp.
+    decimals = range > 0 ? Math.min(6, 1 - Math.floor(Math.log10(range))) : 2;
+  }
+  return {
+    yMin: roundBound(lo - pad, 'down', decimals),
+    yMax: roundBound(hi + pad, 'up', decimals),
+  };
 }
 
 /**
