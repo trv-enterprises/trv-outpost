@@ -993,15 +993,35 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   }, [surfaceEligible, dashboard?.id, dashboard?.name, panelSignature, isEditMode]);
   useAssistantSurface(assistantSurface);
 
-  // In edit mode, grid extends to the layout dimension boundary (or panel extent if larger)
-  // In view mode, grid fits tightly around panels
-  const maxGridCol = isEditMode && gridCols
-    ? Math.max(gridCols, panelExtentCol)
-    : (isEditMode ? Math.max(panelExtentCol, 40) : (panelExtentCol || 60));
+  // Fixed fallback budget for edit mode when no dimension is resolved yet
+  // (gridCols/gridRows null — e.g. the brief async window after opening a
+  // new dashboard, before getSystemConfig lands). Generous enough not to
+  // clip a 4K canvas (~118×58). The resize/drag handlers key off this
+  // (editBudgetCols/Rows) rather than the render-time maxGridCol so the
+  // cell-size denominator can NEVER grow from panel extent — that
+  // self-referential loop (resize grows extent → grows maxGridCol →
+  // shrinks the cell → next mousemove maps bigger → runaway reflow of
+  // every panel) was the new-dashboard resize bug.
+  const EDIT_FALLBACK_COLS = 200;
+  const EDIT_FALLBACK_ROWS = 120;
+  const editBudgetCols = gridCols || EDIT_FALLBACK_COLS;
+  const editBudgetRows = gridRows || EDIT_FALLBACK_ROWS;
 
-  const maxGridRow = isEditMode && gridRows
-    ? Math.max(gridRows, panelExtentRow)
-    : (isEditMode ? Math.max(panelExtentRow, 24) : (panelExtentRow || 60));
+  // In edit mode, the grid template is PINNED to the fixed dimension budget
+  // (editBudgetCols/Rows) — NEVER panel extent. Deriving it from extent made
+  // the grid re-lay-out on every panel change: resizing past the edge grew
+  // the template (runaway), and even deleting a panel shifted the extent and
+  // reflowed every other panel ("whole dashboard went flaky"). A fixed
+  // template means panel mutations only move the touched panel. Panels are
+  // already clamped to the budget on drag/resize, so nothing renders past it.
+  // In view mode, grid fits tightly around panels.
+  const maxGridCol = isEditMode
+    ? editBudgetCols
+    : (panelExtentCol || 60);
+
+  const maxGridRow = isEditMode
+    ? editBudgetRows
+    : (panelExtentRow || 60);
 
   // Track container size for fit-to-screen scale calculation.
   // The resize handler is guarded: it only updates state when the measured
@@ -2246,8 +2266,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   useEffect(() => {
     if (!isEditMode || (!draggingPanel && !resizingPanel && !drawingPanel)) return;
 
-    const boundCols = gridCols || maxGridCol;
-    const boundRows = gridRows || maxGridRow;
+    // Clamp against the STABLE edit budget, never maxGridCol — maxGridCol
+    // grows with panel extent (to render legacy oversized panels), so using
+    // it here let a resize push the panel past the budget, which grew
+    // maxGridCol further: the runaway-reflow loop. editBudgetCols is the
+    // fixed dimension budget (or a generous constant before it resolves).
+    const boundCols = editBudgetCols;
+    const boundRows = editBudgetRows;
 
     const handleMouseMove = (e) => {
       const pos = getGridPosition(e);
@@ -2320,7 +2345,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, getGridPosition]);
+  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition]);
 
   // ── Chart editor / component picker / AI preflight ───────────────
 
