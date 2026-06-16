@@ -56,9 +56,14 @@ const round4 = (n) => Number(n.toFixed(4));
  * more precision (3dp) so small-scale series (fractions, rates) still
  * read. The bound is rounded OUTWARD (floor min / ceil max at the chosen
  * precision) so rounding never clips the data inside the padded range.
+ * Whole numbers are returned unchanged — the rule only applies to values
+ * that carry a fractional part.
  */
 function roundBound(value, dir) {
   if (!Number.isFinite(value)) return value;
+  // Only round values that actually carry decimals — a whole number is
+  // already clean and is left exactly as-is regardless of magnitude.
+  if (Number.isInteger(value)) return value;
   const mag = Math.abs(value);
   let decimals;
   if (mag < 1) decimals = 3;
