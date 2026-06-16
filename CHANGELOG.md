@@ -6,6 +6,18 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.31.1] — 2026-06-16
+
+### Fixed
+
+- Dashboard Assistant rejected every `create_component` / `update_component`
+  (and dashboard create/update) when the model sent `data_mapping`,
+  `query_config`, or `options` as JSON **strings** — the typed unmarshal
+  failed and the call was refused, so the Assistant could only build
+  custom-code components. The chat tool path now coerces stringified
+  JSON object/array args before decoding, mirroring the MCP fix from v0.31.0
+  (#78). Plain strings, SQL-with-braces, and invalid JSON are left untouched.
+
 ## [0.31.0] — 2026-06-16
 
 ### Added
