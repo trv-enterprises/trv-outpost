@@ -460,7 +460,7 @@ func chartDataMappingSchema() map[string]interface{} {
 			"label_col":      map[string]interface{}{"type": "string", "description": "Column used for pie/bar slice labels."},
 			"filters":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "object"}, "description": "Client-side filters: [{field, op, value}]. ops: eq, neq, gt, gte, lt, lte, contains, in, notIn, isNull, isNotNull."},
 			"aggregation":    map[string]interface{}{"type": "object", "description": "Optional aggregation: {type: first|last|min|max|avg|sum|count|limit, sort_by, field, count}."},
-			"sliding_window": map[string]interface{}{"type": "object", "description": "{duration: seconds, timestamp_col: \"ts\"} — keep only the last N seconds of data."},
+			"sliding_window": map[string]interface{}{"type": "object", "description": "{duration: seconds, timestamp_col: \"ts\"} — keep only the last N seconds of streaming data. Size it to the data's CADENCE and intent: it must hold many records, not one. Hourly-rollup data (one record/hour) needs a span of many hours/days (a 'Weekly' board → 604800); high-frequency live streams → ~3600. Use the user's span if given (15 min → 900, 1 day → 86400). When EDITING an existing chart, preserve the current duration unless the user asks to change the time span — do NOT reset it on a chart_type or visual change."},
 			"time_bucket":    map[string]interface{}{"type": "object", "description": "{interval: seconds, function: avg|min|max|sum|count, value_cols: [\"temp\",\"humidity\"], timestamp_col: \"ts\"} — aggregate streaming rows into time buckets."},
 			"sort_by":        map[string]interface{}{"type": "string"},
 			"sort_order":     map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
