@@ -49,6 +49,27 @@ const TOOLTIP_BORDER = '#393939';
 const round4 = (n) => Number(n.toFixed(4));
 
 /**
+ * Round an auto-computed axis bound to a sensible precision based on its
+ * magnitude, so the explicit min/max labels don't show full float noise
+ * (e.g. 66.15382275132275). Decimals scale down as the integer part
+ * grows: 1–99 → 2dp, 100–999 → 1dp, ≥1000 → 0dp. Values below 1 keep
+ * more precision (3dp) so small-scale series (fractions, rates) still
+ * read. The bound is rounded OUTWARD (floor min / ceil max at the chosen
+ * precision) so rounding never clips the data inside the padded range.
+ */
+function roundBound(value, dir) {
+  if (!Number.isFinite(value)) return value;
+  const mag = Math.abs(value);
+  let decimals;
+  if (mag < 1) decimals = 3;
+  else if (mag < 100) decimals = 2;
+  else if (mag < 1000) decimals = 1;
+  else decimals = 0;
+  const f = 10 ** decimals;
+  return dir === 'up' ? Math.ceil(value * f) / f : Math.floor(value * f) / f;
+}
+
+/**
  * Compute padded y-axis bounds from the center values plus every
  * resolved band's lower/upper series. Auto-scale would floor at 0
  * because the stacked width-helper series carry small delta values; we
@@ -64,7 +85,7 @@ function computeYBounds(centerVals, resolvedPairs) {
   }
   const centerAvg = centerVals.reduce((a, b) => a + b, 0) / centerVals.length;
   const pad = Math.abs(centerAvg) * 0.10 || (hi - lo) * 0.10 || 1;
-  return { yMin: lo - pad, yMax: hi + pad };
+  return { yMin: roundBound(lo - pad, 'down'), yMax: roundBound(hi + pad, 'up') };
 }
 
 /**
