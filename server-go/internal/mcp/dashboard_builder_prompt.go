@@ -138,11 +138,20 @@ const dashboardBuilderFlow = `# Build flow
 
 # About templates
 
-- Most charts (line, bar, area, pie, scatter, number, gauge, heatmap,
-  radar, funnel, dataview) have a prebuilt template. Fetch it with
-  ` + "`" + `get_component_template` + "`" + ` and modify only the parts that need
-  real column names. Don't rewrite from scratch.
-- For visualizations outside the catalog, use chart_type='custom' —
+- The canonical chart_type values are: line, area, bar, pie, scatter,
+  gauge, number, dataview (table), banded_bar, and custom. These have
+  prebuilt templates — fetch with ` + "`" + `get_component_template` + "`" + ` and modify
+  only the parts that need real column names. Don't rewrite from
+  scratch. Before assuming a type doesn't exist and going custom, read
+  the Chart types section of the embedded catalog above — it carries
+  each type's current capability.
+- banded_bar does DATA-DERIVED bands (not fixed thresholds): a center
+  line plus a per-row shaded band via data_mapping.band_columns. Pick a
+  scheme — 'minmaxmean' (mean column + min/max columns = a min↔max
+  envelope around an average), 'sd' (mean + ±1/±2 SD), or 'spc' (target
+  + control/limit columns). A "banded" chart over min/avg/max columns
+  is a native banded_bar (scheme minmaxmean), NOT custom code.
+- For visualizations outside this list, use chart_type='custom' —
   the custom template is a minimal ECharts skeleton with the Carbon
   color palette pre-wired.
 - For Prometheus specifically, instant queries return a scalar
