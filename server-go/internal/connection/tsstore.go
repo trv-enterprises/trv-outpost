@@ -624,11 +624,16 @@ func (a *TSStoreAdapter) fetchOldest(ctx context.Context, limit int, filter stri
 	return a.fetchList(ctx, endpoint)
 }
 
-// fetchRange retrieves objects in time range
+// fetchRange retrieves objects in time range. Callers pass start/end as
+// epoch SECONDS (the single user-facing convention shared with since: and
+// the range: DSL); the ts-store /data/range endpoint expects epoch
+// NANOSECONDS, so we convert here — the one dialect-specific conversion
+// point, per "one user convention, backend converts as needed". (Sending
+// seconds verbatim silently returned zero rows.)
 func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool) ([]dataResponse, error) {
 	params := url.Values{}
-	params.Set("start_time", strconv.FormatInt(startTime, 10))
-	params.Set("end_time", strconv.FormatInt(endTime, 10))
+	params.Set("start_time", strconv.FormatInt(toEpochNanos(startTime), 10))
+	params.Set("end_time", strconv.FormatInt(toEpochNanos(endTime), 10))
 	params.Set("limit", strconv.Itoa(limit))
 	params.Set("include_data", "true")
 	if filter != "" {
@@ -643,6 +648,31 @@ func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int6
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/range?%s", a.config.StoreName, params.Encode())
 	return a.fetchList(ctx, endpoint)
+}
+
+// toEpochNanos normalizes a caller-supplied epoch to NANOSECONDS for the
+// ts-store /data/range endpoint. Callers pass seconds by convention, but
+// the function is tolerant of values already in larger units so a literal
+// ns value typed into the range: DSL isn't double-scaled. Heuristic by
+// digit magnitude (all comfortably distinct for any realistic recent date):
+//   seconds      ~1.7e9   (10 digits) → ×1e9
+//   milliseconds ~1.7e12  (13 digits) → ×1e6
+//   microseconds ~1.7e15  (16 digits) → ×1e3
+//   nanoseconds  ~1.7e18  (19 digits) → as-is
+func toEpochNanos(v int64) int64 {
+	if v <= 0 {
+		return v
+	}
+	switch {
+	case v < 1e11: // seconds
+		return v * 1_000_000_000
+	case v < 1e14: // milliseconds
+		return v * 1_000_000
+	case v < 1e17: // microseconds
+		return v * 1_000
+	default: // already nanoseconds
+		return v
+	}
 }
 
 // fetchList makes request to list endpoint
@@ -888,8 +918,10 @@ func (t *TSStoreDataSource) fetchOldest(ctx context.Context, limit int, filter s
 // fetchRange retrieves objects within a time range
 func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool) ([]dataResponse, error) {
 	params := url.Values{}
-	params.Set("start_time", strconv.FormatInt(startTime, 10))
-	params.Set("end_time", strconv.FormatInt(endTime, 10))
+	// start/end arrive as epoch seconds; /data/range wants nanoseconds.
+	// See the TSStoreAdapter.fetchRange note above.
+	params.Set("start_time", strconv.FormatInt(toEpochNanos(startTime), 10))
+	params.Set("end_time", strconv.FormatInt(toEpochNanos(endTime), 10))
 	params.Set("limit", strconv.Itoa(limit))
 	params.Set("include_data", "true")
 	if filter != "" {
