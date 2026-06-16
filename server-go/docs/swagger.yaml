@@ -5431,6 +5431,28 @@ paths:
       summary: Update a dashboard
       tags:
       - dashboards
+  /dashboards/{id}/delete-preview:
+    get:
+      parameters:
+      - description: Dashboard ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Preview orphaned components for a dashboard delete
+      tags:
+      - dashboards
   /dashboards/{id}/variable-candidates:
     get:
       description: List candidate connections for a connection_swap dashboard variable

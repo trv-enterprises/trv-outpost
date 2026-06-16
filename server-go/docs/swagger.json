@@ -2576,6 +2576,39 @@
                 }
             }
         },
+        "/dashboards/{id}/delete-preview": {
+            "get": {
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Preview orphaned components for a dashboard delete",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboards/{id}/variable-candidates": {
             "get": {
                 "description": "List candidate connections for a connection_swap dashboard variable",

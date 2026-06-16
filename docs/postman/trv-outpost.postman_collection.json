@@ -1759,7 +1759,7 @@
     },
     {
       "name": "Dashboards",
-      "description": "dashboards endpoints (10).",
+      "description": "dashboards endpoints (11).",
       "item": [
         {
           "name": "Apply an import bundle",
@@ -2129,6 +2129,41 @@
                 }
               }
             }
+          },
+          "response": []
+        },
+        {
+          "name": "Preview orphaned components for a dashboard delete",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/{id}/delete-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                ":id",
+                "delete-preview"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Dashboard ID"
+                }
+              ]
+            },
+            "description": "Preview orphaned components for a dashboard delete\n\n\nResponses: 200, 404"
           },
           "response": []
         },
