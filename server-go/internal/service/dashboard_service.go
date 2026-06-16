@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -95,6 +96,14 @@ func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.Crea
 
 	// Normalize tags before persistence.
 	req.Tags = models.NormalizeTags(req.Tags)
+
+	// Assign an id to every panel that lacks one. The editor generates panel
+	// ids client-side, but the AI surfaces send panels with id:"" — and the
+	// editor identifies panels BY id (drag/resize/edit target, React keys).
+	// Empty ids collide ("" == ""), so every panel resolves to the first one:
+	// editing one changed all, saves landed on the wrong panel, delete went
+	// flaky. Backfill server-side so all surfaces get unique panel ids.
+	ensurePanelIDs(req.Panels)
 
 	// Seed scale_percent from the chosen dimension's default scale when
 	// the caller didn't set one (designer/AI override wins). Seeded once
@@ -226,6 +235,12 @@ func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *
 	if req.Tags != nil {
 		normalized := models.NormalizeTags(*req.Tags)
 		req.Tags = &normalized
+	}
+
+	// Backfill ids on any panel that lacks one (see CreateDashboard) — the
+	// AI surfaces send id:"" panels and empty ids collide in the editor.
+	if req.Panels != nil {
+		ensurePanelIDs(*req.Panels)
 	}
 
 	dashboard, err := s.repo.Update(ctx, id, req)
@@ -608,4 +623,23 @@ func (s *DashboardService) schemaCompatible(ctx context.Context, candidateID str
 		}
 	}
 	return true, ""
+}
+
+// ensurePanelIDs assigns a unique id to every panel that lacks one, and
+// regenerates any id that duplicates an earlier panel's. The editor keys
+// all per-panel operations (drag, resize, edit-target, delete, React keys)
+// on panel.id; empty or duplicate ids collide so every op resolves to the
+// first matching panel — which is how an AI-built dashboard (panels sent
+// with id:"") got "edit one chart changes all" and "save lands on the
+// wrong panel." Mutates the slice in place.
+func ensurePanelIDs(panels []models.DashboardPanel) {
+	seen := make(map[string]bool, len(panels))
+	for i := range panels {
+		id := panels[i].ID
+		if id == "" || seen[id] {
+			id = uuid.New().String()
+			panels[i].ID = id
+		}
+		seen[id] = true
+	}
 }
