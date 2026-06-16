@@ -815,6 +815,7 @@ func wrapGetComponent(ops *toolops.Toolset) ToolHandler {
 
 func wrapCreateComponent(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		args = coerceStringifiedJSONFields(args)
 		var req models.CreateComponentRequest
 		if err := json.Unmarshal(args, &req); err != nil {
 			return "", fmt.Errorf("invalid args: %w", err)
@@ -869,6 +870,7 @@ func wrapUpdateComponent(ops *toolops.Toolset) ToolHandler {
 		if idHolder.ID == "" {
 			return "", fmt.Errorf("id is required")
 		}
+		args = coerceStringifiedJSONFields(args)
 		var req models.UpdateComponentRequest
 		if err := json.Unmarshal(args, &req); err != nil {
 			return "", fmt.Errorf("invalid args: %w", err)
@@ -897,6 +899,7 @@ func wrapGetDashboard(ops *toolops.Toolset) ToolHandler {
 
 func wrapCreateDashboard(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		args = coerceStringifiedJSONFields(args)
 		var req models.CreateDashboardRequest
 		if err := json.Unmarshal(args, &req); err != nil {
 			return "", fmt.Errorf("invalid args: %w", err)
@@ -916,6 +919,7 @@ func wrapUpdateDashboard(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		// id is a top-level arg; the rest map onto the pointer-field
 		// UpdateDashboardRequest so omitted keys stay nil (untouched).
+		args = coerceStringifiedJSONFields(args)
 		var envelope struct {
 			ID string `json:"id"`
 			models.UpdateDashboardRequest
@@ -1078,4 +1082,54 @@ func jsonResult(v interface{}) (string, error) {
 		return "", fmt.Errorf("marshal result: %w", err)
 	}
 	return string(b), nil
+}
+
+// coerceStringifiedJSONFields repairs the same client failure mode the MCP
+// handler guards against (issue #78), but on the Dashboard Assistant tool
+// path: the model sometimes encodes an object/array argument as a JSON
+// *string* (e.g. data_mapping arrives as "{\"x_axis\":\"ts\"}"). Here the
+// typed fields (data_mapping / query_config / options / settings / panels)
+// unmarshal into Go structs, so a string value makes the WHOLE
+// json.Unmarshal fail ("cannot unmarshal string into struct field") and the
+// create/update is rejected — exactly the "server won't accept strings for
+// typed structs" blocker. Decode args to a map, replace any top-level value
+// that is a string parsing cleanly as a JSON object or array with the parsed
+// value, then re-marshal. Plain-string params (name, chart_type, raw SQL,
+// component_code) are untouched: only strings whose first non-space rune is
+// '{' or '[' AND that parse are converted, so a SQL string with braces is
+// never mangled. On any decode hiccup the original args are returned
+// unchanged (the downstream Unmarshal then surfaces the real error).
+func coerceStringifiedJSONFields(args json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(args, &m); err != nil {
+		return args // not an object — leave as-is
+	}
+	changed := false
+	for k, v := range m {
+		var s string
+		if err := json.Unmarshal(v, &s); err != nil {
+			continue // value isn't a JSON string
+		}
+		t := strings.TrimSpace(s)
+		if t == "" || (t[0] != '{' && t[0] != '[') {
+			continue
+		}
+		var probe interface{}
+		if err := json.Unmarshal([]byte(t), &probe); err != nil {
+			continue // string isn't valid JSON — leave it
+		}
+		switch probe.(type) {
+		case map[string]interface{}, []interface{}:
+			m[k] = json.RawMessage(t)
+			changed = true
+		}
+	}
+	if !changed {
+		return args
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return args
+	}
+	return out
 }
