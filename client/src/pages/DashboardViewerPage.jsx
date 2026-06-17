@@ -1660,6 +1660,29 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [savingThumbnail, setSavingThumbnail] = useState(false);
   const [downloadingPng, setDownloadingPng] = useState(false);
 
+  // Auto-thumbnail-on-save: a structural signature of everything that
+  // affects the rendered thumbnail (panel geometry + which component/text is
+  // in each panel + each component's look + canvas size), so we only re-run
+  // the (non-trivial) html2canvas capture when the layout actually changed —
+  // NOT on non-visual saves (description/tags) or live-data ticks. Updated
+  // after each successful capture; compared on the next save.
+  const lastThumbnailSigRef = useRef(null);
+  const autoThumbnailInFlightRef = useRef(false);
+
+  const computeThumbnailSignature = useCallback(() => {
+    const panelsSig = (editablePanels || []).map((p) => {
+      const chart = p.component_id ? chartsMap[p.component_id] : null;
+      const look = chart
+        ? `${chart.component_type || ''}:${chart.chart_type || ''}:${chart.display_config?.display_type || ''}:${chart.control_config?.control_type || ''}:${chart.title || chart.name || ''}`
+        : '';
+      const text = p.text_config
+        ? `${p.text_config.content || ''}|${p.text_config.size || ''}|${p.text_config.align || ''}|${p.text_config.display_content || ''}`
+        : '';
+      return `${p.x},${p.y},${p.w},${p.h}|${p.component_id || ''}|${text}|${look}`;
+    });
+    return JSON.stringify({ d: currentDimension, s: scalePercent, p: panelsSig });
+  }, [editablePanels, chartsMap, currentDimension, scalePercent]);
+
   // Render the full dashboard grid to a PNG canvas via html2canvas at the
   // given scale (thumbnails use a small scale; the PNG download uses 1 for a
   // crisp full-res image). Temporarily neutralizes the fit-mode transform and
@@ -1727,20 +1750,53 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
   };
 
+  // Capture the grid and persist ONLY the thumbnail (a lightweight,
+  // single-field PUT — the server merges pointer fields, so this doesn't
+  // touch panels/settings). Records the structural signature so an
+  // unchanged subsequent save can skip the capture.
+  const captureAndPutThumbnail = useCallback(async () => {
+    const canvas = await captureGridCanvas(0.25);
+    if (!canvas) return false;
+    const thumbnailDataUrl = canvas.toDataURL('image/png');
+    await apiClient.updateDashboard(id, { thumbnail: thumbnailDataUrl });
+    lastThumbnailSigRef.current = computeThumbnailSignature();
+    return true;
+  }, [id, computeThumbnailSignature]);
+
+  // Manual "Save thumbnail" button (kept for explicit re-capture).
   const saveThumbnail = async () => {
     setSavingThumbnail(true);
     try {
-      const canvas = await captureGridCanvas(0.25);
-      if (!canvas) return;
-      const thumbnailDataUrl = canvas.toDataURL('image/png');
-      await apiClient.updateDashboard(id, { ...dashboard, thumbnail: thumbnailDataUrl });
-      fetchDashboard();
+      const ok = await captureAndPutThumbnail();
+      if (ok) fetchDashboard();
     } catch (err) {
       console.error('Failed to save thumbnail:', err);
     } finally {
       setSavingThumbnail(false);
     }
   };
+
+  // Auto-capture after a dashboard save (fire-and-forget). Skips when the
+  // structural signature is unchanged since the last thumbnail (non-visual
+  // saves, repeat saves of the same layout). Best-effort: errors are logged,
+  // never surfaced, and never block the save. Guarded against overlap from
+  // rapid round-trip saves.
+  const maybeAutoThumbnail = useCallback(() => {
+    if (autoThumbnailInFlightRef.current) return;
+    const sig = computeThumbnailSignature();
+    if (sig === lastThumbnailSigRef.current) return; // nothing visual changed
+    autoThumbnailInFlightRef.current = true;
+    // Defer a beat so the just-saved DOM has settled before capture.
+    setTimeout(async () => {
+      try {
+        await captureAndPutThumbnail();
+      } catch (err) {
+        console.error('Auto-thumbnail capture failed (non-fatal):', err);
+      } finally {
+        autoThumbnailInFlightRef.current = false;
+      }
+    }, 300);
+  }, [computeThumbnailSignature, captureAndPutThumbnail]);
 
   // Capture the dashboard grid at full resolution and trigger a browser
   // download as a PNG file named after the dashboard.
@@ -2011,6 +2067,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           setFromDesign(true);
         }
         fetchDashboard();
+        // Refresh the dashboard thumbnail in the background (only if the
+        // layout/components actually changed — see maybeAutoThumbnail). The
+        // grid is still mounted (save drops edit→view-preview within the
+        // editor, not out of DESIGN), so the capture sees the saved state.
+        maybeAutoThumbnail();
         return id;
       }
     } catch (err) {
