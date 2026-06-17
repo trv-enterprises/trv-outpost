@@ -293,7 +293,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [modeSwitchPromptOpen, setModeSwitchPromptOpen] = useState(false);
   // True when the "Unsaved changes" dialog was triggered by the in-editor
   // View button rather than a header mode switch. In that case the three
-  // dialog actions operate in place (goToViewer) instead of resolving the
+  // dialog actions operate in place (goToPreview) instead of resolving the
   // header mode-switch guard promise.
   const [viewNavMode, setViewNavMode] = useState(false);
   const modeSwitchResolveRef = useRef(null);
@@ -1901,10 +1901,25 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   //     mode-switch uses (Keep Editing / Discard and switch / Save and
   //     switch). Pressing View isn't a cancel, so the user deserves the
   //     save path too. The dialog's handlers branch on viewNavMode to act
-  //     in place (goToViewer) rather than resolving the header guard.
-  const goToViewer = () => {
+  //     in place (goToPreview) rather than resolving the header guard.
+  // The editor's "Preview" button drops into PREVIEW — the design-mode
+  // viewer. It must STAY in DESIGN mode (keep fromDesign true); only the
+  // app-level VIEW-mode selector leaves DESIGN. So: exit edit, keep the
+  // design-origin framing. (Same for both the clean path and the
+  // save-and-switch modal path — both call this.)
+  //
+  // Clear the sticky `autoEdit` route state on the way out. Without this,
+  // exiting edit resets the autoEdit latch (see the latch-reset effect),
+  // and because location.state.autoEdit is still set the autoEdit effect
+  // immediately re-enters the editor — the "drops to preview for a beat,
+  // then jumps back into the editor" bug. Keep fromDesign so we stay in
+  // the design-mode preview, not View mode.
+  const goToPreview = () => {
     setIsEditMode(false);
     setEditHasChanges(false);
+    if (location.state?.autoEdit) {
+      navigate(location.pathname, { replace: true, state: { fromDesign: true } });
+    }
   };
 
   const handleViewClick = () => {
@@ -1913,7 +1928,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setModeSwitchPromptOpen(true);
       return;
     }
-    goToViewer();
+    goToPreview();
   };
 
   const handleDimensionChange = (newDimension) => {
@@ -2142,7 +2157,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     if (viewNavMode) {
       setViewNavMode(false);
       const ok = await saveEditMode();
-      if (ok) goToViewer();
+      if (ok) goToPreview();
       return;
     }
     // Skip the post-save navigate inside saveEditMode — App.jsx is
@@ -2175,7 +2190,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     // View-button path: discard edits and drop to the viewer in place.
     if (viewNavMode) {
       setViewNavMode(false);
-      goToViewer();
+      goToPreview();
       return;
     }
     setIsEditMode(false);
