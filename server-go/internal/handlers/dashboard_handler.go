@@ -283,6 +283,35 @@ func (h *DashboardHandler) PutDashboardThumbnail(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// GetDashboardComponents returns the latest final version of every component
+// the dashboard's panels reference (defaults + component-swap overrides) in a
+// single response, so the viewer can fetch all panel components in ONE request
+// instead of one getComponent per panel (#60).
+// @Summary Get all components for a dashboard
+// @Description Batch-fetch the components referenced by a dashboard's panels (latest final versions)
+// @Tags dashboards
+// @Produce json
+// @Param id path string true "Dashboard ID"
+// @Success 200 {object} map[string]interface{} "{ components: [...] }"
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /dashboards/{id}/components [get]
+func (h *DashboardHandler) GetDashboardComponents(c *gin.Context) {
+	id := c.Param("id")
+
+	components, err := h.service.GetDashboardComponents(c.Request.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"components": components})
+}
+
 // DeleteDashboard deletes a dashboard
 // @Summary Delete a dashboard
 // @Description Delete a dashboard by ID

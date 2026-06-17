@@ -837,6 +837,17 @@ class APIClient {
     return this.request(`/api/dashboards/${id}`);
   }
 
+  /**
+   * Batch-fetch every component a dashboard's panels reference (defaults +
+   * component-swap overrides), latest final versions, in ONE request (#60).
+   * Returns the array of component objects; collapses the viewer's
+   * per-panel getComponent N+1. Drafts are excluded server-side.
+   */
+  async getDashboardComponents(id) {
+    const res = await this.request(`/api/dashboards/${id}/components`);
+    return res?.components || [];
+  }
+
   // List candidate connections for a connection_swap dashboard variable.
   // Returns { variable, candidates: [{ id, name, namespace, type_id, compatible, reason }] }.
   async getDashboardVariableCandidates(id, variableName) {

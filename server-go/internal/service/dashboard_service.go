@@ -149,6 +149,34 @@ func (s *DashboardService) GetDashboard(ctx context.Context, id string) (*models
 	return dashboard, nil
 }
 
+// GetDashboardComponents returns the latest FINAL version of every component a
+// dashboard's panels reference — both each panel's default component and every
+// component named by a component-swap override — in ONE query. This collapses
+// the viewer's per-panel getComponent N+1 (one round-trip per unique
+// component) into a single batch fetch (#60). Drafts are excluded: a viewer
+// should never render a mid-edit draft.
+//
+// Missing components (id with no final version) are simply absent from the
+// result; the viewer treats an unresolved panel component the same as a failed
+// single fetch (renders as a panel with no chart).
+func (s *DashboardService) GetDashboardComponents(ctx context.Context, id string) ([]models.Component, error) {
+	dashboard, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dashboard: %w", err)
+	}
+	if dashboard == nil {
+		return nil, fmt.Errorf("dashboard not found")
+	}
+	ids := panelComponentIDs(dashboard)
+	if len(ids) == 0 {
+		return []models.Component{}, nil
+	}
+	if s.chartRepo == nil {
+		return nil, fmt.Errorf("component repository not configured")
+	}
+	return s.chartRepo.FindLatestFinalByIDs(ctx, ids)
+}
+
 // ListDashboards retrieves dashboards with filtering and pagination
 func (s *DashboardService) ListDashboards(ctx context.Context, params models.DashboardQueryParams) (*models.DashboardListResponse, error) {
 	// Normalize filter tags to match how they're stored.

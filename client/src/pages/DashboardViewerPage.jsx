@@ -1121,26 +1121,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setDashboard(data);
 
       if (data.panels && data.panels.length > 0) {
-        // Collect each panel's default component AND every component referenced
-        // by its component-swap rules, so a swap renders instantly (no mid-render
-        // fetch). De-duped across all panels.
-        const chartIds = [...new Set(
-          data.panels.flatMap(p => [
-            p.component_id,
-            ...(Array.isArray(p.component_overrides) ? p.component_overrides.map(o => o?.component_id) : []),
-          ]).filter(Boolean)
-        )];
-        if (chartIds.length > 0) {
-          const chartPromises = chartIds.map(chartId =>
-            apiClient.getComponent(chartId).catch(() => null)
-          );
-          const charts = await Promise.all(chartPromises);
-          const newChartsMap = {};
-          charts.forEach(chart => {
-            if (chart) newChartsMap[chart.id] = chart;
-          });
-          setChartsMap(newChartsMap);
-        }
+        // Batch-fetch every component the panels reference (defaults + every
+        // component-swap override, so a swap renders instantly) in ONE request
+        // (#60), replacing the old per-panel getComponent N+1. The server
+        // returns latest FINAL versions de-duped; we key them by component id.
+        const charts = await apiClient.getDashboardComponents(id).catch(() => []);
+        const newChartsMap = {};
+        charts.forEach(chart => {
+          if (chart) newChartsMap[chart.id] = chart;
+        });
+        setChartsMap(newChartsMap);
       }
 
       setLastRefresh(new Date());

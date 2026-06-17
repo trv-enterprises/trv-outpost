@@ -5424,6 +5424,37 @@ paths:
       summary: Update a dashboard
       tags:
       - dashboards
+  /dashboards/{id}/components:
+    get:
+      description: Batch-fetch the components referenced by a dashboard's panels (latest
+        final versions)
+      parameters:
+      - description: Dashboard ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{ components: [...] }'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get all components for a dashboard
+      tags:
+      - dashboards
   /dashboards/{id}/delete-preview:
     get:
       parameters:

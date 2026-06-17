@@ -922,6 +922,7 @@ func main() {
 			dashboards.GET("/:id/delete-preview", dashboardHandler.GetDashboardDeletePreview)
 			dashboards.GET("/:id/thumbnail", dashboardHandler.GetDashboardThumbnail)
 			dashboards.PUT("/:id/thumbnail", dashboardHandler.PutDashboardThumbnail)
+			dashboards.GET("/:id/components", dashboardHandler.GetDashboardComponents)
 			dashboards.PUT("/:id", dashboardHandler.UpdateDashboard)
 			dashboards.DELETE("/:id", dashboardHandler.DeleteDashboard)
 

@@ -575,6 +575,48 @@ func (r *ComponentRepository) FindByConnectionID(ctx context.Context, connection
 	return components, nil
 }
 
+// FindLatestFinalByIDs returns the latest FINAL (non-draft) version of each
+// component whose id is in ids, in a single query. Used by the dashboard
+// batch-component endpoint to collapse the viewer's per-panel getComponent
+// N+1 into one round-trip (#60). Drafts are intentionally excluded — a
+// dashboard viewer should never render a mid-edit draft (that resolution
+// would be undefined). Components with no final version simply don't appear
+// in the result (the caller treats a missing id as a panel with no chart,
+// same as a failed single getComponent).
+//
+// Aggregation mirrors FindByConnectionID: match the id set + final status,
+// sort by (id, version DESC), group taking the first (= highest version) per
+// id. Result order is not guaranteed; the caller keys by component id.
+func (r *ComponentRepository) FindLatestFinalByIDs(ctx context.Context, ids []string) ([]models.Component, error) {
+	if len(ids) == 0 {
+		return []models.Component{}, nil
+	}
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"id":     bson.M{"$in": ids},
+			"status": models.ComponentStatusFinal,
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": "$id",
+			"doc": bson.M{"$first": "$$ROOT"},
+		}}},
+		{{Key: "$replaceRoot", Value: bson.M{"newRoot": "$doc"}}},
+	}
+
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var components []models.Component
+	if err := cursor.All(ctx, &components); err != nil {
+		return nil, err
+	}
+	return components, nil
+}
+
 // Helper to get string from bson.M
 func getString(doc bson.M, key string) string {
 	if v, ok := doc[key].(string); ok {
