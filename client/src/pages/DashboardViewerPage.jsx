@@ -1656,8 +1656,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
 
 
-  // Save thumbnail — captures the live grid at native resolution
-  const [savingThumbnail, setSavingThumbnail] = useState(false);
+  // Thumbnail capture — auto-fires on save (#97); see captureAndPutThumbnail.
   const [downloadingPng, setDownloadingPng] = useState(false);
 
   // Auto-thumbnail-on-save: a structural signature of everything that
@@ -1762,19 +1761,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     lastThumbnailSigRef.current = computeThumbnailSignature();
     return true;
   }, [id, computeThumbnailSignature]);
-
-  // Manual "Save thumbnail" button (kept for explicit re-capture).
-  const saveThumbnail = async () => {
-    setSavingThumbnail(true);
-    try {
-      const ok = await captureAndPutThumbnail();
-      if (ok) fetchDashboard();
-    } catch (err) {
-      console.error('Failed to save thumbnail:', err);
-    } finally {
-      setSavingThumbnail(false);
-    }
-  };
 
   // Auto-capture after a dashboard save (fire-and-forget). Skips when the
   // structural signature is unchanged since the last thumbnail (non-visual
@@ -3114,13 +3100,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     Design mode switch (which opens this dashboard in the editor)
                     and was inconsistent. The design workflow (fromDesign) still
                     shows a prominent ghost Edit button — see above. */}
-                {canDesign && (
-                  <OverflowMenuItem
-                    itemText={savingThumbnail ? "Saving..." : "Save Thumbnail"}
-                    onClick={saveThumbnail}
-                    disabled={savingThumbnail}
-                  />
-                )}
+                {/* "Save Thumbnail" item removed — the thumbnail now
+                    auto-captures on save when the layout changed (#97), so
+                    a manual button is redundant. */}
                 {/* Download PNG — DISABLED pending capture-quality fixes.
                     html2canvas mangles letter-spacing in text panels and
                     occasionally drops a chart panel (e.g. temperatures). The
