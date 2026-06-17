@@ -6,6 +6,22 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.31.3] — 2026-06-16
+
+### Added
+
+- **Dashboard thumbnails refresh automatically on save.** When you save a
+  dashboard in the editor and the layout/components changed, the thumbnail
+  re-captures in the background (a lightweight, thumbnail-only update). Saves
+  that don't change the visual layout (description/tag edits, live-data
+  ticks) are skipped, so the thumbnail only churns on real changes. The
+  manual "Save Thumbnail" menu item was removed as redundant (#97).
+
+### Changed
+
+- The data simulators moved out of `dashboard/simulators/` into their own
+  repo, `trv-outpost-sim` (history preserved). Docs updated to point there.
+
 ## [0.31.2] — 2026-06-16
 
 ### Fixed
