@@ -152,18 +152,23 @@
 
         h1 {
           color: #f4f4f4;
-          font-size: 2rem;
+          // Slightly smaller than the old 2rem so a long name fits more
+          // characters before ellipsizing, especially alongside the range
+          // picker's Custom from/to editor.
+          font-size: 1.5rem;
           font-weight: 600;
           margin: 0;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          // Reserve a generous minimum for the dashboard name so the variable
-          // picker doesn't crowd it; the name still ellipsizes past this if
-          // very long. The variable section keeps an 8px gap in front of it
-          // (below) so even a long name stays separated from the picker.
-          flex: 0 1 auto;
-          min-width: 12rem;
+          // The name takes PRIORITY for row space: flex:1 1 auto lets it grow
+          // into available width and the higher min-width floor keeps it
+          // readable even when a wide variable picker (the range Custom
+          // editor) shares the row. The variable section yields first (it can
+          // shrink — see the range-custom rule below), instead of the name
+          // being crushed to a ~12-char stub.
+          flex: 1 1 auto;
+          min-width: 16rem;
         }
 
         p {
@@ -232,6 +237,15 @@
             text-overflow: clip;
           }
 
+          // The range picker (which can expand into the wide Custom from/to
+          // editor) yields to the title: allow it to shrink so the name keeps
+          // its 16rem floor instead of being crushed. The compact filter /
+          // connection-swap picker stays flex-shrink:0 (it's already small).
+          &.dashboard-range-picker {
+            flex-shrink: 1;
+            min-width: 0;
+          }
+
           // Range preset dropdown: Carbon caps the open menu at ~5 rows, but the
           // default preset set (1h/6h/24h/7d/30d + Custom…) is 6 — so a scrollbar
           // appears. Lengthen the menu so the common case shows all rows without
@@ -264,15 +278,23 @@
             display: flex;
             align-items: flex-end;
             gap: 0.5rem;
+            // Yield row space to the dashboard name before the title gets
+            // crushed: this wide from/to editor may shrink (the title now
+            // has flex priority + a 16rem floor). min-width:0 lets the flex
+            // shrink actually take effect on the nested fields.
+            flex: 0 1 auto;
+            min-width: 0;
 
-            // The date input must fit "YYYY-MM-DD" PLUS the calendar icon that
-            // Carbon overlays on the right; 10rem clears the overlap.
+            // The date input fits "YYYY-MM-DD" PLUS Carbon's overlaid calendar
+            // icon; trimmed from 10rem to 9rem to give the title more room.
             .cds--date-picker__input {
-              width: 10rem;
+              width: 9rem;
+              min-width: 0;
               padding-right: 2.5rem;
             }
             .cds--time-picker__input-field {
-              width: 5rem;
+              width: 4.5rem;
+              min-width: 0;
             }
             // A bare TimePicker has no label; nudge it up so its field bottom
             // lines up with the labelled date inputs beside it.
