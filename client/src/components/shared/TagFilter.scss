@@ -1,5 +1,20 @@
 .tag-filter {
-  min-width: 12rem;
+  // Pin the trigger to a fixed width so it doesn't stretch to fill the
+  // toolbar (the source of the extra right-hand gap) and doesn't grow when
+  // tags are selected (the "N tags selected" text + count pill would
+  // otherwise widen the greedy multiselect input). flex-shrink:0 keeps it
+  // from collapsing in the flex toolbar; the open menu still expands below.
+  inline-size: 14rem;
+  flex: 0 0 auto;
+
+  // Constrain the inner Carbon field + its input to the trigger width so
+  // the selection pill/placeholder can't push it wider.
+  .cds--list-box,
+  .cds--list-box__field,
+  .cds--text-input {
+    inline-size: 100%;
+    max-inline-size: 100%;
+  }
 
   // Trigger stays its set width so toolbar layout is predictable, but
   // let the open menu and its items expand to fit long tag names. Mirrors
