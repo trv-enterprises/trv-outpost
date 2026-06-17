@@ -1875,7 +1875,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   const confirmDiscard = () => {
     setShowDiscardModal(false);
-    finishCancelNavigation();
+    // Dirty Cancel → Discard REVERTS the unsaved edits and STAYS in the
+    // editor on this dashboard (re-seeding from the last-saved version),
+    // rather than leaving to the dashboard list. enterEditMode() reloads
+    // all editable state from `dashboard` and clears the dirty flag — i.e.
+    // a revert-in-place. (Only the NOT-dirty Cancel exits to the list, via
+    // exitEditMode → finishCancelNavigation.)
+    enterEditMode();
   };
 
   const finishCancelNavigation = () => {
