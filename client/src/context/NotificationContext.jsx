@@ -165,7 +165,9 @@ export function NotificationProvider({ children }) {
   }, []);
 
   const pushToast = useCallback((toast) => {
-    // toast: { kind, title, subtitle }
+    // toast: { kind, title, subtitle, duration? }
+    // duration (ms) overrides ToastStack's default auto-dismiss for
+    // non-error toasts; omit it to use the default.
     setToasts((prev) => [{ id: nextId++, ...toast }, ...prev]);
   }, []);
 

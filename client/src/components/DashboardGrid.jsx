@@ -4,13 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import ComponentPanelWithActions from './ComponentPanelWithActions';
-import { ControlRenderer } from './controls';
-import FrigateCameraViewer from './frigate/FrigateCameraViewer';
-import FrigateAlertsGrid from './frigate/FrigateAlertsGrid';
-import WeatherDisplay from './weather/WeatherDisplay';
-import PanelText from './PanelText';
-import PanelErrorBoundary from './shared/PanelErrorBoundary';
+import PanelContent from './PanelContent';
 import './DashboardGrid.scss';
 
 const CELL_WIDTH = 32;
@@ -19,13 +13,25 @@ const GAP = 4;             // spacing.$spacing-02
 const CONTAINER_PADDING = 4;
 
 /**
- * DashboardGrid — read-only presentational render of a dashboard's panels.
+ * DashboardGrid — the single panel-render path for a dashboard, in BOTH
+ * view and edit modes.
  *
- * Extracted from DashboardViewerPage's view-mode render so it can be reused by
- * the kiosk surface. It owns its container measurement + fit-mode transform and
- * renders each panel's content (text / control / display / chart). It contains
- * NO edit affordances (drag, resize, hover headers) — the editor keeps those in
- * the page and only delegates the view-mode render here.
+ * Originally the read-only view render (extracted for the kiosk surface).
+ * It is now also the editor's render, so that the in-place edit↔view
+ * toggle does NOT remount the panel subtree. The viewer page renders
+ * <DashboardGrid> at one stable slot in both modes and flips `editMode`;
+ * because the panel-bearing subtree keeps the same component-type path
+ * across the flip, React reconciles it instead of unmounting — so a
+ * streaming chart keeps its live subscription (the v0.13.3 streaming-safe
+ * guarantee, regressed at v0.26.0 when this was split into two trees).
+ *
+ * Edit affordances stay OUT of this component: the editor passes a
+ * `renderPanelChrome(panel, ctx)` render-prop that returns the hover
+ * header / drag overlay / resize handle / add-button JSX, which this
+ * component layers inside each `.panel-container`. All editor closures
+ * (drag, resize, delete, open-editor, …) remain in DashboardViewerPage —
+ * the grid stays view/kiosk-clean and never imports editor internals.
+ * View and kiosk callers pass no edit props and get the read-only render.
  *
  * Data is self-contained per panel: charts fetch via ComponentPanelWithActions
  * → DynamicComponentLoader → useData. The caller must wrap this in a
@@ -59,9 +65,34 @@ function DashboardGrid({
   scalePercent = 100,
   isFullscreen = false,
   onExpandPanel = null,
+  dataRefreshInterval = null,
+  // --- edit-mode props (all optional; absent = read-only view/kiosk render) ---
+  editMode = false,
+  // Editor uses the dimension BUDGET for grid bounds, not the panel extent,
+  // so the canvas shows empty cells out to the dashboard edge.
+  editGridCols = null,
+  editGridRows = null,
+  // Edit transforms: manual view zoom (wrapper level) + build/display
+  // scaleFactor (grid level). View mode derives its own fit transform.
+  editZoom = 100,
+  editScaleFactor = 1,
+  onGridMouseDown = null,
+  // Per-panel edit overlay JSX (hover header, drag/resize, add). Receives
+  // (panel, { chart, hasText, hasChart, hasContent }).
+  renderPanelChrome = null,
+  // Extra edit-only grid children rendered after the panels (drawing
+  // preview + canvas boundary lines).
+  gridExtras = null,
+  // Optional external refs so the editor can attach its drag/resize and
+  // measurement logic to this component's container + grid DOM nodes. When
+  // omitted, the grid uses its own internal refs (view/kiosk).
+  containerRef: externalContainerRef = null,
+  gridRef: externalGridRef = null,
 }) {
-  const containerRef = useRef(null);
-  const gridRef = useRef(null);
+  const internalContainerRef = useRef(null);
+  const internalGridRef = useRef(null);
+  const containerRef = externalContainerRef || internalContainerRef;
+  const gridRef = externalGridRef || internalGridRef;
   const lastSizeRef = useRef({ width: 0, height: 0 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
@@ -69,16 +100,19 @@ function DashboardGrid({
 
   const hasPanels = panels && panels.length > 0;
 
-  // View-mode grid bounds: tight around the panel extent (fall back to 60 when
-  // there are no panels, matching the viewer).
+  // Grid bounds. Edit mode uses the dimension budget (editGridCols/Rows) so
+  // the canvas extends to the dashboard edge; view mode fits tight around
+  // the panel extent (fall back to 60 when empty, matching the viewer).
   const maxGridCol = useMemo(() => {
+    if (editMode && editGridCols) return editGridCols;
     if (!hasPanels) return 60;
     return panels.reduce((max, p) => Math.max(max, p.x + p.w), 0) || 60;
-  }, [panels, hasPanels]);
+  }, [editMode, editGridCols, panels, hasPanels]);
   const maxGridRow = useMemo(() => {
+    if (editMode && editGridRows) return editGridRows;
     if (!hasPanels) return 60;
     return panels.reduce((max, p) => Math.max(max, p.y + p.h), 0) || 60;
-  }, [panels, hasPanels]);
+  }, [editMode, editGridRows, panels, hasPanels]);
 
   // Measure the container so fit-mode can scale to it. Double-rAF lets CSS class
   // changes (overflow) paint before measuring; ResizeObserver catches
@@ -143,21 +177,44 @@ function DashboardGrid({
     return { transform: `scale(${s * scaleFactor})`, scaledW: targetW * s, scaledH: targetH * s };
   }, [fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, scaleFactor]);
 
-  if (!hasPanels) return null;
+  // View mode with no panels renders nothing (the viewer shows its own
+  // "no panels" message). Edit mode always renders so there's a canvas.
+  if (!hasPanels && !editMode) return null;
 
   return (
-    <div ref={containerRef} className={`dashboard-grid-container fit-mode-${fitMode}`}>
+    <div
+      ref={containerRef}
+      className={`dashboard-grid-container fit-mode-${editMode ? 'edit' : fitMode}`}
+    >
       <div
         className="dashboard-grid-scale-wrapper"
-        style={fitTransform.scaledW > 0 ? { width: fitTransform.scaledW, height: fitTransform.scaledH } : {}}
+        style={{
+          // View mode reserves the post-fit-transform size; edit mode
+          // applies the manual view zoom here (scales the whole scene,
+          // including the canvas boundary line).
+          ...(!editMode && fitTransform.scaledW > 0
+            ? { width: fitTransform.scaledW, height: fitTransform.scaledH }
+            : {}),
+          ...(editMode && editZoom !== 100
+            ? { transform: `scale(${editZoom / 100})`, transformOrigin: 'top left' }
+            : {}),
+        }}
       >
         <div
           ref={gridRef}
-          className="dashboard-grid"
+          className={`dashboard-grid ${editMode ? 'edit-active' : ''}`}
+          onMouseDown={editMode ? onGridMouseDown : undefined}
           style={{
             gridTemplateColumns: `repeat(${maxGridCol}, ${CELL_WIDTH}px)`,
             gridTemplateRows: `repeat(${maxGridRow}, ${CELL_HEIGHT}px)`,
-            ...(fitTransform.transform ? { transform: fitTransform.transform, transformOrigin: 'top left' } : {}),
+            // View: fit transform. Edit: build/display scaleFactor (design
+            // at display size; 100% = actual).
+            ...(!editMode && fitTransform.transform
+              ? { transform: fitTransform.transform, transformOrigin: 'top left' }
+              : {}),
+            ...(editMode && editScaleFactor !== 1
+              ? { transform: `scale(${editScaleFactor})`, transformOrigin: 'top left' }
+              : {}),
           }}
         >
           {panels.map((panel) => {
@@ -195,6 +252,15 @@ function DashboardGrid({
               || (chart?.component_type === 'display' && expandableDisplayTypes.has(chart?.display_config?.display_type))
             );
 
+            // View mode polls at the dashboard's refresh interval; edit
+            // mode passes null (no auto-refresh while designing). The caller
+            // can override via dataRefreshInterval.
+            const effectiveRefreshInterval = dataRefreshInterval != null
+              ? dataRefreshInterval
+              : (!editMode && dashboard?.settings?.refresh_interval > 0
+                ? dashboard.settings.refresh_interval * 1000
+                : null);
+
             return (
               <div
                 key={panel.id}
@@ -202,79 +268,46 @@ function DashboardGrid({
                 // Native hover tooltip shows the component NAME (the internal
                 // identifier) when a component is involved — the canvas shows the
                 // display TITLE, so the hover surfaces the name behind it. Text
-                // panels have no component, so no tooltip.
-                title={hasChart ? (chart?.name || undefined) : undefined}
-                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''}`}
+                // panels have no component, so no tooltip. Suppressed in edit
+                // mode (the edit hover header surfaces this instead).
+                title={!editMode && hasChart ? (chart?.name || undefined) : undefined}
+                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''}`}
                 style={{
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
-                  cursor: hasChart && onExpandPanel ? 'pointer' : 'default',
+                  cursor: editMode ? 'default' : (hasChart && onExpandPanel ? 'pointer' : 'default'),
                 }}
                 onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
               >
-                <PanelErrorBoundary
-                  resetKey={`${effectiveComponentId || panel.id}-${chart?.updated || ''}`}
-                  label={chart?.title || chart?.name || (hasText ? 'Text panel' : 'Component')}
-                >
-                {hasText ? (
-                  <div className="component-wrapper text-wrapper">
-                    <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
-                  </div>
-                ) : hasChart ? (
-                  <>
-                    {chart.component_type === 'control' ? (
-                      <div className="component-wrapper control-wrapper" onDoubleClick={(e) => e.stopPropagation()}>
-                        <ControlRenderer control={chart} canControl={canControl} />
-                      </div>
-                    ) : chart.component_type === 'display' ? (
-                      <div className="component-wrapper display-wrapper">
-                        {chart.display_config?.display_type === 'weather' ? (
-                          <WeatherDisplay config={chart.display_config} />
-                        ) : chart.display_config?.display_type === 'frigate_camera' ? (
-                          <FrigateCameraViewer config={chart.display_config} dashboardCommand={dashboardCommand} />
-                        ) : chart.display_config?.display_type === 'frigate_alerts' ? (
-                          <FrigateAlertsGrid config={chart.display_config} dashboardCommand={dashboardCommand} canControl={canControl} refreshTick={refreshTick} />
-                        ) : (
-                          <div className="display-empty">Unknown display type</div>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        {chart.chart_type === 'datatable' && (
-                          <div className="chart-header">
-                            <span className="chart-name">{chart.title || chart.name || 'Untitled Chart'}</span>
-                          </div>
-                        )}
-                        <div className={`component-wrapper ${chart.chart_type === 'datatable' ? 'with-header' : ''} ${chart.chart_type === 'dataview' ? 'dataview-wrapper' : ''} ${(chart.chart_type === 'datatable' || (chart.options?.showTitle !== false && (chart.title || chart.name))) ? 'has-title' : ''}`}>
-                          <ComponentPanelWithActions
-                            key={`${effectiveComponentId}-${chart.updated || ''}`}
-                            chart={chart}
-                            loaderProps={{
-                              code: chart.component_code,
-                              props: {},
-                              componentMeta: chart,
-                              dataMapping: chart.data_mapping,
-                              connectionId: resolveConnectionId ? resolveConnectionId(chart) : chart.connection_id,
-                              queryConfig: chart.query_config,
-                              dataRefreshInterval: dashboard?.settings?.refresh_interval > 0 ? dashboard.settings.refresh_interval * 1000 : null,
-                              refreshTick,
-                              dashboardVariableValue,
-                              rangeValue,
-                            }}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <div className="empty-panel-placeholder">
-                    <span>No chart</span>
-                  </div>
-                )}
-                </PanelErrorBoundary>
+                {/* Edit chrome (hover header / drag overlay / resize / add) is
+                    injected by the editor; null in view/kiosk. */}
+                {editMode && renderPanelChrome
+                  ? renderPanelChrome(panel, { chart, hasText, hasChart, hasContent })
+                  : null}
+
+                {/* Shared panel BODY — identical subtree in both modes so the
+                    streaming chart survives the edit↔view flip. */}
+                <PanelContent
+                  panel={panel}
+                  chart={chart}
+                  effectiveComponentId={effectiveComponentId}
+                  hasText={hasText}
+                  hasChart={hasChart}
+                  resolveConnectionId={resolveConnectionId}
+                  dashboardVariableText={dashboardVariableText}
+                  variableValues={variableValues}
+                  dashboardVariableValue={dashboardVariableValue}
+                  rangeValue={rangeValue}
+                  dashboardCommand={dashboardCommand}
+                  canControl={canControl}
+                  refreshTick={refreshTick}
+                  dataRefreshInterval={effectiveRefreshInterval}
+                />
               </div>
             );
           })}
+          {/* Edit-only extras (drawing preview, canvas boundary). */}
+          {editMode ? gridExtras : null}
         </div>
       </div>
     </div>
@@ -298,6 +331,17 @@ DashboardGrid.propTypes = {
   scalePercent: PropTypes.number,
   isFullscreen: PropTypes.bool,
   onExpandPanel: PropTypes.func,
+  dataRefreshInterval: PropTypes.number,
+  editMode: PropTypes.bool,
+  editGridCols: PropTypes.number,
+  editGridRows: PropTypes.number,
+  editZoom: PropTypes.number,
+  editScaleFactor: PropTypes.number,
+  onGridMouseDown: PropTypes.func,
+  renderPanelChrome: PropTypes.func,
+  gridExtras: PropTypes.node,
+  containerRef: PropTypes.object,
+  gridRef: PropTypes.object,
 };
 
 export default DashboardGrid;

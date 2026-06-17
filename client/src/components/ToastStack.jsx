@@ -34,10 +34,13 @@ export default function ToastStack() {
     toasts.forEach((t) => {
       if (t.kind === 'error') return;
       if (timersRef.current.has(t.id)) return;
+      // Per-toast duration override (pushToast { duration }); falls back to
+      // the 5s default for toasts that don't specify one.
+      const ms = typeof t.duration === 'number' ? t.duration : AUTO_DISMISS_MS;
       const timer = setTimeout(() => {
         dismissToast(t.id);
         timersRef.current.delete(t.id);
-      }, AUTO_DISMISS_MS);
+      }, ms);
       timersRef.current.set(t.id, timer);
     });
     // Drop timers for toasts that vanished (manual dismiss, etc).
