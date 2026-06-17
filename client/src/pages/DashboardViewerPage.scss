@@ -244,6 +244,16 @@
           &.dashboard-range-picker {
             flex-shrink: 1;
             min-width: 0;
+
+            // The range PRESET trigger only ever shows short labels
+            // ("Last 24 hours", "Custom…") — it doesn't need the 12rem that
+            // the connection-swap picker uses for long connection names. The
+            // open menu widens independently (width: max-content above), so a
+            // narrower trigger doesn't truncate any option.
+            .cds--dropdown__wrapper,
+            .cds--list-box__wrapper {
+              width: 9rem;
+            }
           }
 
           // Range preset dropdown: Carbon caps the open menu at ~5 rows, but the
@@ -277,24 +287,38 @@
           .dashboard-range-custom {
             display: flex;
             align-items: flex-end;
-            gap: 0.5rem;
-            // Yield row space to the dashboard name before the title gets
-            // crushed: this wide from/to editor may shrink (the title now
-            // has flex priority + a 16rem floor). min-width:0 lets the flex
-            // shrink actually take effect on the nested fields.
-            flex: 0 1 auto;
-            min-width: 0;
+            gap: 0.5rem 0.75rem; // row-gap when folded, column-gap between fields
+            // Size to content by default so the From/To row stays on ONE line
+            // whenever there's room (which is the common case). flex-wrap lets
+            // it FOLD From-over-To only when the toolbar is genuinely too
+            // narrow — never eagerly. (No overflow scroll container here: that
+            // collapses the min-content size and made it fold immediately.)
+            flex: 0 0 auto;
+            flex-wrap: wrap;
+
+            // From / To each hold a date + time and must NOT shrink below
+            // their content (that's what was clipping the To-time field).
+            // They wrap as a unit when there isn't room for both on one line.
+            .dashboard-range-field {
+              display: flex;
+              align-items: flex-end;
+              gap: 0.5rem;
+              flex: 0 0 auto;
+            }
 
             // The date input fits "YYYY-MM-DD" PLUS Carbon's overlaid calendar
-            // icon; trimmed from 10rem to 9rem to give the title more room.
+            // icon. Fixed width, no shrink, so the value + icon never clip.
             .cds--date-picker__input {
               width: 9rem;
-              min-width: 0;
+              flex: 0 0 auto;
               padding-right: 2.5rem;
             }
+            // Wide enough for "HH:MM" PLUS Carbon's input padding — 4.5rem
+            // clipped the last digit (value overflowed and the field
+            // scrolled). 5rem fits the full time.
             .cds--time-picker__input-field {
-              width: 4.5rem;
-              min-width: 0;
+              width: 5rem;
+              flex: 0 0 auto;
             }
             // A bare TimePicker has no label; nudge it up so its field bottom
             // lines up with the labelled date inputs beside it.

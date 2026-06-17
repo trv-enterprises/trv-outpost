@@ -156,52 +156,60 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
       />
       {customOpen && allowAbsolute && (
         <div className="dashboard-range-custom">
-          <DatePicker
-            datePickerType="single"
-            dateFormat="Y-m-d"
-            value={fromParts.date || undefined}
-            onChange={(dates) => {
-              const d = dates?.[0];
-              if (!d) return;
-              const pad = (n) => String(n).padStart(2, '0');
-              const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-              commitCustom({ fromDate: date, fromTime: fromParts.time, toDate: toParts.date, toTime: toParts.time });
-            }}
-          >
-            <DatePickerInput id="range-from-date" size="sm" labelText="From" placeholder="YYYY-MM-DD" />
-          </DatePicker>
-          <TimePicker
-            id="range-from-time"
-            size="sm"
-            labelText=""
-            value={fromParts.time}
-            onChange={(e) =>
-              commitCustom({ fromDate: fromParts.date, fromTime: e.target.value, toDate: toParts.date, toTime: toParts.time })
-            }
-          />
-          <DatePicker
-            datePickerType="single"
-            dateFormat="Y-m-d"
-            value={toParts.date || undefined}
-            onChange={(dates) => {
-              const d = dates?.[0];
-              if (!d) return;
-              const pad = (n) => String(n).padStart(2, '0');
-              const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-              commitCustom({ fromDate: fromParts.date, fromTime: fromParts.time, toDate: date, toTime: toParts.time });
-            }}
-          >
-            <DatePickerInput id="range-to-date" size="sm" labelText="To" placeholder="YYYY-MM-DD" />
-          </DatePicker>
-          <TimePicker
-            id="range-to-time"
-            size="sm"
-            labelText=""
-            value={toParts.time}
-            onChange={(e) =>
-              commitCustom({ fromDate: fromParts.date, fromTime: fromParts.time, toDate: toParts.date, toTime: e.target.value })
-            }
-          />
+          {/* From and To each group their date+time so they wrap as a unit
+              when the toolbar is tight (the row folds From-over-To rather
+              than clipping). The field row also scrolls horizontally as a
+              backstop so nothing is ever truncated. */}
+          <div className="dashboard-range-field">
+            <DatePicker
+              datePickerType="single"
+              dateFormat="Y-m-d"
+              value={fromParts.date || undefined}
+              onChange={(dates) => {
+                const d = dates?.[0];
+                if (!d) return;
+                const pad = (n) => String(n).padStart(2, '0');
+                const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                commitCustom({ fromDate: date, fromTime: fromParts.time, toDate: toParts.date, toTime: toParts.time });
+              }}
+            >
+              <DatePickerInput id="range-from-date" size="sm" labelText="From" placeholder="YYYY-MM-DD" />
+            </DatePicker>
+            <TimePicker
+              id="range-from-time"
+              size="sm"
+              labelText=""
+              value={fromParts.time}
+              onChange={(e) =>
+                commitCustom({ fromDate: fromParts.date, fromTime: e.target.value, toDate: toParts.date, toTime: toParts.time })
+              }
+            />
+          </div>
+          <div className="dashboard-range-field">
+            <DatePicker
+              datePickerType="single"
+              dateFormat="Y-m-d"
+              value={toParts.date || undefined}
+              onChange={(dates) => {
+                const d = dates?.[0];
+                if (!d) return;
+                const pad = (n) => String(n).padStart(2, '0');
+                const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                commitCustom({ fromDate: fromParts.date, fromTime: fromParts.time, toDate: date, toTime: toParts.time });
+              }}
+            >
+              <DatePickerInput id="range-to-date" size="sm" labelText="To" placeholder="YYYY-MM-DD" />
+            </DatePicker>
+            <TimePicker
+              id="range-to-time"
+              size="sm"
+              labelText=""
+              value={toParts.time}
+              onChange={(e) =>
+                commitCustom({ fromDate: fromParts.date, fromTime: fromParts.time, toDate: toParts.date, toTime: e.target.value })
+              }
+            />
+          </div>
         </div>
       )}
       {showStep && (
