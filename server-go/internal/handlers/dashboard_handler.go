@@ -5,6 +5,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strings"
 
@@ -198,6 +199,88 @@ func (h *DashboardHandler) UpdateDashboard(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dashboard)
+}
+
+// GetDashboardThumbnail returns a dashboard's thumbnail as raw PNG bytes.
+// The blob is stored as a base64 data URL in the dashboard_thumbnails
+// collection (#19); this decodes it so tiles can lazy-load it directly
+// via <img loading="lazy" src=...> with native browser caching. Returns
+// 404 when no thumbnail has been captured for the dashboard.
+// @Summary Get a dashboard thumbnail
+// @Description Get the captured thumbnail image (PNG) for a dashboard
+// @Tags dashboards
+// @Produce image/png
+// @Param id path string true "Dashboard ID"
+// @Success 200 {string} binary "PNG image bytes"
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /dashboards/{id}/thumbnail [get]
+func (h *DashboardHandler) GetDashboardThumbnail(c *gin.Context) {
+	id := c.Param("id")
+
+	dataURL, err := h.service.GetThumbnail(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if dataURL == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No thumbnail"})
+		return
+	}
+
+	// Stored form is a data URL ("data:image/png;base64,...."). Strip the
+	// prefix and decode to raw bytes so we can serve image/png directly.
+	b64 := dataURL
+	if i := strings.Index(b64, ","); i >= 0 && strings.HasPrefix(b64, "data:") {
+		b64 = b64[i+1:]
+	}
+	raw, derr := base64.StdEncoding.DecodeString(b64)
+	if derr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "corrupt thumbnail"})
+		return
+	}
+
+	// Tiles refetch on a structural-signature change (the URL gets a cache
+	// buster appended client-side), so a short cache is safe and cheap.
+	c.Header("Cache-Control", "private, max-age=300")
+	c.Data(http.StatusOK, "image/png", raw)
+}
+
+// PutDashboardThumbnail upserts a dashboard's thumbnail blob. Body is
+// { "thumbnail": "data:image/png;base64,..." }. Replaces the old
+// thumbnail-only PUT /dashboards/:id path that embedded the blob in the
+// dashboard document (#19).
+// @Summary Set a dashboard thumbnail
+// @Description Upsert the captured thumbnail (base64 data URL) for a dashboard
+// @Tags dashboards
+// @Accept json
+// @Produce json
+// @Param id path string true "Dashboard ID"
+// @Param thumbnail body object true "Thumbnail data URL"
+// @Success 204
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /dashboards/{id}/thumbnail [put]
+func (h *DashboardHandler) PutDashboardThumbnail(c *gin.Context) {
+	id := c.Param("id")
+
+	var body struct {
+		Thumbnail string `json:"thumbnail"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if body.Thumbnail == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "thumbnail is required"})
+		return
+	}
+
+	if err := h.service.SetThumbnail(c.Request.Context(), id, body.Thumbnail); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // DeleteDashboard deletes a dashboard

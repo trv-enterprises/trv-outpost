@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ import (
 // by the export/import endpoints.
 type DashboardService struct {
 	repo           *repository.DashboardRepository
+	thumbnailRepo  *repository.DashboardThumbnailRepository
 	db             *mongo.Database
 	chartRepo      *repository.ComponentRepository
 	connectionRepo *repository.ConnectionRepository
@@ -67,10 +69,22 @@ func (s *DashboardService) SetScaleLookup(fn func(ctx context.Context, dimension
 func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Database, chartRepo *repository.ComponentRepository, connectionRepo *repository.ConnectionRepository) *DashboardService {
 	return &DashboardService{
 		repo:           repo,
+		thumbnailRepo:  repository.NewDashboardThumbnailRepository(db),
 		db:             db,
 		chartRepo:      chartRepo,
 		connectionRepo: connectionRepo,
 	}
+}
+
+// GetThumbnail returns the stored thumbnail data URL for a dashboard, or
+// "" when none has been captured.
+func (s *DashboardService) GetThumbnail(ctx context.Context, id string) (string, error) {
+	return s.thumbnailRepo.Get(ctx, id)
+}
+
+// SetThumbnail upserts a dashboard's thumbnail blob.
+func (s *DashboardService) SetThumbnail(ctx context.Context, id, data string) error {
+	return s.thumbnailRepo.Put(ctx, id, data)
 }
 
 // CreateDashboard creates a new dashboard. Namespace defaults to
@@ -391,6 +405,13 @@ func (s *DashboardService) DeleteDashboardCascade(ctx context.Context, id string
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return deleted, fmt.Errorf("failed to delete dashboard: %w", err)
+	}
+
+	// Best-effort thumbnail cleanup so blobs don't orphan in the
+	// dashboard_thumbnails collection. Non-fatal: the dashboard is
+	// already gone, a leftover blob is harmless and re-deletable.
+	if err := s.thumbnailRepo.Delete(ctx, id); err != nil {
+		log.Printf("warning: failed to delete thumbnail for dashboard %s: %v", id, err)
 	}
 	return deleted, nil
 }

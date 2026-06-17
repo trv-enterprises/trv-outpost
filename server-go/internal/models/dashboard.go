@@ -209,8 +209,7 @@ type Dashboard struct {
 	Namespace   string                 `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 	Name        string                 `json:"name" bson:"name" binding:"required"`
 	Description string                 `json:"description" bson:"description"`
-	Panels      []DashboardPanel       `json:"panels" bson:"panels"`       // Panels with component_id references
-	Thumbnail   string                 `json:"thumbnail" bson:"thumbnail"` // Base64 encoded thumbnail image
+	Panels      []DashboardPanel       `json:"panels" bson:"panels"` // Panels with component_id references
 	Settings    DashboardSettings      `json:"settings" bson:"settings"`
 	Tags        []string               `json:"tags,omitempty" bson:"tags,omitempty"` // User-defined tags for filtering/grouping
 	Metadata    map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
@@ -409,7 +408,6 @@ type UpdateDashboardRequest struct {
 	Name        *string                 `json:"name,omitempty"`
 	Description *string                 `json:"description,omitempty"`
 	Panels      *[]DashboardPanel       `json:"panels,omitempty"` // Panels with optional component_id
-	Thumbnail   *string                 `json:"thumbnail,omitempty"`
 	Settings    *DashboardSettings      `json:"settings,omitempty"`
 	Tags        *[]string               `json:"tags,omitempty"`
 	Metadata    *map[string]interface{} `json:"metadata,omitempty"`
@@ -444,7 +442,6 @@ type DashboardSummary struct {
 	Namespace       string            `json:"namespace"`
 	Name            string            `json:"name"`
 	Description     string            `json:"description"`
-	Thumbnail       string            `json:"thumbnail,omitempty"`
 	Settings        DashboardSettings `json:"settings"`
 	Tags            []string          `json:"tags,omitempty"`
 	PanelCount      int               `json:"panel_count"`

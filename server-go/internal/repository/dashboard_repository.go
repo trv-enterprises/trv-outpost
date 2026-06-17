@@ -208,9 +208,6 @@ func (r *DashboardRepository) Update(ctx context.Context, id string, req *models
 	if req.Panels != nil {
 		setFields["panels"] = *req.Panels
 	}
-	if req.Thumbnail != nil {
-		setFields["thumbnail"] = *req.Thumbnail
-	}
 	if req.Settings != nil {
 		setFields["settings"] = *req.Settings
 	}
@@ -437,7 +434,6 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 			{Key: "id", Value: "$_id"},
 			{Key: "name", Value: 1},
 			{Key: "description", Value: 1},
-			{Key: "thumbnail", Value: 1},
 			{Key: "settings", Value: 1},
 			{Key: "tags", Value: 1},
 			{Key: "panel_count", Value: bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels", bson.A{}}}}}}},

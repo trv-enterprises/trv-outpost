@@ -1428,9 +1428,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        description: Base64 encoded thumbnail image
-        type: string
       updated:
         type: string
     required:
@@ -1561,8 +1558,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        type: string
       updated:
         type: string
     type: object
@@ -3075,8 +3070,6 @@ definitions:
         items:
           type: string
         type: array
-      thumbnail:
-        type: string
     type: object
   models.UpdateDeviceRequest:
     description: Request body for updating an existing device
@@ -5451,6 +5444,69 @@ paths:
             additionalProperties: true
             type: object
       summary: Preview orphaned components for a dashboard delete
+      tags:
+      - dashboards
+  /dashboards/{id}/thumbnail:
+    get:
+      description: Get the captured thumbnail image (PNG) for a dashboard
+      parameters:
+      - description: Dashboard ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: PNG image bytes
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a dashboard thumbnail
+      tags:
+      - dashboards
+    put:
+      consumes:
+      - application/json
+      description: Upsert the captured thumbnail (base64 data URL) for a dashboard
+      parameters:
+      - description: Dashboard ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thumbnail data URL
+        in: body
+        name: thumbnail
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Set a dashboard thumbnail
       tags:
       - dashboards
   /dashboards/{id}/variable-candidates:

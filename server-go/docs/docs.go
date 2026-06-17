@@ -2616,6 +2616,99 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboards/{id}/thumbnail": {
+            "get": {
+                "description": "Get the captured thumbnail image (PNG) for a dashboard",
+                "produces": [
+                    "image/png"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Get a dashboard thumbnail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "PNG image bytes",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Upsert the captured thumbnail (base64 data URL) for a dashboard",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Set a dashboard thumbnail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Thumbnail data URL",
+                        "name": "thumbnail",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboards/{id}/variable-candidates": {
             "get": {
                 "description": "List candidate connections for a connection_swap dashboard variable",
@@ -8173,10 +8266,6 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "thumbnail": {
-                    "description": "Base64 encoded thumbnail image",
-                    "type": "string"
-                },
                 "updated": {
                     "type": "string"
                 }
@@ -8326,9 +8415,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "thumbnail": {
-                    "type": "string"
                 },
                 "updated": {
                     "type": "string"
@@ -10405,9 +10491,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "thumbnail": {
-                    "type": "string"
                 }
             }
         },

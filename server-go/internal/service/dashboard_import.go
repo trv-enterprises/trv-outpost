@@ -460,5 +460,8 @@ func chartVolatileFields() map[string]bool {
 	return map[string]bool{"created": true, "updated": true, "version": true, "ai_session_id": true}
 }
 func dashboardVolatileFields() map[string]bool {
+	// `thumbnail` is no longer embedded in the dashboard doc (#19 moved it
+	// to a separate collection), but stays in the ignore set so bundles
+	// exported by older versions — which still carry the field — diff clean.
 	return map[string]bool{"created": true, "updated": true, "thumbnail": true}
 }

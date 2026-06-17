@@ -1749,15 +1749,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
   };
 
-  // Capture the grid and persist ONLY the thumbnail (a lightweight,
-  // single-field PUT — the server merges pointer fields, so this doesn't
-  // touch panels/settings). Records the structural signature so an
-  // unchanged subsequent save can skip the capture.
+  // Capture the grid and persist ONLY the thumbnail. The blob lives in a
+  // separate collection (#19), upserted via its own endpoint — this never
+  // touches the dashboard's panels/settings. Records the structural
+  // signature so an unchanged subsequent save can skip the capture.
   const captureAndPutThumbnail = useCallback(async () => {
     const canvas = await captureGridCanvas(0.25);
     if (!canvas) return false;
     const thumbnailDataUrl = canvas.toDataURL('image/png');
-    await apiClient.updateDashboard(id, { thumbnail: thumbnailDataUrl });
+    await apiClient.putDashboardThumbnail(id, thumbnailDataUrl);
     lastThumbnailSigRef.current = computeThumbnailSignature();
     return true;
   }, [id, computeThumbnailSignature]);

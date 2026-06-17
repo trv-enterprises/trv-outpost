@@ -2,14 +2,80 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Tag, Tooltip } from '@carbon/react';
 import { Dashboard, DataBase, Information, Time, Copy } from '@carbon/icons-react';
 import NamespaceChip from './shared/NamespaceChip';
 import VariableIndicator from './shared/VariableIndicator';
 import CountListPopover from './shared/CountListPopover';
 import { dashboardUsesVariable } from '../utils/dashboardVariable';
+import apiClient from '../api/client';
 import './DashboardTile.scss';
+
+/**
+ * Lazy-loading dashboard thumbnail (#19). The blob lives in a separate
+ * collection now (not embedded in the dashboard doc) behind a
+ * header-authed endpoint, so a native <img src> can't load it (it 401s —
+ * browser image requests don't carry our auth headers). Instead we
+ * fetch the PNG through apiClient (which attaches auth) once the tile
+ * scrolls near the viewport, wrap it in an object URL, and render that.
+ * No thumbnail / 404 / any error → placeholder icon. Cache-busted on the
+ * dashboard's `updated` stamp so a re-capture shows through.
+ */
+function TileThumbnail({ dashboardId, updated, alt }) {
+  const [objectUrl, setObjectUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let createdUrl = null;
+    const el = containerRef.current;
+    if (!el) return undefined;
+
+    const load = async () => {
+      try {
+        const blob = await apiClient.getDashboardThumbnailBlob(dashboardId, updated);
+        if (cancelled) return;
+        if (!blob) { setFailed(true); return; }
+        createdUrl = URL.createObjectURL(blob);
+        setObjectUrl(createdUrl);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    };
+
+    // Defer the fetch until the tile is near the viewport. Falls back to
+    // an immediate load when IntersectionObserver is unavailable.
+    let observer = null;
+    if (typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          observer.disconnect();
+          load();
+        }
+      }, { rootMargin: '200px' });
+      observer.observe(el);
+    } else {
+      load();
+    }
+
+    return () => {
+      cancelled = true;
+      if (observer) observer.disconnect();
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [dashboardId, updated]);
+
+  if (failed || !objectUrl) {
+    return (
+      <div className="thumbnail-placeholder" ref={containerRef}>
+        <Dashboard size={48} />
+      </div>
+    );
+  }
+  return <img ref={containerRef} src={objectUrl} alt={alt} />;
+}
 
 /**
  * Shared dashboard tile card. Used by:
@@ -184,13 +250,11 @@ function DashboardTile({
       {badge !== null && <div className="tile-badge">{badge}</div>}
 
       <div className="tile-thumbnail">
-        {dashboard.thumbnail ? (
-          <img src={dashboard.thumbnail} alt={dashboard.name} />
-        ) : (
-          <div className="thumbnail-placeholder">
-            <Dashboard size={48} />
-          </div>
-        )}
+        <TileThumbnail
+          dashboardId={dashboard.id}
+          updated={dashboard.updated}
+          alt={dashboard.name}
+        />
       </div>
 
       <div className="tile-content">

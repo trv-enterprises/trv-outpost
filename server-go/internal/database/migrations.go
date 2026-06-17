@@ -45,6 +45,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"refresh_tile_font_size_description_v1", migrateRefreshTileFontSizeDescription},
 		{"drop_panel_pin_connection_v1", migrateDropPanelPinConnection},
 		{"prefix_restart_required_descriptions_v1", migratePrefixRestartRequiredDescriptions},
+		{"move_dashboard_thumbnails_v1", migrateMoveDashboardThumbnails},
 	}
 
 	coll := db.Collection("migrations")
@@ -315,6 +316,68 @@ func migrateStripChartThumbnail(ctx context.Context, db *mongo.Database) error {
 		return fmt.Errorf("strip thumbnail: %w", err)
 	}
 	log.Printf("  charts: stripped thumbnail from %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateMoveDashboardThumbnails relocates the embedded dashboard
+// `thumbnail` blob (a base64 data URL, often 50–200 KB) out of each
+// dashboard document and into a dedicated `dashboard_thumbnails`
+// collection keyed by dashboard _id (#19). The blob bloated every
+// list/read payload even though only the tile <img> ever needs it; the
+// new collection is fetched on demand via GET /api/dashboards/:id/thumbnail.
+//
+// For each dashboard that still carries a non-empty thumbnail: upsert
+// { _id: <dashboardID>, data: <blob> } into dashboard_thumbnails, then
+// $unset thumbnail from the dashboard. Idempotent — once the field is
+// gone the cursor finds nothing and the migrations registry blocks a
+// re-run.
+func migrateMoveDashboardThumbnails(ctx context.Context, db *mongo.Database) error {
+	dashboards := db.Collection("dashboards")
+	thumbnails := db.Collection("dashboard_thumbnails")
+
+	cursor, err := dashboards.Find(ctx, bson.M{"thumbnail": bson.M{"$exists": true, "$ne": ""}})
+	if err != nil {
+		return fmt.Errorf("move dashboard thumbnails: find: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	moved := 0
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID        string `bson:"_id"`
+			Thumbnail string `bson:"thumbnail"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		if doc.Thumbnail == "" {
+			continue
+		}
+		_, err := thumbnails.UpdateOne(
+			ctx,
+			bson.M{"_id": doc.ID},
+			bson.M{"$set": bson.M{"data": doc.Thumbnail, "updated": time.Now()}},
+			options.Update().SetUpsert(true),
+		)
+		if err != nil {
+			return fmt.Errorf("move dashboard thumbnails: upsert %s: %w", doc.ID, err)
+		}
+		moved++
+	}
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("move dashboard thumbnails: cursor: %w", err)
+	}
+
+	// Drop the now-relocated field from every dashboard document.
+	res, err := dashboards.UpdateMany(
+		ctx,
+		bson.M{"thumbnail": bson.M{"$exists": true}},
+		bson.M{"$unset": bson.M{"thumbnail": ""}},
+	)
+	if err != nil {
+		return fmt.Errorf("move dashboard thumbnails: unset: %w", err)
+	}
+	log.Printf("  dashboards: moved %d thumbnails to dashboard_thumbnails, stripped field from %d documents", moved, res.ModifiedCount)
 	return nil
 }
 

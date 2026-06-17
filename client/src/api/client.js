@@ -708,6 +708,56 @@ class APIClient {
     }
   }
 
+  /**
+   * Fetch a binary endpoint (e.g. an image) WITH the same credential
+   * attachment + one-shot refresh-retry as request(), returning a Blob.
+   *
+   * Why this exists: native <img src> requests don't carry our auth
+   * headers (Authorization: Bearer / X-User-ID), so any header-authed
+   * image endpoint 401s. Callers fetch the blob here, wrap it in an
+   * object URL, and feed that to <img>. Returns null on 404 (e.g. a
+   * dashboard with no captured thumbnail) so callers can show a
+   * placeholder without treating it as an error.
+   */
+  async fetchBlob(endpoint, options = {}) {
+    const url = `${this.baseURL}${endpoint}`;
+    const headers = { ...options.headers };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    } else if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    } else {
+      const guid = this.getCurrentUserGuid();
+      if (guid) headers['X-User-ID'] = guid;
+    }
+
+    const skipRefreshRetry = options.skipRefreshRetry === true;
+    const response = await fetch(url, { headers, credentials: 'same-origin' });
+
+    if (response.status === 404) return null;
+
+    if (!response.ok) {
+      // Mirror request()'s 401→refresh→retry-once path for expired
+      // access tokens. The body is JSON here even though the success
+      // path is binary, so parse defensively to read the hint.
+      if (response.status === 401 && !skipRefreshRetry && !this.apiKey && this.accessToken) {
+        let hint = '';
+        try { hint = (await response.clone().json())?.hint || ''; } catch { /* not JSON */ }
+        if (hint === 'refresh') {
+          const refreshed = await this._refreshSession();
+          if (refreshed) {
+            return this.fetchBlob(endpoint, { ...options, skipRefreshRetry: true });
+          }
+        }
+      }
+      const err = new Error(`HTTP ${response.status}`);
+      err.status = response.status;
+      throw err;
+    }
+
+    return response.blob();
+  }
+
 
   // Health check
   async health() {
@@ -805,6 +855,31 @@ class APIClient {
     return this.request(`/api/dashboards/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * Fetch a dashboard's thumbnail PNG as a Blob (#19). The endpoint is
+   * header-authed, so a native <img src> can't load it directly — callers
+   * fetch the blob here and wrap it in an object URL. Pass `cacheBuster`
+   * (e.g. the dashboard's `updated` stamp) to bypass the HTTP cache after
+   * a re-capture. Returns null when no thumbnail has been captured (404)
+   * so callers can show a placeholder.
+   */
+  async getDashboardThumbnailBlob(id, cacheBuster) {
+    const q = cacheBuster ? `?v=${encodeURIComponent(cacheBuster)}` : '';
+    return this.fetchBlob(`/api/dashboards/${id}/thumbnail${q}`);
+  }
+
+  /**
+   * Upsert a dashboard's thumbnail blob (#19). `dataUrl` is a base64
+   * data URL ("data:image/png;base64,..."). Replaces the old
+   * thumbnail-only updateDashboard PUT.
+   */
+  async putDashboardThumbnail(id, dataUrl) {
+    return this.request(`/api/dashboards/${id}/thumbnail`, {
+      method: 'PUT',
+      body: JSON.stringify({ thumbnail: dataUrl }),
     });
   }
 
