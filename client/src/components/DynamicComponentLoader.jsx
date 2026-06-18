@@ -44,6 +44,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { useDataviewLayout } from '../hooks/useDataviewLayout';
 import SpecDrivenChart from '../chart-codegen/SpecDrivenChart';
 import { CARBON_COLORS } from '../chart-spec/option-helpers';
+import ChartTitleBand from '../chart-spec/ChartTitleBand';
 
 // Context to provide transforms to child components
 const TransformsContext = createContext(null);
@@ -455,6 +456,20 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   const contextData = shouldFetchData ? transformedFetchedData : (props.data ?? null);
   const contextLoading = shouldFetchData ? dataLoading : false;
 
+  // Custom-code charts get their title band from the renderer (here), the
+  // same way spec-driven charts get it from ChartShell. The eval'd
+  // component_code only produces the chart body — it must NOT draw its own
+  // title (both AI prompts instruct this; older components that still do
+  // are stripped by the migrateStripCustomCodeTitleDiv migration). Gated
+  // to use_custom_code so spec-driven shims (which render ChartShell) are
+  // never double-titled. datatable owns its header in PanelContent and is
+  // not eval'd through here; displays/controls have no title band.
+  const renderCustomTitle = !!componentMeta?.use_custom_code
+    && componentMeta?.options?.showTitle !== false;
+  const customTitle = renderCustomTitle
+    ? (componentMeta?.title || componentMeta?.name || '')
+    : '';
+
   return (
     <TransformsContext.Provider value={transforms}>
       <ComponentConfigContext.Provider value={config}>
@@ -467,7 +482,19 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         disconnectedSince,
       }}>
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <Component {...finalProps} />
+        {customTitle ? (
+          // Custom-code chart: renderer owns the title band, body fills
+          // the rest. Only restructured when a title actually renders so
+          // spec-driven / datatable paths keep their original direct mount.
+          <>
+            <ChartTitleBand text={customTitle} />
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              <Component {...finalProps} />
+            </div>
+          </>
+        ) : (
+          <Component {...finalProps} />
+        )}
         {children}
         {/* Overlay for connection errors when we still have data to display */}
         {showReconnectOverlay && (

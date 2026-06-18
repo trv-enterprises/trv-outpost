@@ -4,6 +4,7 @@
 
 import { useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
+import ChartTitleBand from './ChartTitleBand';
 
 /**
  * Generic chart shell — the React/DOM layer shared by every spec-driven
@@ -98,30 +99,7 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {chartName ? (
-        // Title band — font AND height scale by --title-scale (admin
-        // setting title_font_size, default 1) so the band always fits the
-        // text. Shared 2.5rem band base + 0.875rem (14px) font base with
-        // NumberView / DataViewGrid. 14px default keeps the title in
-        // proportion with ECharts' 12px axis/legend text (ECharts ignores
-        // the theme's textStyle:14 and uses its own 12 default).
-        <div style={{
-          display: 'block',
-          height: 'calc(2.5rem * var(--title-scale, 1))',
-          lineHeight: 'calc(2.5rem * var(--title-scale, 1))',
-          flexShrink: 0,
-          padding: '0 0.75rem',
-          fontSize: 'calc(0.875rem * var(--title-scale, 1))',
-          fontWeight: 600,
-          color: 'var(--cds-text-primary)',
-          textAlign: 'center',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
-          {chartName}
-        </div>
-      ) : null}
+      <ChartTitleBand text={chartName} />
       <div style={{ flex: 1, minHeight: 0 }}>
         <ReactECharts
           option={renderOption}

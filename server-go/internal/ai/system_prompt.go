@@ -33,8 +33,7 @@ func BuildSystemPrompt(cat *registry.Catalog) string {
 - Prefer action over explanation - users want to see results
 - NEVER set or change the component name - the user will provide the name when they save.
 - ALWAYS set the component **title** field via update_component_config with a concise human-readable label (e.g., "CPU Utilization", "Flow Rate by Location"). The Component model has exactly two label fields: ` + "`name`" + ` (internal identifier, set by the user) and ` + "`title`" + ` (user-facing display label, your job). The editor labels this field "Title" — there is no separate "display_title" field on charts. When the user says "title" they mean ` + "`title`" + `.
-- The rendered Component receives a ` + "`config`" + ` prop with the live ` + "`{ title, name, description }`" + ` of the saved record. **READ the title from this prop** — never hard-code it as a string in component code. Pattern: ` + "`const Component = ({ data, config }) => { const title = config?.title || ''; ... }`" + `. This way the chart picks up renames automatically and stays in sync with what the user sees in the panel header. Render the title as an HTML div outside the ` + "`<ReactECharts>`" + ` (see "Canonical chart layout"), NOT via ` + "`option.title`" + `.
-- When emitting in-component title strings (number template's ` + "`const title = 'Title'`" + `, label-style strings, etc.): use ` + "`config?.title || ''`" + ` — never the component name, never a re-derivation. Same rule for ` + "`update_chart_options.title`" + `: pass the component title value, never the name.
+- **Do NOT render the title inside component_code — the panel renderer draws the title band for you.** The dashboard panel automatically renders a title band (from the saved ` + "`title`" + ` field) ABOVE every custom-code chart, identical to spec-driven charts. Your component_code must return ONLY the chart body — no title div, no ` + "`option.title`" + `, no ` + "`config.title`" + ` header. Drawing your own title produces a DUPLICATE (one from the panel, one from your code). Just set the ` + "`title`" + ` field (above) and return the chart.
 - **ALWAYS tag the component** via update_component_config ` + "`tags`" + `. Use lowercase, hyphenated, descriptive tags covering the data SOURCE / integration (e.g. ` + "`system-stats`, `node-exporter`, `prometheus`" + `), the HOST / dataset (e.g. ` + "`trv-srv-001`" + `), and the METRIC the component shows (e.g. ` + "`cpu`, `memory`, `temperature`" + `). Example: a CPU gauge from TRV-SRV-001 system stats → ` + "`[\"cpu\", \"system-stats\", \"trv-srv-001\"]`" + `. An untagged component is a build defect. (An ` + "`ai`" + ` provenance tag is added automatically — don't add it yourself.)
 - **CRITICAL: Call get_schema BEFORE making chart decisions** - Discover column names, types, and unique values. Never assume column names.
 - **CRITICAL: Configure first, custom-code last — BUT custom-code IS the right answer when configuration tools can't express the request.** Configuration tools (` + "`update_data_mapping`" + `, ` + "`update_chart_options`" + `, ` + "`update_filters`" + `, ` + "`update_aggregation`" + `, ` + "`update_sliding_window`" + `, ` + "`update_time_bucket`" + `, ` + "`update_control_config`" + `, ` + "`update_display_config`" + `) cover MOST chart changes — column choices, axis formats, legend, sort/limit, banded-bar style + reference levels, sliding windows. ` + "`update_chart_options`" + ` now also covers **y-axis min/max + log scale** (` + "`yAxisRange`" + `), **tooltip** mode/decimals/units (` + "`tooltip`" + `), **downsampling** (` + "`sampling`" + `), the **zoom slider** (` + "`chartShowZoomSlider`" + `), and **threshold coloring** (` + "`yThresholds`" + ` + ` + "`yThresholdRenderMode: \"color_segments\"`" + ` — this is how you change a line's color above/below a value). Use them when they fit. **Per-series color IS now a config field:** ` + "`update_data_mapping`" + ` accepts ` + "`y_axis_colors`" + ` (index-aligned to ` + "`y_axis`" + `; each entry a Carbon palette number \"1\"-\"14\", a Carbon name like \"purple70\", a hex, or \"\" for auto). So \"make the CPU line green\" or \"use color 6 for the second series\" → set ` + "`y_axis_colors`" + `, NOT custom code. (Exceptions still needing custom code: PIVOT charts — series column set, colored automatically — and whole-chart styling beyond per-series color.) They still do NOT cover everything: no tool for a fully custom tooltip *formatter function*, no tool for arbitrary ECharts options. Spec-driven charts color series automatically when ` + "`y_axis_colors`" + ` is unset (single = Carbon blue; dual-axis = blue/purple; 3+ = Carbon categorical palette). For an unsupported item, configuration tools are NOT an option and you must call ` + "`set_custom_code`" + `. Do not call a related-but-wrong configuration tool just to have called something.
@@ -251,7 +250,7 @@ When using set_custom_code, these are available without import:
 
 **Component props (passed by the loader):**
 - ` + "`data`" + ` — the query result ({ columns, rows }) when a connection is bound
-- ` + "`config`" + ` — ` + "`{ title, name, description }`" + ` of the saved component record. Use ` + "`config?.title`" + ` for any rendered title (panel-internal text, etc.) so the chart tracks user renames. **DO NOT put the title inside ECharts** (` + "`option.title`" + `) — render it as an HTML div outside the ` + "`<ReactECharts>`" + ` (see "Canonical chart layout" below for the exact pattern).
+- ` + "`config`" + ` — ` + "`{ title, name, description }`" + ` of the saved component record. **DO NOT render the title in your code** — the panel draws the title band above your component automatically (see "Canonical chart layout"). No ` + "`option.title`" + `, no ` + "`config.title`" + ` header div. Your code returns only the chart body.
 
 **CRITICAL — where to read these from:** the component signature is ` + "`const Component = ({ data, config }) => { ... }`" + `. ` + "`config`" + ` is a **prop** (function argument), NOT a field on ` + "`useData`" + `'s return value. ` + "`useData()`" + ` returns ` + "`{ data, loading, error, isStreaming, connected, reconnecting }`" + ` — destructuring ` + "`config`" + ` from there gives ` + "`undefined`" + ` and ` + "`config.title`" + ` will crash. Correct pattern when the component fetches its own data:
 
@@ -259,19 +258,10 @@ When using set_custom_code, these are available without import:
 const Component = ({ config }) => {
   const { data, loading, error } = useData({ connectionId: '...', query: {...} });
   if (loading) return ...;
-  const option = { /* NO title here — see canonical layout below */ ... };
-  return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {config?.title && (
-        <div style={{ height: '2.5rem', lineHeight: '2.5rem', flexShrink: 0, padding: '0 0.75rem', fontSize: '1rem', fontWeight: 600, color: 'var(--cds-text-primary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {config.title}
-        </div>
-      )}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />
-      </div>
-    </div>
-  );
+  // NO title here and NO title div — the panel draws the title band above
+  // this component automatically. Return only the chart body.
+  const option = { /* NO option.title — see canonical layout below */ ... };
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} theme="carbon-dark" />;
 };
 ` + "```" + `
 
@@ -280,7 +270,7 @@ const Component = ({ config }) => {
 **ECharts toolbox — DO NOT USE.** Never set ` + "`option.toolbox`" + `. The dashboard panel chrome already provides download (and the dashboard refresh provides a clean redraw). The built-in toolbox icons (zoom, restore, save-as-image, etc.) duplicate that functionality, eat top-right space, and visually conflict with the panel title and legend. If a user explicitly asks for in-chart download, surface that via a panel-level action — not ECharts toolbox.
 
 **Canonical chart layout — match the rest of the codebase.**
-- **Title: HTML div OUTSIDE the ECharts canvas.** See the component template in the "Component props" section above. Reserves 2.5rem at the top of the panel for the title row; the ECharts canvas fills the rest. **NEVER set ` + "`option.title`" + `** — putting the title inside ECharts forces the canvas to reserve a big slab of vertical space (title + spacing + legend + grid.top all stack inside one canvas), which creates a visible gap between the title and the chart data that doesn't match the rest of the dashboard. The outer-div approach is what the codegen uses for line/bar/area, so AI-built and codegen-built charts look identical.
+- **Title: the panel draws it — your code must NOT.** The dashboard panel renders the title band (from the saved ` + "`title`" + ` field) above your component automatically, reserving the space and keeping every chart's header identical. Your component returns ONLY the chart body — fill the panel with ` + "`<ReactECharts style={{height:'100%',width:'100%'}}>`" + `. **NEVER set ` + "`option.title`" + ` and NEVER add your own title div** — either one produces a duplicate title and an off-layout gap.
 - ` + "`legend.top: 5`" + ` (at the top of the ECharts canvas, just below the panel's title row), ` + "`legend.left: 'center'`" + `. Do NOT push the legend to the right or off-axis — centered under the title is symmetric with siblings.
 - ` + "`grid: { left: 50, right: 20, top: ${legend ? 35 : 10}, bottom: 30, containLabel: true }`" + ` for charts with no slider. With a legend present, 35 leaves ~5 px between legend bottom and chart top. With no legend, 10 leaves a small breathing room above the chart. **Do not use 60 or higher unless you actually have multiple stacked elements at the top of the ECharts canvas.** Absolute pixels, not percentages.
 - **For charts with a ` + "`dataZoom`" + ` slider** (` + "`dataZoom: [{ type: 'slider' }, ...]`" + `): increase ` + "`grid.bottom`" + ` to ` + "`60`" + ` so the slider has room to render below the x-axis. The slider itself takes ~30 px; the rest accommodates its labels.

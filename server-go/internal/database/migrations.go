@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"drop_panel_pin_connection_v1", migrateDropPanelPinConnection},
 		{"prefix_restart_required_descriptions_v1", migratePrefixRestartRequiredDescriptions},
 		{"move_dashboard_thumbnails_v1", migrateMoveDashboardThumbnails},
+		{"strip_custom_code_title_div_v1", migrateStripCustomCodeTitleDiv},
 	}
 
 	coll := db.Collection("migrations")
@@ -1011,5 +1013,78 @@ func migrateSeedGlobalSnippetsV1(ctx context.Context, db *mongo.Database) error 
 		return err
 	}
 	log.Printf("  snippets: seeded %d global starter snippets for edgelake-terminal", len(docs))
+	return nil
+}
+
+// customCodeTitleDivRe matches the canonical title-band div that the AI
+// surfaces historically emitted inside custom-code components — a div whose
+// body is `{config?.title}` / `{config.title}`, optionally wrapped in a
+// `{config?.title && ( ... )}` short-circuit. The renderer now draws the
+// panel title band above every custom-code chart (DynamicComponentLoader +
+// ChartTitleBand), so an in-code title produces a DUPLICATE. This regex
+// strips the known shapes ONLY; anything it doesn't recognize is left
+// byte-for-byte untouched so we never corrupt hand-authored code.
+//
+// Two shapes, tried in order:
+//  1. `{config?.title && ( <div ...>{config.title}</div> )}`  — the guarded form
+//  2. a bare `<div ...>{config?.title || ''}</div>` / `{config.title}` div
+//
+// (?s) = dot matches newlines; lazy bodies keep each match to a single div.
+var (
+	customCodeTitleGuardedRe = regexp.MustCompile(`(?s)\{\s*config\??\.title\s*&&\s*\(.*?<div\b.*?>\s*\{\s*config\??\.title\b.*?\}\s*</div>\s*\)\s*\}`)
+	customCodeTitleBareRe    = regexp.MustCompile(`(?s)<div\b[^>]*>\s*\{\s*config\??\.title\b[^}]*\}\s*</div>`)
+)
+
+// migrateStripCustomCodeTitleDiv removes in-code title bands from existing
+// custom-code chart components now that the renderer owns the title band.
+// Conservative by design: only `use_custom_code: true` chart rows, only the
+// recognized title-div shapes, and only when a strip actually changes the
+// code. Rows whose code doesn't mention `config.title` are skipped without a
+// write. Idempotent — re-running finds nothing left to strip.
+func migrateStripCustomCodeTitleDiv(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("components")
+
+	filter := bson.M{
+		"component_type":  "chart",
+		"use_custom_code": true,
+		"component_code":  bson.M{"$regex": "config\\??\\.title"},
+	}
+	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("find custom-code components to strip: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	stripped := 0
+	unchanged := 0
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID   interface{} `bson:"_id"`
+			Code string      `bson:"component_code"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			return fmt.Errorf("decode component: %w", err)
+		}
+
+		newCode := customCodeTitleGuardedRe.ReplaceAllString(doc.Code, "")
+		newCode = customCodeTitleBareRe.ReplaceAllString(newCode, "")
+		if newCode == doc.Code {
+			// Code references config.title but not in a shape we recognize
+			// (e.g. it reads config.title into a variable used elsewhere).
+			// Leave it untouched rather than risk corrupting it.
+			unchanged++
+			continue
+		}
+
+		if _, err := coll.UpdateByID(ctx, doc.ID, bson.M{"$set": bson.M{"component_code": newCode}}); err != nil {
+			return fmt.Errorf("update component %v: %w", doc.ID, err)
+		}
+		stripped++
+	}
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("cursor: %w", err)
+	}
+
+	log.Printf("  components: stripped in-code title divs from %d custom-code charts (%d referenced config.title in an unrecognized shape — left untouched)", stripped, unchanged)
 	return nil
 }
