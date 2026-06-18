@@ -49,7 +49,7 @@ export const CATEGORICAL_COLORS_DARK = [
   '#fff1f1', // 6  red10
   '#6fdc8c', // 7  green30
   '#4589ff', // 8  blue50
-  '#d12771', // 9  magenta60
+  '#d02670', // 9  magenta60
   '#d2a106', // 10 yellow40
   '#08bdba', // 11 teal40
   '#bae6ff', // 12 cyan20
@@ -72,3 +72,96 @@ const PALETTE_NAMES_DARK = [
   'blue50', 'magenta60', 'yellow40', 'teal40', 'cyan20', 'orange60', 'purple30',
 ];
 export const CATEGORICAL_NAMES = IS_DARK_THEME ? PALETTE_NAMES_DARK : PALETTE_NAMES_LIGHT;
+
+// ── Carbon count-aware color pairings ────────────────────────────────
+// Carbon Charts doesn't color a multi-series chart by simply taking the
+// first N colors of the 14-sequence. It publishes CURATED COMBINATIONS
+// keyed by how many series the chart has — a 3-series chart gets a trio
+// chosen to be mutually distinguishable, not palette[0..2]. Each count
+// offers several numbered "options" (alternative combinations).
+//
+// Source of truth: @carbon/charts `scss/_color-palette.scss`
+// ($white-theme-colors / $dark-theme-colors), resolved to hex through
+// @carbon/colors. Mirrors the API `pairing: { numberOfVariants, option }`.
+// Counts 1–5 have curated combos; 6+ falls back to the 14-sequence by
+// index (see paletteForCount in option-helpers). Count 14 here is the
+// full categorical sequence (== CATEGORICAL_COLORS_* above).
+//
+// To refresh after a Carbon upgrade: re-extract from the package's
+// _color-palette.scss; do NOT hand-edit hex (keeps the mapping auditable).
+export const CATEGORICAL_PAIRINGS_LIGHT = {
+  1: [
+    ['#6929c4'],
+    ['#002d9c'],
+    ['#1192e8'],
+    ['#007d79'],
+  ],
+  2: [
+    ['#6929c4', '#009d9a'],
+    ['#8a3ffc', '#520408'],
+    ['#9f1853', '#520408'],
+    ['#1192e8', '#005d5d'],
+    ['#009d9a', '#002d9c'],
+  ],
+  3: [
+    ['#ee5396', '#1192e8', '#6929c4'],
+    ['#9f1853', '#fa4d56', '#520408'],
+    ['#a56eff', '#005d5d', '#002d9c'],
+    ['#a56eff', '#005d5d', '#9f1853'],
+    ['#012749', '#6929c4', '#009d9a'],
+  ],
+  4: [
+    ['#6929c4', '#012749', '#009d9a', '#ee5396'],
+    ['#9f1853', '#fa4d56', '#520408', '#a56eff'],
+    ['#009d9a', '#002d9c', '#a56eff', '#9f1853'],
+  ],
+  5: [
+    ['#6929c4', '#1192e8', '#005d5d', '#9f1853', '#520408'],
+    ['#002d9c', '#009d9a', '#9f1853', '#520408', '#a56eff'],
+  ],
+  14: [
+    ['#6929c4', '#1192e8', '#005d5d', '#9f1853', '#fa4d56', '#520408', '#198038', '#002d9c', '#ee5396', '#b28600', '#009d9a', '#012749', '#8a3800', '#a56eff'],
+  ],
+};
+
+export const CATEGORICAL_PAIRINGS_DARK = {
+  1: [
+    ['#d4bbff'],
+    ['#4589ff'],
+    ['#33b1ff'],
+    ['#08bdba'],
+  ],
+  2: [
+    ['#8a3ffc', '#08bdba'],
+    ['#8a3ffc', '#ff7eb6'],
+    ['#ff7eb6', '#fff1f1'],
+    ['#4589ff', '#bae6ff'],
+    ['#007d79', '#6fdc8c'],
+  ],
+  3: [
+    ['#8a3ffc', '#08bdba', '#bae6ff'],
+    ['#8a3ffc', '#ff7eb6', '#fff1f1'],
+    ['#4589ff', '#08bdba', '#d4bbff'],
+    ['#4589ff', '#6fdc8c', '#fff1f1'],
+    ['#007d79', '#6fdc8c', '#bae6ff'],
+  ],
+  4: [
+    ['#8a3ffc', '#08bdba', '#bae6ff', '#4589ff'],
+    ['#4589ff', '#08bdba', '#d4bbff', '#fff1f1'],
+    ['#007d79', '#fff1f1', '#33b1ff', '#6fdc8c'],
+  ],
+  5: [
+    ['#8a3ffc', '#08bdba', '#bae6ff', '#4589ff', '#ff7eb6'],
+    ['#4589ff', '#08bdba', '#d4bbff', '#fff1f1', '#6fdc8c'],
+  ],
+  14: [
+    ['#8a3ffc', '#33b1ff', '#007d79', '#ff7eb6', '#fa4d56', '#fff1f1', '#6fdc8c', '#4589ff', '#d02670', '#d2a106', '#08bdba', '#bae6ff', '#ba4e00', '#d4bbff'],
+  ],
+};
+
+// Active-theme pairings (single seam, mirrors CATEGORICAL_PALETTE).
+export const CATEGORICAL_PAIRINGS = IS_DARK_THEME ? CATEGORICAL_PAIRINGS_DARK : CATEGORICAL_PAIRINGS_LIGHT;
+
+// Curated counts that actually have pairings (1–5). Used to decide when
+// to fall back to the 14-sequence-by-index.
+export const PAIRING_COUNTS = [1, 2, 3, 4, 5];

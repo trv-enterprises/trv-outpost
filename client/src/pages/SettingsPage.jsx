@@ -31,6 +31,7 @@ import DefaultDashboardFitModeEditorModal from '../components/DefaultDashboardFi
 import DashboardConfigRefreshIntervalEditorModal, { DEFAULT_DASHBOARD_CONFIG_REFRESH_INTERVAL } from '../components/DashboardConfigRefreshIntervalEditorModal';
 import DefaultBrowserUserEditorModal from '../components/DefaultBrowserUserEditorModal';
 import NumericChartNumberSizeEditorModal, { DEFAULT_NUMBER_CHART_SIZE } from '../components/NumericChartNumberSizeEditorModal';
+import ChartColorOptionsEditorModal from '../components/ChartColorOptionsEditorModal';
 import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
 import PrimitiveSettingEditorModal from '../components/PrimitiveSettingEditorModal';
 import { useEnabledTypes } from '../context/EnabledTypesContext';
@@ -57,6 +58,7 @@ function SettingsPage() {
   const [dashboardConfigRefreshModalOpen, setDashboardConfigRefreshModalOpen] = useState(false);
   const [defaultBrowserUserModalOpen, setDefaultBrowserUserModalOpen] = useState(false);
   const [numericChartSizeModalOpen, setNumericChartSizeModalOpen] = useState(false);
+  const [chartColorOptionsModalOpen, setChartColorOptionsModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
   const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
   const [primitiveEditorOpen, setPrimitiveEditorOpen] = useState(false);
@@ -105,6 +107,9 @@ function SettingsPage() {
         break;
       case 'default_numeric_chart_number_size':
         setNumericChartSizeModalOpen(true);
+        break;
+      case 'chart_preferred_color_options':
+        setChartColorOptionsModalOpen(true);
         break;
       case 'dashboard_command_topic':
       case 'dashboard_command_connection':
@@ -400,6 +405,18 @@ function SettingsPage() {
         onSave={(value) => {
           handleSave('default_numeric_chart_number_size', value);
           setNumericChartSizeModalOpen(false);
+          setEditingSetting(null);
+        }}
+      />
+
+      {/* Chart Color Combinations Editor Modal */}
+      <ChartColorOptionsEditorModal
+        open={chartColorOptionsModalOpen}
+        onClose={() => { setChartColorOptionsModalOpen(false); setEditingSetting(null); }}
+        currentValue={editingSetting?.key === 'chart_preferred_color_options' ? editingSetting.value : null}
+        onSave={(value) => {
+          handleSave('chart_preferred_color_options', value);
+          setChartColorOptionsModalOpen(false);
           setEditingSetting(null);
         }}
       />

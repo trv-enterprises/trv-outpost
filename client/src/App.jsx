@@ -34,6 +34,7 @@ import {
 import apiClient from './api/client';
 import { isElectron } from './utils/electron';
 import { setStreamBufferSize } from './utils/streamBufferConfig';
+import { setPreferredColorOptions } from './utils/chartColorConfig';
 import { getCredentials, clearCredentials } from './utils/secureStorage';
 import { hydrateListPrefs } from './utils/listPrefs';
 import LoginPage from './pages/LoginPage';
@@ -665,6 +666,24 @@ function AppContent({ onDisconnect }) {
       } catch {
         // Older deployments may not have the setting — --title-scale
         // falls back to 1 (the default in every calc()).
+      }
+    })();
+  }, [identityResolved]);
+
+  // Load the per-count preferred chart color-pairing options (admin setting
+  // chart_preferred_color_options) once identity resolves and push into the
+  // shared chart-color config, so multi-series spec-driven charts auto-color
+  // with the deployment's chosen Carbon combination per series count. Read at
+  // load only (applies on next page load), matching the setting's note.
+  useEffect(() => {
+    if (!identityResolved) return;
+    (async () => {
+      try {
+        const s = await apiClient.getSetting('chart_preferred_color_options');
+        if (s?.value != null) setPreferredColorOptions(s.value);
+      } catch {
+        // Older deployments may not have the setting — keep the default
+        // (option 2 per count) baked into chartColorConfig.
       }
     })();
   }, [identityResolved]);

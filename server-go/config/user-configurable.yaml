@@ -37,6 +37,16 @@ settings:
     description: "Default font size (px) for the value in new Number charts"
     value: 120
 
+  - key: chart_preferred_color_options
+    category: appearance
+    description: "Which Carbon color-combination 'option' multi-series charts use when auto-coloring, per number of series. Carbon curates several distinguishable combinations for 1–5 series; this picks the preferred one for each. Charts with 6+ series fall back to the full 14-color sequence. Per-series manual color overrides always win. Applies on next page load."
+    value:
+      "1": 2
+      "2": 2
+      "3": 2
+      "4": 2
+      "5": 2
+
   - key: default_dashboard_fit_mode
     category: dashboard
     description: "Default viewer fit mode for dashboards a user has not explicitly set. One of: actual, window, width, stretch."

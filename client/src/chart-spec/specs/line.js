@@ -27,7 +27,7 @@ import {
   COLOR_SECONDARY,
   COLOR_TEXT_SECONDARY,
   TRANSPARENT_BG,
-  categoricalColor,
+  paletteForCount,
   makeValueFormatter,
 } from '../option-helpers.js';
 
@@ -177,9 +177,11 @@ function buildSeriesForColumn(entry, idx, ctx) {
     // Single-axis, single-column, unstacked → blue default (or the override).
     seriesColor = overrideColor || LEFT_AXIS_COLOR;
   } else {
-    // Single-axis, multi-column (or stacked) → Carbon categorical palette by
-    // series index (or the override).
-    seriesColor = overrideColor || categoricalColor(idx);
+    // Single-axis, multi-column (or stacked) → Carbon COUNT-AWARE pairing:
+    // the curated combination for this many series (stackedCount), indexed by
+    // series position. Falls back to the 14-sequence by index for 6+ series.
+    // An explicit per-series override still wins.
+    seriesColor = overrideColor || paletteForCount(stackedCount)[idx];
   }
   series.itemStyle = { color: seriesColor };
   if (chartType === 'area') {
@@ -502,7 +504,10 @@ export function buildOption(values, data, helpers = {}) {
       // option.color in series-array order (each series' prominence-ranked
       // color) so the theme palette is overridden and the legend + areas both
       // follow the prominence ranking.
-      pivotColorOrder = groups.map((g) => categoricalColor(colorIdxOf.get(g.sv)));
+      // Count-aware pairing, indexed by magnitude rank — must match what
+      // buildSeriesForColumn assigns per series (it uses the same
+      // paletteForCount(stackedCount)[rank]) so legend + areas agree.
+      pivotColorOrder = groups.map((g) => paletteForCount(seriesValues.length)[colorIdxOf.get(g.sv)]);
     }
   } else {
     series = yEntries.map((entry, i) => buildSeriesForColumn(entry, i, {

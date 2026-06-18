@@ -2,7 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { CATEGORICAL_PALETTE, CATEGORICAL_NAMES } from '../config/theme.js';
+import { CATEGORICAL_PALETTE, CATEGORICAL_NAMES, CATEGORICAL_PAIRINGS, PAIRING_COUNTS } from '../config/theme.js';
+import { getPreferredColorOption } from '../utils/chartColorConfig.js';
 
 // Shared ECharts-option helpers for spec-driven chart buildOption
 // functions (line/bar/area/gauge/...). Anything every chart's option
@@ -48,6 +49,38 @@ export const CATEGORICAL_COLORS = CATEGORICAL_PALETTE;
  */
 export function categoricalColor(i) {
   return CATEGORICAL_COLORS[((i % CATEGORICAL_COLORS.length) + CATEGORICAL_COLORS.length) % CATEGORICAL_COLORS.length];
+}
+
+/**
+ * Carbon's COUNT-AWARE color combination for a chart with `count` series.
+ * Carbon curates specific combinations per series-count (1–5) so the colors
+ * are mutually distinguishable — NOT just the first N of the 14-sequence.
+ * The combination ("option") is the deployment's preferred option for that
+ * count (admin setting chart_preferred_color_options, default 2), clamped to
+ * what Carbon actually defines for the count.
+ *
+ * Counts outside 1–5 (or an unexpectedly empty table) fall back to the
+ * 14-color categorical sequence cycled by index — the prior behavior — so a
+ * 6+ series chart still gets distinct, on-brand colors. The returned array
+ * length always === count.
+ *
+ * @param {number} count number of series in the chart
+ * @returns {string[]} hex colors, one per series, in order
+ */
+export function paletteForCount(count) {
+  const n = Math.max(0, Math.floor(count) || 0);
+  if (PAIRING_COUNTS.includes(n)) {
+    const options = CATEGORICAL_PAIRINGS[n];
+    if (Array.isArray(options) && options.length > 0) {
+      // Preferred option is 1-based; clamp into range, fall back to option 1.
+      const pref = getPreferredColorOption(n);
+      const idx = Math.min(Math.max(1, pref), options.length) - 1;
+      const combo = options[idx];
+      if (Array.isArray(combo) && combo.length === n) return combo.slice();
+    }
+  }
+  // Fallback: cycle the 14-sequence by index.
+  return Array.from({ length: n }, (_, i) => categoricalColor(i));
 }
 
 // Named, numbered palette for the per-series color picker + agent. Each entry:

@@ -8,13 +8,16 @@
 // Runs as part of `npm run verify:chart-spec` (chained into build).
 
 import { buildOption } from '../src/chart-spec/specs/line.js';
-import { CATEGORICAL_PALETTE } from '../src/config/theme.js';
+import { paletteForCount } from '../src/chart-spec/option-helpers.js';
 
 // Resolve categorical colors from the active-theme palette (config/theme.js)
 // so these assertions follow a theme switch instead of pinning Light-theme hex.
-const CAT0 = CATEGORICAL_PALETTE[0];
-const CAT1 = CATEGORICAL_PALETTE[1];
-const CAT2 = CATEGORICAL_PALETTE[2];
+// Count-aware combos: multi-series charts color by the curated Carbon
+// combination for the series-count (paletteForCount), NOT raw palette index.
+// These resolve through the same code the renderer uses, so they track the
+// active theme + the deployment's preferred-option default.
+const PAIR2 = paletteForCount(2); // 2-series combo
+const PAIR3 = paletteForCount(3); // 3-series combo
 
 const FAILURES = [];
 
@@ -102,9 +105,9 @@ const data = {
   // Multi-series single-axis walks the active-theme Carbon categorical
   // palette by index (config/theme.js) — on-brand and distinct, not the
   // ECharts default and not all-unset.
-  check('case 3: series 0 categorical [0]', opt.series[0]?.itemStyle?.color === CAT0);
-  check('case 3: series 1 categorical [1]', opt.series[1]?.itemStyle?.color === CAT1);
-  check('case 3: series 2 categorical [2]', opt.series[2]?.itemStyle?.color === CAT2);
+  check('case 3: series 0 count-aware combo [0]', opt.series[0]?.itemStyle?.color === PAIR3[0]);
+  check('case 3: series 1 count-aware combo [1]', opt.series[1]?.itemStyle?.color === PAIR3[1]);
+  check('case 3: series 2 count-aware combo [2]', opt.series[2]?.itemStyle?.color === PAIR3[2]);
 }
 
 // --- Case 4: stacked subset (3 cols, two stacked, one not) ---
@@ -245,13 +248,13 @@ const data = {
   const opt = buildOption(values, pivotData, { formatCellValue, chartType: 'line' });
   check('case 11: pivot creates one series per distinct value', opt.series?.length === 2);
   check('case 11: series named after pivot values', opt.series[0]?.name === 'A' && opt.series[1]?.name === 'B');
-  // Pivot series get categorical colors assigned by PROMINENCE (magnitude
-  // rank), not array order — the largest-magnitude series gets CAT0, etc.
-  // Here site B (20,22) outweighs A (10,12), so B→CAT0 and A→CAT1.
-  // Regression guard: they previously all shared idx 0 (same color), and
-  // they must be DISTINCT palette colors.
-  check('case 11: pivot series A (lesser) categorical [1]', opt.series[0]?.itemStyle?.color === CAT1);
-  check('case 11: pivot series B (greater) categorical [0]', opt.series[1]?.itemStyle?.color === CAT0);
+  // Pivot series get colors from the count-aware combo assigned by PROMINENCE
+  // (magnitude rank), not array order — the largest-magnitude series gets
+  // combo[0], etc. Here site B (20,22) outweighs A (10,12), so B→combo[0] and
+  // A→combo[1]. Regression guard: they previously all shared idx 0 (same
+  // color), and they must be DISTINCT colors.
+  check('case 11: pivot series A (lesser) count-aware combo [1]', opt.series[0]?.itemStyle?.color === PAIR2[1]);
+  check('case 11: pivot series B (greater) count-aware combo [0]', opt.series[1]?.itemStyle?.color === PAIR2[0]);
 }
 
 // --- Case 12: area chart type ---
