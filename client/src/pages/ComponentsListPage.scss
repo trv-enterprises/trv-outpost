@@ -62,9 +62,7 @@
       overflow: visible;
 
       .cds--search {
-        width: 240px;
-        min-width: 240px;
-        flex-shrink: 0;
+        width: 300px;
         background-color: var(--cds-layer-01);
       }
 
@@ -75,8 +73,8 @@
       }
 
       // Width is owned by the shared .connection-filter-dropdown rule
-      // (App.scss) so the trigger sizes to its content (snug idle, grows to
-      // the selected name). Keep it from being squished in the toolbar.
+      // (App.scss), which floors the inner field at 11rem. Just keep this from
+      // being squished in the toolbar.
       #connection-filter {
         flex-shrink: 0;
       }

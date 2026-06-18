@@ -635,8 +635,12 @@ button.cds--overflow-menu {
   // Trigger sizes to its CONTENT: tight on "All Connections" (idle), then
   // grows to fit the selected connection name (names can be long). Clamped so
   // a very long name can't blow out the toolbar — it ellipsizes at the cap.
+  // The floor goes on the inner .cds--list-box__field (the actual toggle
+  // button) too — Carbon makes it max-content, so without this it shrinks to
+  // the text width and the floor on the wrapper has no visible effect.
   .cds--dropdown,
-  .cds--list-box {
+  .cds--list-box,
+  .cds--list-box__field {
     inline-size: max-content;
     min-inline-size: 11rem; // comfortable floor for "All Connections"
     max-inline-size: 22rem;
