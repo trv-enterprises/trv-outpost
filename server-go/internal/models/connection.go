@@ -120,6 +120,45 @@ type Connection struct {
 	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
 }
 
+// ConnectionQueryParams defines query parameters for listing connections
+// with server-side filter + sort + pagination (#21). Connections
+// historically used positional limit/offset args with no struct; this
+// brings them in line with components/dashboards/users.
+// @Description Query parameters for filtering, sorting, and paginating connections
+type ConnectionQueryParams struct {
+	Namespace string   `form:"namespace"` // Empty = all namespaces; non-empty = exact match
+	Name      string   `form:"name"`      // Case-insensitive substring match
+	Type      string   `form:"type"`      // Filter by connection type
+	Tags      []string `form:"tags"`      // Filter connections with any of the given tags (OR)
+	Sort      string   `form:"sort"`      // Sort field (allowlisted; see ConnectionSortFields). Empty = default.
+	Direction string   `form:"direction"` // "asc" | "desc". Empty = entity default.
+	Page      int      `form:"page"`
+	PageSize  int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+}
+
+// ConnectionListResponse is the paginated list envelope for connections,
+// matching the shape of the component/dashboard/user list responses.
+// @Description Response containing a list of connections with pagination
+type ConnectionListResponse struct {
+	Connections []*Connection `json:"connections"`
+	Total       int64         `json:"total"`
+	Page        int           `json:"page"`
+	PageSize    int           `json:"page_size"`
+	HasMore     bool          `json:"has_more"` // True when records exist beyond this page
+}
+
+// ConnectionWithUsage is a list row carrying the connection plus its
+// denormalized component usage (#21): one {id,name} per component that
+// references this connection (via connection_id or a display's
+// frigate/mqtt connection id), de-duped, with the count. Returned when
+// ?include_usage=true so the connections page shows the component count +
+// a navigable list without fetching every component client-side.
+type ConnectionWithUsage struct {
+	Connection     `bson:",inline"`
+	ComponentUsage []EntityRef `json:"component_usage" bson:"component_usage"`
+	ComponentCount int         `json:"component_count" bson:"component_count"`
+}
+
 // DiscoveredValueList is one column's cached distinct values for the
 // dashboard-variable dropdown. Partial is true when the capture was cut short
 // (record cap hit or the user stopped early), so consumers can label the list

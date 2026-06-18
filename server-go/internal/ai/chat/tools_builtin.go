@@ -42,10 +42,15 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	// ─── Connections ───
 	reg.Register(Tool{
 		Name:        "list_connections",
-		Description: "List all configured connections (SQL, API, MQTT, EdgeLake, etc). Returns name, type, and ID for each.",
+		Description: "List configured connections (SQL, API, MQTT, EdgeLake, etc), filtered/sorted/paginated server-side. By default returns ALL matching connections (up to a 1000 cap). Returns name, type, and ID for each (secrets masked). total + has_more indicate truncation.",
 		Tier:        TierA,
-		InputSchema: emptyObjectSchema(),
-		Handler:     wrapListConnections(ops),
+		InputSchema: listObjectSchema(map[string]interface{}{
+			"namespace": map[string]interface{}{"type": "string", "description": "Filter by namespace"},
+			"name":      map[string]interface{}{"type": "string", "description": "Filter by name (case-insensitive substring)"},
+			"type":      map[string]interface{}{"type": "string", "description": "Filter by connection type"},
+			"tags":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Filter by tags (OR semantics)"},
+		}, "name, created_at, updated_at, type, namespace"),
+		Handler: wrapListConnections(ops),
 	})
 
 	// Tier B: schema only loaded after describe_tool. Each
@@ -152,16 +157,17 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	// ─── Components ───
 	reg.Register(Tool{
 		Name:        "list_components",
-		Description: "List components (charts/controls/displays). Optionally filter by chart_type, connection_id, or tag.",
+		Description: "List components (charts/controls/displays), filtered/sorted/paginated server-side. By default returns ALL matching components (up to a 1000 cap); use filters + page_size to narrow. The result's total + has_more indicate whether it was truncated.",
 		Tier:        TierA,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"chart_type":    map[string]interface{}{"type": "string", "description": "Filter by chart subtype (bar, line, etc)"},
-				"connection_id": map[string]interface{}{"type": "string", "description": "Filter by connection ID"},
-				"tag":           map[string]interface{}{"type": "string", "description": "Filter by tag"},
-			},
-		},
+		InputSchema: listObjectSchema(map[string]interface{}{
+			"namespace":      map[string]interface{}{"type": "string", "description": "Filter by namespace"},
+			"name":           map[string]interface{}{"type": "string", "description": "Filter by name (case-insensitive word-prefix match)"},
+			"chart_type":     map[string]interface{}{"type": "string", "description": "Filter by chart subtype (bar, line, etc)"},
+			"component_type": map[string]interface{}{"type": "string", "enum": []string{"chart", "control", "display"}, "description": "Filter by component type"},
+			"status":         map[string]interface{}{"type": "string", "enum": []string{"draft", "final"}, "description": "Filter by status"},
+			"connection_id":  map[string]interface{}{"type": "string", "description": "Filter by connection ID"},
+			"tags":           map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Filter by tags (OR semantics)"},
+		}, "name, updated, created, component_type, chart_type, status, namespace"),
 		Handler: wrapListComponents(ops),
 	})
 
@@ -250,10 +256,16 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	// ─── Dashboards ───
 	reg.Register(Tool{
 		Name:        "list_dashboards",
-		Description: "List all dashboards in the deployment.",
+		Description: "List dashboards, filtered/sorted/paginated server-side. By default returns ALL matching dashboards (up to a 1000 cap). Pass component_id to find dashboards that use a specific component. total + has_more indicate truncation.",
 		Tier:        TierA,
-		InputSchema: emptyObjectSchema(),
-		Handler:     wrapListDashboards(ops),
+		InputSchema: listObjectSchema(map[string]interface{}{
+			"namespace":    map[string]interface{}{"type": "string", "description": "Filter by namespace"},
+			"name":         map[string]interface{}{"type": "string", "description": "Filter by name (partial match)"},
+			"is_public":    map[string]interface{}{"type": "boolean", "description": "Filter by public status"},
+			"component_id": map[string]interface{}{"type": "string", "description": "Only dashboards that reference this component"},
+			"tags":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Filter by tags (OR semantics)"},
+		}, "name, updated, created, namespace"),
+		Handler: wrapListDashboards(ops),
 	})
 
 	reg.Register(Tool{
@@ -404,6 +416,22 @@ func emptyObjectSchema() map[string]interface{} {
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	}
+}
+
+// listObjectSchema builds an object schema from the given property map and
+// appends the shared sort + pagination properties every list tool accepts
+// (#21). sortFields is the human-readable allowlist shown in the sort
+// description. The result advertises the FULL queryable surface so the
+// agent can filter/sort/page precisely instead of pulling everything.
+func listObjectSchema(props map[string]interface{}, sortFields string) map[string]interface{} {
+	if props == nil {
+		props = map[string]interface{}{}
+	}
+	props["sort"] = map[string]interface{}{"type": "string", "description": "Sort field. One of: " + sortFields + ". Omit for the default."}
+	props["direction"] = map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}, "description": "Sort direction. Omit for the default."}
+	props["page"] = map[string]interface{}{"type": "integer", "description": "1-based page number (default 1)."}
+	props["page_size"] = map[string]interface{}{"type": "integer", "description": "Records per page. Omit or 0 = all matching, up to a server cap of 1000. The result's total + has_more tell you whether it was truncated."}
+	return map[string]interface{}{"type": "object", "properties": props}
 }
 
 // chartQueryConfigSchema returns the inline JSON-schema for
@@ -687,7 +715,13 @@ func wrapListNamespaces(ops *toolops.Toolset) ToolHandler {
 
 func wrapListConnections(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
-		out, err := ops.ListConnections(ctx)
+		var in toolops.ListConnectionsInput
+		if len(args) > 0 {
+			if err := json.Unmarshal(args, &in); err != nil {
+				return "", fmt.Errorf("invalid args: %w", err)
+			}
+		}
+		out, err := ops.ListConnections(ctx, in)
 		if err != nil {
 			return "", err
 		}
@@ -755,20 +789,12 @@ func wrapListComponents(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
 		var in toolops.ListComponentsInput
 		if len(args) > 0 {
-			// Decode the model-facing shape (snake_case) into the
-			// strongly-typed input. JSON tags would be cleaner but the
-			// surface is small enough to do manually.
-			var raw struct {
-				ChartType    string `json:"chart_type"`
-				ConnectionID string `json:"connection_id"`
-				Tag          string `json:"tag"`
-			}
-			if err := json.Unmarshal(args, &raw); err != nil {
+			// ListComponentsInput carries JSON tags, so the model-facing
+			// snake_case args unmarshal directly — no hand-rolled raw struct
+			// that silently drops fields when the input grows (#21/#54).
+			if err := json.Unmarshal(args, &in); err != nil {
 				return "", fmt.Errorf("invalid args: %w", err)
 			}
-			in.ChartType = raw.ChartType
-			in.ConnectionID = raw.ConnectionID
-			in.Tag = raw.Tag
 		}
 		out, err := ops.ListComponents(ctx, in)
 		if err != nil {
@@ -954,7 +980,13 @@ func wrapUpdateDashboard(ops *toolops.Toolset) ToolHandler {
 
 func wrapListDashboards(ops *toolops.Toolset) ToolHandler {
 	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
-		out, err := ops.ListDashboards(ctx)
+		var in toolops.ListDashboardsInput
+		if len(args) > 0 {
+			if err := json.Unmarshal(args, &in); err != nil {
+				return "", fmt.Errorf("invalid args: %w", err)
+			}
+		}
+		out, err := ops.ListDashboards(ctx, in)
 		if err != nil {
 			return "", err
 		}

@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -15,8 +15,6 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
   TableToolbarSearch,
   Button,
   IconButton,
@@ -26,23 +24,24 @@ import {
   Tile,
   ContentSwitcher,
   Switch,
-  InlineNotification,
   Dropdown,
   OverflowMenu,
-  OverflowMenuItem
+  OverflowMenuItem,
+  Pagination
 } from '@carbon/react';
-import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Information, Dashboard, Keyboard, TouchInteraction, Filter, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
+import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Dashboard, TouchInteraction, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
 import apiClient from '../api/client';
+import usePaginatedList from '../hooks/usePaginatedList';
 import ComponentDeleteDialog from '../components/ComponentDeleteDialog';
 import CreateMenu from '../components/CreateMenu';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
-import TypeHierarchyFilter from '../components/shared/TypeHierarchyFilter';
+import TypeHierarchyFilter, { matchesTypeSelection, COMPONENT_TYPE_HIERARCHY } from '../components/shared/TypeHierarchyFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import VariableIndicator from '../components/shared/VariableIndicator';
 import CustomCodeIndicator from '../components/shared/CustomCodeIndicator';
@@ -52,6 +51,48 @@ import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import './ComponentsListPage.scss';
 import '../components/shared/FilterOverflowMenu.scss';
+
+const PAGE_SIZES = [25, 50, 100];
+
+// Per-parent subtype counts, used to detect "whole parent selected".
+const SUBTYPE_COUNTS = Object.fromEntries(
+  Object.entries(COMPONENT_TYPE_HIERARCHY).map(([p, def]) => [p, def.subtypes.length])
+);
+
+/**
+ * Map a TypeHierarchyFilter selection (Set of "parent:subtype" keys, or null
+ * for "all") onto the single-valued server params component_type / chart_type,
+ * and report whether a client-side pass is still needed.
+ *
+ * The server filters ONE component_type and ONE chart_type at a time (it has no
+ * control_type/display_type filter). We push a server filter only when the
+ * selection collapses cleanly so the paged `total` stays accurate:
+ *   - one chart subtype                        → component_type=chart & chart_type=sub
+ *   - all subtypes of exactly one parent       → component_type=parent
+ * Everything else (mixed parents, a partial subtype set, or any control/display
+ * subset) can't be expressed in single params, so it loads UNFILTERED from the
+ * server and is filtered CLIENT-side on the loaded page (commented #21). Returns
+ * { server: {component_type, chart_type}, clientFilter: bool }.
+ */
+function resolveTypeSelection(selectedTypes) {
+  const none = { server: { component_type: '', chart_type: '' }, clientFilter: false };
+  if (selectedTypes === null) return none; // all selected → no filter
+  if (selectedTypes.size === 0) return { ...none, clientFilter: true }; // none → client returns empty
+  const keys = Array.from(selectedTypes);
+  const parents = new Set(keys.map((k) => k.split(':')[0]));
+  if (parents.size !== 1) return { ...none, clientFilter: true }; // mixed parents
+  const parent = keys[0].split(':')[0];
+  // One chart subtype is fully server-expressible.
+  if (parent === 'chart' && keys.length === 1) {
+    return { server: { component_type: 'chart', chart_type: keys[0].split(':')[1] }, clientFilter: false };
+  }
+  // Whole parent selected (every subtype) → component_type filter is exact.
+  if (keys.length === SUBTYPE_COUNTS[parent]) {
+    return { server: { component_type: parent, chart_type: '' }, clientFilter: false };
+  }
+  // Partial subtype set within one parent → client pass on the loaded page.
+  return { ...none, clientFilter: true };
+}
 
 /**
  * ComponentsListPage Component
@@ -73,15 +114,16 @@ function ComponentsListPage() {
   const savedFilters = { ...getListPrefs('charts'), ...getFilters('charts') };
 
   // Initialize state from saved filters (persist across navigation within session)
-  const [charts, setCharts] = useState([]);
-  const [connections, setConnections] = useState({});
-  const [dashboardCounts, setDashboardCounts] = useState({}); // Map of component_id -> dashboard count
-  const [dashboardNames, setDashboardNames] = useState({}); // Map of component_id -> array of dashboard display names
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [connections, setConnections] = useState({}); // id -> name, one-shot lookup for the connection column
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
-  const [sortKey, setSortKey] = useState(savedFilters.sortKey || 'updated');
+  // 'dashboards' (count) and 'connection' (name) were client-only sort keys with
+  // no server field; fall back to 'updated' so a persisted value stays valid.
+  const initialSort = (savedFilters.sortKey === 'dashboards' || savedFilters.sortKey === 'connection')
+    ? 'updated'
+    : (savedFilters.sortKey || 'updated');
+  const [sortKey, setSortKey] = useState(initialSort);
   const [sortDirection, setSortDirection] = useState(savedFilters.sortDir || 'desc');
+  const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [chartToDelete, setChartToDelete] = useState(null);
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
@@ -106,6 +148,44 @@ function ComponentsListPage() {
     return null;
   });
 
+  // Resolve the hierarchical type selection into server params (+ whether a
+  // client pass is still needed). See resolveTypeSelection above.
+  const { server: typeServerParams, clientFilter: typeNeedsClientFilter } = resolveTypeSelection(selectedTypes);
+
+  // Server-side filter/sort/pagination (#21). dashboard_count / dashboard_usage
+  // come from include_usage:true (replaces the old getDashboards(page_size:1000)
+  // truncation hack). Server search matches NAME only (the old client search
+  // also matched description/chart_type/connection-name — acceptable).
+  const {
+    rows: charts,
+    total,
+    loading,
+    error,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePaginatedList({
+    fetcher: (q) => apiClient.getComponents(q),
+    extract: (resp) => ({ rows: resp?.components || [], total: resp?.total || 0, hasMore: resp?.has_more }),
+    filters: {
+      include_usage: true,
+      namespace: namespaceFilter,
+      component_type: typeServerParams.component_type,
+      chart_type: typeServerParams.chart_type,
+      connection_id: connectionFilter === 'all' ? '' : connectionFilter,
+      tags: tagFilter,
+    },
+    sortKey,
+    sortDir: sortDirection,
+    initialPageSize: savedFilters.pageSize || 25,
+    search: searchTerm,
+    searchKey: 'name',
+    reloadTick,
+  });
+
+  const refetch = useCallback(() => setReloadTick((t) => t + 1), []);
+
   // Save filters to session store when they change
   useEffect(() => {
     setFilters('charts', {
@@ -120,98 +200,28 @@ function ComponentsListPage() {
       variableOnly,
       customCodeOnly,
     });
-    // Persist user-level preferences (view mode, sort) to user config — survives reloads
+    // Persist user-level preferences (view mode, sort, page size) — survives reloads
     setListPrefs('charts', {
       view: viewMode,
       sortKey,
-      sortDir: sortDirection
+      sortDir: sortDirection,
+      pageSize,
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter, variableOnly, customCodeOnly]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, connectionFilter, selectedTypes, tagFilter, namespaceFilter, variableOnly, customCodeOnly, pageSize]);
 
-  // Fetch charts and data sources from API
+  // One-shot connection-name lookup for the connection column. Connections are
+  // few (no truncation risk), so a single page_size:'all' fetch is fine —
+  // separate from the paginated component list.
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    apiClient.getConnections({ page_size: 'all' }).then((data) => {
+      if (cancelled || !data?.connections) return;
+      const connMap = {};
+      data.connections.forEach((conn) => { connMap[conn.id] = conn.name; });
+      setConnections(connMap);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      // Fetch charts, connections, and dashboards in parallel.
-      // page_size:1000 on dashboards so the usage count below sees EVERY
-      // dashboard — the default page (20) was dropping referencing dashboards,
-      // making the count read 0 while the server's delete-guard (full scan)
-      // correctly found the reference.
-      const [chartsData, connectionsData, dashboardsData] = await Promise.all([
-        apiClient.getComponents(),
-        apiClient.getConnections(),
-        apiClient.getDashboards({ page_size: 1000 })
-      ]);
-
-      if (chartsData.components) {
-        setCharts(chartsData.components);
-      } else if (chartsData.error) {
-        setError(chartsData.error);
-      } else {
-        setCharts([]);
-      }
-
-      // Create a lookup map for connections
-      if (connectionsData.connections) {
-        const connMap = {};
-        connectionsData.connections.forEach(conn => {
-          connMap[conn.id] = conn.name;
-        });
-        setConnections(connMap);
-      }
-
-      // Build dashboard count + name-list maps by component_id. The
-      // count tracks how many panels reference the component (a single
-      // dashboard can use the same component in multiple panels — those
-      // bump the count but the dashboard name only appears once in the
-      // tooltip list).
-      if (dashboardsData.dashboards) {
-        const counts = {};
-        const names = {};
-        dashboardsData.dashboards.forEach(dashboard => {
-          if (!dashboard.panels) return;
-          const dashboardLabel = dashboard.name || '(unnamed)';
-          const seenInThisDashboard = new Set();
-          // A panel references a component both via its default component_id AND
-          // via any component-swap override rules — count both, so a component
-          // used only through an override still shows as in-use (matches the
-          // server's delete-guard, which considers overrides too).
-          const refIn = (panel) => {
-            const ids = [];
-            if (panel.component_id) ids.push(panel.component_id);
-            (panel.component_overrides || []).forEach(ov => {
-              if (ov.component_id) ids.push(ov.component_id);
-            });
-            return ids;
-          };
-          dashboard.panels.forEach(panel => {
-            refIn(panel).forEach(cid => {
-              counts[cid] = (counts[cid] || 0) + 1;
-              if (seenInThisDashboard.has(cid)) return;
-              seenInThisDashboard.add(cid);
-              // Store { id, label } so the count popover can navigate to each
-              // dashboard's editor.
-              (names[cid] = names[cid] || []).push({ id: dashboard.id, label: dashboardLabel });
-            });
-          });
-        });
-        setDashboardCounts(counts);
-        setDashboardNames(names);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCharts = async () => {
-    fetchData();
-  };
 
   // Create menu handlers
   const handleCreate = () => {
@@ -253,20 +263,12 @@ function ComponentsListPage() {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = (result) => {
+  const handleDeleteConfirm = () => {
     setDeleteDialogOpen(false);
     setChartToDelete(null);
-    // The delete already succeeded server-side. When the whole component
-    // was removed, drop just its row from local state — no full re-fetch
-    // (re-fetching components + connections + dashboards and replacing the
-    // arrays regenerated the entire list on a single delete). When only a
-    // version/draft was removed the component still exists; re-fetch so the
-    // row's version metadata stays accurate.
-    if (result?.removedComponent) {
-      setCharts((prev) => prev.filter((c) => c.id !== result.id));
-    } else {
-      fetchCharts();
-    }
+    // The delete already succeeded server-side. The list is server-paged now,
+    // so refetch the current page to reflect the change (#21).
+    refetch();
   };
 
   const handleDeleteClose = () => {
@@ -332,147 +334,50 @@ function ComponentsListPage() {
     }
   };
 
-  // Filter and sort components (displays + controls)
+  // Server already applied namespace / type (when expressible) / connection /
+  // tags / search / sort / pagination. What remains are CLIENT-only passes on
+  // the loaded page (#21):
+  //   - type selection that couldn't collapse to single server params
+  //     (mixed parents / partial subtype sets) — see resolveTypeSelection.
+  //   - variableOnly / customCodeOnly toggles — no server field.
+  // These filter only the loaded page; that's acceptable here (the toggles are
+  // niche and the partial-type case is uncommon).
   const filteredAndSortedCharts = useMemo(() => {
-    let result = [...charts];
+    let result = charts;
 
-    // Multi-select namespace filter; empty filter = show everything.
-    // Components with an empty/missing namespace value are treated as
-    // "default" — same fallback the table cell uses for display, so
-    // filtering and the visible namespace tag stay in lockstep.
-    if (namespaceFilter.length > 0) {
-      const wanted = new Set(namespaceFilter);
-      result = result.filter((c) => wanted.has(c.namespace || 'default'));
+    // #21: client-only post-filter on the loaded page — the type selection
+    // wasn't fully server-expressible.
+    if (typeNeedsClientFilter) {
+      result = result.filter((item) => matchesTypeSelection(item, selectedTypes));
     }
 
-    // Filter by hierarchical type selection
-    // null = all selected (no filter), Set = specific selection
-    if (selectedTypes !== null) {
-      if (selectedTypes.size === 0) {
-        // Nothing selected - return empty array
-        return [];
-      }
-      result = result.filter(item => {
-        // Map component_type to hierarchy key
-        const componentType = item.component_type || 'chart';
-        let subtype;
-        if (componentType === 'control') {
-          subtype = item.control_config?.control_type || 'button';
-        } else if (componentType === 'display') {
-          subtype = item.display_config?.display_type || 'frigate_camera';
-        } else {
-          subtype = item.chart_type || 'custom';
-        }
-        const typeKey = `${componentType}:${subtype}`;
-        return selectedTypes.has(typeKey);
-      });
-    }
-
-    // Filter by connection. Components reference connections through one of
-    // three fields: top-level connection_id (charts/controls), or
-    // display_config.frigate_connection_id / mqtt_connection_id for
-    // Frigate/weather displays. Include all of them so a Frigate display's
-    // API and MQTT connections both filter correctly.
-    if (connectionFilter !== 'all') {
-      result = result.filter(item => {
-        if (item.connection_id === connectionFilter) return true;
-        const dc = item.display_config;
-        if (dc?.frigate_connection_id === connectionFilter) return true;
-        if (dc?.mqtt_connection_id === connectionFilter) return true;
-        return false;
-      });
-    }
-
-    // Filter by tags (OR semantics)
-    if (tagFilter.length > 0) {
-      result = result.filter(chart => {
-        const chartTags = chart.tags || [];
-        return tagFilter.some(t => chartTags.includes(t));
-      });
-    }
-
-    // Variable-driven only: keep components whose query/filter uses the
-    // {{dashboard-variable}} token (auto-derived uses_dashboard_variable).
+    // #21: client-only post-filter on the loaded page — no server field for
+    // variable-driven components.
     if (variableOnly) {
-      result = result.filter(chart => !!chart.uses_dashboard_variable);
+      result = result.filter((chart) => !!chart.uses_dashboard_variable);
     }
 
-    // Custom-code only: keep components that render from hand-written code.
+    // #21: client-only post-filter on the loaded page — no server field for
+    // custom-code components.
     if (customCodeOnly) {
-      result = result.filter(chart => !!chart.use_custom_code);
+      result = result.filter((chart) => !!chart.use_custom_code);
     }
-
-    // Filter by search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(chart => {
-        const connName = connections[chart.connection_id || chart.connection_id] || '';
-        return chart.name?.toLowerCase().includes(term) ||
-          chart.description?.toLowerCase().includes(term) ||
-          chart.chart_type?.toLowerCase().includes(term) ||
-          connName.toLowerCase().includes(term);
-      });
-    }
-
-    // Sort - drafts first, then by selected sort key
-    result.sort((a, b) => {
-      // Primary sort: drafts come first
-      const aIsDraft = (a.status || 'draft') === 'draft';
-      const bIsDraft = (b.status || 'draft') === 'draft';
-      if (aIsDraft && !bIsDraft) return -1;
-      if (!aIsDraft && bIsDraft) return 1;
-
-      // Secondary sort: by selected sort key
-      let aVal, bVal;
-
-      // Handle connection sorting (use name lookup)
-      if (sortKey === 'connection') {
-        aVal = connections[a.connection_id || a.datasource_id] || '';
-        bVal = connections[b.connection_id || b.datasource_id] || '';
-      } else if (sortKey === 'component_type' || sortKey === 'chart_type') {
-        // Component + Type are two columns, but BOTH sort by the same composite
-        // key: component_type FIRST so all charts (then controls, then displays)
-        // group together, then by subtype within each group (chart/LINE,
-        // chart/BAR, ...). So sorting by either column keeps charts contiguous
-        // instead of the old behavior where a Type sort interleaved
-        // chart/control/display by subtype.
-        const sub = (c) => c.chart_type || c.control_config?.control_type || c.display_config?.display_type || '';
-        aVal = `${a.component_type || 'chart'}:${sub(a)}`;
-        bVal = `${b.component_type || 'chart'}:${sub(b)}`;
-      } else if (sortKey === 'dashboards') {
-        // Handle dashboards count sorting
-        aVal = dashboardCounts[a.id] || 0;
-        bVal = dashboardCounts[b.id] || 0;
-      } else {
-        aVal = a[sortKey] || '';
-        bVal = b[sortKey] || '';
-      }
-
-      // Handle date sorting
-      if (sortKey === 'updated') {
-        aVal = new Date(aVal).getTime() || 0;
-        bVal = new Date(bVal).getTime() || 0;
-      } else if (sortKey !== 'dashboards') {
-        aVal = String(aVal).toLowerCase();
-        bVal = String(bVal).toLowerCase();
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
 
     return result;
-  }, [charts, connections, dashboardCounts, searchTerm, sortKey, sortDirection, selectedTypes, connectionFilter, tagFilter, namespaceFilter, variableOnly, customCodeOnly]);
+  }, [charts, typeNeedsClientFilter, selectedTypes, variableOnly, customCodeOnly]);
 
+  // Sort allowlist: name, updated, created, component_type, chart_type, status,
+  // namespace. 'dashboards' (count) and 'connection' (name) have no server sort
+  // field — marked non-sortable. The old drafts-first special-case is dropped
+  // (status sorts plainly now).
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'component_type', header: 'Component', isSortable: true },
     { key: 'chart_type', header: 'Type', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
-    { key: 'dashboards', header: 'Dashboards', isSortable: true },
-    { key: 'connection', header: 'Connection', isSortable: true },
+    { key: 'dashboards', header: 'Dashboards', isSortable: false },
+    { key: 'connection', header: 'Connection', isSortable: false },
     { key: 'status', header: 'Status', isSortable: true },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
@@ -484,8 +389,8 @@ function ComponentsListPage() {
     namespace: chart.namespace || 'default',
     component_type: chart.component_type || 'chart',
     chart_type: chart.chart_type || chart.control_config?.control_type || chart.display_config?.display_type || '',
-    connection: connections[chart.connection_id || chart.connection_id] || 'None',
-    dashboards: dashboardCounts[chart.id] || 0,
+    connection: connections[chart.connection_id] || 'None',
+    dashboards: chart.dashboard_count || 0,
     status: chart.status || 'draft',
     description: chart.description || '',
     updated: formatDate(chart.updated)
@@ -726,10 +631,10 @@ function ComponentsListPage() {
                             {connections[chart.connection_id || chart.connection_id]}
                           </span>
                         )}
-                        {dashboardCounts[chart.id] > 0 && (
+                        {chart.dashboard_count > 0 && (
                           <span className="tile-dashboards">
                             <Dashboard size={14} />
-                            {dashboardCounts[chart.id]} dashboard{dashboardCounts[chart.id] !== 1 ? 's' : ''}
+                            {chart.dashboard_count} dashboard{chart.dashboard_count !== 1 ? 's' : ''}
                           </span>
                         )}
                         <span className="tile-date">
@@ -888,7 +793,9 @@ function ComponentsListPage() {
                               );
                             }
                             if (cell.info.header === 'dashboards') {
-                              const items = (chart && dashboardNames[chart.id]) || [];
+                              // Server returns dashboard_usage as [{id,name}];
+                              // CountListPopover wants [{id,label}].
+                              const items = (chart?.dashboard_usage || []).map((u) => ({ id: u.id, label: u.name }));
                               return (
                                 <TableCell key={cell.id} className="dashboards-cell" onClick={(e) => e.stopPropagation()}>
                                   <CountListPopover
@@ -985,6 +892,19 @@ function ComponentsListPage() {
           )}
         </DataTable>
       )}
+
+      {/* Server-side pagination (#21) — shared across both views. */}
+      <Pagination
+        className="list-pagination"
+        page={page}
+        pageSize={pageSize}
+        pageSizes={PAGE_SIZES}
+        totalItems={total}
+        onChange={({ page: p, pageSize: ps }) => {
+          if (ps !== pageSize) setPageSize(ps);
+          setPage(p);
+        }}
+      />
 
       {/* Delete Confirmation Dialog */}
       <ComponentDeleteDialog

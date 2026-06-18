@@ -211,6 +211,18 @@ type UserListResponse struct {
 	Total    int64  `json:"total"`
 	Page     int    `json:"page"`
 	PageSize int    `json:"page_size"`
+	HasMore  bool   `json:"has_more"` // True when records exist beyond this page
+}
+
+// UserQueryParams defines query parameters for listing users with
+// server-side filter + sort + pagination (#21).
+// @Description Query parameters for filtering, sorting, and paginating users
+type UserQueryParams struct {
+	Name      string `form:"name"`      // Case-insensitive substring match on name or email
+	Sort      string `form:"sort"`      // Sort field (allowlisted; see UserSortFields). Empty = default.
+	Direction string `form:"direction"` // "asc" | "desc". Empty = entity default.
+	Page      int    `form:"page"`
+	PageSize  int    `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
 }
 
 // PseudoUsers defines the default pseudo users to seed

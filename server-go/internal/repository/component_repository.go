@@ -235,9 +235,11 @@ func (r *ComponentRepository) RenameNamespace(ctx context.Context, oldName, newN
 	return res.ModifiedCount, nil
 }
 
-// FindAllLatest retrieves the latest version of each component with pagination
-func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.ComponentQueryParams) ([]models.Component, int64, error) {
-	// Build match filter
+// buildLatestPipeline constructs the shared aggregation that filters,
+// reduces to the latest version per component id, and applies the
+// allowlisted display sort. Used by FindAllLatest and the
+// usage-denormalized variant so they stay in lockstep.
+func buildLatestPipeline(params models.ComponentQueryParams) mongo.Pipeline {
 	matchFilter := bson.M{}
 	if params.Namespace != "" {
 		matchFilter["namespace"] = params.Namespace
@@ -272,11 +274,11 @@ func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.C
 		matchFilter["status"] = params.Status
 	}
 
-	// Aggregation pipeline to get latest version of each component
-	pipeline := mongo.Pipeline{
+	return mongo.Pipeline{
 		// Match initial filters
 		{{Key: "$match", Value: matchFilter}},
-		// Sort by id and version descending
+		// Structural sort by id + version DESC — drives the latest-version
+		// $group below. NOT user-controllable; do not touch.
 		{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
 		// Group by id, taking the first (latest version)
 		{{Key: "$group", Value: bson.M{
@@ -286,9 +288,18 @@ func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.C
 		}}},
 		// Replace root with the full document
 		{{Key: "$replaceRoot", Value: bson.M{"newRoot": "$doc"}}},
-		// Sort by updated time for display
-		{{Key: "$sort", Value: bson.D{{Key: "updated", Value: -1}}}},
+		// Display sort (allowlisted; defaults to updated DESC) — the
+		// user-controllable POST-group sort.
+		{{Key: "$sort", Value: models.ResolveSort(
+			models.ComponentSortFields, params.Sort, params.Direction,
+			models.ComponentDefaultSortField, models.ComponentDefaultSortDir,
+		)}},
 	}
+}
+
+// FindAllLatest retrieves the latest version of each component with pagination
+func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.ComponentQueryParams) ([]models.Component, int64, error) {
+	pipeline := buildLatestPipeline(params)
 
 	// Count total unique components (before pagination)
 	countPipeline := append(pipeline, bson.D{{Key: "$count", Value: "total"}})
@@ -342,6 +353,103 @@ func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.C
 	}
 
 	return components, total, nil
+}
+
+// FindAllLatestWithUsage is FindAllLatest plus a denormalized dashboard
+// usage join (#21): each returned row carries the dashboards that
+// reference it (via a panel's component_id OR a component-swap override's
+// component_id), de-duped, with the count. The $lookup runs AFTER
+// pagination, so it touches only the page's components — usage scales with
+// page size, not the whole dashboards collection, and a component on page
+// N still gets a correct count.
+func (r *ComponentRepository) FindAllLatestWithUsage(ctx context.Context, params models.ComponentQueryParams) ([]models.ComponentWithUsage, int64, error) {
+	base := buildLatestPipeline(params)
+
+	// Count total unique components (count pipeline is independent so it
+	// doesn't alias the base slice).
+	countPipeline := make(mongo.Pipeline, len(base), len(base)+1)
+	copy(countPipeline, base)
+	countPipeline = append(countPipeline, bson.D{{Key: "$count", Value: "total"}})
+	countCursor, err := r.collection.Aggregate(ctx, countPipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer countCursor.Close(ctx)
+	var countResult []bson.M
+	if err := countCursor.All(ctx, &countResult); err != nil {
+		return nil, 0, err
+	}
+	var total int64
+	if len(countResult) > 0 {
+		if t, ok := countResult[0]["total"].(int32); ok {
+			total = int64(t)
+		} else if t, ok := countResult[0]["total"].(int64); ok {
+			total = t
+		}
+	}
+
+	page := params.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := params.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+
+	// Fresh pipeline copy + pagination + the usage $lookup.
+	pipeline := make(mongo.Pipeline, len(base), len(base)+4)
+	copy(pipeline, base)
+	pipeline = append(pipeline,
+		bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+		bson.D{{Key: "$limit", Value: int64(pageSize)}},
+		// Join dashboards that reference this component id either directly
+		// (panels.component_id) or via a swap override
+		// (panels.component_overrides.component_id). Project just {id,name}.
+		bson.D{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: "dashboards"},
+			{Key: "let", Value: bson.D{{Key: "cid", Value: "$id"}}},
+			{Key: "pipeline", Value: mongo.Pipeline{
+				{{Key: "$match", Value: bson.D{{Key: "$expr", Value: bson.D{
+					{Key: "$or", Value: bson.A{
+						bson.D{{Key: "$in", Value: bson.A{"$$cid", bson.D{{Key: "$ifNull", Value: bson.A{"$panels.component_id", bson.A{}}}}}}},
+						bson.D{{Key: "$in", Value: bson.A{"$$cid", bson.D{{Key: "$ifNull", Value: bson.A{
+							bson.D{{Key: "$reduce", Value: bson.D{
+								{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels.component_overrides", bson.A{}}}}},
+								{Key: "initialValue", Value: bson.A{}},
+								{Key: "in", Value: bson.D{{Key: "$concatArrays", Value: bson.A{
+									"$$value",
+									bson.D{{Key: "$map", Value: bson.D{
+										{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$$this", bson.A{}}}}},
+										{Key: "as", Value: "ov"},
+										{Key: "in", Value: "$$ov.component_id"},
+									}}},
+								}}}},
+							}}},
+							bson.A{},
+						}}}}}},
+					}},
+				}}}}},
+				{{Key: "$project", Value: bson.D{{Key: "_id", Value: 0}, {Key: "id", Value: "$_id"}, {Key: "name", Value: 1}}}},
+			}},
+			{Key: "as", Value: "dashboard_usage"},
+		}}},
+		bson.D{{Key: "$addFields", Value: bson.D{
+			{Key: "dashboard_count", Value: bson.D{{Key: "$size", Value: "$dashboard_usage"}}},
+		}}},
+	)
+
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var rows []models.ComponentWithUsage
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 // FindAll is an alias for FindAllLatest for backward compatibility

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
@@ -102,4 +103,34 @@ func TestDashboardSettingsSchemaParity(t *testing.T) {
 
 func TestChartQueryConfigSchemaParity(t *testing.T) {
 	assertParity(t, models.ChartQueryConfig{}, chartQueryConfigSchema(), nil)
+}
+
+// TestListToolInputSchemaParity locks each list tool's advertised input
+// schema to its toolops input struct (#21). The list inputs carry JSON
+// tags and are unmarshaled directly (no silent-drop), but a field added to
+// the struct and forgotten in the InputSchema is invisible to the agent —
+// this catches that. Build the registry with nil ops (we only inspect
+// schemas, never dispatch).
+func TestListToolInputSchemaParity(t *testing.T) {
+	reg := NewToolRegistry()
+	RegisterBuiltinTools(reg, nil)
+
+	cases := []struct {
+		tool  string
+		input interface{}
+		allow map[string]string
+	}{
+		{"list_components", toolops.ListComponentsInput{}, map[string]string{
+			"tag": "deprecated single-tag alias; superseded by tags — accepted but not advertised",
+		}},
+		{"list_dashboards", toolops.ListDashboardsInput{}, nil},
+		{"list_connections", toolops.ListConnectionsInput{}, nil},
+	}
+	for _, tc := range cases {
+		tl := reg.findTool(tc.tool)
+		if tl == nil {
+			t.Fatalf("tool %q not registered", tc.tool)
+		}
+		assertParity(t, tc.input, tl.InputSchema, tc.allow)
+	}
 }

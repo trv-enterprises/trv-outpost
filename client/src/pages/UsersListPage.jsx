@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DataTable,
@@ -13,8 +13,6 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
   TableToolbarSearch,
   Button,
   IconButton,
@@ -24,12 +22,15 @@ import {
   Tile,
   ContentSwitcher,
   Switch,
-  Toggle
+  Pagination
 } from '@carbon/react';
 import { TrashCan, UserMultiple, List, Grid, Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
+import usePaginatedList from '../hooks/usePaginatedList';
 import './UsersListPage.scss';
+
+const PAGE_SIZES = [25, 50, 100];
 
 /**
  * UsersListPage Component
@@ -42,19 +43,42 @@ import './UsersListPage.scss';
  */
 function UsersListPage() {
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
   const savedPrefs = getListPrefs('users');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState(savedPrefs.sortKey || 'name');
   const [sortDirection, setSortDirection] = useState(savedPrefs.sortDir || 'asc');
   const [viewMode, setViewMode] = useState(savedPrefs.view || 'list'); // 'list' or 'tile'
+  const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete
+
+  // Server-side filter/sort/pagination (#21). The 'capabilities' sort key is
+  // client-only (no server field); map it to the closest server sort so the
+  // request stays valid, then the column still highlights.
+  const serverSortKey = sortKey === 'capabilities' ? 'name' : sortKey;
+  const {
+    rows: users,
+    total,
+    loading,
+    error,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePaginatedList({
+    fetcher: (q) => apiClient.getUsers(q),
+    extract: (resp) => ({ rows: resp?.users || [], total: resp?.total || 0, hasMore: resp?.has_more }),
+    filters: {},
+    sortKey: serverSortKey,
+    sortDir: sortDirection,
+    initialPageSize: savedPrefs.pageSize || 25,
+    search: searchTerm,
+    searchKey: 'name',
+    reloadTick,
+  });
 
   // Persist user-level preferences to user config
   useEffect(() => {
-    setListPrefs('users', { view: viewMode, sortKey, sortDir: sortDirection });
-  }, [viewMode, sortKey, sortDirection]);
+    setListPrefs('users', { view: viewMode, sortKey, sortDir: sortDirection, pageSize });
+  }, [viewMode, sortKey, sortDirection, pageSize]);
 
   // Get color for capability tag
   const getCapabilityColor = (capability) => {
@@ -66,29 +90,7 @@ function UsersListPage() {
     return colors[capability?.toLowerCase()] || 'gray';
   };
 
-  // Fetch users from API
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getUsers();
-
-      if (data.users) {
-        setUsers(data.users);
-      } else if (data.error) {
-        setError(data.error);
-      } else {
-        setUsers([]);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const refetch = useCallback(() => setReloadTick((t) => t + 1), []);
 
   const handleCreate = () => {
     navigate('/manage/users/new');
@@ -109,7 +111,7 @@ function UsersListPage() {
     if (window.confirm(msg)) {
       try {
         await apiClient.deleteUser(user.id);
-        fetchUsers();
+        refetch();
       } catch (err) {
         alert(`Error: ${err.message}`);
       }
@@ -132,55 +134,19 @@ function UsersListPage() {
     }
   };
 
-  // Filter and sort users
-  const filteredAndSortedUsers = useMemo(() => {
-    let result = [...users];
-
-    // Filter by search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(user =>
-        user.name?.toLowerCase().includes(term) ||
-        user.email?.toLowerCase().includes(term) ||
-        user.capabilities?.some(c => c.toLowerCase().includes(term))
-      );
-    }
-
-    // Sort
-    result.sort((a, b) => {
-      let aVal = a[sortKey] || '';
-      let bVal = b[sortKey] || '';
-
-      // Handle date sorting
-      if (sortKey === 'updated') {
-        aVal = new Date(aVal).getTime() || 0;
-        bVal = new Date(bVal).getTime() || 0;
-      } else if (sortKey === 'capabilities') {
-        aVal = (a.capabilities || []).join(',');
-        bVal = (b.capabilities || []).join(',');
-      } else {
-        aVal = String(aVal).toLowerCase();
-        bVal = String(bVal).toLowerCase();
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [users, searchTerm, sortKey, sortDirection]);
-
+  // `users` is already filtered/sorted/paginated server-side (the hook).
+  // 'capabilities' is not a server sort field (it's array-derived) so it's
+  // marked non-sortable below.
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'email', header: 'Email', isSortable: true },
-    { key: 'capabilities', header: 'Capabilities', isSortable: true },
-    { key: 'active', header: 'Status', isSortable: true },
+    { key: 'capabilities', header: 'Capabilities', isSortable: false },
+    { key: 'active', header: 'Status', isSortable: false },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
 
-  const rows = filteredAndSortedUsers.map((user) => ({
+  const rows = users.map((user) => ({
     id: user.id,
     name: user.name,
     email: user.email || '',
@@ -254,7 +220,7 @@ function UsersListPage() {
       {/* Tile View */}
       {viewMode === 'tile' && (
         <div className="users-content">
-          {filteredAndSortedUsers.length === 0 ? (
+          {users.length === 0 ? (
             <div className="empty-state">
               <UserMultiple size={64} />
               <h3>No users available</h3>
@@ -266,7 +232,7 @@ function UsersListPage() {
             </div>
           ) : (
             <div className="users-grid">
-              {filteredAndSortedUsers.map((user) => (
+              {users.map((user) => (
                 <Tile
                   key={user.id}
                   className="user-tile"
@@ -425,6 +391,19 @@ function UsersListPage() {
           )}
         </DataTable>
       )}
+
+      {/* Server-side pagination (#21) — shared across both views. */}
+      <Pagination
+        className="list-pagination"
+        page={page}
+        pageSize={pageSize}
+        pageSizes={PAGE_SIZES}
+        totalItems={total}
+        onChange={({ page: p, pageSize: ps }) => {
+          if (ps !== pageSize) setPageSize(ps);
+          setPage(p);
+        }}
+      />
     </div>
   );
 }

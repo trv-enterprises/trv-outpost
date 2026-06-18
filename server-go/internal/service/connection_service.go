@@ -38,11 +38,10 @@ type ConnectionUsage struct {
 }
 
 // EntityRef is a minimal {id, name} pair so the frontend can show
-// human-readable references without a second API round-trip.
-type EntityRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
+// human-readable references without a second API round-trip. Aliased to
+// the models type so the list usage-denormalization (#21) and these
+// service usage structs share one definition.
+type EntityRef = models.EntityRef
 
 // ConnectionService handles connection business logic
 type ConnectionService struct {
@@ -231,21 +230,67 @@ func (s *ConnectionService) ListConnectionsByType(ctx context.Context, dsType mo
 	return connections, total, nil
 }
 
-// ListConnectionsFiltered retrieves connections with optional namespace,
-// type, and tag filters. Empty namespace = all namespaces (cross-namespace
-// toggle). Tags are OR-matched; normalized before the query.
-func (s *ConnectionService) ListConnectionsFiltered(ctx context.Context, namespace, typeFilter string, tags []string, limit, offset int64) ([]*models.Connection, int64, error) {
-	if limit <= 0 {
-		limit = 20
+// ListConnectionsPaged retrieves connections with server-side filter +
+// sort + pagination, returning the standard paginated envelope (#21).
+// Empty namespace = all namespaces (cross-namespace toggle). Tags are
+// OR-matched and normalized. page_size=0 → all (capped via ClampPageSize).
+// Used by both the HTTP list handler and the AI/toolops path so filtering
+// behaves identically.
+func (s *ConnectionService) ListConnectionsPaged(ctx context.Context, params models.ConnectionQueryParams) (*models.ConnectionListResponse, error) {
+	if params.Page < 1 {
+		params.Page = 1
 	}
-	if offset < 0 {
-		offset = 0
-	}
-	if len(tags) > 0 {
-		tags = models.NormalizeTags(tags)
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
+	if len(params.Tags) > 0 {
+		params.Tags = models.NormalizeTags(params.Tags)
 	}
 
-	return s.repo.List(ctx, namespace, typeFilter, tags, limit, offset)
+	limit := int64(params.PageSize)
+	offset := int64((params.Page - 1) * params.PageSize)
+
+	connections, total, err := s.repo.List(ctx, params, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("error listing connections: %w", err)
+	}
+
+	return &models.ConnectionListResponse{
+		Connections: connections,
+		Total:       total,
+		Page:        params.Page,
+		PageSize:    params.PageSize,
+		HasMore:     models.ComputeHasMore(params.Page, params.PageSize, len(connections), total),
+	}, nil
+}
+
+// ListConnectionsWithUsage is ListConnectionsPaged plus the denormalized
+// component-usage join (#21, ?include_usage=true): each row carries the
+// components that reference this connection + the count, computed
+// server-side for the current page only. Returns the with-usage rows
+// (NOT sanitized here — the handler sanitizes per row before responding).
+func (s *ConnectionService) ListConnectionsWithUsage(ctx context.Context, params models.ConnectionQueryParams) ([]models.ConnectionWithUsage, *models.ConnectionListResponse, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
+	if len(params.Tags) > 0 {
+		params.Tags = models.NormalizeTags(params.Tags)
+	}
+
+	limit := int64(params.PageSize)
+	offset := int64((params.Page - 1) * params.PageSize)
+
+	rows, total, err := s.repo.ListWithUsage(ctx, params, limit, offset)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error listing connections with usage: %w", err)
+	}
+
+	meta := &models.ConnectionListResponse{
+		Total:    total,
+		Page:     params.Page,
+		PageSize: params.PageSize,
+		HasMore:  models.ComputeHasMore(params.Page, params.PageSize, len(rows), total),
+	}
+	return rows, meta, nil
 }
 
 // UpdateConnection updates an existing connection

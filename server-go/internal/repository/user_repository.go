@@ -167,28 +167,40 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// List returns a paginated list of users
-func (r *UserRepository) List(ctx context.Context, page, pageSize int) ([]models.User, int64, error) {
+// List returns a paginated, optionally filtered + sorted list of users.
+// The page-size cap is owned by the service (ClampPageSize); the repo
+// only floors a non-positive value.
+func (r *UserRepository) List(ctx context.Context, params models.UserQueryParams) ([]models.User, int64, error) {
+	page := params.Page
 	if page < 1 {
 		page = 1
 	}
+	pageSize := params.PageSize
 	if pageSize < 1 {
 		pageSize = 10
 	}
 
-	// Count total
-	total, err := r.collection.CountDocuments(ctx, bson.M{})
+	filter := bson.M{}
+	if params.Name != "" {
+		// Case-insensitive substring across name OR email.
+		rx := bson.M{"$regex": params.Name, "$options": "i"}
+		filter["$or"] = bson.A{bson.M{"name": rx}, bson.M{"email": rx}}
+	}
+
+	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Find with pagination
 	opts := options.Find().
 		SetSkip(int64((page - 1) * pageSize)).
 		SetLimit(int64(pageSize)).
-		SetSort(bson.D{{Key: "name", Value: 1}})
+		SetSort(models.ResolveSort(
+			models.UserSortFields, params.Sort, params.Direction,
+			models.UserDefaultSortField, models.UserDefaultSortDir,
+		))
 
-	cursor, err := r.collection.Find(ctx, bson.M{}, opts)
+	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, 0, err
 	}

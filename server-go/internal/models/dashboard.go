@@ -420,6 +420,7 @@ type DashboardListResponse struct {
 	Total      int64       `json:"total"`
 	Page       int         `json:"page"`
 	PageSize   int         `json:"page_size"`
+	HasMore    bool        `json:"has_more"` // True when records exist beyond this page
 }
 
 // DashboardQueryParams defines query parameters for listing dashboards
@@ -431,23 +432,37 @@ type DashboardQueryParams struct {
 	ComponentID        string   `form:"component_id"`        // Filter dashboards using a specific component
 	Tags               []string `form:"tags"`                // Filter dashboards with any of the given tags (OR)
 	IncludeConnections bool     `form:"include_connections"` // Include connection names from referenced components
+	Sort               string   `form:"sort"`                // Sort field (allowlisted; see DashboardSortFields). Empty = default.
+	Direction          string   `form:"direction"`           // "asc" | "desc". Empty = entity default.
 	Page               int      `form:"page"`
-	PageSize           int      `form:"page_size"`
+	PageSize           int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
 }
 
 // DashboardSummary is a lightweight dashboard representation for tile listings
 // @Description Dashboard info with optional data source names for display in tiles
+// NOTE: bson tags are REQUIRED here. This struct is decoded from an
+// aggregation that projects snake_case keys (panel_count, connection_names,
+// component_usage). Without bson tags the driver maps by lowercased field
+// name (panelcount, connectionnames) which silently never matches — the
+// fields decode to zero. (That mismatch, combined with the charts→components
+// lookup drift, is why panel_count/connection_names were empty pre-#21.)
 type DashboardSummary struct {
-	ID              string            `json:"id"`
-	Namespace       string            `json:"namespace"`
-	Name            string            `json:"name"`
-	Description     string            `json:"description"`
-	Settings        DashboardSettings `json:"settings"`
-	Tags            []string          `json:"tags,omitempty"`
-	PanelCount      int               `json:"panel_count"`
-	ConnectionNames []string          `json:"connection_names,omitempty"` // Unique connection names used by referenced components
-	Created         time.Time         `json:"created"`
-	Updated         time.Time         `json:"updated"`
+	ID              string            `json:"id" bson:"id"`
+	Namespace       string            `json:"namespace" bson:"namespace"`
+	Name            string            `json:"name" bson:"name"`
+	Description     string            `json:"description" bson:"description"`
+	Settings        DashboardSettings `json:"settings" bson:"settings"`
+	Tags            []string          `json:"tags,omitempty" bson:"tags,omitempty"`
+	PanelCount      int               `json:"panel_count" bson:"panel_count"`
+	ConnectionNames []string          `json:"connection_names,omitempty" bson:"connection_names,omitempty"` // DEPRECATED: names only. Use ConnectionUsage for navigable links. Kept for back-compat.
+	// ComponentUsage / ConnectionUsage carry the {id,name} of each distinct
+	// component / connection the dashboard's panels reference, so the list
+	// page can render navigable popovers + links without a per-tile fetch
+	// (#21).
+	ComponentUsage  []EntityRef `json:"component_usage,omitempty" bson:"component_usage,omitempty"`
+	ConnectionUsage []EntityRef `json:"connection_usage,omitempty" bson:"connection_usage,omitempty"`
+	Created        time.Time   `json:"created" bson:"created"`
+	Updated        time.Time   `json:"updated" bson:"updated"`
 }
 
 // DashboardSummaryListResponse represents a paginated list of dashboard summaries
@@ -457,6 +472,7 @@ type DashboardSummaryListResponse struct {
 	Total      int64              `json:"total"`
 	Page       int                `json:"page"`
 	PageSize   int                `json:"page_size"`
+	HasMore    bool               `json:"has_more"` // True when records exist beyond this page
 }
 
 // DashboardWithComponents represents a dashboard with expanded component data

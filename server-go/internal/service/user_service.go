@@ -307,8 +307,13 @@ func (s *UserService) DeleteUser(ctx context.Context, id string) error {
 }
 
 // ListUsers returns a paginated list of users
-func (s *UserService) ListUsers(ctx context.Context, page, pageSize int) (*models.UserListResponse, error) {
-	users, total, err := s.repo.List(ctx, page, pageSize)
+func (s *UserService) ListUsers(ctx context.Context, params models.UserQueryParams) (*models.UserListResponse, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 10)
+
+	users, total, err := s.repo.List(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -316,8 +321,9 @@ func (s *UserService) ListUsers(ctx context.Context, page, pageSize int) (*model
 	return &models.UserListResponse{
 		Users:    users,
 		Total:    total,
-		Page:     page,
-		PageSize: pageSize,
+		Page:     params.Page,
+		PageSize: params.PageSize,
+		HasMore:  models.ComputeHasMore(params.Page, params.PageSize, len(users), total),
 	}, nil
 }
 

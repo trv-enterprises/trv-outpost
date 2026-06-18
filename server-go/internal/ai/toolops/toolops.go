@@ -140,18 +140,43 @@ func (t *Toolset) ListNamespaces(ctx context.Context) (*ListNamespacesOutput, er
 
 // ─── Connections ──────────────────────────────────────────────────
 
-type ListConnectionsOutput struct {
-	Connections []*models.Connection `json:"connections"`
-	Count       int64                `json:"count"`
+// ListConnectionsInput exposes the connection filter set + sort +
+// pagination (#21).
+type ListConnectionsInput struct {
+	Namespace string   `json:"namespace,omitempty"`
+	Name      string   `json:"name,omitempty"`
+	Type      string   `json:"type,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+	Sort      string   `json:"sort,omitempty"`
+	Direction string   `json:"direction,omitempty"`
+	Page      int      `json:"page,omitempty"`
+	PageSize  int      `json:"page_size,omitempty"` // 0/omitted = all (capped at 1000)
 }
 
-// ListConnections returns every connection in the deployment.
-// Pagination cap (100) mirrors the existing MCP behavior.
-func (t *Toolset) ListConnections(ctx context.Context) (*ListConnectionsOutput, error) {
+type ListConnectionsOutput struct {
+	Connections []*models.Connection `json:"connections"`
+	Count       int64                `json:"count"` // total matching the filter (NOT just this page)
+	Page        int                  `json:"page"`
+	PageSize    int                  `json:"page_size"`
+	HasMore     bool                 `json:"has_more"`
+}
+
+// ListConnections returns connections matching the optional filters,
+// sorted and paginated. Default page_size 0 → all (server-capped at 1000).
+func (t *Toolset) ListConnections(ctx context.Context, in ListConnectionsInput) (*ListConnectionsOutput, error) {
 	if t.Connections == nil {
 		return nil, fmt.Errorf("connection service not wired")
 	}
-	conns, total, err := t.Connections.ListConnections(ctx, 100, 0)
+	resp, err := t.Connections.ListConnectionsPaged(ctx, models.ConnectionQueryParams{
+		Namespace: in.Namespace,
+		Name:      in.Name,
+		Type:      in.Type,
+		Tags:      in.Tags,
+		Sort:      in.Sort,
+		Direction: in.Direction,
+		Page:      in.Page,
+		PageSize:  in.PageSize,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -161,13 +186,16 @@ func (t *Toolset) ListConnections(ctx context.Context) (*ListConnectionsOutput, 
 	// api_key/password here leaks in cleartext. SanitizeForAPI masks
 	// every secret field (TSStore api_key, SQL/MQTT/Prometheus
 	// passwords, API auth creds/headers/body, etc.).
-	masked := make([]*models.Connection, len(conns))
-	for i, c := range conns {
+	masked := make([]*models.Connection, len(resp.Connections))
+	for i, c := range resp.Connections {
 		masked[i] = c.SanitizeForAPI()
 	}
 	return &ListConnectionsOutput{
 		Connections: masked,
-		Count:       total,
+		Count:       resp.Total,
+		Page:        resp.Page,
+		PageSize:    resp.PageSize,
+		HasMore:     resp.HasMore,
 	}, nil
 }
 
@@ -356,29 +384,54 @@ func (ts *Toolset) QueryConnection(ctx context.Context, in QueryConnectionInput)
 
 // ─── Components ───────────────────────────────────────────────────
 
+// ListComponentsInput exposes the FULL component filter set the repo
+// supports (#21), plus sort + pagination. JSON tags let the chat wrapper
+// unmarshal the model-facing snake_case args directly — no hand-rolled
+// raw struct that silently drops new fields.
 type ListComponentsInput struct {
-	ChartType    string
-	ConnectionID string
-	Tag          string
+	Namespace     string   `json:"namespace,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	ChartType     string   `json:"chart_type,omitempty"`
+	ComponentType string   `json:"component_type,omitempty"`
+	Status        string   `json:"status,omitempty"`
+	ConnectionID  string   `json:"connection_id,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	Tag           string   `json:"tag,omitempty"` // deprecated single-tag; backfilled into Tags
+	Sort          string   `json:"sort,omitempty"`
+	Direction     string   `json:"direction,omitempty"`
+	Page          int      `json:"page,omitempty"`
+	PageSize      int      `json:"page_size,omitempty"` // 0/omitted = all (capped at 1000)
 }
 
 type ListComponentsOutput struct {
 	Components []models.Component `json:"components"`
-	Count      int64              `json:"count"`
+	Count      int64              `json:"count"`    // total matching the filter (NOT just this page)
+	Page       int                `json:"page"`
+	PageSize   int                `json:"page_size"`
+	HasMore    bool               `json:"has_more"` // true when more records exist beyond this page
 }
 
-// ListComponents returns components matching the optional filters.
-// Pagination + behavior mirror MCP exactly so the shim is transparent.
+// ListComponents returns components matching the optional filters, sorted
+// and paginated. Default page_size 0 → all (server-capped at 1000), so the
+// agent gets everything-up-to-cap in one call by default; Count + HasMore
+// signal when the set was truncated.
 func (t *Toolset) ListComponents(ctx context.Context, in ListComponentsInput) (*ListComponentsOutput, error) {
 	if t.Components == nil {
 		return nil, fmt.Errorf("component service not wired")
 	}
 	params := models.ComponentQueryParams{
-		Page:         1,
-		PageSize:     100,
-		ChartType:    in.ChartType,
-		ConnectionID: in.ConnectionID,
-		Tag:          in.Tag,
+		Namespace:     in.Namespace,
+		Name:          in.Name,
+		ChartType:     in.ChartType,
+		ComponentType: in.ComponentType,
+		Status:        in.Status,
+		ConnectionID:  in.ConnectionID,
+		Tags:          in.Tags,
+		Tag:           in.Tag,
+		Sort:          in.Sort,
+		Direction:     in.Direction,
+		Page:          in.Page,
+		PageSize:      in.PageSize,
 	}
 	resp, err := t.Components.ListComponents(ctx, params)
 	if err != nil {
@@ -387,6 +440,9 @@ func (t *Toolset) ListComponents(ctx context.Context, in ListComponentsInput) (*
 	return &ListComponentsOutput{
 		Components: resp.Components,
 		Count:      resp.Total,
+		Page:       resp.Page,
+		PageSize:   resp.PageSize,
+		HasMore:    resp.HasMore,
 	}, nil
 }
 
@@ -495,18 +551,45 @@ func (t *Toolset) DeleteDashboard(ctx context.Context, in DeleteDashboardInput) 
 
 // ─── Dashboards ───────────────────────────────────────────────────
 
-type ListDashboardsOutput struct {
-	Dashboards []models.Dashboard `json:"dashboards"`
-	Count      int64              `json:"count"`
+// ListDashboardsInput exposes the dashboard filter set + sort + pagination
+// (#21). ComponentID finds dashboards using a specific component (the
+// list_dashboards_using_component tool routes through here).
+type ListDashboardsInput struct {
+	Namespace   string   `json:"namespace,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	IsPublic    *bool    `json:"is_public,omitempty"`
+	ComponentID string   `json:"component_id,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Sort        string   `json:"sort,omitempty"`
+	Direction   string   `json:"direction,omitempty"`
+	Page        int      `json:"page,omitempty"`
+	PageSize    int      `json:"page_size,omitempty"` // 0/omitted = all (capped at 1000)
 }
 
-func (t *Toolset) ListDashboards(ctx context.Context) (*ListDashboardsOutput, error) {
+type ListDashboardsOutput struct {
+	Dashboards []models.Dashboard `json:"dashboards"`
+	Count      int64              `json:"count"` // total matching the filter (NOT just this page)
+	Page       int                `json:"page"`
+	PageSize   int                `json:"page_size"`
+	HasMore    bool               `json:"has_more"`
+}
+
+// ListDashboards returns dashboards matching the optional filters, sorted
+// and paginated. Default page_size 0 → all (server-capped at 1000).
+func (t *Toolset) ListDashboards(ctx context.Context, in ListDashboardsInput) (*ListDashboardsOutput, error) {
 	if t.Dashboards == nil {
 		return nil, fmt.Errorf("dashboard service not wired")
 	}
 	resp, err := t.Dashboards.ListDashboards(ctx, models.DashboardQueryParams{
-		Page:     1,
-		PageSize: 100,
+		Namespace:   in.Namespace,
+		Name:        in.Name,
+		IsPublic:    in.IsPublic,
+		ComponentID: in.ComponentID,
+		Tags:        in.Tags,
+		Sort:        in.Sort,
+		Direction:   in.Direction,
+		Page:        in.Page,
+		PageSize:    in.PageSize,
 	})
 	if err != nil {
 		return nil, err
@@ -514,6 +597,9 @@ func (t *Toolset) ListDashboards(ctx context.Context) (*ListDashboardsOutput, er
 	return &ListDashboardsOutput{
 		Dashboards: resp.Dashboards,
 		Count:      resp.Total,
+		Page:       resp.Page,
+		PageSize:   resp.PageSize,
+		HasMore:    resp.HasMore,
 	}, nil
 }
 

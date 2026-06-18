@@ -129,15 +129,18 @@ func (h *DashboardHandler) GetVariableCandidates(c *gin.Context) {
 // @Produce json
 // @Param name query string false "Filter by name (partial match)"
 // @Param is_public query boolean false "Filter by public status"
-// @Param include_datasources query boolean false "Include data source names from charts"
+// @Param include_connections query boolean false "Include connection names from charts (returns DashboardSummary shape)"
+// @Param sort query string false "Sort field (name, updated, created, namespace)"
+// @Param direction query string false "Sort direction (asc, desc)"
 // @Param page query int false "Page number" default(1)
-// @Param page_size query int false "Page size" default(20)
+// @Param page_size query string false "Page size; 'all' or 0 returns up to 1000 in one response" default(20)
 // @Success 200 {object} models.DashboardListResponse "Standard response"
-// @Success 200 {object} models.DashboardSummaryListResponse "Response when include_datasources=true"
+// @Success 200 {object} models.DashboardSummaryListResponse "Response when include_connections=true"
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /dashboards [get]
 func (h *DashboardHandler) ListDashboards(c *gin.Context) {
+	normalizeAllPageSize(c)
 	var params models.DashboardQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

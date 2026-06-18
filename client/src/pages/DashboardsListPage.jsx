@@ -15,8 +15,6 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
   TableToolbarSearch,
   Button,
   IconButton,
@@ -27,12 +25,13 @@ import {
   Tag,
   Tooltip,
   Checkbox,
-  Dropdown,
   OverflowMenu,
-  OverflowMenuItem
+  OverflowMenuItem,
+  Pagination
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, DataBase, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import usePaginatedList from '../hooks/usePaginatedList';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
@@ -49,6 +48,8 @@ import DashboardDeleteModal from '../components/DashboardDeleteModal';
 import '../components/shared/FilterOverflowMenu.scss';
 import './DashboardsListPage.scss';
 
+const PAGE_SIZES = [25, 50, 100];
+
 /**
  * DashboardsListPage Component
  *
@@ -64,14 +65,10 @@ function DashboardsListPage() {
   // Merge persisted per-user prefs (survives reload) with session filters (takes precedence)
   const savedFilters = { ...getListPrefs('dashboards'), ...getFilters('dashboards') };
 
-  const [dashboards, setDashboards] = useState([]);
-  const [charts, setCharts] = useState({});
-  const [connections, setConnections] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   // Delete confirmation — DashboardDeleteModal (Carbon danger modal + orphaned-
   // component cascade). Replaces the old window.confirm (#64) and adds #65.
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete/import
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
   // Sort state. Authoritative storage is per-user server config
   // (`dashboard_tile_sort`), shared with the View-mode tile page so a
@@ -103,12 +100,12 @@ function DashboardsListPage() {
   // so users can peek at other namespaces without changing where new
   // records land.
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
-  // Single-select connection filter. 'all' = no filter; otherwise the
-  // connection id we're matching against any panel's component refs.
-  const [connectionFilter, setConnectionFilter] = useState(savedFilters.connection || 'all');
   // Variable-driven only: when on, keep only dashboards that define and
   // enable dashboard variables (settings.variables_enabled + variables[],
   // via dashboardUsesVariable). Lives in the ⋮ filter overflow.
+  // #21: client-only post-filter on the loaded page — the dashboards API has
+  // no variable-driven server field. Variables are rare, so filtering only the
+  // current page is acceptable.
   const [variableOnly, setVariableOnly] = useState(savedFilters.variableOnly || false);
   // Export mode layers a selection UI on top of the table. When on:
   // the Create button hides, rows show a checkbox, and a batch-action
@@ -117,6 +114,40 @@ function DashboardsListPage() {
   const [selectedForExport, setSelectedForExport] = useState(new Set());
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+
+  // Server-side filter/sort/pagination (#21). Rows are DashboardSummary
+  // objects (include_connections:true) — each carries `connection_names`
+  // ([string]) + `panel_count` instead of the full `panels` array. 'manual'
+  // sort isn't a server field; send 'updated' to the server and re-apply the
+  // manual ordering client-side within the current page (see notes below).
+  const serverSortKey = sortKey === 'manual' ? 'updated' : sortKey;
+  const serverSortDir = sortKey === 'manual' ? 'desc' : sortDirection;
+  const {
+    rows: dashboards,
+    total,
+    loading,
+    error,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePaginatedList({
+    fetcher: (q) => apiClient.getDashboards(q),
+    extract: (resp) => ({ rows: resp?.dashboards || [], total: resp?.total || 0, hasMore: resp?.has_more }),
+    filters: {
+      include_connections: true,
+      namespace: namespaceFilter,
+      tags: tagFilter,
+    },
+    sortKey: serverSortKey,
+    sortDir: serverSortDir,
+    initialPageSize: savedFilters.pageSize || 25,
+    search: searchTerm,
+    searchKey: 'name',
+    reloadTick,
+  });
+
+  const refetch = useCallback(() => setReloadTick((t) => t + 1), []);
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -127,7 +158,6 @@ function DashboardsListPage() {
       view: viewMode,
       tags: tagFilter,
       namespaces: namespaceFilter,
-      connection: connectionFilter,
       variableOnly,
     });
     // View mode stays in listPrefs (it's UI-local, not shared with
@@ -135,12 +165,12 @@ function DashboardsListPage() {
     // pages stay in lockstep — persisted in persistSort below, not here.
     setListPrefs('dashboards', {
       view: viewMode,
+      pageSize,
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, connectionFilter, variableOnly]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, variableOnly, pageSize]);
 
-  // Fetch dashboards, charts, and connections from API
+  // Load the shared per-user sort + manual order from server config.
   useEffect(() => {
-    fetchData();
     fetchUserConfig();
   }, []);
 
@@ -243,50 +273,6 @@ function DashboardsListPage() {
     setDragOver(null);
   };
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      // Fetch dashboards, charts, and connections in parallel (like DashboardTileViewPage)
-      const [dashboardsRes, chartsRes, connectionsRes] = await Promise.all([
-        apiClient.getDashboards({ page: 1, page_size: 100 }),
-        apiClient.getComponents(),
-        apiClient.getConnections()
-      ]);
-
-      if (dashboardsRes.dashboards) {
-        setDashboards(dashboardsRes.dashboards);
-      } else if (dashboardsRes.error) {
-        setError(dashboardsRes.error);
-      } else {
-        setDashboards([]);
-      }
-
-      // Build component lookup (component_id -> chart)
-      if (chartsRes.components) {
-        const chartMap = {};
-        chartsRes.components.forEach(chart => {
-          chartMap[chart.id] = chart;
-        });
-        setCharts(chartMap);
-      }
-
-      // Build connection lookup (connection_id -> name)
-      if (connectionsRes.connections) {
-        const dsMap = {};
-        connectionsRes.connections.forEach(ds => {
-          dsMap[ds.id] = ds.name;
-        });
-        setConnections(dsMap);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchDashboards = () => fetchData();
-
   const handleCreate = () => {
     navigate('/design/dashboards/new');
   };
@@ -316,55 +302,8 @@ function DashboardsListPage() {
   };
 
   const getPanelCount = (dashboard) => {
-    // Column header already says "Panels" — return the bare count.
-    return dashboard.panels?.length || 0;
-  };
-
-  // Build a multi-line label of the named components referenced by a
-  // dashboard's panels, for the panel-count tooltip on the list view.
-  // Panels without a component_id (text labels, spacers, etc.) are
-  // omitted; panels referencing deleted components are surfaced
-  // explicitly so the count stays honest.
-  // Components placed on a dashboard, as { id, label } so the count popover can
-  // navigate to each component's editor. Panels referencing a deleted component
-  // are dropped (nothing to navigate to). De-duped so a component used in two
-  // panels lists once.
-  const getComponentItems = (dashboard) => {
-    const panels = dashboard.panels || [];
-    const seen = new Set();
-    const items = [];
-    panels.forEach((panel) => {
-      if (!panel.component_id || seen.has(panel.component_id)) return;
-      const c = charts[panel.component_id];
-      if (!c) return; // missing/deleted component — can't navigate to it
-      seen.add(panel.component_id);
-      items.push({ id: panel.component_id, label: c.title || c.name || '(unnamed)' });
-    });
-    return items;
-  };
-
-  // Distinct connections used by a dashboard's components, as { id, label } so
-  // the popover's second column can navigate to each connection's editor. Pulls
-  // the top-level connection_id plus the display_config frigate/mqtt refs (the
-  // same union the connection filter uses).
-  const getConnectionItems = (dashboard) => {
-    const panels = dashboard.panels || [];
-    const seen = new Set();
-    const items = [];
-    const add = (connId) => {
-      if (!connId || seen.has(connId) || !connections[connId]) return;
-      seen.add(connId);
-      items.push({ id: connId, label: connections[connId] });
-    };
-    panels.forEach((panel) => {
-      if (!panel.component_id) return;
-      const c = charts[panel.component_id];
-      if (!c) return;
-      add(c.connection_id);
-      add(c.display_config?.frigate_connection_id);
-      add(c.display_config?.mqtt_connection_id);
-    });
-    return items;
+    // Summary rows carry panel_count instead of a full panels array.
+    return dashboard.panel_count || 0;
   };
 
   // Handle column sorting. Goes through persistSort so the choice
@@ -377,154 +316,60 @@ function DashboardsListPage() {
     }
   };
 
-  // Helper to get connection names for search filtering (returns string for matching)
-  const getConnectionNamesForSearch = (dashboard) => {
-    if (!dashboard.panels || dashboard.panels.length === 0) return '';
+  // Manual drag-reorder is only safe within a single page — it can't
+  // re-order rows that live on other pages. Disable it (and the Reset
+  // button) whenever the dataset spans more than one page.
+  const isPaginated = total > pageSize;
 
-    const dsNames = new Set();
-    dashboard.panels.forEach(panel => {
-      if (panel.component_id) {
-        const chart = charts[panel.component_id];
-        if (chart?.connection_id && connections[chart.connection_id]) {
-          dsNames.add(connections[chart.connection_id]);
-        }
-      }
-    });
-
-    return Array.from(dsNames).join(' ');
-  };
-
-  // Filter and sort dashboards
+  // Apply the remaining CLIENT-ONLY transforms on top of the server-paged
+  // page (#21). Filtering/sorting/search/namespace/tags already happened
+  // server-side; what's left has no server equivalent:
+  //   - variableOnly: post-filter on the loaded page (variables are rare).
+  //   - manual tile order: re-sequence the current page only.
   const filteredAndSortedDashboards = useMemo(() => {
     let result = [...dashboards];
 
-    // Namespace filter: empty selection = no filter (show all). Records
-    // missing a namespace (shouldn't happen post-migration, but
-    // defensive) stay visible to avoid empty lists from bad data.
-    if (namespaceFilter.length > 0) {
-      const wanted = new Set(namespaceFilter);
-      result = result.filter((d) => !d.namespace || wanted.has(d.namespace));
-    }
-
-    // Filter by tags (OR semantics)
-    if (tagFilter.length > 0) {
-      result = result.filter(dashboard => {
-        const dTags = dashboard.tags || [];
-        return tagFilter.some(t => dTags.includes(t));
-      });
-    }
-
-    // Filter by connection. A dashboard matches when any of its panels'
-    // components reference the selected connection — through the top-level
-    // connection_id (charts/controls) OR display_config.frigate_connection_id
-    // / mqtt_connection_id (Frigate/weather displays). Mirrors the union we
-    // do for the connection-usage count on the connections list page.
-    if (connectionFilter !== 'all') {
-      result = result.filter(dashboard => {
-        if (!dashboard.panels || dashboard.panels.length === 0) return false;
-        return dashboard.panels.some(panel => {
-          if (!panel.component_id) return false;
-          const c = charts[panel.component_id];
-          if (!c) return false;
-          if (c.connection_id === connectionFilter) return true;
-          const dc = c.display_config;
-          if (dc?.frigate_connection_id === connectionFilter) return true;
-          if (dc?.mqtt_connection_id === connectionFilter) return true;
-          return false;
-        });
-      });
-    }
-
-    // Variable-driven only: keep dashboards that define + enable variables.
+    // #21: client-only post-filter on the loaded page — no server field for
+    // variable-driven dashboards. Summary rows include `settings`, so
+    // dashboardUsesVariable still works.
     if (variableOnly) {
       result = result.filter((d) => dashboardUsesVariable(d));
     }
 
-    // Filter by search term (matches name, description, or connection names)
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(dashboard => {
-        // Check name and description
-        if (dashboard.name?.toLowerCase().includes(term)) return true;
-        if (dashboard.description?.toLowerCase().includes(term)) return true;
-
-        // Check connection names (computed from charts)
-        const dsNames = getConnectionNamesForSearch(dashboard);
-        if (dsNames.toLowerCase().includes(term)) return true;
-
-        return false;
-      });
-    }
-
     // Order resolution.
     //
-    // Tile view: delegate to orderDashboardsForViewer so this page and
-    // the View-mode tile page render dashboards in identical order
-    // (including manual drag-reorder).
+    // Tile view: delegate to orderDashboardsForViewer so this page and the
+    // View-mode tile page render dashboards in identical order (including
+    // manual drag-reorder). #21: manual ordering only re-sequences the
+    // current page — it cannot move rows across page boundaries.
     //
-    // List view: doesn't support a meaningful "manual" order in a
-    // table — fall back to name asc when sortKey === 'manual'. The
-    // shared setting itself stays as 'manual' (we don't write back);
-    // switching to tile view restores the manual ordering.
+    // List view: server order is already applied; manual sort falls back to
+    // the server's default (updated desc) ordering, so just return as-is.
     if (viewMode === 'tile') {
       return orderDashboardsForViewer(result, tileOrder, { key: sortKey, direction: sortDirection });
     }
 
-    const effectiveKey = sortKey === 'manual' ? 'name' : sortKey;
-    const effectiveDir = sortKey === 'manual' ? 'asc' : sortDirection;
-    result.sort((a, b) => {
-      let aVal = a[effectiveKey] || '';
-      let bVal = b[effectiveKey] || '';
-
-      // Handle date sorting
-      if (effectiveKey === 'updated') {
-        aVal = new Date(aVal).getTime() || 0;
-        bVal = new Date(bVal).getTime() || 0;
-      } else if (effectiveKey === 'panels') {
-        // Use panels array length directly (full dashboard object)
-        aVal = a.panels?.length || 0;
-        bVal = b.panels?.length || 0;
-      } else {
-        aVal = String(aVal).toLowerCase();
-        bVal = String(bVal).toLowerCase();
-      }
-
-      if (aVal < bVal) return effectiveDir === 'asc' ? -1 : 1;
-      if (aVal > bVal) return effectiveDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-
     return result;
-  }, [dashboards, searchTerm, sortKey, sortDirection, viewMode, tileOrder, charts, connections, tagFilter, namespaceFilter, connectionFilter, variableOnly]);
+  }, [dashboards, sortKey, sortDirection, viewMode, tileOrder, variableOnly]);
 
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     // (tags now render under the name in the name cell — no separate column)
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
-    { key: 'panels', header: 'Panels', isSortable: true },
+    // 'panels' is not a server sort field (only name/updated/created/namespace
+    // are) — marked non-sortable (#21).
+    { key: 'panels', header: 'Components', isSortable: false },
     { key: 'connections', header: 'Connections', isSortable: false },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
 
-  // Get unique data source names for a dashboard (computed client-side)
+  // Summary rows carry connection_names ([string]) directly — no client-side
+  // panel walk needed.
   const getConnectionNames = (dashboard) => {
-    if (!dashboard.panels || dashboard.panels.length === 0) return '-';
-
-    const dsNames = new Set();
-    dashboard.panels.forEach(panel => {
-      if (panel.component_id) {
-        const chart = charts[panel.component_id];
-        if (chart?.connection_id && connections[chart.connection_id]) {
-          dsNames.add(connections[chart.connection_id]);
-        }
-      }
-    });
-
-    const namesArray = Array.from(dsNames);
-    if (namesArray.length === 0) return '-';
-    return namesArray.join(', ');
+    const names = dashboard.connection_names || [];
+    return names.length === 0 ? '-' : names.join(', ');
   };
 
   const rows = filteredAndSortedDashboards.map((dashboard) => ({
@@ -587,22 +432,11 @@ function DashboardsListPage() {
             selected={tagFilter}
             onChange={setTagFilter}
           />
-          <Dropdown
-            id="connection-filter-dashboards"
-            className="connection-filter-dropdown"
-            label="Filter by connection"
-            titleText=""
-            items={[
-              { id: 'all', text: 'All Connections' },
-              ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
-            ]}
-            itemToString={(item) => item?.text || ''}
-            selectedItem={{ id: connectionFilter, text: connectionFilter === 'all' ? 'All Connections' : (connections[connectionFilter] || 'Unknown') }}
-            onChange={({ selectedItem }) => {
-              setConnectionFilter(selectedItem?.id || 'all');
-            }}
-            size="md"
-          />
+          {/* #21: the "filter by connection" dropdown was dropped. It was a
+              client-side walk over each dashboard's panels/components, which
+              the summary list no longer carries, and the dashboards API has no
+              connection-id filter (only component_id). Follow-up: add a
+              connection→component_id resolution server-side if needed. */}
           {/* Overflow (⋮) menu for facet toggles — mirrors the components
               list/picker. Holds "Variable dashboards only". Sits BEFORE the
               reset button so reset stays the rightmost filter control. */}
@@ -632,14 +466,12 @@ function DashboardsListPage() {
               !!searchTerm ||
               namespaceFilter.length > 0 ||
               tagFilter.length > 0 ||
-              connectionFilter !== 'all' ||
               variableOnly
             }
             onReset={() => {
               setSearchTerm('');
               setNamespaceFilter([]);
               setTagFilter([]);
-              setConnectionFilter('all');
               setVariableOnly(false);
             }}
           />
@@ -650,13 +482,16 @@ function DashboardsListPage() {
                 sortDirection={sortDirection}
                 onChange={(k, d) => persistSort(k, d)}
                 options={[
-                  { key: 'manual', label: 'Manual (drag to reorder)' },
+                  // #21: manual drag-reorder only re-sequences the current
+                  // page; hide it once the dataset spans multiple pages so
+                  // users don't get a partial-reorder surprise.
+                  ...(isPaginated ? [] : [{ key: 'manual', label: 'Manual (drag to reorder)' }]),
                   { key: 'name', label: 'Name', defaultDir: 'asc' },
                   { key: 'updated', label: 'Last modified', defaultDir: 'desc' },
                   { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
                 ]}
               />
-              {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
+              {sortKey === 'manual' && !isPaginated && tileOrder && tileOrder.length > 0 && (
                 <Button
                   kind="ghost"
                   size="sm"
@@ -771,8 +606,9 @@ function DashboardsListPage() {
                 };
                 // Drag-reorder is only meaningful in manual sort and
                 // out of export mode (export mode owns the click for
-                // checkbox toggling).
-                const isManual = sortKey === 'manual' && !exportMode;
+                // checkbox toggling). #21: disabled while paginated — a
+                // drag can't move rows onto another page.
+                const isManual = sortKey === 'manual' && !exportMode && !isPaginated;
                 const dropSide = dragOver?.id === dashboard.id ? dragOver.side : null;
                 const handleTileClickGuarded = () => {
                   // Swallow the synthetic click that fires immediately
@@ -788,12 +624,18 @@ function DashboardsListPage() {
                     handleRowClick(dashboard);
                   }
                 };
+                // #21: feed the tile pre-computed comps/conns from the
+                // summary's denormalized {id,name} fields — both navigable.
+                const tileComponentItems = (dashboard.component_usage || []).map((c) => ({ id: c.id, label: c.name }));
+                const tileConnectionItems = (dashboard.connection_usage || []).map((c) => ({ id: c.id, label: c.name }));
                 return (
                 <DashboardTile
                   key={dashboard.id}
                   dashboard={dashboard}
-                  componentMap={charts}
-                  connectionMap={connections}
+                  componentItems={tileComponentItems}
+                  connectionItems={tileConnectionItems}
+                  onComponentClick={(item) => navigate(`/design/components/${item.id}`)}
+                  onConnectionClick={(item) => navigate(`/design/connections/${item.id}`)}
                   selected={isTileSelected}
                   onClick={handleTileClickGuarded}
                   draggable={isManual}
@@ -808,8 +650,6 @@ function DashboardsListPage() {
                   onTagClick={(t) => {
                     if (!tagFilter.includes(t)) setTagFilter([...tagFilter, t]);
                   }}
-                  onComponentClick={(item) => navigate(`/design/components/${item.id}`)}
-                  onConnectionClick={(item) => navigate(`/design/connections/${item.id}`)}
                   badge={exportMode ? (
                     <div onClick={(e) => e.stopPropagation()}>
                       <Checkbox
@@ -943,16 +783,19 @@ function DashboardsListPage() {
                               );
                             }
                             if (cell.info.header === 'panels') {
+                              // #21: the dashboard summary now carries
+                              // component_usage [{id,name}] (server-side
+                              // denormalized), so the navigable "Components"
+                              // popover is restored — click a component to jump
+                              // to its editor.
+                              const compItems = (dashboard.component_usage || []).map((c) => ({ id: c.id, label: c.name }));
                               return (
                                 <TableCell key={cell.id} className="panels-cell" onClick={(e) => e.stopPropagation()}>
-                                  {/* Single-column: just components. Connections
-                                      now have their own linked column, so the
-                                      popover no longer needs a second section. */}
                                   <CountListPopover
                                     count={cell.value}
                                     className="panels-count"
                                     heading="Components"
-                                    items={getComponentItems(dashboard)}
+                                    items={compItems}
                                     emptyLabel="No components on this dashboard"
                                     onItemClick={(item) => navigate(`/design/components/${item.id}`)}
                                   />
@@ -1014,29 +857,25 @@ function DashboardsListPage() {
                               );
                             }
                             if (cell.info.header === 'connections') {
-                              // Keep the comma-separated name list, but make each
-                              // name a link to that connection's editor.
-                              const connItems = getConnectionItems(dashboard);
+                              // #21: the summary now carries connection_usage
+                              // [{id,name}] (server-side denormalized), so the
+                              // connections render as navigable comma-separated
+                              // links to each connection's editor — same as
+                              // before pagination.
+                              const connItems = dashboard.connection_usage || [];
                               return (
                                 <TableCell key={cell.id} className="connections-cell" onClick={(e) => e.stopPropagation()}>
-                                  {connItems.length === 0 ? (
-                                    '-'
-                                  ) : (
-                                    connItems.map((c, i) => (
-                                      <Fragment key={c.id}>
-                                        <Link
-                                          href={`/design/connections/${c.id}`}
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            navigate(`/design/connections/${c.id}`);
-                                          }}
-                                        >
-                                          {c.label}
-                                        </Link>
-                                        {i < connItems.length - 1 ? <span>, </span> : null}
-                                      </Fragment>
-                                    ))
-                                  )}
+                                  {connItems.length === 0 ? '-' : connItems.map((c, i) => (
+                                    <Fragment key={c.id}>
+                                      <Link
+                                        href={`/design/connections/${c.id}`}
+                                        onClick={(e) => { e.preventDefault(); navigate(`/design/connections/${c.id}`); }}
+                                      >
+                                        {c.name}
+                                      </Link>
+                                      {i < connItems.length - 1 ? <span>, </span> : null}
+                                    </Fragment>
+                                  ))}
                                 </TableCell>
                               );
                             }
@@ -1068,14 +907,27 @@ function DashboardsListPage() {
       <DashboardImportModal
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
-        onImported={() => fetchData()}
+        onImported={refetch}
       />
 
       {/* Delete confirmation + orphaned-component cascade (#64, #65) */}
       <DashboardDeleteModal
         dashboard={deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onDeleted={fetchDashboards}
+        onDeleted={refetch}
+      />
+
+      {/* Server-side pagination (#21) — shared across both views. */}
+      <Pagination
+        className="list-pagination"
+        page={page}
+        pageSize={pageSize}
+        pageSizes={PAGE_SIZES}
+        totalItems={total}
+        onChange={({ page: p, pageSize: ps }) => {
+          if (ps !== pageSize) setPageSize(ps);
+          setPage(p);
+        }}
       />
     </div>
   );

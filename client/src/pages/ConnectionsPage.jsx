@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -15,8 +15,6 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
   TableToolbarSearch,
   Button,
   IconButton,
@@ -27,10 +25,12 @@ import {
   ContentSwitcher,
   Switch,
   Tooltip,
-  Dropdown
+  Dropdown,
+  Pagination
 } from '@carbon/react';
 import { TrashCan, DataBase, List, Grid, Edit, Information, Sql, Api, Document, NetworkEnterprise, ChartLineSmooth, Meter, Db2Database, Tree, Video } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import usePaginatedList from '../hooks/usePaginatedList';
 import TagFilter from '../components/shared/TagFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import { useNotifications } from '../context/NotificationContext';
@@ -39,6 +39,8 @@ import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import './ConnectionsPage.scss';
+
+const PAGE_SIZES = [25, 50, 100];
 
 /**
  * ConnectionsPage Component
@@ -56,18 +58,58 @@ function ConnectionsPage() {
   // Get saved filters from session store
   const savedFilters = { ...getListPrefs('connections'), ...getFilters('connections') };
 
-  const [connections, setConnections] = useState([]);
-  const [componentCounts, setComponentCounts] = useState({}); // Map of connection_id -> component count
-  const [componentNames, setComponentNames] = useState({}); // Map of connection_id -> array of component display names
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
-  const [sortKey, setSortKey] = useState(savedFilters.sortKey || 'updated_at');
+  // 'components' was a client-only count sort (no server field); fall back to
+  // 'updated_at' so a persisted 'components' sortKey stays a valid request.
+  const initialSort = savedFilters.sortKey === 'components' ? 'updated_at' : (savedFilters.sortKey || 'updated_at');
+  const [sortKey, setSortKey] = useState(initialSort);
   const [sortDirection, setSortDirection] = useState(savedFilters.sortDir || 'desc');
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
   const [typeFilter, setTypeFilter] = useState(savedFilters.type || 'all'); // 'all' or specific type
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
+  const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete
+
+  // Server-side filter/sort/pagination (#21). The wrapped include_usage rows
+  // each carry { connection, component_usage, component_count }; flatten them
+  // so the render reads `_componentCount`/`_componentUsage` instead of the old
+  // client-computed maps. Server search matches NAME only (the old client
+  // search also matched description/type — acceptable trade-off).
+  const {
+    rows: connections,
+    total,
+    loading,
+    error,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePaginatedList({
+    fetcher: (q) => apiClient.getConnections(q),
+    extract: (resp) => ({
+      rows: (resp?.connections || []).map((r) => ({
+        ...r.connection,
+        _componentCount: r.component_count || 0,
+        _componentUsage: r.component_usage || [],
+      })),
+      total: resp?.total || 0,
+      hasMore: resp?.has_more,
+    }),
+    filters: {
+      include_usage: true,
+      namespace: namespaceFilter,
+      type: typeFilter === 'all' ? '' : typeFilter,
+      tags: tagFilter,
+    },
+    sortKey,
+    sortDir: sortDirection,
+    initialPageSize: savedFilters.pageSize || 25,
+    search: searchTerm,
+    searchKey: 'name',
+    reloadTick,
+  });
+
+  const refetch = useCallback(() => setReloadTick((t) => t + 1), []);
 
   // Save filters to session store when they change
   useEffect(() => {
@@ -80,13 +122,14 @@ function ConnectionsPage() {
       tags: tagFilter,
       namespaces: namespaceFilter,
     });
-    // Persist user-level preferences (view mode, sort) to user config — survives reloads
+    // Persist user-level preferences (view mode, sort, page size) — survives reloads
     setListPrefs('connections', {
       view: viewMode,
       sortKey,
-      sortDir: sortDirection
+      sortDir: sortDirection,
+      pageSize,
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter, namespaceFilter]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, typeFilter, tagFilter, namespaceFilter, pageSize]);
 
   // Connection types for filter dropdown
   // Keep in sync with server-go/internal/models/datasource.go DatasourceType* constants
@@ -119,62 +162,6 @@ function ConnectionsPage() {
     return icons[type?.toLowerCase()] || DataBase;
   };
 
-  // Fetch connections from API
-  useEffect(() => {
-    fetchConnections();
-  }, []);
-
-  const fetchConnections = async () => {
-    try {
-      setLoading(true);
-      // Fetch connections and components in parallel
-      const [connectionsData, componentsData] = await Promise.all([
-        apiClient.getConnections(),
-        apiClient.getComponents()
-      ]);
-
-      if (connectionsData.connections) {
-        setConnections(connectionsData.connections);
-      } else if (connectionsData.error) {
-        setError(connectionsData.error);
-      } else {
-        setConnections([]);
-      }
-
-      // Build component count + name-list maps by connection_id. A single
-      // component can reference a connection through multiple fields
-      // (top-level connection_id for components,
-      // display_config.frigate_connection_id and
-      // display_config.mqtt_connection_id for Frigate/weather displays).
-      // De-dupe per component so referencing the same connection twice
-      // still counts once.
-      if (componentsData.components) {
-        const counts = {};
-        const names = {};
-        componentsData.components.forEach(component => {
-          const refs = new Set();
-          if (component.connection_id) refs.add(component.connection_id);
-          const dc = component.display_config;
-          if (dc?.frigate_connection_id) refs.add(dc.frigate_connection_id);
-          if (dc?.mqtt_connection_id) refs.add(dc.mqtt_connection_id);
-          const componentLabel = component.title || component.name || '(unnamed)';
-          refs.forEach(connId => {
-            counts[connId] = (counts[connId] || 0) + 1;
-            // Store { id, label } so the count popover can navigate to each
-            // component's editor (not just show names).
-            (names[connId] = names[connId] || []).push({ id: component.id, label: componentLabel });
-          });
-        });
-        setComponentCounts(counts);
-        setComponentNames(names);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreate = () => {
     navigate('/design/connections/new');
   };
@@ -188,7 +175,7 @@ function ConnectionsPage() {
     if (!window.confirm(`Are you sure you want to delete "${connection.name}"?`)) return;
     try {
       await apiClient.deleteConnection(connection.id);
-      fetchConnections();
+      refetch();
     } catch (err) {
       // Server returns HTTP 409 + { usage: { components, devices } } when
       // the connection still has references. Render a clear toast that
@@ -242,86 +229,26 @@ function ConnectionsPage() {
     }
   };
 
-  // Filter and sort connections
-  const filteredAndSortedConnections = useMemo(() => {
-    let result = [...connections];
-
-    // Multi-select namespace filter; empty = no filter.
-    if (namespaceFilter.length > 0) {
-      const wanted = new Set(namespaceFilter);
-      result = result.filter((c) => !c.namespace || wanted.has(c.namespace));
-    }
-
-    // Filter by type
-    if (typeFilter !== 'all') {
-      result = result.filter(connection => connection.type?.toLowerCase() === typeFilter);
-    }
-
-    // Filter by tags (OR semantics: match any selected tag)
-    if (tagFilter.length > 0) {
-      result = result.filter(connection => {
-        const connTags = connection.tags || [];
-        return tagFilter.some(t => connTags.includes(t));
-      });
-    }
-
-    // Filter by search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(connection =>
-        connection.name?.toLowerCase().includes(term) ||
-        connection.description?.toLowerCase().includes(term) ||
-        connection.type?.toLowerCase().includes(term)
-      );
-    }
-
-    // Sort
-    result.sort((a, b) => {
-      let aVal, bVal;
-
-      // Handle component count sorting
-      if (sortKey === 'components') {
-        aVal = componentCounts[a.id] || 0;
-        bVal = componentCounts[b.id] || 0;
-      } else {
-        aVal = a[sortKey] || '';
-        bVal = b[sortKey] || '';
-      }
-
-      // Handle date sorting
-      if (sortKey === 'updated_at') {
-        aVal = new Date(aVal).getTime() || 0;
-        bVal = new Date(bVal).getTime() || 0;
-      } else if (sortKey !== 'components') {
-        aVal = String(aVal).toLowerCase();
-        bVal = String(bVal).toLowerCase();
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [connections, componentCounts, searchTerm, sortKey, sortDirection, typeFilter, tagFilter, namespaceFilter]);
-
+  // `connections` is already filtered/sorted/paginated server-side (the hook).
+  // The 'components' (count) column has no server sort field — marked
+  // non-sortable below.
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     // (tags now render under the name in the name cell — no separate column)
     { key: 'namespace', header: 'Namespace', isSortable: true },
     { key: 'type', header: 'Type', isSortable: true },
     { key: 'description', header: 'Description', isSortable: false },
-    { key: 'components', header: 'Components', isSortable: true },
+    { key: 'components', header: 'Components', isSortable: false },
     { key: 'updated_at', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
   ];
 
-  const rows = filteredAndSortedConnections.map((connection) => ({
+  const rows = connections.map((connection) => ({
     id: connection.id,
     name: connection.name,
     namespace: connection.namespace || 'default',
     type: connection.type,
-    components: componentCounts[connection.id] || 0,
+    components: connection._componentCount || 0,
     tags: connection.tags || [],
     description: connection.description || '',
     updated_at: formatDate(connection.updated_at)
@@ -439,7 +366,7 @@ function ConnectionsPage() {
       {/* Tile View */}
       {viewMode === 'tile' && (
         <div className="connections-content">
-          {filteredAndSortedConnections.length === 0 ? (
+          {connections.length === 0 ? (
             <div className="empty-state">
               <DataBase size={64} />
               <h3>No connections available</h3>
@@ -451,7 +378,7 @@ function ConnectionsPage() {
             </div>
           ) : (
             <div className="connections-grid">
-              {filteredAndSortedConnections.map((connection) => {
+              {connections.map((connection) => {
                 const TypeIcon = getTypeIcon(connection.type);
                 return (
                   <Tile
@@ -501,10 +428,10 @@ function ConnectionsPage() {
                         ))}
                       </div>
 
-                      {componentCounts[connection.id] > 0 && (
+                      {connection._componentCount > 0 && (
                         <div className="tile-components">
                           <ChartLineSmooth size={14} />
-                          <span>{componentCounts[connection.id]} component{componentCounts[connection.id] !== 1 ? 's' : ''}</span>
+                          <span>{connection._componentCount} component{connection._componentCount !== 1 ? 's' : ''}</span>
                         </div>
                       )}
 
@@ -605,7 +532,9 @@ function ConnectionsPage() {
                               );
                             }
                             if (cell.info.header === 'components') {
-                              const items = componentNames[connection.id] || [];
+                              // Server returns component_usage as [{id,name}];
+                              // CountListPopover wants [{id,label}].
+                              const items = (connection._componentUsage || []).map((u) => ({ id: u.id, label: u.name }));
                               return (
                                 <TableCell key={cell.id} className="components-cell" onClick={(e) => e.stopPropagation()}>
                                   <CountListPopover
@@ -674,6 +603,19 @@ function ConnectionsPage() {
           )}
         </DataTable>
       )}
+
+      {/* Server-side pagination (#21) — shared across both views. */}
+      <Pagination
+        className="list-pagination"
+        page={page}
+        pageSize={pageSize}
+        pageSizes={PAGE_SIZES}
+        totalItems={total}
+        onChange={({ page: p, pageSize: ps }) => {
+          if (ps !== pageSize) setPageSize(ps);
+          setPage(p);
+        }}
+      />
     </div>
   );
 }

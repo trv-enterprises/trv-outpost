@@ -1146,7 +1146,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/components?name=&chart_type=&component_type=&status=&connection_id=&tag=&page=&page_size=",
+              "raw": "{{baseUrl}}/api/components?name=&chart_type=&component_type=&status=&connection_id=&tag=&sort=&direction=&include_usage=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1192,6 +1192,24 @@
                   "disabled": true
                 },
                 {
+                  "key": "sort",
+                  "value": "",
+                  "description": "Sort field (name, updated, created, component_type, chart_type, status, namespace)",
+                  "disabled": true
+                },
+                {
+                  "key": "direction",
+                  "value": "",
+                  "description": "Sort direction (asc, desc)",
+                  "disabled": true
+                },
+                {
+                  "key": "include_usage",
+                  "value": "",
+                  "description": "Include per-component dashboard usage (count + navigable list); returns ComponentUsageListResponse shape",
+                  "disabled": true
+                },
+                {
                   "key": "page",
                   "value": "",
                   "description": "Page number",
@@ -1200,7 +1218,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "Page size",
+                  "description": "Page size; 'all' or 0 returns up to 1000 in one response",
                   "disabled": true
                 }
               ]
@@ -1416,7 +1434,7 @@
     },
     {
       "name": "connections",
-      "description": "connections endpoints (7).",
+      "description": "connections endpoints (8).",
       "item": [
         {
           "name": "Get aggregator statistics",
@@ -1505,6 +1523,88 @@
               ]
             },
             "description": "List active streams\n\nGet a list of all active streaming connections\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "List all connections",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections?namespace=&name=&type=&tags=&sort=&direction=&include_usage=&page=&page_size=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections"
+              ],
+              "query": [
+                {
+                  "key": "namespace",
+                  "value": "",
+                  "description": "Filter by namespace (empty = all namespaces)",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": "",
+                  "description": "Filter by name (case-insensitive substring)",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "",
+                  "description": "Filter by connection type",
+                  "disabled": true
+                },
+                {
+                  "key": "tags",
+                  "value": "",
+                  "description": "Filter by tags (OR semantics, repeat param)",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "",
+                  "description": "Sort field (name, created_at, updated_at, type, namespace)",
+                  "disabled": true
+                },
+                {
+                  "key": "direction",
+                  "value": "",
+                  "description": "Sort direction (asc, desc)",
+                  "disabled": true
+                },
+                {
+                  "key": "include_usage",
+                  "value": "",
+                  "description": "Include per-connection component usage (count + navigable list); each row becomes {connection, component_usage, component_count}",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "",
+                  "description": "Page number",
+                  "disabled": true
+                },
+                {
+                  "key": "page_size",
+                  "value": "",
+                  "description": "Page size; 'all' or 0 returns up to 1000 in one response",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all connections\n\nRetrieve connections with server-side filter, sort, and pagination. Accepts page/page_size (preferred) or legacy limit/offset.\n\n\nResponses: 200"
           },
           "response": []
         },
@@ -2075,7 +2175,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&include_datasources=&page=&page_size=",
+              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&include_connections=&sort=&direction=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2097,9 +2197,21 @@
                   "disabled": true
                 },
                 {
-                  "key": "include_datasources",
+                  "key": "include_connections",
                   "value": "",
-                  "description": "Include data source names from charts",
+                  "description": "Include connection names from charts (returns DashboardSummary shape)",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "",
+                  "description": "Sort field (name, updated, created, namespace)",
+                  "disabled": true
+                },
+                {
+                  "key": "direction",
+                  "value": "",
+                  "description": "Sort direction (asc, desc)",
                   "disabled": true
                 },
                 {
@@ -2111,7 +2223,7 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "Page size",
+                  "description": "Page size; 'all' or 0 returns up to 1000 in one response",
                   "disabled": true
                 }
               ]
@@ -2336,7 +2448,7 @@
     },
     {
       "name": "Datasources (legacy alias of /connections)",
-      "description": "datasources endpoints (16).",
+      "description": "datasources endpoints (15).",
       "item": [
         {
           "name": "Check datasource health",
@@ -2817,64 +2929,6 @@
               ]
             },
             "description": "Get values for a Prometheus label\n\nRetrieve all possible values for a specific label from a Prometheus datasource\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "List all datasources",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources?limit=&offset=&namespace=&type=&tags=",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources"
-              ],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "",
-                  "description": "Number of items per page",
-                  "disabled": true
-                },
-                {
-                  "key": "offset",
-                  "value": "",
-                  "description": "Number of items to skip",
-                  "disabled": true
-                },
-                {
-                  "key": "namespace",
-                  "value": "",
-                  "description": "Filter by namespace (empty = all namespaces)",
-                  "disabled": true
-                },
-                {
-                  "key": "type",
-                  "value": "",
-                  "description": "Filter by datasource type (api, websocket, file)",
-                  "disabled": true
-                },
-                {
-                  "key": "tags",
-                  "value": "",
-                  "description": "Filter by tags (OR semantics, repeat param)",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "List all datasources\n\nRetrieve all datasources with pagination and optional namespace/type/tag filters\n\n\nResponses: 200"
           },
           "response": []
         },
@@ -5678,7 +5732,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/users?page=&page_size=",
+              "raw": "{{baseUrl}}/api/users?name=&sort=&direction=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -5688,6 +5742,24 @@
               ],
               "query": [
                 {
+                  "key": "name",
+                  "value": "",
+                  "description": "Filter by name or email (case-insensitive substring)",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "",
+                  "description": "Sort field (name, updated, email)",
+                  "disabled": true
+                },
+                {
+                  "key": "direction",
+                  "value": "",
+                  "description": "Sort direction (asc, desc)",
+                  "disabled": true
+                },
+                {
                   "key": "page",
                   "value": "",
                   "description": "Page number",
@@ -5696,12 +5768,12 @@
                 {
                   "key": "page_size",
                   "value": "",
-                  "description": "Page size",
+                  "description": "Page size; 'all' or 0 returns up to 1000 in one response",
                   "disabled": true
                 }
               ]
             },
-            "description": "List all users\n\nReturns a paginated list of all users\n\n\nResponses: 200, 403"
+            "description": "List all users\n\nReturns a paginated, optionally filtered + sorted list of users\n\n\nResponses: 200, 403"
           },
           "response": []
         },

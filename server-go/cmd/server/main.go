@@ -256,8 +256,15 @@ func main() {
 	// dashboard→connection dependency loose (mirrors SetScaleLookup).
 	dashboardService.SetVariableHelpers(
 		func(ctx context.Context, namespace string, tags []string) ([]*models.Connection, error) {
-			conns, _, err := connectionService.ListConnectionsFiltered(ctx, namespace, "", tags, 1000, 0)
-			return conns, err
+			resp, err := connectionService.ListConnectionsPaged(ctx, models.ConnectionQueryParams{
+				Namespace: namespace,
+				Tags:      tags,
+				PageSize:  0, // all (capped)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return resp.Connections, nil
 		},
 		connectionService.GetConnection,
 		connectionService.GetSchema,

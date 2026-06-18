@@ -338,10 +338,18 @@
     }
   }
 
-  // Panels column: count is hoverable to reveal a tooltip listing
-  // the components referenced by the dashboard's panels.
-  .panels-cell .panels-count {
-    cursor: pointer;
+  // Components column: center the count box in the cell. The fixed-width,
+  // left-justified digit box itself lives in CountListPopover.scss (shared
+  // with the other count columns). The wrapper is inline-flex, so center it
+  // via flex justification + the cell's text-align.
+  .panels-cell {
+    text-align: center;
+
+    .count-list-popover {
+      display: inline-flex;
+      justify-content: center;
+      width: 100%;
+    }
   }
 
   // Connections cell — comma-separated connection links. Carbon Link defaults

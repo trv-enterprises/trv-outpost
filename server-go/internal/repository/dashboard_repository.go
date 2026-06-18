@@ -150,7 +150,9 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 		return nil, 0, fmt.Errorf("failed to count dashboards: %w", err)
 	}
 
-	// Calculate pagination
+	// Calculate pagination. The page-size CAP is owned by the service
+	// (ClampPageSize); the repo only floors a non-positive value so direct
+	// callers/tests still get a sane page.
 	page := params.Page
 	if page < 1 {
 		page = 1
@@ -159,18 +161,18 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
 
 	skip := int64((page - 1) * pageSize)
 	limit := int64(pageSize)
 
-	// Find options with pagination and sorting
+	// Find options with pagination and allowlisted sort (default name ASC).
 	opts := options.Find().
 		SetSkip(skip).
 		SetLimit(limit).
-		SetSort(bson.D{{Key: "name", Value: 1}})
+		SetSort(models.ResolveSort(
+			models.DashboardSortFields, params.Sort, params.Direction,
+			models.DashboardDefaultSortField, models.DashboardDefaultSortDir,
+		))
 
 	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
@@ -319,7 +321,8 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 		return nil, 0, fmt.Errorf("failed to count dashboards: %w", err)
 	}
 
-	// Calculate pagination
+	// Calculate pagination. Cap is owned by the service (ClampPageSize); the
+	// repo only floors a non-positive value.
 	page := params.Page
 	if page < 1 {
 		page = 1
@@ -327,9 +330,6 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 	pageSize := params.PageSize
 	if pageSize < 1 {
 		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
 	}
 
 	skip := int64((page - 1) * pageSize)
@@ -339,8 +339,11 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 	pipeline := mongo.Pipeline{
 		// Match filter
 		{{Key: "$match", Value: filter}},
-		// Sort by name
-		{{Key: "$sort", Value: bson.D{{Key: "name", Value: 1}}}},
+		// Allowlisted sort (default name ASC) — keep consistent with List().
+		{{Key: "$sort", Value: models.ResolveSort(
+			models.DashboardSortFields, params.Sort, params.Direction,
+			models.DashboardDefaultSortField, models.DashboardDefaultSortDir,
+		)}},
 		// Pagination
 		{{Key: "$skip", Value: skip}},
 		{{Key: "$limit", Value: limit}},
@@ -359,15 +362,14 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 				}},
 			}},
 		}}},
-		// Lookup components by ID (components use "id" field, not "_id").
-		// Note: the `from: "charts"` collection name here is pre-existing
-		// drift — the underlying Mongo collection is `components`. This
-		// aggregation has been broken since v0.11.x (panel_count returns 0)
-		// and is worked around client-side; the proper fix is tracked
-		// separately. Don't conflate it with the v0.14.1 panel.chart_id
-		// rename: this code is renamed for consistency, not correctness.
+		// Lookup components by ID. Collection is `components` (this used to
+		// say `charts` — pre-v0.11 drift that left panel_count/connection
+		// names empty and forced a client-side workaround; fixed in #21).
+		// Components are versioned, so reduce to the latest FINAL version per
+		// id before matching, then project id+name (for component_usage) and
+		// connection_id (for the connection-name lookup below).
 		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: "charts"},
+			{Key: "from", Value: "components"},
 			{Key: "let", Value: bson.D{{Key: "componentIds", Value: "$component_ids"}}},
 			{Key: "pipeline", Value: bson.A{
 				bson.D{{Key: "$match", Value: bson.D{
@@ -378,8 +380,12 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 						}},
 					}},
 				}}},
-				bson.D{{Key: "$project", Value: bson.D{
-					{Key: "connection_id", Value: 1},
+				bson.D{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
+				bson.D{{Key: "$group", Value: bson.M{
+					"_id":           "$id",
+					"id":            bson.M{"$first": "$id"},
+					"name":          bson.M{"$first": "$name"},
+					"connection_id": bson.M{"$first": "$connection_id"},
 				}}},
 			}},
 			{Key: "as", Value: "matched_components"},
@@ -401,29 +407,24 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 				}},
 			}},
 		}}},
-		// Convert string IDs to ObjectIds for datasource lookup
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "datasource_object_ids", Value: bson.D{
-				{Key: "$map", Value: bson.D{
-					{Key: "input", Value: "$connection_ids"},
-					{Key: "as", Value: "dsid"},
-					{Key: "in", Value: bson.D{
-						{Key: "$toObjectId", Value: "$$dsid"},
-					}},
-				}},
-			}},
-		}}},
-		// Lookup connections to get their names
+		// Lookup connections to get their names. Connection _id is a STRING
+		// (UUID), so match the connection_ids directly — NOT via $toObjectId
+		// (that failed on the 36-char UUIDs once the component lookup above
+		// started returning real connection_ids, the second half of the
+		// pre-v0.11 breakage fixed in #21). Compare with $toString defensively
+		// in case any legacy connection has an ObjectId _id.
 		{{Key: "$lookup", Value: bson.D{
 			{Key: "from", Value: "connections"},
-			{Key: "let", Value: bson.D{{Key: "dsIds", Value: "$datasource_object_ids"}}},
+			{Key: "let", Value: bson.D{{Key: "dsIds", Value: "$connection_ids"}}},
 			{Key: "pipeline", Value: bson.A{
 				bson.D{{Key: "$match", Value: bson.D{
 					{Key: "$expr", Value: bson.D{
-						{Key: "$in", Value: bson.A{"$_id", "$$dsIds"}},
+						{Key: "$in", Value: bson.A{bson.D{{Key: "$toString", Value: "$_id"}}, "$$dsIds"}},
 					}},
 				}}},
 				bson.D{{Key: "$project", Value: bson.D{
+					{Key: "_id", Value: 0},
+					{Key: "id", Value: bson.D{{Key: "$toString", Value: "$_id"}}},
 					{Key: "name", Value: 1},
 				}}},
 			}},
@@ -437,7 +438,18 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 			{Key: "settings", Value: 1},
 			{Key: "tags", Value: 1},
 			{Key: "panel_count", Value: bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels", bson.A{}}}}}}},
-			{Key: "connection_names", Value: "$matched_datasources.name"},
+			{Key: "connection_names", Value: "$matched_datasources.name"}, // back-compat (names only)
+			// {id,name} per referenced component → navigable component popover.
+			{Key: "component_usage", Value: bson.D{{Key: "$map", Value: bson.D{
+				{Key: "input", Value: "$matched_components"},
+				{Key: "as", Value: "c"},
+				{Key: "in", Value: bson.D{
+					{Key: "id", Value: "$$c.id"},
+					{Key: "name", Value: "$$c.name"},
+				}},
+			}}}},
+			// {id,name} per referenced connection → navigable connection links.
+			{Key: "connection_usage", Value: "$matched_datasources"},
 			{Key: "created", Value: 1},
 			{Key: "updated", Value: 1},
 		}}},

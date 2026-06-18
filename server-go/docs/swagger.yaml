@@ -885,6 +885,9 @@ definitions:
         items:
           $ref: '#/definitions/models.Component'
         type: array
+      has_more:
+        description: True when records exist beyond this page
+        type: boolean
       page:
         type: integer
       page_size:
@@ -1440,6 +1443,9 @@ definitions:
         items:
           $ref: '#/definitions/models.Dashboard'
         type: array
+      has_more:
+        description: True when records exist beyond this page
+        type: boolean
       page:
         type: integer
       page_size:
@@ -1535,10 +1541,24 @@ definitions:
   models.DashboardSummary:
     description: Dashboard info with optional data source names for display in tiles
     properties:
+      component_usage:
+        description: |-
+          ComponentUsage / ConnectionUsage carry the {id,name} of each distinct
+          component / connection the dashboard's panels reference, so the list
+          page can render navigable popovers + links without a per-tile fetch
+          (#21).
+        items:
+          $ref: '#/definitions/models.EntityRef'
+        type: array
       connection_names:
-        description: Unique connection names used by referenced components
+        description: 'DEPRECATED: names only. Use ConnectionUsage for navigable links.
+          Kept for back-compat.'
         items:
           type: string
+        type: array
+      connection_usage:
+        items:
+          $ref: '#/definitions/models.EntityRef'
         type: array
       created:
         type: string
@@ -1569,6 +1589,9 @@ definitions:
         items:
           $ref: '#/definitions/models.DashboardSummary'
         type: array
+      has_more:
+        description: True when records exist beyond this page
+        type: boolean
       page:
         type: integer
       page_size:
@@ -1852,6 +1875,13 @@ definitions:
     required:
     - host
     - port
+    type: object
+  models.EntityRef:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
     type: object
   models.ExportBundle:
     description: Portable bundle representing one or more dashboards plus their dependencies
@@ -3282,6 +3312,9 @@ definitions:
   models.UserListResponse:
     description: Response containing a list of users with pagination
     properties:
+      has_more:
+        description: True when records exist beyond this page
+        type: boolean
       page:
         type: integer
       page_size:
@@ -4347,16 +4380,30 @@ paths:
         in: query
         name: tag
         type: string
+      - description: Sort field (name, updated, created, component_type, chart_type,
+          status, namespace)
+        in: query
+        name: sort
+        type: string
+      - description: Sort direction (asc, desc)
+        in: query
+        name: direction
+        type: string
+      - description: Include per-component dashboard usage (count + navigable list);
+          returns ComponentUsageListResponse shape
+        in: query
+        name: include_usage
+        type: boolean
       - default: 1
         description: Page number
         in: query
         name: page
         type: integer
-      - default: 20
-        description: Page size
+      - default: "20"
+        description: Page size; 'all' or 0 returns up to 1000 in one response
         in: query
         name: page_size
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
@@ -4854,6 +4901,64 @@ paths:
       summary: Update user configuration
       tags:
       - config
+  /connections:
+    get:
+      description: Retrieve connections with server-side filter, sort, and pagination.
+        Accepts page/page_size (preferred) or legacy limit/offset.
+      parameters:
+      - description: Filter by namespace (empty = all namespaces)
+        in: query
+        name: namespace
+        type: string
+      - description: Filter by name (case-insensitive substring)
+        in: query
+        name: name
+        type: string
+      - description: Filter by connection type
+        in: query
+        name: type
+        type: string
+      - collectionFormat: csv
+        description: Filter by tags (OR semantics, repeat param)
+        in: query
+        items:
+          type: string
+        name: tags
+        type: array
+      - description: Sort field (name, created_at, updated_at, type, namespace)
+        in: query
+        name: sort
+        type: string
+      - description: Sort direction (asc, desc)
+        in: query
+        name: direction
+        type: string
+      - description: Include per-connection component usage (count + navigable list);
+          each row becomes {connection, component_usage, component_count}
+        in: query
+        name: include_usage
+        type: boolean
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: "20"
+        description: Page size; 'all' or 0 returns up to 1000 in one response
+        in: query
+        name: page_size
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List all connections
+      tags:
+      - connections
   /connections/{id}/command:
     post:
       consumes:
@@ -5265,25 +5370,34 @@ paths:
         in: query
         name: is_public
         type: boolean
-      - description: Include data source names from charts
+      - description: Include connection names from charts (returns DashboardSummary
+          shape)
         in: query
-        name: include_datasources
+        name: include_connections
         type: boolean
+      - description: Sort field (name, updated, created, namespace)
+        in: query
+        name: sort
+        type: string
+      - description: Sort direction (asc, desc)
+        in: query
+        name: direction
+        type: string
       - default: 1
         description: Page number
         in: query
         name: page
         type: integer
-      - default: 20
-        description: Page size
+      - default: "20"
+        description: Page size; 'all' or 0 returns up to 1000 in one response
         in: query
         name: page_size
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: Response when include_datasources=true
+          description: Response when include_connections=true
           schema:
             $ref: '#/definitions/models.DashboardSummaryListResponse'
         "400":
@@ -5697,46 +5811,6 @@ paths:
       tags:
       - dashboards
   /datasources:
-    get:
-      description: Retrieve all datasources with pagination and optional namespace/type/tag
-        filters
-      parameters:
-      - default: 20
-        description: Number of items per page
-        in: query
-        name: limit
-        type: integer
-      - default: 0
-        description: Number of items to skip
-        in: query
-        name: offset
-        type: integer
-      - description: Filter by namespace (empty = all namespaces)
-        in: query
-        name: namespace
-        type: string
-      - description: Filter by datasource type (api, websocket, file)
-        in: query
-        name: type
-        type: string
-      - collectionFormat: csv
-        description: Filter by tags (OR semantics, repeat param)
-        in: query
-        items:
-          type: string
-        name: tags
-        type: array
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List all datasources
-      tags:
-      - datasources
     post:
       consumes:
       - application/json
@@ -7893,18 +7967,30 @@ paths:
       - TSStoreAlerts
   /users:
     get:
-      description: Returns a paginated list of all users
+      description: Returns a paginated, optionally filtered + sorted list of users
       parameters:
+      - description: Filter by name or email (case-insensitive substring)
+        in: query
+        name: name
+        type: string
+      - description: Sort field (name, updated, email)
+        in: query
+        name: sort
+        type: string
+      - description: Sort direction (asc, desc)
+        in: query
+        name: direction
+        type: string
       - default: 1
         description: Page number
         in: query
         name: page
         type: integer
-      - default: 10
-        description: Page size
+      - default: "10"
+        description: Page size; 'all' or 0 returns up to 1000 in one response
         in: query
         name: page_size
-        type: integer
+        type: string
       produces:
       - application/json
       responses:

@@ -6,7 +6,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
@@ -45,30 +44,26 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 
 // ListUsers returns all users (admin only)
 // @Summary List all users
-// @Description Returns a paginated list of all users
+// @Description Returns a paginated, optionally filtered + sorted list of users
 // @Tags Users
 // @Produce json
+// @Param name query string false "Filter by name or email (case-insensitive substring)"
+// @Param sort query string false "Sort field (name, updated, email)"
+// @Param direction query string false "Sort direction (asc, desc)"
 // @Param page query int false "Page number" default(1)
-// @Param page_size query int false "Page size" default(10)
+// @Param page_size query string false "Page size; 'all' or 0 returns up to 1000 in one response" default(10)
 // @Success 200 {object} models.UserListResponse
 // @Failure 403 {object} map[string]string
 // @Router /users [get]
 func (h *AuthHandler) ListUsers(c *gin.Context) {
-	page := 1
-	pageSize := 10
-
-	if p := c.Query("page"); p != "" {
-		if parsed, err := parseIntFromQuery(p); err == nil && parsed > 0 {
-			page = parsed
-		}
-	}
-	if ps := c.Query("page_size"); ps != "" {
-		if parsed, err := parseIntFromQuery(ps); err == nil && parsed > 0 {
-			pageSize = parsed
-		}
+	normalizeAllPageSize(c)
+	var params models.UserQueryParams
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	response, err := h.userService.ListUsers(c.Request.Context(), page, pageSize)
+	response, err := h.userService.ListUsers(c.Request.Context(), params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -213,9 +208,4 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
-}
-
-// parseIntFromQuery parses an integer from a query string
-func parseIntFromQuery(s string) (int, error) {
-	return strconv.Atoi(s)
 }

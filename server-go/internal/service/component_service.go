@@ -235,9 +235,8 @@ func (s *ComponentService) ListComponents(ctx context.Context, params models.Com
 	if params.Page < 1 {
 		params.Page = 1
 	}
-	if params.PageSize < 1 {
-		params.PageSize = 20
-	}
+	// Single page-size authority: 0 → all (capped), >cap → cap, <0 → default.
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
 
 	// Back-compat: backfill the deprecated single-value Tag param into Tags
 	// so the repository only deals with the slice form.
@@ -259,6 +258,38 @@ func (s *ComponentService) ListComponents(ctx context.Context, params models.Com
 		Total:      total,
 		Page:       params.Page,
 		PageSize:   params.PageSize,
+		HasMore:    models.ComputeHasMore(params.Page, params.PageSize, len(components), total),
+	}, nil
+}
+
+// ListComponentsWithUsage is ListComponents plus the denormalized
+// dashboard-usage join (#21, ?include_usage=true): each row carries the
+// dashboards that reference it + the count, computed server-side for the
+// current page only.
+func (s *ComponentService) ListComponentsWithUsage(ctx context.Context, params models.ComponentQueryParams) (*models.ComponentUsageListResponse, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
+
+	if len(params.Tags) == 0 && params.Tag != "" {
+		params.Tags = []string{params.Tag}
+	}
+	if len(params.Tags) > 0 {
+		params.Tags = models.NormalizeTags(params.Tags)
+	}
+
+	rows, total, err := s.repo.FindAllLatestWithUsage(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error listing components with usage: %w", err)
+	}
+
+	return &models.ComponentUsageListResponse{
+		Components: rows,
+		Total:      total,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		HasMore:    models.ComputeHasMore(params.Page, params.PageSize, len(rows), total),
 	}, nil
 }
 
