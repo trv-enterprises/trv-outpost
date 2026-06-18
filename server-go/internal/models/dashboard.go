@@ -430,6 +430,8 @@ type DashboardQueryParams struct {
 	Name               string   `form:"name"`
 	IsPublic           *bool    `form:"is_public"`
 	ComponentID        string   `form:"component_id"`        // Filter dashboards using a specific component
+	ConnectionID       string   `form:"connection_id"`       // Filter dashboards using any component bound to this connection (resolved server-side into ComponentIDs)
+	ComponentIDs       []string `form:"-"`                   // Internal: the component-id set a ConnectionID resolved to. Not a query param; populated by the service.
 	Tags               []string `form:"tags"`                // Filter dashboards with any of the given tags (OR)
 	IncludeConnections bool     `form:"include_connections"` // Include connection names from referenced components
 	Sort               string   `form:"sort"`                // Sort field (allowlisted; see DashboardSortFields). Empty = default.

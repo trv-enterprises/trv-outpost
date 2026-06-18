@@ -126,6 +126,7 @@ function DashboardsListPage() {
     rows: dashboards,
     total,
     loading,
+    hasLoadedOnce,
     error,
     page,
     setPage,
@@ -385,7 +386,9 @@ function DashboardsListPage() {
 
   const getDashboardById = (id) => dashboards.find(d => d.id === id);
 
-  if (loading) {
+  // Full-page spinner only on the first load; later refetches keep the page
+  // mounted so filtering/paging updates just the table (#21).
+  if (loading && dashboards.length === 0 && !hasLoadedOnce) {
     return (
       <div className="dashboards-list-page">
         <Loading description="Loading dashboards..." withOverlay={false} />
@@ -393,7 +396,7 @@ function DashboardsListPage() {
     );
   }
 
-  if (error) {
+  if (error && dashboards.length === 0) {
     return (
       <div className="dashboards-list-page">
         <div className="error-message">Error: {error}</div>
@@ -746,6 +749,7 @@ function DashboardsListPage() {
                   ) : (
                     rows.map((row) => {
                       const dashboard = getDashboardById(row.id);
+                      if (!dashboard) return null; // guard transient refetch row/lookup mismatch
                       const isSelected = selectedForExport.has(row.id);
                       const toggleSelection = () => {
                         setSelectedForExport((prev) => {

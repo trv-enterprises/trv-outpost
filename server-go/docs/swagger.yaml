@@ -5370,6 +5370,14 @@ paths:
         in: query
         name: is_public
         type: boolean
+      - description: Filter to dashboards using a specific component
+        in: query
+        name: component_id
+        type: string
+      - description: Filter to dashboards using any component bound to this connection
+        in: query
+        name: connection_id
+        type: string
       - description: Include connection names from charts (returns DashboardSummary
           shape)
         in: query

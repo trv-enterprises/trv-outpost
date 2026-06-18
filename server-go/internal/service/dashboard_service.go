@@ -177,11 +177,34 @@ func (s *DashboardService) GetDashboardComponents(ctx context.Context, id string
 	return s.chartRepo.FindLatestFinalByIDs(ctx, ids)
 }
 
+// resolveConnectionFilter expands a ConnectionID filter into the set of
+// component ids bound to that connection (by connection_id or a display's
+// frigate/mqtt connection id), stamping params.ComponentIDs for the repo's
+// panels.component_id $in. An empty set is left as-is (matches no dashboard).
+// No-op when ConnectionID is unset or the component repo isn't wired.
+func (s *DashboardService) resolveConnectionFilter(ctx context.Context, params *models.DashboardQueryParams) error {
+	if params.ConnectionID == "" || s.chartRepo == nil {
+		return nil
+	}
+	ids, err := s.chartRepo.FindIDsByConnectionAnyRef(ctx, params.ConnectionID)
+	if err != nil {
+		return fmt.Errorf("resolving connection filter: %w", err)
+	}
+	if ids == nil {
+		ids = []string{} // non-nil empty → $in matches nothing, not "field absent"
+	}
+	params.ComponentIDs = ids
+	return nil
+}
+
 // ListDashboards retrieves dashboards with filtering and pagination
 func (s *DashboardService) ListDashboards(ctx context.Context, params models.DashboardQueryParams) (*models.DashboardListResponse, error) {
 	// Normalize filter tags to match how they're stored.
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
+	}
+	if err := s.resolveConnectionFilter(ctx, &params); err != nil {
+		return nil, err
 	}
 	if params.Page < 1 {
 		params.Page = 1
@@ -208,6 +231,9 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 	// Normalize filter tags to match how they're stored.
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
+	}
+	if err := s.resolveConnectionFilter(ctx, &params); err != nil {
+		return nil, err
 	}
 	if params.Page < 1 {
 		params.Page = 1

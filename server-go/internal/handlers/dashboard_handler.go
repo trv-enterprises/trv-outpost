@@ -129,6 +129,8 @@ func (h *DashboardHandler) GetVariableCandidates(c *gin.Context) {
 // @Produce json
 // @Param name query string false "Filter by name (partial match)"
 // @Param is_public query boolean false "Filter by public status"
+// @Param component_id query string false "Filter to dashboards using a specific component"
+// @Param connection_id query string false "Filter to dashboards using any component bound to this connection"
 // @Param include_connections query boolean false "Include connection names from charts (returns DashboardSummary shape)"
 // @Param sort query string false "Sort field (name, updated, created, namespace)"
 // @Param direction query string false "Sort direction (asc, desc)"

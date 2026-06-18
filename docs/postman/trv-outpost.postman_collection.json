@@ -2175,7 +2175,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&include_connections=&sort=&direction=&page=&page_size=",
+              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&component_id=&connection_id=&include_connections=&sort=&direction=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2194,6 +2194,18 @@
                   "key": "is_public",
                   "value": "",
                   "description": "Filter by public status",
+                  "disabled": true
+                },
+                {
+                  "key": "component_id",
+                  "value": "",
+                  "description": "Filter to dashboards using a specific component",
+                  "disabled": true
+                },
+                {
+                  "key": "connection_id",
+                  "value": "",
+                  "description": "Filter to dashboards using any component bound to this connection",
                   "disabled": true
                 },
                 {

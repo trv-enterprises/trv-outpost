@@ -58,6 +58,7 @@ function UsersListPage() {
     rows: users,
     total,
     loading,
+    hasLoadedOnce,
     error,
     page,
     setPage,
@@ -157,7 +158,9 @@ function UsersListPage() {
 
   const getUserById = (id) => users.find(u => u.id === id);
 
-  if (loading) {
+  // Full-page spinner only on the first load; later refetches keep the page
+  // mounted so filtering/paging updates just the table (#21).
+  if (loading && users.length === 0 && !hasLoadedOnce) {
     return (
       <div className="users-page">
         <Loading description="Loading users..." withOverlay={false} />
@@ -165,7 +168,7 @@ function UsersListPage() {
     );
   }
 
-  if (error) {
+  if (error && users.length === 0) {
     return (
       <div className="users-page">
         <div className="error-message">Error: {error}</div>
@@ -335,6 +338,7 @@ function UsersListPage() {
                   ) : (
                     rows.map((row) => {
                       const user = getUserById(row.id);
+                      if (!user) return null; // guard transient refetch row/lookup mismatch
                       return (
                         <TableRow
                           {...getRowProps({ row })}

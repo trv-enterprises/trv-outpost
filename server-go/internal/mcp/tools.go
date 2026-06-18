@@ -1097,23 +1097,25 @@ func (r *ToolRegistry) registerDashboardTools() {
 				Type: "object",
 				Properties: withListProps(map[string]PropertySchema{
 					"namespace":    {Type: "string", Description: "Filter by namespace"},
-					"name":         {Type: "string", Description: "Filter by name (partial match)"},
-					"is_public":    {Type: "boolean", Description: "Filter by public status"},
-					"component_id": {Type: "string", Description: "Only dashboards that reference this component"},
-					"tags":         {Type: "array", Description: "Filter by tags (OR semantics)"},
+					"name":          {Type: "string", Description: "Filter by name (partial match)"},
+					"is_public":     {Type: "boolean", Description: "Filter by public status"},
+					"component_id":  {Type: "string", Description: "Only dashboards that reference this component"},
+					"connection_id": {Type: "string", Description: "Only dashboards using any component bound to this connection"},
+					"tags":          {Type: "array", Description: "Filter by tags (OR semantics)"},
 				}, "name, updated, created, namespace"),
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
 			in := toolops.ListDashboardsInput{
-				Namespace:   getString(args, "namespace"),
-				Name:        getString(args, "name"),
-				ComponentID: getString(args, "component_id"),
-				Tags:        getStringSlice(args, "tags"),
-				Sort:        getString(args, "sort"),
-				Direction:   getString(args, "direction"),
-				Page:        getInt(args, "page"),
-				PageSize:    getInt(args, "page_size"),
+				Namespace:    getString(args, "namespace"),
+				Name:         getString(args, "name"),
+				ComponentID:  getString(args, "component_id"),
+				ConnectionID: getString(args, "connection_id"),
+				Tags:         getStringSlice(args, "tags"),
+				Sort:         getString(args, "sort"),
+				Direction:    getString(args, "direction"),
+				Page:         getInt(args, "page"),
+				PageSize:     getInt(args, "page_size"),
 			}
 			if _, ok := args["is_public"]; ok {
 				b := getBool(args, "is_public")
@@ -1124,7 +1126,8 @@ func (r *ToolRegistry) registerDashboardTools() {
 			}
 			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{
 				Namespace: in.Namespace, Name: in.Name, IsPublic: in.IsPublic, ComponentID: in.ComponentID,
-				Tags: in.Tags, Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
+				ConnectionID: in.ConnectionID,
+				Tags:         in.Tags, Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
 			})
 			if err != nil {
 				return nil, err

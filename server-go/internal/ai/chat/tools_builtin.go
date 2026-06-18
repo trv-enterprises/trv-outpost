@@ -261,9 +261,10 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		InputSchema: listObjectSchema(map[string]interface{}{
 			"namespace":    map[string]interface{}{"type": "string", "description": "Filter by namespace"},
 			"name":         map[string]interface{}{"type": "string", "description": "Filter by name (partial match)"},
-			"is_public":    map[string]interface{}{"type": "boolean", "description": "Filter by public status"},
-			"component_id": map[string]interface{}{"type": "string", "description": "Only dashboards that reference this component"},
-			"tags":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Filter by tags (OR semantics)"},
+			"is_public":     map[string]interface{}{"type": "boolean", "description": "Filter by public status"},
+			"component_id":  map[string]interface{}{"type": "string", "description": "Only dashboards that reference this component"},
+			"connection_id": map[string]interface{}{"type": "string", "description": "Only dashboards using any component bound to this connection"},
+			"tags":          map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Filter by tags (OR semantics)"},
 		}, "name, updated, created, namespace"),
 		Handler: wrapListDashboards(ops),
 	})

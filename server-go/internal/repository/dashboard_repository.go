@@ -140,6 +140,10 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 	if params.ComponentID != "" {
 		filter["panels.component_id"] = params.ComponentID
 	}
+	// connection_id → resolved component-id set (see ListWithConnections).
+	if params.ConnectionID != "" {
+		filter["panels.component_id"] = bson.M{"$in": params.ComponentIDs}
+	}
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
 	}
@@ -310,6 +314,13 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 	}
 	if params.ComponentID != "" {
 		filter["panels.component_id"] = params.ComponentID
+	}
+	// connection_id filter: the service resolved it to the component ids bound
+	// to that connection; match dashboards whose panels reference any of them.
+	// An empty resolved set means the connection is used by no component → no
+	// dashboard matches (filter to nothing, not "all").
+	if params.ConnectionID != "" {
+		filter["panels.component_id"] = bson.M{"$in": params.ComponentIDs}
 	}
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}

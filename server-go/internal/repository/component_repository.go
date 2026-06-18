@@ -270,6 +270,26 @@ func buildLatestPipeline(params models.ComponentQueryParams) mongo.Pipeline {
 	if params.ComponentType != "" {
 		matchFilter["component_type"] = params.ComponentType
 	}
+	// Multi-value type filter: a component matches if ANY of its type fields is
+	// in the corresponding requested set. Built as an $or across the provided
+	// sets, ANDed into the rest of the match. Lets the hierarchical type picker
+	// express mixed-parent / partial-subtype selections server-side.
+	var typeOr bson.A
+	if len(params.ComponentTypes) > 0 {
+		typeOr = append(typeOr, bson.M{"component_type": bson.M{"$in": params.ComponentTypes}})
+	}
+	if len(params.ChartTypes) > 0 {
+		typeOr = append(typeOr, bson.M{"chart_type": bson.M{"$in": params.ChartTypes}})
+	}
+	if len(params.ControlTypes) > 0 {
+		typeOr = append(typeOr, bson.M{"control_config.control_type": bson.M{"$in": params.ControlTypes}})
+	}
+	if len(params.DisplayTypes) > 0 {
+		typeOr = append(typeOr, bson.M{"display_config.display_type": bson.M{"$in": params.DisplayTypes}})
+	}
+	if len(typeOr) > 0 {
+		matchFilter["$or"] = typeOr
+	}
 	if params.Status != "" {
 		matchFilter["status"] = params.Status
 	}
@@ -681,6 +701,31 @@ func (r *ComponentRepository) FindByConnectionID(ctx context.Context, connection
 		return nil, err
 	}
 	return components, nil
+}
+
+// FindIDsByConnectionAnyRef returns the distinct component ids that reference
+// the given connection by ANY of the three reference fields a component can
+// hold: connection_id (charts/controls), or a display's
+// display_config.frigate_connection_id / .mqtt_connection_id. Mirrors the
+// client-side connection-match the dashboards list used pre-#21. Used to
+// resolve the dashboard "filter by connection" to a panels.component_id $in.
+func (r *ComponentRepository) FindIDsByConnectionAnyRef(ctx context.Context, connectionID string) ([]string, error) {
+	filter := bson.M{"$or": bson.A{
+		bson.M{"connection_id": connectionID},
+		bson.M{"display_config.frigate_connection_id": connectionID},
+		bson.M{"display_config.mqtt_connection_id": connectionID},
+	}}
+	ids, err := r.collection.Distinct(ctx, "id", filter)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(ids))
+	for _, v := range ids {
+		if s, ok := v.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // FindLatestFinalByIDs returns the latest FINAL (non-draft) version of each

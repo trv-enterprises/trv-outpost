@@ -41,7 +41,7 @@ import CreateMenu from '../components/CreateMenu';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
-import TypeHierarchyFilter, { matchesTypeSelection, COMPONENT_TYPE_HIERARCHY } from '../components/shared/TypeHierarchyFilter';
+import TypeHierarchyFilter, { COMPONENT_TYPE_HIERARCHY } from '../components/shared/TypeHierarchyFilter';
 import NamespaceChip from '../components/shared/NamespaceChip';
 import VariableIndicator from '../components/shared/VariableIndicator';
 import CustomCodeIndicator from '../components/shared/CustomCodeIndicator';
@@ -61,37 +61,52 @@ const SUBTYPE_COUNTS = Object.fromEntries(
 
 /**
  * Map a TypeHierarchyFilter selection (Set of "parent:subtype" keys, or null
- * for "all") onto the single-valued server params component_type / chart_type,
- * and report whether a client-side pass is still needed.
+ * for "all") onto the server's multi-value type params. The server OR-matches
+ * across component_types / chart_types / control_types / display_types, so ANY
+ * selection — mixed parents, partial subtype sets — is expressed server-side
+ * and paginates correctly (no client-side post-filter; the paged total stays
+ * accurate).
  *
- * The server filters ONE component_type and ONE chart_type at a time (it has no
- * control_type/display_type filter). We push a server filter only when the
- * selection collapses cleanly so the paged `total` stays accurate:
- *   - one chart subtype                        → component_type=chart & chart_type=sub
- *   - all subtypes of exactly one parent       → component_type=parent
- * Everything else (mixed parents, a partial subtype set, or any control/display
- * subset) can't be expressed in single params, so it loads UNFILTERED from the
- * server and is filtered CLIENT-side on the loaded page (commented #21). Returns
- * { server: {component_type, chart_type}, clientFilter: bool }.
+ * Per parent: if EVERY subtype of a parent is selected, send the parent in
+ * component_types (cheaper, and catches components with a blank subtype). For a
+ * PARTIAL set, send the individual subtype ids in the parent's *_types list:
+ *   chart   → chart_types, control → control_types, display → display_types.
+ * Returns { server: { component_types, chart_types, control_types,
+ * display_types }, empty: bool } where empty=true means "none selected → show
+ * nothing".
  */
 function resolveTypeSelection(selectedTypes) {
-  const none = { server: { component_type: '', chart_type: '' }, clientFilter: false };
-  if (selectedTypes === null) return none; // all selected → no filter
-  if (selectedTypes.size === 0) return { ...none, clientFilter: true }; // none → client returns empty
-  const keys = Array.from(selectedTypes);
-  const parents = new Set(keys.map((k) => k.split(':')[0]));
-  if (parents.size !== 1) return { ...none, clientFilter: true }; // mixed parents
-  const parent = keys[0].split(':')[0];
-  // One chart subtype is fully server-expressible.
-  if (parent === 'chart' && keys.length === 1) {
-    return { server: { component_type: 'chart', chart_type: keys[0].split(':')[1] }, clientFilter: false };
+  const empty = {
+    server: { component_types: [], chart_types: [], control_types: [], display_types: [] },
+    empty: false,
+  };
+  if (selectedTypes === null) return empty; // all → no type filter
+  if (selectedTypes.size === 0) return { ...empty, empty: true }; // none selected
+
+  const byParent = { chart: [], control: [], display: [] };
+  for (const key of selectedTypes) {
+    const [parent, subtype] = key.split(':');
+    if (byParent[parent]) byParent[parent].push(subtype);
   }
-  // Whole parent selected (every subtype) → component_type filter is exact.
-  if (keys.length === SUBTYPE_COUNTS[parent]) {
-    return { server: { component_type: parent, chart_type: '' }, clientFilter: false };
+
+  const component_types = [];
+  const chart_types = [];
+  const control_types = [];
+  const display_types = [];
+  const subtypeListByParent = { chart: chart_types, control: control_types, display: display_types };
+
+  for (const parent of ['chart', 'control', 'display']) {
+    const subs = byParent[parent];
+    if (subs.length === 0) continue;
+    if (subs.length === SUBTYPE_COUNTS[parent]) {
+      // Whole parent selected → match by component_type (also catches blanks).
+      component_types.push(parent);
+    } else {
+      // Partial set → match the specific subtype ids.
+      subtypeListByParent[parent].push(...subs);
+    }
   }
-  // Partial subtype set within one parent → client pass on the loaded page.
-  return { ...none, clientFilter: true };
+  return { server: { component_types, chart_types, control_types, display_types }, empty: false };
 }
 
 /**
@@ -148,9 +163,10 @@ function ComponentsListPage() {
     return null;
   });
 
-  // Resolve the hierarchical type selection into server params (+ whether a
-  // client pass is still needed). See resolveTypeSelection above.
-  const { server: typeServerParams, clientFilter: typeNeedsClientFilter } = resolveTypeSelection(selectedTypes);
+  // Resolve the hierarchical type selection into the server's multi-value type
+  // params (any selection is now server-side; no client post-filter). See
+  // resolveTypeSelection above. `typeEmpty` = nothing selected → show nothing.
+  const { server: typeServerParams, empty: typeEmpty } = resolveTypeSelection(selectedTypes);
 
   // Server-side filter/sort/pagination (#21). dashboard_count / dashboard_usage
   // come from include_usage:true (replaces the old getDashboards(page_size:1000)
@@ -160,19 +176,27 @@ function ComponentsListPage() {
     rows: charts,
     total,
     loading,
+    hasLoadedOnce,
     error,
     page,
     setPage,
     pageSize,
     setPageSize,
   } = usePaginatedList({
-    fetcher: (q) => apiClient.getComponents(q),
+    fetcher: (q) => {
+      // Nothing-selected in the type picker → render an empty list without a
+      // pointless server round-trip.
+      if (typeEmpty) return Promise.resolve({ components: [], total: 0, has_more: false });
+      return apiClient.getComponents(q);
+    },
     extract: (resp) => ({ rows: resp?.components || [], total: resp?.total || 0, hasMore: resp?.has_more }),
     filters: {
       include_usage: true,
       namespace: namespaceFilter,
-      component_type: typeServerParams.component_type,
-      chart_type: typeServerParams.chart_type,
+      component_types: typeServerParams.component_types,
+      chart_types: typeServerParams.chart_types,
+      control_types: typeServerParams.control_types,
+      display_types: typeServerParams.display_types,
       connection_id: connectionFilter === 'all' ? '' : connectionFilter,
       tags: tagFilter,
     },
@@ -334,37 +358,23 @@ function ComponentsListPage() {
     }
   };
 
-  // Server already applied namespace / type (when expressible) / connection /
-  // tags / search / sort / pagination. What remains are CLIENT-only passes on
-  // the loaded page (#21):
-  //   - type selection that couldn't collapse to single server params
-  //     (mixed parents / partial subtype sets) — see resolveTypeSelection.
-  //   - variableOnly / customCodeOnly toggles — no server field.
-  // These filter only the loaded page; that's acceptable here (the toggles are
-  // niche and the partial-type case is uncommon).
+  // Server applied namespace / type (fully, incl. mixed/partial selections via
+  // the multi-value type params) / connection / tags / search / sort /
+  // pagination. The only remaining CLIENT-only passes are the variableOnly /
+  // customCodeOnly toggles — no server field — which filter the loaded page
+  // (#21; niche, acceptable).
   const filteredAndSortedCharts = useMemo(() => {
     let result = charts;
 
-    // #21: client-only post-filter on the loaded page — the type selection
-    // wasn't fully server-expressible.
-    if (typeNeedsClientFilter) {
-      result = result.filter((item) => matchesTypeSelection(item, selectedTypes));
-    }
-
-    // #21: client-only post-filter on the loaded page — no server field for
-    // variable-driven components.
     if (variableOnly) {
       result = result.filter((chart) => !!chart.uses_dashboard_variable);
     }
-
-    // #21: client-only post-filter on the loaded page — no server field for
-    // custom-code components.
     if (customCodeOnly) {
       result = result.filter((chart) => !!chart.use_custom_code);
     }
 
     return result;
-  }, [charts, typeNeedsClientFilter, selectedTypes, variableOnly, customCodeOnly]);
+  }, [charts, variableOnly, customCodeOnly]);
 
   // Sort allowlist: name, updated, created, component_type, chart_type, status,
   // namespace. 'dashboards' (count) and 'connection' (name) have no server sort
@@ -398,7 +408,11 @@ function ComponentsListPage() {
 
   const getChartById = (id) => charts.find(c => c.id === id);
 
-  if (loading) {
+  // Full-page spinner ONLY on the very first load (no rows yet). On later
+  // refetches (filter / sort / page change) keep the page — header, toolbar,
+  // filters, pagination — mounted so only the table contents update; the
+  // toolbar shows the inline busy state instead of the whole page flashing.
+  if (loading && charts.length === 0 && !hasLoadedOnce) {
     return (
       <div className="components-list-page">
         <Loading description="Loading components..." withOverlay={false} />
@@ -406,7 +420,7 @@ function ComponentsListPage() {
     );
   }
 
-  if (error) {
+  if (error && charts.length === 0) {
     return (
       <div className="components-list-page">
         <div className="error-message">Error: {error}</div>
@@ -720,6 +734,7 @@ function ComponentsListPage() {
                   ) : (
                     rows.map((row) => {
                       const chart = getChartById(row.id);
+                      if (!chart) return null; // guard transient refetch row/lookup mismatch
                       return (
                         <TableRow
                           {...getRowProps({ row })}

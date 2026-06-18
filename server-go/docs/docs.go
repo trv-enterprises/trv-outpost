@@ -2284,6 +2284,18 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Filter to dashboards using a specific component",
+                        "name": "component_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter to dashboards using any component bound to this connection",
+                        "name": "connection_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "boolean",
                         "description": "Include connection names from charts (returns DashboardSummary shape)",
                         "name": "include_connections",

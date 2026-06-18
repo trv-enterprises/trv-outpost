@@ -79,6 +79,7 @@ function ConnectionsPage() {
     rows: connections,
     total,
     loading,
+    hasLoadedOnce,
     error,
     page,
     setPage,
@@ -256,7 +257,9 @@ function ConnectionsPage() {
 
   const getConnectionById = (id) => connections.find(c => c.id === id);
 
-  if (loading) {
+  // Full-page spinner only on the first load; later refetches keep the page
+  // mounted so filtering/paging updates just the table (#21).
+  if (loading && connections.length === 0 && !hasLoadedOnce) {
     return (
       <div className="connections-page">
         <Loading description="Loading connections..." withOverlay={false} />
@@ -264,7 +267,7 @@ function ConnectionsPage() {
     );
   }
 
-  if (error) {
+  if (error && connections.length === 0) {
     return (
       <div className="connections-page">
         <div className="error-message">Error: {error}</div>
@@ -506,7 +509,12 @@ function ConnectionsPage() {
                     </TableRow>
                   ) : (
                     rows.map((row) => {
+                      // During a refetch the Carbon DataTable can briefly render
+                      // a stale row id that's no longer in `connections` (the
+                      // lookup source) — guard so a transient mismatch doesn't
+                      // crash on connection.tags etc.
                       const connection = getConnectionById(row.id);
+                      if (!connection) return null;
                       return (
                         <TableRow
                           {...getRowProps({ row })}

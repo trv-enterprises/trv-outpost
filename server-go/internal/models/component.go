@@ -207,10 +207,22 @@ type ComponentQueryParams struct {
 	Name          string   `form:"name"`
 	ChartType     string   `form:"chart_type"`
 	ComponentType string   `form:"component_type"` // "chart", "control", "display"
-	Status        string   `form:"status"`         // "draft", "final"
-	ConnectionID  string   `form:"connection_id"`  // Accept connection_id query param
-	Tags          []string `form:"tags"`           // Filter components with any of the given tags (OR)
-	Tag           string   `form:"tag"`            // DEPRECATED: use tags; kept for back-compat
+	// Multi-value type filters (OR within each, AND across the union with the
+	// single-value ChartType/ComponentType above) — lets the hierarchical type
+	// picker express ANY selection server-side (mixed parents, partial subtype
+	// sets) so it paginates correctly instead of client-filtering one page.
+	// A component matches the type filter if it satisfies ANY of: its
+	// component_type ∈ ComponentTypes, chart_type ∈ ChartTypes,
+	// control_config.control_type ∈ ControlTypes, display_config.display_type
+	// ∈ DisplayTypes.
+	ComponentTypes []string `form:"component_types"`
+	ChartTypes     []string `form:"chart_types"`
+	ControlTypes   []string `form:"control_types"`
+	DisplayTypes   []string `form:"display_types"`
+	Status         string   `form:"status"`        // "draft", "final"
+	ConnectionID   string   `form:"connection_id"` // Accept connection_id query param
+	Tags           []string `form:"tags"`          // Filter components with any of the given tags (OR)
+	Tag            string   `form:"tag"`           // DEPRECATED: use tags; kept for back-compat
 	Sort          string   `form:"sort"`           // Sort field (allowlisted; see ComponentSortFields). Empty = default.
 	Direction     string   `form:"direction"`      // "asc" | "desc". Empty = entity default direction.
 	Page          int      `form:"page"`

@@ -555,15 +555,16 @@ func (t *Toolset) DeleteDashboard(ctx context.Context, in DeleteDashboardInput) 
 // (#21). ComponentID finds dashboards using a specific component (the
 // list_dashboards_using_component tool routes through here).
 type ListDashboardsInput struct {
-	Namespace   string   `json:"namespace,omitempty"`
-	Name        string   `json:"name,omitempty"`
-	IsPublic    *bool    `json:"is_public,omitempty"`
-	ComponentID string   `json:"component_id,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	Sort        string   `json:"sort,omitempty"`
-	Direction   string   `json:"direction,omitempty"`
-	Page        int      `json:"page,omitempty"`
-	PageSize    int      `json:"page_size,omitempty"` // 0/omitted = all (capped at 1000)
+	Namespace    string   `json:"namespace,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	IsPublic     *bool    `json:"is_public,omitempty"`
+	ComponentID  string   `json:"component_id,omitempty"`
+	ConnectionID string   `json:"connection_id,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	Sort         string   `json:"sort,omitempty"`
+	Direction    string   `json:"direction,omitempty"`
+	Page         int      `json:"page,omitempty"`
+	PageSize     int      `json:"page_size,omitempty"` // 0/omitted = all (capped at 1000)
 }
 
 type ListDashboardsOutput struct {
@@ -581,13 +582,14 @@ func (t *Toolset) ListDashboards(ctx context.Context, in ListDashboardsInput) (*
 		return nil, fmt.Errorf("dashboard service not wired")
 	}
 	resp, err := t.Dashboards.ListDashboards(ctx, models.DashboardQueryParams{
-		Namespace:   in.Namespace,
-		Name:        in.Name,
-		IsPublic:    in.IsPublic,
-		ComponentID: in.ComponentID,
-		Tags:        in.Tags,
-		Sort:        in.Sort,
-		Direction:   in.Direction,
+		Namespace:    in.Namespace,
+		Name:         in.Name,
+		IsPublic:     in.IsPublic,
+		ComponentID:  in.ComponentID,
+		ConnectionID: in.ConnectionID,
+		Tags:         in.Tags,
+		Sort:         in.Sort,
+		Direction:    in.Direction,
 		Page:        in.Page,
 		PageSize:    in.PageSize,
 	})

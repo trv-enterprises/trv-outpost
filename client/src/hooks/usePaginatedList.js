@@ -58,6 +58,11 @@ export function usePaginatedList({
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
+  // True once the first fetch has resolved. Pages use this to keep the page
+  // shell mounted across later refetches (show a full-page spinner only on the
+  // very first load, an inline busy state thereafter) so filtering doesn't
+  // flash the whole page.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Debounce the search term so typing doesn't fire a request per keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -103,6 +108,7 @@ export function usePaginatedList({
       setHasMore(false);
     } finally {
       setLoading(false);
+      setHasLoadedOnce(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSig, page, reloadTick]);
@@ -116,6 +122,7 @@ export function usePaginatedList({
     total,
     hasMore,
     loading,
+    hasLoadedOnce,
     error,
     page,
     setPage,
