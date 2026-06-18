@@ -74,9 +74,10 @@
         background-color: var(--cds-layer-01);
       }
 
+      // Width is owned by the shared .connection-filter-dropdown rule
+      // (App.scss) so the trigger sizes to its content (snug idle, grows to
+      // the selected name). Keep it from being squished in the toolbar.
       #connection-filter {
-        min-width: 240px;
-        width: 240px;
         flex-shrink: 0;
       }
 
