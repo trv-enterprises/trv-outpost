@@ -3,9 +3,18 @@
 // See LICENSE file for details.
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Modal, Loading, InlineNotification } from '@carbon/react';
+import { Modal, Loading, InlineNotification, TextInput } from '@carbon/react';
 import apiClient from '../api/client';
 import { triggerDownload, filenameSlug } from '../utils/downloadFile';
+
+// Suggested base filename (no extension): source-namespace slug + a compact
+// timestamp, matching the prior auto-generated name. The user can edit it
+// before downloading (mirrors the AI-surface ExportNameModal #61).
+function defaultExportName(sourceNamespace) {
+  const slug = filenameSlug(sourceNamespace || 'dashboard_export');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15); // YYYYMMDDTHHMMSS
+  return `${slug}-${stamp}`;
+}
 
 /**
  * DashboardExportModal
@@ -37,6 +46,10 @@ export default function DashboardExportModal({ open, onClose, dashboardIds, dash
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
+  // User-editable base filename (no extension). Seeded from the source
+  // namespace + timestamp when the preview loads; the user can rename before
+  // downloading.
+  const [fileName, setFileName] = useState('');
 
   // Name-collision guard inside the selected set. If two selected
   // dashboards share a name (probably in different namespaces), import
@@ -66,7 +79,12 @@ export default function DashboardExportModal({ open, onClose, dashboardIds, dash
     setPreview(null);
     apiClient
       .previewExportDashboards(dashboardIds)
-      .then((data) => { if (!cancelled) setPreview(data); })
+      .then((data) => {
+        if (cancelled) return;
+        setPreview(data);
+        // Seed the editable filename from the resolved source namespace.
+        setFileName(defaultExportName(data?.source_namespace));
+      })
       .catch((err) => { if (!cancelled) setError(err.message || 'Preview failed'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -77,14 +95,12 @@ export default function DashboardExportModal({ open, onClose, dashboardIds, dash
     setError(null);
     try {
       const bundle = await apiClient.exportDashboards(dashboardIds);
-      const slug = filenameSlug(bundle.source_namespace || 'dashboard_export');
-      const stamp = new Date()
-        .toISOString()
-        .replace(/[-:]/g, '')
-        .slice(0, 15); // YYYYMMDDTHHMMSS
+      // Use the user-chosen base name; fall back to the namespace default if
+      // somehow empty. filenameSlug keeps it filesystem-safe.
+      const base = filenameSlug(fileName.trim() || bundle.source_namespace || 'dashboard_export');
       triggerDownload(
         new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }),
-        `${slug}-${stamp}.json`
+        `${base}.json`
       );
       onClose();
     } catch (err) {
@@ -92,7 +108,7 @@ export default function DashboardExportModal({ open, onClose, dashboardIds, dash
     } finally {
       setLoading(false);
     }
-  }, [dashboardIds, onClose]);
+  }, [dashboardIds, onClose, fileName]);
 
   // Preflight errors or in-selection collisions block the download.
   const blocked = !!error || nameCollisions.length > 0;
@@ -105,7 +121,7 @@ export default function DashboardExportModal({ open, onClose, dashboardIds, dash
       secondaryButtonText="Cancel"
       onRequestClose={onClose}
       onRequestSubmit={download}
-      primaryButtonDisabled={loading || blocked || !preview}
+      primaryButtonDisabled={loading || blocked || !preview || !fileName.trim()}
       size="sm"
     >
       {loading && <Loading description="Checking…" small withOverlay={false} />}
@@ -127,6 +143,15 @@ export default function DashboardExportModal({ open, onClose, dashboardIds, dash
       )}
       {preview && !blocked && (
         <div>
+          <TextInput
+            id="dashboard-export-filename"
+            labelText="File name"
+            helperText={`Saved as “${(filenameSlug(fileName.trim() || preview.source_namespace || 'dashboard_export'))}.json”`}
+            value={fileName}
+            onChange={(e) => setFileName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && fileName.trim()) download(); }}
+            style={{ marginBottom: '0.75rem' }}
+          />
           <p style={{ marginBottom: '0.75rem' }}>
             Exporting <strong>{preview.dashboard_count}</strong> dashboard{preview.dashboard_count === 1 ? '' : 's'}
             {' '}with <strong>{preview.component_count}</strong> component{preview.component_count === 1 ? '' : 's'}
