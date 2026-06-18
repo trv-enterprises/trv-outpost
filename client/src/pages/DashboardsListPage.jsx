@@ -27,6 +27,7 @@ import {
   Checkbox,
   OverflowMenu,
   OverflowMenuItem,
+  Dropdown,
   Pagination
 } from '@carbon/react';
 import { TrashCan, Dashboard, List, Grid, Edit, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
@@ -100,6 +101,11 @@ function DashboardsListPage() {
   // so users can peek at other namespaces without changing where new
   // records land.
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
+  // Connection filter (filter dashboards to those using a given connection).
+  // 'all' or a connection id. The options come from a one-shot all-connections
+  // fetch (comprehensive, NOT the paginated rows).
+  const [connectionFilter, setConnectionFilter] = useState(savedFilters.connection || 'all');
+  const [connections, setConnections] = useState({}); // id -> name, for the dropdown options
   // Variable-driven only: when on, keep only dashboards that define and
   // enable dashboard variables (settings.variables_enabled + variables[],
   // via dashboardUsesVariable). Lives in the ⋮ filter overflow.
@@ -139,6 +145,7 @@ function DashboardsListPage() {
       include_connections: true,
       namespace: namespaceFilter,
       tags: tagFilter,
+      connection_id: connectionFilter === 'all' ? '' : connectionFilter,
     },
     sortKey: serverSortKey,
     sortDir: serverSortDir,
@@ -150,6 +157,19 @@ function DashboardsListPage() {
 
   const refetch = useCallback(() => setReloadTick((t) => t + 1), []);
 
+  // One-shot all-connections fetch for the connection filter dropdown options
+  // (comprehensive set, independent of the paginated dashboard rows).
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getConnections({ page_size: 'all' }).then((data) => {
+      if (cancelled || !data?.connections) return;
+      const connMap = {};
+      data.connections.forEach((conn) => { connMap[conn.id] = conn.name; });
+      setConnections(connMap);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // Save filters to session store when they change
   useEffect(() => {
     setFilters('dashboards', {
@@ -159,6 +179,7 @@ function DashboardsListPage() {
       view: viewMode,
       tags: tagFilter,
       namespaces: namespaceFilter,
+      connection: connectionFilter,
       variableOnly,
     });
     // View mode stays in listPrefs (it's UI-local, not shared with
@@ -168,7 +189,7 @@ function DashboardsListPage() {
       view: viewMode,
       pageSize,
     });
-  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, variableOnly, pageSize]);
+  }, [searchTerm, sortKey, sortDirection, viewMode, tagFilter, namespaceFilter, connectionFilter, variableOnly, pageSize]);
 
   // Load the shared per-user sort + manual order from server config.
   useEffect(() => {
@@ -435,11 +456,26 @@ function DashboardsListPage() {
             selected={tagFilter}
             onChange={setTagFilter}
           />
-          {/* #21: the "filter by connection" dropdown was dropped. It was a
-              client-side walk over each dashboard's panels/components, which
-              the summary list no longer carries, and the dashboards API has no
-              connection-id filter (only component_id). Follow-up: add a
-              connection→component_id resolution server-side if needed. */}
+          {/* Filter dashboards by connection. The server resolves the
+              connection to the component ids bound to it and matches dashboards
+              using any of them (#21). Options come from the one-shot
+              all-connections fetch above. */}
+          <Dropdown
+            id="dashboard-connection-filter"
+            className="connection-filter-dropdown"
+            label="Filter by connection"
+            titleText=""
+            items={[
+              { id: 'all', text: 'All Connections' },
+              ...Object.entries(connections).map(([id, name]) => ({ id, text: name }))
+            ]}
+            itemToString={(item) => item?.text || ''}
+            selectedItem={{ id: connectionFilter, text: connectionFilter === 'all' ? 'All Connections' : (connections[connectionFilter] || 'Unknown') }}
+            onChange={({ selectedItem }) => {
+              setConnectionFilter(selectedItem?.id || 'all');
+            }}
+            size="md"
+          />
           {/* Overflow (⋮) menu for facet toggles — mirrors the components
               list/picker. Holds "Variable dashboards only". Sits BEFORE the
               reset button so reset stays the rightmost filter control. */}
@@ -469,12 +505,14 @@ function DashboardsListPage() {
               !!searchTerm ||
               namespaceFilter.length > 0 ||
               tagFilter.length > 0 ||
+              connectionFilter !== 'all' ||
               variableOnly
             }
             onReset={() => {
               setSearchTerm('');
               setNamespaceFilter([]);
               setTagFilter([]);
+              setConnectionFilter('all');
               setVariableOnly(false);
             }}
           />
