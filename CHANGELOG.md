@@ -6,6 +6,27 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.32.1] — 2026-06-18
+
+### Fixed
+
+- **Custom-code charts now get a panel-rendered title band** (#101). AI-generated
+  custom-code chart components (`chart.custom` / `use_custom_code=true`) were
+  shipping without a title — the chart rendered but the panel had no header.
+  Title-band ownership moved into the renderer, so every custom-code chart gets
+  the same header treatment as the spec-driven chart types, drawn from the
+  component's `title` field rather than depending on the AI to hand-draw it in
+  the component code. Both AI surfaces (the in-editor Component agent and the
+  Dashboard Assistant) now converge on the same rule: set the `title` field, do
+  not draw a title in `component_code` — removing the duplicate-title risk.
+
+### Migration
+
+- `strip_custom_code_title_div_v1` runs on first boot of the new server image and
+  strips the now-redundant in-code title divs from existing custom-code
+  components so they don't show two titles. Conservative: only recognized
+  title-div shapes are touched; unrecognized `config.title` usage is left as-is.
+
 ## [0.32.0] — 2026-06-17
 
 ### Added
