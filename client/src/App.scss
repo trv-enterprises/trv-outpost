@@ -632,6 +632,22 @@ button.cds--overflow-menu {
 // long (e.g. "TRV-SRV-001 TS-STORE WS STATS") and the default Carbon
 // dropdown truncates with ellipsis at the trigger's width.
 .connection-filter-dropdown {
+  // Trigger sizes to its CONTENT: tight on "All Connections" (idle), then
+  // grows to fit the selected connection name (names can be long). Clamped so
+  // a very long name can't blow out the toolbar — it ellipsizes at the cap.
+  .cds--dropdown,
+  .cds--list-box {
+    inline-size: max-content;
+    min-inline-size: 11rem; // comfortable floor for "All Connections"
+    max-inline-size: 22rem;
+  }
+  // Ellipsize the selected label at the max width instead of overflowing.
+  .cds--list-box__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .cds--list-box__menu {
     inline-size: max-content;
     min-inline-size: 100%;

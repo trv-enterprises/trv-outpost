@@ -457,6 +457,7 @@ function ComponentsListPage() {
           <TypeHierarchyFilter
             selectedTypes={selectedTypes}
             onChange={setSelectedTypes}
+            width={190}
           />
           <TagFilter
             entityType="components"
