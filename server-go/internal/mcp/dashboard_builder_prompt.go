@@ -39,8 +39,12 @@ create a dashboard whose panels reference those components.
   panels. The MCP preamble's "Grid contract" section has the full
   cell math and worked examples; use those cols/rows values, don't
   hardcode "12 columns."
-- **Titles**: every chart/display should have a human-readable title.
-  Use title case, avoid jargon, keep titles under ~40 chars.
+- **Titles**: set the ` + "`" + `title` + "`" + ` param on every ` + "`" + `create_component` + "`" + ` — it's
+  the human-readable label shown in the panel header (e.g. "CPU
+  Utilization"). Use title case, avoid jargon, keep under ~40 chars.
+  The ` + "`" + `name` + "`" + ` param is the INTERNAL identifier, not the label — do NOT
+  bury the display label in ` + "`" + `name` + "`" + ` or rename a component to relabel it;
+  the renderer shows ` + "`" + `title` + "`" + ` when set.
 - **Color**: prefer Carbon Design System colors. When in doubt, use
   semantic tokens — don't hard-code hex values in component config.
 - **One component per chart** — don't create a single "monster"
@@ -123,6 +127,28 @@ const dashboardBuilderFlow = `# Build flow
    to the component IDs from step 4 (plus the section-header text
    panels from step 3). Double-check panel coordinates don't overlap
    and fit the canvas.
+   **FILL the full canvas — both axes — it's not enough to merely stay
+   inside it.** The viewer SCALES the whole ` + "`" + `cols × rows` + "`" + ` canvas to fit
+   the screen, so a dashboard that stops short leaves dead space and
+   scales poorly. The plan MUST CONSUME the entire budget:
+   - **Width (every row):** the panel widths in a row MUST SUM TO
+     ` + "`" + `cols` + "`" + ` — no empty strip on the right, no overflow. E.g. 5 tiles
+     on a 71-col canvas → 14+14+14+14+15 = 71, not 12 each (=60, leaves
+     a dead strip) and not 16 each (=80, overflows).
+   - **Height (whole dashboard):** the final ` + "`" + `cursorY` + "`" + ` after the last
+     row MUST EQUAL ` + "`" + `rows` + "`" + ` — not stop short of it. Stopping at, say,
+     y=27 on a 38-row canvas leaves the bottom ~30% empty (a build
+     defect). ADD UP all row heights (headers + chart rows) before
+     creating; if the total is under ` + "`" + `rows` + "`" + `, GROW the chart rows
+     toward the tall end (time-series read fine at 9–14 cells tall) or
+     add another useful section until it reaches ` + "`" + `rows` + "`" + `. If it's
+     over, trim chart-row heights or drop the lowest-priority section.
+   State BOTH the per-row width sum and the total-height arithmetic
+   before calling ` + "`" + `create_dashboard` + "`" + ` (e.g. "row1: 14+14+14+14+15 = 71
+   = cols ✓; heights 2 + 5 + 2+12 + 2+12 = 35 < 38 → grow chart rows to
+   13 → 38 = rows ✓"). Underfilling ` + "`" + `cols/rows` + "`" + ` is as much a defect as
+   overflowing them.
+
    **Pack rows contiguously — no vertical gaps.** Stack rows from y=0
    downward, each row starting exactly where the one above ended
    (next y = prev y + prev h). A section-header text panel abuts its
@@ -131,8 +157,7 @@ const dashboardBuilderFlow = `# Build flow
    cell rows between sections — gaps render as dark dead strips.
    Charts in the same row share a y and tile left-to-right
    (x += w). Track a running cursorY as you lay out rows and set each
-   row's y to it. Within a row, the panel widths should sum to the
-   full width you're using for that row (no ragged right edge).
+   row's y to it.
 6. Finish with a brief reply: the created dashboard ID and a short
    summary of what you built (keep the summary under ~100 words).
 

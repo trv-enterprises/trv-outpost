@@ -818,7 +818,8 @@ func (r *ToolRegistry) registerComponentTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"name":            {Type: "string", Description: "Unique component name (must be unique within the target namespace)"},
+					"name":            {Type: "string", Description: "Unique component name (must be unique within the target namespace). This is the INTERNAL identifier — keep it descriptive but it is NOT the on-panel label. Set `title` for the display label."},
+					"title":           {Type: "string", Description: "Human-readable display label shown in the panel header (e.g. \"CPU Utilization\", \"Memory %\"). ALWAYS set this — it's what users see. Use title case, keep under ~40 chars. Do NOT encode the label into `name`; the renderer shows title when set, falling back to name only when title is empty."},
 					"description":     {Type: "string", Description: "Description"},
 					"namespace":       {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
 					"component_type":  {Type: "string", Description: "chart | control | display", Enum: []string{"chart", "control", "display"}},
@@ -848,6 +849,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			}
 			req := &models.CreateComponentRequest{
 				Name:          getString(args, "name"),
+				Title:         getString(args, "title"),
 				Description:   getString(args, "description"),
 				Namespace:     getString(args, "namespace"),
 				ComponentType: getString(args, "component_type"),
@@ -913,7 +915,8 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"id":              {Type: "string", Description: "Component ID"},
-					"name":            {Type: "string", Description: "New name"},
+					"name":            {Type: "string", Description: "New internal name (the identifier, not the on-panel label). To change the displayed label, set `title` instead — do not rename to relabel."},
+					"title":           {Type: "string", Description: "New human-readable display label shown in the panel header (e.g. \"CPU Utilization\"). This — not `name` — is what users see; the renderer shows title when set."},
 					"description":     {Type: "string", Description: "New description"},
 					"chart_type":      {Type: "string", Description: "New chart subtype"},
 					"connection_id":   {Type: "string", Description: "New connection ID"},
@@ -935,6 +938,9 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 			req := &models.UpdateComponentRequest{}
 			if name := getString(args, "name"); name != "" {
 				req.Name = &name
+			}
+			if title := getString(args, "title"); title != "" {
+				req.Title = &title
 			}
 			if desc := getString(args, "description"); desc != "" {
 				req.Description = &desc
