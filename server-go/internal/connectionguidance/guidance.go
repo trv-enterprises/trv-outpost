@@ -352,6 +352,38 @@ A given ts-store connection is either REST or streaming based on
 its config.transport — they are not interchangeable. To convert,
 edit the connection.
 
+## Latest-value tiles (number / gauge)
+
+A KPI tile shows the most recent value off the push stream. Use
+stream_filter + an aggregation of "last":
+
+    "query_config": { "raw": "<series or empty>", "type": "stream_filter" },
+    "data_mapping": { "y_axis": ["cpu.pct"], "aggregation": { "type": "last" } }
+
+## Trend charts (line / area) — use a sliding_window
+
+A streaming line/area chart keeps a rolling time window of pushed
+records and re-renders as each one arrives. Set a sliding_window in
+data_mapping so the chart holds (and backfills) a fixed span instead
+of just the newest point:
+
+    "query_config": { "raw": "since:1h", "type": "stream_filter" },
+    "data_mapping": {
+      "x_axis": "timestamp",
+      "y_axis": ["cpu.pct"],
+      "sliding_window": { "duration": 3600, "timestamp_col": "timestamp" }
+    }
+
+  - sliding_window.duration is in SECONDS (3600 = last hour, 300 = last
+    5 min). timestamp_col is the time column to window on — for ts-store
+    that is the synthetic "timestamp" field present on every record.
+  - raw "since:<dur>" (e.g. "since:1h") backfills that span on first
+    paint, then the window keeps the live buffer to the same duration.
+    Match the since: span to the window duration.
+  - Map y_axis to RAW streamed columns (the dotted field names from the
+    schema, e.g. cpu.pct, memory.pct). Do unit math (bytes→GB) in a
+    custom-code component, never in the query — there is no SQL here.
+
 # Discovering columns
 
 Call get_connection_schema first — the adapter handles all three
