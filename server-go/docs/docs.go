@@ -845,6 +845,24 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Sort field (name, updated, created, component_type, chart_type, status, namespace)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "direction",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include per-component dashboard usage (count + navigable list); returns ComponentUsageListResponse shape",
+                        "name": "include_usage",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "default": 1,
                         "description": "Page number",
@@ -852,9 +870,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Page size",
+                        "type": "string",
+                        "default": "20",
+                        "description": "Page size; 'all' or 0 returns up to 1000 in one response",
                         "name": "page_size",
                         "in": "query"
                     }
@@ -1580,6 +1598,89 @@ const docTemplate = `{
                 }
             }
         },
+        "/connections": {
+            "get": {
+                "description": "Retrieve connections with server-side filter, sort, and pagination. Accepts page/page_size (preferred) or legacy limit/offset.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "List all connections",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by namespace (empty = all namespaces)",
+                        "name": "namespace",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by name (case-insensitive substring)",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by connection type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by tags (OR semantics, repeat param)",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field (name, created_at, updated_at, type, namespace)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "direction",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include per-connection component usage (count + navigable list); each row becomes {connection, component_usage, component_count}",
+                        "name": "include_usage",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "20",
+                        "description": "Page size; 'all' or 0 returns up to 1000 in one response",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/connections/aggregators": {
             "get": {
                 "description": "Get statistics about active bucket aggregators",
@@ -2184,8 +2285,20 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Include data source names from charts",
-                        "name": "include_datasources",
+                        "description": "Include connection names from charts (returns DashboardSummary shape)",
+                        "name": "include_connections",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field (name, updated, created, namespace)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "direction",
                         "in": "query"
                     },
                     {
@@ -2196,16 +2309,16 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Page size",
+                        "type": "string",
+                        "default": "20",
+                        "description": "Page size; 'all' or 0 returns up to 1000 in one response",
                         "name": "page_size",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Response when include_datasources=true",
+                        "description": "Response when include_connections=true",
                         "schema": {
                             "$ref": "#/definitions/models.DashboardSummaryListResponse"
                         }
@@ -2811,63 +2924,6 @@ const docTemplate = `{
             }
         },
         "/datasources": {
-            "get": {
-                "description": "Retrieve all datasources with pagination and optional namespace/type/tag filters",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "datasources"
-                ],
-                "summary": "List all datasources",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Number of items per page",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Number of items to skip",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by namespace (empty = all namespaces)",
-                        "name": "namespace",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by datasource type (api, websocket, file)",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Filter by tags (OR semantics, repeat param)",
-                        "name": "tags",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
             "post": {
                 "description": "Create a new data source (API, WebSocket, or File)",
                 "consumes": [
@@ -6036,7 +6092,7 @@ const docTemplate = `{
         },
         "/users": {
             "get": {
-                "description": "Returns a paginated list of all users",
+                "description": "Returns a paginated, optionally filtered + sorted list of users",
                 "produces": [
                     "application/json"
                 ],
@@ -6046,6 +6102,24 @@ const docTemplate = `{
                 "summary": "List all users",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "Filter by name or email (case-insensitive substring)",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field (name, updated, email)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "direction",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "default": 1,
                         "description": "Page number",
@@ -6053,9 +6127,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Page size",
+                        "type": "string",
+                        "default": "10",
+                        "description": "Page size; 'all' or 0 returns up to 1000 in one response",
                         "name": "page_size",
                         "in": "query"
                     }
@@ -7571,6 +7645,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.Component"
                     }
                 },
+                "has_more": {
+                    "description": "True when records exist beyond this page",
+                    "type": "boolean"
+                },
                 "page": {
                     "type": "integer"
                 },
@@ -8325,6 +8403,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.Dashboard"
                     }
                 },
+                "has_more": {
+                    "description": "True when records exist beyond this page",
+                    "type": "boolean"
+                },
                 "page": {
                     "type": "integer"
                 },
@@ -8474,6 +8556,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.DashboardSummary"
                     }
+                },
+                "has_more": {
+                    "description": "True when records exist beyond this page",
+                    "type": "boolean"
                 },
                 "page": {
                     "type": "integer"
@@ -10815,6 +10901,10 @@ const docTemplate = `{
             "description": "Response containing a list of users with pagination",
             "type": "object",
             "properties": {
+                "has_more": {
+                    "description": "True when records exist beyond this page",
+                    "type": "boolean"
+                },
                 "page": {
                     "type": "integer"
                 },

@@ -272,35 +272,55 @@ func (r *ToolRegistry) registerConnectionTools() {
 	r.registerTool(
 		Tool{
 			Name:        "list_connections",
-			Description: "List all configured connections (datasources). Returns name, type, health status, and ID for each.",
+			Description: "List configured connections (datasources), filtered/sorted/paginated server-side. By default returns ALL matching connections (up to a 1000 cap). Returns name, type, health status, and ID for each (secrets masked). count (total) + has_more indicate truncation.",
 			InputSchema: InputSchema{
-				Type:       "object",
-				Properties: map[string]PropertySchema{},
+				Type: "object",
+				Properties: withListProps(map[string]PropertySchema{
+					"namespace": {Type: "string", Description: "Filter by namespace"},
+					"name":      {Type: "string", Description: "Filter by name (case-insensitive substring)"},
+					"type":      {Type: "string", Description: "Filter by connection type"},
+					"tags":      {Type: "array", Description: "Filter by tags (OR semantics)"},
+				}, "name, created_at, updated_at, type, namespace"),
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			// Shim through the shared toolops layer when available so
-			// MCP and the Dashboard Assistant share one truth. Fall
-			// back to direct service calls only when toolops isn't
-			// wired (early bootstrap, tests).
-			if r.toolops != nil {
-				return r.toolops.ListConnections(context.Background())
+			in := toolops.ListConnectionsInput{
+				Namespace: getString(args, "namespace"),
+				Name:      getString(args, "name"),
+				Type:      getString(args, "type"),
+				Tags:      getStringSlice(args, "tags"),
+				Sort:      getString(args, "sort"),
+				Direction: getString(args, "direction"),
+				Page:      getInt(args, "page"),
+				PageSize:  getInt(args, "page_size"),
 			}
-			ctx := context.Background()
-			conns, total, err := r.connectionService.ListConnections(ctx, 100, 0)
+			// Shim through the shared toolops layer when available so MCP
+			// and the Dashboard Assistant share one truth (incl. secret
+			// masking). Fall back to direct service calls only when toolops
+			// isn't wired (early bootstrap, tests).
+			if r.toolops != nil {
+				return r.toolops.ListConnections(context.Background(), in)
+			}
+			resp, err := r.connectionService.ListConnectionsPaged(context.Background(), models.ConnectionQueryParams{
+				Namespace: in.Namespace, Name: in.Name, Type: in.Type, Tags: in.Tags,
+				Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
+			})
 			if err != nil {
 				return nil, err
 			}
-			// Sanitize secrets before they reach the agent (the toolops
-			// path above does the same). Never hand a live api_key /
-			// password to a model or into an exportable transcript.
-			masked := make([]*models.Connection, len(conns))
-			for i, c := range conns {
+			// Sanitize secrets before they reach the agent. Never hand a
+			// live api_key / password to a model or into an exportable
+			// transcript.
+			masked := make([]*models.Connection, len(resp.Connections))
+			for i, c := range resp.Connections {
 				masked[i] = c.SanitizeForAPI()
 			}
 			return map[string]interface{}{
 				"connections": masked,
-				"count":       total,
+				"count":       resp.Total,
+				"page":        resp.Page,
+				"page_size":   resp.PageSize,
+				"has_more":    resp.HasMore,
 			}, nil
 		},
 	)
@@ -709,36 +729,48 @@ func (r *ToolRegistry) registerComponentTools() {
 	r.registerTool(
 		Tool{
 			Name:        "list_components",
-			Description: "List components (charts/controls/displays). Optionally filter by chart_type, connection ID, or tag. Components are stored in one collection and discriminated by `component_type`.",
+			Description: "List components (charts/controls/displays), filtered/sorted/paginated server-side. By default returns ALL matching components (up to a 1000 cap); use filters + page_size to narrow. The result's count (total) + has_more indicate truncation. Components are stored in one collection and discriminated by `component_type`.",
 			InputSchema: InputSchema{
 				Type: "object",
-				Properties: map[string]PropertySchema{
-					"chart_type":    {Type: "string", Description: "Filter by chart subtype (bar, line, etc)"},
-					"connection_id": {Type: "string", Description: "Filter by connection ID"},
-					"tag":           {Type: "string", Description: "Filter by tag"},
-				},
+				Properties: withListProps(map[string]PropertySchema{
+					"namespace":      {Type: "string", Description: "Filter by namespace"},
+					"name":           {Type: "string", Description: "Filter by name (case-insensitive word-prefix match)"},
+					"chart_type":     {Type: "string", Description: "Filter by chart subtype (bar, line, etc)"},
+					"component_type": {Type: "string", Enum: []string{"chart", "control", "display"}, Description: "Filter by component type"},
+					"status":         {Type: "string", Enum: []string{"draft", "final"}, Description: "Filter by status"},
+					"connection_id":  {Type: "string", Description: "Filter by connection ID"},
+					"tags":           {Type: "array", Description: "Filter by tags (OR semantics)"},
+				}, "name, updated, created, component_type, chart_type, status, namespace"),
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
+			in := toolops.ListComponentsInput{
+				Namespace:     getString(args, "namespace"),
+				Name:          getString(args, "name"),
+				ChartType:     getString(args, "chart_type"),
+				ComponentType: getString(args, "component_type"),
+				Status:        getString(args, "status"),
+				ConnectionID:  getString(args, "connection_id"),
+				Tags:          getStringSlice(args, "tags"),
+				Tag:           getString(args, "tag"),
+				Sort:          getString(args, "sort"),
+				Direction:     getString(args, "direction"),
+				Page:          getInt(args, "page"),
+				PageSize:      getInt(args, "page_size"),
+			}
 			if r.toolops != nil {
-				return r.toolops.ListComponents(context.Background(), toolops.ListComponentsInput{
-					ChartType:    getString(args, "chart_type"),
-					ConnectionID: getString(args, "connection_id"),
-					Tag:          getString(args, "tag"),
-				})
+				return r.toolops.ListComponents(context.Background(), in)
 			}
-			params := models.ComponentQueryParams{
-				Page:         1,
-				PageSize:     100,
-				ChartType:    getString(args, "chart_type"),
-				ConnectionID: getString(args, "connection_id"),
-				Tag:          getString(args, "tag"),
-			}
-			result, err := r.componentService.ListComponents(context.Background(), params)
+			result, err := r.componentService.ListComponents(context.Background(), models.ComponentQueryParams{
+				Namespace: in.Namespace, Name: in.Name, ChartType: in.ChartType,
+				ComponentType: in.ComponentType, Status: in.Status, ConnectionID: in.ConnectionID,
+				Tags: in.Tags, Tag: in.Tag, Sort: in.Sort, Direction: in.Direction,
+				Page: in.Page, PageSize: in.PageSize,
+			})
 			if err != nil {
 				return nil, err
 			}
-			return map[string]interface{}{"components": result.Components, "count": result.Total}, nil
+			return map[string]interface{}{"components": result.Components, "count": result.Total, "page": result.Page, "page_size": result.PageSize, "has_more": result.HasMore}, nil
 		},
 	)
 
@@ -989,26 +1021,33 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 	r.registerTool(
 		Tool{
 			Name:        "list_dashboards_using_component",
-			Description: "Find every dashboard that references a specific component. Useful before deleting a component to see what would break.",
+			Description: "Find every dashboard that references a specific component (default + component-swap references). Useful before deleting a component to see what would break. Returns ALL matching dashboards (up to a 1000 cap); count + has_more indicate truncation.",
 			InputSchema: InputSchema{
 				Type: "object",
-				Properties: map[string]PropertySchema{
+				Properties: withListProps(map[string]PropertySchema{
 					"component_id": {Type: "string", Description: "Component ID"},
-				},
+				}, "name, updated, created, namespace"),
 				Required: []string{"component_id"},
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			params := models.DashboardQueryParams{
+			in := toolops.ListDashboardsInput{
 				ComponentID: getString(args, "component_id"),
-				Page:        1,
-				PageSize:    100,
+				Sort:        getString(args, "sort"),
+				Direction:   getString(args, "direction"),
+				Page:        getInt(args, "page"),
+				PageSize:    getInt(args, "page_size"),
 			}
-			result, err := r.dashboardService.ListDashboards(context.Background(), params)
+			if r.toolops != nil {
+				return r.toolops.ListDashboards(context.Background(), in)
+			}
+			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{
+				ComponentID: in.ComponentID, Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
+			})
 			if err != nil {
 				return nil, err
 			}
-			return map[string]interface{}{"dashboards": result.Dashboards, "count": result.Total}, nil
+			return map[string]interface{}{"dashboards": result.Dashboards, "count": result.Total, "page": result.Page, "page_size": result.PageSize, "has_more": result.HasMore}, nil
 		},
 	)
 
@@ -1053,21 +1092,44 @@ func (r *ToolRegistry) registerDashboardTools() {
 	r.registerTool(
 		Tool{
 			Name:        "list_dashboards",
-			Description: "List all dashboards.",
+			Description: "List dashboards, filtered/sorted/paginated server-side. By default returns ALL matching dashboards (up to a 1000 cap). Pass component_id to find dashboards using a specific component. count (total) + has_more indicate truncation.",
 			InputSchema: InputSchema{
-				Type:       "object",
-				Properties: map[string]PropertySchema{},
+				Type: "object",
+				Properties: withListProps(map[string]PropertySchema{
+					"namespace":    {Type: "string", Description: "Filter by namespace"},
+					"name":         {Type: "string", Description: "Filter by name (partial match)"},
+					"is_public":    {Type: "boolean", Description: "Filter by public status"},
+					"component_id": {Type: "string", Description: "Only dashboards that reference this component"},
+					"tags":         {Type: "array", Description: "Filter by tags (OR semantics)"},
+				}, "name, updated, created, namespace"),
 			},
 		},
 		func(args map[string]interface{}) (interface{}, error) {
-			if r.toolops != nil {
-				return r.toolops.ListDashboards(context.Background())
+			in := toolops.ListDashboardsInput{
+				Namespace:   getString(args, "namespace"),
+				Name:        getString(args, "name"),
+				ComponentID: getString(args, "component_id"),
+				Tags:        getStringSlice(args, "tags"),
+				Sort:        getString(args, "sort"),
+				Direction:   getString(args, "direction"),
+				Page:        getInt(args, "page"),
+				PageSize:    getInt(args, "page_size"),
 			}
-			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{Page: 1, PageSize: 100})
+			if _, ok := args["is_public"]; ok {
+				b := getBool(args, "is_public")
+				in.IsPublic = &b
+			}
+			if r.toolops != nil {
+				return r.toolops.ListDashboards(context.Background(), in)
+			}
+			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{
+				Namespace: in.Namespace, Name: in.Name, IsPublic: in.IsPublic, ComponentID: in.ComponentID,
+				Tags: in.Tags, Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
+			})
 			if err != nil {
 				return nil, err
 			}
-			return map[string]interface{}{"dashboards": result.Dashboards, "count": result.Total}, nil
+			return map[string]interface{}{"dashboards": result.Dashboards, "count": result.Total, "page": result.Page, "page_size": result.PageSize, "has_more": result.HasMore}, nil
 		},
 	)
 
@@ -1283,6 +1345,43 @@ func getBool(m map[string]interface{}, key string) bool {
 		return v
 	}
 	return false
+}
+
+// withListProps appends the shared sort + pagination property schemas
+// every list tool accepts (#21) to the given property map. sortFields is
+// the allowlist shown in the sort description.
+func withListProps(props map[string]PropertySchema, sortFields string) map[string]PropertySchema {
+	if props == nil {
+		props = map[string]PropertySchema{}
+	}
+	props["sort"] = PropertySchema{Type: "string", Description: "Sort field. One of: " + sortFields + ". Omit for the default."}
+	props["direction"] = PropertySchema{Type: "string", Enum: []string{"asc", "desc"}, Description: "Sort direction. Omit for the default."}
+	props["page"] = PropertySchema{Type: "integer", Description: "1-based page number (default 1)."}
+	props["page_size"] = PropertySchema{Type: "integer", Description: "Records per page. Omit or 0 = all matching, up to a server cap of 1000. The result's count + has_more tell you whether it was truncated."}
+	return props
+}
+
+// getStringSlice extracts a []string from a JSON array arg (e.g. tags).
+// Tolerates a single bare string too.
+func getStringSlice(m map[string]interface{}, key string) []string {
+	switch v := m[key].(type) {
+	case []string:
+		return v
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		if v == "" {
+			return nil
+		}
+		return []string{v}
+	}
+	return nil
 }
 
 // componentWriteAck is the compact response envelope returned to MCP
