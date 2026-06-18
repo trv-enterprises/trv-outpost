@@ -178,6 +178,28 @@ type ComponentListResponse struct {
 	HasMore    bool        `json:"has_more"` // True when records exist beyond this page
 }
 
+// ComponentWithUsage is a list row that embeds the full component plus its
+// denormalized dashboard usage (#21). Returned by the list endpoint when
+// ?include_usage=true, so the components list page shows the per-component
+// dashboard count + a navigable list WITHOUT fetching every dashboard
+// client-side. dashboard_usage carries one {id,name} per referencing
+// dashboard (de-duped); dashboard_count is its length.
+type ComponentWithUsage struct {
+	Component      `bson:",inline"`
+	DashboardUsage []EntityRef `json:"dashboard_usage" bson:"dashboard_usage"`
+	DashboardCount int         `json:"dashboard_count" bson:"dashboard_count"`
+}
+
+// ComponentUsageListResponse is the include_usage variant of the component
+// list response.
+type ComponentUsageListResponse struct {
+	Components []ComponentWithUsage `json:"components"`
+	Total      int64                `json:"total"`
+	Page       int                  `json:"page"`
+	PageSize   int                  `json:"page_size"`
+	HasMore    bool                 `json:"has_more"`
+}
+
 // ComponentQueryParams defines query parameters for listing components
 // @Description Query parameters for filtering and pagination
 type ComponentQueryParams struct {

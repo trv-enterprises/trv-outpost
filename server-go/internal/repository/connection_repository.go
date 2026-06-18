@@ -154,6 +154,91 @@ func (r *ConnectionRepository) List(ctx context.Context, params models.Connectio
 	return connections, total, nil
 }
 
+// ListWithUsage is List plus a denormalized component-usage join (#21):
+// each row carries the components that reference this connection — via
+// connection_id, or a display's frigate/mqtt connection id — de-duped to
+// the latest version per component, with the count. The $lookup runs after
+// pagination so it only touches the page's connections.
+func (r *ConnectionRepository) ListWithUsage(ctx context.Context, params models.ConnectionQueryParams, limit, offset int64) ([]models.ConnectionWithUsage, int64, error) {
+	filter := bson.M{}
+	if params.Namespace != "" {
+		filter["namespace"] = params.Namespace
+	}
+	if params.Type != "" {
+		filter["type"] = params.Type
+	}
+	if params.Name != "" {
+		filter["name"] = bson.M{"$regex": params.Name, "$options": "i"}
+	}
+	if len(params.Tags) > 0 {
+		filter["tags"] = bson.M{"$in": params.Tags}
+	}
+
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	sort := models.ResolveSort(
+		models.ConnectionSortFields, params.Sort, params.Direction,
+		models.ConnectionDefaultSortField, models.ConnectionDefaultSortDir,
+	)
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: filter}},
+		{{Key: "$sort", Value: sort}},
+		{{Key: "$skip", Value: offset}},
+		{{Key: "$limit", Value: limit}},
+		// Join components referencing this connection. The inner pipeline
+		// first reduces components to their latest version per id (sort by
+		// version DESC + group), THEN matches any of the three connection
+		// reference fields, so an old version can't double-count.
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: "components"},
+			{Key: "let", Value: bson.D{{Key: "connID", Value: bson.D{{Key: "$toString", Value: "$_id"}}}}},
+			{Key: "pipeline", Value: mongo.Pipeline{
+				{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
+				{{Key: "$group", Value: bson.M{"_id": "$id", "doc": bson.M{"$first": "$$ROOT"}}}},
+				{{Key: "$replaceRoot", Value: bson.M{"newRoot": "$doc"}}},
+				{{Key: "$match", Value: bson.D{{Key: "$expr", Value: bson.D{
+					{Key: "$or", Value: bson.A{
+						bson.D{{Key: "$eq", Value: bson.A{"$connection_id", "$$connID"}}},
+						bson.D{{Key: "$eq", Value: bson.A{"$display_config.frigate_connection_id", "$$connID"}}},
+						bson.D{{Key: "$eq", Value: bson.A{"$display_config.mqtt_connection_id", "$$connID"}}},
+					}},
+				}}}}},
+				// Label = title || name (mirrors the client's componentLabel).
+				{{Key: "$project", Value: bson.D{
+					{Key: "_id", Value: 0},
+					{Key: "id", Value: "$id"},
+					{Key: "name", Value: bson.D{{Key: "$ifNull", Value: bson.A{
+						bson.D{{Key: "$cond", Value: bson.A{
+							bson.D{{Key: "$ne", Value: bson.A{"$title", ""}}}, "$title", "$name",
+						}}},
+						"$name",
+					}}}},
+				}}},
+			}},
+			{Key: "as", Value: "component_usage"},
+		}}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "component_count", Value: bson.D{{Key: "$size", Value: "$component_usage"}}},
+		}}},
+	}
+
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var rows []models.ConnectionWithUsage
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
 // FindByTags retrieves connections with any of the given tags
 func (r *ConnectionRepository) FindByTags(ctx context.Context, tags []string, limit, offset int64) ([]*models.Connection, error) {
 	opts := options.Find().

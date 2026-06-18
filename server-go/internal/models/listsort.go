@@ -11,6 +11,15 @@ import "go.mongodb.org/mongo-driver/bson"
 // allowlists, sort resolution, and page-size clamping so the HTTP
 // handlers and the AI/toolops path get identical behavior (#21).
 
+// EntityRef is a minimal {id, name} pair so the frontend can show
+// human-readable cross-entity references (and navigate to them) without a
+// second round-trip. Used by the list usage-denormalization (#21) and the
+// delete-orphan/usage flows. service.EntityRef aliases this.
+type EntityRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // PageSizeAllCap is the hard upper bound returned when a caller asks for
 // "all" (page_size=0 or page_size="all"). It bounds the AI/MCP path —
 // the agent can fetch everything-up-to-the-cap in one response, but a

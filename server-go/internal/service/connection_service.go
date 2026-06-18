@@ -38,11 +38,10 @@ type ConnectionUsage struct {
 }
 
 // EntityRef is a minimal {id, name} pair so the frontend can show
-// human-readable references without a second API round-trip.
-type EntityRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
+// human-readable references without a second API round-trip. Aliased to
+// the models type so the list usage-denormalization (#21) and these
+// service usage structs share one definition.
+type EntityRef = models.EntityRef
 
 // ConnectionService handles connection business logic
 type ConnectionService struct {
@@ -261,6 +260,37 @@ func (s *ConnectionService) ListConnectionsPaged(ctx context.Context, params mod
 		PageSize:    params.PageSize,
 		HasMore:     models.ComputeHasMore(params.Page, params.PageSize, len(connections), total),
 	}, nil
+}
+
+// ListConnectionsWithUsage is ListConnectionsPaged plus the denormalized
+// component-usage join (#21, ?include_usage=true): each row carries the
+// components that reference this connection + the count, computed
+// server-side for the current page only. Returns the with-usage rows
+// (NOT sanitized here — the handler sanitizes per row before responding).
+func (s *ConnectionService) ListConnectionsWithUsage(ctx context.Context, params models.ConnectionQueryParams) ([]models.ConnectionWithUsage, *models.ConnectionListResponse, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
+	if len(params.Tags) > 0 {
+		params.Tags = models.NormalizeTags(params.Tags)
+	}
+
+	limit := int64(params.PageSize)
+	offset := int64((params.Page - 1) * params.PageSize)
+
+	rows, total, err := s.repo.ListWithUsage(ctx, params, limit, offset)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error listing connections with usage: %w", err)
+	}
+
+	meta := &models.ConnectionListResponse{
+		Total:    total,
+		Page:     params.Page,
+		PageSize: params.PageSize,
+		HasMore:  models.ComputeHasMore(params.Page, params.PageSize, len(rows), total),
+	}
+	return rows, meta, nil
 }
 
 // UpdateConnection updates an existing connection

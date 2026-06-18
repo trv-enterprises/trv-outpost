@@ -82,6 +82,7 @@ func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 // @Param tags query []string false "Filter by tags (OR semantics, repeat param)"
 // @Param sort query string false "Sort field (name, created_at, updated_at, type, namespace)"
 // @Param direction query string false "Sort direction (asc, desc)"
+// @Param include_usage query boolean false "Include per-connection component usage (count + navigable list); each row becomes {connection, component_usage, component_count}"
 // @Param page query int false "Page number" default(1)
 // @Param page_size query string false "Page size; 'all' or 0 returns up to 1000 in one response" default(20)
 // @Success 200 {object} map[string]interface{}
@@ -107,6 +108,33 @@ func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 				params.Page = (o / params.PageSize) + 1
 			}
 		}
+	}
+
+	// include_usage=true returns each row with its denormalized component
+	// usage (count + navigable {id,name} list). Opt-in (heavier aggregation).
+	if c.Query("include_usage") == "true" {
+		rows, meta, err := h.service.ListConnectionsWithUsage(c.Request.Context(), params)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		out := make([]gin.H, len(rows))
+		for i := range rows {
+			conn := rows[i].Connection // value copy; sanitize before exposing
+			out[i] = gin.H{
+				"connection":      enrichWithCapabilities(conn.SanitizeForAPI()),
+				"component_usage": rows[i].ComponentUsage,
+				"component_count": rows[i].ComponentCount,
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"connections": out,
+			"total":       meta.Total,
+			"page":        meta.Page,
+			"page_size":   meta.PageSize,
+			"has_more":    meta.HasMore,
+		})
+		return
 	}
 
 	resp, err := h.service.ListConnectionsPaged(c.Request.Context(), params)

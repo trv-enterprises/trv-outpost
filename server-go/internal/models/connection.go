@@ -147,6 +147,18 @@ type ConnectionListResponse struct {
 	HasMore     bool          `json:"has_more"` // True when records exist beyond this page
 }
 
+// ConnectionWithUsage is a list row carrying the connection plus its
+// denormalized component usage (#21): one {id,name} per component that
+// references this connection (via connection_id or a display's
+// frigate/mqtt connection id), de-duped, with the count. Returned when
+// ?include_usage=true so the connections page shows the component count +
+// a navigable list without fetching every component client-side.
+type ConnectionWithUsage struct {
+	Connection     `bson:",inline"`
+	ComponentUsage []EntityRef `json:"component_usage" bson:"component_usage"`
+	ComponentCount int         `json:"component_count" bson:"component_count"`
+}
+
 // DiscoveredValueList is one column's cached distinct values for the
 // dashboard-variable dropdown. Partial is true when the capture was cut short
 // (record cap hit or the user stopped early), so consumers can label the list
