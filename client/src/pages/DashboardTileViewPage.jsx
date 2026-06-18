@@ -209,11 +209,14 @@ function DashboardTileViewPage({ canDesign = false }) {
 
   const fetchData = async () => {
     try {
-      // Fetch dashboards, charts, and connections in parallel
+      // VIEW-mode tile grid needs the FULL dashboard set for prev/next nav
+      // and the kiosk rotation — not a single page. Ask for all explicitly
+      // (server-capped at 1000) rather than the old implicit page_size:100,
+      // which silently truncated at the 101st dashboard (#21).
       const [dashboardsRes, chartsRes, connectionsRes] = await Promise.all([
-        apiClient.getDashboards({ page: 1, page_size: 100 }),
+        apiClient.getDashboards({ page_size: 'all' }),
         apiClient.getComponents(),
-        apiClient.getConnections()
+        apiClient.getConnections({ page_size: 'all' })
       ]);
 
       if (dashboardsRes.dashboards) {

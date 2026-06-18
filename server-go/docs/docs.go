@@ -8508,6 +8508,13 @@ const docTemplate = `{
             "description": "Dashboard info with optional data source names for display in tiles",
             "type": "object",
             "properties": {
+                "component_usage": {
+                    "description": "ComponentUsage is the {id,name} of each distinct component the\ndashboard's panels reference (final versions), so the list page can\nshow a navigable component popover without a per-tile fetch (#21).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EntityRef"
+                    }
+                },
                 "connection_names": {
                     "description": "Unique connection names used by referenced components",
                     "type": "array",
@@ -8964,6 +8971,17 @@ const docTemplate = `{
                 "use_distributed_query": {
                     "description": "Add \"destination: network\" header",
                     "type": "boolean"
+                }
+            }
+        },
+        "models.EntityRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },

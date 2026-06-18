@@ -98,6 +98,12 @@ function DashboardTile({
   dashboard,
   componentMap = {},   // { component_id: component }
   connectionMap = {},  // { connection_id: name }
+  // #21: pre-computed { id, label } pairs from a paginated summary list
+  // (dashboard has no full `panels` array there). When provided, they take
+  // precedence over the panel-walk below so the navigable comps/conns pills
+  // keep working without fetching every component/connection client-side.
+  componentItems: componentItemsProp = null,
+  connectionItems: connectionItemsProp = null,
 
   // Interaction
   onClick,
@@ -152,7 +158,7 @@ function DashboardTile({
   // Distinct connections as { id, label } so the popover can navigate to each
   // connection's editor. De-duped by connection id. (connectionsForDashboard
   // keeps the name list for the read-only tooltip + the count.)
-  const connectionItems = (() => {
+  const connectionItems = connectionItemsProp != null ? connectionItemsProp : (() => {
     const out = [];
     const seen = new Set();
     for (const panel of dashboard.panels || []) {
@@ -170,7 +176,7 @@ function DashboardTile({
   // Distinct components placed on the dashboard, as { id, label }, so the
   // popover can navigate to each component's editor. Panels pointing at a
   // deleted component are dropped (nothing to navigate to). De-duped by id.
-  const componentItems = (() => {
+  const componentItems = componentItemsProp != null ? componentItemsProp : (() => {
     const out = [];
     const seen = new Set();
     for (const panel of dashboard.panels || []) {
@@ -187,12 +193,18 @@ function DashboardTile({
   // Excludes text panels and empty placeholders. The previous tooltip
   // showed all panels including '(empty panel)' rows; the chip count
   // now reflects what's actually a component.
-  const componentPanels = (dashboard.panels || []).filter(
-    (p) => p.component_id,
-  );
+  // Component count + tooltip. When componentItems came in pre-computed
+  // (paginated summary path), derive both from it; otherwise walk panels.
+  const componentCount = componentItemsProp != null
+    ? componentItems.length
+    : (dashboard.panels || []).filter((p) => p.component_id).length;
   const componentNamesLabel = (() => {
+    if (componentItemsProp != null) {
+      return componentItems.length === 0 ? 'No components' : componentItems.map((c) => c.label).join('\n');
+    }
+    const componentPanels = (dashboard.panels || []).filter((p) => p.component_id);
     if ((dashboard.panels || []).length === 0) return 'No panels';
-    if (componentPanels.length === 0) return 'No components';
+    if (componentCount === 0) return 'No components';
     return componentPanels
       .map((p) => {
         const c = componentMap[p.component_id];
@@ -341,7 +353,7 @@ function DashboardTile({
               onComponentClick ? (
                 <CountListPopover
                   className="tile-count-pill tile-count-pill--comp"
-                  count={`${componentPanels.length} comp${componentPanels.length === 1 ? '' : 's'}`}
+                  count={`${componentCount} comp${componentCount === 1 ? '' : 's'}`}
                   heading="Components"
                   items={componentItems}
                   onItemClick={(item) => onComponentClick(item)}
@@ -356,8 +368,8 @@ function DashboardTile({
                   className="tooltip-multiline"
                 >
                   <Tag type="gray" size="sm">
-                    {componentPanels.length} comp
-                    {componentPanels.length === 1 ? '' : 's'}
+                    {componentCount} comp
+                    {componentCount === 1 ? '' : 's'}
                   </Tag>
                 </Tooltip>
               )

@@ -440,17 +440,27 @@ type DashboardQueryParams struct {
 
 // DashboardSummary is a lightweight dashboard representation for tile listings
 // @Description Dashboard info with optional data source names for display in tiles
+// NOTE: bson tags are REQUIRED here. This struct is decoded from an
+// aggregation that projects snake_case keys (panel_count, connection_names,
+// component_usage). Without bson tags the driver maps by lowercased field
+// name (panelcount, connectionnames) which silently never matches — the
+// fields decode to zero. (That mismatch, combined with the charts→components
+// lookup drift, is why panel_count/connection_names were empty pre-#21.)
 type DashboardSummary struct {
-	ID              string            `json:"id"`
-	Namespace       string            `json:"namespace"`
-	Name            string            `json:"name"`
-	Description     string            `json:"description"`
-	Settings        DashboardSettings `json:"settings"`
-	Tags            []string          `json:"tags,omitempty"`
-	PanelCount      int               `json:"panel_count"`
-	ConnectionNames []string          `json:"connection_names,omitempty"` // Unique connection names used by referenced components
-	Created         time.Time         `json:"created"`
-	Updated         time.Time         `json:"updated"`
+	ID              string            `json:"id" bson:"id"`
+	Namespace       string            `json:"namespace" bson:"namespace"`
+	Name            string            `json:"name" bson:"name"`
+	Description     string            `json:"description" bson:"description"`
+	Settings        DashboardSettings `json:"settings" bson:"settings"`
+	Tags            []string          `json:"tags,omitempty" bson:"tags,omitempty"`
+	PanelCount      int               `json:"panel_count" bson:"panel_count"`
+	ConnectionNames []string          `json:"connection_names,omitempty" bson:"connection_names,omitempty"` // Unique connection names used by referenced components
+	// ComponentUsage is the {id,name} of each distinct component the
+	// dashboard's panels reference (final versions), so the list page can
+	// show a navigable component popover without a per-tile fetch (#21).
+	ComponentUsage []EntityRef `json:"component_usage,omitempty" bson:"component_usage,omitempty"`
+	Created        time.Time   `json:"created" bson:"created"`
+	Updated        time.Time   `json:"updated" bson:"updated"`
 }
 
 // DashboardSummaryListResponse represents a paginated list of dashboard summaries

@@ -16,8 +16,8 @@ import "go.mongodb.org/mongo-driver/bson"
 // second round-trip. Used by the list usage-denormalization (#21) and the
 // delete-orphan/usage flows. service.EntityRef aliases this.
 type EntityRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   string `json:"id" bson:"id"`
+	Name string `json:"name" bson:"name"`
 }
 
 // PageSizeAllCap is the hard upper bound returned when a caller asks for

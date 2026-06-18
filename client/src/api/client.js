@@ -765,8 +765,17 @@ class APIClient {
   }
 
   // Component endpoints (umbrella for chart, control, and display sub-types)
+  /**
+   * List components. By default returns ALL components in one response
+   * (server-capped at 1000) — pickers, the editor, and lookups rely on
+   * that. Pass explicit { page, page_size, sort, direction, ...filters }
+   * to paginate (the components list page does), and include_usage:true to
+   * get each row's dashboard usage count + navigable list denormalized
+   * server-side (#21). The old magic page_size:1000 is replaced by the
+   * 'all' sentinel which the server clamps to the cap.
+   */
   async getComponents(filters = {}) {
-    const params = buildListParams({ page_size: 1000, ...filters });
+    const params = buildListParams({ page_size: 'all', ...filters });
     return this.request(`/api/components?${params}`);
   }
 
@@ -1483,8 +1492,14 @@ class APIClient {
   // removed in v0.11.1.
 
 
-  async getUsers() {
-    return this.request('/api/users');
+  /**
+   * List users with optional server-side filter/sort/pagination (#21).
+   * { name, sort, direction, page, page_size }. No args → server default
+   * page. Returns { users, total, page, page_size, has_more }.
+   */
+  async getUsers(filters = {}) {
+    const params = buildListParams(filters);
+    return this.request(`/api/users${params ? `?${params}` : ''}`);
   }
 
   async getCurrentUser() {
