@@ -64,6 +64,11 @@ in most any environment.
   through the MCP server. See [examples/dashboards](examples/dashboards/)
   for a walkthrough of a multi-panel Prometheus monitoring dashboard
   built from a single prompt.
+- **Desktop app (macOS)** — an Electron build of the dashboard with a
+  built-in **Claude Code sidebar** that launches the Claude Code CLI
+  pre-wired to your dashboard's MCP server. It uses your existing Claude
+  subscription (not a pay-as-you-go API key). See the
+  [Desktop App guide](udoc/docs/getting-started.md#electron-desktop-app).
 
 ## High-level architecture
 

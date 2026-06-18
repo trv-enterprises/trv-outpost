@@ -6,6 +6,41 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.0] — 2026-06-18
+
+### Added
+
+- **Count-aware Carbon chart color combinations** (#110). Multi-series line/area
+  charts now color by Carbon's curated combination for the series-count (1–5)
+  instead of indexing the raw 14-color sequence, so a 3-series chart gets three
+  mutually distinguishable colors rather than the first three. Both dark and
+  light pairings ship (extracted from `@carbon/charts`, resolved via
+  `@carbon/colors`). 6+ series fall back to the 14-color sequence; per-series
+  manual overrides still win.
+- **Admin setting `chart_preferred_color_options`** — pick which curated color
+  combination ("option") each series-count uses, with a swatch-preview editor in
+  Manage → Settings. Read client-side at bootstrap; applies on next page load.
+- **Name your dashboard export file** — the dashboard export modal now has an
+  editable file-name field (prefilled with the namespace + timestamp default),
+  matching the AI-surface export naming.
+
+### Changed
+
+- **Desktop app rebuilt and shipped with the release.** The macOS `.dmg` is now
+  built and attached to the GitHub release so desktop users stay in sync with
+  the web app. The desktop app's embedded version is synced to the release.
+
+### Documentation
+
+- Documented the desktop app's built-in **Claude Code sidebar** and that it uses
+  your Claude **subscription** (not an API key) — in the User Guide
+  (Getting Started → Electron Desktop App) with a cross-link from the MCP page,
+  plus a desktop-app mention in the README.
+
+### Fixed
+
+- Corrected a hex typo in the dark categorical palette (`magenta60`).
+
 ## [0.32.1] — 2026-06-18
 
 ### Fixed

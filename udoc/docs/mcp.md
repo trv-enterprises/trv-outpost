@@ -22,6 +22,8 @@ When you log in to the dashboard UI, the MCP session preamble is wired up automa
 
 ## Connecting Claude Code (recommended)
 
+> **Using the desktop app?** The TRV Outpost desktop app has a built-in Claude Code sidebar that wires this MCP connection up for you automatically (and bills your Claude subscription, not an API key). See [Claude Code Sidebar](getting-started.md#claude-code-sidebar). The steps below are for connecting Claude Code *outside* the desktop app.
+
 Claude Code speaks streamable HTTP natively from `.mcp.json` — no bridge needed. Drop the following at the project root (or at `~/.claude.json` to make it global):
 
 ```json

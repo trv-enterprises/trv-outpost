@@ -86,6 +86,40 @@ Credentials are stored encrypted via the operating system keychain
 next launch. To revoke a desktop client's access, delete its API
 key from **Manage → API Keys**.
 
+### Claude Code Sidebar
+
+The desktop app includes a built-in **Claude Code sidebar** (toggle with
+**⌘⇧/**) — a terminal pane that launches the [Claude Code](https://claude.com/claude-code)
+CLI pre-wired to this dashboard, so you can build and edit dashboards
+conversationally without leaving the app.
+
+**It uses your Claude subscription, not an API key.** The sidebar spawns
+the `claude` CLI that's already installed and signed in on your machine,
+so it bills against your existing Claude subscription (Pro / Max / Team).
+The app deliberately **strips** any `ANTHROPIC_API_KEY` /
+`ANTHROPIC_AUTH_TOKEN` from the session before launching `claude` — if
+those survived, the CLI would bill the Anthropic Console (pay-as-you-go
+API) instead of your subscription. Subscription billing is the whole point
+of hosting Claude Code in the sidebar.
+
+What this means in practice:
+
+- **Prerequisite:** Claude Code must be **installed and on your PATH**, and
+  you must be **logged in to your Claude subscription** in it (run `claude`
+  once in a terminal and complete the login). The sidebar reuses that
+  login — there's nothing to configure in the app. If `claude` isn't found,
+  the sidebar shows an "install the CLI and make sure it's on PATH" message.
+- **Subscription auth is picked up from your environment**, not stored by
+  the app. The app does not hold your Anthropic credentials; it relies on
+  the machine's existing `claude` login (`~/.claude` / Keychain).
+- **The dashboard MCP connection is wired automatically.** The sidebar runs
+  `claude` in a curated workspace whose `.mcp.json` points at this
+  dashboard's MCP endpoint, authenticated with the same credentials you
+  connected the desktop app with — so the agent can read and build your
+  dashboards out of the box. To restore the curated config after editing
+  it, use **Reset Sidebar Workspace**. (For connecting Claude Code *outside*
+  the desktop app, see [MCP Integration](mcp.md).)
+
 ## User Capabilities
 
 Each user has a set of capabilities that control access:
