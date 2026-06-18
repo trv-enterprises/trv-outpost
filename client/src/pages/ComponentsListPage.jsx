@@ -178,6 +178,7 @@ function ComponentsListPage() {
     },
     sortKey,
     sortDir: sortDirection,
+    initialPageSize: savedFilters.pageSize || 25,
     search: searchTerm,
     searchKey: 'name',
     reloadTick,

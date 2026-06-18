@@ -8509,17 +8509,23 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "component_usage": {
-                    "description": "ComponentUsage is the {id,name} of each distinct component the\ndashboard's panels reference (final versions), so the list page can\nshow a navigable component popover without a per-tile fetch (#21).",
+                    "description": "ComponentUsage / ConnectionUsage carry the {id,name} of each distinct\ncomponent / connection the dashboard's panels reference, so the list\npage can render navigable popovers + links without a per-tile fetch\n(#21).",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.EntityRef"
                     }
                 },
                 "connection_names": {
-                    "description": "Unique connection names used by referenced components",
+                    "description": "DEPRECATED: names only. Use ConnectionUsage for navigable links. Kept for back-compat.",
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                },
+                "connection_usage": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EntityRef"
                     }
                 },
                 "created": {

@@ -1543,16 +1543,22 @@ definitions:
     properties:
       component_usage:
         description: |-
-          ComponentUsage is the {id,name} of each distinct component the
-          dashboard's panels reference (final versions), so the list page can
-          show a navigable component popover without a per-tile fetch (#21).
+          ComponentUsage / ConnectionUsage carry the {id,name} of each distinct
+          component / connection the dashboard's panels reference, so the list
+          page can render navigable popovers + links without a per-tile fetch
+          (#21).
         items:
           $ref: '#/definitions/models.EntityRef'
         type: array
       connection_names:
-        description: Unique connection names used by referenced components
+        description: 'DEPRECATED: names only. Use ConnectionUsage for navigable links.
+          Kept for back-compat.'
         items:
           type: string
+        type: array
+      connection_usage:
+        items:
+          $ref: '#/definitions/models.EntityRef'
         type: array
       created:
         type: string

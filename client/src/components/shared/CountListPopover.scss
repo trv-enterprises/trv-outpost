@@ -54,6 +54,19 @@
       text-decoration: none;
       &:hover { text-decoration: none; }
     }
+
+    // Numeric count columns (panels/components/dashboards usage counts):
+    // give the digits a fixed-width box and RIGHT-justify them inside it, so a
+    // 1-digit and a 2-digit count line up on the ones place (standard numeric
+    // alignment). The cell centers the whole box (see the per-page .*-cell
+    // rule). 3ch covers up to 3 digits.
+    &.panels-count,
+    &.components-count,
+    &.dashboards-count {
+      display: inline-block;
+      width: 3ch;
+      text-align: right;
+    }
   }
 
   // Dark popover surface (the default Carbon Popover content is unstyled / can

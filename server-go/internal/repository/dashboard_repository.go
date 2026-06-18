@@ -423,6 +423,8 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 					}},
 				}}},
 				bson.D{{Key: "$project", Value: bson.D{
+					{Key: "_id", Value: 0},
+					{Key: "id", Value: bson.D{{Key: "$toString", Value: "$_id"}}},
 					{Key: "name", Value: 1},
 				}}},
 			}},
@@ -436,7 +438,7 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 			{Key: "settings", Value: 1},
 			{Key: "tags", Value: 1},
 			{Key: "panel_count", Value: bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels", bson.A{}}}}}}},
-			{Key: "connection_names", Value: "$matched_datasources.name"},
+			{Key: "connection_names", Value: "$matched_datasources.name"}, // back-compat (names only)
 			// {id,name} per referenced component → navigable component popover.
 			{Key: "component_usage", Value: bson.D{{Key: "$map", Value: bson.D{
 				{Key: "input", Value: "$matched_components"},
@@ -446,6 +448,8 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 					{Key: "name", Value: "$$c.name"},
 				}},
 			}}}},
+			// {id,name} per referenced connection → navigable connection links.
+			{Key: "connection_usage", Value: "$matched_datasources"},
 			{Key: "created", Value: 1},
 			{Key: "updated", Value: 1},
 		}}},

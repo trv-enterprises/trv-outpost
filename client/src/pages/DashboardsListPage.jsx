@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -141,6 +141,7 @@ function DashboardsListPage() {
     },
     sortKey: serverSortKey,
     sortDir: serverSortDir,
+    initialPageSize: savedFilters.pageSize || 25,
     search: searchTerm,
     searchKey: 'name',
     reloadTick,
@@ -358,7 +359,7 @@ function DashboardsListPage() {
     { key: 'description', header: 'Description', isSortable: false },
     // 'panels' is not a server sort field (only name/updated/created/namespace
     // are) — marked non-sortable (#21).
-    { key: 'panels', header: 'Panels', isSortable: false },
+    { key: 'panels', header: 'Components', isSortable: false },
     { key: 'connections', header: 'Connections', isSortable: false },
     { key: 'updated', header: 'Last modified', isSortable: true },
     { key: 'actions', header: '', isSortable: false }
@@ -624,17 +625,17 @@ function DashboardsListPage() {
                   }
                 };
                 // #21: feed the tile pre-computed comps/conns from the
-                // summary's denormalized fields (component_usage carries
-                // {id,name} → navigable; connection_names are names-only so
-                // those pills show but don't navigate).
+                // summary's denormalized {id,name} fields — both navigable.
                 const tileComponentItems = (dashboard.component_usage || []).map((c) => ({ id: c.id, label: c.name }));
-                const tileConnectionItems = (dashboard.connection_names || []).map((n) => ({ id: null, label: n }));
+                const tileConnectionItems = (dashboard.connection_usage || []).map((c) => ({ id: c.id, label: c.name }));
                 return (
                 <DashboardTile
                   key={dashboard.id}
                   dashboard={dashboard}
                   componentItems={tileComponentItems}
                   connectionItems={tileConnectionItems}
+                  onComponentClick={(item) => navigate(`/design/components/${item.id}`)}
+                  onConnectionClick={(item) => navigate(`/design/connections/${item.id}`)}
                   selected={isTileSelected}
                   onClick={handleTileClickGuarded}
                   draggable={isManual}
@@ -856,13 +857,25 @@ function DashboardsListPage() {
                               );
                             }
                             if (cell.info.header === 'connections') {
-                              // #21: plain comma-separated names from the
-                              // summary's connection_names. The old per-name
-                              // links needed connection ids the summary list
-                              // doesn't carry, so the names are now text-only.
+                              // #21: the summary now carries connection_usage
+                              // [{id,name}] (server-side denormalized), so the
+                              // connections render as navigable comma-separated
+                              // links to each connection's editor — same as
+                              // before pagination.
+                              const connItems = dashboard.connection_usage || [];
                               return (
-                                <TableCell key={cell.id} className="connections-cell">
-                                  {cell.value}
+                                <TableCell key={cell.id} className="connections-cell" onClick={(e) => e.stopPropagation()}>
+                                  {connItems.length === 0 ? '-' : connItems.map((c, i) => (
+                                    <Fragment key={c.id}>
+                                      <Link
+                                        href={`/design/connections/${c.id}`}
+                                        onClick={(e) => { e.preventDefault(); navigate(`/design/connections/${c.id}`); }}
+                                      >
+                                        {c.name}
+                                      </Link>
+                                      {i < connItems.length - 1 ? <span>, </span> : null}
+                                    </Fragment>
+                                  ))}
                                 </TableCell>
                               );
                             }

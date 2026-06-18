@@ -412,9 +412,21 @@
     }
   }
 
-  // Components column: count is hoverable to reveal a tooltip listing
-  // the components referencing this connection.
-  .components-cell .components-count {
-    cursor: pointer;
+  // Components column: the count opens a popover listing the components
+  // referencing this connection. Center the count box in the cell; the
+  // fixed-width left-justified digit box itself lives in CountListPopover.scss
+  // (shared with the other count columns).
+  .components-cell {
+    text-align: center;
+
+    .count-list-popover {
+      display: inline-flex;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .components-count {
+      cursor: pointer;
+    }
   }
 }

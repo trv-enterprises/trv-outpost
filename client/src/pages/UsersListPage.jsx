@@ -69,6 +69,7 @@ function UsersListPage() {
     filters: {},
     sortKey: serverSortKey,
     sortDir: sortDirection,
+    initialPageSize: savedPrefs.pageSize || 25,
     search: searchTerm,
     searchKey: 'name',
     reloadTick,

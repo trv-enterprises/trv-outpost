@@ -447,10 +447,22 @@
     margin: 0;
   }
 
-  // Dashboards column: count is hoverable to reveal a tooltip
-  // listing every dashboard that places this component on a panel.
-  .dashboards-cell .dashboards-count {
-    cursor: pointer;
+  // Dashboards column: the count opens a popover listing every dashboard
+  // that places this component on a panel. Center the count box in the cell;
+  // the fixed-width left-justified digit box itself lives in
+  // CountListPopover.scss (shared with the other count columns).
+  .dashboards-cell {
+    text-align: center;
+
+    .count-list-popover {
+      display: inline-flex;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .dashboards-count {
+      cursor: pointer;
+    }
   }
 
   // Name cell with tags stacked below

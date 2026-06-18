@@ -454,11 +454,13 @@ type DashboardSummary struct {
 	Settings        DashboardSettings `json:"settings" bson:"settings"`
 	Tags            []string          `json:"tags,omitempty" bson:"tags,omitempty"`
 	PanelCount      int               `json:"panel_count" bson:"panel_count"`
-	ConnectionNames []string          `json:"connection_names,omitempty" bson:"connection_names,omitempty"` // Unique connection names used by referenced components
-	// ComponentUsage is the {id,name} of each distinct component the
-	// dashboard's panels reference (final versions), so the list page can
-	// show a navigable component popover without a per-tile fetch (#21).
-	ComponentUsage []EntityRef `json:"component_usage,omitempty" bson:"component_usage,omitempty"`
+	ConnectionNames []string          `json:"connection_names,omitempty" bson:"connection_names,omitempty"` // DEPRECATED: names only. Use ConnectionUsage for navigable links. Kept for back-compat.
+	// ComponentUsage / ConnectionUsage carry the {id,name} of each distinct
+	// component / connection the dashboard's panels reference, so the list
+	// page can render navigable popovers + links without a per-tile fetch
+	// (#21).
+	ComponentUsage  []EntityRef `json:"component_usage,omitempty" bson:"component_usage,omitempty"`
+	ConnectionUsage []EntityRef `json:"connection_usage,omitempty" bson:"connection_usage,omitempty"`
 	Created        time.Time   `json:"created" bson:"created"`
 	Updated        time.Time   `json:"updated" bson:"updated"`
 }
