@@ -6,6 +6,36 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.32.0] — 2026-06-17
+
+### Added
+
+- **Server-side filter, sort, and pagination on the list pages** (connections,
+  users, components, dashboards) (#21). Carbon pagination with a 25/50/100
+  page-size selector; filters and sort apply over the whole dataset and a
+  sort/filter change reloads from page 1. Page size persists per user across
+  sessions. Cross-entity counts (a component's dashboards, a connection's
+  components, a dashboard's components/connections) are denormalized
+  server-side so the navigable popovers/links work per page. The dashboard
+  "filter by connection" is restored as a true server-side filter.
+- **Batch component fetch for the dashboard viewer** (#60) — one request on
+  mount instead of one per panel.
+- **Lazy dashboard thumbnails** (#19) — moved to their own collection, served
+  as raw PNG, lazy-loaded by tiles.
+- **AI/MCP/chat list tools** expose the full filter set + sort + pagination,
+  with `total` / `has_more` as a size signal.
+
+### Fixed
+
+- **Silent list truncation** — connections showed only the first 20, users the
+  first 10; both now paginate.
+- Editor edit↔view no longer remounts panels (streaming charts stay live);
+  Save stays in edit with a confirmation toast.
+- Custom range picker From/To layout (clipped time field) and list-toolbar
+  filter/dropdown sizing.
+- The dashboard-summary aggregation (panel counts / connection names empty
+  since ~v0.11).
+
 ## [0.31.3] — 2026-06-16
 
 ### Added
