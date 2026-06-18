@@ -183,26 +183,23 @@ func (s *DashboardService) ListDashboards(ctx context.Context, params models.Das
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
 	}
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	// Clamp BEFORE the repo call so 0=all (capped) reaches the query.
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
+
 	dashboards, total, err := s.repo.List(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list dashboards: %w", err)
 	}
 
-	// Default page values
-	page := params.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := params.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
-
 	return &models.DashboardListResponse{
 		Dashboards: dashboards,
 		Total:      total,
-		Page:       page,
-		PageSize:   pageSize,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		HasMore:    models.ComputeHasMore(params.Page, params.PageSize, len(dashboards), total),
 	}, nil
 }
 
@@ -212,26 +209,22 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
 	}
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
+
 	summaries, total, err := s.repo.ListWithConnections(ctx, params, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list dashboards with datasources: %w", err)
 	}
 
-	// Default page values
-	page := params.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := params.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
-
 	return &models.DashboardSummaryListResponse{
 		Dashboards: summaries,
 		Total:      total,
-		Page:       page,
-		PageSize:   pageSize,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		HasMore:    models.ComputeHasMore(params.Page, params.PageSize, len(summaries), total),
 	}, nil
 }
 

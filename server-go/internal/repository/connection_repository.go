@@ -111,16 +111,20 @@ func (r *ConnectionRepository) FindByType(ctx context.Context, dsType models.Con
 // This is the preferred list method for UI-driven filtering. FindAll,
 // FindByType, and FindByTags are kept for back-compat with existing call
 // sites that pass a single filter.
-func (r *ConnectionRepository) List(ctx context.Context, namespace, typeFilter string, tags []string, limit, offset int64) ([]*models.Connection, int64, error) {
+func (r *ConnectionRepository) List(ctx context.Context, params models.ConnectionQueryParams, limit, offset int64) ([]*models.Connection, int64, error) {
 	filter := bson.M{}
-	if namespace != "" {
-		filter["namespace"] = namespace
+	if params.Namespace != "" {
+		filter["namespace"] = params.Namespace
 	}
-	if typeFilter != "" {
-		filter["type"] = typeFilter
+	if params.Type != "" {
+		filter["type"] = params.Type
 	}
-	if len(tags) > 0 {
-		filter["tags"] = bson.M{"$in": tags}
+	if params.Name != "" {
+		// $regex ignores collation, so request case-insensitive explicitly.
+		filter["name"] = bson.M{"$regex": params.Name, "$options": "i"}
+	}
+	if len(params.Tags) > 0 {
+		filter["tags"] = bson.M{"$in": params.Tags}
 	}
 
 	total, err := r.collection.CountDocuments(ctx, filter)
@@ -129,7 +133,10 @@ func (r *ConnectionRepository) List(ctx context.Context, namespace, typeFilter s
 	}
 
 	opts := options.Find().
-		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetSort(models.ResolveSort(
+			models.ConnectionSortFields, params.Sort, params.Direction,
+			models.ConnectionDefaultSortField, models.ConnectionDefaultSortDir,
+		)).
 		SetLimit(limit).
 		SetSkip(offset)
 

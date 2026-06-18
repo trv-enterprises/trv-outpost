@@ -207,13 +207,16 @@ func (h *ComponentHandler) GetComponentDraft(c *gin.Context) {
 // @Param status query string false "Filter by status (draft, final)"
 // @Param connection_id query string false "Filter by data source ID"
 // @Param tag query string false "Filter by tag"
+// @Param sort query string false "Sort field (name, updated, created, component_type, chart_type, status, namespace)"
+// @Param direction query string false "Sort direction (asc, desc)"
 // @Param page query int false "Page number" default(1)
-// @Param page_size query int false "Page size" default(20)
+// @Param page_size query string false "Page size; 'all' or 0 returns up to 1000 in one response" default(20)
 // @Success 200 {object} models.ComponentListResponse
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /components [get]
 func (h *ComponentHandler) ListComponents(c *gin.Context) {
+	normalizeAllPageSize(c)
 	var params models.ComponentQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

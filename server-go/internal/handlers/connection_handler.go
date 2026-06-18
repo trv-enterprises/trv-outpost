@@ -71,42 +71,62 @@ func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 	c.JSON(http.StatusCreated, enrichWithCapabilities(datasource.SanitizeForAPI()))
 }
 
-// ListConnections handles datasource listing
-// @Summary List all datasources
-// @Description Retrieve all datasources with pagination and optional namespace/type/tag filters
-// @Tags datasources
+// ListConnections handles connection listing
+// @Summary List all connections
+// @Description Retrieve connections with server-side filter, sort, and pagination. Accepts page/page_size (preferred) or legacy limit/offset.
+// @Tags connections
 // @Produce json
-// @Param limit query int false "Number of items per page" default(20)
-// @Param offset query int false "Number of items to skip" default(0)
 // @Param namespace query string false "Filter by namespace (empty = all namespaces)"
-// @Param type query string false "Filter by datasource type (api, websocket, file)"
+// @Param name query string false "Filter by name (case-insensitive substring)"
+// @Param type query string false "Filter by connection type"
 // @Param tags query []string false "Filter by tags (OR semantics, repeat param)"
+// @Param sort query string false "Sort field (name, created_at, updated_at, type, namespace)"
+// @Param direction query string false "Sort direction (asc, desc)"
+// @Param page query int false "Page number" default(1)
+// @Param page_size query string false "Page size; 'all' or 0 returns up to 1000 in one response" default(20)
 // @Success 200 {object} map[string]interface{}
-// @Router /datasources [get]
+// @Router /connections [get]
 func (h *ConnectionHandler) ListConnections(c *gin.Context) {
-	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "20"), 10, 64)
-	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
-	namespace := c.Query("namespace")
-	typeFilter := c.Query("type")
-	tags := c.QueryArray("tags")
+	normalizeAllPageSize(c)
 
-	datasources, total, err := h.service.ListConnectionsFiltered(c.Request.Context(), namespace, typeFilter, tags, limit, offset)
+	var params models.ConnectionQueryParams
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Back-compat: honor legacy limit/offset when page/page_size are absent
+	// (existing API-key callers). offset → page; limit → page_size.
+	if params.Page == 0 && params.PageSize == 0 {
+		if lim := c.Query("limit"); lim != "" {
+			if l, err := strconv.Atoi(lim); err == nil {
+				params.PageSize = l
+			}
+		}
+		if off := c.Query("offset"); off != "" {
+			if o, err := strconv.Atoi(off); err == nil && params.PageSize > 0 {
+				params.Page = (o / params.PageSize) + 1
+			}
+		}
+	}
+
+	resp, err := h.service.ListConnectionsPaged(c.Request.Context(), params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Sanitize sensitive fields and enrich with capabilities before returning
-	enrichedConnections := make([]connectionResponse, len(datasources))
-	for i, ds := range datasources {
+	// Sanitize sensitive fields and enrich with capabilities before returning.
+	enrichedConnections := make([]connectionResponse, len(resp.Connections))
+	for i, ds := range resp.Connections {
 		enrichedConnections[i] = enrichWithCapabilities(ds.SanitizeForAPI())
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"connections": enrichedConnections,
-		"total":       total,
-		"limit":       limit,
-		"offset":      offset,
+		"total":       resp.Total,
+		"page":        resp.Page,
+		"page_size":   resp.PageSize,
+		"has_more":    resp.HasMore,
 	})
 }
 

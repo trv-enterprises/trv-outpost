@@ -175,6 +175,7 @@ type ComponentListResponse struct {
 	Total      int64       `json:"total"`
 	Page       int         `json:"page"`
 	PageSize   int         `json:"page_size"`
+	HasMore    bool        `json:"has_more"` // True when records exist beyond this page
 }
 
 // ComponentQueryParams defines query parameters for listing components
@@ -188,8 +189,10 @@ type ComponentQueryParams struct {
 	ConnectionID  string   `form:"connection_id"`  // Accept connection_id query param
 	Tags          []string `form:"tags"`           // Filter components with any of the given tags (OR)
 	Tag           string   `form:"tag"`            // DEPRECATED: use tags; kept for back-compat
+	Sort          string   `form:"sort"`           // Sort field (allowlisted; see ComponentSortFields). Empty = default.
+	Direction     string   `form:"direction"`      // "asc" | "desc". Empty = entity default direction.
 	Page          int      `form:"page"`
-	PageSize      int      `form:"page_size"`
+	PageSize      int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
 }
 
 // ComponentSummary is a lightweight component representation for card listings

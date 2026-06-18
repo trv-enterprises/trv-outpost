@@ -150,7 +150,9 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 		return nil, 0, fmt.Errorf("failed to count dashboards: %w", err)
 	}
 
-	// Calculate pagination
+	// Calculate pagination. The page-size CAP is owned by the service
+	// (ClampPageSize); the repo only floors a non-positive value so direct
+	// callers/tests still get a sane page.
 	page := params.Page
 	if page < 1 {
 		page = 1
@@ -159,18 +161,18 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
 
 	skip := int64((page - 1) * pageSize)
 	limit := int64(pageSize)
 
-	// Find options with pagination and sorting
+	// Find options with pagination and allowlisted sort (default name ASC).
 	opts := options.Find().
 		SetSkip(skip).
 		SetLimit(limit).
-		SetSort(bson.D{{Key: "name", Value: 1}})
+		SetSort(models.ResolveSort(
+			models.DashboardSortFields, params.Sort, params.Direction,
+			models.DashboardDefaultSortField, models.DashboardDefaultSortDir,
+		))
 
 	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
@@ -319,7 +321,8 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 		return nil, 0, fmt.Errorf("failed to count dashboards: %w", err)
 	}
 
-	// Calculate pagination
+	// Calculate pagination. Cap is owned by the service (ClampPageSize); the
+	// repo only floors a non-positive value.
 	page := params.Page
 	if page < 1 {
 		page = 1
@@ -327,9 +330,6 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 	pageSize := params.PageSize
 	if pageSize < 1 {
 		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
 	}
 
 	skip := int64((page - 1) * pageSize)
@@ -339,8 +339,11 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 	pipeline := mongo.Pipeline{
 		// Match filter
 		{{Key: "$match", Value: filter}},
-		// Sort by name
-		{{Key: "$sort", Value: bson.D{{Key: "name", Value: 1}}}},
+		// Allowlisted sort (default name ASC) — keep consistent with List().
+		{{Key: "$sort", Value: models.ResolveSort(
+			models.DashboardSortFields, params.Sort, params.Direction,
+			models.DashboardDefaultSortField, models.DashboardDefaultSortDir,
+		)}},
 		// Pagination
 		{{Key: "$skip", Value: skip}},
 		{{Key: "$limit", Value: limit}},

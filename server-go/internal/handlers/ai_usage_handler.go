@@ -121,7 +121,7 @@ func (h *AIUsageHandler) GetUsage(c *gin.Context) {
 
 	// List human users (system users don't drive the Assistant). Page
 	// size is generous for a single-tenant deployment.
-	users, _, err := h.userRepo.List(ctx, 1, 1000)
+	users, _, err := h.userRepo.List(ctx, models.UserQueryParams{Page: 1, PageSize: 1000})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users: " + err.Error()})
 		return

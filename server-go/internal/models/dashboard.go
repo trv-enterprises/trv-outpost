@@ -420,6 +420,7 @@ type DashboardListResponse struct {
 	Total      int64       `json:"total"`
 	Page       int         `json:"page"`
 	PageSize   int         `json:"page_size"`
+	HasMore    bool        `json:"has_more"` // True when records exist beyond this page
 }
 
 // DashboardQueryParams defines query parameters for listing dashboards
@@ -431,8 +432,10 @@ type DashboardQueryParams struct {
 	ComponentID        string   `form:"component_id"`        // Filter dashboards using a specific component
 	Tags               []string `form:"tags"`                // Filter dashboards with any of the given tags (OR)
 	IncludeConnections bool     `form:"include_connections"` // Include connection names from referenced components
+	Sort               string   `form:"sort"`                // Sort field (allowlisted; see DashboardSortFields). Empty = default.
+	Direction          string   `form:"direction"`           // "asc" | "desc". Empty = entity default.
 	Page               int      `form:"page"`
-	PageSize           int      `form:"page_size"`
+	PageSize           int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
 }
 
 // DashboardSummary is a lightweight dashboard representation for tile listings
@@ -457,6 +460,7 @@ type DashboardSummaryListResponse struct {
 	Total      int64              `json:"total"`
 	Page       int                `json:"page"`
 	PageSize   int                `json:"page_size"`
+	HasMore    bool               `json:"has_more"` // True when records exist beyond this page
 }
 
 // DashboardWithComponents represents a dashboard with expanded component data

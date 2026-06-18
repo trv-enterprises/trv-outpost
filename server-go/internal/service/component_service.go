@@ -235,9 +235,8 @@ func (s *ComponentService) ListComponents(ctx context.Context, params models.Com
 	if params.Page < 1 {
 		params.Page = 1
 	}
-	if params.PageSize < 1 {
-		params.PageSize = 20
-	}
+	// Single page-size authority: 0 → all (capped), >cap → cap, <0 → default.
+	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
 
 	// Back-compat: backfill the deprecated single-value Tag param into Tags
 	// so the repository only deals with the slice form.
@@ -259,6 +258,7 @@ func (s *ComponentService) ListComponents(ctx context.Context, params models.Com
 		Total:      total,
 		Page:       params.Page,
 		PageSize:   params.PageSize,
+		HasMore:    models.ComputeHasMore(params.Page, params.PageSize, len(components), total),
 	}, nil
 }
 

@@ -286,8 +286,14 @@ func (r *ComponentRepository) FindAllLatest(ctx context.Context, params models.C
 		}}},
 		// Replace root with the full document
 		{{Key: "$replaceRoot", Value: bson.M{"newRoot": "$doc"}}},
-		// Sort by updated time for display
-		{{Key: "$sort", Value: bson.D{{Key: "updated", Value: -1}}}},
+		// Display sort (allowlisted; defaults to updated DESC). NOTE: this is
+		// the POST-group display sort — distinct from the structural
+		// id/version sort above that drives the latest-version $group. Only
+		// this one is user-controllable.
+		{{Key: "$sort", Value: models.ResolveSort(
+			models.ComponentSortFields, params.Sort, params.Direction,
+			models.ComponentDefaultSortField, models.ComponentDefaultSortDir,
+		)}},
 	}
 
 	// Count total unique components (before pagination)
