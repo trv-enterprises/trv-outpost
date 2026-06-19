@@ -139,6 +139,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [dashboard, setDashboard] = useState(null);
   const [chartsMap, setChartsMap] = useState({}); // Chart data keyed by component_id
   const [loading, setLoading] = useState(true);
+  // Transient spin feedback for the manual Refresh button. The refetch is
+  // out-of-band (per-chart, via refreshTick) with no central completion
+  // signal, so we spin the icon for a brief fixed pulse to acknowledge the
+  // click — distinct from `loading` (the initial page-load flag).
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshSpinTimerRef = useRef(null);
   const [error, setError] = useState(null);
 
   // Dashboard command subscription (voice control / kiosk integration)
@@ -1570,7 +1576,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     // itself changed, the user should reload the page.
     setRefreshTick(t => t + 1);
     setLastRefresh(new Date());
+    // Acknowledge the click with a brief spin pulse (the per-chart refetches
+    // don't report completion centrally). Reset any in-flight timer so rapid
+    // clicks keep spinning rather than stop early.
+    if (refreshSpinTimerRef.current) clearTimeout(refreshSpinTimerRef.current);
+    setRefreshing(true);
+    refreshSpinTimerRef.current = setTimeout(() => {
+      setRefreshing(false);
+      refreshSpinTimerRef.current = null;
+    }, 800);
   };
+
+  // Clear the manual-refresh spin timer on unmount (avoid a state update after
+  // the page is gone).
+  useEffect(() => () => {
+    if (refreshSpinTimerRef.current) clearTimeout(refreshSpinTimerRef.current);
+  }, []);
 
   const handleBack = () => {
     if (fromDesign) {
@@ -3071,6 +3092,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   so a streaming-only dashboard doesn't show a doubled separator. */}
               <RefreshControls
                 loading={loading}
+                spinning={refreshing}
                 onRefresh={handleManualRefresh}
               />
               {/* Design workflow: a prominent ghost Edit button (mirror of the
@@ -3780,12 +3802,15 @@ function RefreshIntervalPill({ intervalSec, lastRefresh }) {
 // dashboard would do anything with a refresh (streaming-only dashboards see
 // no toolbar noise). The last-refresh time / next-refresh countdown now lives
 // in the interval pill's tooltip, so this is just the button.
-function RefreshControls({ loading, onRefresh }) {
+function RefreshControls({ loading, spinning, onRefresh }) {
   const { hasRefreshable } = useRefreshableComponentsContext();
   // Nothing to refresh → render NOTHING, including the trailing divider, so a
   // streaming-only dashboard doesn't leave a doubled separator where the
   // refresh section would have been.
   if (!hasRefreshable) return null;
+  // Spin on the initial page load OR the transient manual-refresh pulse, so a
+  // click visibly acknowledges (the per-chart refetch reports no completion).
+  // `disabled` stays tied to the initial load only — never disable mid-use.
   return (
     <>
       <IconButton
@@ -3795,7 +3820,7 @@ function RefreshControls({ loading, onRefresh }) {
         onClick={onRefresh}
         disabled={loading}
       >
-        <Renew size={20} className={loading ? 'spinning' : ''} />
+        <Renew size={20} className={loading || spinning ? 'spinning' : ''} />
       </IconButton>
       <span className="toolbar-divider" aria-hidden="true" />
     </>
