@@ -35,18 +35,24 @@ import './NamespacesPage.scss';
 // color the chip will use (via namespaceChipStyle), and what you pick is
 // exactly the chip you get. The stored `value` is the canonical hex for that
 // Carbon color (kept for back-compat with existing namespace records, which
-// store a hex; namespaceColor.js maps it to the tag color at render). The
-// redundant old presets (Warm→red, Cool→purple, Yellow→warm-gray, Black→
-// cool-gray) were dropped — they collapsed onto these.
+// store a hex; namespaceColor.js maps it to the tag color at render).
+//
+// Blue is intentionally NOT offered: user tags render type="blue" across the
+// app, so a blue namespace pill collides with the tag pills next to it and
+// stops reading as a namespace. (Existing namespaces already stored as blue
+// still render blue — we only removed it as a NEW choice.) Cool Gray + Warm
+// Gray are offered as the remaining distinct Carbon tag hues; on g100 dark
+// they read close to Gray, so revisit with custom hues if that's too subtle.
 const NAMESPACE_PALETTE = [
-  { name: 'Gray',    value: '#6f6f6f' },
-  { name: 'Blue',    value: '#0f62fe' },
-  { name: 'Cyan',    value: '#1192e8' },
-  { name: 'Teal',    value: '#009d9a' },
-  { name: 'Green',   value: '#24a148' },
-  { name: 'Red',     value: '#da1e28' },
-  { name: 'Magenta', value: '#d02670' },
-  { name: 'Purple',  value: '#8a3ffc' },
+  { name: 'Gray',      value: '#6f6f6f' },
+  { name: 'Cool Gray', value: '#4d5358' },
+  { name: 'Warm Gray', value: '#565151' },
+  { name: 'Cyan',      value: '#1192e8' },
+  { name: 'Teal',      value: '#009d9a' },
+  { name: 'Green',     value: '#24a148' },
+  { name: 'Red',       value: '#da1e28' },
+  { name: 'Magenta',   value: '#d02670' },
+  { name: 'Purple',    value: '#8a3ffc' },
 ];
 
 function NamespacesPage() {

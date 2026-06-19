@@ -16,10 +16,12 @@ const DEFAULT_COLOR = '#6f6f6f';
 // waste namespace-identity slots. Carbon also has no orange/yellow tag hue, so
 // those legacy presets fall to their nearest distinct color.
 const PRESET_TO_TAG = {
-  '#6f6f6f': 'gray',     // Gray
-  '#393939': 'gray',     // Black (legacy) → gray (cool-gray reads identical)
-  '#0f62fe': 'blue',     // Blue
-  '#1192e8': 'cyan',     // Cyan
+  '#6f6f6f': 'gray',       // Gray
+  '#4d5358': 'cool-gray',  // Cool Gray
+  '#565151': 'warm-gray',  // Warm Gray
+  '#393939': 'gray',       // Black (legacy) → gray
+  '#0f62fe': 'blue',       // Blue (removed from the picker; existing blue namespaces still render blue)
+  '#1192e8': 'cyan',       // Cyan
   '#009d9a': 'teal',     // Teal
   '#24a148': 'green',    // Green
   '#da1e28': 'red',      // Red
@@ -40,6 +42,8 @@ function tagColorForHex(hex) {
 // (#da1e28) so the picker shows the right swatch when editing old namespaces.
 const TAG_TO_CANONICAL_HEX = {
   gray: '#6f6f6f',
+  'cool-gray': '#4d5358',
+  'warm-gray': '#565151',
   blue: '#0f62fe',
   cyan: '#1192e8',
   teal: '#009d9a',
