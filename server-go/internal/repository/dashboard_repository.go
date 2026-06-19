@@ -445,6 +445,7 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 		{{Key: "$project", Value: bson.D{
 			{Key: "id", Value: "$_id"},
 			{Key: "name", Value: 1},
+			{Key: "namespace", Value: 1}, // #21 regression: omitted here dropped the namespace pill from the design-mode tile/list (View mode uses full docs and kept it).
 			{Key: "description", Value: 1},
 			{Key: "settings", Value: 1},
 			{Key: "tags", Value: 1},
