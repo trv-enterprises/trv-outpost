@@ -322,7 +322,11 @@ func (c *Catalog) RenderMarkdown() string {
 	if len(c.LayoutDimensions) > 0 {
 		sb.WriteString("## Layout dimensions\n\n")
 		sb.WriteString("Dashboard canvas presets. Set `settings.layout_dimension` on a dashboard to the exact `name` of one of these. `cols` × `rows` is the cell-grid budget for panel placement — and it is ALREADY computed at the preset's default scale, so plan panels directly to those cols × rows; no scale math needed for the normal case.\n\n")
-		sb.WriteString("`default scale` is the display zoom dashboards at this dimension use by default (it scales component text/line sizes up; the budget shrinks as scale rises because the design canvas = dimension ÷ scale). A new dashboard inherits it. If the user asks to build at a DIFFERENT scale, set `settings.scale_percent` on the dashboard to that value — and note the usable grid is smaller than the cols × rows shown here by roughly (default_scale ÷ requested_scale).\n\n")
+		sb.WriteString("`default scale` is the display zoom dashboards at this dimension use by default (it scales component text/line sizes up; the budget shrinks as scale rises because the design canvas = dimension ÷ scale). A new dashboard inherits it.\n\n")
+		sb.WriteString("**Building at a NON-DEFAULT scale (`settings.scale_percent`):** the cols × rows above are at the default scale, so do NOT reuse them and do NOT just divide them by the scale ratio — that re-floors an already-floored number and loses a cell (e.g. 4K at 150% is **71 × 38**, not 106 ÷ 1.5 = 70). Recompute the usable budget from the PIXEL dimensions instead, exactly as the viewer does:\n\n")
+		sb.WriteString("    usable_cols = floor( (max_width_px  × 100 / scale_percent) / 36 )\n")
+		sb.WriteString("    usable_rows = floor( (max_height_px × 100 / scale_percent − 53) / 36 )\n\n")
+		sb.WriteString("(36 = 32px cell + 4px gap; 53 = viewer chrome.) Worked example — 4K (3840×2160 px) at scale_percent 150: design canvas = 3840×100/150 = 2560 wide, 2160×100/150 = 1440 tall → usable_cols = floor(2560/36) = **71**, usable_rows = floor((1440−53)/36) = **38**. Plan and FILL to those 71 × 38, not 70. Set `settings.scale_percent` to the requested value.\n\n")
 		for _, d := range c.LayoutDimensions {
 			marker := ""
 			if d.IsDefault {
