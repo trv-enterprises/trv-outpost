@@ -3817,6 +3817,7 @@ function RefreshControls({ loading, spinning, onRefresh }) {
         kind="ghost"
         label="Refresh"
         align="bottom"
+        className="toolbar-refresh-btn"
         onClick={onRefresh}
         disabled={loading}
       >

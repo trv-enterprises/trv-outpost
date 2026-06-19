@@ -553,6 +553,23 @@
           fill: #c6c6c6;
         }
 
+        // Refresh button: don't keep the focus ring after a MOUSE click.
+        // Carbon paints its ring on :focus, and a clicked button keeps DOM
+        // focus, so the outline lingered until something else was selected
+        // (felt like a grabbed text field). Restrict the ring to keyboard
+        // focus only — same :focus-visible pattern used app-wide (App.scss).
+        // (Carbon labels the button via aria-labelledby→tooltip, not
+        // aria-label, so target it by an explicit class instead.)
+        &.toolbar-refresh-btn {
+          &:focus {
+            outline: none;
+          }
+          &:focus-visible {
+            outline: 2px solid var(--cds-focus);
+            outline-offset: -2px;
+          }
+        }
+
         .spinning {
           animation: spin 1s linear infinite;
         }
