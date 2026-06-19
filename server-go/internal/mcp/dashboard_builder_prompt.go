@@ -94,15 +94,24 @@ const dashboardBuilderFlow = `# Build flow
    Prometheus, ` + "`" + `list_mqtt_topics` + "`" + ` / ` + "`" + `list_edgelake_tables` + "`" + ` / etc
    for other types). You need to know what fields and metrics are
    available before you can build charts that render real data.
-3. Plan the dashboard. What chart types, what the grid layout looks
-   like, and how many panels. Respect the canvas size. Build for
-   LEGIBILITY by default — readable, sensibly-sized panels — rather
-   than maximizing panel count; a clean overview of the key signals
-   is the right default. If the user asks for a DENSE board (says
+3. **Plan the WHOLE dashboard BEFORE creating anything.** Decide the
+   complete structure up front — every section, every component (name +
+   chart_type + which column(s)), AND its panel rectangle {x,y,w,h}
+   against the canvas's ` + "`" + `cols × rows` + "`" + ` cell budget (the
+   ` + "`" + `layout_dimensions` + "`" + ` entry from get_type_catalog) — then build the
+   settled set in one pass. Do NOT create components first and figure out
+   the grid afterward; that produces under-filled, ragged layouts and
+   re-work. Write the plan as an explicit note before the first
+   create_component, and in it STATE THE ARITHMETIC that proves the grid
+   fills the canvas (see step 5's FILL rule): for each row the panel
+   widths sum to ` + "`" + `cols` + "`" + `, and the running ` + "`" + `cursorY` + "`" + ` after the last
+   row equals ` + "`" + `rows` + "`" + `. This applies to EVERY board, not just large ones.
+   Build for LEGIBILITY by default — readable, sensibly-sized panels —
+   rather than maximizing panel count; a clean overview of the key
+   signals is the right default. If the user asks for a DENSE board (says
    "dense", "pack it", names a panel count, or asks to cover "every"
-   metric), build more, smaller panels accordingly. If you're
-   planning ≥6 panels, make the plan explicit in a brief internal
-   note before creating anything.
+   metric), build more, smaller panels accordingly — but the plan still
+   fills the budget exactly.
    **Group into sections.** Organize the charts into logical sections
    by subsystem (e.g. "CPU & MEMORY", "DISK & STORAGE", "NETWORK",
    "TEMPERATURES"). Group by what belongs together (meaning), not by
