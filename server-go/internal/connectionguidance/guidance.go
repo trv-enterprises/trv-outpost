@@ -381,8 +381,14 @@ of just the newest point:
     paint, then the window keeps the live buffer to the same duration.
     Match the since: span to the window duration.
   - Map y_axis to RAW streamed columns (the dotted field names from the
-    schema, e.g. cpu.pct, memory.pct). Do unit math (bytes→GB) in a
-    custom-code component, never in the query — there is no SQL here.
+    schema, e.g. cpu.pct, memory.pct) — never compute in the query, there
+    is no SQL here. For unit/time DISPLAY on a number tile, map the raw
+    column and pick a numberFormat instead of writing custom code:
+    "duration" (raw SECONDS → "2d 3h 4m", e.g. uptime.sec), "duration_clock"
+    (seconds → HH:MM:SS), or "compact" (large values → 1.2M / 3.4K). Only
+    drop to a custom-code component for a conversion none of those cover
+    (e.g. bytes→GB as a plain number has no built-in scale yet — use
+    "compact" or custom code).
 
 # Discovering columns
 

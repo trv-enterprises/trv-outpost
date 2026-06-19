@@ -448,6 +448,24 @@ func writeComponentTypes(sb *strings.Builder, types []ComponentTypeInfo) {
 			sb.WriteString(strings.Join(parts, ", "))
 			sb.WriteString("\n")
 		}
+		// Config fields (the component's `options`). Rendered with
+		// descriptions because the values matter to the agent (e.g. the
+		// number tile's numberFormat modes) — a bare field list isn't
+		// enough to pick the right one without dropping to custom code.
+		if len(t.ConfigSchema) > 0 {
+			sb.WriteString("  Options:\n")
+			for _, f := range t.ConfigSchema {
+				marker := ""
+				if f.Required {
+					marker = " (required)"
+				}
+				if f.Description != "" {
+					fmt.Fprintf(sb, "    - `%s`%s — %s\n", f.Name, marker, f.Description)
+				} else {
+					fmt.Fprintf(sb, "    - `%s`%s\n", f.Name, marker)
+				}
+			}
+		}
 	}
 	sb.WriteString("\n")
 }

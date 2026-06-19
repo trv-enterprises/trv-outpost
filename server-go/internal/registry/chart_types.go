@@ -173,6 +173,16 @@ func init() {
 			HasTimeBucket: true,
 			YAxisLabel:    "Value Column",
 		},
+		// Options (set via the component's `options` object). The format
+		// IMPLIES the raw value's unit — map a RAW column and pick a format
+		// rather than doing unit math in the query or writing custom code.
+		ConfigSchema: []ConfigField{
+			{Name: "numberFormat", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"}, Description: "Value format. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K — use for large magnitudes), \"duration\" (raw value is SECONDS → \"2d 3h 4m\", e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (raw value is a timestamp → date/time via numberDateFormat). Pick the format instead of dividing in custom code."},
+			{Name: "numberDateFormat", Type: "select", Required: false, Default: "datetime", Options: []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"}, Description: "Date/time style when numberFormat=\"datetime\". Ignored otherwise."},
+			{Name: "numberDecimals", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "0", "1", "2", "3", "4"}, Description: "Decimal places, or \"auto\"."},
+			{Name: "numberUnit", Type: "string", Required: false, Description: "Unit suffix appended after the value (e.g. \"%\", \"°C\", \"GB\"). Cosmetic — does not scale the value."},
+			{Name: "numberSize", Type: "string", Required: false, Default: "120", Description: "Value font size in px (12–400). Size it to the panel height so the value doesn't overflow."},
+		},
 	})
 
 	RegisterComponentType(ComponentTypeInfo{

@@ -45,6 +45,15 @@ create a dashboard whose panels reference those components.
   The ` + "`" + `name` + "`" + ` param is the INTERNAL identifier, not the label — do NOT
   bury the display label in ` + "`" + `name` + "`" + ` or rename a component to relabel it;
   the renderer shows ` + "`" + `title` + "`" + ` when set.
+- **Number tiles — format, don't compute.** A ` + "`" + `number` + "`" + ` chart formats its
+  value via ` + "`" + `options.numberFormat` + "`" + ` — map the RAW column and pick a
+  format instead of writing custom code to convert units: ` + "`" + `duration` + "`" + `
+  (raw SECONDS → "2d 3h 4m", e.g. uptime.sec), ` + "`" + `duration_clock` + "`" + `
+  (seconds → HH:MM:SS), ` + "`" + `compact` + "`" + ` (large values → 1.2M/3.4K),
+  ` + "`" + `datetime` + "`" + ` (raw timestamp → date/time). Do NOT use_custom_code to
+  divide seconds by 86400 — that's what ` + "`" + `duration` + "`" + ` is for. ` + "`" + `numberUnit` + "`" + `
+  adds a cosmetic suffix ("%", "°C"). (See get_type_catalog for the full
+  option list.)
 - **Color**: prefer Carbon Design System colors. When in doubt, use
   semantic tokens — don't hard-code hex values in component config.
 - **One component per chart** — don't create a single "monster"
