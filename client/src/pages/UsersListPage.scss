@@ -235,7 +235,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    margin: 0 spacing.$spacing-06 spacing.$spacing-06;
+    margin: 0 spacing.$spacing-06 spacing.$spacing-06; // #112: panel now contains the footer; keep bottom gutter below it
     background-color: var(--cds-layer-01);
     overflow: hidden;
   }

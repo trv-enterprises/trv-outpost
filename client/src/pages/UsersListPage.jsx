@@ -391,23 +391,38 @@ function UsersListPage() {
                   )}
                 </TableBody>
               </Table>
+              {/* #112: footer lives INSIDE the table panel so it's bounded by the
+                  table's width and reads as the table's footer. */}
+              <Pagination
+                className="list-pagination"
+                page={page}
+                pageSize={pageSize}
+                pageSizes={PAGE_SIZES}
+                totalItems={total}
+                onChange={({ page: p, pageSize: ps }) => {
+                  if (ps !== pageSize) setPageSize(ps);
+                  setPage(p);
+                }}
+              />
             </TableContainer>
           )}
         </DataTable>
       )}
 
-      {/* Server-side pagination (#21) — shared across both views. */}
-      <Pagination
-        className="list-pagination"
-        page={page}
-        pageSize={pageSize}
-        pageSizes={PAGE_SIZES}
-        totalItems={total}
-        onChange={({ page: p, pageSize: ps }) => {
-          if (ps !== pageSize) setPageSize(ps);
-          setPage(p);
-        }}
-      />
+      {/* Tile view keeps its own page-level pagination (#21). */}
+      {viewMode === 'tile' && (
+        <Pagination
+          className="list-pagination list-pagination--tile"
+          page={page}
+          pageSize={pageSize}
+          pageSizes={PAGE_SIZES}
+          totalItems={total}
+          onChange={({ page: p, pageSize: ps }) => {
+            if (ps !== pageSize) setPageSize(ps);
+            setPage(p);
+          }}
+        />
+      )}
     </div>
   );
 }

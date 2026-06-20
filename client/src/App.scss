@@ -413,6 +413,41 @@ button.cds--overflow-menu {
   }
 }
 
+// #112 — Shared list-page Pagination + table-scroll rules across all four list
+// pages (Connections / Users / Components / Dashboards).
+//
+// The Pagination is rendered INSIDE the bordered table panel
+// (`.cds--data-table-container`), as a flex sibling below the scroll region, so it
+// is bounded by exactly the table's width and reads as the table's footer. (As a
+// page-level sibling it overflowed the panel's right edge because it stretched to
+// the wider page flex parent instead of the table panel.)
+//
+// `scrollbar-gutter: stable` reserves the scrollbar column inside the scroll
+// region so the row right edge is fixed whether or not it's scrolling; the footer
+// spans the full panel width below it (the gutter is empty layer space to the
+// right of the rows). NOTE: Carbon DataTable has no native fixed-header scrolling
+// (carbon GitHub issue open since 2018), so the scrollbar visually spans the
+// CSS-sticky `thead` too — accepted limitation. A proper rows-only scroller is a
+// follow-up table rewrite (#116).
+.list-pagination {
+  flex-shrink: 0;
+  margin: 0;
+  background-color: var(--cds-layer-01);
+  border-top: 1px solid var(--cds-border-subtle-01);
+}
+
+// Tile view has no bordered table panel to nest in, so its pagination stays a
+// page-level footer inset to the tile-grid edges (the tile content padding is
+// $spacing-06). Tom: tile view is fine as a page-level footer.
+.list-pagination--tile {
+  margin: 0 spacing.$spacing-06 spacing.$spacing-06;
+}
+
+.cds--data-table-content {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
 // OverflowMenu dropdown options
 .cds--overflow-menu-options {
   background-color: var(--cds-layer-02, #393939);
