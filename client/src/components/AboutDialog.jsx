@@ -16,6 +16,7 @@ import {
 import { Copy } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import { isElectron, getAppVersion, getElectronVersion, getPlatform } from '../utils/electron';
+import { copyTextToClipboard } from '../utils/clipboard';
 import buildInfo from '../../build.json';
 import packageInfo from '../../package.json';
 
@@ -92,14 +93,16 @@ function AboutDialog({ open, onClose, currentUser, clerkActive }) {
     const blob = rows
       .map((r) => `${r.label}: ${r.value}`)
       .join('\n');
-    navigator.clipboard.writeText(blob).then(
+    // Use the shared helper: navigator.clipboard is undefined on plain HTTP
+    // (the homelab runs at http://192.168.x.x), so the direct call threw and
+    // nothing copied. copyTextToClipboard falls back to execCommand there.
+    copyTextToClipboard(blob).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       },
       () => {
-        // Clipboard write can fail in some contexts (insecure origin,
-        // permission). Don't crash — just leave the copied flag off.
+        // Both paths failed (rare) — leave the copied flag off.
       }
     );
   }, [rows]);
