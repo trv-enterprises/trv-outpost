@@ -116,17 +116,44 @@
     border-bottom: 1px solid #393939;
     flex-shrink: 0;
     flex-grow: 0;
+    // DEFAULT (wide): single row, NO wrap. The title shrinks/ellipsizes to its
+    // 10ch floor first (flex-shrink runs on a single line), so the fixed-width
+    // range Custom editor + right group fit without the title hogging space.
+    // flex-wrap can't do "shrink-then-wrap" (it line-breaks at flex-basis
+    // BEFORE shrinking — same in edit mode), so wrapping is deferred to an
+    // explicit breakpoint below, where the right group drops to row 2.
+    flex-wrap: nowrap;
     height: 56px;
     min-height: 56px;
     max-height: 56px;
     overflow: visible;
 
+    // Narrow (iPad / split-screen): once even a 10ch title + the expanded
+    // range editor + the right group can't share one row, wrap the right group
+    // to line 2. ~1280px covers the widest case (Custom range + Prometheus
+    // Step ≈ 785px + right group ≈ 290px + title/back ≈ 200px). Tune if the
+    // wrap fires too early/late.
+    @media (max-width: 1280px) {
+      flex-wrap: wrap;
+      height: auto;
+      min-height: 56px;
+      max-height: none;
+      row-gap: spacing.$spacing-02;
+    }
+
     .toolbar-left {
       display: flex;
       align-items: center;
       gap: spacing.$spacing-03;
-      flex: 1;
-      min-width: 0;
+      // Grows to absorb the toolbar's slack (so the right group is content-
+      // sized and the title+range sit just after the back/home buttons, not
+      // pushed to the far right). A LOW min-width lets the title ellipsize as
+      // far as needed so the fixed-width range Custom editor always fits before
+      // anything overflows; the right group wraps to line 2 only once even a
+      // stub title + the range no longer fit. (Range is flex-shrink:0 — the
+      // title is what yields.)
+      flex: 1 1 auto;
+      min-width: 120px;
       // visible (not hidden) so the variable-picker dropdown menu can overflow
       // the toolbar instead of being clipped. The title still ellipsizes via
       // its own `h1 { overflow: hidden }` rule below.
@@ -137,7 +164,12 @@
         align-items: center;
         gap: spacing.$spacing-03;
         min-width: 0;
-        flex: 1;
+        // Size to the title's content (don't grow to fill the left zone).
+        // flex:1 used to park the range picker at the far RIGHT of the zone
+        // and make it jump a large distance left when the Custom from/to
+        // editor opened. Content-sizing keeps the range picker HUGGING the
+        // title, so opening Custom only nudges it slightly.
+        flex: 0 1 auto;
 
         // Variables button hugs the name; matches the Cancel/secondary button.
         // Only the horizontal padding is overridden to a symmetric 20px (Carbon's
@@ -148,6 +180,19 @@
           padding-inline: 20px;
           justify-content: center;
           text-align: center;
+        }
+
+        // The title is wrapped in a Carbon <Tooltip> (full-name on hover), so
+        // the tooltip's container (.cds--tooltip) and its inner trigger wrapper
+        // (.cds--tooltip-trigger__wrapper) — not the <h1> — sit between
+        // .dashboard-info and the title. Make BOTH shrinkable, content-sized,
+        // min-width:0 flex items so the h1's ellipsis + the toolbar-left
+        // wrap-trigger still work through them.
+        .cds--tooltip,
+        .cds--tooltip-trigger__wrapper {
+          display: flex;
+          min-width: 0;
+          flex: 0 1 auto;
         }
 
         h1 {
@@ -161,14 +206,24 @@
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          // The name takes PRIORITY for row space: flex:1 1 auto lets it grow
-          // into available width and the higher min-width floor keeps it
-          // readable even when a wide variable picker (the range Custom
-          // editor) shares the row. The variable section yields first (it can
-          // shrink — see the range-custom rule below), instead of the name
-          // being crushed to a ~12-char stub.
-          flex: 1 1 auto;
-          min-width: 16rem;
+          // The name sizes to its CONTENT (flex:0 1 auto) — it does NOT grow
+          // to fill the row. Growing parked the range picker at the far right
+          // and made it jump a long way left when the Custom editor opened;
+          // content-sizing keeps the range hugging the title. The name still
+          // SHRINKS+ellipsizes when a wide range Custom editor needs room
+          // (the variable section also yields — see the range-custom rule),
+          // so the title gives a little rather than being crushed to a stub.
+          // max-width caps a very long name so it truncates instead of pushing
+          // the range picker too far right.
+          flex: 0 1 auto;
+          // ~10-char floor: the title shrinks/ellipsizes down to this as the
+          // toolbar tightens (yielding space to the fixed-width range editor
+          // FIRST), but never below it — so after the right group wraps to
+          // line 2 the name is still legibly present (it was collapsing to an
+          // invisible stub before). This floor is also what makes the title
+          // give up space VISIBLY before the wrap triggers.
+          min-width: 10ch;
+          max-width: 32rem;
         }
 
         p {
@@ -237,12 +292,13 @@
             text-overflow: clip;
           }
 
-          // The range picker (which can expand into the wide Custom from/to
-          // editor) yields to the title: allow it to shrink so the name keeps
-          // its 16rem floor instead of being crushed. The compact filter /
-          // connection-swap picker stays flex-shrink:0 (it's already small).
+          // The range picker does NOT shrink — its Custom from/to date/time
+          // inputs have a legible minimum and clipped/overflowed when forced
+          // smaller. Instead the TITLE yields (h1 is flex:0 1 auto, min-width:0
+          // — it ellipsizes as far as needed). So the range editor always
+          // shows full-size fields and the name gives up space to make room.
           &.dashboard-range-picker {
-            flex-shrink: 1;
+            flex-shrink: 0;
             min-width: 0;
 
             // The range PRESET trigger only ever shows short labels
@@ -517,8 +573,23 @@
       align-items: center;
       justify-content: flex-end;
       gap: spacing.$spacing-03;
-      flex: 1;
+      // Content-sized AND atomic. It's a fixed set of icon buttons: it must
+      // neither grow (flex:1 split the toolbar 50/50 and truncated the title)
+      // nor shrink (that crushed the buttons and overlapped the To-time on
+      // narrow screens). flex:0 0 auto + flex-wrap:nowrap keeps the group whole
+      // so it DROPS to row 2 as a unit when the row is too tight, while
+      // toolbar-left (flex:1) absorbs the slack on wide screens.
+      flex: 0 0 auto;
+      flex-wrap: nowrap;
       min-width: 0;
+
+      // Keep each button/divider from shrinking, so a tight row pushes the
+      // WHOLE right group to line 2 rather than squeezing individual buttons
+      // (which produced the To-time/nav-button overlap). Mirrors the edit-mode
+      // rule. Children stay on one line via the group's flex-wrap:nowrap.
+      > * {
+        flex-shrink: 0;
+      }
 
       // Subtle vertical divider used to formalize group separation in the
       // right-side toolbar (Carbon's group-separation pattern):

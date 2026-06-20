@@ -2767,7 +2767,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 )}
               </div>
             ) : (
-              <h1>{dashboard?.name}</h1>
+              <Tooltip
+                label={dashboard?.name || ''}
+                align="bottom-left"
+                enterDelayMs={2000}
+                leaveDelayMs={100}
+              >
+                {/* The title can ellipsize (it yields space to the range
+                    picker before the toolbar wraps), so the tooltip surfaces
+                    the full name on hover. 2s enter delay — the 5s default
+                    feels far too slow. */}
+                <h1 className="dashboard-title" tabIndex={0}>{dashboard?.name}</h1>
+              </Tooltip>
             )}
             {/* Variables editor trigger — hugs the name in edit mode. Styled
                 like the Cancel button (secondary) for consistency with the
