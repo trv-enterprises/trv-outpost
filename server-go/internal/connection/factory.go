@@ -7,97 +7,19 @@ package connection
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
-// ConnectionFactory manages datasource instances
-type ConnectionFactory struct {
-	sources map[string]models.ConnectionAdapter
-	mu      sync.RWMutex
-}
+// ConnectionFactory converts a stored Connection into a live adapter. It is
+// stateless: the generic register/pool/cache API it once carried was never
+// adopted, so the live path uses only CreateFromConfig / CreateAdapterFromConfig.
+type ConnectionFactory struct{}
 
-// NewConnectionFactory creates a new datasource factory
+// NewConnectionFactory creates a new connection factory.
 func NewConnectionFactory() *ConnectionFactory {
-	return &ConnectionFactory{
-		sources: make(map[string]models.ConnectionAdapter),
-	}
-}
-
-// Register registers a datasource with the factory
-func (f *ConnectionFactory) Register(name string, ds models.ConnectionAdapter) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.sources[name] = ds
-}
-
-// Get retrieves a datasource by name
-func (f *ConnectionFactory) Get(name string) (models.ConnectionAdapter, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	ds, exists := f.sources[name]
-	if !exists {
-		return nil, fmt.Errorf("datasource '%s' not found", name)
-	}
-
-	return ds, nil
-}
-
-// Unregister removes a datasource from the factory
-func (f *ConnectionFactory) Unregister(name string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	ds, exists := f.sources[name]
-	if !exists {
-		return fmt.Errorf("datasource '%s' not found", name)
-	}
-
-	// Close the datasource
-	if err := ds.Close(); err != nil {
-		return fmt.Errorf("error closing datasource: %w", err)
-	}
-
-	delete(f.sources, name)
-	return nil
-}
-
-// List returns all registered datasource names
-func (f *ConnectionFactory) List() []string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	names := make([]string, 0, len(f.sources))
-	for name := range f.sources {
-		names = append(names, name)
-	}
-
-	return names
-}
-
-// CloseAll closes all registered datasources
-func (f *ConnectionFactory) CloseAll() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	var errors []error
-	for name, ds := range f.sources {
-		if err := ds.Close(); err != nil {
-			errors = append(errors, fmt.Errorf("error closing '%s': %w", name, err))
-		}
-	}
-
-	// Clear the map
-	f.sources = make(map[string]models.ConnectionAdapter)
-
-	if len(errors) > 0 {
-		return fmt.Errorf("errors closing datasources: %v", errors)
-	}
-
-	return nil
+	return &ConnectionFactory{}
 }
 
 // CreateFromConfig creates a datasource from configuration
@@ -171,17 +93,6 @@ func (f *ConnectionFactory) CreateFromConfig(ds *models.Connection) (models.Conn
 	default:
 		return nil, fmt.Errorf("unsupported datasource type: %s", ds.Type)
 	}
-}
-
-// RegisterFromConfig creates and registers a datasource from configuration
-func (f *ConnectionFactory) RegisterFromConfig(ds *models.Connection) error {
-	dataSource, err := f.CreateFromConfig(ds)
-	if err != nil {
-		return err
-	}
-
-	f.Register(ds.Name, dataSource)
-	return nil
 }
 
 // CreateAdapterFromConfig creates a registry.Adapter from datasource configuration
