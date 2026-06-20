@@ -28,8 +28,8 @@ const (
 	// a freshly-fetched DB record. Handlers that need full fidelity
 	// (admin mutations, audit fields) must re-fetch via userService.
 	UserContextKey = "user"
-	// ClaimsContextKey holds the parsed *auth.Claims. The right
-	// surface for routine authz — DoesUserHavePriv reads from it.
+	// ClaimsContextKey holds the parsed *auth.Claims, set by
+	// Authenticate() for downstream authz checks.
 	ClaimsContextKey = "claims"
 )
 
@@ -69,7 +69,7 @@ type RouteCapability struct {
 // userService stays so handlers needing a fully-populated *User
 // (e.g. for admin operations that mutate the user record) can
 // look it up from the JWT's UserID. Routine authz uses the JWT
-// claims directly via DoesUserHavePriv.
+// claims directly (Claims.HasCapability).
 type AuthMiddleware struct {
 	userService *service.UserService
 	sessions    *auth.SessionService
@@ -620,52 +620,3 @@ func GetUser(c *gin.Context) *models.User {
 	return user
 }
 
-// GetClaims retrieves the parsed JWT claims from gin context. The
-// right surface for routine authz: every authz check on a route
-// after Authenticate() can read claims here and pass them to
-// auth.DoesUserHavePriv.
-func GetClaims(c *gin.Context) *auth.Claims {
-	v, exists := c.Get(ClaimsContextKey)
-	if !exists || v == nil {
-		return nil
-	}
-	claims, ok := v.(*auth.Claims)
-	if !ok {
-		return nil
-	}
-	return claims
-}
-
-// RequireAuth is a helper middleware that requires authentication
-func RequireAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		user := GetUser(c)
-		if user == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}
-
-// RequireCapability creates a middleware that requires a specific capability
-func RequireCapability(cap models.Capability) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		user := GetUser(c)
-		if user == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
-			c.Abort()
-			return
-		}
-		if !user.HasCapability(cap) {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":    "Access denied",
-				"required": string(cap),
-			})
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}

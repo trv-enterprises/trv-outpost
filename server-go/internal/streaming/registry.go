@@ -96,34 +96,6 @@ func (r *AggregatorRegistry) FeedRecord(connectionID string, record models.Recor
 	}
 }
 
-// GetAggregator returns an aggregator by config key (for testing/debugging)
-func (r *AggregatorRegistry) GetAggregator(configKey string) *BucketAggregator {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.aggregators[configKey]
-}
-
-// GetAggregatorCount returns the number of active aggregators
-func (r *AggregatorRegistry) GetAggregatorCount() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return len(r.aggregators)
-}
-
-// GetAggregatorsForDatasource returns all aggregators for a given datasource
-func (r *AggregatorRegistry) GetAggregatorsForDatasource(connectionID string) []*BucketAggregator {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	var result []*BucketAggregator
-	for _, agg := range r.aggregators {
-		if agg.config.ConnectionID == connectionID {
-			result = append(result, agg)
-		}
-	}
-	return result
-}
-
 // Stats returns statistics about the registry
 func (r *AggregatorRegistry) Stats() map[string]interface{} {
 	r.mu.RLock()
@@ -148,17 +120,4 @@ func (r *AggregatorRegistry) Stats() map[string]interface{} {
 	stats["aggregators"] = aggStats
 
 	return stats
-}
-
-// Shutdown stops all aggregators and clears the registry
-func (r *AggregatorRegistry) Shutdown() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	log.Printf("[AggregatorRegistry] Shutting down %d aggregators", len(r.aggregators))
-
-	for key, agg := range r.aggregators {
-		agg.Stop()
-		delete(r.aggregators, key)
-	}
 }

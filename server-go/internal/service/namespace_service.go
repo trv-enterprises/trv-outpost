@@ -123,11 +123,6 @@ func (s *NamespaceService) GetByID(ctx context.Context, id string) (*models.Name
 	return s.repo.FindByID(ctx, id)
 }
 
-// GetByName returns a namespace by slug name, or (nil, nil) if missing.
-func (s *NamespaceService) GetByName(ctx context.Context, name string) (*models.Namespace, error) {
-	return s.repo.FindByName(ctx, name)
-}
-
 // List returns all namespaces.
 func (s *NamespaceService) List(ctx context.Context) (*models.NamespaceListResponse, error) {
 	items, total, err := s.repo.List(ctx)

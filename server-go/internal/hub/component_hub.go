@@ -110,11 +110,6 @@ func (h *ComponentHub) Run() {
 	}
 }
 
-// Stop stops the hub
-func (h *ComponentHub) Stop() {
-	close(h.stop)
-}
-
 // Subscribe adds a subscriber for a specific component
 func (h *ComponentHub) Subscribe(subscriber *ComponentSubscriber, componentID string) {
 	h.subscribe <- &subscribeRequest{
@@ -271,21 +266,4 @@ func (h *ComponentHub) handleBroadcast(req *broadcastRequest) {
 		}
 	}
 	h.mu.RUnlock()
-}
-
-// GetSubscriberCount returns the number of subscribers for a component
-func (h *ComponentHub) GetSubscriberCount(componentID string) int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	if subs := h.componentSubscriptions[componentID]; subs != nil {
-		return len(subs)
-	}
-	return 0
-}
-
-// GetTotalSubscribers returns the total number of unique subscribers
-func (h *ComponentHub) GetTotalSubscribers() int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.subscribers)
 }

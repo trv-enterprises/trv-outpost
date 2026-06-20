@@ -5,7 +5,6 @@
 package registry
 
 import (
-	"context"
 	"sort"
 	"sync"
 )
@@ -69,14 +68,6 @@ type ComponentTypeInfo struct {
 	ConfigSchema     []ConfigField          `json:"config_schema,omitempty"`     // Fields the component exposes in the editor
 	DataRequirements *DataRequirements      `json:"data_requirements,omitempty"` // Charts only
 	DefaultConfig    map[string]interface{} `json:"default_config,omitempty"`    // Seed values for a freshly-created instance
-}
-
-// ComponentSource is the pluggable source of component type metadata. Today
-// only CodeSource (compile-time registrations) exists. A future MongoDB-backed
-// source can be added without touching any consumer.
-type ComponentSource interface {
-	ListComponentTypes(ctx context.Context) ([]ComponentTypeInfo, error)
-	GetComponentType(ctx context.Context, typeID string) (ComponentTypeInfo, bool, error)
 }
 
 // componentRegistry is the in-memory component type registry populated by
@@ -146,25 +137,4 @@ func IsSpecDrivenChart(subtype string) bool {
 	}
 	info, ok := GetComponentType("chart." + subtype)
 	return ok && info.Category == CategoryChart
-}
-
-// CodeSource is a ComponentSource backed by the compile-time component
-// registry. It's the default source used today; a MongoDB source can be
-// layered on later without changing consumers.
-type CodeSource struct{}
-
-// NewCodeSource returns a CodeSource that reads from the global registry.
-func NewCodeSource() *CodeSource {
-	return &CodeSource{}
-}
-
-// ListComponentTypes implements ComponentSource.
-func (s *CodeSource) ListComponentTypes(ctx context.Context) ([]ComponentTypeInfo, error) {
-	return ListComponentTypes(""), nil
-}
-
-// GetComponentType implements ComponentSource.
-func (s *CodeSource) GetComponentType(ctx context.Context, typeID string) (ComponentTypeInfo, bool, error) {
-	info, ok := GetComponentType(typeID)
-	return info, ok, nil
 }

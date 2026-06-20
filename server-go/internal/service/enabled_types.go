@@ -195,13 +195,6 @@ type CatalogProvider struct {
 	filter      registry.TypeFilter
 }
 
-// NewCatalogProvider constructs a CatalogProvider with only device
-// types — no layout dimensions. Kept for backward compatibility with
-// older call sites that don't have a ConfigService handy.
-func NewCatalogProvider(deviceTypes registry.DeviceTypeLister, filter registry.TypeFilter) *CatalogProvider {
-	return &CatalogProvider{deviceTypes: deviceTypes, filter: filter}
-}
-
 // NewCatalogProviderWithLayout constructs a CatalogProvider that
 // includes layout-dimension presets. Wire the ConfigService (or any
 // LayoutDimensionLister) so the chat-agent surface sees the real

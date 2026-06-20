@@ -61,14 +61,6 @@ func ListIntegrations() []IntegrationInfo {
 	return out
 }
 
-// GetIntegration returns a single integration by ID.
-func GetIntegration(id string) (IntegrationInfo, bool) {
-	integrationGlobal.mu.RLock()
-	defer integrationGlobal.mu.RUnlock()
-	info, ok := integrationGlobal.items[id]
-	return info, ok
-}
-
 // IntegrationOwningConnectionType returns the integration ID that owns the
 // given connection type (via OwnedConnectionType), or empty string if none.
 // This lets the filter look up integration membership for connection types

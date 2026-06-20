@@ -12,7 +12,6 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
@@ -394,11 +393,6 @@ func summarizeToolResultForHistory(toolName, output string) string {
 		return output
 	}
 	return string(summaryJSON)
-}
-
-// GenerateToolCallID generates a unique ID for tool calls
-func GenerateToolCallID() string {
-	return "toolu_" + uuid.New().String()[:8]
 }
 
 // summarizeAnthropicMessages creates a summary of messages for debug output

@@ -430,16 +430,6 @@ func (h *Handler) sendSSEMessage(w gin.ResponseWriter, msg SSEMessage) {
 	fmt.Fprintf(w, "data: %s\n\n", data)
 }
 
-// Broadcast sends a message to all connected clients
-func (h *Handler) Broadcast(msg SSEMessage) {
-	h.clients.Range(func(key, value interface{}) bool {
-		client := value.(*sseClient)
-		h.sendSSEMessage(client.response, msg)
-		client.response.Flush()
-		return true
-	})
-}
-
 // Helper functions
 
 func randomString(n int) string {

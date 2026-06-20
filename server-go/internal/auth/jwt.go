@@ -89,9 +89,7 @@ func (c *Claims) ValidateType(expected TokenType) error {
 }
 
 // HasCapability is the single primitive every authz check eventually
-// reaches. Wraps a linear scan over the (short) capability list. Use
-// the package-level DoesUserHavePriv when you have a *Claims directly
-// — it handles nil/expired-token cases too.
+// reaches. Wraps a linear scan over the (short) capability list.
 func (c *Claims) HasCapability(needed models.Capability) bool {
 	for _, cap := range c.Capabilities {
 		if cap == needed {
@@ -224,22 +222,6 @@ func (s *TokenSigner) VerifyToken(raw string, expected TokenType) (*Claims, erro
 		}
 	}
 	return claims, nil
-}
-
-// DoesUserHavePriv is the single authz primitive Tom asked for
-// (2026-05-15). Every authz decision in the codebase routes through
-// here: "does this caller hold this privilege?" Returns false for any
-// reason the answer isn't a definitive yes — nil claims, missing
-// capability, otherwise unknown caller. Doesn't hit the DB; the
-// signed claims ARE the source of truth at request time.
-//
-// Callers that need different semantics (e.g. "self-only" path-param
-// checks) build them on top of this primitive plus the request shape.
-func DoesUserHavePriv(claims *Claims, needed models.Capability) bool {
-	if claims == nil {
-		return false
-	}
-	return claims.HasCapability(needed)
 }
 
 // ErrInvalidToken is declared in verifier.go and shared across this

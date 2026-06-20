@@ -229,27 +229,6 @@ func (h *InboundHandler) Unsubscribe(connectionID string, ch chan models.Record)
 	}
 }
 
-// IsConnected checks if there's an active inbound connection for a datasource
-func (h *InboundHandler) IsConnected(connectionID string) bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	_, exists := h.connections[connectionID]
-	return exists
-}
-
-// CloseConnection closes an inbound connection
-func (h *InboundHandler) CloseConnection(connectionID string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if ic, exists := h.connections[connectionID]; exists {
-		close(ic.stopChan)
-		ic.conn.Close()
-		delete(h.connections, connectionID)
-		log.Printf("[InboundHandler] Closed connection for %s", connectionID)
-	}
-}
-
 // GetInboundURL returns the WebSocket URL that ts-store should connect to
 // The dashboardHost is the external address of the dashboard server
 func GetInboundURL(dashboardHost string, connectionID string) string {

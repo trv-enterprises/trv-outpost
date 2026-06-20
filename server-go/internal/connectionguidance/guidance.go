@@ -77,17 +77,6 @@ func suffixOf(typeID string) string {
 	return typeID
 }
 
-// List returns every typeID that has dedicated guidance. Useful for
-// the agent layer to advertise the option set; not for the agent
-// itself to consume.
-func List() []string {
-	out := make([]string, 0, len(guidance))
-	for k := range guidance {
-		out = append(out, k)
-	}
-	return out
-}
-
 const genericFallback = `
 No specific guidance is recorded for this connection type yet.
 Inspect the query_config field on an existing component that uses this type

@@ -128,26 +128,3 @@ func (r *ClientRegistry) GetStats() ConnectionStats {
 		ByType:       byType,
 	}
 }
-
-// GetConnectionsByType returns connections of a specific type
-func (r *ClientRegistry) GetConnectionsByType(connType ConnectionType) []ClientConnectionInfo {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	now := time.Now()
-	var result []ClientConnectionInfo
-
-	for _, conn := range r.connections {
-		if conn.Type == connType {
-			result = append(result, ClientConnectionInfo{
-				ID:           conn.ID,
-				Type:         conn.Type,
-				ConnectedAt:  conn.ConnectedAt,
-				DurationSecs: now.Sub(conn.ConnectedAt).Seconds(),
-				Metadata:     conn.Metadata,
-			})
-		}
-	}
-
-	return result
-}

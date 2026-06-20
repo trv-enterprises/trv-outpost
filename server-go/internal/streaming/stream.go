@@ -52,16 +52,6 @@ type StreamConfig struct {
 	HeartbeatInterval  time.Duration
 }
 
-// DefaultStreamConfig returns default stream configuration
-func DefaultStreamConfig() StreamConfig {
-	return StreamConfig{
-		BufferSize:         100,
-		ReconnectDelay:     time.Second,
-		MaxReconnectDelay:  30 * time.Second,
-		HeartbeatInterval:  30 * time.Second,
-	}
-}
-
 // NewStream creates a new stream for a socket datasource
 func NewStream(connectionID string, config *models.SocketConfig, streamConfig StreamConfig) *Stream {
 	bufferSize := streamConfig.BufferSize

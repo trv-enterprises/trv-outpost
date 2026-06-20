@@ -472,15 +472,3 @@ func chartTypeEnum(cat *registry.Catalog) []string {
 func chartTemplateEnum(_ *registry.Catalog) []string {
 	return []string{"custom"}
 }
-
-// IsComponentUpdateTool returns true if the tool modifies the component
-func IsComponentUpdateTool(toolName string) bool {
-	switch toolName {
-	case ToolUpdateComponentType, ToolUpdateControlConfig,
-		ToolUpdateComponentConfig, ToolUpdateDataMapping, ToolUpdateQueryConfig,
-		ToolUpdateFilters, ToolUpdateAggregation, ToolUpdateSlidingWindow, ToolUpdateTimeBucket, ToolSetCustomCode, ToolUpdateChartOptions:
-		return true
-	default:
-		return false
-	}
-}

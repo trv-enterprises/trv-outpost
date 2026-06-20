@@ -68,11 +68,3 @@ func (r *ChatToolResultRepository) FindByID(ctx context.Context, id string) (*mo
 	}
 	return &result, nil
 }
-
-// DeleteBySession removes every result tied to a session — used when
-// the user clicks "Clear chat" so the storage doesn't outlive the
-// conversation.
-func (r *ChatToolResultRepository) DeleteBySession(ctx context.Context, sessionID string) error {
-	_, err := r.collection.DeleteMany(ctx, bson.M{"session_id": sessionID})
-	return err
-}

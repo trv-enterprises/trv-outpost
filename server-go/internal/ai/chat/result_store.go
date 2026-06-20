@@ -113,16 +113,6 @@ func (s *ResultStore) FetchFull(ctx context.Context, resultID string) (string, e
 	return rec.FullJSON, nil
 }
 
-// ClearSession removes every stored result for the given session.
-// Called from the chat agent's Clear-chat path so storage doesn't
-// outlive the conversation it belonged to.
-func (s *ResultStore) ClearSession(ctx context.Context, sessionID string) error {
-	if s == nil || s.repo == nil {
-		return nil
-	}
-	return s.repo.DeleteBySession(ctx, sessionID)
-}
-
 // SummaryItemCap bounds how many entries we enumerate in a list
 // summary before truncating to a tail count. 50 covers virtually all
 // real deployments (typical user has ~10-30 connections / components,

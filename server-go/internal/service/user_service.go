@@ -145,41 +145,6 @@ func normalizeCapabilitiesNoForceView(in []models.Capability) []models.Capabilit
 	return out
 }
 
-// normalizeCapabilities deduplicates the slice, drops unknown values,
-// and guarantees `view` is present. Used for HUMAN users (CreateUser)
-// where every interactive principal needs view at minimum.
-func normalizeCapabilities(in []models.Capability) []models.Capability {
-	known := map[models.Capability]bool{
-		models.CapabilityView:    true,
-		models.CapabilityDesign:  true,
-		models.CapabilityManage:  true,
-		models.CapabilityWebhook: true,
-	}
-	seen := map[models.Capability]bool{}
-	out := make([]models.Capability, 0, len(in)+1)
-	if !containsCapability(in, models.CapabilityView) {
-		out = append(out, models.CapabilityView)
-		seen[models.CapabilityView] = true
-	}
-	for _, c := range in {
-		if !known[c] || seen[c] {
-			continue
-		}
-		seen[c] = true
-		out = append(out, c)
-	}
-	return out
-}
-
-func containsCapability(haystack []models.Capability, needle models.Capability) bool {
-	for _, c := range haystack {
-		if c == needle {
-			return true
-		}
-	}
-	return false
-}
-
 // ListSystemUsers returns every system principal in the deployment.
 // Returned full record (no redaction) because callers are gated on
 // Manage capability — same posture as ListUsers.

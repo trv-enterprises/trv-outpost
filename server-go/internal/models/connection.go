@@ -926,12 +926,6 @@ var authHeaderNames = map[string]struct{}{
 	"x-access-token":      {},
 }
 
-// maskAuthHeaders is the SanitizeForAPI shape: replaces matching
-// header values with the round-trip sentinel.
-func maskAuthHeaders(headers map[string]string) map[string]string {
-	return maskAuthHeadersWith(headers, SecretMaskedValue)
-}
-
 // maskAuthHeadersWith returns a copy of headers with any header whose
 // name matches authHeaderNames (case-insensitive) replaced with
 // `replacement`. Preserves the original key casing. The two call

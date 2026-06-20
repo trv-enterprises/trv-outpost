@@ -130,13 +130,3 @@ func (r *SnippetRepository) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
-
-// CountGlobalForContext returns the number of global snippets for a
-// given context. Used by the starter-pack migration to decide whether
-// to seed.
-func (r *SnippetRepository) CountGlobalForContext(ctx context.Context, contextKey string) (int64, error) {
-	return r.collection.CountDocuments(ctx, bson.M{
-		"context": contextKey,
-		"scope":   models.SnippetScopeGlobal,
-	})
-}

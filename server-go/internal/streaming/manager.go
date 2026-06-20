@@ -249,18 +249,6 @@ func (m *Manager) SubscribeAndGetChannel(ctx context.Context, connectionID strin
 	return stream.Subscribe(), nil
 }
 
-// Subscribe creates or gets a stream for the datasource and returns a subscriber channel
-func (m *Manager) Subscribe(ctx context.Context, connectionID string) (<-chan models.Record, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	stream, err := m.getOrCreateStream(ctx, connectionID)
-	if err != nil {
-		return nil, err
-	}
-	return stream.Subscribe(), nil
-}
-
 // Unsubscribe removes a subscriber from a stream
 // Note: The caller must pass a bidirectional channel that was returned by Subscribe()
 func (m *Manager) Unsubscribe(connectionID string, ch chan models.Record) {
@@ -273,19 +261,6 @@ func (m *Manager) Unsubscribe(connectionID string, ch chan models.Record) {
 	}
 
 	stream.Unsubscribe(ch)
-}
-
-// GetBuffer returns the buffered records for a datasource
-func (m *Manager) GetBuffer(connectionID string) []models.Record {
-	m.mu.RLock()
-	stream, exists := m.streams[connectionID]
-	m.mu.RUnlock()
-
-	if !exists {
-		return []models.Record{}
-	}
-
-	return stream.GetBuffer()
 }
 
 // GetStreamStatus returns status information for a stream. When no live stream

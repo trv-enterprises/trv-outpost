@@ -132,23 +132,11 @@ func (h *DebugHub) Send(event *DebugEvent) {
 	}
 }
 
-// HasClients returns true if there are connected debug clients
-func (h *DebugHub) HasClients() bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.clients) > 0
-}
-
 // ClientCount returns the number of connected clients
 func (h *DebugHub) ClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
-}
-
-// SetEnabled enables or disables debug broadcasting
-func (h *DebugHub) SetEnabled(enabled bool) {
-	h.enabled = enabled
 }
 
 // Helper functions for sending specific event types

@@ -198,17 +198,6 @@ func NewAgent(sessionSvc SessionService, tools *ToolRegistry, config *Config) (*
 	}, nil
 }
 
-// ResultStore exposes the result store for callers that need to
-// dispatch the get_full_result meta-tool. The result store is a
-// per-Agent dependency; the meta-tool handler retrieves it through
-// this accessor rather than getting a parallel reference.
-func (a *Agent) ResultStore() *ResultStore {
-	if a == nil {
-		return nil
-	}
-	return a.resultStore
-}
-
 // ProcessMessage runs one round of the Dashboard Assistant's
 // message loop: build prompt, call Anthropic, dispatch any tool
 // calls, repeat until the assistant returns plain text or we hit

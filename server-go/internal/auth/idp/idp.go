@@ -91,12 +91,6 @@ func (r *Registry) Resolve(ctx context.Context, c *gin.Context) (*models.User, I
 	return nil, nil, nil
 }
 
-// Providers returns the ordered list. Useful for diagnostic endpoints
-// and tests.
-func (r *Registry) Providers() []IdentityProvider {
-	return r.providers
-}
-
 // ErrCredentialInvalid is the umbrella any provider can return when
 // its credential was present but didn't validate. The bootstrap
 // handler maps this to 401. Each provider should wrap this with

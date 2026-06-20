@@ -35,30 +35,6 @@ func Get(chartType string) (string, bool) {
 	return t, ok
 }
 
-// GetStyled returns the template for a chart type + style variant. With
-// only the "custom" template remaining there are no style variants, so
-// this just delegates to Get; the signature is kept so the MCP and AI
-// tool handlers don't have to change shape. Returns ok=false when the
-// chart type has no template.
-func GetStyled(chartType, style string) (string, bool) {
-	if style != "" {
-		if t, ok := templates[chartType+":"+style]; ok {
-			return t, true
-		}
-	}
-	return Get(chartType)
-}
-
-// List returns the chart types that have templates, in no guaranteed
-// order. Only "custom" today.
-func List() []string {
-	out := make([]string, 0, len(templates))
-	for k := range templates {
-		out = append(out, k)
-	}
-	return out
-}
-
 // templates is the registry of React component skeletons, keyed by
 // chart_type. Only "custom" remains — see the package doc.
 var templates = map[string]string{

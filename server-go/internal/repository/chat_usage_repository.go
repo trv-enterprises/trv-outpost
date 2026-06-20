@@ -88,17 +88,6 @@ func (r *ChatUsageRepository) ListSince(ctx context.Context, sinceUTCDate string
 	return out, nil
 }
 
-// DeleteForUserDay removes a single (user, UTC date) usage row. NOT
-// exposed in the shipped UI — used only by the local dev/test reset
-// path (a one-line Mongo command does the same; this exists for
-// completeness/testing). Returns the number of rows deleted (0 or 1).
-func (r *ChatUsageRepository) DeleteForUserDay(ctx context.Context, userGUID, utcDate string) (int64, error) {
-	res, err := r.collection.DeleteOne(ctx, bson.M{"_id": fmt.Sprintf("%s:%s", userGUID, utcDate)})
-	if err != nil {
-		return 0, err
-	}
-	return res.DeletedCount, nil
-}
 
 // IncrementToday atomically adds the given input/output deltas to
 // today's row, creating it if absent. Called once per successful

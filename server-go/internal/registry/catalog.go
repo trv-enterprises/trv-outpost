@@ -224,13 +224,6 @@ func BuildCatalogWithLayout(ctx context.Context, deviceTypes DeviceTypeLister, l
 	return cat, nil
 }
 
-// BuildUnfilteredCatalog returns the catalog with no filtering applied.
-// Used by the settings editor so admins can see every type, including the
-// ones they previously disabled.
-func BuildUnfilteredCatalog(ctx context.Context, deviceTypes DeviceTypeLister) (*Catalog, error) {
-	return BuildCatalog(ctx, deviceTypes, nil)
-}
-
 // appendSyntheticConnectionTypes adds TypeInfo entries for connection types
 // owned by integrations that aren't already in the adapter registry.
 // Frigate's connection type is the canonical example — it has no Go adapter

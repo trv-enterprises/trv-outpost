@@ -499,8 +499,3 @@ func (s *ComponentService) DeleteComponentDraft(ctx context.Context, id string) 
 
 	return nil
 }
-
-// GetComponentsByConnection retrieves latest version of all components using a specific connection
-func (s *ComponentService) GetComponentsByConnection(ctx context.Context, connectionID string) ([]models.Component, error) {
-	return s.repo.FindByConnectionID(ctx, connectionID)
-}

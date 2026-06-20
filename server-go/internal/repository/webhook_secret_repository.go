@@ -70,26 +70,3 @@ func (r *WebhookSecretRepository) TouchLastUsed(ctx context.Context, id string) 
 	_, err := r.collection.UpdateByID(ctx, id, bson.M{"$set": bson.M{"last_used_at": time.Now().UTC()}})
 	return err
 }
-
-// ListByConnection returns every secret bound to a connection. For
-// the future admin view; not on a hot path.
-func (r *WebhookSecretRepository) ListByConnection(ctx context.Context, connectionID string) ([]*models.WebhookSecret, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"connection_id": connectionID})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-	var out []*models.WebhookSecret
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// Delete removes a secret. Old ts-store rules using its URL start
-// 404'ing on next fire; the user must edit the rule on the tsstore
-// side (or recreate via the dashboard, generating a new secret).
-func (r *WebhookSecretRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
-	return err
-}

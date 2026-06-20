@@ -45,13 +45,6 @@ func NewSnippetService(repo *repository.SnippetRepository) *SnippetService {
 	return &SnippetService{repo: repo}
 }
 
-// Repo exposes the underlying repository so other services (e.g. the
-// starter-pack migration runner) can read counts without going through
-// validation. Keep usage narrow.
-func (s *SnippetService) Repo() *repository.SnippetRepository {
-	return s.repo
-}
-
 // List returns every snippet visible to the caller for the given
 // context, with `can_edit` stamped per row.
 func (s *SnippetService) List(ctx context.Context, caller *models.User, contextKey string) ([]models.SnippetResponse, error) {
