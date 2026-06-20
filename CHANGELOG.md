@@ -6,6 +6,30 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.2] — 2026-06-20
+
+### Fixed
+
+- **List pagination footer** now sits inside the table panel — attached to the
+  bottom of the data table with its right edge aligned to the table, rather than
+  floating full-bleed as a page-level footer. Applies to the Connections, Users,
+  Components, and Dashboards list pages (#112).
+
+### Changed
+
+- **Removed 45 dead Go functions** flagged by `deadcode` and verified
+  unreachable across the whole repo (AI/chat, auth/middleware, registry,
+  streaming, hub, repository/service/models/mcp). Pure removal, no behavior
+  change (#102).
+- **`ConnectionFactory` reduced to a stateless converter** — dropped six unused
+  register/pool/cache methods (and the map + mutex they were the sole users of)
+  that were never adopted; the live path only ever used `CreateFromConfig` /
+  `CreateAdapterFromConfig` (#103).
+- **Deleted 17 orphaned client files (~3,348 lines)** — verified-dead clusters
+  (old AI builder modal, old dashboard/queries pages, component viewer) and
+  standalone orphans (ModeSelector, NodesPage, DeviceEditor,
+  DeviceDiscoveryModal) (#105).
+
 ## [0.33.1] — 2026-06-19
 
 ### Fixed
