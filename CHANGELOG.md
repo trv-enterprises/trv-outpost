@@ -6,6 +6,31 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.1] — 2026-06-19
+
+### Fixed
+
+- **AI / MCP build surface**: `create_component`/`update_component` expose a
+  `title` field over MCP (agents were renaming components to relabel them);
+  the build prompt now mandates filling the canvas and planning the full
+  layout (panel rectangles) before creating; number tiles surface
+  `numberFormat` (duration/compact) so agents stop writing custom code for
+  unit conversions; streaming guidance documents `sliding_window` + KPI
+  shapes; non-default scale (e.g. 4K @ 150%) recomputes the grid from pixel
+  dimensions instead of dividing the floored column count (fixes a one-cell
+  blank strip).
+- **Namespace pill** restored in the design-mode dashboard list/tile — the
+  `include_connections` summary projection was dropping `namespace`
+  (regression vs the view-mode path).
+- **Namespace palette**: dropped Blue (collided with tag pills), added
+  Cool/Warm Gray.
+- **Viewer toolbar**: range picker no longer jumps when Custom opens; the
+  title shrinks/ellipsizes before the right-side controls wrap on narrow
+  screens; full-name tooltip on the title.
+- **Refresh button**: spin acknowledgment on click; no lingering focus ring
+  after a mouse click.
+- **AI Usage page** now scrolls when the user/history list is long.
+
 ## [0.33.0] — 2026-06-18
 
 ### Added
