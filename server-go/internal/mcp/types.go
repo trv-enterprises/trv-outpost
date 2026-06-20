@@ -4,6 +4,8 @@
 
 package mcp
 
+import "encoding/json"
+
 // JSON-RPC 2.0 types for MCP protocol
 
 // JSONRPCRequest represents an incoming JSON-RPC request
@@ -56,6 +58,22 @@ type PropertySchema struct {
 	Description string   `json:"description,omitempty"`
 	Enum        []string `json:"enum,omitempty"`
 	Default     interface{} `json:"default,omitempty"`
+
+	// Raw, when non-nil, is emitted verbatim as this property's JSON schema
+	// instead of the flat fields above. Escape hatch for rich/nested schemas
+	// (e.g. the chart `options` object with its own typed sub-properties) so
+	// the MCP surface can advertise the SAME full schema the chat assistant
+	// uses — without converting all ~40 flat property literals to raw maps.
+	Raw interface{} `json:"-"`
+}
+
+// MarshalJSON emits Raw verbatim when set, else the normal flat schema.
+func (p PropertySchema) MarshalJSON() ([]byte, error) {
+	if p.Raw != nil {
+		return json.Marshal(p.Raw)
+	}
+	type alias PropertySchema // avoid recursion
+	return json.Marshal(alias(p))
 }
 
 // ToolHandler is a function type for handling tool calls
