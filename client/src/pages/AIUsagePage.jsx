@@ -126,6 +126,11 @@ function AIUsagePage() {
 
   return (
     <div className="ai-usage-page">
+      {/* Inner scroll region: the app shell (.app-content > *) pins every page
+          to viewport height + overflow:hidden, so the page itself can't
+          scroll — content must scroll in an inner flex:1/min-height:0 region
+          (same pattern as the other manage list pages). */}
+      <div className="ai-usage-scroll">
       <div className="page-header">
         <h1>AI API Usage</h1>
         <Button kind="ghost" size="sm" renderIcon={Reset} onClick={load}>Refresh</Button>
@@ -231,6 +236,7 @@ function AIUsagePage() {
           <p className="empty">No users found.</p>
         )}
       </div>
+      </div>{/* .ai-usage-scroll */}
 
       {editUser && (
         <Modal

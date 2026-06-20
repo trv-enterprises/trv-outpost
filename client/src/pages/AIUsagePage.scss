@@ -3,8 +3,26 @@
 // See LICENSE file for details.
 
 .ai-usage-page {
-  padding: 1.5rem 2rem;
-  max-width: 1100px;
+  // The app shell pins every page via `.app-content > * { height:100%;
+  // overflow:hidden }` (App.scss), so the page root CAN'T scroll — content
+  // must scroll in an inner region. Be a flex column that fills that pinned
+  // height; the inner .ai-usage-scroll takes the overflow.
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  // Scrollable content region. flex:1 + min-height:0 lets it shrink within
+  // the pinned page height and scroll its own overflow (the pattern the other
+  // manage pages use). Padding/max-width moved here so they apply to the
+  // scrolling content.
+  .ai-usage-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1.5rem 2rem;
+    max-width: 1100px;
+  }
 
   .page-header {
     display: flex;
