@@ -8,6 +8,8 @@ import { IconButton, Button, TextArea, InlineNotification } from '@carbon/react'
 import { Close, Send, Launch } from '@carbon/icons-react';
 import useAssistantSession from '../../hooks/useAssistantSession';
 import useAssistantPreferences from '../../hooks/useAssistantPreferences';
+import { useModeGuard } from '../../context/ModeGuardContext';
+import { MODES } from '../../config/layoutConfig';
 import AssistantMessageList from './AssistantMessageList';
 import AssistantSettingsMenu from './AssistantSettingsMenu';
 import { exportAsMarkdown, exportAsJson, defaultExportBaseName } from './exportConversation';
@@ -53,6 +55,7 @@ export default function AssistantSidecard({
   const session = useAssistantSession();
   const prefs = useAssistantPreferences();
   const navigate = useNavigate();
+  const { runModeGuard } = useModeGuard();
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
 
@@ -70,12 +73,18 @@ export default function AssistantSidecard({
 
   // Open a created dashboard in the Design-mode previewer (read-only viewer
   // reached from the design context — same target the dashboards list uses).
+  // If the user is mid-edit on ANOTHER dashboard, route through the mode guard
+  // first so a dirty editor prompts "Unsaved changes" before we navigate away —
+  // this in-app navigation would otherwise bypass that guard and silently
+  // discard their edits (#117 follow-up).
   const openDashboard = useCallback(
-    (id) => {
+    async (id) => {
       if (!id) return;
+      const { proceed } = await runModeGuard(MODES.VIEW);
+      if (!proceed) return;
       navigate(`/view/dashboards/${id}`, { state: { fromDesign: true } });
     },
-    [navigate]
+    [navigate, runModeGuard]
   );
 
   // Export handlers are passed to the cog menu. Only wire them when

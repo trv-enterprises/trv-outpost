@@ -1388,6 +1388,19 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
     setRefreshTick(t => t + 1);
     setLastRefresh(new Date());
+    // Navigating to a DIFFERENT dashboard (e.g. the Assistant's "Open in
+    // viewer" button while editing another dashboard) must drop out of edit
+    // mode — otherwise the page keeps isEditMode=true and renders the NEW
+    // dashboard through the OLD dashboard's stale editablePanels, showing empty
+    // "Add chart" cells instead of the real panels. View mode reads from
+    // `dashboard` (refetched on id change), so just exiting edit mode is enough;
+    // editable* state re-seeds from the new dashboard if the user edits again.
+    // An incoming autoEdit navigation re-enters edit mode via its own effect.
+    if (!location.state?.autoEdit) {
+      setIsEditMode(false);
+      setEditHasChanges(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Auto-enter edit mode when navigated from design mode (or new dashboard).
