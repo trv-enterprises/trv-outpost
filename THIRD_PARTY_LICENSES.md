@@ -54,3 +54,42 @@ The favicon is the `ChartMultitype` glyph from `@carbon/icons-react`
 exported as a standalone SVG. Carbon icons ship Apache 2.0, the same
 license as this project, so redistribution requires no additional
 notice beyond this acknowledgement.
+
+---
+
+## AG Grid (data grid component)
+
+- **Packages**: `ag-grid-community`, `ag-grid-react` (Community Edition)
+- **Author**: AG Grid Ltd.
+- **Source**: https://github.com/ag-grid/ag-grid
+- **License**: MIT
+
+Used for the dataview component and component data-grid views
+(`client/src/chart-spec/views/DataViewGrid.jsx`,
+`client/src/components/ComponentDataGridModal.jsx`). This project uses the
+**Community Edition** only — no AG Grid Enterprise packages or license key
+are present, so there is no commercial obligation.
+
+```
+MIT License
+
+Copyright (c) 2015-2026 AG GRID LTD
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
