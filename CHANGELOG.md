@@ -6,6 +6,48 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.3] — 2026-06-22
+
+### Fixed
+
+- **Dashboard Assistant chat now survives a browser refresh** — the session ID
+  is persisted and the conversation is rehydrated from the server on load, so a
+  refresh (or accidentally closing the panel) no longer drops the chat. A new
+  "Open in viewer" button (primary above the composer, inline under each
+  `create_dashboard` tool call) jumps straight to a just-built dashboard, and
+  re-clicking it for the dashboard you're already viewing now refetches so an
+  AI component edit appears without a manual refresh (#117).
+- **Editing a dashboard then refreshing** no longer silently discards unsaved
+  changes — the browser's native "Leave site?" prompt now guards a reload while
+  the editor is dirty, and the Assistant's "Open in viewer" routes through the
+  same unsaved-changes confirmation.
+- **Prometheus queries that yield `NaN`/`±Inf`** for any series (e.g. a
+  div-by-zero like `avail / size` over a 0-byte pseudo-filesystem) no longer
+  blank the whole chart. Non-finite values map to `null` (a gap) instead of
+  making the entire result set unserializable (#118).
+- **`refresh_interval` unit corrected** — the AI/MCP `create_dashboard` tools
+  documented the field in milliseconds, but the app uses seconds, so AI-built
+  dashboards polled on the wrong cadence and showed "Data refresh: 30000s". Tool
+  descriptions now say seconds; a migration converts existing millisecond values
+  back to seconds.
+- **MCP `update_component` no longer mis-flagged** by a host's auto-mode
+  approval as a foreign-state mutation — MCP tools now advertise behavior
+  annotations (read-only / non-destructive / idempotent), so a same-session
+  rename isn't blocked (#111).
+- **Removed an invalid React `focusTrap` prop** on the inline component editor
+  modal that produced a console warning (Carbon's basic Modal doesn't support
+  it).
+
+### Changed
+
+- **AI dashboard builder pushes back on over-constrained requests** — when the
+  requested component count can't fit at readable sizes (e.g. "20+ components on
+  a 4K canvas at 150% scale"), the builder now stops and offers options (fewer
+  components, lower scale, larger canvas, split) instead of cramming charts
+  below their minimum sizes. Stale per-type minimum sizes in the build prompt
+  were also corrected.
+- **Recorded AG Grid (Community Edition, MIT)** in `THIRD_PARTY_LICENSES.md`.
+
 ## [0.33.2] — 2026-06-20
 
 ### Fixed
