@@ -1436,6 +1436,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
   }, [location.state]);
 
+  // Honor a refetch signal carried in navigation state (#117 follow-up). The
+  // Assistant's "Open in viewer" button stamps location.state.refetchAt; when
+  // it targets the dashboard already open, the :id is unchanged so neither the
+  // mount fetch nor the id-change effect re-runs — chartsMap keeps the stale
+  // component and an AI edit doesn't mount until a manual reload. Re-running
+  // fetchDashboard pulls the updated component (and its new `updated` stamp,
+  // which bumps the panel key → remount). Tracked by value so it fires once per
+  // distinct press and never on the initial mount (refetchAt is unset then).
+  const lastRefetchAtRef = useRef(null);
+  useEffect(() => {
+    const stamp = location.state?.refetchAt;
+    if (!stamp || stamp === lastRefetchAtRef.current) return;
+    lastRefetchAtRef.current = stamp;
+    fetchDashboard();
+  }, [location.state, fetchDashboard]);
+
   // Check if this dashboard is the user's default
   useEffect(() => {
     const checkIfDefault = async () => {

@@ -77,12 +77,22 @@ export default function AssistantSidecard({
   // first so a dirty editor prompts "Unsaved changes" before we navigate away —
   // this in-app navigation would otherwise bypass that guard and silently
   // discard their edits (#117 follow-up).
+  //
+  // `refetchAt` forces the viewer to reload the dashboard record + its
+  // components on arrival. The common case is the Assistant editing a component
+  // on the dashboard the user is ALREADY viewing: navigating to that same
+  // /view/dashboards/:id is a routing no-op (the :id is unchanged), so without
+  // this signal the viewer keeps the stale component in chartsMap and the edit
+  // doesn't mount until a manual browser refresh. A changing timestamp in
+  // location.state makes the viewer refetch every time the button is pressed.
   const openDashboard = useCallback(
     async (id) => {
       if (!id) return;
       const { proceed } = await runModeGuard(MODES.VIEW);
       if (!proceed) return;
-      navigate(`/view/dashboards/${id}`, { state: { fromDesign: true } });
+      navigate(`/view/dashboards/${id}`, {
+        state: { fromDesign: true, refetchAt: Date.now() },
+      });
     },
     [navigate, runModeGuard]
   );
