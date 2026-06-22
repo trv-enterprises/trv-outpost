@@ -106,12 +106,33 @@ const dashboardBuilderFlow = `# Build flow
    fills the canvas (see step 5's FILL rule): for each row the panel
    widths sum to ` + "`" + `cols` + "`" + `, and the running ` + "`" + `cursorY` + "`" + ` after the last
    row equals ` + "`" + `rows` + "`" + `. This applies to EVERY board, not just large ones.
+   **3a. CAPACITY CHECK — does the requested component count FIT at
+   readable sizes? If not, STOP and ASK; do NOT cram.** A readable chart
+   row needs ~8-10 cells of height (body 7-9 + a 1-2 cell header), so the
+   canvas holds about ` + "`" + `floor(rows / 9)` + "`" + ` chart rows; with the per-row
+   panel count (each ≥ its min WIDTH below) that's an honest ceiling on
+   READABLE panels. Worked example — a 71×38 canvas (4K at 150% scale):
+   ~4 chart rows minus header/KPI rows → about 14-16 readable panels max;
+   a request for "20+ components" EXCEEDS this. **When the requested count
+   or density can't fit without driving panels BELOW their per-type
+   minimum heights (step 3's sizing list), do NOT shrink charts to force
+   the fit — STOP before creating anything and tell the user the request
+   is over-constrained, offering concrete options:** (a) fewer components
+   (name a count that fits), (b) lower the scale (4K at 100% is 106×58 —
+   far more room than 150%'s 71×38), (c) a larger canvas preset, or
+   (d) split across multiple dashboards. Let them choose first.
+   **Readability beats fill** — a board with a little slack and legible
+   charts is correct; one that fills every cell with sub-minimum charts
+   is the defect. Only continue once the count genuinely fits.
    Build for LEGIBILITY by default — readable, sensibly-sized panels —
    rather than maximizing panel count; a clean overview of the key
    signals is the right default. If the user asks for a DENSE board (says
    "dense", "pack it", names a panel count, or asks to cover "every"
-   metric), build more, smaller panels accordingly — but the plan still
-   fills the budget exactly.
+   metric), build more, smaller panels accordingly — but never below the
+   per-type minimum sizes (step 3's floor), and if the requested density
+   can't fit at those minimums, fall back to the capacity check (3a) and
+   ask rather than squashing. Fill the budget by GROWING panels, not by
+   adding sub-minimum ones; a little slack beats a cramped row.
    **Group into sections.** Organize the charts into logical sections
    by subsystem (e.g. "CPU & MEMORY", "DISK & STORAGE", "NETWORK",
    "TEMPERATURES"). Group by what belongs together (meaning), not by
@@ -123,9 +144,16 @@ const dashboardBuilderFlow = `# Build flow
    reads as a wall of charts. Typical shape: a full-width × 2-cell
    text panel above each group of charts (and a full-width title strip
    at the very top).
-   **Panel sizing — editor-enforced minimums (don't author below
-   these; the panel can't render smaller):** gauge 4x3, number 4x2,
-   bar/line/area/pie/scatter 6x4, dataview 8x3.
+   **Panel sizing — editor-enforced minimums are a HARD FLOOR (author
+   AT or ABOVE these; the panel literally cannot render smaller, and
+   filling the budget NEVER justifies going below):** gauge 4x3,
+   number 4x2, bar/line/area/scatter 6x4, pie 12x7, dataview 8x8.
+   Pie and dataview need real height (7 and 8 cells) — a pie or data
+   table jammed into a 3-4 cell row renders squashed and unreadable.
+   Grow panels UP from these floors to fill the canvas; if filling
+   would force any panel below its floor, you have too many components
+   for this canvas — go back to step 3a and reduce the count or change
+   scale/canvas, do NOT squash.
 4. For **each chart component**, do this three-step sequence:
    a. ` + "`" + `create_component` + "`" + ` with component_type=chart, chart_type,
       connection_id, query_config, data_mapping, title. This creates
