@@ -18,9 +18,9 @@ type JSONRPCRequest struct {
 
 // JSONRPCResponse represents an outgoing JSON-RPC response
 type JSONRPCResponse struct {
-	JSONRPC string       `json:"jsonrpc"`
-	ID      interface{}  `json:"id,omitempty"`
-	Result  interface{}  `json:"result,omitempty"`
+	JSONRPC string        `json:"jsonrpc"`
+	ID      interface{}   `json:"id,omitempty"`
+	Result  interface{}   `json:"result,omitempty"`
 	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
@@ -40,9 +40,34 @@ type SSEMessage struct {
 
 // Tool represents an MCP tool definition
 type Tool struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	InputSchema InputSchema `json:"inputSchema"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	InputSchema InputSchema      `json:"inputSchema"`
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
+}
+
+// ToolAnnotations carries the MCP 2025-03-26 behavior hints clients use to
+// classify a tool without inspecting its name or arguments. We advertise
+// these so a host's auto-approval logic can tell read-only and idempotent
+// mutations apart from destructive ones, rather than guessing from the call
+// (which produced the false-positive in issue #111, where an `update_component`
+// rename to the short word "Disk" tripped a value heuristic).
+//
+// All fields are hints, not guarantees, per the spec. Pointers so that an
+// unset hint is omitted from the wire rather than sent as a misleading false.
+type ToolAnnotations struct {
+	// ReadOnlyHint: the tool does not modify its environment.
+	ReadOnlyHint *bool `json:"readOnlyHint,omitempty"`
+	// DestructiveHint: for a non-read-only tool, whether the mutation may be
+	// destructive (data loss). An update that overwrites fields is NOT
+	// destructive; a delete is.
+	DestructiveHint *bool `json:"destructiveHint,omitempty"`
+	// IdempotentHint: for a non-read-only tool, whether repeating the call
+	// with the same arguments has no additional effect.
+	IdempotentHint *bool `json:"idempotentHint,omitempty"`
+	// OpenWorldHint: the tool interacts with external entities beyond this
+	// server (e.g. probing a remote connection / broker).
+	OpenWorldHint *bool `json:"openWorldHint,omitempty"`
 }
 
 // InputSchema represents JSON Schema for tool input
@@ -54,9 +79,9 @@ type InputSchema struct {
 
 // PropertySchema represents a property in JSON Schema
 type PropertySchema struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string      `json:"type"`
+	Description string      `json:"description,omitempty"`
+	Enum        []string    `json:"enum,omitempty"`
 	Default     interface{} `json:"default,omitempty"`
 
 	// Raw, when non-nil, is emitted verbatim as this property's JSON schema
@@ -118,8 +143,8 @@ type PromptArgument struct {
 // useful shape is a single user-role message containing the prompt
 // text. Claude Desktop renders this as system/role framing.
 type PromptMessage struct {
-	Role    string         `json:"role"`
-	Content PromptContent  `json:"content"`
+	Role    string        `json:"role"`
+	Content PromptContent `json:"content"`
 }
 
 // PromptContent wraps the actual prompt text in a typed envelope per

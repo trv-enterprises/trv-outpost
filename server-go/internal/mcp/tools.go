@@ -29,7 +29,7 @@ type ToolRegistry struct {
 
 	connectionService *service.ConnectionService
 	dashboardService  *service.DashboardService
-	componentService      *service.ComponentService
+	componentService  *service.ComponentService
 	deviceTypeService *service.DeviceTypeService
 	settingsService   *service.SettingsService
 	typeFilter        registry.TypeFilter
@@ -61,7 +61,7 @@ func NewToolRegistry(
 		handlers:          make(map[string]ToolHandler),
 		connectionService: connectionSvc,
 		dashboardService:  dashboardSvc,
-		componentService:      chartSvc,
+		componentService:  chartSvc,
 		deviceTypeService: deviceTypeSvc,
 		settingsService:   settingsSvc,
 		typeFilter:        typeFilter,
@@ -97,8 +97,75 @@ func (r *ToolRegistry) CallTool(name string, args map[string]interface{}) (inter
 }
 
 func (r *ToolRegistry) registerTool(tool Tool, handler ToolHandler) {
+	if tool.Annotations == nil {
+		tool.Annotations = annotationsForTool(tool.Name)
+	}
 	r.tools[tool.Name] = tool
 	r.handlers[tool.Name] = handler
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// externalReadTools are read-only tools that reach a configured connection or
+// broker rather than only this server's own catalog/records. They get
+// openWorldHint=true so a host knows the call touches an external system.
+var externalReadTools = map[string]bool{
+	"query_connection":             true,
+	"test_connection":              true,
+	"sample_mqtt_topic":            true,
+	"list_mqtt_topics":             true,
+	"list_edgelake_databases":      true,
+	"list_edgelake_tables":         true,
+	"get_edgelake_table_schema":    true,
+	"get_connection_schema":        true,
+	"list_prometheus_label_values": true,
+}
+
+// annotationsForTool derives MCP behavior hints from a tool's name. The MCP
+// surface follows a strict `verb_noun` convention (get_/list_/create_/update_/
+// delete_), so the verb prefix is a reliable classifier — and deriving the
+// hints here (rather than on each Tool literal) means every current and future
+// tool is annotated consistently with no per-tool boilerplate to forget.
+//
+// The crucial case for issue #111 is update_*: those are non-destructive,
+// idempotent mutations. Advertising idempotentHint=true + destructiveHint=false
+// lets a host's auto-approval logic treat an `update_component` rename as the
+// safe operation it is, instead of falling back to a value heuristic that
+// mis-flagged the rename to the short word "Disk".
+func annotationsForTool(name string) *ToolAnnotations {
+	switch {
+	case strings.HasPrefix(name, "get_"), strings.HasPrefix(name, "list_"),
+		name == "query_connection", name == "test_connection", name == "sample_mqtt_topic":
+		a := &ToolAnnotations{ReadOnlyHint: boolPtr(true)}
+		if externalReadTools[name] {
+			a.OpenWorldHint = boolPtr(true)
+		}
+		return a
+	case strings.HasPrefix(name, "create_"):
+		// Additive: not read-only, not destructive, and not idempotent
+		// (each call makes a new record).
+		return &ToolAnnotations{
+			ReadOnlyHint:    boolPtr(false),
+			DestructiveHint: boolPtr(false),
+			IdempotentHint:  boolPtr(false),
+		}
+	case strings.HasPrefix(name, "update_"):
+		// Overwrites provided fields on an existing record: a mutation, but
+		// not data-destroying, and idempotent for a fixed argument set.
+		return &ToolAnnotations{
+			ReadOnlyHint:    boolPtr(false),
+			DestructiveHint: boolPtr(false),
+			IdempotentHint:  boolPtr(true),
+		}
+	case strings.HasPrefix(name, "delete_"):
+		return &ToolAnnotations{
+			ReadOnlyHint:    boolPtr(false),
+			DestructiveHint: boolPtr(true),
+			IdempotentHint:  boolPtr(true),
+		}
+	default:
+		return nil
+	}
 }
 
 // deviceTypeLister adapts the device type service for the catalog builder.
@@ -522,10 +589,10 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"connection_id":  {Type: "string", Description: "Connection ID"},
-					"metric_prefix":  {Type: "string", Description: "Prometheus only: return only metric names that start with this prefix. Recommended on any Prometheus server exposing more than a few dozen metrics — otherwise the response can bloat your context with hundreds of irrelevant names."},
+					"connection_id":   {Type: "string", Description: "Connection ID"},
+					"metric_prefix":   {Type: "string", Description: "Prometheus only: return only metric names that start with this prefix. Recommended on any Prometheus server exposing more than a few dozen metrics — otherwise the response can bloat your context with hundreds of irrelevant names."},
 					"metric_contains": {Type: "string", Description: "Prometheus only: return only metric names that contain this substring. Takes precedence over metric_prefix if both are given."},
-					"max_metrics":    {Type: "integer", Description: "Prometheus only: cap the number of metric names returned. Default 150. Set a negative value for unlimited."},
+					"max_metrics":     {Type: "integer", Description: "Prometheus only: cap the number of metric names returned. Default 150. Set a negative value for unlimited."},
 				},
 				Required: []string{"connection_id"},
 			},
@@ -818,21 +885,21 @@ func (r *ToolRegistry) registerComponentTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"name":            {Type: "string", Description: "Unique component name (must be unique within the target namespace). This is the INTERNAL identifier — keep it descriptive but it is NOT the on-panel label. Set `title` for the display label."},
-					"title":           {Type: "string", Description: "Human-readable display label shown in the panel header (e.g. \"CPU Utilization\", \"Memory %\"). ALWAYS set this — it's what users see. Use title case, keep under ~40 chars. Do NOT encode the label into `name`; the renderer shows title when set, falling back to name only when title is empty."},
-					"description":     {Type: "string", Description: "Description"},
-					"namespace":       {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
-					"component_type":  {Type: "string", Description: "chart | control | display", Enum: []string{"chart", "control", "display"}},
-					"chart_type":      {Type: "string", Description: "Chart subtype (bar, line, pie, etc) — for chart components"},
-					"connection_id":   {Type: "string", Description: "Connection ID for data binding"},
-					"query_config":    {Type: "object", Description: "Query: {raw, type, params}"},
-					"data_mapping":    {Type: "object", Description: "Data mapping: {x_axis, y_axis, series, group_by, filters, aggregation, ...}. `series` is a SINGLE column name (string): when the result stacks multiple series in one column with a distinguishing label column (e.g. a Prometheus `sum by (mode)` query returns rows with a `mode` column, or any long-format table), set series to that label column to split into one line/bar per value. Omitting it renders all rows as a single merged series. (`group_by` is a separate, client-side grouping field — for multi-series from a label column, use `series`.) For chart_type 'banded_bar' set band_columns: {scheme: \"sd\"|\"minmaxmean\"|\"spc\", and the columns for that scheme — sd: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd; minmaxmean: mean + min/max; spc: target + lower_control/upper_control/lower_limit/upper_limit}. Each row carries its own band values; the center column is required."},
-					"control_config":  {Type: "object", Description: "Control config: {control_type, device_type_id, target, ui_config}"},
-					"display_config":  {Type: "object", Description: "Display config: {display_type, ...display-specific fields}"},
-					"component_code":  {Type: "string", Description: "React component code (for chart_type=custom or use_custom_code=true)"},
-					"use_custom_code": {Type: "boolean", Description: "Render via custom React code instead of ECharts options"},
-					"options":                {Raw: toolops.ChartOptionsSchema()},
-					"tags":                   {Type: "array", Description: "Tags"},
+					"name":                    {Type: "string", Description: "Unique component name (must be unique within the target namespace). This is the INTERNAL identifier — keep it descriptive but it is NOT the on-panel label. Set `title` for the display label."},
+					"title":                   {Type: "string", Description: "Human-readable display label shown in the panel header (e.g. \"CPU Utilization\", \"Memory %\"). ALWAYS set this — it's what users see. Use title case, keep under ~40 chars. Do NOT encode the label into `name`; the renderer shows title when set, falling back to name only when title is empty."},
+					"description":             {Type: "string", Description: "Description"},
+					"namespace":               {Type: "string", Description: "Target namespace. Must equal the runtime context's target namespace; omit to default to \"default\"."},
+					"component_type":          {Type: "string", Description: "chart | control | display", Enum: []string{"chart", "control", "display"}},
+					"chart_type":              {Type: "string", Description: "Chart subtype (bar, line, pie, etc) — for chart components"},
+					"connection_id":           {Type: "string", Description: "Connection ID for data binding"},
+					"query_config":            {Type: "object", Description: "Query: {raw, type, params}"},
+					"data_mapping":            {Type: "object", Description: "Data mapping: {x_axis, y_axis, series, group_by, filters, aggregation, ...}. `series` is a SINGLE column name (string): when the result stacks multiple series in one column with a distinguishing label column (e.g. a Prometheus `sum by (mode)` query returns rows with a `mode` column, or any long-format table), set series to that label column to split into one line/bar per value. Omitting it renders all rows as a single merged series. (`group_by` is a separate, client-side grouping field — for multi-series from a label column, use `series`.) For chart_type 'banded_bar' set band_columns: {scheme: \"sd\"|\"minmaxmean\"|\"spc\", and the columns for that scheme — sd: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd; minmaxmean: mean + min/max; spc: target + lower_control/upper_control/lower_limit/upper_limit}. Each row carries its own band values; the center column is required."},
+					"control_config":          {Type: "object", Description: "Control config: {control_type, device_type_id, target, ui_config}"},
+					"display_config":          {Type: "object", Description: "Display config: {display_type, ...display-specific fields}"},
+					"component_code":          {Type: "string", Description: "React component code (for chart_type=custom or use_custom_code=true)"},
+					"use_custom_code":         {Type: "boolean", Description: "Render via custom React code instead of ECharts options"},
+					"options":                 {Raw: toolops.ChartOptionsSchema()},
+					"tags":                    {Type: "array", Description: "Tags"},
 					"uses_dashboard_variable": {Type: "boolean", Description: "Marks this component as accepting dashboard-variable substitution (the {{dashboard-variable}} token in its query or a filter value)."},
 				},
 				Required: []string{"name"},
@@ -848,15 +915,15 @@ func (r *ToolRegistry) registerComponentTools() {
 				return nil, fmt.Errorf("text_config is not a component field — do NOT create a component for a section header or text label. Text/header panels are created inline on the dashboard: in create_dashboard (or update_dashboard), add a panel with text_config set and component_id left unset")
 			}
 			req := &models.CreateComponentRequest{
-				Name:          getString(args, "name"),
-				Title:         getString(args, "title"),
-				Description:   getString(args, "description"),
-				Namespace:     getString(args, "namespace"),
-				ComponentType: getString(args, "component_type"),
-				ChartType:     getString(args, "chart_type"),
-				ConnectionID:  getString(args, "connection_id"),
-				ComponentCode: getString(args, "component_code"),
-				UseCustomCode: getBool(args, "use_custom_code"),
+				Name:                  getString(args, "name"),
+				Title:                 getString(args, "title"),
+				Description:           getString(args, "description"),
+				Namespace:             getString(args, "namespace"),
+				ComponentType:         getString(args, "component_type"),
+				ChartType:             getString(args, "chart_type"),
+				ConnectionID:          getString(args, "connection_id"),
+				ComponentCode:         getString(args, "component_code"),
+				UseCustomCode:         getBool(args, "use_custom_code"),
 				UsesDashboardVariable: getBool(args, "uses_dashboard_variable"),
 			}
 			// Nested model objects decode field-complete via their json tags
@@ -914,20 +981,20 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
-					"id":              {Type: "string", Description: "Component ID"},
-					"name":            {Type: "string", Description: "New internal name (the identifier, not the on-panel label). To change the displayed label, set `title` instead — do not rename to relabel."},
-					"title":           {Type: "string", Description: "New human-readable display label shown in the panel header (e.g. \"CPU Utilization\"). This — not `name` — is what users see; the renderer shows title when set."},
-					"description":     {Type: "string", Description: "New description"},
-					"chart_type":      {Type: "string", Description: "New chart subtype"},
-					"connection_id":   {Type: "string", Description: "New connection ID"},
-					"query_config":    {Type: "object", Description: "New query config"},
-					"data_mapping":    {Type: "object", Description: "New data mapping. For multiple series from a label column (e.g. a Prometheus `sum by (mode)` result), set `series` to that column name — see create_component's data_mapping description. For chart_type 'banded_bar' include band_columns (see create_component's data_mapping description for the per-scheme keys)."},
-					"control_config":  {Type: "object", Description: "New control config"},
-					"display_config":  {Type: "object", Description: "New display config"},
-					"component_code":  {Type: "string", Description: "New component code. Last-resort field — prefer changing data_mapping / options / chart_type instead. Setting this with use_custom_code=true freezes the chart at this code; subsequent config tool calls won't update the rendering."},
-					"use_custom_code": {Type: "boolean", Description: "New custom-code flag. Setting true is destructive and one-way (per the description above). Only enable when configuration fields can't express the request."},
-					"options":                {Raw: toolops.ChartOptionsSchema()},
-					"tags":                   {Type: "array", Description: "New tags"},
+					"id":                      {Type: "string", Description: "Component ID"},
+					"name":                    {Type: "string", Description: "New internal name (the identifier, not the on-panel label). To change the displayed label, set `title` instead — do not rename to relabel."},
+					"title":                   {Type: "string", Description: "New human-readable display label shown in the panel header (e.g. \"CPU Utilization\"). This — not `name` — is what users see; the renderer shows title when set."},
+					"description":             {Type: "string", Description: "New description"},
+					"chart_type":              {Type: "string", Description: "New chart subtype"},
+					"connection_id":           {Type: "string", Description: "New connection ID"},
+					"query_config":            {Type: "object", Description: "New query config"},
+					"data_mapping":            {Type: "object", Description: "New data mapping. For multiple series from a label column (e.g. a Prometheus `sum by (mode)` result), set `series` to that column name — see create_component's data_mapping description. For chart_type 'banded_bar' include band_columns (see create_component's data_mapping description for the per-scheme keys)."},
+					"control_config":          {Type: "object", Description: "New control config"},
+					"display_config":          {Type: "object", Description: "New display config"},
+					"component_code":          {Type: "string", Description: "New component code. Last-resort field — prefer changing data_mapping / options / chart_type instead. Setting this with use_custom_code=true freezes the chart at this code; subsequent config tool calls won't update the rendering."},
+					"use_custom_code":         {Type: "boolean", Description: "New custom-code flag. Setting true is destructive and one-way (per the description above). Only enable when configuration fields can't express the request."},
+					"options":                 {Raw: toolops.ChartOptionsSchema()},
+					"tags":                    {Type: "array", Description: "New tags"},
 					"uses_dashboard_variable": {Type: "boolean", Description: "Marks this component as accepting dashboard-variable substitution: the {{dashboard-variable}} token may appear in its query (substituted server-side as a bound param) or in a client-side filter value (substituted at view time). Drives the editor's substitution UI hints."},
 				},
 				Required: []string{"id"},
@@ -1059,7 +1126,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 
 	r.registerTool(
 		Tool{
-			Name: "get_component_template",
+			Name:        "get_component_template",
 			Description: "Return the custom-code starting template — a freeform React/ECharts skeleton with Carbon g100 styling, the CARBON_COLORS palette, and the viewer's data helpers (toObjects, getValue, formatTimestamp, formatCellValue — do not import them) already wired. ONLY for hand-written custom code: set use_custom_code=true and pass the filled-in code in update_component's `component_code` field. The canonical chart types (line, bar, area, pie, scatter, gauge, number, dataview, banded_bar) are spec-driven — configure them via create_component / update_component structured fields (chart_type + data_mapping + options); do NOT fetch a template and hand-write code for them. There is exactly one template, 'custom'.",
 			InputSchema: InputSchema{
 				Type: "object",
@@ -1102,7 +1169,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: withListProps(map[string]PropertySchema{
-					"namespace":    {Type: "string", Description: "Filter by namespace"},
+					"namespace":     {Type: "string", Description: "Filter by namespace"},
 					"name":          {Type: "string", Description: "Filter by name (partial match)"},
 					"is_public":     {Type: "boolean", Description: "Filter by public status"},
 					"component_id":  {Type: "string", Description: "Only dashboards that reference this component"},
@@ -1407,19 +1474,19 @@ func componentWriteAck(c *models.Component) map[string]interface{} {
 		return nil
 	}
 	return map[string]interface{}{
-		"id":              c.ID,
-		"version":         c.Version,
-		"status":          c.Status,
-		"component_type":  c.ComponentType,
-		"namespace":       c.Namespace,
-		"name":            c.Name,
-		"title":           c.Title,
-		"chart_type":      c.ChartType,
-		"connection_id":   c.ConnectionID,
-		"use_custom_code": c.UseCustomCode,
+		"id":                    c.ID,
+		"version":               c.Version,
+		"status":                c.Status,
+		"component_type":        c.ComponentType,
+		"namespace":             c.Namespace,
+		"name":                  c.Name,
+		"title":                 c.Title,
+		"chart_type":            c.ChartType,
+		"connection_id":         c.ConnectionID,
+		"use_custom_code":       c.UseCustomCode,
 		"component_code_length": len(c.ComponentCode),
-		"created":         c.Created,
-		"updated":         c.Updated,
+		"created":               c.Created,
+		"updated":               c.Updated,
 	}
 }
 
