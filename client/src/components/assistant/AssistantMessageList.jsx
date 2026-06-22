@@ -3,11 +3,13 @@
 // See LICENSE file for details.
 
 import { useEffect, useRef } from 'react';
-import { InlineLoading } from '@carbon/react';
+import { InlineLoading, Button } from '@carbon/react';
+import { Launch } from '@carbon/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import AssistantToolCallCard from './AssistantToolCallCard';
+import { dashboardFromToolCall } from './createdDashboards';
 import AgentWelcome from '../shared/AgentWelcome';
 import AiIcon from '../icons/AiIcon';
 
@@ -38,6 +40,7 @@ export default function AssistantMessageList({
   streamingContent,
   expandToolCalls = false,
   onSuggestion,
+  onOpenDashboard,
 }) {
   const scrollerRef = useRef(null);
 
@@ -78,6 +81,7 @@ export default function AssistantMessageList({
           key={msg.id || `m-${idx}`}
           message={msg}
           expandToolCalls={expandToolCalls}
+          onOpenDashboard={onOpenDashboard}
         />
       ))}
       {streamingContent && (
@@ -99,20 +103,40 @@ export default function AssistantMessageList({
   );
 }
 
-function AssistantMessage({ message, expandToolCalls }) {
+function AssistantMessage({ message, expandToolCalls, onOpenDashboard }) {
   const isUser = message.role === 'user';
   const hasTools = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
   return (
     <div className={`assistant-message assistant-message--${isUser ? 'user' : 'assistant'}`}>
       {!isUser && hasTools && (
         <div className="assistant-message__tool-calls">
-          {message.tool_calls.map((tc) => (
-            <AssistantToolCallCard
-              key={tc.id}
-              toolCall={tc}
-              defaultOpen={expandToolCalls}
-            />
-          ))}
+          {message.tool_calls.map((tc) => {
+            // A create_dashboard tool call gets an inline "Open in viewer"
+            // button under its card (#117) so the user can jump straight to
+            // what was just built without hunting the list.
+            const createdDashboard = onOpenDashboard ? dashboardFromToolCall(tc) : null;
+            return (
+              <div key={tc.id}>
+                <AssistantToolCallCard
+                  toolCall={tc}
+                  defaultOpen={expandToolCalls}
+                />
+                {createdDashboard && (
+                  <Button
+                    className="assistant-message__open-dashboard"
+                    kind="tertiary"
+                    size="sm"
+                    renderIcon={Launch}
+                    onClick={() => onOpenDashboard(createdDashboard.id)}
+                  >
+                    {createdDashboard.name
+                      ? `Open “${createdDashboard.name}” in viewer`
+                      : 'Open in viewer'}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {message.content && (

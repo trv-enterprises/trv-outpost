@@ -12,6 +12,30 @@ import { useAssistantSurfaceValue } from '../context/AssistantSurfaceContext';
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 3000;
 
+// localStorage key for the active chat session ID (#117). We persist only
+// the ID — the server keeps the full conversation (messages + tool calls)
+// for the session's 24h TTL, so on reload we rehydrate from getAISession
+// rather than mirroring message history into localStorage. Matches the
+// browser-local convention of the other assistant.* keys.
+const SESSION_ID_KEY = 'assistant.session_id';
+
+function readStoredSessionId() {
+  try {
+    return window.localStorage.getItem(SESSION_ID_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSessionId(id) {
+  try {
+    if (id) window.localStorage.setItem(SESSION_ID_KEY, id);
+    else window.localStorage.removeItem(SESSION_ID_KEY);
+  } catch {
+    /* private mode / quota — non-fatal, just lose cross-refresh resume */
+  }
+}
+
 /**
  * useAssistantSession — owns the lifecycle of a single Dashboard
  * Assistant conversation, talking to the server over the existing
@@ -222,6 +246,8 @@ export default function useAssistantSession() {
     if (!id) throw new Error('No session ID returned from server');
     setSessionId(id);
     sessionIdRef.current = id;
+    // Persist the ID so a page refresh can resume this conversation (#117).
+    writeStoredSessionId(id);
     // Open the WS as soon as the session exists so we don't miss
     // any events the agent emits before we'd otherwise be listening.
     openWebSocket();
@@ -268,6 +294,8 @@ export default function useAssistantSession() {
     if (prevId) {
       apiClient.cancelAISession(prevId).catch(() => {});
     }
+    // Drop the persisted ID so the next load starts a fresh conversation (#117).
+    writeStoredSessionId(null);
     setSessionId(null);
     sessionIdRef.current = null;
     setMessages([]);
@@ -277,6 +305,45 @@ export default function useAssistantSession() {
     setWarning(null);
     setTokenUsage(null);
   }, [closeWebSocket]);
+
+  // Resume a persisted session on mount (#117). The hook re-mounts on a
+  // full page refresh with empty in-memory state; if localStorage holds a
+  // session ID, pull the conversation back from the server (which is the
+  // source of truth) and reopen the WS. A missing / expired / cancelled
+  // session just clears the stale key and leaves the welcome screen — the
+  // next message starts fresh. Runs once; guarded so a slow fetch racing a
+  // user-initiated send or clear doesn't clobber newer state.
+  useEffect(() => {
+    const storedId = readStoredSessionId();
+    if (!storedId) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await apiClient.getAISession(storedId);
+        const sess = resp?.session || resp;
+        // If the user already started or cleared a session while this was in
+        // flight, leave it alone.
+        if (cancelled || sessionIdRef.current) return;
+        if (!sess || sess.status !== 'active') {
+          writeStoredSessionId(null);
+          return;
+        }
+        setSessionId(storedId);
+        sessionIdRef.current = storedId;
+        setMessages(Array.isArray(sess.messages) ? sess.messages : []);
+        openWebSocket();
+      } catch {
+        // 404 / network — drop the key and stay on a fresh conversation.
+        if (!cancelled) writeStoredSessionId(null);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // Mount-only: openWebSocket is stable (useCallback), and we explicitly
+    // only want this to run once per hook instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Tear down the WS on unmount so a closed sidecard doesn't leak.
   useEffect(() => () => closeWebSocket(), [closeWebSocket]);

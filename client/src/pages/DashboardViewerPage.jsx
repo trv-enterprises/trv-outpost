@@ -311,6 +311,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setIsEditingDashboard(isEditMode || fromDesign);
     return () => setIsEditingDashboard(false);
   }, [isEditMode, fromDesign, setIsEditingDashboard]);
+
+  // Guard a browser refresh / tab-close / external navigation away while the
+  // editor has unsaved changes. The in-app mode-switch intercept (below) only
+  // catches React-Router navigations; a hard reload bypasses it and silently
+  // drops edits. beforeunload triggers the browser's native "Leave site?"
+  // confirmation — the only hook a page has into a reload. Only armed while
+  // actually dirty in edit mode so it never nags a read-only viewer.
+  useEffect(() => {
+    if (!isEditMode || !editHasChanges) return undefined;
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      // Legacy browsers require returnValue to be set; the prompt text itself
+      // is fixed by the browser and our string is ignored by modern ones.
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isEditMode, editHasChanges]);
+
   const { pushToast, addNotification, notifications, togglePanel: toggleNotificationPanel } = useNotifications();
   const [editSaving, setEditSaving] = useState(false);
   const [editableName, setEditableName] = useState('');

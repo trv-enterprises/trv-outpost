@@ -108,6 +108,16 @@
   gap: spacing.$spacing-04;
 }
 
+// Primary "open the dashboard I just built" button, shown above the composer
+// once the Assistant has created at least one dashboard this conversation (#117).
+// Full-width so it reads as the obvious next step.
+.assistant-sidecard__open-dashboard.cds--btn {
+  width: 100%;
+  max-width: 100%;
+  justify-content: space-between;
+  margin-bottom: spacing.$spacing-03;
+}
+
 .assistant-sidecard__input-row {
   display: flex;
   align-items: flex-end;
@@ -160,6 +170,13 @@
   &__pending {
     padding: spacing.$spacing-03 0;
   }
+}
+
+// Inline "Open in viewer" button rendered under a create_dashboard tool-call
+// card (#117). Sits flush under its card with a little breathing room.
+.assistant-message__open-dashboard.cds--btn {
+  margin-top: spacing.$spacing-02;
+  max-width: 100%;
 }
 
 .assistant-message {

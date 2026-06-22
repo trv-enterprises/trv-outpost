@@ -2,14 +2,16 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { IconButton, Button, TextArea, InlineNotification } from '@carbon/react';
-import { Close, Send } from '@carbon/icons-react';
+import { Close, Send, Launch } from '@carbon/icons-react';
 import useAssistantSession from '../../hooks/useAssistantSession';
 import useAssistantPreferences from '../../hooks/useAssistantPreferences';
 import AssistantMessageList from './AssistantMessageList';
 import AssistantSettingsMenu from './AssistantSettingsMenu';
 import { exportAsMarkdown, exportAsJson, defaultExportBaseName } from './exportConversation';
+import { createdDashboardsFromMessages } from './createdDashboards';
 import ExportNameModal from '../shared/ExportNameModal';
 import './AssistantSidecard.scss';
 
@@ -50,8 +52,31 @@ export default function AssistantSidecard({
 
   const session = useAssistantSession();
   const prefs = useAssistantPreferences();
+  const navigate = useNavigate();
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
+
+  // Dashboards the Assistant created in this conversation, so we can offer
+  // an "Open in viewer" affordance (#117). Derived from create_dashboard
+  // tool-call outputs in the message history — so it stays correct after a
+  // refresh rehydrates the conversation. The last entry is the most recent.
+  const createdDashboards = useMemo(
+    () => createdDashboardsFromMessages(session.messages),
+    [session.messages]
+  );
+  const latestDashboard = createdDashboards.length
+    ? createdDashboards[createdDashboards.length - 1]
+    : null;
+
+  // Open a created dashboard in the Design-mode previewer (read-only viewer
+  // reached from the design context — same target the dashboards list uses).
+  const openDashboard = useCallback(
+    (id) => {
+      if (!id) return;
+      navigate(`/view/dashboards/${id}`, { state: { fromDesign: true } });
+    },
+    [navigate]
+  );
 
   // Export handlers are passed to the cog menu. Only wire them when
   // the conversation has at least one message — the menu reads
@@ -205,10 +230,24 @@ export default function AssistantSidecard({
           streamingContent={session.streamingContent}
           expandToolCalls={prefs.expandToolCalls}
           onSuggestion={setDraft}
+          onOpenDashboard={openDashboard}
         />
       </div>
 
       <footer className="assistant-sidecard__footer">
+        {latestDashboard && (
+          <Button
+            className="assistant-sidecard__open-dashboard"
+            kind="primary"
+            size="sm"
+            renderIcon={Launch}
+            onClick={() => openDashboard(latestDashboard.id)}
+          >
+            {latestDashboard.name
+              ? `Open “${latestDashboard.name}” in viewer`
+              : 'Open new dashboard in viewer'}
+          </Button>
+        )}
         <div className="assistant-sidecard__input-row">
           <TextArea
             ref={inputRef}
