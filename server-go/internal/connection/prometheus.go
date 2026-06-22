@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -404,6 +405,35 @@ func (a *PrometheusAdapter) parseQueryResultRegistry(resp *prometheusResponse, i
 	}, nil
 }
 
+// parsePromValue converts a Prometheus sample value into a JSON-serializable
+// cell. Prometheus encodes values as strings and legitimately returns "NaN",
+// "+Inf", or "-Inf" for valid expressions — e.g. a div-by-zero like
+// `avail / size` when a 0-byte pseudo-filesystem (ramfs credential mount) is in
+// the denominator. Go's encoding/json CANNOT marshal a non-finite float64
+// (json.Marshal returns "unsupported value: NaN"), so letting such a value into
+// a row makes the ENTIRE result set unserializable — the chart shows "no data"
+// and the API response is truncated, even though most rows were fine. Map any
+// non-finite value to nil (JSON null), which charts already render as a gap.
+func parsePromValue(value interface{}) interface{} {
+	var val float64
+	switch v := value.(type) {
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return nil
+		}
+		val = f
+	case float64:
+		val = v
+	default:
+		return nil
+	}
+	if math.IsNaN(val) || math.IsInf(val, 0) {
+		return nil
+	}
+	return val
+}
+
 // buildRowRegistry creates a row
 func (a *PrometheusAdapter) buildRowRegistry(timestamp, value interface{}, metric map[string]string, labelOrder []string) []interface{} {
 	var ts int64
@@ -416,17 +446,9 @@ func (a *PrometheusAdapter) buildRowRegistry(timestamp, value interface{}, metri
 		ts = int64(t)
 	}
 
-	var val float64
-	switch v := value.(type) {
-	case string:
-		val, _ = strconv.ParseFloat(v, 64)
-	case float64:
-		val = v
-	}
-
 	row := make([]interface{}, 2+len(labelOrder))
 	row[0] = ts
-	row[1] = val
+	row[1] = parsePromValue(value)
 
 	for i, labelName := range labelOrder {
 		if labelValue, ok := metric[labelName]; ok {
@@ -883,19 +905,12 @@ func (p *PrometheusDataSource) buildRow(timestamp, value interface{}, metric map
 		ts = int64(t)
 	}
 
-	// Parse value (Prometheus returns string values)
-	var val float64
-	switch v := value.(type) {
-	case string:
-		val, _ = strconv.ParseFloat(v, 64)
-	case float64:
-		val = v
-	}
-
 	// Build row: timestamp, value, labels...
+	// parsePromValue maps NaN/±Inf (valid PromQL div-by-zero results) to nil so
+	// the row stays JSON-serializable.
 	row := make([]interface{}, 2+len(labelOrder))
 	row[0] = ts
-	row[1] = val
+	row[1] = parsePromValue(value)
 
 	for i, labelName := range labelOrder {
 		if labelValue, ok := metric[labelName]; ok {

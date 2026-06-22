@@ -5,11 +5,51 @@
 package connection
 
 import (
+	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
+
+// TestParsePromValue locks in the NaN/±Inf → nil mapping. Prometheus returns
+// "NaN"/"+Inf"/"-Inf" for valid div-by-zero expressions (e.g. avail/size when a
+// 0-byte ramfs mount is in the denominator); a non-finite float64 cannot be
+// JSON-marshaled, so without this mapping ONE such cell makes the whole result
+// set unserializable and the chart shows "no data".
+func TestParsePromValue(t *testing.T) {
+	cases := []struct {
+		name string
+		in   interface{}
+		want interface{}
+	}{
+		{"finite string", "36.93", 36.93},
+		{"zero string", "0", 0.0},
+		{"negative string", "-12.5", -12.5},
+		{"NaN string", "NaN", nil},
+		{"+Inf string", "+Inf", nil},
+		{"-Inf string", "-Inf", nil},
+		{"unparseable string", "abc", nil},
+		{"finite float", 1.5, 1.5},
+		{"NaN float", math.NaN(), nil},
+		{"+Inf float", math.Inf(1), nil},
+		{"-Inf float", math.Inf(-1), nil},
+		{"unexpected type", []int{1}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parsePromValue(tc.in)
+			if got != tc.want {
+				t.Errorf("parsePromValue(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+			// Whatever it returns MUST be JSON-serializable — that's the point.
+			if _, err := json.Marshal(got); err != nil {
+				t.Errorf("parsePromValue(%v) returned unmarshalable %v: %v", tc.in, got, err)
+			}
+		})
+	}
+}
 
 // TestParsePromDuration covers the d/w extension over time.ParseDuration — the
 // fix for "invalid duration: -7d", which made 7d/30d range windows return no
