@@ -301,9 +301,9 @@ the BSON field is ` + "`connection_id`" + ` and the route family is
   anything outside the canonical chart types.
 - **Streaming vs polling**: a chart's ` + "`query_config.type`" + ` decides this.
   ` + "`stream_filter`" + ` subscribes to a live stream (MQTT, ts-store push, etc.)
-  and re-renders on each record. Other types poll at the component's
-  ` + "`refresh_interval`" + ` (milliseconds). Pick stream for true real-time
-  sources, polling for SQL/Prometheus/REST.
+  and re-renders on each record. Other types poll at the dashboard's
+  ` + "`settings.refresh_interval`" + ` (SECONDS, not ms). Pick stream for true
+  real-time sources, polling for SQL/Prometheus/REST.
 
 # Discovery flow (call these AFTER picking a connection)
 

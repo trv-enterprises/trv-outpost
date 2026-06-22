@@ -588,7 +588,7 @@ func dashboardSettingsSchema() map[string]interface{} {
 		"type":        "object",
 		"description": "Dashboard-level settings.",
 		"properties": map[string]interface{}{
-			"refresh_interval": map[string]interface{}{"type": "integer", "description": "Auto-refresh interval in ms (e.g. 5000 = 5s)."},
+			"refresh_interval": map[string]interface{}{"type": "integer", "description": "Auto-refresh interval in SECONDS (e.g. 30 = refresh every 30s; 0 = disabled). NOT milliseconds."},
 			"theme":            map[string]interface{}{"type": "string", "description": "\"light\", \"dark\", or \"auto\"."},
 			"timezone":         map[string]interface{}{"type": "string", "description": "IANA timezone for x-axis timestamp display."},
 			"layout_dimension": map[string]interface{}{

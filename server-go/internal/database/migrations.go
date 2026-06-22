@@ -48,6 +48,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"prefix_restart_required_descriptions_v1", migratePrefixRestartRequiredDescriptions},
 		{"move_dashboard_thumbnails_v1", migrateMoveDashboardThumbnails},
 		{"strip_custom_code_title_div_v1", migrateStripCustomCodeTitleDiv},
+		{"refresh_interval_ms_to_seconds_v1", migrateRefreshIntervalMsToSeconds},
 	}
 
 	coll := db.Collection("migrations")
@@ -1086,5 +1087,42 @@ func migrateStripCustomCodeTitleDiv(ctx context.Context, db *mongo.Database) err
 	}
 
 	log.Printf("  components: stripped in-code title divs from %d custom-code charts (%d referenced config.title in an unrecognized shape — left untouched)", stripped, unchanged)
+	return nil
+}
+
+// migrateRefreshIntervalMsToSeconds corrects dashboards whose
+// settings.refresh_interval was written in MILLISECONDS. The canonical unit is
+// SECONDS (the editor stores seconds, DashboardGrid multiplies by 1000 for the
+// poll timer, and the viewer pill labels the value with "s"), but the AI /
+// MCP create_dashboard tools historically documented and accepted the field in
+// ms (e.g. 30000 for "30s"). Those values were stored verbatim, so an AI-built
+// dashboard polled on the wrong cadence and showed "Data refresh: 30000s" in
+// the pill.
+//
+// Heuristic: any value >= 1000 is treated as ms and divided by 1000. 1000
+// seconds is ~16.7 minutes — implausibly long for a real dashboard refresh, so
+// no legitimate seconds value lands at/above the cutoff, while the AI ms values
+// (5000, 10000, 30000, 60000 → 5/10/30/60s) all convert cleanly. Values below
+// 1000 (including 0 = disabled, and ordinary 30 / 300 = 5min) are left as-is.
+// Integer division floors, which is exact for the multiple-of-1000 ms values.
+func migrateRefreshIntervalMsToSeconds(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("dashboards")
+	res, err := coll.UpdateMany(
+		ctx,
+		bson.M{"settings.refresh_interval": bson.M{"$gte": 1000}},
+		mongo.Pipeline{
+			{{Key: "$set", Value: bson.M{
+				"settings.refresh_interval": bson.M{
+					"$toInt": bson.M{"$floor": bson.M{
+						"$divide": bson.A{"$settings.refresh_interval", 1000},
+					}},
+				},
+			}}},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("convert refresh_interval ms→seconds: %w", err)
+	}
+	log.Printf("  dashboards: converted refresh_interval ms→seconds on %d documents", res.ModifiedCount)
 	return nil
 }
