@@ -738,7 +738,8 @@ function ControlEditor({
                   id="ui-min"
                   label="Minimum"
                   value={uiConfig.min ?? 0}
-                  onChange={(e, { value }) => updateUIConfig('min', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('min', value === '' || value == null ? 0 : value)}
                   min={-1000000}
                   max={1000000}
                 />
@@ -748,7 +749,8 @@ function ControlEditor({
                   id="ui-max"
                   label="Maximum"
                   value={uiConfig.max ?? 100}
-                  onChange={(e, { value }) => updateUIConfig('max', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('max', value === '' || value == null ? 100 : value)}
                   min={-1000000}
                   max={1000000}
                 />
@@ -758,7 +760,8 @@ function ControlEditor({
                   id="ui-step"
                   label="Step"
                   value={uiConfig.step ?? 1}
-                  onChange={(e, { value }) => updateUIConfig('step', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('step', value === '' || value == null ? 1 : value)}
                   min={0.001}
                   max={1000}
                   step={0.001}
@@ -799,7 +802,8 @@ function ControlEditor({
                   id="ui-min"
                   label="Min"
                   value={uiConfig.min ?? 0}
-                  onChange={(e, { value }) => updateUIConfig('min', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('min', value === '' || value == null ? 0 : value)}
                   min={0}
                   max={999}
                   step={1}
@@ -810,7 +814,8 @@ function ControlEditor({
                   id="ui-max"
                   label="Max"
                   value={uiConfig.max ?? 100}
-                  onChange={(e, { value }) => updateUIConfig('max', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('max', value === '' || value == null ? 100 : value)}
                   min={1}
                   max={1000}
                   step={1}
@@ -821,7 +826,8 @@ function ControlEditor({
                   id="ui-step"
                   label="Step"
                   value={uiConfig.step ?? 1}
-                  onChange={(e, { value }) => updateUIConfig('step', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('step', value === '' || value == null ? 1 : value)}
                   min={1}
                   max={100}
                   step={1}
@@ -878,7 +884,8 @@ function ControlEditor({
                   id="ui-min"
                   label="Min"
                   value={uiConfig.min ?? 0}
-                  onChange={(e, { value }) => updateUIConfig('min', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('min', value === '' || value == null ? 0 : value)}
                   min={0}
                   max={999}
                   step={1}
@@ -889,7 +896,8 @@ function ControlEditor({
                   id="ui-max"
                   label="Max"
                   value={uiConfig.max ?? 100}
-                  onChange={(e, { value }) => updateUIConfig('max', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('max', value === '' || value == null ? 100 : value)}
                   min={1}
                   max={1000}
                   step={1}
@@ -900,7 +908,8 @@ function ControlEditor({
                   id="ui-step"
                   label="Step"
                   value={uiConfig.step ?? 1}
-                  onChange={(e, { value }) => updateUIConfig('step', value)}
+                  allowEmpty
+                  onChange={(e, { value }) => updateUIConfig('step', value === '' || value == null ? 1 : value)}
                   min={1}
                   max={100}
                   step={1}

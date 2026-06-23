@@ -848,7 +848,8 @@ const SQLQueryBuilder = ({
                 min={0}
                 max={10000}
                 value={limit}
-                onChange={(e, { value }) => setLimit(value)}
+                allowEmpty
+                onChange={(e, { value }) => setLimit(value === '' || value == null ? 0 : value)}
                 disabled={disabled}
                 className="compact-limit-input"
               />
@@ -858,7 +859,8 @@ const SQLQueryBuilder = ({
                 size="sm"
                 min={0}
                 value={offset}
-                onChange={(e, { value }) => setOffset(value)}
+                allowEmpty
+                onChange={(e, { value }) => setOffset(value === '' || value == null ? 0 : value)}
                 disabled={disabled}
                 className="compact-limit-input"
               />

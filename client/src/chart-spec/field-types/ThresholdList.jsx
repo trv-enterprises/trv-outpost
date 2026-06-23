@@ -67,7 +67,8 @@ export default function ThresholdListField({ field }) {
                 label={i === 0 ? 'Value' : undefined}
                 hideLabel={i !== 0}
                 value={entry.value}
-                onChange={(_e, { value }) => updateEntry(i, { value: Number(value) })}
+                allowEmpty
+                onChange={(_e, { value }) => updateEntry(i, { value: value === '' || value == null ? 0 : Number(value) })}
                 step={1}
                 hideSteppers
               />

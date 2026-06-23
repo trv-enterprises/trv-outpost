@@ -46,6 +46,7 @@ export default function NullableNumberField({ field }) {
             hideLabel
             helperText={field.helperText}
             value={value}
+            allowEmpty
             onChange={(_e, { value: next }) => onFieldChange(field.id, next == null || next === '' ? null : Number(next))}
             min={field.min ?? -1000000}
             max={field.max ?? 1000000}

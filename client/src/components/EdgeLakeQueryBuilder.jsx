@@ -335,7 +335,8 @@ function EdgeLakeQueryBuilder({ connectionId, onQueryChange, onDatabaseChange, o
                 id="edgelake-limit"
                 label="Limit"
                 value={limit}
-                onChange={(e, { value }) => setLimit(value)}
+                allowEmpty
+                onChange={(e, { value }) => setLimit(value === '' || value == null ? 1 : value)}
                 min={1}
                 max={100000}
               />

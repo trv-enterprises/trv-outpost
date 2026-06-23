@@ -3328,7 +3328,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               id="tsstore-limit"
                               label="Number of Records"
                               value={tsstoreLimit}
-                              onChange={(e, { value }) => setTsstoreLimit(value)}
+                              allowEmpty
+                              onChange={(e, { value }) => setTsstoreLimit(value === '' || value == null ? 1 : value)}
                               min={1}
                               max={10000}
                             />
@@ -4268,7 +4269,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               id="aggregation-count"
                               label="Row Count"
                               value={aggregation.count}
-                              onChange={(e, { value }) => updateAggregation('count', value)}
+                              allowEmpty
+                              onChange={(e, { value }) => updateAggregation('count', value === '' || value == null ? 1 : value)}
                               min={1}
                               max={1000}
                             />
@@ -4307,7 +4309,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               id="limit-rows"
                               label="Limit"
                               value={limitRows}
-                              onChange={(e, { value }) => setLimitRows(value)}
+                              allowEmpty
+                              onChange={(e, { value }) => setLimitRows(value === '' || value == null ? 0 : value)}
                               min={0}
                               max={10000}
                               helperText="0 = no limit"
@@ -4549,7 +4552,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               id="time-bucket-interval"
                               label="Bucket Interval (seconds)"
                               value={timeBucketInterval}
-                              onChange={(e, { value }) => setTimeBucketInterval(value)}
+                              allowEmpty
+                              onChange={(e, { value }) => setTimeBucketInterval(value === '' || value == null ? 1 : value)}
                               min={1}
                               max={86400}
                               step={1}

@@ -263,7 +263,8 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
             min={1}
             max={50}
             step={1}
-            onChange={(e, { value }) => updateConfig({ max_thumbnails: value })}
+            allowEmpty
+            onChange={(e, { value }) => updateConfig({ max_thumbnails: value === '' || value == null ? 8 : value })}
             helperText="Maximum number of alert thumbnails to display (1–50)"
           />
 
@@ -274,7 +275,8 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
             min={2000}
             max={60000}
             step={1000}
-            onChange={(e, { value }) => updateConfig({ snapshot_interval: value })}
+            allowEmpty
+            onChange={(e, { value }) => updateConfig({ snapshot_interval: value === '' || value == null ? 10000 : value })}
             helperText="How often to poll Frigate for new alerts"
           />
         </div>
@@ -321,7 +323,8 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
             min={1000}
             max={60000}
             step={1000}
-            onChange={(e, { value }) => updateConfig({ snapshot_interval: value })}
+            allowEmpty
+            onChange={(e, { value }) => updateConfig({ snapshot_interval: value === '' || value == null ? 10000 : value })}
             helperText="How often to refresh the camera snapshot (idle mode)"
           />
         </div>

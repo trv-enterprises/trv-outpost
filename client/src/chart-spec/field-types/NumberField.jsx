@@ -15,7 +15,14 @@ export default function NumberField({ field }) {
       label={field.label}
       helperText={field.helperText}
       value={value}
-      onChange={(_e, { value: next }) => onFieldChange(field.id, next)}
+      // allowEmpty lets the field be cleared while typing — without it Carbon
+      // coerces an empty input to 0 and that 0 stays sticky, so every digit you
+      // type lands behind it ("05", "015", …). Empty commits back to the field
+      // default (or 0) so storage never holds a non-numeric value.
+      allowEmpty
+      onChange={(_e, { value: next }) =>
+        onFieldChange(field.id, next === '' || next == null ? (field.default ?? 0) : next)
+      }
       min={field.min ?? -1000000}
       max={field.max ?? 1000000}
       step={field.step ?? 1}
