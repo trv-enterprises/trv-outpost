@@ -1653,6 +1653,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Thumbnail capture — auto-fires on save (#97); see captureAndPutThumbnail.
   const [downloadingPng, setDownloadingPng] = useState(false);
+  const [creatingThumbnail, setCreatingThumbnail] = useState(false);
 
   // Auto-thumbnail-on-save: a structural signature of everything that
   // affects the rendered thumbnail (panel geometry + which component/text is
@@ -1756,6 +1757,30 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     lastThumbnailSigRef.current = computeThumbnailSignature();
     return true;
   }, [id, computeThumbnailSignature]);
+
+  // Manual thumbnail capture from the overflow menu. The auto-on-save path
+  // can miss a good frame — slow/late streaming data when editing, or an
+  // AI-built dashboard that was never saved out of edit mode — so this lets
+  // the user capture the currently-rendered grid on demand. Unlike the
+  // silent auto path, this surfaces success/failure via a toast and refetches
+  // so the tile thumbnail updates immediately.
+  const createThumbnail = useCallback(async () => {
+    setCreatingThumbnail(true);
+    try {
+      const ok = await captureAndPutThumbnail();
+      if (ok) {
+        pushToast({ kind: 'success', title: 'Thumbnail created', duration: 2000 });
+        fetchDashboard();
+      } else {
+        pushToast({ kind: 'error', title: 'Thumbnail capture failed', subtitle: 'The dashboard grid was not ready to capture.' });
+      }
+    } catch (err) {
+      console.error('Manual thumbnail capture failed:', err);
+      pushToast({ kind: 'error', title: 'Thumbnail capture failed', subtitle: err?.message || 'Unexpected error.' });
+    } finally {
+      setCreatingThumbnail(false);
+    }
+  }, [captureAndPutThumbnail, pushToast, fetchDashboard]);
 
   // Auto-capture after a dashboard save (fire-and-forget). Skips when the
   // structural signature is unchanged since the last thumbnail (non-visual
@@ -3316,6 +3341,17 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   <OverflowMenuItem
                     itemText="Measure screen size…"
                     onClick={measureScreenSize}
+                  />
+                )}
+                {/* Manual thumbnail capture. Auto-on-save covers the common
+                    path, but late streaming data or an AI-built dashboard
+                    that was never saved out of edit mode can leave a stale or
+                    blank tile — this captures the current grid on demand. */}
+                {canDesign && (
+                  <OverflowMenuItem
+                    itemText={creatingThumbnail ? "Creating thumbnail…" : "Create dashboard thumbnail"}
+                    onClick={createThumbnail}
+                    disabled={creatingThumbnail}
                   />
                 )}
                 <OverflowMenuItem
