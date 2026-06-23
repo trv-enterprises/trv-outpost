@@ -6,6 +6,53 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.0] — 2026-06-23
+
+### Added
+
+- **ts-store editor: absolute time-range queries** — the component editor's
+  ts-store query mode gained a "Time range (from–to)" option with From/To
+  datetime pickers, alongside the existing "since duration" mode. Lets a
+  component pull an explicit historical window instead of only a rolling
+  lookback (#90).
+- **Dashboard Assistant can browse EdgeLake** — the chat agent now has the
+  EdgeLake database/table/schema browse tools its own guidance already
+  referenced, so it can discover EdgeLake structure while building components
+  instead of guessing.
+- **Create dashboard thumbnail (manual)** — re-added a "Create dashboard
+  thumbnail" item to the dashboard viewer's overflow menu. Auto-capture on save
+  can miss a good frame (late streaming data while editing, or an AI-built
+  dashboard that was never saved out of edit mode); this captures the
+  currently-rendered grid on demand and updates the tile immediately (#124).
+
+### Fixed
+
+- **Custom range time fields wouldn't accept typed input** — the From/To time
+  pickers in the dashboard header's custom range selector rejected typed
+  characters (the controlled input was gated on a complete `HH:MM` and snapped
+  back mid-typing). They now hold a local draft so you can type freely,
+  committing once the time is complete (#122).
+- **Numeric editor fields showed a sticky leading zero** — clearing and
+  retyping a number in the editor produced `05`, `015`, etc. across the Gauge
+  options, aggregation/sort/limit, control min/max/step, display intervals, and
+  the SQL/EdgeLake query builders. All numeric inputs now allow an empty field
+  and accept clean entry (#123).
+- **Editing a ts-store component required re-running the fetch** to see
+  previously-selected columns — saved column selections now render immediately
+  on edit by seeding the column list from the saved mapping (#121).
+- **AI agents could truncate long responses** — both agent loops now run with a
+  higher output-token ceiling and handle `stop_reason=max_tokens` instead of
+  silently cutting off (#82).
+- **Dashboard-actions overflow menu truncated its labels** — "Measure screen
+  size…" and "Create dashboard thumbnail" were ellipsized and "Default
+  Dashboard" wrapped; the menu now sizes to its content (#124).
+
+### Internal
+
+- **Prompt caching on both AI agent loops** — the system prompt is now marked
+  for ephemeral caching, cutting input-token cost on multi-turn agent sessions
+  (resolves an Anthropic low-cache-utilization alert) (#120).
+
 ## [0.33.3] — 2026-06-22
 
 ### Fixed
