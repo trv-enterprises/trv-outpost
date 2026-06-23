@@ -16,6 +16,17 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
+// componentAgentMaxTokens caps each API call's output. The old 4096 (~16K
+// chars) was too low for this agent's bread-and-butter call: update_component
+// carrying hand-written component_code routinely exceeds it in ONE turn, and
+// the response then comes back with stop_reason=max_tokens and a truncated,
+// invalid tool_use input (issue #82 — same class as the chat agent). Raised to
+// match chat's chatMaxTokens; a turn that still overruns is detected explicitly
+// rather than dispatched. (claude-opus-4-8 supports up to 128K output but that
+// requires the streaming API; this loop is non-streaming, so 16000 is the
+// SDK-recommended ceiling that stays clear of HTTP timeouts.)
+const componentAgentMaxTokens = 16000
+
 // CatalogProvider returns the current type catalog (filtered by enabled_types
 // settings). The agent calls this once per message so admin toggles take
 // effect on the next user turn.
@@ -153,7 +164,7 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		// Build request params
 		params := anthropic.MessageNewParams{
 			Model:     anthropic.Model(a.modelName),
-			MaxTokens: 4096,
+			MaxTokens: componentAgentMaxTokens,
 			System: []anthropic.TextBlockParam{
 				{Text: systemPromptText},
 			},
@@ -195,6 +206,30 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		// If there's text content, stream it
 		if textContent != "" {
 			a.sessionSvc.SendStreamingEvent(session.ID, textContent, len(toolUseBlocks) == 0)
+		}
+
+		// Turn hit the output-token ceiling (issue #82). The assistant turn was
+		// cut off mid-generation, so any tool_use block in it likely carries a
+		// truncated, invalid-JSON input (most often a fat update_component
+		// component_code). Dispatching it would run a malformed call and the
+		// model would never learn it was truncated — stop with an explicit
+		// error instead. Persist the partial turn for the transcript first.
+		if response.StopReason == anthropic.StopReasonMaxTokens {
+			truncatedCalls := make([]models.ToolCall, 0, len(toolUseBlocks))
+			for _, tu := range toolUseBlocks {
+				truncatedCalls = append(truncatedCalls, models.ToolCall{
+					ID:    tu.ID,
+					Name:  tu.Name,
+					Input: string(tu.Input),
+				})
+			}
+			if _, err := a.sessionSvc.AddAssistantMessage(ctx, session.ID, textContent, truncatedCalls); err != nil {
+				return fmt.Errorf("failed to save truncated assistant message: %w", err)
+			}
+			truncErr := fmt.Errorf("the assistant's response was cut off at the %d-token limit, likely while writing a large component. Ask it to simplify the component or build it in smaller steps", componentAgentMaxTokens)
+			debug.SendError(session.ID, turn, truncErr, "max_tokens")
+			a.sessionSvc.SendErrorEvent(session.ID, truncErr, "max_tokens")
+			return truncErr
 		}
 
 		// If no tool calls, we're done

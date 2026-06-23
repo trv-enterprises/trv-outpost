@@ -118,6 +118,18 @@ type CallerCtx struct {
 // only thing standing between a stuck agent and runaway cost.
 const defaultChatMaxTurns = 50
 
+// chatMaxTokens caps each API call's output. The old value of 4096 (~16K
+// chars) was too low for a single fat tool call: a 30-panel create_dashboard
+// panels[] array or a create_component carrying hand-written component_code can
+// exceed it in ONE call, and the response then comes back with
+// stop_reason=max_tokens and a truncated/invalid tool_use input (issue #82).
+// claude-opus-4-8 supports up to 128K output, but values that large require the
+// streaming API to avoid HTTP timeouts; this loop is non-streaming, so 16000
+// (the SDK's recommended non-streaming default) gives a fat call ~4x the
+// headroom while staying well under the timeout ceiling. A turn that still hits
+// the cap is detected explicitly below rather than silently dispatched.
+const chatMaxTokens = 16000
+
 // SessionService is the subset of the existing AISessionService that
 // the chat agent needs. Same interface shape the Component AI agent
 // uses, so we can reuse the same implementation by composition.
@@ -280,7 +292,7 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 
 		params := anthropic.MessageNewParams{
 			Model:     anthropic.Model(a.modelName),
-			MaxTokens: 4096,
+			MaxTokens: chatMaxTokens,
 			System: []anthropic.TextBlockParam{
 				{Text: systemPrompt},
 			},
@@ -324,6 +336,36 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 
 		if textContent != "" {
 			a.sessionSvc.SendStreamingEvent(session.ID, textContent, len(toolUseBlocks) == 0)
+		}
+
+		// Turn hit the output-token ceiling (issue #82). The assistant turn was
+		// cut off mid-generation, so any tool_use block in it likely carries a
+		// truncated, invalid-JSON input — dispatching it would run a malformed
+		// call (or silently drop a half-built panels[] array) and the model
+		// would never learn it was truncated. Stop the turn with an explicit
+		// error instead of guessing. (chatMaxTokens is already generous; a turn
+		// that still overruns it is producing a single tool call too large to
+		// emit in one response — the real fix is a smaller request, e.g. fewer
+		// panels per create_dashboard or spec-driven instead of hand-written
+		// component_code.)
+		if response.StopReason == anthropic.StopReasonMaxTokens {
+			// Persist whatever text/tool-calls did arrive so the transcript
+			// reflects the truncated turn, then surface the error. We do NOT
+			// dispatch the (likely broken) tool calls.
+			truncatedCalls := make([]models.ToolCall, 0, len(toolUseBlocks))
+			for _, tu := range toolUseBlocks {
+				truncatedCalls = append(truncatedCalls, models.ToolCall{
+					ID:    tu.ID,
+					Name:  tu.Name,
+					Input: string(tu.Input),
+				})
+			}
+			if _, err := a.sessionSvc.AddAssistantMessage(ctx, session.ID, textContent, truncatedCalls); err != nil {
+				return fmt.Errorf("save truncated assistant message: %w", err)
+			}
+			truncErr := fmt.Errorf("the assistant's response was cut off at the %d-token limit, likely while building a single large tool call. Ask it to build in smaller steps (e.g. fewer panels per create_dashboard, or split the request)", chatMaxTokens)
+			a.sessionSvc.SendErrorEvent(session.ID, truncErr, "max_tokens")
+			return truncErr
 		}
 
 		// No tool calls → done.
