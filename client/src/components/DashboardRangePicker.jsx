@@ -131,6 +131,18 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
   const fromParts = isoToParts(value?.type === 'absolute' ? value.from : '');
   const toParts = isoToParts(value?.type === 'absolute' ? value.to : '');
 
+  // The TimePicker is a CONTROLLED input gated on a complete HH:MM, but the user
+  // types one character at a time ("0" → "00" → "00:" → "00:0" → "00:00"). If we
+  // drove its value straight from the committed ISO, every incomplete keystroke
+  // would fail partsToIso, leave `value` unchanged, and snap the input back to
+  // the old time — so it reads as "can't type a time". Keep a LOCAL draft so
+  // partial input persists; commit the ISO only when a full HH:MM is entered,
+  // and re-sync the draft when `value` changes externally (preset/date switch).
+  const [fromTimeDraft, setFromTimeDraft] = useState(fromParts.time);
+  const [toTimeDraft, setToTimeDraft] = useState(toParts.time);
+  useEffect(() => { setFromTimeDraft(fromParts.time); }, [fromParts.time]);
+  useEffect(() => { setToTimeDraft(toParts.time); }, [toParts.time]);
+
   const commitCustom = (next) => {
     const fromIso = partsToIso(next.fromDate, next.fromTime);
     const toIso = partsToIso(next.toDate, next.toTime);
@@ -179,10 +191,12 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
               id="range-from-time"
               size="sm"
               labelText=""
-              value={fromParts.time}
-              onChange={(e) =>
-                commitCustom({ fromDate: fromParts.date, fromTime: e.target.value, toDate: toParts.date, toTime: toParts.time })
-              }
+              value={fromTimeDraft}
+              onChange={(e) => {
+                const t = e.target.value;
+                setFromTimeDraft(t); // keep partial input visible while typing
+                commitCustom({ fromDate: fromParts.date, fromTime: t, toDate: toParts.date, toTime: toTimeDraft });
+              }}
             />
           </div>
           <div className="dashboard-range-field">
@@ -204,10 +218,12 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
               id="range-to-time"
               size="sm"
               labelText=""
-              value={toParts.time}
-              onChange={(e) =>
-                commitCustom({ fromDate: fromParts.date, fromTime: fromParts.time, toDate: toParts.date, toTime: e.target.value })
-              }
+              value={toTimeDraft}
+              onChange={(e) => {
+                const t = e.target.value;
+                setToTimeDraft(t); // keep partial input visible while typing
+                commitCustom({ fromDate: fromParts.date, fromTime: fromTimeDraft, toDate: toParts.date, toTime: t });
+              }}
             />
           </div>
         </div>
