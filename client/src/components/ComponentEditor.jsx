@@ -999,6 +999,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
       setVisibleColumns(Array.isArray(loadedVisible) && loadedVisible.length > 0 ? loadedVisible : null);
+
+      // Seed availableColumns from the saved column references so the x/y/series/
+      // group-by/filter dropdowns RENDER THE PREVIOUSLY-SELECTED VALUES on edit
+      // WITHOUT requiring a Fetch Data first. availableColumns otherwise starts
+      // empty on load (it's only populated by a fetch), so a saved selection has
+      // no matching <SelectItem> and shows blank. A later Fetch Data replaces
+      // this seed with the real schema. pruneStaleColumnSelections only runs in
+      // the fetch handler, so it never wipes this seed.
+      const seededCols = [];
+      const addCol = (c) => { if (typeof c === 'string' && c && !seededCols.includes(c)) seededCols.push(c); };
+      addCol(chart.data_mapping?.x_axis);
+      loadedYCols.forEach(addCol);
+      addCol(chart.data_mapping?.group_by);
+      addCol(chart.data_mapping?.series);
+      (chart.data_mapping?.filters || []).forEach((f) => addCol(f?.column));
+      (Array.isArray(loadedVisible) ? loadedVisible : []).forEach(addCol);
+      Object.keys(chart.data_mapping?.column_aliases || {}).forEach(addCol);
+      if (seededCols.length > 0) setAvailableColumns(seededCols);
       // Sliding window initialization
       const sw = chart.data_mapping?.sliding_window;
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
