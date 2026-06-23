@@ -68,6 +68,41 @@ const hasBandCenter = (bandColumns) => {
   const centerKey = getBandScheme(bandColumns.scheme).center.key;
   return Boolean(bandColumns[centerKey]);
 };
+
+// ── ts-store absolute-range (range: DSL) datetime <-> epoch-seconds helpers ──
+// The <input type="datetime-local"> value is a local "YYYY-MM-DDTHH:MM" string;
+// the ts-store range: DSL takes epoch SECONDS. These convert each way.
+const dtLocalToEpochSeconds = (dtLocal) => {
+  if (!dtLocal) return null;
+  const ms = new Date(dtLocal).getTime();
+  return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+};
+const epochSecondsToDtLocal = (epochSec) => {
+  const sec = Number(epochSec);
+  if (!Number.isFinite(sec) || sec <= 0) return '';
+  const d = new Date(sec * 1000);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+// Build the range: DSL string from the two datetime-local inputs, or '' if
+// either bound is missing/invalid (callers fall back to a safe default).
+const buildTsstoreRangeRaw = (fromDtLocal, toDtLocal) => {
+  const start = dtLocalToEpochSeconds(fromDtLocal);
+  const end = dtLocalToEpochSeconds(toDtLocal);
+  if (start == null || end == null) return '';
+  return `range:${start}:${end}`;
+};
+// Assemble the tsstore `raw` DSL string for any query type. Centralizes the
+// since / range / newest|oldest shapes so the save + preview sites agree.
+// 'range' falls back to 'newest' when either bound is missing (never emit a
+// malformed range: — the adapter rejects it).
+const buildTsstoreRaw = (queryType, sinceDuration, rangeFrom, rangeTo) => {
+  if (queryType === 'since') return `since:${sinceDuration}`;
+  if (queryType === 'range') return buildTsstoreRangeRaw(rangeFrom, rangeTo) || 'newest';
+  return queryType; // 'newest' | 'oldest'
+};
+
 import './ComponentEditor.scss';
 
 // Chart types available. Array order is the render order in the
@@ -620,9 +655,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [timeBucketTimestampCol, setTimeBucketTimestampCol] = useState('');
 
   // TSStore query configuration
-  const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest
+  const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest, range
   const [tsstoreLimit, setTsstoreLimit] = useState(100);
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
+  // Absolute from→to window for tsstoreQueryType==='range'. Stored as
+  // datetime-local strings ("YYYY-MM-DDTHH:MM", local time); converted to epoch
+  // SECONDS on save (the ts-store adapter's range: DSL convention — fetchRange
+  // scales seconds→ns server-side) and parsed back from the saved epochs on load.
+  const [tsstoreRangeFrom, setTsstoreRangeFrom] = useState('');
+  const [tsstoreRangeTo, setTsstoreRangeTo] = useState('');
 
   // Prometheus query configuration. The source of truth for query_config.params
   // on a Prometheus component. 'instant' = a single snapshot (current value per
@@ -1024,6 +1065,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         setTsstoreQueryType('since');
         setTsstoreSinceDuration(rawQuery.substring(6));
         setTsstoreLimit(chart.query_config?.params?.limit || 100);
+      } else if (rawQuery.startsWith('range:')) {
+        // range:<startEpochSec>:<endEpochSec> → restore the two datetime pickers.
+        setTsstoreQueryType('range');
+        const m = rawQuery.match(/^range:(\d+):(\d+)$/);
+        if (m) {
+          setTsstoreRangeFrom(epochSecondsToDtLocal(m[1]));
+          setTsstoreRangeTo(epochSecondsToDtLocal(m[2]));
+        }
       } else if (rawQuery === 'newest' || rawQuery === 'oldest') {
         setTsstoreQueryType(rawQuery);
         setTsstoreSinceDuration('1h');
@@ -1140,8 +1189,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       })();
       const loadedQueryType = chart.query_config?.type || 'sql';
       const loadedTsRaw = loadedQueryType === 'tsstore' ? (chart.query_config?.raw || 'newest') : '';
-      const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:') ? 'since' : (loadedTsRaw || 'since');
+      const loadedTsRangeMatch = loadedTsRaw.match(/^range:(\d+):(\d+)$/);
+      const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:')
+        ? 'since'
+        : (loadedTsRangeMatch ? 'range' : (loadedTsRaw || 'since'));
       const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
+      const loadedTsstoreRangeFrom = loadedTsRangeMatch ? epochSecondsToDtLocal(loadedTsRangeMatch[1]) : '';
+      const loadedTsstoreRangeTo = loadedTsRangeMatch ? epochSecondsToDtLocal(loadedTsRangeMatch[2]) : '';
       const loadedTsstoreLimit = chart.query_config?.params?.limit || 100;
       const loadedTsFilter = chart.query_config?.params?.filter;
       const loadedTsstoreFilterSource = loadedTsFilter === DASHBOARD_VARIABLE_TOKEN ? 'variable' : 'literal';
@@ -1178,6 +1232,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryType: loadedQueryType,
         tsstoreQueryType: loadedTsstoreQueryType,
         tsstoreSinceDuration: loadedTsstoreSinceDuration,
+        tsstoreRangeFrom: loadedTsstoreRangeFrom,
+        tsstoreRangeTo: loadedTsstoreRangeTo,
         promQueryType: loadedPromQueryType,
         promTimeRange: loadedPromTimeRange,
         promStep: loadedPromStep,
@@ -1251,6 +1307,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryType: 'sql',
         tsstoreQueryType: 'newest',
         tsstoreSinceDuration: '1h',
+        tsstoreRangeFrom: '',
+        tsstoreRangeTo: '',
         promQueryType: 'range',
         promTimeRange: '1h',
         promStep: '1m',
@@ -1329,6 +1387,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       queryType,
       tsstoreQueryType,
       tsstoreSinceDuration,
+      tsstoreRangeFrom,
+      tsstoreRangeTo,
       tsstoreLimit,
       promQueryType,
       promTimeRange,
@@ -1378,7 +1438,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreLimit, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -1973,6 +2033,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           // For 'since' queries, don't limit - fetch all data in time window
           rawQuery = `since:${tsstoreSinceDuration}`;
           queryParams = {};
+        } else if (tsstoreQueryType === 'range') {
+          // Absolute from→to window. Falls back to 'newest' if either bound is
+          // unset/invalid so we never emit a malformed range: the adapter rejects.
+          rawQuery = buildTsstoreRangeRaw(tsstoreRangeFrom, tsstoreRangeTo) || 'newest';
+          queryParams = {};
         } else {
           // For 'newest' or 'oldest', use the configured limit
           rawQuery = tsstoreQueryType;
@@ -2096,6 +2161,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // For 'since' queries, don't limit - fetch all data in time window
         rawQuery = `since:${tsstoreSinceDuration}`;
         queryParams = { ...tsstoreFilterParams };
+      } else if (tsstoreQueryType === 'range') {
+        // Absolute from→to window (epoch seconds). Falls back to 'newest' if a
+        // bound is missing so a half-filled form never emits a bad range:.
+        rawQuery = buildTsstoreRangeRaw(tsstoreRangeFrom, tsstoreRangeTo) || 'newest';
+        queryParams = { ...tsstoreFilterParams };
       } else {
         // For 'newest' or 'oldest', use the configured limit
         rawQuery = tsstoreQueryType;
@@ -2142,7 +2212,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildPrometheusParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2225,11 +2295,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       connection_id: componentType === 'control' ? (controlConfig?.connection_id || '') : (selectedConnectionId || ''),
       query_config: selectedConnectionId ? {
         raw: selectedDatasource?.type === 'tsstore'
-          ? (tsstoreQueryType === 'since' ? `since:${tsstoreSinceDuration}` : tsstoreQueryType)
+          ? buildTsstoreRaw(tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo)
           : queryRaw,
         type: queryType,
         params: selectedDatasource?.type === 'tsstore'
-          ? { ...(tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit }), ...buildTsstoreFilterParams() }
+          // 'since' and 'range' are time-windowed (no limit); 'newest'/'oldest' use the limit.
+          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' ? {} : { limit: tsstoreLimit }), ...buildTsstoreFilterParams() }
           : selectedDatasource?.type === 'prometheus'
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
@@ -3184,6 +3255,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             <SelectItem value="newest" text="Newest Records" />
                             <SelectItem value="oldest" text="Oldest Records" />
                             <SelectItem value="since" text="Time Range (Last...)" />
+                            <SelectItem value="range" text="Time range (from–to)" />
                           </Select>
                         </div>
                         {tsstoreQueryType === 'since' ? (
@@ -3209,6 +3281,29 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               <SelectItem value="30d" text="Last 30 days" />
                             </Select>
                           </div>
+                        ) : tsstoreQueryType === 'range' ? (
+                          // Absolute from→to window — two native datetime-local inputs.
+                          // Each occupies a half-row col like the since/limit controls.
+                          <>
+                            <div className="tsstore-query-row__col">
+                              <TextInput
+                                id="tsstore-range-from"
+                                labelText="From"
+                                type="datetime-local"
+                                value={tsstoreRangeFrom}
+                                onChange={(e) => setTsstoreRangeFrom(e.target.value)}
+                              />
+                            </div>
+                            <div className="tsstore-query-row__col">
+                              <TextInput
+                                id="tsstore-range-to"
+                                labelText="To"
+                                type="datetime-local"
+                                value={tsstoreRangeTo}
+                                onChange={(e) => setTsstoreRangeTo(e.target.value)}
+                              />
+                            </div>
+                          </>
                         ) : (
                           <div className="tsstore-query-row__col">
                             <NumberInput
@@ -4670,12 +4765,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       connectionId={selectedConnectionId || null}
                       queryConfig={selectedConnectionId ? {
                         raw: selectedDatasource?.type === 'tsstore'
-                          ? (tsstoreQueryType === 'since' ? `since:${tsstoreSinceDuration}` : tsstoreQueryType)
+                          ? buildTsstoreRaw(tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo)
                           : queryRaw,
                         type: queryType,
                         params: selectedDatasource?.type === 'tsstore'
                           ? {
-                              ...(tsstoreQueryType === 'since' ? {} : { limit: tsstoreLimit }),
+                              ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' ? {} : { limit: tsstoreLimit }),
                               ...buildTsstoreFilterParams(),
                               // Resolve the filter token for the custom-code preview.
                               ...(tsstoreFilterUsesVariable ? { dashboard_variable: previewVariableValue } : {}),
