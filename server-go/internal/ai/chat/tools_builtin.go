@@ -92,6 +92,57 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapGetConnectionSchema(ops),
 	})
 
+	// Tier B: EdgeLake catalog browse. EdgeLake doesn't support generic
+	// schema discovery (get_connection_schema returns success-with-error for
+	// it); its guidance tells the agent to drill down database → table →
+	// column with these three tools instead. They were MCP-only before, so the
+	// chat Assistant read guidance pointing at tools it couldn't call and
+	// failed "what EdgeLake databases do I have" — now it can enumerate them.
+	reg.Register(Tool{
+		Name:        "list_edgelake_databases",
+		Description: "List the databases available on an EdgeLake connection. The first hop for EdgeLake — call this to answer \"what data is on this connection\" before list_edgelake_tables.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"connection_id": map[string]interface{}{"type": "string", "description": "EdgeLake connection ID"},
+			},
+			"required": []string{"connection_id"},
+		},
+		Handler: wrapListEdgeLakeDatabases(ops),
+	})
+
+	reg.Register(Tool{
+		Name:        "list_edgelake_tables",
+		Description: "List the tables in an EdgeLake database (the second hop after list_edgelake_databases). EdgeLake routes every query by database, so you need a database name first.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"connection_id": map[string]interface{}{"type": "string", "description": "EdgeLake connection ID"},
+				"database":      map[string]interface{}{"type": "string", "description": "Database name (from list_edgelake_databases)"},
+			},
+			"required": []string{"connection_id", "database"},
+		},
+		Handler: wrapListEdgeLakeTables(ops),
+	})
+
+	reg.Register(Tool{
+		Name:        "get_edgelake_table_schema",
+		Description: "Get column information for an EdgeLake table (the leaf of database → table → column). Use the columns to build a query_config before calling query_connection.",
+		Tier:        TierB,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"connection_id": map[string]interface{}{"type": "string", "description": "EdgeLake connection ID"},
+				"database":      map[string]interface{}{"type": "string", "description": "Database name"},
+				"table":         map[string]interface{}{"type": "string", "description": "Table name (from list_edgelake_tables)"},
+			},
+			"required": []string{"connection_id", "database", "table"},
+		},
+		Handler: wrapGetEdgeLakeTableSchema(ops),
+	})
+
 	// Tier B: type-shopping. Use when no specific connection is
 	// selected yet — e.g. "what would a Postgres connection look
 	// like before I create one." For the more common
@@ -751,6 +802,48 @@ func wrapGetConnectionSchema(ops *toolops.Toolset) ToolHandler {
 			return "", fmt.Errorf("invalid args: %w", err)
 		}
 		out, err := ops.GetConnectionSchema(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapListEdgeLakeDatabases(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.ListEdgeLakeDatabasesInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.ListEdgeLakeDatabases(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapListEdgeLakeTables(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.ListEdgeLakeTablesInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.ListEdgeLakeTables(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapGetEdgeLakeTableSchema(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.GetEdgeLakeTableSchemaInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.GetEdgeLakeTableSchema(ctx, in)
 		if err != nil {
 			return "", err
 		}

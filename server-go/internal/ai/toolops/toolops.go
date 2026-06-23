@@ -290,6 +290,86 @@ func (t *Toolset) GetConnectionSchema(ctx context.Context, in GetConnectionSchem
 	return out, nil
 }
 
+// ─── EdgeLake browse helpers ──────────────────────────────────────
+//
+// EdgeLake doesn't support generic schema discovery (GetConnectionSchema
+// returns success-with-error for it); instead its guidance points callers at
+// this database → table → column drill-down. These were MCP-only; lifting them
+// into toolops lets the chat Assistant enumerate EdgeLake catalogs too, so the
+// guidance it reads references tools it can actually call (the "two agents
+// converge on shared functions" direction).
+
+// ListEdgeLakeDatabasesInput selects the EdgeLake connection.
+type ListEdgeLakeDatabasesInput struct {
+	ConnectionID string `json:"connection_id"`
+}
+
+// ListEdgeLakeDatabases returns the database names available on an EdgeLake
+// connection (the first hop when answering "what data is here").
+func (t *Toolset) ListEdgeLakeDatabases(ctx context.Context, in ListEdgeLakeDatabasesInput) (map[string]interface{}, error) {
+	if t.Connections == nil {
+		return nil, fmt.Errorf("connection service not wired")
+	}
+	if in.ConnectionID == "" {
+		return nil, fmt.Errorf("connection_id is required")
+	}
+	dbs, err := t.Connections.GetEdgeLakeDatabases(ctx, in.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"databases": dbs, "count": len(dbs)}, nil
+}
+
+// ListEdgeLakeTablesInput selects the connection + database to enumerate.
+type ListEdgeLakeTablesInput struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database"`
+}
+
+// ListEdgeLakeTables returns the table names in an EdgeLake database.
+func (t *Toolset) ListEdgeLakeTables(ctx context.Context, in ListEdgeLakeTablesInput) (map[string]interface{}, error) {
+	if t.Connections == nil {
+		return nil, fmt.Errorf("connection service not wired")
+	}
+	if in.ConnectionID == "" {
+		return nil, fmt.Errorf("connection_id is required")
+	}
+	if in.Database == "" {
+		return nil, fmt.Errorf("database is required")
+	}
+	tables, err := t.Connections.GetEdgeLakeTables(ctx, in.ConnectionID, in.Database)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"tables": tables, "count": len(tables)}, nil
+}
+
+// GetEdgeLakeTableSchemaInput selects the connection + database + table.
+type GetEdgeLakeTableSchemaInput struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database"`
+	Table        string `json:"table"`
+}
+
+// GetEdgeLakeTableSchema returns column info for an EdgeLake table — the leaf of
+// the database → table → column drill-down, used to build query_config.
+func (t *Toolset) GetEdgeLakeTableSchema(ctx context.Context, in GetEdgeLakeTableSchemaInput) (map[string]interface{}, error) {
+	if t.Connections == nil {
+		return nil, fmt.Errorf("connection service not wired")
+	}
+	if in.ConnectionID == "" {
+		return nil, fmt.Errorf("connection_id is required")
+	}
+	if in.Database == "" || in.Table == "" {
+		return nil, fmt.Errorf("database and table are required")
+	}
+	cols, err := t.Connections.GetEdgeLakeSchema(ctx, in.ConnectionID, in.Database, in.Table)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"columns": cols, "count": len(cols)}, nil
+}
+
 // GetConnectionTypeGuidanceInput selects a type id directly. Used
 // by callers that haven't picked a specific connection yet but want
 // to learn the query-config conventions for a type they're
