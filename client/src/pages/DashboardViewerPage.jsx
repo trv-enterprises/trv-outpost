@@ -3316,6 +3316,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 // Dashboard-settings gear's reasoning.)
                 align="bottom-end"
                 iconDescription="Dashboard actions"
+                // Carbon caps option width at a fixed 13rem and ellipsizes
+                // longer labels ("Measure screen s…", "Create dashboard…").
+                // Widen JUST this menu so its full item text shows.
+                menuOptionsClass="dashboard-actions-menu"
               >
                 {/* No "Edit" item here in view mode: it's redundant with the
                     Design mode switch (which opens this dashboard in the editor)

@@ -1126,3 +1126,21 @@
     cursor: help;
   }
 }
+
+// Dashboard-actions overflow menu: Carbon fixes option width at 13rem and
+// ellipsizes longer labels ("Measure screen s…", "Create dashboard…").
+// Let this one menu size to its widest label. Global scope because the menu
+// portals to document.body (see the .fit-mode-item comment above).
+.dashboard-actions-menu.cds--overflow-menu-options {
+  inline-size: max-content;
+  min-inline-size: 13rem; // keep Carbon's default as the floor
+  max-inline-size: 22rem; // guard against a runaway-long label
+
+  // Carbon ellipsizes the label on __option-content (not __btn). Let the
+  // content size to its text so the container's max-content width can fit it.
+  .cds--overflow-menu-options__option-content {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+}
