@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -161,12 +162,19 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 		// Debug: Log LLM request
 		debug.SendLLMRequest(session.ID, turn, summarizeAnthropicMessages(messages), summarizeAnthropicTools(tools))
 
-		// Build request params
+		// Build request params. Prompt caching (render order tools → system →
+		// messages): CacheControl on the system block caches tools + system —
+		// both are built once before the loop and are byte-stable across every
+		// turn (this agent has no mid-conversation tool reveal, so the prefix
+		// never invalidates). Top-level CacheControl auto-places a second
+		// breakpoint on the growing conversation tail. Cache reads cost ~0.1x
+		// input; 5-minute ephemeral TTL covers the seconds-apart turn loop.
 		params := anthropic.MessageNewParams{
-			Model:     anthropic.Model(a.modelName),
-			MaxTokens: componentAgentMaxTokens,
+			Model:        anthropic.Model(a.modelName),
+			MaxTokens:    componentAgentMaxTokens,
+			CacheControl: anthropic.NewCacheControlEphemeralParam(),
 			System: []anthropic.TextBlockParam{
-				{Text: systemPromptText},
+				{Text: systemPromptText, CacheControl: anthropic.NewCacheControlEphemeralParam()},
 			},
 			Messages: messages,
 			Tools:    tools,
@@ -186,6 +194,12 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			a.sessionSvc.SendErrorEvent(session.ID, err, "api_error")
 			return fmt.Errorf("Anthropic API error: %w", err)
 		}
+
+		// Prompt-cache verification (issue #120 / Anthropic low-cache alert).
+		// cache_read_input_tokens > 0 confirms the system+tools prefix is reused.
+		log.Printf("component-agent usage: input=%d cache_read=%d cache_creation=%d output=%d",
+			response.Usage.InputTokens, response.Usage.CacheReadInputTokens,
+			response.Usage.CacheCreationInputTokens, response.Usage.OutputTokens)
 
 		// Process the response
 		textContent := ""

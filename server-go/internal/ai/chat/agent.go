@@ -30,6 +30,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -290,11 +291,24 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			}
 		}
 
+		// Prompt caching (render order is tools → system → messages):
+		//   - CacheControl on the system block caches tools + system together —
+		//     both are byte-stable across turns within a conversation (the
+		//     system prompt is built once before the loop, and the tool slice is
+		//     deterministic). This is the large, repeated prefix; caching it is
+		//     the main win. NOTE: revealing a Tier-B tool via describe_tool
+		//     appends to the tool list, which invalidates this prefix for that
+		//     one turn — unavoidable and infrequent.
+		//   - Top-level CacheControl auto-places a second breakpoint on the last
+		//     cacheable block of the growing conversation, so each turn reuses
+		//     the prior turns' prefix. Cache reads cost ~0.1x input; the 5-minute
+		//     ephemeral TTL comfortably covers the seconds-apart turns in a loop.
 		params := anthropic.MessageNewParams{
-			Model:     anthropic.Model(a.modelName),
-			MaxTokens: chatMaxTokens,
+			Model:        anthropic.Model(a.modelName),
+			MaxTokens:    chatMaxTokens,
+			CacheControl: anthropic.NewCacheControlEphemeralParam(),
 			System: []anthropic.TextBlockParam{
-				{Text: systemPrompt},
+				{Text: systemPrompt, CacheControl: anthropic.NewCacheControlEphemeralParam()},
 			},
 			Messages: messages,
 			Tools:    anthropicTools,
@@ -305,6 +319,14 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 			a.sessionSvc.SendErrorEvent(session.ID, err, "api_error")
 			return fmt.Errorf("Anthropic API error: %w", err)
 		}
+
+		// Prompt-cache verification (issue #120 / Anthropic low-cache alert).
+		// cache_read_input_tokens > 0 confirms the system+tools prefix is being
+		// reused; if it stays 0 across turns, a silent invalidator is at work.
+		// One line per API call — AI turns are seconds apart, not a hot path.
+		log.Printf("chat-agent usage: input=%d cache_read=%d cache_creation=%d output=%d",
+			response.Usage.InputTokens, response.Usage.CacheReadInputTokens,
+			response.Usage.CacheCreationInputTokens, response.Usage.OutputTokens)
 
 		// Record exact token usage from the response so the
 		// per-user daily budget converges on truth, not heuristics.
