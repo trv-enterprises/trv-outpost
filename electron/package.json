@@ -1,6 +1,6 @@
 {
   "name": "trve-dashboards",
-  "version": "0.33.1",
+  "version": "0.34.0",
   "description": "TRV Outpost Desktop Client",
   "main": "main.js",
   "author": "TRV Enterprises LLC",
@@ -47,7 +47,9 @@
       {
         "from": "../client/dist",
         "to": "app",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {
@@ -55,7 +57,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "icon": "resources/icon.icns",
