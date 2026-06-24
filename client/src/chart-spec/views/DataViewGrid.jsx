@@ -178,8 +178,16 @@ export default function DataViewGrid({
 
   // Persist user layout changes (resize + reorder) to app_config.
   // Debounced via the saver itself in useDataviewLayout.
+  //
+  // ONLY persist a genuine user drag (source 'uiColumnResized'). AG Grid also
+  // fires columnResized for programmatic width changes — applying our author
+  // `def.width` from columnDefs comes through as source 'api'/'flex'/'autosize'.
+  // Without this guard, the author width gets written into the per-user widths
+  // store, which is a columnDefs dep, so the grid re-derives → re-applies →
+  // fires again: a width-jitter feedback loop in view mode.
   const handleColumnResized = (event) => {
     if (!event.finished || !event.column || !chartId) return;
+    if (event.source !== 'uiColumnResized') return;
     saveLayout((prev) => {
       const widths = { ...(prev?.widths || {}) };
       widths[event.column.getColId()] = event.column.getActualWidth();
