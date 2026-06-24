@@ -31,6 +31,12 @@ export default function ComponentExpandModal({
   lastRefresh,
   formatTime,
   dashboardCommand,
+  // Active dashboard-variable / range values — MUST be threaded into the
+  // loader so the expanded chart's query substitutes the same variable the
+  // inline panel uses. Without these the query runs with dashboard_variable=""
+  // and the server rejects it ("dashboard variable not set").
+  dashboardVariableValue = null,
+  rangeValue = null,
 }) {
   if (!chart) return null;
 
@@ -77,6 +83,8 @@ export default function ComponentExpandModal({
               dataMapping: chart.data_mapping,
               connectionId: chart.connection_id,
               queryConfig: chart.query_config,
+              dashboardVariableValue,
+              rangeValue,
               dataRefreshInterval: refreshInterval ? refreshInterval * 1000 : null,
             }}
           />

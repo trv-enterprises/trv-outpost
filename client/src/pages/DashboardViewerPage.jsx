@@ -3517,6 +3517,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             lastRefresh={lastRefresh}
             formatTime={formatTime}
             dashboardCommand={dashboardCommand}
+            // Same active variable/range the inline grid uses, so the expanded
+            // chart substitutes the dashboard variable instead of running with
+            // dashboard_variable="" (server rejects: "dashboard variable not set").
+            dashboardVariableValue={dashFilterValue}
+            rangeValue={dashRangeValue}
           />
         );
       })()}
