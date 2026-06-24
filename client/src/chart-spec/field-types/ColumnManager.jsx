@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { Button, Checkbox, IconButton, TextInput } from '@carbon/react';
+import { Button, Checkbox, IconButton, NumberInput, TextInput } from '@carbon/react';
 import { CaretUp, CaretDown } from '@carbon/icons-react';
 import { useSpecRenderContext } from '../SpecContext';
 
@@ -31,6 +31,9 @@ export default function ColumnManager() {
   const { availableColumns, formState, onFieldChange } = useSpecRenderContext();
   const visibleColumns = formState.visible_columns ?? null;
   const columnAliases = formState.column_aliases || {};
+  // Author-set per-column pixel widths ({ col → px }). Blank = auto. These are
+  // the chart default; a viewer's live drag-resize still overrides per-user.
+  const columnWidths = formState.column_widths || {};
 
   if (!availableColumns || availableColumns.length === 0) {
     return (
@@ -45,6 +48,7 @@ export default function ColumnManager() {
 
   const setVisible = (next) => onFieldChange('visible_columns', next);
   const setAliases = (next) => onFieldChange('column_aliases', next);
+  const setWidths = (next) => onFieldChange('column_widths', next);
 
   const toggleVisible = (col) => {
     if (isVisible(col)) {
@@ -82,6 +86,15 @@ export default function ColumnManager() {
     setAliases(updated);
   };
 
+  const setWidth = (col, raw) => {
+    const updated = { ...columnWidths };
+    const n = Number(raw);
+    // Blank / 0 / non-numeric = auto: drop the key rather than store 0.
+    if (raw === '' || raw == null || !Number.isFinite(n) || n <= 0) delete updated[col];
+    else updated[col] = n;
+    setWidths(updated);
+  };
+
   const renderRow = (col, opts) => (
     <div key={col} className="alias-row">
       {/* First quarter: checkbox anchored left, reorder arrows centered
@@ -113,6 +126,22 @@ export default function ColumnManager() {
         size="sm"
         disabled={!isVisible(col)}
       />
+      <NumberInput
+        id={`width-${col}`}
+        label=""
+        hideLabel
+        className="column-width-input"
+        placeholder="auto"
+        value={columnWidths[col] ?? ''}
+        allowEmpty
+        min={1}
+        max={2000}
+        step={10}
+        hideSteppers
+        onChange={(_e, { value }) => setWidth(col, value)}
+        size="sm"
+        disabled={!isVisible(col)}
+      />
     </div>
   );
 
@@ -125,7 +154,7 @@ export default function ColumnManager() {
         </Button>
       </div>
       <p className="aliases-hint">
-        Check to include the column. Use the ↕ arrows to reorder and set an optional display name. Column widths auto-size to fit the data; drag the header in the live table to override.
+        Check to include the column. Use the ↕ arrows to reorder, set an optional display name, and set a fixed pixel width (blank = auto-size to fit). A viewer can still drag the header in the live table to override the width for their own session.
       </p>
       <div className="aliases-grid">
         {visibleList.map((col, i) => renderRow(col, {

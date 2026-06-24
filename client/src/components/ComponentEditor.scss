@@ -975,8 +975,9 @@
           // instead of spreading the cells apart — keeps the arrows tight
           // to the name (no big gap).
           .alias-row {
+            // [checkbox ↕] auto · name ~1/4 · rename ~1/4 · width (px) fixed.
             display: grid;
-            grid-template-columns: auto minmax(0, 14rem) minmax(0, 14rem);
+            grid-template-columns: auto minmax(0, 12rem) minmax(0, 12rem) 5rem;
             justify-content: start;
             align-items: center;
             gap: spacing.$spacing-03;
@@ -1027,6 +1028,21 @@
 
             .cds--text-input {
               background-color: transparent;
+            }
+
+            // Per-column width (px). Compact NumberInput in the last cell;
+            // transparent like the alias input so the row reads uniform.
+            .column-width-input {
+              min-width: 0;
+
+              .cds--number__input-wrapper {
+                min-width: 0;
+              }
+
+              .cds--text-input,
+              input {
+                background-color: transparent;
+              }
             }
           }
         }

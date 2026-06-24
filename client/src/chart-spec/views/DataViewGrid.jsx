@@ -26,6 +26,7 @@ import { formatCellValue } from '../../utils/dataTransforms';
  *
  * @param {object}        props
  * @param {object}        props.columnAliases       { col → display name }
+ * @param {object}        props.columnWidths        { col → px } author-set default widths
  * @param {string[]|null} props.visibleColumnsConfig ordered whitelist, or null = show all
  * @param {string}        props.xAxisFormat         timestamp format for time columns
  * @param {object}        props.config              saved config (id, title)
@@ -33,6 +34,7 @@ import { formatCellValue } from '../../utils/dataTransforms';
  */
 export default function DataViewGrid({
   columnAliases = {},
+  columnWidths = {},
   visibleColumnsConfig = null,
   xAxisFormat = 'short',
   config,
@@ -68,6 +70,12 @@ export default function DataViewGrid({
   })();
 
   const columnsKey = orderedColumns.join('|');
+  // Stable signature of the author width map so columnDefs re-derive when the
+  // editor changes a width (object identity alone wouldn't be a safe dep).
+  const columnWidthsKey = Object.entries(columnWidths || {})
+    .map(([c, w]) => `${c}:${w}`)
+    .sort()
+    .join('|');
   // Row objects derived from the latest snapshot. Stable __id (content
   // hash + index) so AG Grid's filter, sort, menu state, and scroll
   // position survive streaming buffer slices.
@@ -119,9 +127,11 @@ export default function DataViewGrid({
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
-      // User-override widths (set by live drag-resize, persisted via
-      // useDataviewLayout) take precedence over the grid's autosize.
+      // Width precedence: a viewer's live drag-resize (per-user, via
+      // useDataviewLayout) wins; else the author-set config width; else the
+      // grid's content autosize.
       const userWidth = userLayout?.widths?.[col];
+      const authorWidth = Number(columnWidths?.[col]);
       // AG Grid's field prop treats dots as nested-path navigation
       // (data['cpu']['pct']), which silently empties columns whose names
       // literally contain dots (e.g. ts-store flat keys like 'cpu.pct').
@@ -147,11 +157,14 @@ export default function DataViewGrid({
       if (userWidth && userWidth > 0) {
         def.width = userWidth;
         def.flex = 0;
+      } else if (Number.isFinite(authorWidth) && authorWidth > 0) {
+        def.width = authorWidth;
+        def.flex = 0;
       }
       return def;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout]);
+  }, [columnsKey, userLayout, columnWidthsKey]);
 
   // No default flex — columns size to their content via the grid's
   // autoSizeStrategy=fitCellContents. A default flex=1 would cause AG Grid

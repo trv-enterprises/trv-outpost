@@ -24,12 +24,17 @@ export function buildOption(values, _data, helpers = {}) {
   // array (even empty = hide all) is an ordered whitelist.
   const visibleColumnsConfig = Array.isArray(dm.visible_columns) ? dm.visible_columns : null;
   const columnAliases = dm.column_aliases && typeof dm.column_aliases === 'object' ? dm.column_aliases : {};
+  // Author-set per-column pixel widths ({ col → px }). The grid applies these
+  // as the default column width; a viewer's drag-resize (useDataviewLayout)
+  // still overrides per-user.
+  const columnWidths = dm.column_widths && typeof dm.column_widths === 'object' ? dm.column_widths : {};
   const xAxisFormat = dm.x_axis_format || helpers.xAxisFormat || 'short';
 
   return {
     render: 'dataview',
     props: {
       columnAliases,
+      columnWidths,
       visibleColumnsConfig,
       xAxisFormat,
     },

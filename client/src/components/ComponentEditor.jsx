@@ -69,6 +69,19 @@ const hasBandCenter = (bandColumns) => {
   return Boolean(bandColumns[centerKey]);
 };
 
+// dataview column_widths: author-set per-column pixel widths. Keep only
+// positive numeric entries (a blank/0 input means "auto" — don't persist it),
+// and return null when nothing is set so the saved record stays clean.
+const pruneColumnWidths = (widths) => {
+  if (!widths || typeof widths !== 'object') return null;
+  const out = {};
+  for (const [col, px] of Object.entries(widths)) {
+    const n = Number(px);
+    if (Number.isFinite(n) && n > 0) out[col] = n;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+};
+
 // ── ts-store absolute-range (range: DSL) datetime <-> epoch-seconds helpers ──
 // The <input type="datetime-local"> value is a local "YYYY-MM-DDTHH:MM" string;
 // the ts-store range: DSL takes epoch SECONDS. These convert each way.
@@ -623,6 +636,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [sortOrder, setSortOrder] = useState('desc');
   const [limitRows, setLimitRows] = useState(0);
   const [columnAliases, setColumnAliases] = useState({}); // For dataview: column name -> display name
+  // For dataview: author-set per-column pixel widths (column name -> px).
+  // Absent/0 = auto-size to content. These are the chart DEFAULT; a user's
+  // live drag-resize (per-user, useDataviewLayout) still overrides them.
+  const [columnWidths, setColumnWidths] = useState({});
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -995,6 +1012,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setSortOrder(chart.data_mapping?.sort_order || 'desc');
       setLimitRows(chart.data_mapping?.limit || 0);
       setColumnAliases(chart.data_mapping?.column_aliases || {});
+      setColumnWidths(chart.data_mapping?.column_widths || {});
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
@@ -1285,6 +1303,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         sortOrder: chart.data_mapping?.sort_order || 'desc',
         limitRows: chart.data_mapping?.limit || 0,
         columnAliases: chart.data_mapping?.column_aliases || {},
+        columnWidths: chart.data_mapping?.column_widths || {},
         visibleColumns: Array.isArray(loadedVisibleSnap) && loadedVisibleSnap.length > 0 ? loadedVisibleSnap : null,
         parserPreset: loadedParserPreset,
         parserDataPath: loadedParser?.data_path || '',
@@ -1358,6 +1377,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         sortOrder: 'desc',
         limitRows: 0,
         columnAliases: {},
+        columnWidths: {},
         visibleColumns: null,
         parserPreset: 'none',
         parserDataPath: '',
@@ -1438,6 +1458,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       sortOrder,
       limitRows,
       columnAliases,
+      columnWidths,
       visibleColumns,
       parserPreset,
       parserDataPath,
@@ -1461,7 +1482,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
-    sortBy, sortOrder, limitRows, columnAliases, visibleColumns,
+    sortBy, sortOrder, limitRows, columnAliases, columnWidths, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
     bandColumns, bandedBarStyle, chartOptions,
     componentCode, showCustomCode, usesDashboardVariable, initialState, onDirtyChange,
@@ -1715,6 +1736,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       return kept.length === prev.length ? prev : kept;
     });
 
+    // column_widths (dataview) — drop widths for columns no longer present.
+    setColumnWidths((prev) => {
+      if (!prev || typeof prev !== 'object') return prev;
+      const keys = Object.keys(prev);
+      const next = {};
+      for (const k of keys) if (has(k)) next[k] = prev[k];
+      return Object.keys(next).length === keys.length ? prev : next;
+    });
+
     // Time bucket value + timestamp columns.
     setTimeBucketValueCols((prev) => {
       const kept = (prev || []).filter(has);
@@ -1815,6 +1845,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setSortOrder('desc');
     setLimitRows(0);
     setColumnAliases({});
+    setColumnWidths({});
     setVisibleColumns(null);
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
@@ -2390,6 +2421,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         sort_order: sortOrder || 'desc',
         limit: limitRows || 0,
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
+        column_widths: pruneColumnWidths(columnWidths),
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -3854,10 +3886,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // Value-format enum + date sub-format (number-formats.js).
                       number_format: chartOptions.numberFormat ?? 'auto',
                       number_date_format: chartOptions.numberDateFormat ?? 'datetime',
-                      // dataview: the column_manager widget reads these two
+                      // dataview: the column_manager widget reads these
                       // keys directly (visible_columns null = show all).
                       visible_columns: visibleColumns,
                       column_aliases: columnAliases,
+                      column_widths: columnWidths,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -4029,6 +4062,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'column_aliases':
                           setColumnAliases(value);
+                          break;
+                        case 'column_widths':
+                          setColumnWidths(value);
                           break;
                         default: break;
                       }
@@ -4774,9 +4810,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           band_columns: chartType === 'banded_bar' && hasBandCenter(bandColumns) ? bandColumns : undefined,
                           // dataview reads its column config off data_mapping.
                           // visible_columns is the working state directly
-                          // (null = show all); aliases as-is.
+                          // (null = show all); aliases as-is; author widths
+                          // pruned so the preview matches a saved record.
                           visible_columns: Array.isArray(visibleColumns) ? visibleColumns : undefined,
                           column_aliases: columnAliases,
+                          column_widths: pruneColumnWidths(columnWidths),
                         } : undefined,
                         // bandedBarStyle is a sibling state var (not inside
                         // chartOptions); merge it into options for the
@@ -4819,6 +4857,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         sort_order: sortOrder || 'desc',
                         limit: limitRows || 0,
                         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
+                        column_widths: pruneColumnWidths(columnWidths),
                         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
                         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
                           data_path: parserDataPath || undefined,
