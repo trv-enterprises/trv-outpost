@@ -215,9 +215,17 @@ What works:
 - date(timestamp) — day-truncation, returns 'YYYY-MM-DD' text
 - trunc(numeric), round(numeric) — integer-coercing scalars
 - numeric % integer — but ONLY in the SELECT projection (returns the modulo as a column)
-- Plain LIMIT N and ORDER BY
+- Plain LIMIT N and ORDER BY — BUT the ORDER BY column MUST be in the SELECT
+  projection (see the silent-empty trap below)
 
 What FAILS (don't write these):
+- ORDER BY a column that is NOT in the SELECT — returns an EMPTY result set
+  with NO error (the most dangerous trap: the query "succeeds" with 0 rows, so
+  it looks like there's no data). ALWAYS project every column you ORDER BY.
+  e.g. "SELECT rul, sensor_11 ... ORDER BY cycle" → 0 rows; add cycle to the
+  SELECT ("SELECT cycle, rul, sensor_11 ... ORDER BY cycle") → rows. For a
+  time/sequence chart you want that ordering column on the x-axis anyway, so
+  projecting it is the right shape regardless.
 - EXTRACT(MONTH FROM ts) / EXTRACT(YEAR FROM ts) — "Error in SQL Select statement"
 - DATE_TRUNC('day', ts) and friends
 - CAST(expr AS int), expr::int — "Non supported SQL"
