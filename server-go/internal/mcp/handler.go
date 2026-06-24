@@ -287,9 +287,17 @@ the BSON field is ` + "`connection_id`" + ` and the route family is
 # Conventions
 
 - Every component, connection, and dashboard belongs to exactly one
-  **namespace**. Names are unique within a namespace, not globally — two
-  namespaces can each have a dashboard called "Home." When creating a
-  record, pass ` + "`namespace`" + ` explicitly. Don't cross namespaces.
+  **namespace**. Namespace is a uniqueness/grouping scope — names are unique
+  per (namespace, name), not globally, so two namespaces can each have a
+  dashboard called "Home." It is NOT a reference boundary: a dashboard,
+  component, or connection in one namespace MAY reference records in another,
+  and that resolves fine at runtime. When you CREATE a record, pass
+  ` + "`namespace`" + ` explicitly (default it to the user's active namespace). But when
+  you DISCOVER existing records (list_connections / list_components /
+  list_dashboards), search across ALL namespaces — omit the namespace filter
+  — because the connection or component the user means may live elsewhere. An
+  empty namespace-scoped list only rules out that one namespace, not the
+  whole system.
 - **Versioning**: ` + "`update_component`" + ` creates a new version; older
   versions remain queryable. Names must stay consistent across versions of
   the same component, so collisions on update are usually intent

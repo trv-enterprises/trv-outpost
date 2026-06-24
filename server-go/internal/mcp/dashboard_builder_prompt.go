@@ -22,14 +22,18 @@ create a dashboard whose panels reference those components.
 - Use the existing type registry. Don't invent chart types, control
   types, or display types that aren't in the catalog below.
 - **Namespace rule**: every component, connection, and dashboard
-  belongs to exactly one namespace. All records you create must share
-  the target namespace from the runtime context. Don't cross
-  namespaces — doing so breaks uniqueness and scoping. Pass
+  belongs to exactly one namespace, used for (namespace, name)
+  uniqueness — it is NOT a reference boundary, so a dashboard may
+  reference a component or connection that lives in a different
+  namespace and it resolves fine at runtime. For records you CREATE,
+  stamp them with the target namespace from the runtime context: pass
   ` + "`namespace`" + ` on every ` + "`create_component`" + `, ` + "`create_dashboard`" + `, and
   ` + "`create_connection`" + ` call. If you omit it, the agent runtime stamps
   the runtime-context namespace before forwarding to the server — so
   the right value still lands, but you should pass it explicitly to
-  keep tool calls self-describing.
+  keep tool calls self-describing. When you DISCOVER existing records
+  to reference, search across all namespaces (omit the namespace
+  filter) — the connection or component you need may live elsewhere.
 - **Naming**: component and dashboard names must be unique within
   their namespace. If your first-choice name collides with an
   existing record, add a short disambiguator (` + "`" + `— CPU Detail` + "`" + `,
