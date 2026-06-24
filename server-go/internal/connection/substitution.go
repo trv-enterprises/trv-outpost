@@ -426,9 +426,33 @@ func escapeEdgeLakeValue(value string) string {
 	return value
 }
 
+// edgeLakeNumericLiteral matches a value that EdgeLake will accept as a bare
+// numeric literal (int or float, optional leading sign). Anything else must be
+// emitted as a single-quoted string literal.
+var edgeLakeNumericLiteral = regexp.MustCompile(`^[+-]?(?:\d+\.?\d*|\.\d+)$`)
+
+// edgeLakeVariableLiteral renders a dashboard-variable value as an EdgeLake SQL
+// literal. EdgeLake has no bind params (the SQL drivers' placeholders handle
+// quoting for them), so the substitution must emit a valid literal itself:
+//   - numeric values stay BARE (`dataset = 42`) so they match numeric columns,
+//   - everything else becomes a single-quoted, escaped string (`dataset = 'FD001'`).
+// Without the quotes, EdgeLake's parser reads the value as an identifier and
+// rejects the query — the original "queries not working" bug.
+func edgeLakeVariableLiteral(value string) string {
+	if edgeLakeNumericLiteral.MatchString(value) {
+		return value
+	}
+	// Single-quoted string literal; escape embedded single quotes by doubling
+	// (SQL-standard), plus the double-quote/backslash escaping the outer AnyLog
+	// command string needs.
+	escaped := escapeEdgeLakeValue(strings.ReplaceAll(value, "'", "''"))
+	return "'" + escaped + "'"
+}
+
 // substituteEdgeLakeToken replaces each DashboardVariableToken occurrence in raw
-// with the escaped value. Returns ErrDashboardVariableNotSet when the token is
-// present but no value was supplied.
+// with the value rendered as an EdgeLake SQL literal (quoted unless numeric).
+// Returns ErrDashboardVariableNotSet when the token is present but no value was
+// supplied.
 func substituteEdgeLakeToken(raw string, value string, hasValue bool) (string, error) {
 	if !strings.Contains(raw, DashboardVariableToken) {
 		return raw, nil
@@ -436,7 +460,7 @@ func substituteEdgeLakeToken(raw string, value string, hasValue bool) (string, e
 	if !hasValue {
 		return "", ErrDashboardVariableNotSet
 	}
-	return strings.ReplaceAll(raw, DashboardVariableToken, escapeEdgeLakeValue(value)), nil
+	return strings.ReplaceAll(raw, DashboardVariableToken, edgeLakeVariableLiteral(value)), nil
 }
 
 // edgeLakeRangePattern captures the column immediately before the range token:

@@ -74,17 +74,46 @@ func TestSubstituteEdgeLakeToken(t *testing.T) {
 		}
 	})
 
-	t.Run("substitutes_escaped", func(t *testing.T) {
-		raw := `select * from t where host = "` + DashboardVariableToken + `"`
-		got, err := substituteEdgeLakeToken(raw, `a"b`, true)
+	// String values are emitted as a QUOTED SQL string literal. The token is
+	// written bare (`host = {{dashboard-variable}}`, per the authoring
+	// convention) — the substitution adds the quotes EdgeLake's parser needs.
+	// Inserting the value bare was the "queries not working" bug.
+	t.Run("string_value_is_quoted", func(t *testing.T) {
+		raw := "select * from t where dataset = " + DashboardVariableToken
+		got, err := substituteEdgeLakeToken(raw, "FD001", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if strings.Contains(got, DashboardVariableToken) {
-			t.Fatalf("token not substituted: %q", got)
+		want := "select * from t where dataset = 'FD001'"
+		if got != want {
+			t.Fatalf("expected %q, got %q", want, got)
 		}
-		if !strings.Contains(got, `a\"b`) {
-			t.Fatalf("value not escaped in output: %q", got)
+	})
+
+	// Numeric values stay BARE so they match numeric columns.
+	t.Run("numeric_value_is_bare", func(t *testing.T) {
+		raw := "select * from t where unit = " + DashboardVariableToken
+		got, err := substituteEdgeLakeToken(raw, "42", true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := "select * from t where unit = 42"
+		if got != want {
+			t.Fatalf("expected %q, got %q", want, got)
+		}
+	})
+
+	// String escaping: embedded single quotes are doubled (SQL-standard) and
+	// the AnyLog-command double-quote/backslash escaping still applies.
+	t.Run("string_value_is_escaped", func(t *testing.T) {
+		raw := "select * from t where name = " + DashboardVariableToken
+		got, err := substituteEdgeLakeToken(raw, `O'Brien`, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := "select * from t where name = 'O''Brien'"
+		if got != want {
+			t.Fatalf("expected %q, got %q", want, got)
 		}
 	})
 
