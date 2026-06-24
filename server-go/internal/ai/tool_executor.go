@@ -425,7 +425,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		XAxis        *string             `json:"x_axis,omitempty"`
 		XAxisLabel   *string             `json:"x_axis_label,omitempty"`
 		XAxisFormat  *string             `json:"x_axis_format,omitempty"`
-		YAxis        *[]string           `json:"y_axis,omitempty"`
+		YAxis        json.RawMessage     `json:"y_axis,omitempty"` // normalized via models.NormalizeYAxisColumns (tolerates [{"column":...}] / bare string)
 		YAxisLabel   *string             `json:"y_axis_label,omitempty"`  // legacy single label
 		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"` // per-column labels (preferred)
 		YAxisColors  *[]string           `json:"y_axis_colors,omitempty"` // per-column color override (index|name|hex)
@@ -466,21 +466,26 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		chart.DataMapping.XAxisFormat = *params.XAxisFormat
 	}
 	if params.YAxis != nil {
-		// Cap y_axis at 2 columns for chart types that render with axes.
-		// Beyond 2 there's no good rendering on bar/line/area — no place for
-		// axis names, tick values overlap, and color coding breaks down. Two
-		// separate charts beat one cluttered one. Exceptions:
-		//   - dataview (tabular) — any column count is fine
-		//   - banded_bar (Levey-Jennings envelope) — the SD columns are
-		//     additional series on the same value scale as the primary mean,
-		//     not independent y axes. Need 5 (mean + ±1 SD + ±2 SD) to draw a
-		//     per-row envelope.
-		ys := *params.YAxis
-		uncapped := chart.ChartType == "dataview" || chart.ChartType == "banded_bar"
-		if !uncapped && len(ys) > 2 {
-			ys = ys[:2]
+		// Tolerate the common LLM shape mistakes ([{"column":"x"}] / bare
+		// string) the same way create/update_component does — normalize to the
+		// canonical []string before use. An unrecognized shape leaves YAxis
+		// untouched rather than erroring the whole call.
+		if ys, ok := models.NormalizeYAxisColumns(params.YAxis); ok {
+			// Cap y_axis at 2 columns for chart types that render with axes.
+			// Beyond 2 there's no good rendering on bar/line/area — no place for
+			// axis names, tick values overlap, and color coding breaks down. Two
+			// separate charts beat one cluttered one. Exceptions:
+			//   - dataview (tabular) — any column count is fine
+			//   - banded_bar (Levey-Jennings envelope) — the SD columns are
+			//     additional series on the same value scale as the primary mean,
+			//     not independent y axes. Need 5 (mean + ±1 SD + ±2 SD) to draw a
+			//     per-row envelope.
+			uncapped := chart.ChartType == "dataview" || chart.ChartType == "banded_bar"
+			if !uncapped && len(ys) > 2 {
+				ys = ys[:2]
+			}
+			chart.DataMapping.YAxis = ys
 		}
-		chart.DataMapping.YAxis = ys
 	}
 	if params.YAxisLabel != nil {
 		chart.DataMapping.YAxisLabel = *params.YAxisLabel

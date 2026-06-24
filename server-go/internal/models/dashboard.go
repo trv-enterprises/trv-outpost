@@ -5,6 +5,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -135,6 +136,92 @@ type ChartDataMapping struct {
 	// it for backward compat reads but the editor + AI tools no longer
 	// write it. Safe to remove once all stored components migrate.
 	ReferenceLevels []ReferenceLevel `json:"reference_levels,omitempty" bson:"reference_levels,omitempty"`
+}
+
+// NormalizeYAxisColumns coerces the several shapes an LLM client commonly sends
+// for y_axis into the canonical []string of column names. The wire contract is
+// an array of plain strings (e.g. ["temp", "humidity"]), but models frequently
+// emit the object shape ["{column: temp}"] (mirroring y_axis_columns elsewhere)
+// or a bare "temp" string. Accepting all three keeps a correct-intent call from
+// being rejected over a shape nit. Accepted inputs:
+//   - ["temp","humidity"]              → ["temp","humidity"]
+//   - [{"column":"temp"}, {"col":"x"}] → ["temp","x"]   (column | col | name | value keys)
+//   - "temp"                           → ["temp"]
+//   - mixed arrays of the above        → flattened to names
+// Unrecognized entries are skipped. Returns (nil, false) when raw isn't one of
+// these shapes, so the caller can fall back to the standard decode/error.
+func NormalizeYAxisColumns(raw json.RawMessage) ([]string, bool) {
+	if len(raw) == 0 {
+		return nil, false
+	}
+	// Already the canonical array-of-strings (the common case) — fast path.
+	var strs []string
+	if err := json.Unmarshal(raw, &strs); err == nil {
+		return strs, true
+	}
+	// Bare string → single column.
+	var one string
+	if err := json.Unmarshal(raw, &one); err == nil {
+		return []string{one}, true
+	}
+	// Array of mixed string/object entries.
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil, false
+	}
+	out := make([]string, 0, len(arr))
+	for _, el := range arr {
+		var s string
+		if err := json.Unmarshal(el, &s); err == nil {
+			out = append(out, s)
+			continue
+		}
+		var obj map[string]interface{}
+		if err := json.Unmarshal(el, &obj); err == nil {
+			for _, key := range []string{"column", "col", "name", "value"} {
+				if v, ok := obj[key].(string); ok && v != "" {
+					out = append(out, v)
+					break
+				}
+			}
+		}
+		// Anything else (number, null, unkeyed object) is skipped.
+	}
+	return out, true
+}
+
+// UnmarshalJSON tolerates the common y_axis shape mistakes (object entries or a
+// bare string) by normalizing y_axis before the standard decode, then defers to
+// the default struct unmarshal for every other field. This makes create/update
+// component robust to LLM clients that send y_axis: [{"column":"x"}] instead of
+// the canonical ["x"] — they no longer hard-fail with "cannot unmarshal object
+// into ... y_axis of type string".
+func (m *ChartDataMapping) UnmarshalJSON(data []byte) error {
+	type alias ChartDataMapping // avoid recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	// Pre-normalize y_axis so the aliased decode sees canonical []string.
+	if yRaw, ok := raw["y_axis"]; ok {
+		if cols, normalized := NormalizeYAxisColumns(yRaw); normalized {
+			b, err := json.Marshal(cols)
+			if err != nil {
+				return err
+			}
+			raw["y_axis"] = b
+		}
+	}
+	patched, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	var a alias
+	if err := json.Unmarshal(patched, &a); err != nil {
+		return err
+	}
+	*m = ChartDataMapping(a)
+	return nil
 }
 
 // BandColumns maps each conceptual band role to a row-column name. The
