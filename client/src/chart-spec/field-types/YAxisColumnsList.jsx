@@ -48,7 +48,7 @@ export default function YAxisColumnsListField({ field }) {
   const raw = Array.isArray(formState[field.id]) ? formState[field.id] : [];
   // Normalize legacy/loose shapes. A bare string (legacy y_axis: ['a','b'])
   // becomes a default entry; partial objects fill in defaults too.
-  const entries = raw.map((e) => {
+  const normalized = raw.map((e) => {
     if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left', color: '', accumulate: false };
     if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false };
     return {
@@ -60,6 +60,17 @@ export default function YAxisColumnsListField({ field }) {
       accumulate: Boolean(e.accumulate),
     };
   });
+  // A chart needs at least one y-column. When the field is required, always
+  // render a row (a blank placeholder when the list is empty) so the user sees
+  // the required column picker immediately — no "Add column" click needed, and
+  // the single row's ✕ stays disabled (you can't delete the last required
+  // column). The placeholder isn't pushed to state until the user picks a
+  // column, so it doesn't dirty an untouched chart.
+  const isRequired = field.required === true;
+  const entries = normalized.length === 0 && isRequired
+    ? [{ column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false }]
+    : normalized;
+
   // Per-column accumulator/delta (#8) — line/area only (gauges/bars don't
   // delta). Gated by the spec field flag so the shared widget stays clean for
   // other chart types. Pivots split one column at runtime; the delta still
@@ -108,6 +119,11 @@ export default function YAxisColumnsListField({ field }) {
                 hideLabel={i !== 0}
                 value={entry.column}
                 onChange={(e) => updateEntry(i, { column: e.target.value })}
+                // A required y-column with nothing picked is invalid — surface
+                // Carbon's error styling so a blank row reads as "pick a column"
+                // rather than a broken/undeletable row.
+                invalid={isRequired && !entry.column}
+                invalidText="Select a column"
               >
                 <SelectItem value="" text="Select a column" />
                 {colOptions.map((col) => (
@@ -175,16 +191,21 @@ export default function YAxisColumnsListField({ field }) {
                 />
               </div>
             )}
+            {/* No ✕ on the lone row: a chart needs at least one y-column, so
+                the last/required row isn't removable. Render nothing (not a
+                disabled button) so it doesn't read as broken. The cell stays to
+                hold its grid column. */}
             <div className="spec-yacl__remove">
-              <IconButton
-                kind="ghost"
-                size="sm"
-                label="Remove column"
-                onClick={() => removeEntry(i)}
-                disabled={entries.length <= 1}
-              >
-                <Close />
-              </IconButton>
+              {entries.length > 1 && (
+                <IconButton
+                  kind="ghost"
+                  size="sm"
+                  label="Remove column"
+                  onClick={() => removeEntry(i)}
+                >
+                  <Close />
+                </IconButton>
+              )}
             </div>
           </div>
           );
