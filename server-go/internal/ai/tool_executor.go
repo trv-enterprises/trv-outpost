@@ -431,8 +431,13 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		YAxisColors  *[]string           `json:"y_axis_colors,omitempty"` // per-column color override (index|name|hex)
 		GroupBy      *string             `json:"group_by,omitempty"`
 		BandColumns  *models.BandColumns `json:"band_columns,omitempty"`
-		AccumulatorMode        *bool   `json:"accumulator_mode,omitempty"`
-		AccumulatorResetPolicy *string `json:"accumulator_reset_policy,omitempty"`
+		// Per-column accumulator/delta (#8). The agent passes the column NAMES to
+		// delta (ergonomic — no index alignment to get wrong); we convert to the
+		// model's index-aligned []bool against the chart's y_axis. accumulator_mode
+		// (legacy chart-wide bool) is still accepted = "all y columns".
+		AccumulatorColumns     *[]string `json:"accumulator_columns,omitempty"`
+		AccumulatorMode        *bool     `json:"accumulator_mode,omitempty"`
+		AccumulatorResetPolicy *string   `json:"accumulator_reset_policy,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -514,8 +519,32 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	if params.BandColumns != nil {
 		chart.DataMapping.BandColumns = params.BandColumns
 	}
-	if params.AccumulatorMode != nil {
-		chart.DataMapping.AccumulatorMode = *params.AccumulatorMode
+	// Per-column accumulator/delta (#8). Convert the agent's column-name list to
+	// the model's index-aligned []bool against the current y_axis. A chart-wide
+	// accumulator_mode:true sets every y column. Setting either clears the
+	// legacy chart-wide flag so the two representations don't fight.
+	if params.AccumulatorColumns != nil {
+		want := make(map[string]bool, len(*params.AccumulatorColumns))
+		for _, c := range *params.AccumulatorColumns {
+			want[c] = true
+		}
+		cols := make([]bool, len(chart.DataMapping.YAxis))
+		for i, y := range chart.DataMapping.YAxis {
+			cols[i] = want[y]
+		}
+		chart.DataMapping.AccumulatorColumns = cols
+		chart.DataMapping.AccumulatorMode = false
+	} else if params.AccumulatorMode != nil {
+		if *params.AccumulatorMode {
+			cols := make([]bool, len(chart.DataMapping.YAxis))
+			for i := range cols {
+				cols[i] = true
+			}
+			chart.DataMapping.AccumulatorColumns = cols
+		} else {
+			chart.DataMapping.AccumulatorColumns = nil
+		}
+		chart.DataMapping.AccumulatorMode = false
 	}
 	if params.AccumulatorResetPolicy != nil {
 		chart.DataMapping.AccumulatorResetPolicy = *params.AccumulatorResetPolicy

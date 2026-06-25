@@ -73,7 +73,7 @@ When a user asks to "fix", "improve", "format", "tweak", or otherwise *refine* a
 | Change the displayed title                              | ` + "`update_component_config`" + ` with ` + "`title`" + `                                |
 | Change which columns drive the chart                    | ` + "`update_data_mapping`" + ` with new ` + "`x_axis`" + ` / ` + "`y_axis`" + `                       |
 | Add a sliding window / time bucket                      | ` + "`update_sliding_window`" + ` / ` + "`update_time_bucket`" + `                          |
-| Chart a counter's per-interval delta (rate of change)   | ` + "`update_data_mapping`" + ` with ` + "`accumulator_mode: true`" + ` (line/area) — do NOT write custom delta code or assume a SQL LAG()/Prometheus rate() |
+| Chart a counter's per-interval delta (rate of change)   | ` + "`update_data_mapping`" + ` with ` + "`accumulator_columns`" + ` = the counter column name(s) (line/area, per-column) — do NOT write custom delta code or assume a SQL LAG()/Prometheus rate() |
 | Refine the rendered code (colors, layout, custom logic) | ` + "`set_custom_code`" + ` (still on the same component_type)                  |
 | Adjust a control's behavior                             | ` + "`update_control_config`" + `                                                  |
 | Adjust a display's settings                             | ` + "`update_display_config`" + `                                                  |

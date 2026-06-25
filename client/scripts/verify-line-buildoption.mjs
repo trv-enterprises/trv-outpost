@@ -403,7 +403,7 @@ const data = {
   check('case 18: auto + non-timestamp → passthrough', catData[0] === 'us-east' && catData[1] === 'us-west');
 }
 
-// --- Case 19: accumulator delta transform (#8) ---
+// --- Case 19: per-column accumulator delta transform (#8) ---
 {
   const fmt = (v) => String(v ?? '');
   // Monotonic counter with a reset: 10,13,18,30 then resets to 5,9.
@@ -423,7 +423,7 @@ const data = {
       data_mapping: {
         x_axis: 'ts',
         y_axis: [{ column: 'count' }],
-        accumulator_mode: true,
+        accumulator_columns: [true],
         ...(policy ? { accumulator_reset_policy: policy } : {}),
       },
       options: {},
@@ -455,6 +455,45 @@ const data = {
   // keep_negative: reset surfaces the raw negative delta (5 - 30 = -25).
   const keep = run('keep_negative');
   check('case 19: keep_negative surfaces the negative delta', keep[4] === -25);
+
+  // PER-COLUMN: counter + raw on the same chart. Only the flagged column deltas.
+  const mixedData = {
+    columns: ['ts', 'counter', 'gauge'],
+    rows: [
+      [1, 100, 50],
+      [2, 110, 55],
+      [3, 130, 40],
+    ],
+  };
+  const mixed = buildOption(
+    {
+      data_mapping: {
+        x_axis: 'ts',
+        y_axis: [{ column: 'counter' }, { column: 'gauge' }],
+        accumulator_columns: [true, false],
+      },
+      options: {},
+    },
+    mixedData,
+    { formatCellValue: fmt, chartType: 'line' },
+  ).series;
+  check('case 19: per-column — flagged counter deltas', JSON.stringify(mixed[0].data) === JSON.stringify([null, 10, 20]));
+  check('case 19: per-column — unflagged gauge stays raw', JSON.stringify(mixed[1].data) === JSON.stringify([50, 55, 40]));
+
+  // Legacy chart-wide accumulator_mode:true → all columns delta (back-compat).
+  const legacy = buildOption(
+    {
+      data_mapping: {
+        x_axis: 'ts',
+        y_axis: [{ column: 'counter' }, { column: 'gauge' }],
+        accumulator_mode: true,
+      },
+      options: {},
+    },
+    mixedData,
+    { formatCellValue: fmt, chartType: 'line' },
+  ).series;
+  check('case 19: legacy accumulator_mode → both columns delta', mixed && legacy[0].data[1] === 10 && legacy[1].data[1] === 5);
 }
 
 if (FAILURES.length > 0) {

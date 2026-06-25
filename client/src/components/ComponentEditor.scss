@@ -2047,8 +2047,8 @@
     grid-template-columns:
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
-      auto auto 1fr auto;
-    grid-template-areas: 'column label color stack . remove';
+      auto auto auto 1fr auto;
+    grid-template-areas: 'column label color stack accumulate . remove';
     gap: spacing.$spacing-05;
     align-items: end;
 
@@ -2056,6 +2056,7 @@
     .spec-yacl__label  { grid-area: label; }
     .spec-yacl__axis   { grid-area: axis; }
     .spec-yacl__stack  { grid-area: stack; }
+    .spec-yacl__accumulate { grid-area: accumulate; }
     .spec-yacl__color  { grid-area: color; display: flex; flex-direction: column; gap: spacing.$spacing-02; }
     .spec-yacl__color-label { font-size: 0.75rem; color: var(--cds-text-secondary); }
     .spec-yacl__remove { grid-area: remove; }
@@ -2066,7 +2067,8 @@
         'column remove'
         'label  label'
         'color color'
-        'stack stack';
+        'stack stack'
+        'accumulate accumulate';
     }
   }
 
@@ -2082,8 +2084,8 @@
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
       calc(25% - #{spacing.$spacing-05} * 3 / 4)
-      auto 1fr auto;
-    grid-template-areas: 'column label axis color . remove';
+      auto auto 1fr auto;
+    grid-template-areas: 'column label axis color accumulate . remove';
 
     @media (max-width: 720px) {
       grid-template-columns: 1fr auto;
@@ -2091,7 +2093,8 @@
         'column remove'
         'label  label'
         'axis   axis'
-        'color  color';
+        'color  color'
+        'accumulate accumulate';
     }
   }
 

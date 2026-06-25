@@ -89,9 +89,10 @@
               "type": "y_axis_columns_list",
               "label": "Y-axis columns",
               "required": true,
-              "helperText": "Numeric columns to plot. The column-name field overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of columns (columns left out stack-free draw independently — useful for a high-water total line).",
+              "helperText": "Numeric columns to plot. The column-name field overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of columns (columns left out stack-free draw independently — useful for a high-water total line). Tick Δ Delta on a column whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp.",
               "modeFieldId": "multipleYAxis",
-              "maxInDualAxis": 2
+              "maxInDualAxis": 2,
+              "showAccumulator": true
             }
           ]
         },
@@ -112,29 +113,22 @@
         {
           "id": "accumulator_group",
           "label": "Accumulator",
-          "helperText": "For monotonically-increasing counters (odometers, packet/request totals, kWh meters). When on, each point plots its delta from the previous point instead of the raw value.",
+          "helperText": "Counter-reset handling for any Y column with Δ Delta ticked above.",
           "layout": "single-column",
+          "visibleWhen": { "field": "any_accumulator", "operator": "truthy" },
           "fields": [
-            {
-              "id": "accumulator_mode",
-              "binds": "data_mapping.accumulator_mode",
-              "type": "boolean",
-              "label": "Treat Y values as an accumulator (chart deltas)",
-              "default": false
-            },
             {
               "id": "accumulator_reset_policy",
               "binds": "data_mapping.accumulator_reset_policy",
               "type": "enum",
               "label": "Counter-reset handling",
               "default": "drop_negative",
-              "visibleWhen": { "field": "accumulator_mode", "operator": "truthy" },
               "options": [
                 { "value": "drop_negative", "label": "Break the line (drop resets)" },
                 { "value": "clamp_zero", "label": "Show 0 at resets" },
                 { "value": "keep_negative", "label": "Show the negative delta" }
               ],
-              "helperText": "When the counter resets (a negative delta): break the line, show 0, or surface the raw negative drop."
+              "helperText": "When a Δ counter resets (a negative delta): break the line, show 0, or surface the raw negative drop."
             }
           ]
         }

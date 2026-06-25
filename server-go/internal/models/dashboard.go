@@ -137,12 +137,20 @@ type ChartDataMapping struct {
 	// write it. Safe to remove once all stored components migrate.
 	ReferenceLevels []ReferenceLevel `json:"reference_levels,omitempty" bson:"reference_levels,omitempty"`
 
-	// AccumulatorMode turns the line/area renderer's pairwise-delta transform on:
-	// each point plots value[i]-value[i-1] instead of the raw value, for
-	// monotonically-increasing counters (odometers, packet counters, kWh meters).
-	// AccumulatorResetPolicy governs counter resets (delta < 0):
-	// "drop_negative" (default — break the line), "clamp_zero", "keep_negative".
-	// See issue #8. Renderer-side transform; the stored values are untouched.
+	// AccumulatorColumns is the PER-COLUMN pairwise-delta transform (#8): a
+	// parallel boolean array index-aligned to YAxis (like YAxisColors/Labels).
+	// A true entry makes that line/area series plot value[i]-value[i-1] instead
+	// of the raw value — for monotonically-increasing counters (odometers,
+	// packet counters, kWh meters) — so a chart can delta one column and leave
+	// another raw. AccumulatorResetPolicy (chart-wide) governs counter resets
+	// (delta < 0): "drop_negative" (default — break the line), "clamp_zero",
+	// "keep_negative". Renderer-side transform; the stored values are untouched.
+	//
+	// AccumulatorMode is the LEGACY chart-wide flag (the original #8 shape):
+	// true = delta ALL y-columns. Kept for back-compat reads of records saved
+	// before per-column landed; the renderer treats it as "all columns" only
+	// when AccumulatorColumns is absent. New writes use AccumulatorColumns.
+	AccumulatorColumns     []bool `json:"accumulator_columns,omitempty" bson:"accumulator_columns,omitempty"`
 	AccumulatorMode        bool   `json:"accumulator_mode,omitempty" bson:"accumulator_mode,omitempty"`
 	AccumulatorResetPolicy string `json:"accumulator_reset_policy,omitempty" bson:"accumulator_reset_policy,omitempty"`
 }

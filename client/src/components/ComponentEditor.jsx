@@ -580,10 +580,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [groupByColumn, setGroupByColumn] = useState('');
   const [seriesColumn, setSeriesColumn] = useState(''); // Column that identifies each series (e.g., location) - used for time bucket partitioning
 
-  // Accumulator/delta transform (#8). When on, line/area charts plot each
-  // point's delta from the previous (for monotonically-increasing counters).
-  // reset_policy governs counter resets (delta < 0).
-  const [accumulatorMode, setAccumulatorMode] = useState(false);
+  // Accumulator/delta transform (#8). PER-COLUMN: a parallel boolean array
+  // index-aligned to yAxisColumns (like yAxisColors). A true entry plots that
+  // line/area column's delta from the previous point (for monotonic counters).
+  // reset_policy (chart-wide) governs counter resets (delta < 0).
+  const [yAxisAccumulate, setYAxisAccumulate] = useState([]);
   const [accumulatorResetPolicy, setAccumulatorResetPolicy] = useState('drop_negative');
 
   // Filters and aggregation
@@ -1012,7 +1013,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       }
       setGroupByColumn(chart.data_mapping?.group_by || '');
       setSeriesColumn(chart.data_mapping?.series || '');
-      setAccumulatorMode(chart.data_mapping?.accumulator_mode === true);
+      // Per-column accumulator (#8). Prefer the parallel accumulator_columns
+      // array; fall back to the legacy chart-wide accumulator_mode:true (= all
+      // columns). Index-aligned to the loaded y columns.
+      const rawAccum = chart.data_mapping?.accumulator_columns;
+      const legacyAccumAll = chart.data_mapping?.accumulator_mode === true;
+      setYAxisAccumulate(loadedYCols.map((_c, i) => (
+        Array.isArray(rawAccum) ? rawAccum[i] === true : legacyAccumAll
+      )));
       setAccumulatorResetPolicy(chart.data_mapping?.accumulator_reset_policy || 'drop_negative');
       setFilters(chart.data_mapping?.filters || []);
       setAggregation(chart.data_mapping?.aggregation || { type: '', sortBy: '', field: '', count: 10 });
@@ -2393,11 +2401,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         })(),
         group_by: groupByColumn || '',
         series: seriesColumn || '', // Column for series partitioning in time buckets
-        // Accumulator/delta transform (#8). Only persisted when on (omitempty
-        // on the Go side keeps records lean); reset policy rides along so a
-        // saved accumulator chart round-trips its policy.
-        accumulator_mode: accumulatorMode || undefined,
-        accumulator_reset_policy: accumulatorMode ? accumulatorResetPolicy : undefined,
+        // Per-column accumulator/delta (#8). Parallel boolean array realigned to
+        // the FILTERED y_axis (same realignment as y_axis_colors). Omitted when
+        // no column accumulates (keeps records lean); reset_policy rides along
+        // only when at least one column does, so it round-trips.
+        accumulator_columns: (() => {
+          const keep = yAxisColumns.map((c, i) => (typeof c === 'string' && c.length > 0 ? i : -1)).filter((i) => i >= 0);
+          const aligned = keep.map((i) => (Array.isArray(yAxisAccumulate) ? yAxisAccumulate[i] === true : false));
+          return aligned.some(Boolean) ? aligned : undefined;
+        })(),
+        accumulator_reset_policy: (Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean)) ? accumulatorResetPolicy : undefined,
         // Scatter bubble mode: column whose value sizes each point.
         // Persisted on data_mapping (a data dimension, like series) so
         // scatter.js reads it alongside x/y. Empty for non-scatter.
@@ -3833,13 +3846,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
                         // Per-column color override (index-aligned yAxisColors).
                         color: (Array.isArray(yAxisColors) ? yAxisColors[i] : '') || '',
+                        // Per-column accumulator/delta flag (#8), index-aligned.
+                        accumulate: (Array.isArray(yAxisAccumulate) ? yAxisAccumulate[i] : false) === true,
                       })),
                       x_axis_column: xAxisColumn,
                       x_axis_label: xAxisLabel || '',
                       x_axis_format: xAxisFormat || 'auto',
                       series_column: seriesColumn,
-                      // accumulator/delta (#8)
-                      accumulator_mode: accumulatorMode,
+                      // accumulator/delta (#8). any_accumulator gates the
+                      // reset-policy subsection's visibility (shown only when at
+                      // least one column has Δ Delta ticked).
+                      any_accumulator: Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean),
                       accumulator_reset_policy: accumulatorResetPolicy,
                       // pie field ids — label binds to x_axis, value to
                       // y_axis[0]; map the shared state onto pie's ids so
@@ -3956,9 +3973,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           const cols = (value || []).map((e) => (typeof e?.column === 'string' ? e.column : ''));
                           const labels = (value || []).map((e) => (typeof e?.label === 'string' ? e.label : ''));
                           const colors = (value || []).map((e) => (typeof e?.color === 'string' ? e.color : ''));
+                          // Per-column accumulator/delta flag (#8), index-aligned.
+                          const accum = (value || []).map((e) => e?.accumulate === true);
                           setYAxisColumns(cols);
                           setYAxisLabels(labels);
                           setYAxisColors(colors);
+                          setYAxisAccumulate(accum);
                           const anyStacked = (value || []).some((e) => e?.stack);
                           updateChartOption('chartStacked', anyStacked);
                           break;
@@ -3967,7 +3987,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'x_axis_label': setXAxisLabel(value); break;
                         case 'x_axis_format': setXAxisFormat(value); break;
                         case 'series_column': setSeriesColumn(value); break;
-                        case 'accumulator_mode': setAccumulatorMode(value); break;
                         case 'accumulator_reset_policy': setAccumulatorResetPolicy(value); break;
                         // Pie: label column binds to data_mapping.x_axis,
                         // value column to data_mapping.y_axis[0]. Map the
@@ -4818,10 +4837,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           // formState builder and the saved-record path.
                           multiple_y_axis: chartOptions.multipleYAxis === true,
                           series: seriesColumn || '',
-                          // Accumulator/delta (#8) — mirror the save path so the
-                          // preview deltas exactly as a saved record would.
-                          accumulator_mode: accumulatorMode || undefined,
-                          accumulator_reset_policy: accumulatorMode ? accumulatorResetPolicy : undefined,
+                          // Per-column accumulator/delta (#8) — mirror the save
+                          // path (parallel array realigned to filtered y_axis)
+                          // so the preview deltas exactly as a saved record.
+                          accumulator_columns: (() => {
+                            const keep = yAxisColumns.map((c, i) => (typeof c === 'string' && c.length > 0 ? i : -1)).filter((i) => i >= 0);
+                            const aligned = keep.map((i) => (Array.isArray(yAxisAccumulate) ? yAxisAccumulate[i] === true : false));
+                            return aligned.some(Boolean) ? aligned : undefined;
+                          })(),
+                          accumulator_reset_policy: (Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean)) ? accumulatorResetPolicy : undefined,
                           // scatter reads these off data_mapping
                           y_axis_label: yAxisLabel || '',
                           size_column: chartOptions.sizeColumn || '',

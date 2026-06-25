@@ -49,16 +49,22 @@ export default function YAxisColumnsListField({ field }) {
   // Normalize legacy/loose shapes. A bare string (legacy y_axis: ['a','b'])
   // becomes a default entry; partial objects fill in defaults too.
   const entries = raw.map((e) => {
-    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left', color: '' };
-    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left', color: '' };
+    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left', color: '', accumulate: false };
+    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false };
     return {
       column: typeof e.column === 'string' ? e.column : '',
       label: typeof e.label === 'string' ? e.label : '',
       stack: Boolean(e.stack),
       axis: e.axis === 'right' ? 'right' : 'left',
       color: typeof e.color === 'string' ? e.color : '',
+      accumulate: Boolean(e.accumulate),
     };
   });
+  // Per-column accumulator/delta (#8) — line/area only (gauges/bars don't
+  // delta). Gated by the spec field flag so the shared widget stays clean for
+  // other chart types. Pivots split one column at runtime; the delta still
+  // applies per the single y-column's flag, so we keep showing it.
+  const showAccumulator = field.showAccumulator === true;
 
   const updateEntry = (index, patch) => {
     const next = entries.map((e, i) => (i === index ? { ...e, ...patch } : e));
@@ -72,7 +78,7 @@ export default function YAxisColumnsListField({ field }) {
 
   const addEntry = () => {
     const nextAxis = isDualAxis && entries.length === 1 ? 'right' : 'left';
-    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis, color: '' }];
+    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis, color: '', accumulate: false }];
     onFieldChange(field.id, next);
   };
 
@@ -143,6 +149,18 @@ export default function YAxisColumnsListField({ field }) {
                   labelText="In stack"
                   checked={entry.stack}
                   onChange={(_e, { checked }) => updateEntry(i, { stack: checked })}
+                />
+              </div>
+            )}
+            {/* Per-column accumulator/delta (#8). Plots this column's
+                value[i]-value[i-1] (for monotonic counters). Line/area only. */}
+            {showAccumulator && (
+              <div className="spec-yacl__accumulate">
+                <Checkbox
+                  id={`spec-${field.id}-${i}-accumulate`}
+                  labelText="Δ Delta"
+                  checked={entry.accumulate}
+                  onChange={(_e, { checked }) => updateEntry(i, { accumulate: checked })}
                 />
               </div>
             )}

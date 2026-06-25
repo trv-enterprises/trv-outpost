@@ -145,12 +145,13 @@ function normalizeYEntry(e) {
 }
 
 function buildSeriesForColumn(entry, idx, ctx) {
-  const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, chartType, seriesName, accumulatorMode, accumulatorResetPolicy } = ctx;
+  const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, chartType, seriesName, accumulatorResetPolicy } = ctx;
   const colIdx = columnIndex(entry.column);
   let data = rows.map((r) => r[colIdx]);
-  // Accumulator mode: plot each point's delta from the previous (#8). Applied
-  // per series so each column/pivot group deltas against its own history.
-  if (accumulatorMode) data = applyAccumulator(data, accumulatorResetPolicy);
+  // Accumulator mode: plot this column's delta from the previous point (#8).
+  // Per-column (entry.accumulate), so a chart can delta one series and leave
+  // another raw. Applied per series → each deltas against its own history.
+  if (entry.accumulate) data = applyAccumulator(data, accumulatorResetPolicy);
   const series = {
     name: seriesName,
     type: chartType === 'area' ? 'line' : chartType,
@@ -359,11 +360,15 @@ export function buildOption(values, data, helpers = {}) {
   // wire y_axis is a string array). Merge it onto the normalized entries; an
   // inline entry.color (object-form record) still wins if present.
   const rawYColors = Array.isArray(values?.data_mapping?.y_axis_colors) ? values.data_mapping.y_axis_colors : [];
-  // Accumulator/delta transform (#8): when on, each series plots value[i] -
-  // value[i-1]. Reset policy governs counter resets (delta < 0). Threaded into
-  // buildSeriesForColumn via ctx so it applies on both the normal and pivot
-  // paths.
-  const accumulatorMode = values?.data_mapping?.accumulator_mode === true;
+  // Accumulator/delta transform (#8): a column flagged here plots value[i] -
+  // value[i-1] instead of the raw value (for monotonic counters). PER-COLUMN,
+  // like y_axis_colors/labels — `accumulator_columns` is a parallel boolean
+  // array index-aligned to y_axis. Legacy: a chart-wide `accumulator_mode:true`
+  // (the original shape) means "all columns". The flag is merged onto each
+  // entry as `accumulate` and read inside buildSeriesForColumn, so it applies
+  // on both the normal and pivot paths. Reset policy is chart-wide.
+  const rawAccumCols = Array.isArray(values?.data_mapping?.accumulator_columns) ? values.data_mapping.accumulator_columns : null;
+  const accumulatorAll = values?.data_mapping?.accumulator_mode === true && !rawAccumCols;
   const accumulatorResetPolicy = values?.data_mapping?.accumulator_reset_policy || 'drop_negative';
   const yEntries = rawYAxis
     .map((e, i) => {
@@ -373,6 +378,9 @@ export function buildOption(values, data, helpers = {}) {
       }
       if (!norm.color && typeof rawYColors[i] === 'string') {
         norm.color = rawYColors[i];
+      }
+      if (norm.accumulate == null) {
+        norm.accumulate = accumulatorAll || (rawAccumCols ? rawAccumCols[i] === true : false);
       }
       return norm;
     })
@@ -506,8 +514,10 @@ export function buildOption(values, data, helpers = {}) {
           },
         );
         // Pivot path supplies data explicitly (buildSeriesForColumn got rows:[]),
-        // so apply the accumulator delta to the aligned group here (#8).
-        built.data = accumulatorMode ? applyAccumulator(g.aligned, accumulatorResetPolicy) : g.aligned;
+        // so apply the accumulator delta to the aligned group here (#8). Pivot
+        // splits one y-column (yEntries[0]) into per-value series, so that
+        // column's per-column flag governs every group.
+        built.data = yEntries[0]?.accumulate ? applyAccumulator(g.aligned, accumulatorResetPolicy) : g.aligned;
         return built;
       });
       // The carbon-dark ECharts theme carries a top-level `color` palette that
@@ -533,7 +543,6 @@ export function buildOption(values, data, helpers = {}) {
       showDataLabels,
       chartType,
       seriesName: entry.label || entry.column,
-      accumulatorMode,
       accumulatorResetPolicy,
     }));
   }

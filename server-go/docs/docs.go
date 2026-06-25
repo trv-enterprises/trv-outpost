@@ -7316,8 +7316,14 @@ const docTemplate = `{
             "description": "Mapping configuration from data columns to chart axes/series",
             "type": "object",
             "properties": {
+                "accumulator_columns": {
+                    "description": "AccumulatorColumns is the PER-COLUMN pairwise-delta transform (#8): a\nparallel boolean array index-aligned to YAxis (like YAxisColors/Labels).\nA true entry makes that line/area series plot value[i]-value[i-1] instead\nof the raw value — for monotonically-increasing counters (odometers,\npacket counters, kWh meters) — so a chart can delta one column and leave\nanother raw. AccumulatorResetPolicy (chart-wide) governs counter resets\n(delta \u003c 0): \"drop_negative\" (default — break the line), \"clamp_zero\",\n\"keep_negative\". Renderer-side transform; the stored values are untouched.\n\nAccumulatorMode is the LEGACY chart-wide flag (the original #8 shape):\ntrue = delta ALL y-columns. Kept for back-compat reads of records saved\nbefore per-column landed; the renderer treats it as \"all columns\" only\nwhen AccumulatorColumns is absent. New writes use AccumulatorColumns.",
+                    "type": "array",
+                    "items": {
+                        "type": "boolean"
+                    }
+                },
                 "accumulator_mode": {
-                    "description": "AccumulatorMode turns the line/area renderer's pairwise-delta transform on:\neach point plots value[i]-value[i-1] instead of the raw value, for\nmonotonically-increasing counters (odometers, packet counters, kWh meters).\nAccumulatorResetPolicy governs counter resets (delta \u003c 0):\n\"drop_negative\" (default — break the line), \"clamp_zero\", \"keep_negative\".\nSee issue #8. Renderer-side transform; the stored values are untouched.",
                     "type": "boolean"
                 },
                 "accumulator_reset_policy": {

@@ -36,7 +36,7 @@ func TestDecodeIntoDataMappingFieldComplete(t *testing.T) {
 			"scheme": "sd", "mean": "m",
 			"plus_1sd": "p1", "minus_1sd": "n1",
 		},
-		"accumulator_mode":         true,
+		"accumulator_columns":      []interface{}{true, false},
 		"accumulator_reset_policy": "clamp_zero",
 		"limit":                    float64(500),
 	}
@@ -64,8 +64,8 @@ func TestDecodeIntoDataMappingFieldComplete(t *testing.T) {
 	if got.BandColumns == nil || got.BandColumns.Scheme != "sd" || got.BandColumns.Mean != "m" || got.BandColumns.Plus1SD != "p1" {
 		t.Errorf("band_columns dropped/wrong: %#v", got.BandColumns)
 	}
-	if !got.AccumulatorMode {
-		t.Errorf("accumulator_mode dropped: %v", got.AccumulatorMode)
+	if len(got.AccumulatorColumns) != 2 || got.AccumulatorColumns[0] != true || got.AccumulatorColumns[1] != false {
+		t.Errorf("accumulator_columns dropped/wrong: %#v", got.AccumulatorColumns)
 	}
 	if got.AccumulatorResetPolicy != "clamp_zero" {
 		t.Errorf("accumulator_reset_policy dropped/wrong: %q", got.AccumulatorResetPolicy)
