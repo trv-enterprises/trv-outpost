@@ -157,25 +157,43 @@ function DashboardGrid({
     const targetH = gridNativeH * scaleFactor;
 
     if (fitMode === 'actual') {
-      if (scaleFactor === 1) return { transform: '', scaledW: 0, scaledH: 0 };
-      return { transform: `scale(${scaleFactor})`, scaledW: targetW, scaledH: targetH };
+      if (scaleFactor === 1) return { transform: '', scaledW: 0, scaledH: 0, sx: 1, sy: 1 };
+      return { transform: `scale(${scaleFactor})`, scaledW: targetW, scaledH: targetH, sx: 1, sy: 1 };
     }
     if (!containerSize.width || !containerSize.height) {
-      return { transform: '', scaledW: 0, scaledH: 0 };
+      return { transform: '', scaledW: 0, scaledH: 0, sx: 1, sy: 1 };
     }
     const availW = containerSize.width - 2 * CONTAINER_PADDING;
     const availH = containerSize.height - 2 * CONTAINER_PADDING;
     const sx = availW / targetW;
     const sy = availH / targetH;
     if (fitMode === 'stretch') {
-      return { transform: `scale(${sx * scaleFactor}, ${sy * scaleFactor})`, scaledW: targetW * sx, scaledH: targetH * sy };
+      // sx/sy are the per-axis scale BEFORE scaleFactor. Round-aspect panels
+      // (gauges) read these to counter-scale themselves back to a uniform
+      // aspect ratio — see gaugeCounterTransform below.
+      return { transform: `scale(${sx * scaleFactor}, ${sy * scaleFactor})`, scaledW: targetW * sx, scaledH: targetH * sy, sx, sy };
     }
     if (fitMode === 'width') {
-      return { transform: `scale(${sx * scaleFactor})`, scaledW: targetW * sx, scaledH: targetH * sx };
+      return { transform: `scale(${sx * scaleFactor})`, scaledW: targetW * sx, scaledH: targetH * sx, sx, sy: sx };
     }
     const s = Math.min(sx, sy);
-    return { transform: `scale(${s * scaleFactor})`, scaledW: targetW * s, scaledH: targetH * s };
+    return { transform: `scale(${s * scaleFactor})`, scaledW: targetW * s, scaledH: targetH * s, sx: s, sy: s };
   }, [fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, scaleFactor]);
+
+  // "Stretch" fit applies a NON-UNIFORM scale (sx ≠ sy) to the whole grid,
+  // squeezing a gauge's round box into an ellipse. To keep gauges round we
+  // counter-scale ONLY gauge panels by the inverse of the non-uniform part,
+  // contracting to the SMALLER axis (scale the gauge down to round rather than
+  // up): effective per-axis scale becomes min(sx,sy) on both axes. One factor
+  // is 1, the other ≤ 1. Empty string when the grid is already uniform.
+  const gaugeCounterTransform = useMemo(() => {
+    const { sx, sy } = fitTransform;
+    if (!editMode && fitMode === 'stretch' && sx > 0 && sy > 0 && Math.abs(sx - sy) > 1e-4) {
+      const s = Math.min(sx, sy);
+      return `scale(${s / sx}, ${s / sy})`;
+    }
+    return '';
+  }, [fitTransform, fitMode, editMode]);
 
   // View mode with no panels renders nothing (the viewer shows its own
   // "no panels" message). Edit mode always renders so there's a canvas.
@@ -242,6 +260,12 @@ function DashboardGrid({
             );
             const hasContent = hasText || hasChart;
 
+            // Gauge panels must stay round under "stretch" (non-uniform) fit.
+            // Counter-scale the panel cell back to a uniform aspect so the
+            // round ECharts box isn't squeezed into an ellipse (#63).
+            const isGauge = chart?.chart_type === 'gauge';
+            const counterTransform = isGauge ? gaugeCounterTransform : '';
+
             const expandableDisplayTypes = new Set(['weather', 'frigate_camera']);
             const isLegacyChart = !!chart?.component_code
               && chart?.component_type !== 'control'
@@ -276,6 +300,9 @@ function DashboardGrid({
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
                   cursor: editMode ? 'default' : (hasChart && onExpandPanel ? 'pointer' : 'default'),
+                  ...(counterTransform
+                    ? { transform: counterTransform, transformOrigin: 'center' }
+                    : {}),
                 }}
                 onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
               >
