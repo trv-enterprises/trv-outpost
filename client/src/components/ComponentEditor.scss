@@ -2057,9 +2057,21 @@
     .spec-yacl__axis   { grid-area: axis; }
     .spec-yacl__stack  { grid-area: stack; }
     .spec-yacl__accumulate { grid-area: accumulate; }
+    // Carbon checkbox form-items default to width:100% and the label's
+    // clickable ::before overlay can overflow the `auto` grid track, covering
+    // the adjacent remove (✕) cell and swallowing its clicks. Shrink the
+    // checkbox cells to their content so they stay within their track.
+    .spec-yacl__stack,
+    .spec-yacl__accumulate {
+      .cds--form-item,
+      .cds--checkbox-wrapper { width: auto; }
+      .cds--checkbox-label { white-space: nowrap; }
+    }
     .spec-yacl__color  { grid-area: color; display: flex; flex-direction: column; gap: spacing.$spacing-02; }
     .spec-yacl__color-label { font-size: 0.75rem; color: var(--cds-text-secondary); }
-    .spec-yacl__remove { grid-area: remove; }
+    // Keep the remove button above any neighboring overlay so its click always
+    // lands on the IconButton, not a covering checkbox label.
+    .spec-yacl__remove { grid-area: remove; position: relative; z-index: 1; }
 
     @media (max-width: 720px) {
       grid-template-columns: 1fr auto;
