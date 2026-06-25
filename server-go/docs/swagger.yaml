@@ -623,6 +623,17 @@ definitions:
   models.ChartDataMapping:
     description: Mapping configuration from data columns to chart axes/series
     properties:
+      accumulator_mode:
+        description: |-
+          AccumulatorMode turns the line/area renderer's pairwise-delta transform on:
+          each point plots value[i]-value[i-1] instead of the raw value, for
+          monotonically-increasing counters (odometers, packet counters, kWh meters).
+          AccumulatorResetPolicy governs counter resets (delta < 0):
+          "drop_negative" (default — break the line), "clamp_zero", "keep_negative".
+          See issue #8. Renderer-side transform; the stored values are untouched.
+        type: boolean
+      accumulator_reset_policy:
+        type: string
       aggregation:
         allOf:
         - $ref: '#/definitions/models.DataAggregation'

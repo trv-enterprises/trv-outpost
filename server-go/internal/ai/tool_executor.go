@@ -431,6 +431,8 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		YAxisColors  *[]string           `json:"y_axis_colors,omitempty"` // per-column color override (index|name|hex)
 		GroupBy      *string             `json:"group_by,omitempty"`
 		BandColumns  *models.BandColumns `json:"band_columns,omitempty"`
+		AccumulatorMode        *bool   `json:"accumulator_mode,omitempty"`
+		AccumulatorResetPolicy *string `json:"accumulator_reset_policy,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -511,6 +513,12 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 	if params.BandColumns != nil {
 		chart.DataMapping.BandColumns = params.BandColumns
+	}
+	if params.AccumulatorMode != nil {
+		chart.DataMapping.AccumulatorMode = *params.AccumulatorMode
+	}
+	if params.AccumulatorResetPolicy != nil {
+		chart.DataMapping.AccumulatorResetPolicy = *params.AccumulatorResetPolicy
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {

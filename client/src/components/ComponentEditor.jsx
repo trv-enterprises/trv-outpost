@@ -580,6 +580,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [groupByColumn, setGroupByColumn] = useState('');
   const [seriesColumn, setSeriesColumn] = useState(''); // Column that identifies each series (e.g., location) - used for time bucket partitioning
 
+  // Accumulator/delta transform (#8). When on, line/area charts plot each
+  // point's delta from the previous (for monotonically-increasing counters).
+  // reset_policy governs counter resets (delta < 0).
+  const [accumulatorMode, setAccumulatorMode] = useState(false);
+  const [accumulatorResetPolicy, setAccumulatorResetPolicy] = useState('drop_negative');
+
   // Filters and aggregation
   const [filters, setFilters] = useState([]);
 
@@ -1006,6 +1012,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       }
       setGroupByColumn(chart.data_mapping?.group_by || '');
       setSeriesColumn(chart.data_mapping?.series || '');
+      setAccumulatorMode(chart.data_mapping?.accumulator_mode === true);
+      setAccumulatorResetPolicy(chart.data_mapping?.accumulator_reset_policy || 'drop_negative');
       setFilters(chart.data_mapping?.filters || []);
       setAggregation(chart.data_mapping?.aggregation || { type: '', sortBy: '', field: '', count: 10 });
       setSortBy(chart.data_mapping?.sort_by || '');
@@ -2385,6 +2393,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         })(),
         group_by: groupByColumn || '',
         series: seriesColumn || '', // Column for series partitioning in time buckets
+        // Accumulator/delta transform (#8). Only persisted when on (omitempty
+        // on the Go side keeps records lean); reset policy rides along so a
+        // saved accumulator chart round-trips its policy.
+        accumulator_mode: accumulatorMode || undefined,
+        accumulator_reset_policy: accumulatorMode ? accumulatorResetPolicy : undefined,
         // Scatter bubble mode: column whose value sizes each point.
         // Persisted on data_mapping (a data dimension, like series) so
         // scatter.js reads it alongside x/y. Empty for non-scatter.
@@ -3825,6 +3838,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       x_axis_label: xAxisLabel || '',
                       x_axis_format: xAxisFormat || 'auto',
                       series_column: seriesColumn,
+                      // accumulator/delta (#8)
+                      accumulator_mode: accumulatorMode,
+                      accumulator_reset_policy: accumulatorResetPolicy,
                       // pie field ids — label binds to x_axis, value to
                       // y_axis[0]; map the shared state onto pie's ids so
                       // ColumnSelect (keyed by field.id) shows the saved
@@ -3951,6 +3967,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'x_axis_label': setXAxisLabel(value); break;
                         case 'x_axis_format': setXAxisFormat(value); break;
                         case 'series_column': setSeriesColumn(value); break;
+                        case 'accumulator_mode': setAccumulatorMode(value); break;
+                        case 'accumulator_reset_policy': setAccumulatorResetPolicy(value); break;
                         // Pie: label column binds to data_mapping.x_axis,
                         // value column to data_mapping.y_axis[0]. Map the
                         // pie-specific field ids onto the same state.
@@ -4800,6 +4818,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           // formState builder and the saved-record path.
                           multiple_y_axis: chartOptions.multipleYAxis === true,
                           series: seriesColumn || '',
+                          // Accumulator/delta (#8) — mirror the save path so the
+                          // preview deltas exactly as a saved record would.
+                          accumulator_mode: accumulatorMode || undefined,
+                          accumulator_reset_policy: accumulatorMode ? accumulatorResetPolicy : undefined,
                           // scatter reads these off data_mapping
                           y_axis_label: yAxisLabel || '',
                           size_column: chartOptions.sizeColumn || '',

@@ -129,6 +129,35 @@
               "label": "Pivot by column"
             }
           ]
+        },
+        {
+          "id": "accumulator_group",
+          "label": "Accumulator",
+          "helperText": "For monotonically-increasing counters (odometers, packet/request totals, kWh meters). When on, each point plots its delta from the previous point instead of the raw value.",
+          "layout": "single-column",
+          "fields": [
+            {
+              "id": "accumulator_mode",
+              "binds": "data_mapping.accumulator_mode",
+              "type": "boolean",
+              "label": "Treat Y values as an accumulator (chart deltas)",
+              "default": false
+            },
+            {
+              "id": "accumulator_reset_policy",
+              "binds": "data_mapping.accumulator_reset_policy",
+              "type": "enum",
+              "label": "Counter-reset handling",
+              "default": "drop_negative",
+              "visibleWhen": { "field": "accumulator_mode", "operator": "truthy" },
+              "options": [
+                { "value": "drop_negative", "label": "Break the line (drop resets)" },
+                { "value": "clamp_zero", "label": "Show 0 at resets" },
+                { "value": "keep_negative", "label": "Show the negative delta" }
+              ],
+              "helperText": "When the counter resets (a negative delta): break the line, show 0, or surface the raw negative drop."
+            }
+          ]
         }
       ]
     },

@@ -164,6 +164,44 @@ export function columnValues(data, name) {
   return (data?.rows || []).map((r) => r[idx]);
 }
 
+// ── accumulator / delta transform ────────────────────────────────────
+// Counter-style sources (odometers, packet counters, kWh meters) emit a
+// monotonically-increasing accumulator; the interesting value is each
+// point's DELTA from the previous one. When `accumulator_mode` is on, walk
+// the series pairwise and emit value[i] - value[i-1]. The first point has no
+// predecessor → null (ECharts leaves a gap). Counter resets (delta < 0) are
+// governed by reset_policy. See issue #8.
+export const ACCUMULATOR_RESET_POLICIES = ['drop_negative', 'keep_negative', 'clamp_zero'];
+
+/**
+ * Pairwise-delta a series of values per the accumulator reset policy.
+ * @param {any[]} values series y-values in row order (may contain null)
+ * @param {string} policy 'drop_negative' (default) | 'keep_negative' | 'clamp_zero'
+ * @returns {(number|null)[]} deltas, same length as input; index 0 is always null
+ */
+export function applyAccumulator(values, policy = 'drop_negative') {
+  const out = new Array(values.length).fill(null);
+  let prev = null; // last numeric value seen (skips nulls so a gap doesn't reset)
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    // Non-numeric / null source point: emit a gap, keep prev for the next pair.
+    if (v == null || !Number.isFinite(Number(v))) { out[i] = null; continue; }
+    const cur = Number(v);
+    if (prev == null) { out[i] = null; prev = cur; continue; } // no predecessor
+    const delta = cur - prev;
+    prev = cur;
+    if (delta < 0) {
+      // Counter reset / wrap.
+      if (policy === 'keep_negative') out[i] = delta;
+      else if (policy === 'clamp_zero') out[i] = 0;
+      else out[i] = null; // drop_negative (default): break the line
+    } else {
+      out[i] = delta;
+    }
+  }
+  return out;
+}
+
 /**
  * First row's value for a named column, coerced to a number.
  * Used by single-value charts (gauge, number). Returns `fallback`

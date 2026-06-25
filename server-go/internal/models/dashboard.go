@@ -136,6 +136,15 @@ type ChartDataMapping struct {
 	// it for backward compat reads but the editor + AI tools no longer
 	// write it. Safe to remove once all stored components migrate.
 	ReferenceLevels []ReferenceLevel `json:"reference_levels,omitempty" bson:"reference_levels,omitempty"`
+
+	// AccumulatorMode turns the line/area renderer's pairwise-delta transform on:
+	// each point plots value[i]-value[i-1] instead of the raw value, for
+	// monotonically-increasing counters (odometers, packet counters, kWh meters).
+	// AccumulatorResetPolicy governs counter resets (delta < 0):
+	// "drop_negative" (default — break the line), "clamp_zero", "keep_negative".
+	// See issue #8. Renderer-side transform; the stored values are untouched.
+	AccumulatorMode        bool   `json:"accumulator_mode,omitempty" bson:"accumulator_mode,omitempty"`
+	AccumulatorResetPolicy string `json:"accumulator_reset_policy,omitempty" bson:"accumulator_reset_policy,omitempty"`
 }
 
 // NormalizeYAxisColumns coerces the several shapes an LLM client commonly sends

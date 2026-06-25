@@ -403,6 +403,60 @@ const data = {
   check('case 18: auto + non-timestamp → passthrough', catData[0] === 'us-east' && catData[1] === 'us-west');
 }
 
+// --- Case 19: accumulator delta transform (#8) ---
+{
+  const fmt = (v) => String(v ?? '');
+  // Monotonic counter with a reset: 10,13,18,30 then resets to 5,9.
+  const counterData = {
+    columns: ['ts', 'count'],
+    rows: [
+      [1, 10],
+      [2, 13],
+      [3, 18],
+      [4, 30],
+      [5, 5],
+      [6, 9],
+    ],
+  };
+  const run = (policy) => buildOption(
+    {
+      data_mapping: {
+        x_axis: 'ts',
+        y_axis: [{ column: 'count' }],
+        accumulator_mode: true,
+        ...(policy ? { accumulator_reset_policy: policy } : {}),
+      },
+      options: {},
+    },
+    counterData,
+    { formatCellValue: fmt, chartType: 'line' },
+  ).series[0].data;
+
+  // Off: raw values pass through untouched.
+  const off = buildOption(
+    { data_mapping: { x_axis: 'ts', y_axis: [{ column: 'count' }] }, options: {} },
+    counterData,
+    { formatCellValue: fmt, chartType: 'line' },
+  ).series[0].data;
+  check('case 19: accumulator off → raw values', JSON.stringify(off) === JSON.stringify([10, 13, 18, 30, 5, 9]));
+
+  // drop_negative (default): first point null, deltas, reset → null.
+  const drop = run();
+  check('case 19: drop_negative first point is null', drop[0] === null);
+  check('case 19: drop_negative deltas', drop[1] === 3 && drop[2] === 5 && drop[3] === 12);
+  check('case 19: drop_negative breaks the line at reset', drop[4] === null);
+  check('case 19: drop_negative resumes after reset', drop[5] === 4);
+
+  // clamp_zero: reset emits 0 instead of breaking.
+  const clamp = run('clamp_zero');
+  check('case 19: clamp_zero emits 0 at reset', clamp[4] === 0);
+  check('case 19: clamp_zero keeps normal deltas', clamp[1] === 3 && clamp[5] === 4);
+
+  // keep_negative: reset surfaces the raw negative delta (5 - 30 = -25).
+  const keep = run('keep_negative');
+  check('case 19: keep_negative surfaces the negative delta', keep[4] === -25);
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

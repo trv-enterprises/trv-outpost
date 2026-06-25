@@ -29,6 +29,7 @@ import {
   TRANSPARENT_BG,
   paletteForCount,
   makeValueFormatter,
+  applyAccumulator,
 } from '../option-helpers.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
@@ -144,9 +145,12 @@ function normalizeYEntry(e) {
 }
 
 function buildSeriesForColumn(entry, idx, ctx) {
-  const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, chartType, seriesName } = ctx;
+  const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, chartType, seriesName, accumulatorMode, accumulatorResetPolicy } = ctx;
   const colIdx = columnIndex(entry.column);
-  const data = rows.map((r) => r[colIdx]);
+  let data = rows.map((r) => r[colIdx]);
+  // Accumulator mode: plot each point's delta from the previous (#8). Applied
+  // per series so each column/pivot group deltas against its own history.
+  if (accumulatorMode) data = applyAccumulator(data, accumulatorResetPolicy);
   const series = {
     name: seriesName,
     type: chartType === 'area' ? 'line' : chartType,
@@ -355,6 +359,12 @@ export function buildOption(values, data, helpers = {}) {
   // wire y_axis is a string array). Merge it onto the normalized entries; an
   // inline entry.color (object-form record) still wins if present.
   const rawYColors = Array.isArray(values?.data_mapping?.y_axis_colors) ? values.data_mapping.y_axis_colors : [];
+  // Accumulator/delta transform (#8): when on, each series plots value[i] -
+  // value[i-1]. Reset policy governs counter resets (delta < 0). Threaded into
+  // buildSeriesForColumn via ctx so it applies on both the normal and pivot
+  // paths.
+  const accumulatorMode = values?.data_mapping?.accumulator_mode === true;
+  const accumulatorResetPolicy = values?.data_mapping?.accumulator_reset_policy || 'drop_negative';
   const yEntries = rawYAxis
     .map((e, i) => {
       const norm = normalizeYEntry(e);
@@ -495,7 +505,9 @@ export function buildOption(values, data, helpers = {}) {
             seriesName: String(g.sv),
           },
         );
-        built.data = g.aligned;
+        // Pivot path supplies data explicitly (buildSeriesForColumn got rows:[]),
+        // so apply the accumulator delta to the aligned group here (#8).
+        built.data = accumulatorMode ? applyAccumulator(g.aligned, accumulatorResetPolicy) : g.aligned;
         return built;
       });
       // The carbon-dark ECharts theme carries a top-level `color` palette that
@@ -521,6 +533,8 @@ export function buildOption(values, data, helpers = {}) {
       showDataLabels,
       chartType,
       seriesName: entry.label || entry.column,
+      accumulatorMode,
+      accumulatorResetPolicy,
     }));
   }
 
