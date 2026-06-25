@@ -181,13 +181,14 @@ function DashboardGrid({
   }, [fitMode, containerSize.width, containerSize.height, maxGridCol, maxGridRow, scaleFactor]);
 
   // "Stretch" fit applies a NON-UNIFORM scale (sx ≠ sy) to the whole grid,
-  // squeezing a gauge's round box into an ellipse. To keep gauges round we
-  // counter-scale ONLY the gauge's inner BODY by the inverse of the non-uniform
-  // part, contracting to the SMALLER axis (scale the gauge down to round rather
+  // squeezing a round chart's box (gauge, pie) into an ellipse. To keep them
+  // circular we counter-scale ONLY the chart's inner BODY by the non-uniform
+  // part, contracting to the SMALLER axis (scale the chart down to round rather
   // than up): effective per-axis scale becomes min(sx,sy) on both axes. One
-  // factor is 1, the other ≤ 1. The panel CONTAINER is left untransformed so
-  // its background/border still fill the full stretched footprint; only the
-  // gauge content inside de-stretches. Empty string when the grid is uniform.
+  // factor is 1, the other ≤ 1. The chart still GROWS with the panel (it tracks
+  // min(sx,sy), not actual size) — it just grows uniformly. The panel CONTAINER
+  // is left untransformed so its background/border fill the full stretched
+  // footprint; only the chart content de-stretches. '' when the grid is uniform.
   const gaugeCounterTransform = useMemo(() => {
     const { sx, sy } = fitTransform;
     if (!editMode && fitMode === 'stretch' && sx > 0 && sy > 0 && Math.abs(sx - sy) > 1e-4) {
@@ -262,11 +263,13 @@ function DashboardGrid({
             );
             const hasContent = hasText || hasChart;
 
-            // Gauge panels must stay round under "stretch" (non-uniform) fit.
-            // Counter-scale the panel cell back to a uniform aspect so the
-            // round ECharts box isn't squeezed into an ellipse (#63).
-            const isGauge = chart?.chart_type === 'gauge';
-            const counterTransform = isGauge ? gaugeCounterTransform : '';
+            // Round-aspect charts (gauge, pie) must stay circular under
+            // "stretch" (non-uniform) fit. Counter-scale the panel body back to
+            // a uniform aspect so the round ECharts box isn't squeezed into an
+            // ellipse (#63). Labels/leader lines live inside the transformed
+            // body, so they scale uniformly with the chart — no distortion.
+            const isRoundChart = chart?.chart_type === 'gauge' || chart?.chart_type === 'pie';
+            const counterTransform = isRoundChart ? gaugeCounterTransform : '';
 
             const expandableDisplayTypes = new Set(['weather', 'frigate_camera']);
             const isLegacyChart = !!chart?.component_code
