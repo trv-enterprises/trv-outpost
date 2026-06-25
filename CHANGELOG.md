@@ -6,6 +6,39 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.1] — 2026-06-25
+
+### Added
+
+- **Data table: author-set per-column pixel widths** — the data-table chart
+  type now lets the author pin specific column widths (in pixels), instead of
+  relying only on content-sizing plus the per-user live drag-resize override
+  (#126).
+
+### Fixed
+
+- **Gauge & pie distort to an ellipse under "stretch" fit-to-screen** — View
+  mode's "stretch to fill" applies a non-uniform scale to the whole dashboard
+  grid, which squeezed a round chart's box into an ellipse. Round-aspect charts
+  (gauge, pie) now counter-scale their inner body back to a uniform aspect so
+  they stay circular — and still grow with the panel rather than freezing at
+  actual size. The panel tile keeps its full stretched footprint, and pie
+  labels/leader lines scale with the chart without distortion (#63).
+- **Expanded chart modal dropped the dashboard variable** — opening a panel's
+  expanded view ran its query with an empty `dashboard_variable`; the active
+  variable is now threaded into the modal (#130).
+- **AI create/update rejected a valid `y_axis` object shape** — the agent could
+  legitimately send `y_axis` as `[{column: ...}]`; create/update now tolerates
+  that shape instead of erroring (#129).
+- **EdgeLake dashboard-variable string values substituted unquoted** — string
+  values were injected without quotes, breaking the generated query; they are
+  now quoted (#128).
+- **AI discovery hidden by namespace scope** — the assistant's
+  connection/component discovery was scoped to the active namespace, hiding
+  records in other namespaces; it now discovers across all namespaces (#127).
+- **EdgeLake `ORDER BY` guidance** — the agent is now warned that EdgeLake
+  requires the ordered column to also appear in `SELECT`.
+
 ## [0.34.0] — 2026-06-23
 
 ### Added
