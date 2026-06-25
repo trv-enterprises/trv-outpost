@@ -36,7 +36,9 @@ func TestDecodeIntoDataMappingFieldComplete(t *testing.T) {
 			"scheme": "sd", "mean": "m",
 			"plus_1sd": "p1", "minus_1sd": "n1",
 		},
-		"limit": float64(500),
+		"accumulator_mode":         true,
+		"accumulator_reset_policy": "clamp_zero",
+		"limit":                    float64(500),
 	}
 
 	var got models.ChartDataMapping
@@ -61,6 +63,12 @@ func TestDecodeIntoDataMappingFieldComplete(t *testing.T) {
 	}
 	if got.BandColumns == nil || got.BandColumns.Scheme != "sd" || got.BandColumns.Mean != "m" || got.BandColumns.Plus1SD != "p1" {
 		t.Errorf("band_columns dropped/wrong: %#v", got.BandColumns)
+	}
+	if !got.AccumulatorMode {
+		t.Errorf("accumulator_mode dropped: %v", got.AccumulatorMode)
+	}
+	if got.AccumulatorResetPolicy != "clamp_zero" {
+		t.Errorf("accumulator_reset_policy dropped/wrong: %q", got.AccumulatorResetPolicy)
 	}
 	if got.Limit != 500 {
 		t.Errorf("limit dropped/wrong: %d", got.Limit)
