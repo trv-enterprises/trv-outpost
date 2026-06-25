@@ -182,10 +182,12 @@ function DashboardGrid({
 
   // "Stretch" fit applies a NON-UNIFORM scale (sx ≠ sy) to the whole grid,
   // squeezing a gauge's round box into an ellipse. To keep gauges round we
-  // counter-scale ONLY gauge panels by the inverse of the non-uniform part,
-  // contracting to the SMALLER axis (scale the gauge down to round rather than
-  // up): effective per-axis scale becomes min(sx,sy) on both axes. One factor
-  // is 1, the other ≤ 1. Empty string when the grid is already uniform.
+  // counter-scale ONLY the gauge's inner BODY by the inverse of the non-uniform
+  // part, contracting to the SMALLER axis (scale the gauge down to round rather
+  // than up): effective per-axis scale becomes min(sx,sy) on both axes. One
+  // factor is 1, the other ≤ 1. The panel CONTAINER is left untransformed so
+  // its background/border still fill the full stretched footprint; only the
+  // gauge content inside de-stretches. Empty string when the grid is uniform.
   const gaugeCounterTransform = useMemo(() => {
     const { sx, sy } = fitTransform;
     if (!editMode && fitMode === 'stretch' && sx > 0 && sy > 0 && Math.abs(sx - sy) > 1e-4) {
@@ -300,9 +302,6 @@ function DashboardGrid({
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
                   cursor: editMode ? 'default' : (hasChart && onExpandPanel ? 'pointer' : 'default'),
-                  ...(counterTransform
-                    ? { transform: counterTransform, transformOrigin: 'center' }
-                    : {}),
                 }}
                 onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
               >
@@ -313,7 +312,16 @@ function DashboardGrid({
                   : null}
 
                 {/* Shared panel BODY — identical subtree in both modes so the
-                    streaming chart survives the edit↔view flip. */}
+                    streaming chart survives the edit↔view flip. Gauges wrap the
+                    body in a counter-transformed layer so the circle de-stretches
+                    back to round while the panel CONTAINER keeps its full
+                    stretched footprint (background/border fill the cell). */}
+                <div
+                  className="panel-body"
+                  style={counterTransform
+                    ? { transform: counterTransform, transformOrigin: 'center', flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column' }
+                    : { display: 'contents' }}
+                >
                 <PanelContent
                   panel={panel}
                   chart={chart}
@@ -330,6 +338,7 @@ function DashboardGrid({
                   refreshTick={refreshTick}
                   dataRefreshInterval={effectiveRefreshInterval}
                 />
+                </div>
               </div>
             );
           })}
