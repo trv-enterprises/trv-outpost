@@ -554,12 +554,20 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
           const result = await queryBackfillShared(connectionId, effectiveBackfill, { timeout: BACKFILL_TIMEOUT_MS });
           if (mountedRef.current && result.data?.columns && result.data?.rows) {
             // Convert columnar result to record objects for processStreamRecord.
-            // ts-store backfill ('newest' / 'since:' both hit /data/newest) returns
-            // newest-first (descending timestamp). The chart trusts row order and
-            // never sorts (line.js builds a category x-axis straight from arrival
-            // order), so feed oldest-first to paint left-to-right like SQL charts.
+            // The chart trusts row order and never sorts (line.js builds a category
+            // x-axis straight from arrival order), so backfill rows must be fed
+            // OLDEST-FIRST to paint left→right like SQL charts.
+            //
+            // Source ordering differs by connection type:
+            //   - ts-store ('newest' / 'since:' both hit /data/newest) returns
+            //     NEWEST-first (descending) → reverse to oldest-first.
+            //   - raw socket / websocket / mqtt collect live records in ARRIVAL
+            //     order → already oldest-first; reversing them flips the chart to
+            //     right→left (the bug this guards against).
             const { columns, rows } = result.data;
-            [...rows].reverse().forEach(row => {
+            const sourceIsNewestFirst = datasourceType === 'tsstore';
+            const ordered = sourceIsNewestFirst ? [...rows].reverse() : rows;
+            ordered.forEach(row => {
               const record = {};
               columns.forEach((col, i) => { record[col] = row[i]; });
               processStreamRecord(record);
