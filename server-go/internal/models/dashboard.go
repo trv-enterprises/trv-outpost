@@ -165,6 +165,7 @@ type ChartDataMapping struct {
 //   - [{"column":"temp"}, {"col":"x"}] → ["temp","x"]   (column | col | name | value keys)
 //   - "temp"                           → ["temp"]
 //   - mixed arrays of the above        → flattened to names
+//
 // Unrecognized entries are skipped. Returns (nil, false) when raw isn't one of
 // these shapes, so the caller can fall back to the standard decode/error.
 func NormalizeYAxisColumns(raw json.RawMessage) ([]string, bool) {
@@ -515,6 +516,18 @@ type UpdateDashboardRequest struct {
 	Settings    *DashboardSettings      `json:"settings,omitempty"`
 	Tags        *[]string               `json:"tags,omitempty"`
 	Metadata    *map[string]interface{} `json:"metadata,omitempty"`
+
+	// SettingsFields, when non-nil, holds the RAW settings keys the caller
+	// actually sent. It drives a PARTIAL settings merge: the repo writes a
+	// dotted `settings.<key>` $set for each present key and leaves every
+	// omitted field untouched. This is what makes a partial settings update
+	// (e.g. just `refresh_interval`) safe — without it, the whole `settings`
+	// subdocument is replaced and omitted fields (notably `layout_dimension`)
+	// revert to their zero value (#135). Callers that send the full settings
+	// object can leave this nil to keep the legacy whole-object replace.
+	// Not bound from JSON — populated by the MCP/handler boundary that has
+	// the raw request map.
+	SettingsFields map[string]interface{} `json:"-"`
 }
 
 // DashboardListResponse represents a paginated list of dashboards
@@ -567,8 +580,8 @@ type DashboardSummary struct {
 	// (#21).
 	ComponentUsage  []EntityRef `json:"component_usage,omitempty" bson:"component_usage,omitempty"`
 	ConnectionUsage []EntityRef `json:"connection_usage,omitempty" bson:"connection_usage,omitempty"`
-	Created        time.Time   `json:"created" bson:"created"`
-	Updated        time.Time   `json:"updated" bson:"updated"`
+	Created         time.Time   `json:"created" bson:"created"`
+	Updated         time.Time   `json:"updated" bson:"updated"`
 }
 
 // DashboardSummaryListResponse represents a paginated list of dashboard summaries

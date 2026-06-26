@@ -193,6 +193,21 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 }
 
 // Update updates a dashboard
+// toBSONMap marshals a struct to a bson.M keyed by its bson field names
+// (e.g. `layout_dimension`), so partial $set keys match the stored document
+// shape. Used by the settings partial-merge path.
+func toBSONMap(v interface{}) (bson.M, error) {
+	data, err := bson.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var m bson.M
+	if err := bson.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (r *DashboardRepository) Update(ctx context.Context, id string, req *models.UpdateDashboardRequest) (*models.Dashboard, error) {
 	update := bson.M{
 		"$set": bson.M{
@@ -215,7 +230,26 @@ func (r *DashboardRepository) Update(ctx context.Context, id string, req *models
 		setFields["panels"] = *req.Panels
 	}
 	if req.Settings != nil {
-		setFields["settings"] = *req.Settings
+		if len(req.SettingsFields) > 0 {
+			// Partial merge: write only the settings sub-keys the caller sent
+			// as dotted `settings.<key>` $sets, leaving omitted fields intact
+			// (#135). We pull the values from the decoded struct (validated,
+			// typed) but use the raw map only to know WHICH keys were present —
+			// so an explicit zero (`refresh_interval: 0`) still applies while an
+			// omitted key is left untouched.
+			settingsBSON, err := toBSONMap(*req.Settings)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode settings: %w", err)
+			}
+			for key := range req.SettingsFields {
+				if v, ok := settingsBSON[key]; ok {
+					setFields["settings."+key] = v
+				}
+			}
+		} else {
+			// No field list → legacy whole-object replace (full settings sent).
+			setFields["settings"] = *req.Settings
+		}
 	}
 	if req.Tags != nil {
 		setFields["tags"] = *req.Tags

@@ -6,6 +6,8 @@ package handlers
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -185,10 +187,28 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 func (h *DashboardHandler) UpdateDashboard(c *gin.Context) {
 	id := c.Param("id")
 
+	// Read the body once, then decode it both into the typed request and a
+	// raw map. The raw map tells us WHICH settings keys the caller actually
+	// sent so the repo can merge a partial settings update instead of
+	// replacing the whole subdocument (#135).
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+		return
+	}
+
 	var req models.UpdateDashboardRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if req.Settings != nil {
+		var raw struct {
+			Settings map[string]interface{} `json:"settings"`
+		}
+		if err := json.Unmarshal(body, &raw); err == nil && raw.Settings != nil {
+			req.SettingsFields = raw.Settings
+		}
 	}
 
 	dashboard, err := h.service.UpdateDashboard(c.Request.Context(), id, &req)

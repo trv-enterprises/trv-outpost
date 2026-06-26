@@ -461,13 +461,16 @@ func (r *ToolRegistry) registerConnectionTools() {
 	r.registerTool(
 		Tool{
 			Name:        "update_connection",
-			Description: "Update an existing connection. Provide only the fields you want to change.",
+			Description: "Update an existing connection. Provide only the fields you want to change. To change connection settings, pass `type` (the current connection type) plus a `config` object in the same shape create_connection accepts — it fully replaces the type-specific config.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{
 					"id":          {Type: "string", Description: "Connection ID"},
 					"name":        {Type: "string", Description: "New name (optional)"},
 					"description": {Type: "string", Description: "New description (optional)"},
+					"type":        {Type: "string", Description: "Connection type — REQUIRED when passing `config`, so the config can be parsed for the right adapter."},
+					"config":      {Type: "object", Description: "Type-specific configuration (same shape as create_connection). Replaces the existing config. Requires `type`."},
+					"tags":        {Type: "array", Description: "Replace the connection's tags (optional)"},
 				},
 				Required: []string{"id"},
 			},
@@ -477,6 +480,18 @@ func (r *ToolRegistry) registerConnectionTools() {
 			req := &models.UpdateConnectionRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
+			}
+			// Config edits require the type so we can parse into the right
+			// adapter shape. Without type we can't know which sub-object to fill.
+			if cfg, ok := args["config"].(map[string]interface{}); ok {
+				connType := models.ConnectionType(getString(args, "type"))
+				if connType == "" {
+					return nil, fmt.Errorf("update_connection: `type` is required when passing `config`")
+				}
+				req.Config = parseConnectionConfig(connType, cfg)
+			}
+			if tagsRaw, ok := args["tags"].([]interface{}); ok {
+				req.Tags = parseStringArray(tagsRaw)
 			}
 			return r.connectionService.UpdateConnection(context.Background(), id, req)
 		},
@@ -1309,6 +1324,10 @@ func (r *ToolRegistry) registerDashboardTools() {
 					return nil, fmt.Errorf("invalid settings: %w", err)
 				}
 				req.Settings = &settings
+				// Carry the raw key set so the repo merges ONLY the fields the
+				// caller sent — a partial settings update (e.g. just panels +
+				// refresh_interval) no longer wipes layout_dimension etc (#135).
+				req.SettingsFields = settingsRaw
 			}
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				tags := parseStringArray(tagsRaw)
@@ -1497,22 +1516,54 @@ func getMap(m map[string]interface{}, key string) map[string]interface{} {
 	return nil
 }
 
+// getStringMap pulls a nested object and coerces its values to strings,
+// dropping any non-string entries. Returns nil when the key is absent or
+// not an object (so callers can leave the target field unset).
+func getStringMap(m map[string]interface{}, key string) map[string]string {
+	raw, ok := m[key].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			out[k] = s
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func parseConnectionConfig(dsType models.ConnectionType, configMap map[string]interface{}) models.ConnectionConfig {
 	config := models.ConnectionConfig{}
 	switch dsType {
 	case models.ConnectionTypeAPI:
 		config.API = &models.APIConfig{
-			URL:     getString(configMap, "url"),
-			Method:  getString(configMap, "method"),
-			Timeout: getInt(configMap, "timeout"),
+			URL:                getString(configMap, "url"),
+			Method:             getString(configMap, "method"),
+			Timeout:            getInt(configMap, "timeout"),
+			AuthType:           getString(configMap, "auth_type"),
+			Body:               getString(configMap, "body"),
+			RetryCount:         getInt(configMap, "retry_count"),
+			RetryDelay:         getInt(configMap, "retry_delay"),
+			InsecureSkipVerify: getBool(configMap, "insecure_skip_verify"),
+			Headers:            getStringMap(configMap, "headers"),
+			AuthCredentials:    getStringMap(configMap, "auth_credentials"),
+			QueryParams:        getStringMap(configMap, "query_params"),
 		}
-		if headers, ok := configMap["headers"].(map[string]interface{}); ok {
-			config.API.Headers = make(map[string]string)
-			for k, v := range headers {
-				if s, ok := v.(string); ok {
-					config.API.Headers[k] = s
-				}
+		// response_config.data_path tells the adapter where the record array
+		// lives in the JSON response. Accept it nested (response_config:{data_path})
+		// or as a flat top-level data_path for convenience.
+		dataPath := getString(configMap, "data_path")
+		if rc := getMap(configMap, "response_config"); rc != nil {
+			if dp := getString(rc, "data_path"); dp != "" {
+				dataPath = dp
 			}
+		}
+		if dataPath != "" {
+			config.API.ResponseConfig = &models.APIResponseConfig{DataPath: dataPath}
 		}
 	case models.ConnectionTypeSQL:
 		config.SQL = &models.SQLConfig{
@@ -1532,10 +1583,42 @@ func parseConnectionConfig(dsType models.ConnectionType, configMap map[string]in
 			HasHeader: getBool(configMap, "has_header"),
 		}
 	case models.ConnectionTypeSocket:
-		config.Socket = &models.SocketConfig{
-			URL:      getString(configMap, "url"),
-			Protocol: getString(configMap, "protocol"),
+		socket := &models.SocketConfig{
+			URL:                getString(configMap, "url"),
+			Protocol:           getString(configMap, "protocol"),
+			Bidirectional:      getBool(configMap, "bidirectional"),
+			ReconnectOnError:   getBool(configMap, "reconnect_on_error"),
+			ReconnectDelay:     getInt(configMap, "reconnect_delay"),
+			PingInterval:       getInt(configMap, "ping_interval"),
+			MessageFormat:      getString(configMap, "message_format"),
+			BufferSize:         getInt(configMap, "buffer_size"),
+			InsecureSkipVerify: getBool(configMap, "insecure_skip_verify"),
+			// Custom headers (e.g. Authorization: Bearer …) — the socket
+			// adapter passes these to the WS dialer, so header auth works
+			// without leaking a token into the URL.
+			Headers: getStringMap(configMap, "headers"),
 		}
+		// Parser config unwraps a nested payload (data_path) and pulls the
+		// timestamp out of the message (timestamp_field). Only attach a
+		// parser when at least one field is set so we don't store an empty
+		// object.
+		if p := getMap(configMap, "parser"); p != nil {
+			parser := &models.SocketParserConfig{
+				DataPath:        getString(p, "data_path"),
+				TimestampField:  getString(p, "timestamp_field"),
+				TimestampScale:  getString(p, "timestamp_scale"),
+				TimestampFormat: getString(p, "timestamp_format"),
+				FieldMappings:   getStringMap(p, "field_mappings"),
+				IncludeFields:   getStringSlice(p, "include_fields"),
+				ExcludeFields:   getStringSlice(p, "exclude_fields"),
+			}
+			if parser.DataPath != "" || parser.TimestampField != "" || parser.TimestampScale != "" ||
+				parser.TimestampFormat != "" || len(parser.FieldMappings) > 0 ||
+				len(parser.IncludeFields) > 0 || len(parser.ExcludeFields) > 0 {
+				socket.Parser = parser
+			}
+		}
+		config.Socket = socket
 	case models.ConnectionTypeTSStore:
 		config.TSStore = &models.TSStoreConfig{
 			Transport: models.TSStoreTransport(getString(configMap, "transport")),
