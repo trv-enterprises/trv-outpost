@@ -21,6 +21,7 @@ import NamespaceChip from './shared/NamespaceChip';
 import VariableIndicator from './shared/VariableIndicator';
 import CustomCodeIndicator from './shared/CustomCodeIndicator';
 import SortMenu from './shared/SortMenu';
+import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import './ComponentPickerModal.scss';
 import './shared/FilterOverflowMenu.scss';
 
@@ -96,8 +97,10 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
   // and label the selected item. Fetched in parallel with components on
   // open. Same shape as the connection map on the list pages.
   const [connections, setConnections] = useState({});
-  const [sortKey, setSortKey] = useState('name');
-  const [sortDirection, setSortDirection] = useState('asc');
+  // Sort persists across sessions in user config (like the list pages),
+  // keyed separately from the charts list since the picker is its own view.
+  const [sortKey, setSortKey] = useState(() => getListPrefs('componentPicker').sortKey || 'name');
+  const [sortDirection, setSortDirection] = useState(() => getListPrefs('componentPicker').sortDir || 'asc');
 
   useEffect(() => {
     if (open) {
@@ -109,8 +112,8 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       setTagFilter([]);
       setNamespaceFilter([]);
       setConnectionFilter('all');
-      setSortKey('name');
-      setSortDirection('asc');
+      // Sort is intentionally NOT reset here — it's a persisted user
+      // preference, not a per-open filter.
     }
   }, [open, initialCategory]);
 
@@ -383,7 +386,11 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
           <SortMenu
             sortKey={sortKey}
             sortDirection={sortDirection}
-            onChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
+            onChange={(k, d) => {
+              setSortKey(k);
+              setSortDirection(d);
+              setListPrefs('componentPicker', { sortKey: k, sortDir: d });
+            }}
             options={[
               { key: 'name', label: 'Name', defaultDir: 'asc' },
               { key: 'updated', label: 'Last modified', defaultDir: 'desc' },

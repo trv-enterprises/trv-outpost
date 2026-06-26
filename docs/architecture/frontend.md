@@ -356,6 +356,35 @@ component that consumes dashboard commands is `FrigateAlertsGrid`
 No other component (charts, weather, controls, other displays) acts
 on these messages today.
 
+**Operational note — safe to leave unset.** The sole purpose of
+this channel today is letting a **voice assistant / kiosk** drive the
+Frigate alerts viewer hands-free ("show alert", "next", "mark
+reviewed"). If a deployment does **not** use the Frigate alert
+module from a kiosk, **leave `dashboard_command_connection` (and/or
+`dashboard_command_topic`) blank in Manage → Settings.** Both keys
+are seeded with empty-friendly defaults; when either is empty the
+viewer's `setupCommandSubscription` effect returns early — no MQTT
+connection is opened, **no error is logged, and nothing else is
+affected** (chart data, streaming, refresh all run normally). When
+both *are* set, **every** open viewer subscribes — opening the MQTT
+connection and its ~5 paho goroutines — **regardless of whether the
+dashboard contains a Frigate alerts panel.** So on a server with the
+command settings populated but no kiosk in use, clearing the
+connection setting removes an always-on MQTT cost with zero
+functional regression (you only lose voice/kiosk control of Frigate
+alerts).
+
+> **Why a side-channel and not the component's own stream?** Frigate
+> is a **REST passthrough**, not a streaming connection
+> (`FrigateAlertsGrid` self-polls `getFrigateReviews` on a timer; there
+> is no `internal/connection` Frigate adapter and no
+> `StreamConnectionManager` subscription to ride a command in on). A
+> streaming component *could* receive commands inline on its own
+> connection by topic; Frigate can't, so the global command bus fills
+> that gap. Consolidation (inline-on-stream for streamable components,
+> retire/scope the global bus, per-instance topic routing) is tracked
+> in trv-outpost#134.
+
 **No per-instance routing.** The topic is a single global setting,
 so every connected viewer subscribes to the same topic and acts on
 every command whose `target` matches a component it happens to be
