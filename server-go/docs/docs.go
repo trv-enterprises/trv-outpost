@@ -5584,6 +5584,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/stats": {
+            "get": {
+                "description": "One-shot snapshot of current-state server gauges: goroutine count, runtime memory, inbound connection counts by type, outbound stream summary, service health, and uptime.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get current server stats",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.StatusPayload"
+                        }
+                    }
+                }
+            }
+        },
+        "/stats/goroutines": {
+            "get": {
+                "description": "Groups all live goroutines by their creating function with counts. On-demand diagnostic — not part of the status tick.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get a goroutine accounting",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/system-users": {
             "get": {
                 "produces": [
@@ -6533,6 +6574,29 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.ConnectionSummary": {
+            "type": "object",
+            "properties": {
+                "by_type": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "connections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.ClientConnectionInfo"
+                    }
+                },
+                "total_clients": {
+                    "type": "integer"
+                },
+                "total_websockets": {
+                    "type": "integer"
+                }
+            }
+        },
         "handlers.ConnectionTypeGuidanceResponse": {
             "type": "object",
             "properties": {
@@ -6711,10 +6775,67 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.RuntimeInfo": {
+            "type": "object",
+            "properties": {
+                "goroutines": {
+                    "type": "integer"
+                },
+                "heap_alloc_bytes": {
+                    "type": "integer"
+                },
+                "max_procs": {
+                    "type": "integer"
+                },
+                "num_cpu": {
+                    "type": "integer"
+                },
+                "num_gc": {
+                    "type": "integer"
+                },
+                "sys_bytes": {
+                    "type": "integer"
+                },
+                "total_alloc_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
         "handlers.SaveSessionRequest": {
             "type": "object",
             "properties": {
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.ServerInfo": {
+            "type": "object",
+            "properties": {
+                "build": {
+                    "type": "string"
+                },
+                "git_commit": {
+                    "type": "string"
+                },
+                "uptime_secs": {
+                    "type": "number"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.ServiceStatus": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "latency_ms": {
+                    "type": "integer"
+                },
+                "status": {
                     "type": "string"
                 }
             }
@@ -6730,6 +6851,32 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/models.UserCapabilitiesResponse"
+                }
+            }
+        },
+        "handlers.StatusPayload": {
+            "type": "object",
+            "properties": {
+                "connections": {
+                    "$ref": "#/definitions/handlers.ConnectionSummary"
+                },
+                "runtime": {
+                    "$ref": "#/definitions/handlers.RuntimeInfo"
+                },
+                "server": {
+                    "$ref": "#/definitions/handlers.ServerInfo"
+                },
+                "services": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/handlers.ServiceStatus"
+                    }
+                },
+                "streams": {
+                    "$ref": "#/definitions/handlers.StreamSummary"
+                },
+                "timestamp": {
+                    "type": "string"
                 }
             }
         },
@@ -6763,6 +6910,45 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "handlers.StreamInfo": {
+            "type": "object",
+            "properties": {
+                "buffer_count": {
+                    "type": "integer"
+                },
+                "connected": {
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "string"
+                },
+                "connection_name": {
+                    "description": "resolved display name; empty if unknown",
+                    "type": "string"
+                },
+                "subscriber_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.StreamSummary": {
+            "type": "object",
+            "properties": {
+                "active_count": {
+                    "type": "integer"
+                },
+                "aggregators": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "streams": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.StreamInfo"
                     }
                 }
             }
@@ -11109,6 +11295,27 @@ const docTemplate = `{
                 }
             }
         },
+        "registry.ClientConnectionInfo": {
+            "type": "object",
+            "properties": {
+                "connected_at": {
+                    "type": "string"
+                },
+                "duration_secs": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type": {
+                    "$ref": "#/definitions/registry.ConnectionType"
+                }
+            }
+        },
         "registry.ComponentCapabilities": {
             "type": "object",
             "properties": {
@@ -11223,6 +11430,25 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "registry.ConnectionType": {
+            "type": "string",
+            "enum": [
+                "ai_session",
+                "component_subscription",
+                "stream",
+                "inbound",
+                "status_monitor",
+                "debug"
+            ],
+            "x-enum-varnames": [
+                "ConnectionTypeAISession",
+                "ConnectionTypeComponentSubscription",
+                "ConnectionTypeStream",
+                "ConnectionTypeInbound",
+                "ConnectionTypeStatusMonitor",
+                "ConnectionTypeDebug"
+            ]
         },
         "registry.DataRequirements": {
             "type": "object",

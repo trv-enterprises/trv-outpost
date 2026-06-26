@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +27,11 @@ type StatusHandler struct {
 	mongodb       *database.MongoDB
 	streamManager *streaming.Manager
 	startTime     time.Time
+	// connNameLookup resolves a connection id → display name for the stream
+	// summary. Returns a map of all known connections so a single call covers
+	// every active stream per status build (no per-stream Mongo round-trip).
+	// Optional — nil leaves stream names empty (ids still shown).
+	connNameLookup func() map[string]string
 }
 
 // NewStatusHandler creates a new status handler
@@ -35,6 +43,13 @@ func NewStatusHandler(mongodb *database.MongoDB, streamManager *streaming.Manage
 	}
 }
 
+// SetConnectionNameLookup wires a resolver that maps connection id → name,
+// used to label streams in the status summary. Inject it from main where the
+// connection repo/service is available so the handler stays decoupled.
+func (h *StatusHandler) SetConnectionNameLookup(lookup func() map[string]string) {
+	h.connNameLookup = lookup
+}
+
 // ServiceStatus represents the health status of a service
 type ServiceStatus struct {
 	Status    string `json:"status"`
@@ -44,11 +59,27 @@ type ServiceStatus struct {
 
 // StatusPayload is the complete status message
 type StatusPayload struct {
-	Timestamp   time.Time                  `json:"timestamp"`
-	Server      ServerInfo                 `json:"server"`
-	Services    map[string]ServiceStatus   `json:"services"`
-	Connections ConnectionSummary          `json:"connections"`
-	Streams     StreamSummary              `json:"streams"`
+	Timestamp   time.Time                `json:"timestamp"`
+	Server      ServerInfo               `json:"server"`
+	Runtime     RuntimeInfo              `json:"runtime"`
+	Services    map[string]ServiceStatus `json:"services"`
+	Connections ConnectionSummary        `json:"connections"`
+	Streams     StreamSummary            `json:"streams"`
+}
+
+// RuntimeInfo holds instantaneous Go-runtime gauges. These are pure
+// current-state numbers (no peaks/accumulators) — a ts-store remote
+// attached to the status feed captures the series and recovers any
+// high-water marks downstream. NumGoroutine is the primary concurrency
+// signal; the memory fields come from a single runtime.ReadMemStats.
+type RuntimeInfo struct {
+	Goroutines  int    `json:"goroutines"`
+	MaxProcs    int    `json:"max_procs"`
+	NumCPU      int    `json:"num_cpu"`
+	HeapAllocB  uint64 `json:"heap_alloc_bytes"`
+	TotalAllocB uint64 `json:"total_alloc_bytes"`
+	SysB        uint64 `json:"sys_bytes"`
+	NumGC       uint32 `json:"num_gc"`
 }
 
 // ServerInfo contains server metadata
@@ -61,9 +92,9 @@ type ServerInfo struct {
 
 // ConnectionSummary aggregates connection info
 type ConnectionSummary struct {
-	TotalClients    int                            `json:"total_clients"`
-	TotalWebsockets int                            `json:"total_websockets"`
-	ByType          map[string]int                 `json:"by_type"`
+	TotalClients    int                             `json:"total_clients"`
+	TotalWebsockets int                             `json:"total_websockets"`
+	ByType          map[string]int                  `json:"by_type"`
 	Connections     []registry.ClientConnectionInfo `json:"connections"`
 }
 
@@ -77,6 +108,7 @@ type StreamSummary struct {
 // StreamInfo represents a single stream's status
 type StreamInfo struct {
 	ConnectionID    string `json:"connection_id"`
+	ConnectionName  string `json:"connection_name"` // resolved display name; empty if unknown
 	Connected       bool   `json:"connected"`
 	SubscriberCount int    `json:"subscriber_count"`
 	BufferCount     int    `json:"buffer_count"`
@@ -184,6 +216,89 @@ func (h *StatusHandler) HandleStatusWebSocket(c *gin.Context) {
 	}
 }
 
+// GetStats returns a one-shot snapshot of current server state as JSON.
+// Same payload as the WS status feed (reuses buildStatus) — pure
+// instantaneous gauges, no peaks/accumulators. Scriptable/curl-friendly
+// counterpart to the realtime WS feed.
+// @Summary Get current server stats
+// @Description One-shot snapshot of current-state server gauges: goroutine count, runtime memory, inbound connection counts by type, outbound stream summary, service health, and uptime.
+// @Tags system
+// @Produce json
+// @Success 200 {object} StatusPayload
+// @Router /stats [get]
+func (h *StatusHandler) GetStats(c *gin.Context) {
+	c.JSON(http.StatusOK, h.buildStatus())
+}
+
+// GoroutineGroup is a count of goroutines sharing the same identifying frame.
+type GoroutineGroup struct {
+	Func  string `json:"func"`  // the identifying function (creator or current top user frame)
+	Count int    `json:"count"` // how many goroutines map to it
+}
+
+// GetGoroutines returns an accounting of the live goroutines grouped by the
+// function that created them (runtime.GoroutineProfile gives each record's
+// creation + current stack). This answers "what are the N goroutines doing?"
+// without a full pprof stack dump. Cost is a single GoroutineProfile call
+// (a brief stop-the-world proportional to goroutine count) — fine on demand,
+// NOT something to put on the 2s status tick.
+// @Summary Get a goroutine accounting
+// @Description Groups all live goroutines by their creating function with counts. On-demand diagnostic — not part of the status tick.
+// @Tags system
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /stats/goroutines [get]
+func (h *StatusHandler) GetGoroutines(c *gin.Context) {
+	// Size the buffer with headroom; GoroutineProfile returns ok=false if the
+	// buffer was too small (goroutines spawned between sizing and reading), so
+	// retry with the freshly-reported count until it fits.
+	var records []runtime.StackRecord
+	n, _ := runtime.GoroutineProfile(nil)
+	for {
+		records = make([]runtime.StackRecord, n+16)
+		got, done := runtime.GoroutineProfile(records)
+		if done {
+			records = records[:got]
+			break
+		}
+		n = got
+	}
+
+	byFunc := make(map[string]int)
+	for i := range records {
+		frames := runtime.CallersFrames(records[i].Stack())
+		// Walk to the deepest user frame that isn't pure runtime plumbing —
+		// that's the most informative label for "what is this goroutine".
+		label := "unknown"
+		for {
+			frame, more := frames.Next()
+			if frame.Function != "" && !strings.HasPrefix(frame.Function, "runtime.") {
+				label = frame.Function
+			}
+			if !more {
+				break
+			}
+		}
+		byFunc[label]++
+	}
+
+	groups := make([]GoroutineGroup, 0, len(byFunc))
+	for fn, count := range byFunc {
+		groups = append(groups, GoroutineGroup{Func: fn, Count: count})
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].Count != groups[j].Count {
+			return groups[i].Count > groups[j].Count
+		}
+		return groups[i].Func < groups[j].Func
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":  len(records),
+		"groups": groups,
+	})
+}
+
 // buildStatus creates a complete status payload
 func (h *StatusHandler) buildStatus() *StatusPayload {
 	now := time.Now()
@@ -197,6 +312,21 @@ func (h *StatusHandler) buildStatus() *StatusPayload {
 		Build:      versionInfo["build"],
 		GitCommit:  versionInfo["git_commit"],
 		UptimeSecs: now.Sub(h.startTime).Seconds(),
+	}
+
+	// Instantaneous runtime gauges. NumGoroutine is a cheap atomic read;
+	// ReadMemStats is a single (sub-millisecond) pull. No peaks/accumulators —
+	// current state only.
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	runtimeInfo := RuntimeInfo{
+		Goroutines:  runtime.NumGoroutine(),
+		MaxProcs:    runtime.GOMAXPROCS(0),
+		NumCPU:      runtime.NumCPU(),
+		HeapAllocB:  mem.HeapAlloc,
+		TotalAllocB: mem.TotalAlloc,
+		SysB:        mem.Sys,
+		NumGC:       mem.NumGC,
 	}
 
 	// Check service health
@@ -221,6 +351,7 @@ func (h *StatusHandler) buildStatus() *StatusPayload {
 	return &StatusPayload{
 		Timestamp:   now,
 		Server:      serverInfo,
+		Runtime:     runtimeInfo,
 		Services:    services,
 		Connections: connectionSummary,
 		Streams:     streamSummary,
@@ -254,12 +385,19 @@ func (h *StatusHandler) checkMongoDB() ServiceStatus {
 func (h *StatusHandler) buildStreamSummary() StreamSummary {
 	streamIDs := h.streamManager.ListStreams()
 
+	// Resolve id → name once for all streams in this build (nil-safe).
+	var nameByID map[string]string
+	if h.connNameLookup != nil {
+		nameByID = h.connNameLookup()
+	}
+
 	streams := make([]StreamInfo, 0, len(streamIDs))
 	for _, id := range streamIDs {
 		status := h.streamManager.GetStreamStatus(id)
 		if status != nil {
 			streams = append(streams, StreamInfo{
 				ConnectionID:    status.ConnectionID,
+				ConnectionName:  nameByID[status.ConnectionID],
 				Connected:       status.Connected,
 				SubscriberCount: status.SubscriberCount,
 				BufferCount:     status.BufferCount,

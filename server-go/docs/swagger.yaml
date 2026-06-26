@@ -44,6 +44,21 @@ definitions:
       type_count:
         type: integer
     type: object
+  handlers.ConnectionSummary:
+    properties:
+      by_type:
+        additionalProperties:
+          type: integer
+        type: object
+      connections:
+        items:
+          $ref: '#/definitions/registry.ClientConnectionInfo'
+        type: array
+      total_clients:
+        type: integer
+      total_websockets:
+        type: integer
+    type: object
   handlers.ConnectionTypeGuidanceResponse:
     properties:
       guidance:
@@ -161,9 +176,46 @@ definitions:
           $ref: '#/definitions/registry.IntegrationInfo'
         type: array
     type: object
+  handlers.RuntimeInfo:
+    properties:
+      goroutines:
+        type: integer
+      heap_alloc_bytes:
+        type: integer
+      max_procs:
+        type: integer
+      num_cpu:
+        type: integer
+      num_gc:
+        type: integer
+      sys_bytes:
+        type: integer
+      total_alloc_bytes:
+        type: integer
+    type: object
   handlers.SaveSessionRequest:
     properties:
       name:
+        type: string
+    type: object
+  handlers.ServerInfo:
+    properties:
+      build:
+        type: string
+      git_commit:
+        type: string
+      uptime_secs:
+        type: number
+      version:
+        type: string
+    type: object
+  handlers.ServiceStatus:
+    properties:
+      error:
+        type: string
+      latency_ms:
+        type: integer
+      status:
         type: string
     type: object
   handlers.SessionResponse:
@@ -174,6 +226,23 @@ definitions:
         type: string
       user:
         $ref: '#/definitions/models.UserCapabilitiesResponse'
+    type: object
+  handlers.StatusPayload:
+    properties:
+      connections:
+        $ref: '#/definitions/handlers.ConnectionSummary'
+      runtime:
+        $ref: '#/definitions/handlers.RuntimeInfo'
+      server:
+        $ref: '#/definitions/handlers.ServerInfo'
+      services:
+        additionalProperties:
+          $ref: '#/definitions/handlers.ServiceStatus'
+        type: object
+      streams:
+        $ref: '#/definitions/handlers.StreamSummary'
+      timestamp:
+        type: string
     type: object
   handlers.StreamAggregatedRequest:
     properties:
@@ -199,6 +268,32 @@ definitions:
     - interval
     - timestamp_col
     - value_cols
+    type: object
+  handlers.StreamInfo:
+    properties:
+      buffer_count:
+        type: integer
+      connected:
+        type: boolean
+      connection_id:
+        type: string
+      connection_name:
+        description: resolved display name; empty if unknown
+        type: string
+      subscriber_count:
+        type: integer
+    type: object
+  handlers.StreamSummary:
+    properties:
+      active_count:
+        type: integer
+      aggregators:
+        additionalProperties: true
+        type: object
+      streams:
+        items:
+          $ref: '#/definitions/handlers.StreamInfo'
+        type: array
     type: object
   handlers.tsstoreAlertPayload:
     properties:
@@ -3445,6 +3540,20 @@ definitions:
           $ref: '#/definitions/registry.LayoutDimensionSummary'
         type: array
     type: object
+  registry.ClientConnectionInfo:
+    properties:
+      connected_at:
+        type: string
+      duration_secs:
+        type: number
+      id:
+        type: integer
+      metadata:
+        additionalProperties: true
+        type: object
+      type:
+        $ref: '#/definitions/registry.ConnectionType'
+    type: object
   registry.ComponentCapabilities:
     properties:
       can_read:
@@ -3530,6 +3639,22 @@ definitions:
         description: string, int, bool, password, select
         type: string
     type: object
+  registry.ConnectionType:
+    enum:
+    - ai_session
+    - component_subscription
+    - stream
+    - inbound
+    - status_monitor
+    - debug
+    type: string
+    x-enum-varnames:
+    - ConnectionTypeAISession
+    - ConnectionTypeComponentSubscription
+    - ConnectionTypeStream
+    - ConnectionTypeInbound
+    - ConnectionTypeStatusMonitor
+    - ConnectionTypeDebug
   registry.DataRequirements:
     properties:
       has_axis_labels:
@@ -7640,6 +7765,36 @@ paths:
       summary: Update a snippet
       tags:
       - snippets
+  /stats:
+    get:
+      description: 'One-shot snapshot of current-state server gauges: goroutine count,
+        runtime memory, inbound connection counts by type, outbound stream summary,
+        service health, and uptime.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.StatusPayload'
+      summary: Get current server stats
+      tags:
+      - system
+  /stats/goroutines:
+    get:
+      description: Groups all live goroutines by their creating function with counts.
+        On-demand diagnostic — not part of the status tick.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a goroutine accounting
+      tags:
+      - system
   /system-users:
     get:
       produces:

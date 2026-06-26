@@ -542,6 +542,22 @@ func main() {
 	tsstoreAlertRulesHandler := handlers.NewTSStoreAlertRulesHandler(tsstoreAlertRulesService)
 	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub, alertService, webhookSecretRepo)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
+	// Resolve connection id → name so the status stream summary can label
+	// streams by name instead of only the opaque id. One FindAll per status
+	// build; nil-safe in the handler if this is never wired.
+	statusHandler.SetConnectionNameLookup(func() map[string]string {
+		conns, err := connectionRepo.FindAll(context.Background(), 1000, 0)
+		if err != nil {
+			return nil
+		}
+		m := make(map[string]string, len(conns))
+		for _, c := range conns {
+			if c != nil {
+				m[c.ID] = c.Name
+			}
+		}
+		return m
+	})
 	tagHandler := handlers.NewTagHandler(mongodb.Database)
 
 	// Initialize Clerk verifier when CLERK_SECRET_KEY is set. Same
@@ -659,6 +675,18 @@ func main() {
 	{
 		// Health check
 		api.GET("/health", healthCheck(mongodb, cfg.Auth.AllowLegacyGUID))
+
+		// Server stats — current-state gauges (goroutines, memory, inbound
+		// connections by type, outbound streams, service health). Authed
+		// like the rest of /api. The WS variant below pushes the same payload
+		// on an interval for realtime capture (e.g. a ts-store remote).
+		api.GET("/stats", statusHandler.GetStats)
+		// On-demand goroutine accounting (grouped by creating function).
+		// Brief stop-the-world — diagnostic only, not on the status tick.
+		api.GET("/stats/goroutines", statusHandler.GetGoroutines)
+		// Status monitoring WebSocket. Authed via the api group; WS/EventSource
+		// clients that can't set headers pass the token as ?st=<token>.
+		api.GET("/ws/status", statusHandler.HandleStatusWebSocket)
 
 		// Auth routes (for getting current user capabilities)
 		auth := api.Group("/auth")
@@ -789,8 +817,8 @@ func main() {
 			connections.POST("/:id/health", connectionHandler.CheckConnectionHealth)
 			connections.POST("/:id/query", connectionHandler.QueryConnection)
 			connections.GET("/:id/schema", connectionHandler.GetConnectionSchema)
-			connections.GET("/:id/variable-values", connectionHandler.GetVariableValues)     // Dashboard-variable distinct value discovery
-			connections.PUT("/:id/discovered-values", connectionHandler.SaveDiscoveredValues) // Persist client-captured variable values (design-gated)
+			connections.GET("/:id/variable-values", connectionHandler.GetVariableValues)                        // Dashboard-variable distinct value discovery
+			connections.PUT("/:id/discovered-values", connectionHandler.SaveDiscoveredValues)                   // Persist client-captured variable values (design-gated)
 			connections.GET("/:id/prometheus/labels/:label/values", connectionHandler.GetPrometheusLabelValues) // Prometheus label values
 			connections.GET("/:id/edgelake/databases", connectionHandler.GetEdgeLakeDatabases)                  // EdgeLake databases
 			connections.GET("/:id/edgelake/tables", connectionHandler.GetEdgeLakeTables)                        // EdgeLake tables
@@ -1006,9 +1034,6 @@ func main() {
 	// Inbound WebSocket endpoint for ts-store push connections (outside /api group, no auth required)
 	// ts-store dials out to this endpoint to push data
 	router.GET("/api/streams/inbound/:connectionId", inboundHandler.HandleInboundWebSocket)
-
-	// Status monitoring WebSocket (no auth required for monitoring tools)
-	router.GET("/api/ws/status", statusHandler.HandleStatusWebSocket)
 
 	// Swagger documentation. The committed spec has a static @host
 	// (localhost:3001), but the UI is reached over many origins (homelab
