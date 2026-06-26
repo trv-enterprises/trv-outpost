@@ -286,24 +286,38 @@ function buildLegend(legend, dualAxis, multipleSeries) {
  */
 function buildThresholds(thresholds, mode) {
   if (!Array.isArray(thresholds) || thresholds.length === 0) {
-    return { markLine: undefined, visualMap: undefined };
+    return { markLine: undefined, visualMap: undefined, labelGutter: 0 };
   }
   const sorted = [...thresholds]
     .filter((t) => t && Number.isFinite(Number(t.value)))
     .sort((a, b) => Number(a.value) - Number(b.value));
-  if (sorted.length === 0) return { markLine: undefined, visualMap: undefined };
+  if (sorted.length === 0) return { markLine: undefined, visualMap: undefined, labelGutter: 0 };
 
   const renderMode = mode || 'line';
-  const out = { markLine: undefined, visualMap: undefined };
+  const out = { markLine: undefined, visualMap: undefined, labelGutter: 0 };
 
   if (renderMode === 'line' || renderMode === 'both') {
+    // Threshold labels render at the line's END (right edge of the plot).
+    // ECharts draws the label just past the line's right end, OUTSIDE the
+    // grid, so without right padding it gets clipped by the panel edge.
+    // We measure the widest label here and report it as `labelGutter` so
+    // buildOption can widen grid.right to make room for the largest one.
+    const labels = sorted.map((t) => (t.label ? String(t.label) : '')).filter(Boolean);
+    if (labels.length > 0) {
+      // ECharts markLine label default font is ~12px sans-serif. Estimate
+      // ~7px/char + ~8px for the leading gap between the line end and text.
+      const widest = labels.reduce((max, l) => Math.max(max, l.length), 0);
+      out.labelGutter = Math.ceil(widest * 7) + 8;
+    }
     out.markLine = {
       symbol: 'none',
       silent: true,
       data: sorted.map((t) => ({
         yAxis: Number(t.value),
         lineStyle: { color: t.color || '#888', type: 'dashed', width: 1 },
-        label: t.label ? { show: true, formatter: t.label, color: t.color || '#888' } : { show: false },
+        label: t.label
+          ? { show: true, position: 'end', formatter: t.label, color: t.color || '#888' }
+          : { show: false },
       })),
     };
   }
@@ -550,7 +564,7 @@ export function buildOption(values, data, helpers = {}) {
   const tooltip = buildTooltip(opts.tooltip || {});
   const legend = buildLegend(opts.legend || {}, dualAxis, series.length > 1);
 
-  const { markLine, visualMap } = buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
+  const { markLine, visualMap, labelGutter } = buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
   if (markLine) {
     // Attach to the first series so the marker overlays exist exactly once.
     if (series[0]) series[0] = { ...series[0], markLine };
@@ -630,7 +644,13 @@ export function buildOption(values, data, helpers = {}) {
   const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
   const gridLeft = legendPos === 'left' ? 135 : 50;
-  const gridRight = legendPos === 'right' ? 135 : 20;
+  // Right edge: 135px when the legend sits on the right, else a small 20px
+  // flush gap. When threshold labels render at the line's end (right edge),
+  // widen the gutter to fit the widest label so it isn't clipped by the
+  // panel. A right-side legend already provides ample room, so only bump
+  // the non-legend case (and never shrink below the existing budget).
+  const baseGridRight = legendPos === 'right' ? 135 : 20;
+  const gridRight = Math.max(baseGridRight, (labelGutter || 0) + 12);
   const option = {
     backgroundColor: TRANSPARENT_BG,
     tooltip,
