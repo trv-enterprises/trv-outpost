@@ -6,6 +6,45 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.35.0] — 2026-06-26
+
+### Added
+
+- **Server runtime observability** — `GET /api/stats` returns a one-shot
+  snapshot of current-state server gauges: goroutine count, Go runtime memory
+  (heap/total/sys, GC count), inbound connection counts by type, an outbound
+  stream summary (labeled by connection name), MongoDB health, and uptime. The
+  same payload streams on the existing `/api/ws/status` WebSocket for realtime
+  capture (a ts-store remote can attach to record history). No peaks or
+  server-side persistence — pure current state.
+- **Goroutine accounting** — `GET /api/stats/goroutines` groups every live
+  goroutine by its creating function with counts ("what are the N goroutines
+  doing?"). On-demand diagnostic (brief stop-the-world), never on the status
+  tick.
+- The status WebSocket moved under the authenticated `/api` group (it was
+  previously open); header-less WS/EventSource clients authenticate with
+  `?st=<token>`.
+- **Full socket/API connection config over MCP** — `create_connection` /
+  `update_connection` now carry the complete socket and API config. The socket
+  parser previously kept only `url`/`protocol` (so a WebSocket connection
+  couldn't set an `Authorization` header and had to put a token in the URL);
+  the API parser dropped auth, query params, body, retry, and
+  `response_config.data_path`.
+- **Component picker sort persists** — choosing a sort in the
+  select-existing-component picker on a dashboard panel now persists to user
+  config instead of resetting to Name on every open.
+
+### Fixed
+
+- **Dashboard settings: partial updates wiped omitted fields** — a partial
+  settings update replaced the whole settings document, zeroing everything
+  else; most visibly `layout_dimension` reverting to the kiosk default.
+  Settings now merge field-by-field, preserving omitted fields while still
+  allowing an explicit zero (#135).
+- **Threshold labels clipped on line charts** — reference-line labels (e.g.
+  "HIGH"/"MED") ran off the right panel edge; the plot now reserves a gutter
+  sized to the widest label (#131).
+
 ## [0.34.1] — 2026-06-25
 
 ### Added
