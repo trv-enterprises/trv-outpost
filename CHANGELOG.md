@@ -6,6 +6,17 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.35.1] — 2026-06-26
+
+### Fixed
+
+- **Raw socket/websocket/MQTT line charts painted right-to-left** — the
+  streaming backfill reversed its result rows unconditionally, correct for
+  ts-store (newest-first source) but wrong for the socket adapter, which
+  returns records oldest-first; new points entered on the right and scrolled
+  the wrong way. The reverse is now gated on connection type. ts-store charts
+  are unchanged.
+
 ## [0.35.0] — 2026-06-26
 
 ### Added
