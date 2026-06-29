@@ -1,0 +1,229 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.resource-navigator-modal {
+  .cds--modal-container {
+    // Keep Carbon's `lg` modal width; just give the two-pane body a tall,
+    // stable working area.
+    height: 85vh;
+    max-height: 85vh;
+  }
+
+  .cds--modal-content {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+
+  .rn-toolbar {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-05;
+    padding-bottom: spacing.$spacing-04;
+    flex-wrap: wrap;
+
+    .cds--content-switcher {
+      max-width: 360px;
+    }
+
+    .rn-refresh {
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+  }
+
+  // Search + namespace + tag filters; filter the top-level rows of the
+  // current rooting.
+  .rn-filters {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-04;
+    padding-bottom: spacing.$spacing-04;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+    flex-wrap: wrap;
+
+    .rn-search {
+      flex: 1 1 220px;
+      max-width: 360px;
+      min-width: 180px;
+    }
+  }
+
+  .rn-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0; // allow children to scroll instead of growing the modal
+  }
+
+  // The tree grows with the modal width but stays bounded so the info pane
+  // always keeps room. clamp(min, preferred, max): floor 360px on a narrow
+  // modal, ~44% of the body width as it widens (≈500px around a 1140px body,
+  // which reads well), capped at 560px so a huge screen doesn't starve the
+  // info pane. The width is driven by % of the flex container, not the
+  // viewport, so it tracks the modal — not the whole window.
+  .rn-tree-pane {
+    flex: 0 0 clamp(360px, 44%, 560px);
+    overflow: auto;
+    padding: spacing.$spacing-04 spacing.$spacing-05 spacing.$spacing-05 0;
+    border-right: 1px solid var(--cds-border-subtle-01);
+  }
+
+  .rn-info-pane {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
+    padding: spacing.$spacing-05;
+    color: var(--cds-text-primary);
+  }
+
+  // Tree node label: name on the left, a subdued secondary chip pushed to the
+  // right edge of the row. Fill the available row width so the secondary text
+  // right-justifies within the tree.
+  .rn-node-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: spacing.$spacing-05;
+    width: 100%;
+    min-width: 0;
+
+    .rn-node-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .rn-node-secondary {
+      margin-left: auto;
+      padding-left: spacing.$spacing-05;
+      font-size: 0.75rem;
+      color: var(--cds-text-secondary);
+      flex-shrink: 0;
+    }
+  }
+
+  // Make the whole Carbon label chain stretch so our name column fills the
+  // row's width (otherwise the name stays content-sized and never grows when
+  // the tree pane widens). DOM: .label (row) > .label__details (icon + our
+  // label) > .rn-node-label.
+  .cds--tree-node__label {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  .cds--tree-node__label__details {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: spacing.$spacing-03;
+  }
+
+  .cds--tree-node__label__text {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .rn-empty,
+  .rn-info-empty {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .rn-info-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: spacing.$spacing-04;
+    margin-bottom: spacing.$spacing-03;
+
+    .rn-info-name {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      word-break: break-word;
+    }
+  }
+
+  .rn-info-type {
+    margin: 0 0 spacing.$spacing-04;
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  // Descriptive metadata as a label/value list.
+  .rn-info-meta {
+    margin: 0 0 spacing.$spacing-04;
+
+    .rn-info-meta-row {
+      display: flex;
+      gap: spacing.$spacing-04;
+      margin-bottom: spacing.$spacing-03;
+
+      dt {
+        flex: 0 0 96px;
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding-top: 2px;
+      }
+
+      dd {
+        margin: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 0.875rem;
+        word-break: break-word;
+
+        // Namespace pill sits flush with its label — drop Carbon's default
+        // tag margins so it aligns with the uppercase dt.
+        .cds--tag {
+          margin: 0;
+          max-width: 100%;
+        }
+      }
+    }
+  }
+
+  .rn-info-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: spacing.$spacing-02;
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  .rn-info-divider {
+    border: 0;
+    border-top: 1px solid var(--cds-border-subtle-01);
+    margin: spacing.$spacing-04 0 spacing.$spacing-05;
+  }
+
+  .rn-info-related {
+    margin-bottom: spacing.$spacing-05;
+
+    h5 {
+      margin: 0 0 spacing.$spacing-02;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--cds-text-secondary);
+    }
+
+    ul {
+      margin: 0;
+      padding-left: spacing.$spacing-05;
+      list-style: square;
+
+      li {
+        font-size: 0.875rem;
+        margin-bottom: spacing.$spacing-02;
+        word-break: break-word;
+      }
+    }
+  }
+}

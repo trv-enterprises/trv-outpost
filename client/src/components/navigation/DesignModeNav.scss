@@ -32,6 +32,16 @@
       overflow: hidden;
     }
 
+    // Tree/hierarchy navigator trigger — right-justified in the header row.
+    .nav-header__action {
+      margin-left: auto;
+      flex-shrink: 0;
+
+      svg {
+        fill: currentColor;
+      }
+    }
+
     // Sub-section headers (Extensions, etc.) sit below the first
     // Resources block, so they get a top border to separate from
     // the preceding link list and a slightly subdued tone.

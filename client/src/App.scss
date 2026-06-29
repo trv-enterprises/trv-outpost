@@ -263,10 +263,39 @@ button.cds--header__action {
         display: none;
       }
 
+      // Rail mode: the pencil is just a decorative "Resources" marker, while
+      // the tree icon is the real action — so replace the pencil with the
+      // resource-navigator trigger, centered in the header band (which keeps
+      // its bottom border = the section divider).
+      .nav-header > svg {
+        display: none;
+      }
+
       .nav-header {
         justify-content: center;
         padding: spacing.$spacing-03;
         margin: 0;
+
+        // Carbon IconButton DOM: span.cds--icon-tooltip (wrapper) > button
+        // (our .nav-header__action) > svg. In the narrow rail the tooltip
+        // wrapper collapses unless we assert display on it and the button.
+        .cds--icon-tooltip {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .nav-header__action {
+          margin-left: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+
+          svg {
+            display: block;
+            fill: currentColor;
+          }
+        }
       }
 
       .nav-links .cds--side-nav__link-text {

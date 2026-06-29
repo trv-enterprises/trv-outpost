@@ -2,15 +2,18 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { SideNavItems, SideNavLink } from '@carbon/react';
+import { SideNavItems, SideNavLink, IconButton } from '@carbon/react';
 import {
   Edit,
   DataBase,
   ChartLineSmooth,
   Dashboard,
-  Apps
+  Apps,
+  TreeViewAlt
 } from '@carbon/icons-react';
 import useExtensions from '../../hooks/useExtensions';
+import { useResourceNavigator } from '../../context/ResourceNavigatorContext';
+import ResourceNavigatorModal from './ResourceNavigatorModal';
 import './DesignModeNav.scss';
 
 /**
@@ -23,6 +26,7 @@ import './DesignModeNav.scss';
  */
 function DesignModeNav({ location, navigate }) {
   const { enabled: enabledExtensions } = useExtensions();
+  const { openModal } = useResourceNavigator();
 
   const designNavItems = [
     {
@@ -64,11 +68,22 @@ function DesignModeNav({ location, navigate }) {
   };
 
   return (
+    <>
     <SideNavItems>
       <div className="design-mode-nav">
         <div className="nav-header">
           <Edit size={16} />
           <span>Resources</span>
+          <IconButton
+            className="nav-header__action"
+            kind="ghost"
+            size="sm"
+            align="bottom"
+            label="Open resource navigator"
+            onClick={openModal}
+          >
+            <TreeViewAlt size={16} />
+          </IconButton>
         </div>
 
         <div className="nav-links">
@@ -89,6 +104,8 @@ function DesignModeNav({ location, navigate }) {
         )}
       </div>
     </SideNavItems>
+    <ResourceNavigatorModal navigate={navigate} />
+    </>
   );
 }
 
