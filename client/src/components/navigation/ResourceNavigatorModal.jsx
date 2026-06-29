@@ -39,6 +39,14 @@ const ROOT_MAP_BY_KIND = {
   connection: 'connectionsById',
 };
 
+// TagFilter's `entityType` (plural) for each root kind, so the tag dropdown
+// only offers tags used by the CURRENT root type — not every entity.
+const TAG_ENTITY_BY_KIND = {
+  dashboard: 'dashboards',
+  component: 'components',
+  connection: 'connections',
+};
+
 const ROOT_OPTIONS = [
   { key: 'dashboard', text: 'Dashboard' },
   { key: 'component', text: 'Component' },
@@ -323,7 +331,11 @@ function ResourceNavigatorModal({ navigate }) {
           selected={filterNamespaces}
           onChange={setFilterNamespaces}
         />
-        <TagFilter selected={filterTags} onChange={setFilterTags} />
+        <TagFilter
+          entityType={TAG_ENTITY_BY_KIND[rootDirection]}
+          selected={filterTags}
+          onChange={setFilterTags}
+        />
       </div>
 
       <div className="rn-body">

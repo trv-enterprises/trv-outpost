@@ -88,7 +88,11 @@ export function ResourceNavigatorProvider({ children }) {
   const setRootDirection = useCallback(
     (dir) => {
       setRootDirectionState(dir);
-      persist({ rootDirection: dir });
+      // Tag options are scoped to the root entity type, so a tag selected
+      // under the previous root may not exist for the new one — clear it so
+      // the new root isn't filtered down to nothing by a stale tag.
+      setFilterTagsState([]);
+      persist({ rootDirection: dir, filterTags: [] });
     },
     [persist]
   );
