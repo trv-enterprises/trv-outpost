@@ -251,6 +251,16 @@ npm run dev
 
 Then open <http://localhost:5173>.
 
+> **Dev note — multiple tabs + streaming.** The Vite dev server proxies
+> over HTTP/1.1, so all tabs on `localhost:5173` share the browser's
+> ~6-connections-per-origin limit. Streaming panels each hold one
+> persistent SSE connection open, so a couple of stream-heavy dashboards
+> across two tabs can exhaust the pool and make new streams stall. If you
+> need several streaming dashboards open at once in dev, use a second
+> browser (or browser profile) — each gets its own connection pool.
+> Production is fronted by Caddy over HTTP/2, which multiplexes and isn't
+> affected. (trv-outpost#142)
+
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production
 deployment options (HTTPS via Let's Encrypt, building images from
 source, backup + restore).
