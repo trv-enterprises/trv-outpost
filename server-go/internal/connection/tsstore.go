@@ -401,13 +401,59 @@ func (a *TSStoreAdapter) textToRegistryResultSet(objects []dataResponse, metadat
 	return &registry.ResultSet{Columns: columns, Rows: rows, Metadata: metadata}, nil
 }
 
-// jsonToRegistryResultSet converts JSON objects to ResultSet
+// jsonToRegistryResultSet converts JSON objects to ResultSet.
+//
+// For SCHEMA stores the read uses compact format, so each record's JSON keys
+// are field INDICES as strings ("1","2",…), not names. We remap those to the
+// schema's field names and fix the column order to the schema's index order
+// (#137) — without this, columns surface as numeric indices in Go's
+// nondeterministic map-iteration order and a chart can't bind a named y-axis.
 func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadata map[string]interface{}) (*registry.ResultSet, error) {
+	// Build index-string → name map for schema stores. Empty for json/text.
+	indexToName := map[string]string{}
+	if a.config.DataType == models.TSStoreDataTypeSchema && a.schema != nil {
+		for _, f := range a.schema.Fields {
+			indexToName[strconv.Itoa(f.Index)] = f.Name
+		}
+	}
+	renameKey := func(key string) string {
+		if name, ok := indexToName[key]; ok {
+			return name
+		}
+		return key
+	}
+
 	columnSet := make(map[string]bool)
 	columnOrder := []string{"timestamp"}
 	columnSet["timestamp"] = true
+	// Seed the column order from the schema (index order) so named columns
+	// appear deterministically left-to-right, not in map-iteration order.
+	if len(indexToName) > 0 {
+		for _, f := range a.schema.Fields {
+			if f.Name == "timestamp" {
+				continue // already first
+			}
+			if !columnSet[f.Name] {
+				columnSet[f.Name] = true
+				columnOrder = append(columnOrder, f.Name)
+			}
+		}
+	}
 
 	decodedObjects := make([]map[string]interface{}, 0, len(objects))
+
+	// Remap a record's compact index keys to field names (no-op when not a
+	// schema store). Returns a fresh map so we don't mutate while iterating.
+	normalize := func(record map[string]interface{}) map[string]interface{} {
+		if len(indexToName) == 0 {
+			return record
+		}
+		out := make(map[string]interface{}, len(record))
+		for k, v := range record {
+			out[renameKey(k)] = v
+		}
+		return out
+	}
 
 	for _, obj := range objects {
 		timestamp := obj.Timestamp / 1e9
@@ -415,6 +461,7 @@ func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadat
 		var records []map[string]interface{}
 		if err := json.Unmarshal(obj.Data, &records); err == nil {
 			for _, record := range records {
+				record = normalize(record)
 				record["timestamp"] = timestamp
 				for key := range record {
 					if !columnSet[key] {
@@ -429,6 +476,7 @@ func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadat
 			if err := json.Unmarshal(obj.Data, &record); err != nil {
 				record = map[string]interface{}{"data": string(obj.Data)}
 			}
+			record = normalize(record)
 			record["timestamp"] = timestamp
 			for key := range record {
 				if !columnSet[key] {
@@ -655,10 +703,11 @@ func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int6
 // the function is tolerant of values already in larger units so a literal
 // ns value typed into the range: DSL isn't double-scaled. Heuristic by
 // digit magnitude (all comfortably distinct for any realistic recent date):
-//   seconds      ~1.7e9   (10 digits) → ×1e9
-//   milliseconds ~1.7e12  (13 digits) → ×1e6
-//   microseconds ~1.7e15  (16 digits) → ×1e3
-//   nanoseconds  ~1.7e18  (19 digits) → as-is
+//
+//	seconds      ~1.7e9   (10 digits) → ×1e9
+//	milliseconds ~1.7e12  (13 digits) → ×1e6
+//	microseconds ~1.7e15  (16 digits) → ×1e3
+//	nanoseconds  ~1.7e18  (19 digits) → as-is
 func toEpochNanos(v int64) int64 {
 	if v <= 0 {
 		return v
@@ -752,12 +801,12 @@ type storeStatsResponse struct {
 
 // wsMessage represents a WebSocket message from TSStore
 type wsMessage struct {
-	Type      string          `json:"type"`                 // "data", "caught_up", "error"
-	Timestamp int64           `json:"timestamp,omitempty"`  // For data messages
-	BlockNum  uint32          `json:"block_num,omitempty"`  // For data messages
-	Size      uint32          `json:"size,omitempty"`       // For data messages
-	Data      json.RawMessage `json:"data,omitempty"`       // For data messages
-	Message   string          `json:"message,omitempty"`    // For error messages
+	Type      string          `json:"type"`                // "data", "caught_up", "error"
+	Timestamp int64           `json:"timestamp,omitempty"` // For data messages
+	BlockNum  uint32          `json:"block_num,omitempty"` // For data messages
+	Size      uint32          `json:"size,omitempty"`      // For data messages
+	Data      json.RawMessage `json:"data,omitempty"`      // For data messages
+	Message   string          `json:"message,omitempty"`   // For error messages
 }
 
 // NewTSStoreDataSource creates a new TSStore datasource. Uses
@@ -1104,14 +1153,54 @@ func (t *TSStoreDataSource) textToResultSet(objects []dataResponse, metadata map
 	}, nil
 }
 
-// jsonToResultSet converts JSON/Schema objects to ResultSet
-// For JSON: discovers columns from data structure
-// For Schema: passes compact data through (frontend expands using schema in metadata)
+// jsonToResultSet converts JSON/Schema objects to ResultSet.
+// For JSON: discovers columns from the data structure.
+// For Schema: the read is compact, so record keys are field INDICES as
+// strings ("1","2",…). We remap them to the schema's field names and order
+// columns by index (#137) — otherwise schema-store columns surface as
+// numeric indices in nondeterministic map-iteration order and a chart can't
+// bind a named y-axis. (Was previously left for the frontend, which never
+// did the expansion.)
 func (t *TSStoreDataSource) jsonToResultSet(objects []dataResponse, metadata map[string]interface{}) (*models.ResultSet, error) {
+	// Build index-string → name map for schema stores. Empty for json/text.
+	indexToName := map[string]string{}
+	if t.config.DataType == models.TSStoreDataTypeSchema && t.schema != nil {
+		for _, f := range t.schema.Fields {
+			indexToName[strconv.Itoa(f.Index)] = f.Name
+		}
+	}
+	normalize := func(record map[string]interface{}) map[string]interface{} {
+		if len(indexToName) == 0 {
+			return record
+		}
+		out := make(map[string]interface{}, len(record))
+		for k, v := range record {
+			if name, ok := indexToName[k]; ok {
+				out[name] = v
+			} else {
+				out[k] = v
+			}
+		}
+		return out
+	}
+
 	// Discover columns from all objects
 	columnSet := make(map[string]bool)
 	columnOrder := []string{"timestamp"}
 	columnSet["timestamp"] = true
+	// Seed column order from the schema (index order) so named columns appear
+	// deterministically left-to-right, not in map-iteration order.
+	if len(indexToName) > 0 {
+		for _, f := range t.schema.Fields {
+			if f.Name == "timestamp" {
+				continue // already first
+			}
+			if !columnSet[f.Name] {
+				columnSet[f.Name] = true
+				columnOrder = append(columnOrder, f.Name)
+			}
+		}
+	}
 
 	// First pass: decode all objects and discover columns
 	decodedObjects := make([]map[string]interface{}, 0, len(objects))
@@ -1123,6 +1212,7 @@ func (t *TSStoreDataSource) jsonToResultSet(objects []dataResponse, metadata map
 		var records []map[string]interface{}
 		if err := json.Unmarshal(obj.Data, &records); err == nil {
 			for _, record := range records {
+				record = normalize(record)
 				record["timestamp"] = timestamp
 				for key := range record {
 					if !columnSet[key] {
@@ -1138,6 +1228,7 @@ func (t *TSStoreDataSource) jsonToResultSet(objects []dataResponse, metadata map
 			if err := json.Unmarshal(obj.Data, &record); err != nil {
 				record = map[string]interface{}{"data": string(obj.Data)}
 			}
+			record = normalize(record)
 			record["timestamp"] = timestamp
 			for key := range record {
 				if !columnSet[key] {
