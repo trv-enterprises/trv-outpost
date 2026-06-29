@@ -6,6 +6,19 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.35.2] — 2026-06-29
+
+### Fixed
+
+- **Schema-format ts-store columns rendered as numeric indices, not field
+  names** — a `data_type: schema` ts-store connection charted its columns as
+  `"1"`, `"2"`, … in nondeterministic order instead of `bytes_total`,
+  `packets_total`, …, making schema stores unusable for charting by name. The
+  adapter reads compact-format records (index keys) and fetches the schema but
+  only attached it as metadata, relying on a client-side expansion that never
+  existed. The converter now maps index→name and orders by index, server-side.
+  ts-store itself was correct — an Outpost adapter gap (#137).
+
 ## [0.35.1] — 2026-06-26
 
 ### Fixed
