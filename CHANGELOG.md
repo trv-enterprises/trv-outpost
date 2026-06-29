@@ -6,6 +6,21 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.36.0] — 2026-06-29
+
+### Added
+
+- **Design-mode hierarchical resource navigator** — a secondary navigator
+  (alongside the flat Resources nav, not replacing it) that exposes the
+  connection↔component↔dashboard dependency graph as a modal Carbon `TreeView`.
+  Triggered by a tree icon in the Resources header. Two-pane layout (tree +
+  info panel with namespace/tags/type/usage); "Open editor" routes to the
+  selected item. Re-rootable by Dashboard / Component / Connection, with an
+  optional toggle to nest connections under components. Root direction,
+  expand/selection/scroll, and search + namespace + tag filters persist across
+  opens (sessionStorage). Built on the existing `?include_usage` denormalization
+  — no backend change (#139).
+
 ## [0.35.2] — 2026-06-29
 
 ### Fixed
