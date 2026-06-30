@@ -3,6 +3,7 @@
 // See LICENSE file for details.
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -655,12 +656,19 @@ function ConnectionsPage() {
         />
       )}
 
-      {/* "From Existing" — pick a connection to clone into a new one. */}
-      <ConnectionPickerModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handlePickerSelect}
-      />
+      {/* "From Existing" — pick a connection to clone into a new one.
+          Conditionally rendered and portaled to <body>, matching the
+          component editor's usage. Rendering it inline + always-mounted
+          left the modal's search field unable to take keyboard input
+          (focus/stacking context of the page subtree). */}
+      {pickerOpen && createPortal(
+        <ConnectionPickerModal
+          open
+          onClose={() => setPickerOpen(false)}
+          onSelect={handlePickerSelect}
+        />,
+        document.body
+      )}
     </div>
   );
 }
