@@ -1703,8 +1703,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       // Wait for paint
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      const gridNativeW = maxGridCol * CELL_WIDTH + (maxGridCol - 1) * GAP;
-      const gridNativeH = maxGridRow * CELL_HEIGHT + (maxGridRow - 1) * GAP;
+      // Capture tight to the PANEL BOUNDING BOX, never the design-canvas
+      // budget. Auto-thumbnail-on-save fires while still in edit mode, where
+      // maxGridCol/Row = editBudgetCols/Rows (the full preset canvas, or the
+      // 200×120 fallback) — capturing that left a wide black gutter
+      // (backgroundColor below) wherever panels didn't reach the canvas edge.
+      // panelExtentCol/Row is the rightmost/bottommost panel edge, so the
+      // capture matches what the user sees in stretch mode (panels filling the
+      // frame) regardless of edit vs view mode.
+      const captureCols = panelExtentCol || maxGridCol;
+      const captureRows = panelExtentRow || maxGridRow;
+      const gridNativeW = captureCols * CELL_WIDTH + (captureCols - 1) * GAP;
+      const gridNativeH = captureRows * CELL_HEIGHT + (captureRows - 1) * GAP;
 
       return await html2canvas(grid, {
         backgroundColor: '#161616',
