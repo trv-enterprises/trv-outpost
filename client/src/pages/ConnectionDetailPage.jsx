@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
@@ -150,8 +150,14 @@ function ConnectionDetailPage() {
   const [testResult, setTestResult] = useState(null);
   const [testSchema, setTestSchema] = useState(null);
 
+  // Guards the one-shot clone seed against React 18 StrictMode's double-effect
+  // invocation (and any other remount), which otherwise ran fetchCloneSource —
+  // and fired its credentials toast — twice.
+  const clonedFromRef = useRef(null);
   useEffect(() => {
     if (cloneFromId) {
+      if (clonedFromRef.current === cloneFromId) return;
+      clonedFromRef.current = cloneFromId;
       fetchCloneSource(cloneFromId);
     } else if (!isCreateMode) {
       fetchConnection();

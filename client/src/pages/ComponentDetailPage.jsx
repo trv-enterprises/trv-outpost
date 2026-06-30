@@ -49,9 +49,14 @@ function ComponentDetailPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const editorRef = useRef(null);
+  // Guards the one-shot clone seed against StrictMode's double-effect run
+  // (and any remount), so we don't fetch + re-suffix the name twice.
+  const clonedFromRef = useRef(null);
 
   useEffect(() => {
     if (cloneFromId) {
+      if (clonedFromRef.current === cloneFromId) return;
+      clonedFromRef.current = cloneFromId;
       fetchCloneSource(cloneFromId);
     } else if (!isCreateMode) {
       fetchChart();
