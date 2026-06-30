@@ -136,6 +136,14 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
         className="component-editor-modal"
         preventCloseOnClickOutside
         isFullWidth
+        // ComponentEditor portals several nested modals to <body> (connection
+        // picker, chart-type picker, value pickers). Each is a Carbon Modal
+        // (.cds--modal). This outer modal's focus trap (wrapFocus) treats any
+        // node outside its own body as "outside" and yanks focus back — so the
+        // nested modals' inputs (e.g. the connection picker search) couldn't
+        // take keystrokes. Listing .cds--modal as a floating-menu selector
+        // tells wrapFocus to leave focus alone when it lands in a nested modal.
+        selectorsFloatingMenus={['.cds--modal']}
       >
         <div className="component-editor-content">
           <ComponentEditor
