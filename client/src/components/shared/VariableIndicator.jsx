@@ -25,6 +25,7 @@ function VariableIndicator({ active = false, size = 'sm' }) {
   return (
     <Tooltip
       align="top"
+      autoAlign
       label="Uses a dashboard variable — needs a value to render."
       className="variable-indicator-tooltip"
     >
