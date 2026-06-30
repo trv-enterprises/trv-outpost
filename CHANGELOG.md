@@ -6,6 +6,19 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.36.1] — 2026-06-29
+
+### Fixed
+
+- **Resource navigator tag filter showed tags from all entity types** — the
+  tag-filter dropdown in the hierarchical resource navigator listed tags from
+  every entity instead of just the current root type. `TagFilter` scopes its
+  options by `entityType`, but the navigator rendered it without that prop, so
+  it fell through to the all-entity default. The navigator now passes
+  `entityType` derived from the root direction, and clears the selected tags
+  when the root direction changes (a tag valid under one root may not exist for
+  another) (#139).
+
 ## [0.36.0] — 2026-06-29
 
 ### Added
