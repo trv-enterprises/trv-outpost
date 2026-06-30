@@ -12,14 +12,16 @@ import './CreateMenu.scss';
 /**
  * CreateMenu Component
  *
- * Simple dropdown menu for creating components with three options:
- * - Create: Opens ComponentEditor (which has ContentSwitcher for Display/Control)
- * - Create with AI: Opens AI Pre-flight modal
- * - From Existing: Opens ComponentPickerModal
+ * Dropdown menu for creating an entity, with up to three options:
+ * - Create: opens the editor for a blank entity
+ * - Create with AI: opens the AI pre-flight modal — only rendered when an
+ *   onCreateWithAI handler is supplied AND the deployment has an AI key.
+ *   (Omit the handler for entities with no AI builder, e.g. connections.)
+ * - From Existing: opens the matching picker modal
  *
- * @param {Function} onCreate - Handler for creating a new component manually
- * @param {Function} onCreateWithAI - Handler for creating with AI (opens pre-flight modal)
- * @param {Function} onSelectExisting - Handler for selecting an existing component
+ * @param {Function} onCreate        - Handler for creating a new entity manually
+ * @param {Function} [onCreateWithAI] - Handler for creating with AI; omit to hide the item
+ * @param {Function} onSelectExisting - Handler for selecting an existing entity to clone
  */
 function CreateMenu({
   onCreate,
@@ -79,7 +81,7 @@ function CreateMenu({
             <Edit size={16} />
             <span>Create</span>
           </button>
-          {aiEnabled && (
+          {onCreateWithAI && aiEnabled && (
             <button
               className="create-menu-item"
               onClick={() => handleAction(onCreateWithAI)}

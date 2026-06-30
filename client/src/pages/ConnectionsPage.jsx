@@ -16,7 +16,6 @@ import {
   TableBody,
   TableCell,
   TableToolbarSearch,
-  Button,
   IconButton,
   Loading,
   Tag,
@@ -38,6 +37,8 @@ import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
+import CreateMenu from '../components/CreateMenu';
+import ConnectionPickerModal from '../components/ConnectionPickerModal';
 import './ConnectionsPage.scss';
 
 const PAGE_SIZES = [25, 50, 100];
@@ -69,6 +70,7 @@ function ConnectionsPage() {
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete
+  const [pickerOpen, setPickerOpen] = useState(false); // "From Existing" connection picker
 
   // Server-side filter/sort/pagination (#21). The wrapped include_usage rows
   // each carry { connection, component_usage, component_count }; flatten them
@@ -165,6 +167,20 @@ function ConnectionsPage() {
 
   const handleCreate = () => {
     navigate('/design/connections/new');
+  };
+
+  // "From Existing" creates a NEW connection seeded from the chosen one.
+  // Navigate to the create route with a cloneFrom hint so the editor loads
+  // the source's config but saves as a create (not an overwrite). Secrets
+  // aren't available to the frontend, so the clone clears them and the
+  // editor surfaces a toast asking the user to re-enter credentials.
+  const handleSelectExisting = () => {
+    setPickerOpen(true);
+  };
+
+  const handlePickerSelect = (connection) => {
+    setPickerOpen(false);
+    navigate(`/design/connections/new?cloneFrom=${connection.id}`);
   };
 
   const handleRowClick = (connection) => {
@@ -356,13 +372,12 @@ function ConnectionsPage() {
           </ContentSwitcher>
         </div>
         <div className="toolbar-actions">
-          <Button
-            onClick={handleCreate}
-            size="md"
-            kind="primary"
-          >
-            Create
-          </Button>
+          {/* No "Create with AI" for connections — they're config-driven,
+              not code-driven, so omit the onCreateWithAI handler. */}
+          <CreateMenu
+            onCreate={handleCreate}
+            onSelectExisting={handleSelectExisting}
+          />
         </div>
       </div>
 
@@ -639,6 +654,13 @@ function ConnectionsPage() {
           }}
         />
       )}
+
+      {/* "From Existing" — pick a connection to clone into a new one. */}
+      <ConnectionPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handlePickerSelect}
+      />
     </div>
   );
 }

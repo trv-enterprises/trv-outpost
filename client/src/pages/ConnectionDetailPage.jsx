@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Loading,
@@ -36,7 +36,24 @@ import TLSSkipVerifyToggle from '../components/shared/TLSSkipVerifyToggle';
 import useAssistantSurface from '../hooks/useAssistantSurface';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
 import ConnectionGuidanceHint from '../components/shared/ConnectionGuidanceHint';
+import { useNotifications } from '../context/NotificationContext';
 import './ConnectionDetailPage.scss';
+
+// Recursively replace any masked-secret sentinel ("********") with an empty
+// string. The backend never sends real secret values to the frontend — it
+// masks them — so a cloned config carries masks where credentials were set.
+// Create mode saves config verbatim (no prepareConfigForSave), so leaving the
+// masks in would persist literal "********" as the secret. Scrubbing the
+// sentinel clears exactly the secret fields, regardless of connection type.
+function scrubMaskedSecrets(value) {
+  if (Array.isArray(value)) return value.map(scrubMaskedSecrets);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = scrubMaskedSecrets(value[k]);
+    return out;
+  }
+  return value === SECRET_MASKED_VALUE ? '' : value;
+}
 
 /**
  * ConnectionDetailPage Component
@@ -48,7 +65,13 @@ import './ConnectionDetailPage.scss';
 function ConnectionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isCreateMode = id === 'new';
+  // "From Existing" seeds a NEW connection from an existing one's config.
+  // Still create mode (id === 'new') — save POSTs a new record; we just load
+  // the source's fields first (minus secrets, which the frontend never has).
+  const cloneFromId = isCreateMode ? searchParams.get('cloneFrom') : null;
+  const { pushToast } = useNotifications();
   const { isConnectionTypeEnabled, enabledConnectionTypes } = useEnabledTypes();
 
   // The connection editor's Select uses bare legacy names (`sql`, `api`,
@@ -108,7 +131,7 @@ function ConnectionDetailPage() {
   const [type, setType] = useState('sql');
   const [config, setConfig] = useState({});
   const [tags, setTags] = useState([]);
-  const [loading, setLoading] = useState(!isCreateMode);
+  const [loading, setLoading] = useState(!isCreateMode || !!cloneFromId);
   const [error, setError] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -128,22 +151,26 @@ function ConnectionDetailPage() {
   const [testSchema, setTestSchema] = useState(null);
 
   useEffect(() => {
-    if (!isCreateMode) {
+    if (cloneFromId) {
+      fetchCloneSource(cloneFromId);
+    } else if (!isCreateMode) {
       fetchConnection();
     } else {
       // Initialize empty config for create mode
       setConfig(getDefaultConfig('sql'));
     }
-  }, [id]);
+  }, [id, cloneFromId]);
 
   // In create mode, inherit the header's active namespace whenever it
   // resolves (which may be after the component mounts — context loads
-  // async). Only sets if we haven't already picked one.
+  // async). Only sets if we haven't already picked one. Skip when cloning:
+  // the clone seeds namespace from its source, and this could otherwise
+  // race that async set before it lands.
   useEffect(() => {
-    if (isCreateMode && !namespace && activeNamespace) {
+    if (isCreateMode && !cloneFromId && !namespace && activeNamespace) {
       setNamespace(activeNamespace);
     }
-  }, [isCreateMode, activeNamespace, namespace]);
+  }, [isCreateMode, cloneFromId, activeNamespace, namespace]);
 
   // Publish the current connection surface to the Dashboard Assistant.
   // Always EDIT mode here — this page only renders the connection
@@ -174,6 +201,38 @@ function ConnectionDetailPage() {
       setConfig(data.config || {});
       setTags(data.tags || []);
       setNamespace(data.namespace || 'default');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Seed a new connection from an existing one. Copies name (suffixed),
+  // description, type, config, tags, namespace — but DROPS secrets (the
+  // backend masks them, so the cloned config has "********" placeholders;
+  // scrubMaskedSecrets clears them to '' so the user must re-enter). Toast
+  // tells the user credentials need re-entry. Stays in create mode, so save
+  // POSTs a new record.
+  const fetchCloneSource = async (sourceId) => {
+    try {
+      setLoading(true);
+      const data = await apiClient.getConnection(sourceId);
+      const scrubbedConfig = scrubMaskedSecrets(data.config || {});
+      setName(`${data.name || 'Connection'} (Copy)`);
+      setDescription(data.description || '');
+      setType(data.type || 'sql');
+      setConfig(scrubbedConfig);
+      setTags(data.tags || []);
+      setNamespace(data.namespace || 'default');
+      // A clone is an unsaved new record — enable Save without requiring an
+      // edit first (matters for connections with no secrets to re-enter).
+      setHasChanges(true);
+      pushToast({
+        kind: 'info',
+        title: 'Re-enter credentials',
+        subtitle: 'Cloned from an existing connection. Secrets (passwords, API keys, tokens) are not copied — re-enter them before saving or testing.',
+      });
     } catch (err) {
       setError(err.message);
     } finally {
