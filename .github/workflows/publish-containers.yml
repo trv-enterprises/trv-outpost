@@ -82,3 +82,80 @@ jobs:
             GIT_COMMIT=${{ steps.build_meta.outputs.git_commit }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Prune old ghcr image versions after a successful publish.
+  #
+  # Retention policy (solo phase): keep the 5 most recent PATCH tags
+  # (X.Y.Z) per package. Always-protected, never counted against the 5:
+  #   - "latest"
+  #   - every floating "X.Y" minor tag (re-pointed each release; deleting
+  #     one would break anyone pulling the minor line)
+  #
+  # We delete by *tagged patch version*. Untagged manifests (the per-arch
+  # children of multi-arch images) are intentionally left for GitHub's own
+  # GC — deleting them by hand risks corrupting a kept image that shares
+  # layers. This keeps the prune safe and reversible-by-rebuild.
+  #
+  # When others start consuming these images, switch the policy to
+  # "keep the latest patch of every minor line" so a pinned user's tag is
+  # never deleted out from under them.
+  # ---------------------------------------------------------------------------
+  cleanup:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        image: [outpost-server, outpost-client]
+    steps:
+      - name: Prune old patch versions (keep last 5)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          PKG: ${{ matrix.image }}
+          KEEP: '5'
+        run: |
+          set -euo pipefail
+
+          # Pull every version with its id + tags as TSV: "<id>\t<tag,tag,...>"
+          versions_json="$(gh api --paginate \
+            "/orgs/${ORG}/packages/container/${PKG}/versions?per_page=100")"
+
+          # Rank the X.Y.Z patch tags newest-first; the 6th onward are prune
+          # candidates. "latest" and bare X.Y minor tags never appear here.
+          keep_patches="$(echo "$versions_json" \
+            | jq -r '.[].metadata.container.tags[]' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V -r \
+            | head -n "${KEEP}")"
+          echo "Keeping patch tags:"; echo "$keep_patches" | sed 's/^/  /'
+
+          # A version is deletable only if it has at least one tag AND every
+          # tag on it is a prunable patch (so we never touch a version that
+          # also carries "latest" or a floating X.Y).
+          deletable_ids="$(echo "$versions_json" | jq -r --arg keep "$keep_patches" '
+            ($keep | split("\n") | map(select(length>0))) as $K
+            | .[]
+            | . as $v
+            | ($v.metadata.container.tags) as $tags
+            | select(($tags | length) > 0)
+            | select(all($tags[]; (test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and (. as $t | ($K | index($t) | not))))
+            | "\($v.id)\t\($tags | join(","))"
+          ')"
+
+          if [ -z "$deletable_ids" ]; then
+            echo "Nothing to prune for ${PKG}."
+            exit 0
+          fi
+
+          echo "Pruning these versions from ${PKG}:"
+          echo "$deletable_ids" | sed 's/^/  /'
+
+          echo "$deletable_ids" | while IFS=$'\t' read -r id tags; do
+            [ -z "$id" ] && continue
+            echo "Deleting version ${id} (tags: ${tags})"
+            gh api --method DELETE \
+              "/orgs/${ORG}/packages/container/${PKG}/versions/${id}"
+          done
