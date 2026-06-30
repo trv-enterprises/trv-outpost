@@ -266,10 +266,13 @@ function ComponentsListPage() {
     navigate('/design/components/ai/new', { state: context });
   };
 
-  // Component picker handler
+  // Component picker handler. "From Existing" creates a NEW component seeded
+  // from the chosen one — navigate to the create route with a cloneFrom hint
+  // so the editor loads the source's fields but saves as a create (not an
+  // overwrite of the original).
   const handlePickerSelect = (item) => {
     setPickerOpen(false);
-    navigate(`/design/components/${item.id}`);
+    navigate(`/design/components/new?cloneFrom=${item.id}`);
   };
 
   const handleRowClick = (chart) => {

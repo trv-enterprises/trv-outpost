@@ -27,15 +27,20 @@ function ComponentDetailPage() {
   const [searchParams] = useSearchParams();
   const isCreateMode = id === 'new';
   const initialComponentType = searchParams.get('type') || 'chart';
+  // "From Existing" seeds a NEW component from an existing one's fields.
+  // We're still in create mode (id === 'new'), so save POSTs a new record —
+  // we just need to load the source's data first.
+  const cloneFromId = isCreateMode ? searchParams.get('cloneFrom') : null;
 
   // Initialize chart with component_type from URL param for new controls
   const [chart, setChart] = useState(() => {
-    if (isCreateMode && initialComponentType === 'control') {
+    if (isCreateMode && !cloneFromId && initialComponentType === 'control') {
       return { component_type: 'control' };
     }
     return null;
   });
-  const [loading, setLoading] = useState(!isCreateMode);
+  // Loading when editing an existing component OR seeding a clone — both fetch.
+  const [loading, setLoading] = useState(!isCreateMode || !!cloneFromId);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -46,10 +51,12 @@ function ComponentDetailPage() {
   const editorRef = useRef(null);
 
   useEffect(() => {
-    if (!isCreateMode) {
+    if (cloneFromId) {
+      fetchCloneSource(cloneFromId);
+    } else if (!isCreateMode) {
       fetchChart();
     }
-  }, [id]);
+  }, [id, cloneFromId]);
 
   // Publish the current component surface to the Dashboard Assistant.
   // Always EDIT mode here — this page only renders the editor, never
@@ -74,6 +81,31 @@ function ComponentDetailPage() {
       setLoading(true);
       const data = await apiClient.getComponent(id);
       setChart(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Seed a new component from an existing one's fields. Strip identity and
+  // version metadata so the editor treats it as a fresh record, and suffix
+  // the name so it doesn't collide with the source on the (namespace, name)
+  // uniqueness constraint at create time.
+  const fetchCloneSource = async (sourceId) => {
+    try {
+      setLoading(true);
+      const data = await apiClient.getComponent(sourceId);
+      // Strip identity, version, draft-session, timestamp, and usage fields so
+      // the editor saves this as a brand-new record (json field names per
+      // models.Component).
+      const {
+        id: _id, version: _v, status: _s, ai_session_id: _ai,
+        created: _c, updated: _u, dashboard_usage: _du,
+        version_count: _vc, has_draft: _hd,
+        ...seed
+      } = data;
+      setChart({ ...seed, name: `${data.name || 'Component'} (Copy)` });
     } catch (err) {
       setError(err.message);
     } finally {
