@@ -1205,11 +1205,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setUsesDashboardVariable(!!chart.uses_dashboard_variable);
       const usingCustomCode = chart.use_custom_code ?? (chart.chart_type === 'custom');
       setShowCustomCode(usingCustomCode);
-      // Land on the Code tab for custom-code charts — that's the only meaningful
-      // editing surface in this mode. With the data-mapping form hidden, the Code
-      // tab is index 1 (Preview, Code) instead of 2.
+      // Land on the Code tab for custom-code charts — that's the primary
+      // editing surface in this mode. Tabs are [Details, Preview, Code],
+      // so Code is index 2. (The Details tab stays available so the
+      // connection/query/parser feeding `data` remain editable.)
       if (usingCustomCode) {
-        setActiveTab(1);
+        setActiveTab(2);
       }
       // Initialize chart options from saved data. Base on a fresh copy
       // of DEFAULT_CHART_OPTIONS — NOT the prior chartOptions state — so
@@ -2900,30 +2901,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       )}
 
       {/* Chart Configuration - shown when componentType is 'chart'.
-          The Connection tab stays visible in custom-code mode because the
-          connection + query + parser + sliding window all govern what
-          `data` looks like at runtime — those fields aren't in the React
-          code but they shape its input. Inside the tab, the data-mapping
-          and chart-options subsections hide themselves when in custom-
-          code mode (the user controls those things directly in their
-          JSX, so the form values are no longer load-bearing). */}
+          The Connection (Details) tab stays visible in custom-code mode
+          because the connection + query + parser + sliding window all
+          govern what `data` looks like at runtime — those fields aren't
+          in the React code but they shape its input, so the user must be
+          able to edit them. Inside the tab, the data-mapping and chart-
+          options subsections hide themselves when in custom-code mode
+          (the user controls those things directly in their JSX, so the
+          form values are no longer load-bearing). The Code tab's runtime
+          summary links back here via "Edit in Connection tab". */}
       {componentType === 'chart' && (() => {
-        // In custom-code mode the Details tab is misleading — the
-        // connection + query are already shown inline inside the
-        // custom-code section above, and the Details tab's
-        // Fetch Data button doesn't drive custom code anyway. If
-        // the user wants to modify the data path they switch to
-        // generated code. Drop the tab entirely in this mode.
-        const tabs = showCustomCode
-          ? [
-              { key: 'preview', label: 'Preview' },
-              { key: 'code', label: 'Code' },
-            ]
-          : [
-              { key: 'datasource', label: 'Details' },
-              { key: 'preview', label: 'Preview' },
-              { key: 'code', label: 'Code' },
-            ];
+        const tabs = [
+          { key: 'datasource', label: 'Details' },
+          { key: 'preview', label: 'Preview' },
+          { key: 'code', label: 'Code' },
+        ];
         const activeKey = tabs[Math.min(activeTab, tabs.length - 1)]?.key || tabs[0].key;
         const isOnTab = (key) => activeKey === key;
         return (
