@@ -23,7 +23,8 @@ import { ArrowLeft, Close, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
 import DashboardPickerModal from '../components/DashboardPickerModal';
-import ConnectionPickerModal from '../components/ConnectionPickerModal';
+import { Dropdown } from '@carbon/react';
+import { candidateLabel } from '../utils/tagValueByPrefix';
 import './TsStoreAlertRuleEditorPage.scss';
 
 /**
@@ -98,7 +99,6 @@ function TsStoreAlertRuleEditorPage() {
   const [dashVariables, setDashVariables] = useState([]); // subset of settings.variables we support
   const [dashVarValues, setDashVarValues] = useState({}); // { variableName → value }
   const [dashConnCandidates, setDashConnCandidates] = useState({}); // { variableName → [candidate connections] }
-  const [connVarPickerOpen, setConnVarPickerOpen] = useState(null); // variable name whose connection picker is open
 
   // Probe state. `probe` is one of:
   //   null      — no connection selected yet
@@ -736,37 +736,51 @@ function TsStoreAlertRuleEditorPage() {
                 {dashVariables.map((v) => {
                   const label = v.label || v.name;
                   if (v.mode === 'connection_swap') {
-                    const cands = dashConnCandidates[v.name] || [];
-                    const selected = cands.find((c) => c.id === dashVarValues[v.name]);
+                    // Present EXACTLY like the dashboard viewer's header picker:
+                    // a Dropdown of schema-compatible candidates, labelled via
+                    // the same candidateLabel (label_tag_prefix aware). A blank
+                    // option means "let the viewer pick on open".
+                    const labelPrefix = v.connection_swap?.label_tag_prefix || '';
+                    const cands = (dashConnCandidates[v.name] || []).filter((c) => c.compatible);
+                    const items = [{ id: '', __none: true }, ...cands];
+                    const selected = items.find((c) => c.id === (dashVarValues[v.name] || '')) || items[0];
                     return (
                       <div key={v.name} className="dashboard-var-row">
                         <span className="dashboard-var-label">{label} (connection)</span>
                         <div className="dashboard-var-control">
-                          <Button kind="tertiary" size="sm" onClick={() => setConnVarPickerOpen(v.name)}>
-                            {dashVarValues[v.name] ? 'Change…' : 'Select connection…'}
-                          </Button>
-                          <span className="dashboard-var-value">
-                            {dashVarValues[v.name]
-                              ? (selected?.name || dashVarValues[v.name])
-                              : 'None (viewer picks on open)'}
-                          </span>
-                          {dashVarValues[v.name] && (
-                            <Button kind="ghost" size="sm" onClick={() => setDashVarValues((p) => { const n = { ...p }; delete n[v.name]; return n; })}>
-                              Clear
-                            </Button>
-                          )}
+                          <Dropdown
+                            id={`dashvar-${v.name}`}
+                            size="sm"
+                            titleText=""
+                            label="Select…"
+                            items={items}
+                            itemToString={(item) => (item?.__none ? 'None (viewer picks on open)' : candidateLabel(item, labelPrefix))}
+                            selectedItem={selected}
+                            onChange={({ selectedItem }) => setDashVarValues((p) => {
+                              const n = { ...p };
+                              if (!selectedItem || selectedItem.__none) delete n[v.name];
+                              else n[v.name] = selectedItem.id;
+                              return n;
+                            })}
+                          />
                         </div>
                       </div>
                     );
                   }
-                  // filter (text) variable — static options render a Select,
-                  // otherwise a free-text input.
-                  const opts = v.filter_value?.options || [];
+                  // filter (text) variable. Mirror the viewer's presentation by
+                  // value_source: 'static' → Dropdown of the authored options;
+                  // 'freetext' → TextInput. 'connection' (live value discovery)
+                  // isn't wired here yet — fall back to freetext with a note
+                  // (see the shared-picker follow-up). A blank value = "let the
+                  // viewer pick on open".
+                  const cfg = v.filter_value || {};
+                  const staticOpts = Array.isArray(cfg.options) ? cfg.options : [];
+                  const useStatic = cfg.value_source === 'static' && staticOpts.length > 0;
                   return (
                     <div key={v.name} className="dashboard-var-row">
                       <span className="dashboard-var-label">{label} (text)</span>
                       <div className="dashboard-var-control">
-                        {opts.length > 0 ? (
+                        {useStatic ? (
                           <Select
                             id={`dashvar-${v.name}`}
                             labelText=""
@@ -775,7 +789,7 @@ function TsStoreAlertRuleEditorPage() {
                             size="sm"
                           >
                             <SelectItem value="" text="None (viewer picks on open)" />
-                            {opts.map((o) => (
+                            {staticOpts.map((o) => (
                               <SelectItem key={String(o)} value={String(o)} text={String(o)} />
                             ))}
                           </Select>
@@ -790,6 +804,11 @@ function TsStoreAlertRuleEditorPage() {
                           />
                         )}
                       </div>
+                      {cfg.value_source === 'connection' && (
+                        <span className="dashboard-var-note">
+                          This variable discovers its values live in the viewer; type an exact value to pre-scope the link.
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -811,19 +830,6 @@ function TsStoreAlertRuleEditorPage() {
           handleDashboardChosen(d);
         }}
       />
-      {/* Connection picker for a connection_swap variable's value. Portaled/
-          conditional so its search field takes input inside this page. */}
-      {connVarPickerOpen && (
-        <ConnectionPickerModal
-          open
-          onClose={() => setConnVarPickerOpen(null)}
-          selectedId={dashVarValues[connVarPickerOpen] || ''}
-          onSelect={(conn) => {
-            setDashVarValues((prev) => ({ ...prev, [connVarPickerOpen]: conn.id }));
-            setConnVarPickerOpen(null);
-          }}
-        />
-      )}
     </div>
   );
 }
