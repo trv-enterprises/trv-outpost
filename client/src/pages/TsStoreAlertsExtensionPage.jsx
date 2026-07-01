@@ -127,6 +127,23 @@ function TsStoreAlertsExtensionPage() {
   const siblingRuleCount = (alertId) =>
     rules.filter((r) => r.alert_id === alertId).length;
 
+  // Build a dashboard deep-link, appending the rule's variable pre-scoping as
+  // ?var_<name>=<value> so the list link opens the dashboard scoped exactly like
+  // the bell "Open dashboard" action (#125). Empty vars → bare URL.
+  const dashboardUrlForRule = (r) => {
+    let url = `/view/dashboards/${r.dashboard_id}`;
+    const vars = r.dashboard_vars;
+    if (vars && typeof vars === 'object') {
+      const qs = new URLSearchParams();
+      for (const [name, value] of Object.entries(vars)) {
+        if (name && value != null && value !== '') qs.set(`var_${name}`, value);
+      }
+      const q = qs.toString();
+      if (q) url += `?${q}`;
+    }
+    return url;
+  };
+
   if (extLoading) {
     return <div className="tsstore-alerts-extension-page tsstore-alerts-extension-page--loading">Loading…</div>;
   }
@@ -262,7 +279,7 @@ function TsStoreAlertsExtensionPage() {
                           <TableCell>
                             {r.dashboard_id ? (
                               dash ? (
-                                <Link onClick={(e) => { e.preventDefault(); navigate(`/view/dashboards/${r.dashboard_id}`); }} href={`/view/dashboards/${r.dashboard_id}`}>
+                                <Link onClick={(e) => { e.preventDefault(); navigate(dashboardUrlForRule(r)); }} href={dashboardUrlForRule(r)}>
                                   {dash.name}
                                 </Link>
                               ) : (
