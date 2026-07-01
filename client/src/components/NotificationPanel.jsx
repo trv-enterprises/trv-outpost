@@ -56,10 +56,22 @@ function NotificationPanel({ open, onClose }) {
   // the alert seen — dismiss stays explicit per the Phase 2 design.
   // The user opening the dashboard is "I'm investigating," not
   // "I'm done with this alert."
-  const handleOpenDashboard = (dashboardId) => {
+  const handleOpenDashboard = (dashboardId, dashboardVars) => {
     if (!dashboardId) return;
     onClose();
-    navigate(`/view/dashboards/${dashboardId}`);
+    // Pre-scope the dashboard to the alert's context: append ?var_<name>=<value>
+    // for each variable the rule captured. The viewer reads var_<name> on load
+    // (useDashboardVariable) and selects the connection / applies the filter.
+    let url = `/view/dashboards/${dashboardId}`;
+    if (dashboardVars && typeof dashboardVars === 'object') {
+      const qs = new URLSearchParams();
+      for (const [name, value] of Object.entries(dashboardVars)) {
+        if (name && value != null && value !== '') qs.set(`var_${name}`, value);
+      }
+      const q = qs.toString();
+      if (q) url += `?${q}`;
+    }
+    navigate(url);
   };
 
   // Inline link inside a notification subtitle (e.g. the connection
@@ -137,7 +149,7 @@ function NotificationPanel({ open, onClose }) {
                 {n.dashboardId && (
                   <button
                     className="notification-panel__item-open"
-                    onClick={() => handleOpenDashboard(n.dashboardId)}
+                    onClick={() => handleOpenDashboard(n.dashboardId, n.dashboardVars)}
                     aria-label="Open dashboard"
                     title="Open the dashboard this alert points at"
                   >

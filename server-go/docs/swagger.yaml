@@ -548,6 +548,15 @@ definitions:
           dashboard_id-shaped JSON object — the bell row just hides the
           link button in that case.
         type: string
+      dashboard_vars:
+        additionalProperties:
+          type: string
+        description: |-
+          DashboardVars is the decoded `dashboard_vars` map (variable name → value)
+          from external_ref. Appended to the bell "Open dashboard" link as
+          ?var_<name>=<value> so the dashboard opens pre-scoped to the alert's
+          context. Empty when the producer didn't set it (#125).
+        type: object
       expires_at:
         description: |-
           ExpiresAt drives the MongoDB TTL index. Defaults to 30 days
@@ -3837,6 +3846,16 @@ definitions:
       dashboard_id:
         description: optional bell deep-link target
         type: string
+      dashboard_vars:
+        additionalProperties:
+          type: string
+        description: |-
+          DashboardVars pre-scopes the deep-linked dashboard: variable name →
+          value, appended to the bell link as ?var_<name>=<value> so the dashboard
+          opens already scoped to the alert's context (e.g. the connection that
+          fired, or a text/host value). Requires DashboardID. Carried through
+          ts-store's external_ref alongside dashboard_id (#125).
+        type: object
       max_replay:
         description: e.g. "1h"; only valid when restart_policy=="resume"
         type: string
@@ -3943,6 +3962,14 @@ definitions:
           rules created by non-dashboard tooling carry whatever the
           producer chose to put in external_ref.
         type: string
+      dashboard_vars:
+        additionalProperties:
+          type: string
+        description: |-
+          DashboardVars is the decoded dashboard_vars map (variable name → value)
+          from external_ref, used to pre-scope the deep-linked dashboard. Empty
+          unless the rule was created with variable values (#125).
+        type: object
       external_ref:
         type: string
       namespace:

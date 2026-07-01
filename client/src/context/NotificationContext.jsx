@@ -106,6 +106,7 @@ export function NotificationProvider({ children }) {
         timestamp: a.fired_at ? new Date(a.fired_at).getTime() : Date.now(),
         alertId: a.id,
         dashboardId: a.dashboard_id || '',  // decoded from external_ref; empty when producer didn't supply one
+        dashboardVars: a.dashboard_vars || null,  // {var name → value}; pre-scopes the deep link (#125)
         kind: a.severity === 'error' ? 'error' : a.severity === 'info' ? 'info' : 'warning',
         title: a.title,
         subtitle: a.subtitle,

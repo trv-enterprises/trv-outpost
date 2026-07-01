@@ -48,6 +48,11 @@ type Alert struct {
 	// dashboard_id-shaped JSON object — the bell row just hides the
 	// link button in that case.
 	DashboardID string `json:"dashboard_id,omitempty" bson:"dashboard_id,omitempty"`
+	// DashboardVars is the decoded `dashboard_vars` map (variable name → value)
+	// from external_ref. Appended to the bell "Open dashboard" link as
+	// ?var_<name>=<value> so the dashboard opens pre-scoped to the alert's
+	// context. Empty when the producer didn't set it (#125).
+	DashboardVars map[string]string `json:"dashboard_vars,omitempty" bson:"dashboard_vars,omitempty"`
 	// Seen is the global "first reader clears it" flag. Flipped to
 	// true by POST /api/alerts/:id/seen; flipped back to false when
 	// the alert is pinned (so a pin acts like an "unread" reset).

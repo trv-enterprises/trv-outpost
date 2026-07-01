@@ -23,6 +23,7 @@ import { ArrowLeft, Close, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
 import DashboardPickerModal from '../components/DashboardPickerModal';
+import ConnectionPickerModal from '../components/ConnectionPickerModal';
 import './TsStoreAlertRuleEditorPage.scss';
 
 /**
@@ -90,6 +91,14 @@ function TsStoreAlertRuleEditorPage() {
   // would force another fetch.
   const [dashboardRecord, setDashboardRecord] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Dashboard-variable pre-scoping (#125): the picked dashboard's variables
+  // (connection_swap + filter, range deferred) and the value chosen for each.
+  // dashVarValues maps variable NAME → value; sent as dashboard_vars so the
+  // bell link opens the dashboard pre-scoped.
+  const [dashVariables, setDashVariables] = useState([]); // subset of settings.variables we support
+  const [dashVarValues, setDashVarValues] = useState({}); // { variableName → value }
+  const [dashConnCandidates, setDashConnCandidates] = useState({}); // { variableName → [candidate connections] }
+  const [connVarPickerOpen, setConnVarPickerOpen] = useState(null); // variable name whose connection picker is open
 
   // Probe state. `probe` is one of:
   //   null      — no connection selected yet
@@ -274,6 +283,51 @@ function TsStoreAlertRuleEditorPage() {
     !submitting &&
     probe && probe !== 'pending' && probe.ok === true;
 
+  // When a target dashboard is chosen, load its supported variables
+  // (connection_swap + filter; range deferred) so the user can pre-scope the
+  // deep link. Connection-swap candidates come from the variable-candidates
+  // endpoint (same list the viewer's Host picker uses). Resets any prior
+  // values since they belonged to a different dashboard.
+  const handleDashboardChosen = async (d) => {
+    setDashVarValues({});
+    setDashConnCandidates({});
+    setDashVariables([]);
+    if (!d?.id) return;
+    let full = d;
+    if (!Array.isArray(d?.settings?.variables)) {
+      try {
+        full = await apiClient.getDashboard(d.id);
+      } catch {
+        return; // no variables surfaced; the section just won't render
+      }
+    }
+    const vars = (full?.settings?.variables || []).filter(
+      (v) => v && (v.mode === 'connection_swap' || v.mode === 'filter'),
+    );
+    setDashVariables(vars);
+    // Fetch connection candidates for each connection_swap variable.
+    for (const v of vars) {
+      if (v.mode !== 'connection_swap') continue;
+      try {
+        const res = await apiClient.getDashboardVariableCandidates(d.id, v.name);
+        setDashConnCandidates((prev) => ({ ...prev, [v.name]: res?.candidates || [] }));
+      } catch {
+        setDashConnCandidates((prev) => ({ ...prev, [v.name]: [] }));
+      }
+    }
+  };
+
+  // Build the dashboard_vars map to send: variable name → value, dropping
+  // empty selections.
+  const buildDashboardVars = () => {
+    const out = {};
+    for (const v of dashVariables) {
+      const val = dashVarValues[v.name];
+      if (val != null && String(val).trim() !== '') out[v.name] = String(val);
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
+
   const handleCreate = async () => {
     setSubmitting(true);
     setError(null);
@@ -285,6 +339,10 @@ function TsStoreAlertRuleEditorPage() {
         condition: condition.trim(),
         cooldown: cooldown.trim() || undefined,
         dashboard_id: dashboardId || undefined,
+        // Pre-scope the deep link: variable name → value. Only non-empty
+        // values for variables the picked dashboard actually has; dropped
+        // entirely when no dashboard is selected (#125).
+        dashboard_vars: dashboardId ? buildDashboardVars() : undefined,
         // Only send restart_policy when it diverges from ts-store's
         // implicit default ("now"). max_replay is only valid on
         // resume; sending it with restart_policy=now would 400.
@@ -653,13 +711,90 @@ function TsStoreAlertRuleEditorPage() {
                   <Button
                     kind="ghost"
                     size="sm"
-                    onClick={() => { setDashboardRecord(null); setDashboardId(''); }}
+                    onClick={() => {
+                      setDashboardRecord(null);
+                      setDashboardId('');
+                      setDashVariables([]);
+                      setDashVarValues({});
+                      setDashConnCandidates({});
+                    }}
                   >
                     Clear
                   </Button>
                 )}
               </div>
             </div>
+
+            {/* Pre-scope the deep link with the alert's context (#125). Only
+                shows when the picked dashboard has a supported variable. */}
+            {dashboardRecord && dashVariables.length > 0 && (
+              <div className="dashboard-var-prescope">
+                <p className="picker-help">
+                  Optionally pass values into the dashboard&apos;s variables so the link
+                  opens already scoped to this alert (e.g. the connection that fired).
+                </p>
+                {dashVariables.map((v) => {
+                  const label = v.label || v.name;
+                  if (v.mode === 'connection_swap') {
+                    const cands = dashConnCandidates[v.name] || [];
+                    const selected = cands.find((c) => c.id === dashVarValues[v.name]);
+                    return (
+                      <div key={v.name} className="dashboard-var-row">
+                        <span className="dashboard-var-label">{label} (connection)</span>
+                        <div className="dashboard-var-control">
+                          <Button kind="tertiary" size="sm" onClick={() => setConnVarPickerOpen(v.name)}>
+                            {dashVarValues[v.name] ? 'Change…' : 'Select connection…'}
+                          </Button>
+                          <span className="dashboard-var-value">
+                            {dashVarValues[v.name]
+                              ? (selected?.name || dashVarValues[v.name])
+                              : 'None (viewer picks on open)'}
+                          </span>
+                          {dashVarValues[v.name] && (
+                            <Button kind="ghost" size="sm" onClick={() => setDashVarValues((p) => { const n = { ...p }; delete n[v.name]; return n; })}>
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  // filter (text) variable — static options render a Select,
+                  // otherwise a free-text input.
+                  const opts = v.filter_value?.options || [];
+                  return (
+                    <div key={v.name} className="dashboard-var-row">
+                      <span className="dashboard-var-label">{label} (text)</span>
+                      <div className="dashboard-var-control">
+                        {opts.length > 0 ? (
+                          <Select
+                            id={`dashvar-${v.name}`}
+                            labelText=""
+                            value={dashVarValues[v.name] || ''}
+                            onChange={(e) => setDashVarValues((p) => ({ ...p, [v.name]: e.target.value }))}
+                            size="sm"
+                          >
+                            <SelectItem value="" text="None (viewer picks on open)" />
+                            {opts.map((o) => (
+                              <SelectItem key={String(o)} value={String(o)} text={String(o)} />
+                            ))}
+                          </Select>
+                        ) : (
+                          <TextInput
+                            id={`dashvar-${v.name}`}
+                            labelText=""
+                            placeholder="Value to pass (leave blank for none)"
+                            value={dashVarValues[v.name] || ''}
+                            onChange={(e) => setDashVarValues((p) => ({ ...p, [v.name]: e.target.value }))}
+                            size="sm"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </FormGroup>
         </Form>
       </div>
@@ -673,8 +808,22 @@ function TsStoreAlertRuleEditorPage() {
         onSelect={(d) => {
           setDashboardRecord(d);
           setDashboardId(d.id);
+          handleDashboardChosen(d);
         }}
       />
+      {/* Connection picker for a connection_swap variable's value. Portaled/
+          conditional so its search field takes input inside this page. */}
+      {connVarPickerOpen && (
+        <ConnectionPickerModal
+          open
+          onClose={() => setConnVarPickerOpen(null)}
+          selectedId={dashVarValues[connVarPickerOpen] || ''}
+          onSelect={(conn) => {
+            setDashVarValues((prev) => ({ ...prev, [connVarPickerOpen]: conn.id }));
+            setConnVarPickerOpen(null);
+          }}
+        />
+      )}
     </div>
   );
 }

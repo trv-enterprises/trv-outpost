@@ -240,3 +240,36 @@
     }
   }
 }
+
+// Dashboard-variable pre-scoping (#125): value pickers shown under the target
+// dashboard once one is selected and it has supported variables.
+.dashboard-var-prescope {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--cds-border-subtle-01);
+
+  .dashboard-var-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+
+    .dashboard-var-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--cds-text-secondary);
+    }
+
+    .dashboard-var-control {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+
+      .dashboard-var-value {
+        font-size: 0.8125rem;
+        color: var(--cds-text-primary);
+      }
+    }
+  }
+}

@@ -46,6 +46,10 @@ type AlertPayload struct {
 	// JSON-decoding the producer's external_ref. Empty when the
 	// producer didn't supply one or used a non-dashboard schema.
 	DashboardID string `json:"dashboard_id,omitempty"`
+	// DashboardVars pre-scopes that link (variable name → value),
+	// appended as ?var_<name>=<value>. From external_ref's
+	// dashboard_vars. Empty when not set (#125).
+	DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
 }
 
 // EventHub is an in-process pub/sub fan-out. Subscribers register

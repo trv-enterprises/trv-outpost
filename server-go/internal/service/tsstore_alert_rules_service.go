@@ -113,6 +113,10 @@ type TSStoreAggregatedRule struct {
 	// rules created by non-dashboard tooling carry whatever the
 	// producer chose to put in external_ref.
 	DashboardID string `json:"dashboard_id,omitempty"`
+	// DashboardVars is the decoded dashboard_vars map (variable name → value)
+	// from external_ref, used to pre-scope the deep-linked dashboard. Empty
+	// unless the rule was created with variable values (#125).
+	DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
 
 	// Operational status. ts-store reports state + alerts_fired at
 	// the alert level (not per rule); we mirror onto every rule row
@@ -321,6 +325,7 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 			Cooldown:       rule.Cooldown,
 			ExternalRef:    rule.ExternalRef,
 			DashboardID:    decodeDashboardID(rule.ExternalRef),
+			DashboardVars:  decodeDashboardVars(rule.ExternalRef),
 			State:          st.State,
 			AlertsFired:    st.AlertsFired,
 		})
@@ -514,7 +519,13 @@ type CreateAlertRequest struct {
 	Condition     string `json:"condition" binding:"required"`
 	Cooldown      string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
 	DashboardID   string `json:"dashboard_id,omitempty"` // optional bell deep-link target
-	PollInterval  string `json:"poll_interval,omitempty"`
+	// DashboardVars pre-scopes the deep-linked dashboard: variable name →
+	// value, appended to the bell link as ?var_<name>=<value> so the dashboard
+	// opens already scoped to the alert's context (e.g. the connection that
+	// fired, or a text/host value). Requires DashboardID. Carried through
+	// ts-store's external_ref alongside dashboard_id (#125).
+	DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
+	PollInterval  string            `json:"poll_interval,omitempty"`
 	RestartPolicy string `json:"restart_policy,omitempty"` // "now" (default) or "resume"
 	MaxReplay     string `json:"max_replay,omitempty"`     // e.g. "1h"; only valid when restart_policy=="resume"
 
@@ -569,7 +580,7 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 	if req.Cooldown != "" {
 		tsBody["cooldown"] = req.Cooldown
 	}
-	if ref := encodeExternalRef(req.DashboardID); ref != "" {
+	if ref := encodeExternalRef(req.DashboardID, req.DashboardVars); ref != "" {
 		tsBody["external_ref"] = ref
 	}
 	if req.PollInterval != "" {
@@ -701,18 +712,42 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 	}, nil
 }
 
-// encodeExternalRef returns a JSON-encoded {dashboard_id:...} payload
-// for ts-store's external_ref field, or "" when no dashboard was
-// chosen. Empty stays empty so ts-store doesn't store an empty JSON
-// object.
-func encodeExternalRef(dashboardID string) string {
+// encodeExternalRef returns a JSON-encoded {dashboard_id:..., dashboard_vars:...}
+// payload for ts-store's external_ref field, or "" when no dashboard was
+// chosen. dashboard_vars is omitted when empty. Empty dashboardID stays empty so
+// ts-store doesn't store an empty JSON object. Variables without a dashboard are
+// meaningless (there's no link to scope), so they're dropped in that case (#125).
+func encodeExternalRef(dashboardID string, dashboardVars map[string]string) string {
 	if dashboardID == "" {
 		return ""
 	}
-	buf, _ := json.Marshal(struct {
-		DashboardID string `json:"dashboard_id"`
-	}{DashboardID: dashboardID})
+	payload := struct {
+		DashboardID   string            `json:"dashboard_id"`
+		DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
+	}{DashboardID: dashboardID}
+	if len(dashboardVars) > 0 {
+		payload.DashboardVars = dashboardVars
+	}
+	buf, _ := json.Marshal(payload)
 	return string(buf)
+}
+
+// decodeDashboardVars returns the dashboard_vars map when external_ref carries
+// one. Soft-fail: any malformed input returns nil (mirrors decodeDashboardID).
+func decodeDashboardVars(externalRef string) map[string]string {
+	if externalRef == "" {
+		return nil
+	}
+	var parsed struct {
+		DashboardVars map[string]string `json:"dashboard_vars"`
+	}
+	if err := json.Unmarshal([]byte(externalRef), &parsed); err != nil {
+		return nil
+	}
+	if len(parsed.DashboardVars) == 0 {
+		return nil
+	}
+	return parsed.DashboardVars
 }
 
 // mintWebhookSecret returns a high-entropy URL-safe token suitable

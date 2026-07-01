@@ -7365,6 +7365,13 @@
                     "description": "DashboardID is the decoded `{\"dashboard_id\":\"…\"}` from\nExternalRef, populated at ingest time when the producer\nfollowed that convention. Surfaces as the bell-row \"Open\ndashboard\" link target. Empty when the producer didn't set\nexternal_ref, or set it to something that wasn't a\ndashboard_id-shaped JSON object — the bell row just hides the\nlink button in that case.",
                     "type": "string"
                 },
+                "dashboard_vars": {
+                    "description": "DashboardVars is the decoded `dashboard_vars` map (variable name → value)\nfrom external_ref. Appended to the bell \"Open dashboard\" link as\n?var_\u003cname\u003e=\u003cvalue\u003e so the dashboard opens pre-scoped to the alert's\ncontext. Empty when the producer didn't set it (#125).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "expires_at": {
                     "description": "ExpiresAt drives the MongoDB TTL index. Defaults to 30 days\npast ReceivedAt; once a per-deployment retention setting lands\nthis becomes computed from that. Pinned alerts are still\nsubject to TTL — pinning is \"stay visible until cleared,\" not\n\"keep forever.\"",
                     "type": "string"
@@ -11766,6 +11773,13 @@
                     "description": "optional bell deep-link target",
                     "type": "string"
                 },
+                "dashboard_vars": {
+                    "description": "DashboardVars pre-scopes the deep-linked dashboard: variable name →\nvalue, appended to the bell link as ?var_\u003cname\u003e=\u003cvalue\u003e so the dashboard\nopens already scoped to the alert's context (e.g. the connection that\nfired, or a text/host value). Requires DashboardID. Carried through\nts-store's external_ref alongside dashboard_id (#125).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "max_replay": {
                     "description": "e.g. \"1h\"; only valid when restart_policy==\"resume\"",
                     "type": "string"
@@ -11879,6 +11893,13 @@
                 "dashboard_id": {
                     "description": "DashboardID is decoded opportunistically from ExternalRef when\nit parses as `{\"dashboard_id\":\"\u003cuuid\u003e\"}`. Empty otherwise —\nrules created by non-dashboard tooling carry whatever the\nproducer chose to put in external_ref.",
                     "type": "string"
+                },
+                "dashboard_vars": {
+                    "description": "DashboardVars is the decoded dashboard_vars map (variable name → value)\nfrom external_ref, used to pre-scope the deep-linked dashboard. Empty\nunless the rule was created with variable values (#125).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "external_ref": {
                     "type": "string"

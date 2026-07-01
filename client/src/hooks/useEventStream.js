@@ -73,6 +73,7 @@ export function useEventStream({ ready, addNotification }) {
       addNotification({
         alertId: payload.id,                       // ties the bell row to the persisted record for seen / pin actions
         dashboardId: payload.dashboard_id || '',   // decoded from external_ref; empty when producer didn't supply one
+        dashboardVars: payload.dashboard_vars || null,  // pre-scopes the deep link (#125)
         kind: payload.severity === 'error' ? 'error' : 'warning',
         title: payload.title || 'Alert',
         subtitle: payload.subtitle || '',

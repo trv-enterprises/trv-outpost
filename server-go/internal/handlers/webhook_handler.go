@@ -79,18 +79,25 @@ type tsstoreAlertPayload struct {
 // dashboard_id field, dashboard_id not a string). Never returns an
 // error — a bad external_ref is a soft failure, not a webhook
 // failure.
-func decodeExternalRef(ref string) string {
+// It also returns the optional `dashboard_vars` map (variable name → value)
+// used to pre-scope the deep-linked dashboard (#125); nil when absent.
+func decodeExternalRef(ref string) (string, map[string]string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return ""
+		return "", nil
 	}
 	var parsed struct {
-		DashboardID string `json:"dashboard_id"`
+		DashboardID   string            `json:"dashboard_id"`
+		DashboardVars map[string]string `json:"dashboard_vars"`
 	}
 	if err := json.Unmarshal([]byte(ref), &parsed); err != nil {
-		return ""
+		return "", nil
 	}
-	return parsed.DashboardID
+	vars := parsed.DashboardVars
+	if len(vars) == 0 {
+		vars = nil
+	}
+	return parsed.DashboardID, vars
 }
 
 // HandleTSStoreAlert receives an alert from a ts-store webhook rule
@@ -245,7 +252,7 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 	// so future producers / future schema can still see the raw
 	// value, but DashboardID stays empty and the bell row just
 	// doesn't render an "Open dashboard" link.
-	dashboardID := decodeExternalRef(payload.ExternalRef)
+	dashboardID, dashboardVars := decodeExternalRef(payload.ExternalRef)
 
 	// Persist first, fan-out second. Persistence is the
 	// "doesn't get lost if nobody is watching" guarantee; the SSE
@@ -264,8 +271,9 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 		Namespace:    conn.Namespace,
 		ConnectionID: connectionID,
 		Payload:      payload.Data,
-		ExternalRef:  payload.ExternalRef,
-		DashboardID:  dashboardID,
+		ExternalRef:   payload.ExternalRef,
+		DashboardID:   dashboardID,
+		DashboardVars: dashboardVars,
 	})
 	if err != nil {
 		log.Printf("webhook: ALERT PERSIST FAILED connection=%s rule=%s err=%v (continuing to publish)",
@@ -287,8 +295,9 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 			Subtitle:    payload.Condition,
 			Source:      payload.StoreName,
 			RuleName:    payload.RuleName,
-			FiredAt:     firedAt,
-			DashboardID: dashboardID,
+			FiredAt:       firedAt,
+			DashboardID:   dashboardID,
+			DashboardVars: dashboardVars,
 		},
 	}
 	h.hub.Publish(ev)
