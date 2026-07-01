@@ -6,6 +6,39 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.1] — 2026-07-01
+
+### Fixed
+
+- **Disabling a dashboard variable didn't persist** — turning off a
+  connection-swap (or filter) variable and saving looked like it took, but
+  reloading brought it back. `variables_enabled` / `variables` carried
+  `omitempty`, so the cleared `false` / empty array were dropped from the
+  partial-settings update and never overwrote the stored values (#149).
+- **Data-table author-set column widths were ignored** — a per-column pixel
+  width only applied on the first render, then the column snapped back wide.
+  Two causes: the content-autosize strategy re-sized every column on each data
+  render (clobbering the set width), and a stale per-user drag-resize silently
+  won over the author's value. Autosize now skips explicitly-sized columns, and
+  an author width change discards a column's stale per-user override so the new
+  value shows (#151).
+- **Range header effective-step hint** now uses a Carbon tooltip explaining the
+  10,000-point cap (why a fine requested step is raised), replacing the bare
+  native title.
+
+### Added
+
+- **Connection-swap column-compatibility warning** — when a connection_swap
+  variable resolves to a connection missing a panel component's required
+  columns (e.g. a journal table pointed at a metrics store), the panel now
+  shows a ⚠ badge listing the missing columns instead of silently collapsing.
+  Detection only; never blocks a swap. Backed by a new
+  `POST /api/dashboards/:id/swap-compatibility` endpoint (#150).
+- **Data-table column-editor field labels** — the per-column editor now has a
+  header row labelling the fields (Column / Display name / Width (px)), with a
+  reorder hint in the Column header, so the "auto"/"rename" placeholders are no
+  longer ambiguous (#147).
+
 ## [0.37.0] — 2026-06-30
 
 ### Added
