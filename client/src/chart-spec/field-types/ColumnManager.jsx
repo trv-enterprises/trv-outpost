@@ -157,6 +157,16 @@ export default function ColumnManager() {
         Check to include the column. Use the ↕ arrows to reorder, set an optional display name, and set a fixed pixel width (blank = auto-size to fit). A viewer can still drag the header in the live table to override the width for their own session.
       </p>
       <div className="aliases-grid">
+        {/* Header row — aligned to the same grid as each column row so the
+            three data fields are labelled once (the controls cell has no
+            label). Without it the "rename" and "auto" placeholders don't say
+            what they are once a value is typed. */}
+        <div className="aliases-grid__header" aria-hidden="true">
+          <span />
+          <span>Column</span>
+          <span>Display name</span>
+          <span>Width (px)</span>
+        </div>
         {visibleList.map((col, i) => renderRow(col, {
           canReorder: true,
           canMoveUp: i > 0,
