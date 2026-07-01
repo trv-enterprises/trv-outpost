@@ -129,9 +129,18 @@ export default function DataViewGrid({
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
       // Width precedence: a viewer's live drag-resize (per-user, via
       // useDataviewLayout) wins; else the author-set config width; else the
-      // grid's content autosize.
-      const userWidth = userLayout?.widths?.[col];
+      // grid's content autosize. EXCEPT: when the author has since CHANGED the
+      // config width for this column, the stale per-user drag is discarded so
+      // the new author value shows. We detect that by comparing the author
+      // width the user override was captured against (userLayout.widthBase)
+      // with the current author width — a mismatch means the author re-pinned.
       const authorWidth = Number(columnWidths?.[col]);
+      const userWidthRaw = userLayout?.widths?.[col];
+      const userBase = userLayout?.widthBase?.[col];
+      const authorChangedSinceDrag =
+        (Number.isFinite(authorWidth) && authorWidth > 0) &&
+        Number(userBase || 0) !== authorWidth;
+      const userWidth = authorChangedSinceDrag ? undefined : userWidthRaw;
       // AG Grid's field prop treats dots as nested-path navigation
       // (data['cpu']['pct']), which silently empties columns whose names
       // literally contain dots (e.g. ts-store flat keys like 'cpu.pct').
@@ -211,10 +220,16 @@ export default function DataViewGrid({
   const handleColumnResized = (event) => {
     if (!event.finished || !event.column || !chartId) return;
     if (event.source !== 'uiColumnResized') return;
+    const colId = event.column.getColId();
     saveLayout((prev) => {
       const widths = { ...(prev?.widths || {}) };
-      widths[event.column.getColId()] = event.column.getActualWidth();
-      return { ...prev, widths };
+      widths[colId] = event.column.getActualWidth();
+      // Record the author width this drag was made against, so a LATER author
+      // change to that column's config width invalidates this override (the
+      // author's re-pin wins). 0 = no author width at drag time.
+      const widthBase = { ...(prev?.widthBase || {}) };
+      widthBase[colId] = Number(columnWidths?.[colId]) || 0;
+      return { ...prev, widths, widthBase };
     });
   };
   const handleColumnMoved = () => {
