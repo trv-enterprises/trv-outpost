@@ -124,6 +124,62 @@ func (h *DashboardHandler) GetVariableCandidates(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// swapCompatibilityRequest is the POST body for GetSwapCompatibility. The client
+// sends the EFFECTIVE panel→component pairs it is about to render (post
+// component-override) so substituted panels are checked as their substitute.
+type swapCompatibilityRequest struct {
+	// PanelComponents maps panel_id → effective component_id. Optional; when
+	// omitted the server falls back to each panel's default component.
+	PanelComponents map[string]string `json:"panel_components"`
+}
+
+// GetSwapCompatibility reports which variable-driven panels would be missing
+// required columns if the connection_swap variable resolved to the given
+// connection. Detection only — the swap is never blocked.
+// @Summary Check connection-swap column compatibility
+// @Description Per-panel column-availability check for a candidate connection of a connection_swap variable
+// @Tags dashboards
+// @Accept json
+// @Produce json
+// @Param id path string true "Dashboard ID"
+// @Param variable query string true "Variable name"
+// @Param connection query string true "Candidate connection ID"
+// @Param body body swapCompatibilityRequest false "Effective panel→component pairs"
+// @Success 200 {object} models.SwapCompatibilityResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /dashboards/{id}/swap-compatibility [post]
+func (h *DashboardHandler) GetSwapCompatibility(c *gin.Context) {
+	id := c.Param("id")
+	variable := c.Query("variable")
+	connection := c.Query("connection")
+	if connection == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection query parameter is required"})
+		return
+	}
+
+	var body swapCompatibilityRequest
+	// Body is optional; ignore a decode error on an empty/absent body.
+	_ = c.ShouldBindJSON(&body)
+
+	resp, err := h.service.GetSwapCompatibility(c.Request.Context(), id, variable, connection, body.PanelComponents)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.Contains(err.Error(), "required") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // ListDashboards retrieves a list of dashboards with pagination
 // @Summary List dashboards
 // @Description Get a paginated list of dashboards with optional filtering. Use include_datasources=true to get data source names for each dashboard.

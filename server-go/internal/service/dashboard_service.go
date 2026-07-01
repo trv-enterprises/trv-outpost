@@ -693,6 +693,159 @@ func (s *DashboardService) schemaCompatible(ctx context.Context, candidateID str
 	return true, ""
 }
 
+// columnSetUnified returns the lowercased set of every column/field name a
+// connection exposes, across ALL schema shapes: SQL/EdgeLake tables, the
+// synthetic single-table ts-store/API/CSV/socket schema, and Prometheus
+// metric+label names. Broader than columnSet (which only reads Tables) so the
+// swap-compatibility check works for flat stores like ts-store. Returns nil
+// when the schema is unavailable/empty so callers can distinguish "unknown"
+// from "no matching columns".
+func (s *DashboardService) columnSetUnified(ctx context.Context, connectionID string) map[string]struct{} {
+	if s.schemaOf == nil {
+		return nil
+	}
+	res, err := s.schemaOf(ctx, connectionID)
+	if err != nil || res == nil || !res.Success {
+		return nil
+	}
+	cols := map[string]struct{}{}
+	if res.Schema != nil {
+		for _, t := range res.Schema.Tables {
+			for _, col := range t.Columns {
+				cols[strings.ToLower(col.Name)] = struct{}{}
+			}
+		}
+	}
+	if res.PrometheusSchema != nil {
+		for _, m := range res.PrometheusSchema.Metrics {
+			cols[strings.ToLower(m.Name)] = struct{}{}
+		}
+		for _, l := range res.PrometheusSchema.Labels {
+			cols[strings.ToLower(l)] = struct{}{}
+		}
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	return cols
+}
+
+// requiredColumns collects the columns a component's data_mapping references —
+// the set that must exist on its connection for the component to render as
+// authored. Union of visible_columns (dataview), x_axis, y_axis, series,
+// group_by, sort_by, label_col. Returns an ordered, de-duped list (declaration
+// order, first occurrence wins) so a UI message reads naturally. Components
+// with no data_mapping (custom code, static placeholders like "NA") return
+// nothing — nothing to check, so they never warn.
+func requiredColumns(comp *models.Component) []string {
+	if comp == nil || comp.DataMapping == nil {
+		return nil
+	}
+	dm := comp.DataMapping
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(c string) {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			return
+		}
+		key := strings.ToLower(c)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, c)
+	}
+	// visible_columns is the load-bearing one for data tables; list it first.
+	for _, c := range dm.VisibleColumns {
+		add(c)
+	}
+	add(dm.XAxis)
+	for _, c := range dm.YAxis {
+		add(c)
+	}
+	add(dm.Series)
+	add(dm.GroupBy)
+	add(dm.SortBy)
+	add(dm.LabelCol)
+	return out
+}
+
+// GetSwapCompatibility checks, for a connection_swap variable and a target
+// connection, which of the supplied panels' components would be missing
+// required columns on that connection. The caller passes the EFFECTIVE
+// panel→component pairs it is about to render (post component-override), so a
+// panel the author has already substituted (e.g. swapped to an NA placeholder
+// or a variable-free chart for hosts that lack columns) is checked as that
+// substitute — not the original — and won't false-warn.
+//
+// Detection only: the result annotates the UI; it never blocks a swap.
+func (s *DashboardService) GetSwapCompatibility(ctx context.Context, dashboardID, variableName, connectionID string, panelComponents map[string]string) (*models.SwapCompatibilityResponse, error) {
+	if connectionID == "" {
+		return nil, fmt.Errorf("connection id is required")
+	}
+	dashboard, err := s.repo.FindByID(ctx, dashboardID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving dashboard: %w", err)
+	}
+	if dashboard == nil {
+		return nil, fmt.Errorf("dashboard not found")
+	}
+
+	resp := &models.SwapCompatibilityResponse{Variable: variableName, ConnectionID: connectionID}
+
+	cols := s.columnSetUnified(ctx, connectionID)
+	if cols == nil {
+		// Can't read the target schema → report "unknown" rather than a false
+		// all-clear. No per-panel issues (we can't compute them).
+		resp.SchemaUnavailable = true
+		return resp, nil
+	}
+
+	// When the caller didn't supply the effective components, fall back to each
+	// panel's default component_id from the dashboard.
+	if len(panelComponents) == 0 {
+		panelComponents = map[string]string{}
+		for _, p := range dashboard.Panels {
+			if p.ID != "" && p.ComponentID != "" {
+				panelComponents[p.ID] = p.ComponentID
+			}
+		}
+	}
+
+	if s.chartRepo == nil {
+		return resp, nil
+	}
+	for panelID, componentID := range panelComponents {
+		if componentID == "" {
+			continue
+		}
+		comp, cerr := s.chartRepo.FindByID(ctx, componentID)
+		if cerr != nil || comp == nil {
+			continue
+		}
+		req := requiredColumns(comp)
+		if len(req) == 0 {
+			continue
+		}
+		var missing []string
+		for _, c := range req {
+			if _, ok := cols[strings.ToLower(c)]; !ok {
+				missing = append(missing, c)
+			}
+		}
+		if len(missing) > 0 {
+			resp.Issues = append(resp.Issues, models.PanelSwapIssue{
+				PanelID:        panelID,
+				ComponentID:    comp.ID,
+				ComponentName:  comp.Name,
+				MissingColumns: missing,
+			})
+		}
+	}
+	return resp, nil
+}
+
 // ensurePanelIDs assigns a unique id to every panel that lacks one, and
 // regenerates any id that duplicates an earlier panel's. The editor keys
 // all per-panel operations (drag, resize, edit-target, delete, React keys)

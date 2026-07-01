@@ -864,6 +864,21 @@ class APIClient {
     return this.request(`/api/dashboards/${id}/variable-candidates?variable=${q}`);
   }
 
+  // Check per-panel column compatibility for a connection_swap candidate.
+  // panelComponents maps panel_id → EFFECTIVE component_id (post override) so
+  // substituted panels are checked as their substitute. Returns
+  // { variable, connection_id, schema_unavailable, issues: [{ panel_id,
+  // component_id, component_name, missing_columns }] }.
+  async getDashboardSwapCompatibility(id, variableName, connectionId, panelComponents) {
+    const params = new URLSearchParams();
+    if (variableName) params.set('variable', variableName);
+    params.set('connection', connectionId);
+    return this.request(`/api/dashboards/${id}/swap-compatibility?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify({ panel_components: panelComponents || {} }),
+    });
+  }
+
   async createDashboard(dashboard) {
     return this.request('/api/dashboards', {
       method: 'POST',

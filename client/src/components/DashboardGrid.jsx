@@ -54,6 +54,7 @@ function DashboardGrid({
   dashboard,
   resolveConnectionId,
   resolveComponent,
+  swapIssuesByPanel = {},
   dashboardVariableText = '',
   variableValues = {},
   dashboardVariableValue = null,
@@ -331,6 +332,7 @@ function DashboardGrid({
                   effectiveComponentId={effectiveComponentId}
                   hasText={hasText}
                   hasChart={hasChart}
+                  swapIssue={swapIssuesByPanel[panel.id] || null}
                   resolveConnectionId={resolveConnectionId}
                   dashboardVariableText={dashboardVariableText}
                   variableValues={variableValues}
@@ -359,6 +361,7 @@ DashboardGrid.propTypes = {
   dashboard: PropTypes.object,
   resolveConnectionId: PropTypes.func,
   resolveComponent: PropTypes.func,
+  swapIssuesByPanel: PropTypes.object,
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,

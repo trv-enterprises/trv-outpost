@@ -284,3 +284,28 @@
     }
   }
 }
+
+// Connection-swap column-mismatch badge (detection only). Anchored to the
+// panel's top-right; a warning glyph whose tooltip lists the missing columns.
+// Sits above the component body so it's visible over a collapsed table.
+.swap-issue-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 5;
+
+  .swap-issue-badge__trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    cursor: help;
+    color: var(--cds-support-warning, #f1c21b);
+
+    svg {
+      fill: currentColor;
+    }
+  }
+}

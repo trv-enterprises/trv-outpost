@@ -295,6 +295,16 @@ definitions:
           $ref: '#/definitions/handlers.StreamInfo'
         type: array
     type: object
+  handlers.swapCompatibilityRequest:
+    properties:
+      panel_components:
+        additionalProperties:
+          type: string
+        description: |-
+          PanelComponents maps panel_id → effective component_id. Optional; when
+          omitted the server falls back to each panel's default component.
+        type: object
+    type: object
   handlers.tsstoreAlertPayload:
     properties:
       condition:
@@ -1644,7 +1654,9 @@ definitions:
         description: |-
           Variables holds the dashboard-variable definitions. v1 implements a single
           connection-swap variable (index 0); the array shape is forward-compatible
-          with multiple/filter-value variables.
+          with multiple/filter-value variables. NO omitempty: clearing the variable
+          sends `[]`, and that empty array must overwrite the stored one — omitempty
+          would drop it so the old variables would survive the update.
         items:
           $ref: '#/definitions/models.DashboardVariable'
         type: array
@@ -1653,6 +1665,9 @@ definitions:
           VariablesEnabled is the per-dashboard on/off gate for the dashboard-variable
           feature (the header dropdown that re-scopes panels). When false the viewer
           ignores Variables entirely and behaves as if the feature did not exist.
+          NO omitempty: turning the feature OFF sends `false`, and a partial-settings
+          update must persist that explicit false — omitempty would drop it from the
+          $set, leaving the old `true` in the DB (the "disable didn't stick" bug).
         type: boolean
     type: object
   models.DashboardSummary:
@@ -2353,6 +2368,20 @@ definitions:
       dashboards:
         type: integer
     type: object
+  models.PanelSwapIssue:
+    properties:
+      component_id:
+        type: string
+      component_name:
+        type: string
+      missing_columns:
+        description: required-but-absent, in declaration order
+        items:
+          type: string
+        type: array
+      panel_id:
+        type: string
+    type: object
   models.PanelTextConfig:
     description: Configuration for native text panels — section headers, date/time,
       titles
@@ -2866,6 +2895,23 @@ definitions:
       id:
         type: string
       title:
+        type: string
+    type: object
+  models.SwapCompatibilityResponse:
+    properties:
+      connection_id:
+        type: string
+      issues:
+        items:
+          $ref: '#/definitions/models.PanelSwapIssue'
+        type: array
+      schema_unavailable:
+        description: |-
+          SchemaUnavailable is true when the target connection's schema couldn't be
+          read (idle store, unreachable) — the client should treat issues as
+          "unknown", not "clean", and avoid a false all-clear.
+        type: boolean
+      variable:
         type: string
     type: object
   models.SystemConfigResponse:
@@ -5744,6 +5790,58 @@ paths:
             additionalProperties: true
             type: object
       summary: Preview orphaned components for a dashboard delete
+      tags:
+      - dashboards
+  /dashboards/{id}/swap-compatibility:
+    post:
+      consumes:
+      - application/json
+      description: Per-panel column-availability check for a candidate connection
+        of a connection_swap variable
+      parameters:
+      - description: Dashboard ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Variable name
+        in: query
+        name: variable
+        required: true
+        type: string
+      - description: Candidate connection ID
+        in: query
+        name: connection
+        required: true
+        type: string
+      - description: Effective panel→component pairs
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handlers.swapCompatibilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SwapCompatibilityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check connection-swap column compatibility
       tags:
       - dashboards
   /dashboards/{id}/thumbnail:

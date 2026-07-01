@@ -3,6 +3,8 @@
 // See LICENSE file for details.
 
 import PropTypes from 'prop-types';
+import { Tooltip } from '@carbon/react';
+import { WarningAltFilled } from '@carbon/icons-react';
 import ComponentPanelWithActions from './ComponentPanelWithActions';
 import { ControlRenderer } from './controls';
 import FrigateCameraViewer from './frigate/FrigateCameraViewer';
@@ -40,6 +42,7 @@ function PanelContent({
   effectiveComponentId,
   hasText,
   hasChart,
+  swapIssue = null,
   resolveConnectionId,
   dashboardVariableText = '',
   variableValues = {},
@@ -55,6 +58,23 @@ function PanelContent({
       resetKey={`${effectiveComponentId || panel.id}-${chart?.updated || ''}`}
       label={chart?.title || chart?.name || (hasText ? 'Text panel' : 'Component')}
     >
+      {/* Connection-swap column mismatch badge (detection only). Shown when the
+          active swap connection is missing columns this component needs, so the
+          user knows WHY the panel looks degraded instead of silently seeing a
+          collapsed table. */}
+      {swapIssue && Array.isArray(swapIssue.missing) && swapIssue.missing.length > 0 && (
+        <div className="swap-issue-badge">
+          <Tooltip
+            align="left"
+            autoAlign
+            label={`${swapIssue.missing.length} column${swapIssue.missing.length === 1 ? '' : 's'} unavailable on this connection: ${swapIssue.missing.join(', ')}`}
+          >
+            <button type="button" className="swap-issue-badge__trigger" aria-label="Columns unavailable on this connection">
+              <WarningAltFilled size={16} />
+            </button>
+          </Tooltip>
+        </div>
+      )}
       {hasText ? (
         <div className="component-wrapper text-wrapper">
           <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
@@ -133,6 +153,10 @@ PanelContent.propTypes = {
   effectiveComponentId: PropTypes.string,
   hasText: PropTypes.bool,
   hasChart: PropTypes.bool,
+  swapIssue: PropTypes.shape({
+    missing: PropTypes.arrayOf(PropTypes.string),
+    componentName: PropTypes.string,
+  }),
   resolveConnectionId: PropTypes.func,
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,

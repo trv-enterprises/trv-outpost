@@ -954,6 +954,7 @@ func main() {
 			dashboards.GET("", dashboardHandler.ListDashboards)
 			dashboards.GET("/:id", dashboardHandler.GetDashboard)
 			dashboards.GET("/:id/variable-candidates", dashboardHandler.GetVariableCandidates)
+			dashboards.POST("/:id/swap-compatibility", dashboardHandler.GetSwapCompatibility)
 			dashboards.GET("/:id/delete-preview", dashboardHandler.GetDashboardDeletePreview)
 			dashboards.GET("/:id/thumbnail", dashboardHandler.GetDashboardThumbnail)
 			dashboards.PUT("/:id/thumbnail", dashboardHandler.PutDashboardThumbnail)

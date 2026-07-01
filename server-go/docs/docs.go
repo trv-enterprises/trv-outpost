@@ -2785,6 +2785,81 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboards/{id}/swap-compatibility": {
+            "post": {
+                "description": "Per-panel column-availability check for a candidate connection of a connection_swap variable",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Check connection-swap column compatibility",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Dashboard ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Variable name",
+                        "name": "variable",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Candidate connection ID",
+                        "name": "connection",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Effective panel→component pairs",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.swapCompatibilityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.SwapCompatibilityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboards/{id}/thumbnail": {
             "get": {
                 "description": "Get the captured thumbnail image (PNG) for a dashboard",
@@ -6953,6 +7028,18 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.swapCompatibilityRequest": {
+            "type": "object",
+            "properties": {
+                "panel_components": {
+                    "description": "PanelComponents maps panel_id → effective component_id. Optional; when\nomitted the server falls back to each panel's default component.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "handlers.tsstoreAlertPayload": {
             "type": "object",
             "properties": {
@@ -8703,14 +8790,14 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "variables": {
-                    "description": "Variables holds the dashboard-variable definitions. v1 implements a single\nconnection-swap variable (index 0); the array shape is forward-compatible\nwith multiple/filter-value variables.",
+                    "description": "Variables holds the dashboard-variable definitions. v1 implements a single\nconnection-swap variable (index 0); the array shape is forward-compatible\nwith multiple/filter-value variables. NO omitempty: clearing the variable\nsends ` + "`" + `[]` + "`" + `, and that empty array must overwrite the stored one — omitempty\nwould drop it so the old variables would survive the update.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.DashboardVariable"
                     }
                 },
                 "variables_enabled": {
-                    "description": "VariablesEnabled is the per-dashboard on/off gate for the dashboard-variable\nfeature (the header dropdown that re-scopes panels). When false the viewer\nignores Variables entirely and behaves as if the feature did not exist.",
+                    "description": "VariablesEnabled is the per-dashboard on/off gate for the dashboard-variable\nfeature (the header dropdown that re-scopes panels). When false the viewer\nignores Variables entirely and behaves as if the feature did not exist.\nNO omitempty: turning the feature OFF sends ` + "`" + `false` + "`" + `, and a partial-settings\nupdate must persist that explicit false — omitempty would drop it from the\n$set, leaving the old ` + "`" + `true` + "`" + ` in the DB (the \"disable didn't stick\" bug).",
                     "type": "boolean"
                 }
             }
@@ -9696,6 +9783,27 @@ const docTemplate = `{
                 }
             }
         },
+        "models.PanelSwapIssue": {
+            "type": "object",
+            "properties": {
+                "component_id": {
+                    "type": "string"
+                },
+                "component_name": {
+                    "type": "string"
+                },
+                "missing_columns": {
+                    "description": "required-but-absent, in declaration order",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "panel_id": {
+                    "type": "string"
+                }
+            }
+        },
         "models.PanelTextConfig": {
             "description": "Configuration for native text panels — section headers, date/time, titles",
             "type": "object",
@@ -10376,6 +10484,27 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SwapCompatibilityResponse": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "string"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.PanelSwapIssue"
+                    }
+                },
+                "schema_unavailable": {
+                    "description": "SchemaUnavailable is true when the target connection's schema couldn't be\nread (idle store, unreachable) — the client should treat issues as\n\"unknown\", not \"clean\", and avoid a false all-clear.",
+                    "type": "boolean"
+                },
+                "variable": {
                     "type": "string"
                 }
             }

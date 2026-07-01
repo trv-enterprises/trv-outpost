@@ -64,6 +64,7 @@ import ComponentSwapRulesModal from '../components/ComponentSwapRulesModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import apiClient from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
+import { useSwapCompatibility } from '../hooks/useSwapCompatibility';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
 import { DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
@@ -652,6 +653,30 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // In edit mode: use layout dimension preset for bounds (allows dragging into empty space)
   // In view mode: use panel extent (tight fit)
   const panels = isEditMode ? editablePanels : (dashboard?.panels || []);
+
+  // Connection-swap column compatibility (detection only). For each panel,
+  // resolve its EFFECTIVE component (post component-override) so a panel the
+  // author already substituted (NA placeholder, variable-free chart) is
+  // checked as its substitute and doesn't false-warn. The hook is a no-op
+  // unless a connection_swap variable is active with a selection.
+  const effectivePanelComponents = useMemo(() => {
+    if (!dashVariable?.name || !dashVariableValue) return {};
+    const map = {};
+    for (const p of panels) {
+      if (!p?.id) continue;
+      const compId = resolveComponent ? resolveComponent(p) : p.component_id;
+      if (compId) map[p.id] = compId;
+    }
+    return map;
+    // resolveComponent is stable per selection; panels + selection drive it.
+  }, [panels, dashVariable?.name, dashVariableValue, resolveComponent]);
+
+  const { issuesByPanel: swapIssuesByPanel } = useSwapCompatibility({
+    dashboardId: id,
+    variableName: dashVariable?.name || '',
+    selectedConnId: dashVariableValue || '',
+    panelComponents: effectivePanelComponents,
+  });
 
   // ── Runtime value discovery for a `connection`-sourced filter variable ──
   // When the filter variable's value_source is "connection", the header
@@ -3397,6 +3422,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           dashboard={dashboard}
           resolveConnectionId={resolveConnectionId}
           resolveComponent={resolveComponent}
+          swapIssuesByPanel={swapIssuesByPanel}
           dashboardVariableText={dashboardVariableText}
           variableValues={variableValues}
           dashboardVariableValue={dashFilterValue}
