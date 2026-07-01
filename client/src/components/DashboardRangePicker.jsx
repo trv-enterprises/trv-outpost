@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Dropdown, DatePicker, DatePickerInput, TimePicker } from '@carbon/react';
+import { Dropdown, DatePicker, DatePickerInput, TimePicker, Tooltip } from '@carbon/react';
 import { DEFAULT_RANGE_PRESETS, presetLabel, resolveIntentToAbsolute, clampPromStep } from '../utils/rangePresets';
 
 /**
@@ -241,9 +241,14 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
             onChange={({ selectedItem: it }) => handleStep(it)}
           />
           {stepClamped && (
-            <span className="dashboard-range-step-note" title="Prometheus limits a query to ~11,000 points; the step was raised to fit this window.">
-              → {effectiveStep}
-            </span>
+            <Tooltip
+              align="bottom"
+              label={`Effective step. A range query is capped at 10,000 points, so the requested ${step} step was raised to ${effectiveStep} to cover this time range.`}
+            >
+              <span className="dashboard-range-step-note" tabIndex={0}>
+                → {effectiveStep}
+              </span>
+            </Tooltip>
           )}
         </div>
       )}
