@@ -138,6 +138,15 @@ export default function DataViewGrid({
       // Use a closure-captured valueGetter keyed on the literal name + an
       // explicit colId so reorder / resize state still persists by name.
       const colKey = col;
+      // Resolved explicit width: viewer drag-resize wins, else author config.
+      const resolvedWidth = (userWidth && userWidth > 0)
+        ? userWidth
+        : (Number.isFinite(authorWidth) && authorWidth > 0 ? authorWidth : 0);
+      // Default content floor for unsized columns. When a column IS explicitly
+      // sized, honor a small value by dropping the floor to it (AG Grid still
+      // enforces its own hard ~10px minimum), so "20" doesn't silently snap to
+      // the 120 text-column default.
+      const defaultFloor = isNumCol ? 100 : (isTimeCol ? 170 : 120);
       const def = {
         colId: colKey,
         headerName: columnAliases[col] || col,
@@ -152,16 +161,30 @@ export default function DataViewGrid({
           const f = formatCellValue(v, col, { timestampFormat: xAxisFormat });
           return f == null ? '' : String(f);
         },
-        minWidth: isNumCol ? 100 : (isTimeCol ? 170 : 120),
+        minWidth: resolvedWidth > 0 ? Math.min(defaultFloor, resolvedWidth) : defaultFloor,
       };
-      if (userWidth && userWidth > 0) {
-        def.width = userWidth;
+      if (resolvedWidth > 0) {
+        def.width = resolvedWidth;
         def.flex = 0;
-      } else if (Number.isFinite(authorWidth) && authorWidth > 0) {
-        def.width = authorWidth;
-        def.flex = 0;
+        def.suppressSizeToFit = true;
       }
       return def;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnsKey, userLayout, columnWidthsKey]);
+
+  // Columns WITHOUT an explicit width — the only ones fitCellContents should
+  // auto-size. A column with an author/user width must keep its def.width, but
+  // autoSizeStrategy=fitCellContents runs on data render and, unrestricted,
+  // re-sizes every column to its content — so after the grid mounts the width
+  // field looked like it stopped working (the wide `msg` cell won). Restricting
+  // the strategy's colIds to unsized columns lets the explicit widths stick.
+  const autoSizeColIds = useMemo(() => {
+    return orderedColumns.filter((col) => {
+      const uw = userLayout?.widths?.[col];
+      const aw = Number(columnWidths?.[col]);
+      const hasWidth = (uw && uw > 0) || (Number.isFinite(aw) && aw > 0);
+      return !hasWidth;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnsKey, userLayout, columnWidthsKey]);
@@ -243,7 +266,12 @@ export default function DataViewGrid({
           rowData={initialRowDataRef.current || []}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
-          autoSizeStrategy={{ type: 'fitCellContents' }}
+          // Only auto-size columns that have NO explicit width, so author/user
+          // widths aren't clobbered by fitCellContents on data render. When
+          // every column is explicitly sized, omit the strategy entirely.
+          autoSizeStrategy={autoSizeColIds.length > 0
+            ? { type: 'fitCellContents', colIds: autoSizeColIds }
+            : undefined}
           animateRows={false}
           suppressCellFocus
           getRowId={(params) => String(params.data.__id)}
