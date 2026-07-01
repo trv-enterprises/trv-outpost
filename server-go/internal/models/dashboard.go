@@ -345,11 +345,16 @@ type DashboardSettings struct {
 	// VariablesEnabled is the per-dashboard on/off gate for the dashboard-variable
 	// feature (the header dropdown that re-scopes panels). When false the viewer
 	// ignores Variables entirely and behaves as if the feature did not exist.
-	VariablesEnabled bool `json:"variables_enabled,omitempty" bson:"variables_enabled,omitempty"`
+	// NO omitempty: turning the feature OFF sends `false`, and a partial-settings
+	// update must persist that explicit false — omitempty would drop it from the
+	// $set, leaving the old `true` in the DB (the "disable didn't stick" bug).
+	VariablesEnabled bool `json:"variables_enabled" bson:"variables_enabled"`
 	// Variables holds the dashboard-variable definitions. v1 implements a single
 	// connection-swap variable (index 0); the array shape is forward-compatible
-	// with multiple/filter-value variables.
-	Variables []DashboardVariable `json:"variables,omitempty" bson:"variables,omitempty"`
+	// with multiple/filter-value variables. NO omitempty: clearing the variable
+	// sends `[]`, and that empty array must overwrite the stored one — omitempty
+	// would drop it so the old variables would survive the update.
+	Variables []DashboardVariable `json:"variables" bson:"variables"`
 }
 
 // DashboardVariable defines a single dashboard-level variable whose value, set
@@ -492,6 +497,30 @@ type VariableCandidate struct {
 type VariableCandidatesResponse struct {
 	Variable   string              `json:"variable"`
 	Candidates []VariableCandidate `json:"candidates"`
+}
+
+// PanelSwapIssue reports one variable-driven panel whose (effective) component
+// needs columns the target connection doesn't provide — so a connection_swap
+// to that connection would render it degraded (e.g. a data table collapsing to
+// whatever columns happen to overlap). Detection only; never blocks a swap.
+type PanelSwapIssue struct {
+	PanelID       string   `json:"panel_id"`
+	ComponentID   string   `json:"component_id"`
+	ComponentName string   `json:"component_name"`
+	MissingColumns []string `json:"missing_columns"` // required-but-absent, in declaration order
+}
+
+// SwapCompatibilityResponse is the payload for the swap-compatibility endpoint:
+// per-panel column issues for a specific candidate connection. Empty Issues =
+// every panel's required columns are present on that connection.
+type SwapCompatibilityResponse struct {
+	Variable     string           `json:"variable"`
+	ConnectionID string           `json:"connection_id"`
+	// SchemaUnavailable is true when the target connection's schema couldn't be
+	// read (idle store, unreachable) — the client should treat issues as
+	// "unknown", not "clean", and avoid a false all-clear.
+	SchemaUnavailable bool             `json:"schema_unavailable"`
+	Issues            []PanelSwapIssue `json:"issues"`
 }
 
 // CreateDashboardRequest represents a request to create a dashboard
