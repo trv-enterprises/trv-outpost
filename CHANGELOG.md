@@ -6,6 +6,40 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.0] — 2026-06-30
+
+### Added
+
+- **"Create from Existing" for connections** — the connections list "Create"
+  button is now a dropdown (Create / From Existing). "From Existing" opens the
+  connection picker and clones the chosen connection into a new one, seeding
+  name/type/config/tags/namespace. Secrets aren't copied (the frontend never
+  receives them) — they're cleared and a toast prompts you to re-enter
+  credentials. Nothing is created until you Save, so Cancel leaves no orphan
+  (#145).
+
+### Fixed
+
+- **Component "From Existing" overwrote the source** — cloning a component from
+  an existing one opened it in the editor but saved over the original instead
+  of creating a new component. It now clones into a new record (name suffixed
+  " (Copy)"), leaving the source untouched (#144).
+- **Custom-code components couldn't change their connection** — the Details tab
+  (which holds the connection picker) was dropped in custom-code mode, and the
+  "Edit in Connection tab" button was dead. The tab is now always available;
+  its data-mapping subsections still self-hide in custom-code mode (#143).
+- **Connection picker search wouldn't accept input** inside the component
+  editor modal — the outer modal's focus trap stole focus from the nested,
+  portaled picker. Nested modals are now exempted from the focus wrap.
+- **Dashboard thumbnails had a black gutter** — auto-thumbnail-on-save captured
+  the full design-canvas budget (fired while still in edit mode) and filled the
+  extra space with black. It now captures tight to the panel bounding box, so
+  the thumbnail matches the stretch-mode framing (#146).
+- **"Create from Existing" toast fired twice** — the clone seed ran twice under
+  React StrictMode; it's now guarded to run once (#145).
+- **Variable ("var") indicator tooltip clipped** at the viewport edge on tiles
+  near the left edge — added `autoAlign` so Carbon repositions it.
+
 ## [0.36.1] — 2026-06-29
 
 ### Fixed
