@@ -158,12 +158,24 @@ export default function ColumnManager() {
       </p>
       <div className="aliases-grid">
         {/* Header row — aligned to the same grid as each column row so the
-            three data fields are labelled once (the controls cell has no
-            label). Without it the "rename" and "auto" placeholders don't say
+            three data fields are labelled once. The first cell hints at the
+            reorder (↕) control that sits under it; the rest label the data
+            fields. Without it the "rename" and "auto" placeholders don't say
             what they are once a value is typed. */}
         <div className="aliases-grid__header" aria-hidden="true">
+          {/* First cell sits over the checkbox — no label. The Column header
+              carries a parenthetical reorder hint, since the ↕ arrows render
+              alongside the column name. */}
           <span />
-          <span>Column</span>
+          <span className="aliases-grid__header-column">
+            Column
+            <span className="aliases-grid__header-reorder">
+              (
+              <CaretUp size={10} />
+              <CaretDown size={10} />
+              )
+            </span>
+          </span>
           <span>Display name</span>
           <span>Width (px)</span>
         </div>

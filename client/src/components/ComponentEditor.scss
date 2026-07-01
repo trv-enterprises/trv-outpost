@@ -994,6 +994,32 @@
               text-overflow: ellipsis;
               white-space: nowrap;
             }
+
+            // "COLUMN (↕)" — the reorder hint rides in parentheses after the
+            // Column label, since the ↕ arrows render alongside the column
+            // name. Let this cell show its full content (don't clip the parens).
+            .aliases-grid__header-column {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.25rem;
+              overflow: visible;
+            }
+
+            .aliases-grid__header-reorder {
+              display: inline-flex;
+              align-items: center;
+              // Stacked carets mirror the row's reorder buttons; the parens
+              // are plain text on either side.
+              .cds--tooltip,
+              svg {
+                fill: currentColor;
+              }
+
+              svg {
+                display: block;
+                margin: 0 0.0625rem;
+              }
+            }
           }
 
           // Packed-left layout: [checkbox ↕] hug their content (auto),
