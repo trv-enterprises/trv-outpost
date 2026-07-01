@@ -6,6 +6,25 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.2] — 2026-07-01
+
+### Added
+
+- **ts-store alert links can pass dashboard variables** — an alert rule's
+  target-dashboard deep-link now pre-scopes the dashboard to the alert's
+  context: pick a connection-swap value and/or a filter/text value in the rule
+  editor and the link opens the dashboard already scoped (no manual
+  re-selection). Works from both the bell "Open dashboard" action and the
+  rules-list "Target dashboard" link. The rule editor presents the connection
+  picker exactly like the dashboard viewer's header (schema-compatible
+  candidates). Range variables deferred (#125).
+- **ts-store alert rules "Create from Existing"** — the rules-list "+ New rule"
+  button is now a Create dropdown (Create Rule / From Existing), matching the
+  connection/component pattern. "From Existing" prefills the editor with an
+  existing rule's values (connection, condition, cooldown, alert type + MQTT
+  fields, and the dashboard link + variable pre-scoping), named "<source> copy"
+  (#152).
+
 ## [0.37.1] — 2026-07-01
 
 ### Fixed
