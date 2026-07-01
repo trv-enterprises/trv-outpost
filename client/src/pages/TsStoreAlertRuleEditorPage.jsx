@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   Button,
   Form,
@@ -43,6 +43,7 @@ import './TsStoreAlertRuleEditorPage.scss';
  */
 function TsStoreAlertRuleEditorPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isEnabled, loading: extLoading } = useExtensions();
 
   // Form state.
@@ -142,6 +143,38 @@ function TsStoreAlertRuleEditorPage() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // "From Existing" prefill (#152): seed the form from a source rule passed via
+  // router state. ts-store has no per-rule edit — this is create-with-prefill,
+  // so it also gives the copy a fresh default name (source + " copy") to avoid
+  // a same-name collision. Runs once on mount.
+  const clonedRef = useRef(false);
+  useEffect(() => {
+    const src = location.state?.cloneFrom;
+    if (!src || clonedRef.current) return;
+    clonedRef.current = true;
+    setAlertType(src.alert_type || 'webhook');
+    setConnectionId(src.connection_id || '');
+    setRuleName(src.rule_name ? `${src.rule_name} copy` : '');
+    setCondition(src.condition || '');
+    if (src.cooldown) setCooldown(src.cooldown);
+    if (src.sink_connection_id) setSinkConnectionId(src.sink_connection_id);
+    if (src.mqtt_topic) { setMqttTopic(src.mqtt_topic); setMqttTopicDirty(true); }
+    if (src.mqtt_qos != null) setMqttQos(String(src.mqtt_qos));
+    // Dashboard link + variable pre-scoping.
+    if (src.dashboard_id) {
+      setDashboardId(src.dashboard_id);
+      if (src.dashboard_vars && typeof src.dashboard_vars === 'object') {
+        setDashVarValues({ ...src.dashboard_vars });
+      }
+      apiClient.getDashboard(src.dashboard_id)
+        .then((d) => {
+          if (d) { setDashboardRecord(d); handleDashboardChosen(d, src.dashboard_vars); }
+        })
+        .catch(() => { /* link stays set; the variable section just won't render */ });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Prefill the MQTT topic from the rule name (slugified) until the
   // user manually edits the topic field. Keeps the topic in sync as
@@ -288,8 +321,10 @@ function TsStoreAlertRuleEditorPage() {
   // deep link. Connection-swap candidates come from the variable-candidates
   // endpoint (same list the viewer's Host picker uses). Resets any prior
   // values since they belonged to a different dashboard.
-  const handleDashboardChosen = async (d) => {
-    setDashVarValues({});
+  const handleDashboardChosen = async (d, presetValues) => {
+    // Preserve caller-provided values (clone prefill); otherwise reset — a newly
+    // picked dashboard's variables differ from the previous one's.
+    setDashVarValues(presetValues && typeof presetValues === 'object' ? { ...presetValues } : {});
     setDashConnCandidates({});
     setDashVariables([]);
     if (!d?.id) return;

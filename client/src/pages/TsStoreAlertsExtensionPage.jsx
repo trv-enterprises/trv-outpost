@@ -27,6 +27,7 @@ import {
 import { TrashCan, Renew, View } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
+import CreateMenu from '../components/CreateMenu';
 import './TsStoreAlertsExtensionPage.scss';
 
 /**
@@ -50,6 +51,7 @@ function TsStoreAlertsExtensionPage() {
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [rulePickerOpen, setRulePickerOpen] = useState(false); // "From Existing" clone-source picker
   const [dashboardsById, setDashboardsById] = useState({});
 
   const refresh = async () => {
@@ -196,12 +198,12 @@ function TsStoreAlertsExtensionPage() {
                   hasIconOnly
                   onClick={refresh}
                 />
-                <Button
-                  kind="primary"
-                  onClick={() => navigate('/design/extensions/tsstore-alerts/new')}
-                >
-                  + New rule
-                </Button>
+                {/* Create dropdown — Create Rule / From Existing (clone),
+                    matching the connection/component pattern. No AI option. */}
+                <CreateMenu
+                  onCreate={() => navigate('/design/extensions/tsstore-alerts/new')}
+                  onSelectExisting={() => setRulePickerOpen(true)}
+                />
               </TableToolbarContent>
             </TableToolbar>
             {loading ? (
@@ -339,6 +341,42 @@ function TsStoreAlertsExtensionPage() {
                 lowContrast
               />
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* "From Existing" — pick a rule to clone into a new one. Rules are
+          already loaded, so this is a plain list; on select we navigate to the
+          create editor with the source rule in router state (#152). */}
+      <Modal
+        open={rulePickerOpen}
+        modalHeading="Create from existing rule"
+        passiveModal
+        onRequestClose={() => setRulePickerOpen(false)}
+      >
+        <p className="picker-help">
+          Pick a rule to prefill the editor with its values. Nothing is created
+          until you save the new rule.
+        </p>
+        {rules.length === 0 ? (
+          <p className="muted">No existing rules to clone.</p>
+        ) : (
+          <div className="rule-clone-list">
+            {rules.map((r) => (
+              <button
+                key={`${r.connection_id}|${r.alert_id}|${r.rule_name}`}
+                type="button"
+                className="rule-clone-item"
+                onClick={() => {
+                  setRulePickerOpen(false);
+                  navigate('/design/extensions/tsstore-alerts/new', { state: { cloneFrom: r } });
+                }}
+              >
+                <span className="rule-clone-name">{r.rule_name}</span>
+                <Tag size="sm">{r.alert_type}</Tag>
+                <code className="rule-clone-condition">{r.condition}</code>
+              </button>
+            ))}
           </div>
         )}
       </Modal>
