@@ -1144,3 +1144,114 @@
     white-space: nowrap;
   }
 }
+
+// Dashboard Variables modal — the accordion connection/filter + time-range
+// editor. Global scope because the Carbon Modal portals to document.body, so
+// a rule nested under the page class would never match. The two independent
+// variables each get an accordion section; the section title carries an On/Off
+// status pill (visible without expanding), and each body opens with its enable
+// toggle and lays related fields in a two-column grid.
+// Cap the Dashboard Variables modal width. size="lg" gives the roomy
+// two-column body, but its default 63rem container leaves a wide empty gutter
+// on the right (the content never fills it). Pull the container in to just
+// past the longest content line so the two columns read as a tidy pair rather
+// than floating in a huge modal. Overrides Carbon's inline size on the
+// portaled container, so it must be global + specific.
+.cds--modal.dashboard-variables-modal .cds--modal-container {
+  inline-size: 60rem;
+  max-inline-size: 92vw; // never exceed the viewport on a small screen
+}
+
+.dashboard-variable-settings {
+  // The content switcher selects which variable's config panel is shown. Each
+  // button's text carries a live "· On" / "· Off" status so both variables'
+  // enabled state stays readable regardless of which panel is open. Full width
+  // so the two buttons split the modal evenly, with a gap before the panel.
+  // Switcher spans half the modal (not full width) and sits left-aligned; the
+  // two buttons stay equal-width within it (Carbon flexes them 1:1).
+  .cds--content-switcher {
+    inline-size: 50%;
+    margin-block-end: 1.5rem;
+  }
+
+  // Let each switch button's inner text span the full button so the label's
+  // right-justified pill actually reaches the trailing edge (Carbon centers
+  // the text node by default, which would keep the pill hugging the name).
+  .cds--content-switcher-btn .cds--content-switcher__label {
+    inline-size: 100%;
+  }
+
+  // Each switch button's label: the variable name on the left, its On/Off
+  // status pill right-justified against the button's trailing edge (with a
+  // little margin after it). Fills the button width so the pill can push right.
+  .dvar-switch-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    inline-size: 100%;
+
+    .dvar-status {
+      margin-inline-start: auto; // push the pill to the right edge
+      margin-inline-end: 0.25rem; // small breathing room after the pill
+    }
+  }
+
+  // On/Off status pill inside each switch button. Off = muted outline; On =
+  // filled green (Carbon support-success) — the always-visible enabled state,
+  // so both variables read at a glance no matter which panel is selected.
+  .dvar-status {
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 0.75rem;
+    // Off state: a filled muted chip (not a bare outline) so it reads as solid
+    // next to the green On pill.
+    color: var(--cds-text-primary, #f4f4f4);
+    background: var(--cds-layer-selected-01, #525252);
+    border: 1px solid transparent;
+
+    &--on {
+      color: #fff;
+      background: var(--cds-support-success, #24a148);
+      border-color: var(--cds-support-success, #24a148);
+    }
+  }
+
+  // The selected variable's body: comfortable vertical rhythm between the
+  // enable toggle, the field grids, and the standalone fields (tags, notes).
+  // The default Carbon stacking was cramped — this is the "more vertical
+  // space" fix.
+  .dvar-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  // Two-column field grid for naturally-paired fields (type + label,
+  // compatibility + namespace, range label + default preset). Collapses to a
+  // single column on a narrow viewport so the lg modal still degrades cleanly.
+  .dvar-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 1.5rem;
+    align-items: start;
+
+    @media (max-width: 42rem) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  // Inline explanatory notes (token help, discovery caveats) — muted caption
+  // styling, replacing the former inline style={{fontSize:'0.75rem'...}}.
+  .dvar-note {
+    font-size: 0.75rem;
+    color: var(--cds-text-helper);
+    margin: 0;
+
+    code {
+      font-size: 0.75rem;
+    }
+  }
+}

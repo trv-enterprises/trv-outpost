@@ -22,7 +22,9 @@ import {
   NumberInput,
   Toggle,
   Dropdown,
-  Tooltip
+  Tooltip,
+  ContentSwitcher,
+  Switch
 } from '@carbon/react';
 import {
   ArrowLeft,
@@ -395,6 +397,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // editable* state (+ marks dirty). Seeded from editable* when each modal opens.
   const [settingsDraft, setSettingsDraft] = useState(null);
   const [varsDraft, setVarsDraft] = useState(null);
+  // Which variable panel the Dashboard Variables modal's content switcher shows:
+  // 0 = Connection / Filter, 1 = Time range. Pure view state (not persisted) —
+  // each panel keeps its own enable toggle; the switcher only selects which is
+  // visible, while both variables' On/Off status stays readable on the buttons.
+  const [varsPanel, setVarsPanel] = useState(0);
 
   // Seed the Settings modal draft from the live editable* state when it opens,
   // so the modal edits a buffer and Cancel discards without mutating anything.
@@ -431,6 +438,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         rangePresets: editableRangePresets,
         rangeDefaultPreset: editableRangeDefaultPreset,
       });
+      setVarsPanel(0); // always open on the Connection / Filter panel
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [varsModalOpen]);
@@ -3646,170 +3654,210 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         modalHeading="Dashboard Variables"
         primaryButtonText="Apply"
         secondaryButtonText="Cancel"
-        size="sm"
+        size="lg"
+        className="dashboard-variables-modal"
       >
+        {/* Two independent variables that coexist on a dashboard: the
+            connection/filter variable and the time-range variable. A content
+            switcher selects which one's config is shown; each button carries
+            that variable's live On/Off status so both stay readable no matter
+            which panel is open. The selected panel keeps its own enable toggle
+            (the switcher is navigation, not the enable control). */}
         <div className="dashboard-variable-settings">
-          <Toggle
-            id="settings-variable-enabled"
-            size="sm"
-            labelText="Dashboard Variable"
-            labelA="Off"
-            labelB="On"
-            toggled={!!varsDraft?.enabled}
-            onToggle={(checked) => setVarsDraft((d) => ({ ...d, enabled: checked }))}
-          />
-          {varsDraft?.enabled && (
-            <>
-              <Select
-                id="settings-variable-mode"
-                labelText="Variable type"
-                value={varsDraft?.mode ?? 'connection_swap'}
-                onChange={(e) => setVarsDraft((d) => ({ ...d, mode: e.target.value }))}
-                helperText="What the variable drives, and how the header surfaces it."
-              >
-                <SelectItem value="connection_swap" text="Connection — repoint panels to a chosen connection" />
-                <SelectItem value="filter" text="Filter value — substitute a value into queries/filters" />
-              </Select>
-              <TextInput
-                id="settings-variable-label"
-                labelText="Variable label"
-                value={varsDraft?.label ?? ''}
-                onChange={(e) => setVarsDraft((d) => ({ ...d, label: e.target.value }))}
-                placeholder={varsDraft?.mode === 'filter' ? 'e.g. Host' : 'e.g. Site'}
-                helperText="Shown next to the dashboard name in the header control."
-              />
+          <ContentSwitcher
+            selectedIndex={varsPanel}
+            onChange={({ index }) => setVarsPanel(index)}
+            size="lg"
+          >
+            <Switch name="conn-filter">
+              <span className="dvar-switch-label">
+                Connection / Filter
+                <span className={`dvar-status${varsDraft?.enabled ? ' dvar-status--on' : ''}`}>
+                  {varsDraft?.enabled ? 'On' : 'Off'}
+                </span>
+              </span>
+            </Switch>
+            <Switch name="time-range">
+              <span className="dvar-switch-label">
+                Time range
+                <span className={`dvar-status${varsDraft?.rangeEnabled ? ' dvar-status--on' : ''}`}>
+                  {varsDraft?.rangeEnabled ? 'On' : 'Off'}
+                </span>
+              </span>
+            </Switch>
+          </ContentSwitcher>
 
-              {varsDraft?.mode === 'connection_swap' && (
-                <>
-                  <TagInput
-                    id="settings-variable-tags"
-                    label="Connection tags"
-                    value={varsDraft?.tags ?? []}
-                    onChange={(t) => setVarsDraft((d) => ({ ...d, tags: t }))}
-                  />
-                  <Select
-                    id="settings-variable-schema-strict"
-                    labelText="Compatibility check"
-                    value={varsDraft?.schemaStrict ?? 'type_only'}
-                    onChange={(e) => setVarsDraft((d) => ({ ...d, schemaStrict: e.target.value }))}
-                    helperText="How strictly candidate connections must match. Type only is recommended (one store per site)."
-                  >
-                    <SelectItem value="type_only" text="Type only (recommended)" />
-                    <SelectItem value="superset" text="Columns: superset of reference" />
-                    <SelectItem value="exact" text="Columns: exact match" />
-                  </Select>
+          {varsPanel === 0 && (
+                <div className="dvar-panel">
                   <Toggle
-                    id="settings-variable-same-namespace"
+                    id="settings-variable-enabled"
                     size="sm"
-                    labelText="Same namespace only"
-                    labelA="Off (any namespace)"
+                    labelText="Enable connection / filter variable"
+                    labelA="Off"
                     labelB="On"
-                    toggled={!!varsDraft?.sameNamespace}
-                    onToggle={(checked) => setVarsDraft((d) => ({ ...d, sameNamespace: checked }))}
+                    toggled={!!varsDraft?.enabled}
+                    onToggle={(checked) => setVarsDraft((d) => ({ ...d, enabled: checked }))}
                   />
-                  <TextInput
-                    id="settings-variable-label-tag-prefix"
-                    labelText="Label tag prefix (optional)"
-                    value={varsDraft?.labelTagPrefix ?? ''}
-                    onChange={(e) => setVarsDraft((d) => ({ ...d, labelTagPrefix: e.target.value }))}
-                    placeholder="e.g. host"
-                    helperText="Show a connection's tag value in the dropdown instead of its name: prefix &quot;host&quot; shows &quot;trv-srv-001&quot; from a &quot;host:trv-srv-001&quot; tag. Falls back to the connection name when no matching tag."
-                  />
-                </>
-              )}
+                  {varsDraft?.enabled && (
+                    <>
+                      <div className="dvar-grid">
+                        <Select
+                          id="settings-variable-mode"
+                          labelText="Variable type"
+                          value={varsDraft?.mode ?? 'connection_swap'}
+                          onChange={(e) => setVarsDraft((d) => ({ ...d, mode: e.target.value }))}
+                          helperText="What the variable drives, and how the header surfaces it."
+                        >
+                          <SelectItem value="connection_swap" text="Connection — repoint panels to a chosen connection" />
+                          <SelectItem value="filter" text="Filter value — substitute a value into queries/filters" />
+                        </Select>
+                        <TextInput
+                          id="settings-variable-label"
+                          labelText="Variable label"
+                          value={varsDraft?.label ?? ''}
+                          onChange={(e) => setVarsDraft((d) => ({ ...d, label: e.target.value }))}
+                          placeholder={varsDraft?.mode === 'filter' ? 'e.g. Host' : 'e.g. Site'}
+                          helperText="Shown next to the dashboard name in the header control."
+                        />
+                      </div>
 
-              {varsDraft?.mode === 'filter' && (
-                <>
-                  <Select
-                    id="settings-variable-value-source"
-                    labelText="Value source"
-                    value={varsDraft?.valueSource ?? 'static'}
-                    onChange={(e) => setVarsDraft((d) => ({ ...d, valueSource: e.target.value }))}
-                    helperText="Where the header gets the value. Use the {{dashboard-variable}} token in a component's query or filter to consume it."
-                  >
-                    <SelectItem value="static" text="Pick from a list" />
-                    <SelectItem value="freetext" text="Type a value (free text)" />
-                    <SelectItem value="connection" text="From connection (live)" />
-                  </Select>
-                  {varsDraft?.valueSource === 'connection' && (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', margin: '0' }}>
-                      Options are discovered live from the variable-driven component&apos;s
-                      connection at view time. The static list below (optional) is used as a
-                      fallback if discovery fails.
-                    </p>
+                      {varsDraft?.mode === 'connection_swap' && (
+                        <>
+                          <TagInput
+                            id="settings-variable-tags"
+                            label="Connection tags"
+                            value={varsDraft?.tags ?? []}
+                            onChange={(t) => setVarsDraft((d) => ({ ...d, tags: t }))}
+                          />
+                          <div className="dvar-grid">
+                            <Select
+                              id="settings-variable-schema-strict"
+                              labelText="Compatibility check"
+                              value={varsDraft?.schemaStrict ?? 'type_only'}
+                              onChange={(e) => setVarsDraft((d) => ({ ...d, schemaStrict: e.target.value }))}
+                              helperText="How strictly candidate connections must match. Type only is recommended (one store per site)."
+                            >
+                              <SelectItem value="type_only" text="Type only (recommended)" />
+                              <SelectItem value="superset" text="Columns: superset of reference" />
+                              <SelectItem value="exact" text="Columns: exact match" />
+                            </Select>
+                            <Toggle
+                              id="settings-variable-same-namespace"
+                              size="sm"
+                              labelText="Same namespace only"
+                              labelA="Off (any namespace)"
+                              labelB="On"
+                              toggled={!!varsDraft?.sameNamespace}
+                              onToggle={(checked) => setVarsDraft((d) => ({ ...d, sameNamespace: checked }))}
+                            />
+                          </div>
+                          <TextInput
+                            id="settings-variable-label-tag-prefix"
+                            labelText="Label tag prefix (optional)"
+                            value={varsDraft?.labelTagPrefix ?? ''}
+                            onChange={(e) => setVarsDraft((d) => ({ ...d, labelTagPrefix: e.target.value }))}
+                            placeholder="e.g. host"
+                            helperText="Show a connection's tag value in the dropdown instead of its name: prefix &quot;host&quot; shows &quot;trv-srv-001&quot; from a &quot;host:trv-srv-001&quot; tag. Falls back to the connection name when no matching tag."
+                          />
+                        </>
+                      )}
+
+                      {varsDraft?.mode === 'filter' && (
+                        <>
+                          <Select
+                            id="settings-variable-value-source"
+                            labelText="Value source"
+                            value={varsDraft?.valueSource ?? 'static'}
+                            onChange={(e) => setVarsDraft((d) => ({ ...d, valueSource: e.target.value }))}
+                            helperText="Where the header gets the value. Use the {{dashboard-variable}} token in a component's query or filter to consume it."
+                          >
+                            <SelectItem value="static" text="Pick from a list" />
+                            <SelectItem value="freetext" text="Type a value (free text)" />
+                            <SelectItem value="connection" text="From connection (live)" />
+                          </Select>
+                          {varsDraft?.valueSource === 'connection' && (
+                            <p className="dvar-note">
+                              Options are discovered live from the variable-driven component&apos;s
+                              connection at view time. The static list below (optional) is used as a
+                              fallback if discovery fails.
+                            </p>
+                          )}
+                          {/* Static options: the explicit list for "static", and the
+                              optional fallback list for "connection". */}
+                          {(varsDraft?.valueSource === 'static' || varsDraft?.valueSource === 'connection') && (
+                            <TagInput
+                              id="settings-variable-options"
+                              label={varsDraft?.valueSource === 'connection' ? 'Fallback options (optional)' : 'Options'}
+                              value={varsDraft?.options ?? []}
+                              onChange={(o) => setVarsDraft((d) => ({ ...d, options: o }))}
+                            />
+                          )}
+                          <TextInput
+                            id="settings-variable-default"
+                            labelText="Default value (optional)"
+                            value={varsDraft?.defaultValue ?? ''}
+                            onChange={(e) => setVarsDraft((d) => ({ ...d, defaultValue: e.target.value }))}
+                            placeholder="Pre-selected on first load"
+                          />
+                        </>
+                      )}
+                    </>
                   )}
-                  {/* Static options: the explicit list for "static", and the
-                      optional fallback list for "connection". */}
-                  {(varsDraft?.valueSource === 'static' || varsDraft?.valueSource === 'connection') && (
-                    <TagInput
-                      id="settings-variable-options"
-                      label={varsDraft?.valueSource === 'connection' ? 'Fallback options (optional)' : 'Options'}
-                      value={varsDraft?.options ?? []}
-                      onChange={(o) => setVarsDraft((d) => ({ ...d, options: o }))}
-                    />
-                  )}
-                  <TextInput
-                    id="settings-variable-default"
-                    labelText="Default value (optional)"
-                    value={varsDraft?.defaultValue ?? ''}
-                    onChange={(e) => setVarsDraft((d) => ({ ...d, defaultValue: e.target.value }))}
-                    placeholder="Pre-selected on first load"
-                  />
-                </>
-              )}
-            </>
+                </div>
           )}
 
-          {/* Time-range variable — an INDEPENDENT variable that coexists with
-              the one above. A [from, to] window the viewer picks in the header
-              (after the connection/filter control), clamping time-series panels. */}
-          <hr style={{ border: 'none', borderTop: '1px solid var(--cds-border-subtle-01)', margin: '1rem 0' }} />
-          <Toggle
-            id="settings-range-enabled"
-            size="sm"
-            labelText="Time range variable"
-            labelA="Off"
-            labelB="On"
-            toggled={!!varsDraft?.rangeEnabled}
-            onToggle={(checked) => setVarsDraft((d) => ({ ...d, rangeEnabled: checked }))}
-          />
-          {varsDraft?.rangeEnabled && (
-            <>
-              <TextInput
-                id="settings-range-label"
-                labelText="Range label"
-                value={varsDraft?.rangeLabel ?? ''}
-                onChange={(e) => setVarsDraft((d) => ({ ...d, rangeLabel: e.target.value }))}
-                placeholder="e.g. Time range"
-                helperText="Shown next to the range picker in the header."
-              />
-              <TagInput
-                id="settings-range-presets"
-                label="Presets (duration tokens)"
-                value={varsDraft?.rangePresets ?? []}
-                onChange={(p) => setVarsDraft((d) => ({ ...d, rangePresets: p }))}
-              />
-              <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', margin: '0' }}>
-                Tokens like <code>1h</code>, <code>6h</code>, <code>24h</code>, <code>7d</code>, <code>30d</code>
-                {' '}(units m/h/d/w). Leave empty for a default set. Each resolves to an absolute
-                window ending &ldquo;now&rdquo; when picked. A <code>+n</code> offset / absolute-pair
-                builder is coming later.
-              </p>
-              <TextInput
-                id="settings-range-default-preset"
-                labelText="Default preset (optional)"
-                value={varsDraft?.rangeDefaultPreset ?? ''}
-                onChange={(e) => setVarsDraft((d) => ({ ...d, rangeDefaultPreset: e.target.value }))}
-                placeholder="e.g. 24h"
-                helperText="Applied on first load when no shared URL / saved window."
-              />
-              <p style={{ fontSize: '0.75rem', color: 'var(--cds-text-helper)', margin: '0' }}>
-                Components opt in: SQL/EdgeLake queries use the
-                {' '}<code>{'{{range_from}}'}</code> / <code>{'{{range_to}}'}</code> tokens (plus a
-                per-component Range format); ts-store and Prometheus panels pick up the window
-                automatically.
-              </p>
-            </>
+          {varsPanel === 1 && (
+                <div className="dvar-panel">
+                  <Toggle
+                    id="settings-range-enabled"
+                    size="sm"
+                    labelText="Enable time range variable"
+                    labelA="Off"
+                    labelB="On"
+                    toggled={!!varsDraft?.rangeEnabled}
+                    onToggle={(checked) => setVarsDraft((d) => ({ ...d, rangeEnabled: checked }))}
+                  />
+                  {varsDraft?.rangeEnabled && (
+                    <>
+                      <div className="dvar-grid">
+                        <TextInput
+                          id="settings-range-label"
+                          labelText="Range label"
+                          value={varsDraft?.rangeLabel ?? ''}
+                          onChange={(e) => setVarsDraft((d) => ({ ...d, rangeLabel: e.target.value }))}
+                          placeholder="e.g. Time range"
+                          helperText="Shown next to the range picker in the header."
+                        />
+                        <TextInput
+                          id="settings-range-default-preset"
+                          labelText="Default preset (optional)"
+                          value={varsDraft?.rangeDefaultPreset ?? ''}
+                          onChange={(e) => setVarsDraft((d) => ({ ...d, rangeDefaultPreset: e.target.value }))}
+                          placeholder="e.g. 24h"
+                          helperText="Applied on first load when no shared URL / saved window."
+                        />
+                      </div>
+                      <TagInput
+                        id="settings-range-presets"
+                        label="Presets (duration tokens)"
+                        value={varsDraft?.rangePresets ?? []}
+                        onChange={(p) => setVarsDraft((d) => ({ ...d, rangePresets: p }))}
+                      />
+                      <p className="dvar-note">
+                        Tokens like <code>1h</code>, <code>6h</code>, <code>24h</code>, <code>7d</code>, <code>30d</code>
+                        {' '}(units m/h/d/w). Leave empty for a default set. Each resolves to an absolute
+                        window ending &ldquo;now&rdquo; when picked. A <code>+n</code> offset / absolute-pair
+                        builder is coming later.
+                      </p>
+                      <p className="dvar-note">
+                        Components opt in: SQL/EdgeLake queries use the
+                        {' '}<code>{'{{range_from}}'}</code> / <code>{'{{range_to}}'}</code> tokens (plus a
+                        per-component Range format); ts-store and Prometheus panels pick up the window
+                        automatically.
+                      </p>
+                    </>
+                  )}
+                </div>
           )}
         </div>
       </Modal>
