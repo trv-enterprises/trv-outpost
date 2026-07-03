@@ -8196,7 +8196,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tags": {
-                    "description": "OR-matched discovery tags",
+                    "description": "AND-matched discovery tags: a candidate must carry ALL of them (the Mongo query is OR/$in, then GetVariableCandidates narrows to AND)",
                     "type": "array",
                     "items": {
                         "type": "string"

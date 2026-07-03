@@ -1217,7 +1217,8 @@ definitions:
         description: '"type_only" (default) | "superset" | "exact"'
         type: string
       tags:
-        description: OR-matched discovery tags
+        description: 'AND-matched discovery tags: a candidate must carry ALL of them
+          (the Mongo query is OR/$in, then GetVariableCandidates narrows to AND)'
         items:
           type: string
         type: array
