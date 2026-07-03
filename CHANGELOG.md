@@ -6,6 +6,34 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.3] — 2026-07-03
+
+### Changed
+
+- **Dashboard Variables modal redesign** — the connection/filter and time-range
+  variables coexist, but the old stacked form pushed the time-range one below
+  the connection config and ran fields together with no clear separation. It's
+  now a content switcher: two equal-width buttons (Connection / Filter, Time
+  range), each carrying a live On/Off status pill (green when on) so both
+  variables' enabled state stays readable regardless of which panel is shown.
+  The switcher is navigation only — each panel keeps its own enable toggle.
+  Fields are laid out in a two-column grid with helper text in-slot and the
+  modal width capped so it no longer floats in a wide gutter.
+
+### Fixed
+
+- **Number-tile vertical centering** — a titled number tile centered its value
+  over the full panel, ignoring the title band, so it read slightly high. It
+  now centers between the bottom of the title text and the panel bottom.
+- **Custom-code number tiles align with structured ones** — custom component
+  code can render a reusable `NumberTile` for any single big-number display
+  (distinct counts, derived stats the structured `number` chart can't express);
+  it delegates to the same renderer, so alignment, formatting, and theming stay
+  identical to a spec-driven number tile and can't drift.
+- Corrected the `ConnectionSwapConfig.Tags` API-doc comment: a variable's
+  discovery tags are AND-matched (a candidate must carry all of them), not
+  OR-matched.
+
 ## [0.37.2] — 2026-07-01
 
 ### Added
