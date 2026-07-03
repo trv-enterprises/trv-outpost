@@ -6,6 +6,23 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.4] — 2026-07-03
+
+### Fixed
+
+- **Resource Navigator: tree and info box agree on component labels** — the
+  tree labeled components by title while the info-box usage lists (name-only
+  references from the API) showed names, so the same component read as two
+  different entities and the two sides didn't line up. The tree now keys off
+  the component name to match the usage lists.
+- **Component info box shows its Title** — a selected component now surfaces a
+  Title row (the human-facing title) and drops the redundant Name row (that's
+  the header). Usage-list entries annotate the title as `name { title: "…" }`.
+- **Connection "used by" grouped by dashboard** — selecting a connection groups
+  its components under the dashboard(s) they appear on (sorted, dashboard icon
+  per group, header renamed "Used by dashboard / component") instead of a flat
+  context-free list. Components used on no dashboard fall into "(no dashboard)".
+
 ## [0.37.3] — 2026-07-03
 
 ### Changed
