@@ -374,7 +374,7 @@ type DashboardVariable struct {
 // connections discovered by tag match (within the dashboard's namespace) and
 // selecting one repoints every variable-driven panel's effective connection_id.
 type ConnectionSwapConfig struct {
-	Tags         []string `json:"tags" bson:"tags"`                   // OR-matched discovery tags
+	Tags         []string `json:"tags" bson:"tags"`                   // AND-matched discovery tags: a candidate must carry ALL of them (the Mongo query is OR/$in, then GetVariableCandidates narrows to AND)
 	SchemaStrict string   `json:"schema_strict" bson:"schema_strict"` // "type_only" (default) | "superset" | "exact"
 	// SameNamespace restricts candidate discovery to the dashboard's own
 	// namespace. Default false (cross-namespace by tag), so a dashboard whose
