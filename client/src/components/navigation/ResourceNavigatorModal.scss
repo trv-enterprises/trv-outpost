@@ -223,6 +223,46 @@
         font-size: 0.875rem;
         margin-bottom: spacing.$spacing-02;
         word-break: break-word;
+
+        // The `{ title: "…" }` suffix reads as secondary metadata next to the
+        // component's name — muted + monospace so it's clearly the title annotation.
+        .rn-info-related-title {
+          color: var(--cds-text-helper);
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 0.8125rem;
+        }
+      }
+    }
+
+    // Dashboard-grouped variant (connection detail): a per-dashboard
+    // sub-heading with its components nested under it.
+    &.rn-info-related--grouped {
+      .rn-info-related-group {
+        margin-bottom: spacing.$spacing-04;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
+
+      .rn-info-related-subheading {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-02;
+        margin: 0 0 spacing.$spacing-02;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--cds-text-primary);
+        text-transform: none;
+        letter-spacing: 0;
+
+        // Dashboard icon before the name — muted so the name stays primary,
+        // matching the tree's dashboard glyph so the grouping reads as "these
+        // are dashboards."
+        .rn-info-related-subheading-icon {
+          flex-shrink: 0;
+          fill: var(--cds-icon-secondary);
+        }
       }
     }
   }

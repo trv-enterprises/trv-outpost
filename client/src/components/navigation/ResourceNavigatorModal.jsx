@@ -183,6 +183,16 @@ function ResourceNavigatorModal({ navigate }) {
     if (!graph || !selectedNode) return null;
     const { kind, refId } = selectedNode;
 
+    // Enrich a component usage ref ({id, name} from the API) with the
+    // component's title from the graph, so a related-items list can render
+    // `name { title: "…" }`. Only attaches `title` when the component has one
+    // distinct from its name; otherwise the item renders as a bare name.
+    const withComponentTitle = (ref) => {
+      const comp = graph.componentsById.get(ref.id);
+      const title = comp?.title || '';
+      return title && title !== ref.name ? { ...ref, title } : ref;
+    };
+
     // `meta` = static facts about the entity (description, type, dimensions…),
     // `related` = its links to other entities (usage). The info panel renders
     // them as two sections split by a divider.
@@ -207,7 +217,10 @@ function ResourceNavigatorModal({ navigate }) {
         tags: d.tags,
         meta,
         related: [
-          { heading: 'Components', items: d.componentUsage },
+          // Enrich each {id,name} usage ref with the component's title (from
+          // the graph) so the list can show `name { title: "…" }`, matching the
+          // name-keyed tree while still surfacing the human-facing title.
+          { heading: 'Components', items: d.componentUsage.map(withComponentTitle) },
           { heading: 'Connections', items: d.connectionUsage },
         ],
       };
@@ -221,12 +234,15 @@ function ResourceNavigatorModal({ navigate }) {
         .filter(Boolean)
         .map((conn) => ({ id: conn.id, name: conn.name }));
       const meta = [];
+      // The header shows the component's NAME; surface its human-facing Title
+      // here (when it has one distinct from the name). No "Name" row — that's
+      // the header.
+      if (c.title && c.title !== c.rawName) {
+        meta.push({ label: 'Title', value: c.title });
+      }
       if (c.description) meta.push({ label: 'Description', value: c.description });
       meta.push({ label: 'Type', value: c.type });
       if (c.subtype) meta.push({ label: 'Subtype', value: c.subtype });
-      if (c.title && c.rawName && c.title !== c.rawName) {
-        meta.push({ label: 'Name', value: c.rawName });
-      }
       return {
         kind,
         refId,
@@ -249,6 +265,35 @@ function ResourceNavigatorModal({ navigate }) {
     if (conn.description) meta.push({ label: 'Description', value: conn.description });
     if (conn.type) meta.push({ label: 'Type', value: conn.type });
     if (conn.typeId) meta.push({ label: 'Type ID', value: conn.typeId });
+
+    // Group the connection's components BY the dashboard(s) they appear on, so
+    // the panel reads as a placement map (dashboard → components) instead of a
+    // context-free component list. A component used on N dashboards appears
+    // under each; one used on none falls into an "(unused)" bucket so it's not
+    // dropped. Sorted by dashboard name, components sorted within.
+    const byDashboard = new Map(); // dashboardName → { name, items:[{id,name,title}] }
+    const UNUSED = ' (unused)'; // sorts first; displayed as "(no dashboard)"
+    conn.componentUsage.forEach((ref) => {
+      const comp = graph.componentsById.get(ref.id);
+      const item = withComponentTitle(ref);
+      const dashRefs = comp?.dashboardUsage?.length ? comp.dashboardUsage : [{ id: UNUSED, name: UNUSED }];
+      dashRefs.forEach((dref) => {
+        const dashName = dref.id === UNUSED
+          ? UNUSED
+          : (graph.dashboardsById.get(dref.id)?.name || dref.name || '(unknown dashboard)');
+        if (!byDashboard.has(dashName)) byDashboard.set(dashName, []);
+        // De-dupe: same component could resolve to the same dashboard twice.
+        const bucket = byDashboard.get(dashName);
+        if (!bucket.some((b) => b.id === item.id)) bucket.push(item);
+      });
+    });
+    const componentsByDashboard = [...byDashboard.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dashName, items]) => ({
+        heading: dashName === UNUSED ? '(no dashboard)' : dashName,
+        items: items.slice().sort((x, y) => (x.name || '').localeCompare(y.name || '')),
+      }));
+
     return {
       kind,
       refId,
@@ -257,7 +302,12 @@ function ResourceNavigatorModal({ navigate }) {
       namespace: conn.namespace,
       tags: conn.tags,
       meta,
-      related: [{ heading: 'Used by components', items: conn.componentUsage }],
+      // Grouped view: one sub-heading per dashboard. Rendered as a nested list
+      // under a single "Used by components" section.
+      relatedGroups: {
+        heading: 'Used by dashboard / component',
+        groups: componentsByDashboard,
+      },
     };
   }, [graph, selectedNode]);
 
@@ -418,22 +468,61 @@ function ResourceNavigatorModal({ navigate }) {
               {/* Divider between descriptive data and link/usage data. */}
               <hr className="rn-info-divider" />
 
-              {detail.related.some((g) => g.items.length) ? (
+              {/* Flat related groups (dashboard / component details). */}
+              {detail.related?.some((g) => g.items.length) ? (
                 detail.related.map((group) =>
                   group.items.length ? (
                     <div className="rn-info-related" key={group.heading}>
                       <h5>{group.heading}</h5>
                       <ul>
                         {group.items.map((it) => (
-                          <li key={`${group.heading}:${it.id}`}>{it.name}</li>
+                          <li key={`${group.heading}:${it.id}`}>
+                            {it.name}
+                            {it.title ? (
+                              <span className="rn-info-related-title">
+                                {' '}{`{ title: "${it.title}" }`}
+                              </span>
+                            ) : null}
+                          </li>
                         ))}
                       </ul>
                     </div>
                   ) : null
                 )
-              ) : (
-                <p className="rn-info-empty">No linked resources.</p>
-              )}
+              ) : null}
+
+              {/* Dashboard-grouped related list (connection details): one
+                  sub-heading per dashboard, components nested under each. */}
+              {detail.relatedGroups?.groups?.length ? (
+                <div className="rn-info-related rn-info-related--grouped">
+                  <h5>{detail.relatedGroups.heading}</h5>
+                  {detail.relatedGroups.groups.map((group) => (
+                    <div className="rn-info-related-group" key={group.heading}>
+                      <h6 className="rn-info-related-subheading">
+                        <Dashboard size={16} className="rn-info-related-subheading-icon" />
+                        {group.heading}
+                      </h6>
+                      <ul>
+                        {group.items.map((it) => (
+                          <li key={`${group.heading}:${it.id}`}>
+                            {it.name}
+                            {it.title ? (
+                              <span className="rn-info-related-title">
+                                {' '}{`{ title: "${it.title}" }`}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {!detail.related?.some((g) => g.items.length)
+                && !detail.relatedGroups?.groups?.length ? (
+                  <p className="rn-info-empty">No linked resources.</p>
+                ) : null}
             </>
           ) : (
             <p className="rn-info-empty">Select an item to see its details and links.</p>

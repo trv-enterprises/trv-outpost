@@ -46,7 +46,12 @@ export function buildResourceGraph({ components = [], connections = [], dashboar
     ];
     componentsById.set(c.id, {
       id: c.id,
-      name: labelOf(c),
+      // Key the navigator off the component's NAME, not its title. The
+      // dashboard/connection usage refs from the API carry only {id, name}, so
+      // the tree and the info-box "Components" list must both use name to line
+      // up (a title-first label made them look like different entities). The
+      // title is carried separately and shown in braces in the info box.
+      name: c.name || c.id || '',
       title: c.title || '',
       rawName: c.name || '',
       type: c.component_type || 'component',
