@@ -57,7 +57,13 @@ create a dashboard whose panels reference those components.
   ` + "`" + `datetime` + "`" + ` (raw timestamp → date/time). Do NOT use_custom_code to
   divide seconds by 86400 — that's what ` + "`" + `duration` + "`" + ` is for. ` + "`" + `numberUnit` + "`" + `
   adds a cosmetic suffix ("%", "°C"). (See get_type_catalog for the full
-  option list.)
+  option list.) When a single-value tile GENUINELY needs custom code (a
+  distinct count, a derived stat the ` + "`" + `number` + "`" + ` chart can't express),
+  render ` + "`" + `<NumberTile value={n} unit=\"%\" />` + "`" + ` — a helper injected into the
+  custom-code scope that reuses the same view as the structured ` + "`" + `number` + "`" + `
+  chart, so alignment/title-band/formatting match. Do NOT hand-roll a
+  centered ` + "`" + `<div>` + "`" + ` around a big ` + "`" + `<span>` + "`" + ` — it centers on the full panel
+  and sits misaligned next to real number tiles.
 - **Color**: prefer Carbon Design System colors. When in doubt, use
   semantic tokens — don't hard-code hex values in component config.
 - **One component per chart** — don't create a single "monster"

@@ -23,8 +23,12 @@
  * @param {string} props.title       centered title ('' to hide)
  * @param {object} config            saved config (options.showTitle gate)
  * @param {object} dataCtx           { loading, error } for placeholders
+ * @param {boolean} titleBottomOffset  when true AND no internal title is
+ *   drawn, pulls the value up by the title band's dead space so a custom
+ *   tile (whose band was drawn by the loader above this view) aligns with
+ *   a structured number tile. Used by NumberTile.
  */
-export default function NumberView({ formatted, unit, size, title, config, dataCtx }) {
+export default function NumberView({ formatted, unit, size, title, config, dataCtx, titleBottomOffset = false }) {
   // Title is suppressible per-component via options.showTitle (default
   // on) — same uniform guard as ChartShell / DataViewGrid. Off →
   // reclaim the title's vertical space (the value centers in the full
@@ -46,9 +50,28 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
     );
   }
 
-  // Title sits absolutely at the top; the value absolute-centers in the
-  // full panel so its vertical position is independent of whether a
-  // title is shown (swapping titled/untitled doesn't reflow the number).
+  // Title sits absolutely at the top; the value centers in the space
+  // between the BOTTOM OF THE TITLE TEXT and the bottom edge when a title
+  // is shown, and in the full panel when it isn't.
+  //
+  // The title band is 2.5rem tall with the 0.875rem text vertically
+  // centered in it (lineHeight === band height). So the text glyphs end
+  // partway down the band, not at its bottom edge — the value should
+  // center below the text, not below the whole band:
+  //   textBottom = band/2 + textFontSize/2 = 1.25rem + 0.4375rem = 1.6875rem
+  const titleBand = 'calc(2.5rem * var(--title-scale, 1))';
+  const titleTextBottom = 'calc(1.6875rem * var(--title-scale, 1))';
+
+  // titleBottomOffset: the caller (NumberTile via DynamicComponentLoader)
+  // already rendered a full 2.5rem <ChartTitleBand> above this view and
+  // handed us only the body BELOW it. A structured number tile instead
+  // centers its value below the title TEXT (1.6875rem). To land the value
+  // at the same height as a spec-driven tile beside it, pull the value
+  // container UP by the band's dead space (2.5 − 1.6875 = 0.8125rem) so
+  // its center matches. Only applies when we draw no internal title.
+  const bodyTopPull = titleBottomOffset && !titleText
+    ? 'calc(-0.8125rem * var(--title-scale, 1))'
+    : 0;
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       {titleText ? (
@@ -58,7 +81,7 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
         // 1.5-line-height overlay; bumped to the shared 2.5rem band.)
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
-          height: 'calc(2.5rem * var(--title-scale, 1))', lineHeight: 'calc(2.5rem * var(--title-scale, 1))',
+          height: titleBand, lineHeight: titleBand,
           fontSize: 'calc(0.875rem * var(--title-scale, 1))', fontWeight: 600,
           color: 'var(--cds-text-primary)', textAlign: 'center',
           padding: '0 0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -66,7 +89,10 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
           {titleText}
         </div>
       ) : null}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        position: 'absolute', top: titleText ? titleTextBottom : bodyTopPull, left: 0, right: 0, bottom: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
         <span style={{
           fontSize: `${size}px`,
           fontWeight: 600,

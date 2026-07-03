@@ -43,6 +43,7 @@ import {
 import { AgGridReact } from 'ag-grid-react';
 import { useDataviewLayout } from '../hooks/useDataviewLayout';
 import SpecDrivenChart from '../chart-codegen/SpecDrivenChart';
+import NumberTile from '../chart-spec/views/NumberTile';
 import { CARBON_COLORS } from '../chart-spec/option-helpers';
 import ChartTitleBand from '../chart-spec/ChartTitleBand';
 
@@ -120,6 +121,10 @@ function useDataWithTransforms(params) {
  * - CARBON_COLORS: Carbon palette object ({primary, secondary, ok, warn, danger,
  *   text, textSecondary}). Use these instead of hardcoded hex so custom charts
  *   match spec-driven charts and follow theme changes.
+ * - NumberTile: reusable big-number tile (<NumberTile value={n} title="..." />).
+ *   Render this for any single-value "number" display instead of hand-rolling a
+ *   centered <div> — it delegates to the same NumberView the structured number
+ *   chart uses, so alignment/title-band/formatting stay in sync automatically.
  * - Carbon DataTable components: DataTable, Table, TableHead, TableRow, TableHeader,
  *   TableBody, TableCell, TableContainer, TableToolbar, TableToolbarContent, TableToolbarSearch
  *
@@ -279,6 +284,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         'AgGridReact',
         'useDataviewLayout',
         'SpecDrivenChart',
+        'NumberTile',
         'CARBON_COLORS',
         `
         ${transformedCode}
@@ -321,6 +327,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
         AgGridReact,
         useDataviewLayout,
         SpecDrivenChart,
+        NumberTile,
         CARBON_COLORS
       );
 
