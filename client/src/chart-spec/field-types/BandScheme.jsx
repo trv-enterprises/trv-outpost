@@ -68,9 +68,12 @@ export default function BandScheme({ field }) {
           // Inject the saved value as an option when availableColumns
           // hasn't been repopulated (saved chart, pre-fetch) — same guard
           // as ColumnSelect so a configured band doesn't look empty.
-          const options = value && !availableColumns.includes(value)
-            ? [value, ...availableColumns]
-            : availableColumns;
+          const sortedColumns = [...availableColumns].sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: 'base' })
+          );
+          const options = value && !sortedColumns.includes(value)
+            ? [value, ...sortedColumns]
+            : sortedColumns;
           return (
             <div key={f.bind} className="band-scheme__field">
               <Select

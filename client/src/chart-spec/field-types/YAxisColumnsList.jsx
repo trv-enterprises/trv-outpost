@@ -107,9 +107,12 @@ export default function YAxisColumnsListField({ field }) {
           // query), so the configured selection shows instead of going
           // blank. Once a fetch repopulates the list the duplicate
           // collapses naturally.
-          const colOptions = entry.column && !availableColumns.includes(entry.column)
-            ? [entry.column, ...availableColumns]
-            : availableColumns;
+          const sortedColumns = [...availableColumns].sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: 'base' })
+          );
+          const colOptions = entry.column && !sortedColumns.includes(entry.column)
+            ? [entry.column, ...sortedColumns]
+            : sortedColumns;
           return (
           <div key={i} className="spec-yacl__row">
             <div className="spec-yacl__column">

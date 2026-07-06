@@ -9,15 +9,23 @@ export default function ColumnSelectField({ field }) {
   const { availableColumns, formState, onFieldChange } = useSpecRenderContext();
   const value = formState[field.id] ?? '';
 
+  // Sort the column options alphabetically so the dropdown isn't in
+  // arbitrary query order. (Doesn't touch availableColumns itself, which
+  // other field types use for column ordering — e.g. the dataview's
+  // visible-column order.)
+  const sortedColumns = [...availableColumns].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+
   // When editing a saved chart, availableColumns is empty until the
   // user re-runs the query. Carbon's <Select> renders blank if `value`
   // has no matching <SelectItem>, which would make a configured chart
   // look unconfigured. Inject the saved value as an option so the
   // current selection always shows; once a fetch repopulates
   // availableColumns the duplicate collapses naturally.
-  const options = value && !availableColumns.includes(value)
-    ? [value, ...availableColumns]
-    : availableColumns;
+  const options = value && !sortedColumns.includes(value)
+    ? [value, ...sortedColumns]
+    : sortedColumns;
 
   return (
     <Select
