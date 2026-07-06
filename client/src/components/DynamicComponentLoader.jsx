@@ -187,6 +187,16 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // Fetch data when: connectionId is available AND no data prop was provided
   const shouldFetchData = effectiveDatasourceId && !props.data;
 
+  // Execute-by-reference (#23) only applies to components with a STORED
+  // query. Custom-code components fetch their own data via useData() calls
+  // inside their component_code and leave query_config.raw empty — routing
+  // the loader's own (empty) query through /api/components/:id/data makes
+  // the server reject it with "component has no stored query". For those,
+  // keep componentId null so the loader-level fetch (when it happens at all)
+  // uses the raw path, and the eval'd code's own useData calls are
+  // unaffected either way.
+  const byReferenceComponentId = componentMeta?.use_custom_code ? null : componentId;
+
   // Use data hook when we need to fetch (always called but disabled when not needed)
   // dataRefreshInterval is in milliseconds, passed from dashboard settings
   // timeBucket enables server-side aggregation for socket datasources
@@ -226,7 +236,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   } = useDataOriginal({
     connectionId: shouldFetchData ? effectiveDatasourceId : null,
     query: effectiveQuery,
-    componentId: shouldFetchData ? componentId : null,
+    componentId: shouldFetchData ? byReferenceComponentId : null,
     refreshInterval: dataRefreshInterval,
     useCache: true,
     timeBucket: timeBucketConfig,
