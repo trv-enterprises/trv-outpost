@@ -516,7 +516,7 @@ func main() {
 
 	// Initialize handlers
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
-	componentHandler := handlers.NewComponentHandler(componentService)
+	componentHandler := handlers.NewComponentHandler(componentService, connectionService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chatAgent, configService, chartHub)
 	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
@@ -858,6 +858,10 @@ func main() {
 			components.GET("/:id", componentHandler.GetComponent)
 			components.PUT("/:id", componentHandler.UpdateComponent)
 			components.DELETE("/:id", componentHandler.DeleteComponent)
+			// Execute-by-reference data endpoint (#23): POST that only READS —
+			// runs the component's STORED query with runtime values. View-level
+			// via the componentDataRE rule in middleware/auth.go.
+			components.POST("/:id/data", componentHandler.GetComponentData)
 			// Versioning endpoints
 			components.GET("/:id/versions", componentHandler.ListComponentVersions)
 			components.GET("/:id/versions/:version", componentHandler.GetComponentVersion)

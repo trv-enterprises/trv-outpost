@@ -147,6 +147,26 @@ type CreateComponentRequest struct {
 	Tags                  []string               `json:"tags"`
 }
 
+// ComponentDataRequest is the execute-by-reference runtime request (#23).
+// The client sends only runtime VALUES; the server loads the component's
+// stored query_config and executes it, so no query text ever crosses the
+// wire at view time.
+// @Description Runtime values for executing a component's stored query
+type ComponentDataRequest struct {
+	// ConnectionID optionally overrides the component's stored connection
+	// (dashboard connection-swap variable). It must reference an existing
+	// connection of the SAME type as the stored one.
+	ConnectionID string `json:"connection_id,omitempty"`
+	// DashboardVariable is the active filter-variable value. Merged into
+	// the stored query's params under the reserved dashboard_variable key
+	// only when present in the request (an explicit "" is meaningful: it
+	// yields the server's structured variable-not-set response).
+	DashboardVariable interface{} `json:"dashboard_variable,omitempty"`
+	// Range is the structured range intent, same shape the raw /query path
+	// accepts today: {type:"relative",token} or {type:"absolute",from,to}.
+	Range map[string]interface{} `json:"range,omitempty"`
+}
+
 // UpdateComponentRequest represents a request to update a component
 // @Description Request body for updating an existing component
 type UpdateComponentRequest struct {

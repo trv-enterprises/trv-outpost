@@ -1014,6 +1014,28 @@ definitions:
     required:
     - name
     type: object
+  models.ComponentDataRequest:
+    description: Runtime values for executing a component's stored query
+    properties:
+      connection_id:
+        description: |-
+          ConnectionID optionally overrides the component's stored connection
+          (dashboard connection-swap variable). It must reference an existing
+          connection of the SAME type as the stored one.
+        type: string
+      dashboard_variable:
+        description: |-
+          DashboardVariable is the active filter-variable value. Merged into
+          the stored query's params under the reserved dashboard_variable key
+          only when present in the request (an explicit "" is meaningful: it
+          yields the server's structured variable-not-set response).
+      range:
+        additionalProperties: true
+        description: |-
+          Range is the structured range intent, same shape the raw /query path
+          accepts today: {type:"relative",token} or {type:"absolute",from,to}.
+        type: object
+    type: object
   models.ComponentListResponse:
     description: Response containing a list of components with pagination
     properties:
@@ -4775,6 +4797,45 @@ paths:
             additionalProperties: true
             type: object
       summary: Update a component
+      tags:
+      - components
+  /components/{id}/data:
+    post:
+      consumes:
+      - application/json
+      description: Runs the component's stored query_config against its connection,
+        merging only the reserved runtime values (dashboard_variable, range) from
+        the request. The optional connection_id override (dashboard connection-swap)
+        must reference a connection of the same type as the stored one.
+      parameters:
+      - description: Component ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Runtime values
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/models.ComponentDataRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.QueryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Execute a component's stored query
       tags:
       - components
   /components/{id}/draft:

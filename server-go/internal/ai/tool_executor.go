@@ -12,6 +12,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
 
 // ToolExecutor handles executing AI tools and updating charts
@@ -981,7 +982,7 @@ func (e *ToolExecutor) executeQueryConnection(ctx context.Context, input json.Ra
 		},
 	}
 
-	response, err := e.connectionSvc.QueryConnection(ctx, params.ConnectionID, req)
+	response, err := e.connectionSvc.QueryConnection(service.WithTrustedQuery(ctx), params.ConnectionID, req)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "query failed: " + err.Error()}, nil
 	}
@@ -1241,7 +1242,7 @@ func (e *ToolExecutor) executePreviewData(ctx context.Context, chartID string, c
 		},
 	}
 
-	response, err := e.connectionSvc.QueryConnection(ctx, chart.ConnectionID, req)
+	response, err := e.connectionSvc.QueryConnection(service.WithTrustedQuery(ctx), chart.ConnectionID, req)
 	if err != nil {
 		return &ToolResult{Success: false, Error: "query failed: " + err.Error()}, nil
 	}
@@ -1495,7 +1496,7 @@ func (e *ToolExecutor) inferSchemaFromData(ctx context.Context, connectionID str
 		},
 	}
 
-	response, err := e.connectionSvc.QueryConnection(ctx, connectionID, req)
+	response, err := e.connectionSvc.QueryConnection(service.WithTrustedQuery(ctx), connectionID, req)
 	if err != nil {
 		return models.UnifiedSchema{}, fmt.Errorf("failed to query sample data: %w", err)
 	}

@@ -132,7 +132,14 @@ function useDataWithTransforms(params) {
  * - scatter3D, bar3D, line3D, surface, map3D, globe
  * - grid3D, xAxis3D, yAxis3D, zAxis3D
  */
-export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, dashboardVariableValue = null, rangeValue = null, children = null }) {
+// componentId — execute-by-reference opt-in (#23). When set, the loader's
+// own data fetch posts only runtime values to /api/components/:id/data and
+// the server runs the STORED query. Pass it ONLY from view surfaces with the
+// post-override effective component id (PanelContent, ComponentExpandModal).
+// Editor/AI previews must leave it null: their queryConfig is dirty/unsaved
+// and needs the raw /query path (and passing an id would silently run the
+// stale stored query instead of the edits).
+export default function DynamicComponentLoader({ code, props = {}, componentMeta = null, dataMapping = null, connectionId = null, componentId = null, queryConfig = null, dataRefreshInterval = null, refreshTick = 0, dashboardVariableValue = null, rangeValue = null, children = null }) {
   const [error, setError] = useState(null);
   const [Component, setComponent] = useState(null);
 
@@ -219,6 +226,7 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   } = useDataOriginal({
     connectionId: shouldFetchData ? effectiveDatasourceId : null,
     query: effectiveQuery,
+    componentId: shouldFetchData ? componentId : null,
     refreshInterval: dataRefreshInterval,
     useCache: true,
     timeBucket: timeBucketConfig,

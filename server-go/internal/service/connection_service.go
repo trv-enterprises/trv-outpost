@@ -29,6 +29,60 @@ import (
 // frontend can render a clear "cannot delete — referenced by ..." dialog.
 var ErrConnectionInUse = errors.New("connection is in use")
 
+// ErrQueryForbidden is returned by QueryConnection when a raw query targets
+// a guarded (SQL/EdgeLake) connection but the call carries no design/manage
+// caller and is not a trusted internal call. It closes the arbitrary-SQL
+// hole (#23): view users can no longer replay a tampered raw query — they
+// must execute stored queries by reference instead. The handler maps this
+// to HTTP 403.
+var ErrQueryForbidden = errors.New("raw queries against SQL/EdgeLake connections require design or manage capability")
+
+// queryAuthKey keys the per-call authorization decision stamped onto the
+// context by the entry points. Keeping it in the context (rather than a new
+// method parameter) avoids threading an auth argument through every existing
+// QueryConnection caller and the ConnectionServiceIface used by the AI layer.
+type queryAuthKey struct{}
+
+type queryAuth struct {
+	caller  *models.User
+	trusted bool
+}
+
+// WithQueryCaller stamps the authenticated caller for a raw-query request.
+// The raw /query HTTP handler uses this; QueryConnection then enforces
+// design/manage for guarded connection types.
+func WithQueryCaller(ctx context.Context, user *models.User) context.Context {
+	return context.WithValue(ctx, queryAuthKey{}, queryAuth{caller: user})
+}
+
+// WithTrustedQuery marks a query as a trusted internal call, exempt from the
+// guarded-type capability check (the verb guard still applies). Used by the
+// execute-by-reference path — where the server, not the client, supplies the
+// query — and by surfaces already gated to design at their route (AI
+// sessions, MCP). It does NOT relax the write/DDL verb guard.
+func WithTrustedQuery(ctx context.Context) context.Context {
+	return context.WithValue(ctx, queryAuthKey{}, queryAuth{trusted: true})
+}
+
+func queryAuthFrom(ctx context.Context) queryAuth {
+	az, _ := ctx.Value(queryAuthKey{}).(queryAuth)
+	return az
+}
+
+// rawQueryAuthorized reports whether a raw query against a GUARDED
+// (SQL/EdgeLake) connection is allowed for this call. Allowed when the call
+// is trusted (server-supplied query, e.g. execute-by-reference, or a
+// design-gated surface) or the caller holds design/manage. Default-deny:
+// a call with no stamped auth is refused. Pure so it's unit-testable
+// without a repo/DB. Callers must only invoke this for guarded types.
+func rawQueryAuthorized(az queryAuth) bool {
+	if az.trusted {
+		return true
+	}
+	return az.caller != nil &&
+		(az.caller.HasCapability(models.CapabilityDesign) || az.caller.HasCapability(models.CapabilityManage))
+}
+
 // ConnectionUsage describes the entities referencing a connection. Empty
 // slices mean nothing of that kind references it. The handler serializes
 // this struct under "usage" in the 409 response.
@@ -1383,6 +1437,18 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 	// SQL-family connections only; api/mqtt/prometheus/... can't run raw SQL.
 	// Runs before adapter creation so a blocked query never opens a connection.
 	if connection.MustGuard(string(ds.Type)) {
+		// Capability gate (#23): a raw query against a SQL/EdgeLake
+		// connection is only allowed for a trusted internal call (e.g.
+		// execute-by-reference, where the SERVER supplied the query) or a
+		// caller holding design/manage. Default-deny: a call with no
+		// stamped auth fails closed. This closes the view-user arbitrary-
+		// SQL hole — view users execute stored queries by reference and
+		// never reach the raw path for guarded types. The verb guard below
+		// still applies on top of this.
+		if !rawQueryAuthorized(queryAuthFrom(ctx)) {
+			return nil, ErrQueryForbidden
+		}
+
 		policy := connection.WritePolicy{} // zero value = strict read-only
 		if s.queryGuardPolicy != nil {
 			policy = s.queryGuardPolicy(ctx)

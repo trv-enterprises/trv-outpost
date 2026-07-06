@@ -31,12 +31,21 @@ import (
 	"time"
 )
 
-const defaultBaseURL = "http://localhost:3001"
+// Use the IPv4 loopback literal, not "localhost": the dev server binds
+// IPv4 only, and "localhost" can resolve to ::1 first on some machines,
+// which would make this skip-safe test silently skip when the stack IS up.
+const defaultBaseURL = "http://127.0.0.1:3001"
 
 // viewOnlyUserGUID is the seeded "Support" pseudo-user — capabilities
 // ["view","control"], i.e. NOT design/manage. This is the exact principal the
 // original exploit used: a viewer replaying a rewritten /query request.
 const viewOnlyUserGUID = "support-00000000-0000-0000-0000-000000000003"
+
+// designUserGUID is the seeded "Designer" pseudo-user — capabilities
+// ["view","design","control"]. After #23 the raw /query path is gated to
+// design/manage, so this is the principal that may still send raw queries
+// (subject to the verb guard).
+const designUserGUID = "designer-00000000-0000-0000-0000-000000000002"
 
 func baseURL() string {
 	if v := os.Getenv("OUTPOST_TEST_BASE_URL"); v != "" {
@@ -71,9 +80,15 @@ func newLiveClientOrSkip(t *testing.T) *liveClient {
 		t.Skipf("dev server at %s returned %d on /health — skipping", base, resp.StatusCode)
 	}
 
-	// Mint a session token for the seeded view-only user via legacy GUID auth.
+	return &liveClient{base: base, token: mintTokenOrSkip(t, hc, base, viewOnlyUserGUID), http: hc}
+}
+
+// mintTokenOrSkip mints a session token for a seeded pseudo-user via legacy
+// GUID auth, skipping (never failing) when auth is unavailable.
+func mintTokenOrSkip(t *testing.T, hc *http.Client, base, guid string) string {
+	t.Helper()
 	sreq, _ := http.NewRequest(http.MethodPost, base+"/api/auth/session", nil)
-	sreq.Header.Set("X-User-ID", viewOnlyUserGUID)
+	sreq.Header.Set("X-User-ID", guid)
 	sresp, err := hc.Do(sreq)
 	if err != nil {
 		t.Skipf("could not mint session token (%v) — skipping", err)
@@ -88,7 +103,13 @@ func newLiveClientOrSkip(t *testing.T) *liveClient {
 	if err := json.NewDecoder(sresp.Body).Decode(&sbody); err != nil || sbody.AccessToken == "" {
 		t.Skipf("auth/session response had no access_token — skipping")
 	}
-	return &liveClient{base: base, token: sbody.AccessToken, http: hc}
+	return sbody.AccessToken
+}
+
+// withToken returns a copy of the client that authenticates as a different
+// seeded user (e.g. the design-capable Designer).
+func (c *liveClient) withToken(token string) *liveClient {
+	return &liveClient{base: c.base, token: token, http: c.http}
 }
 
 // firstSQLConnectionID returns the id of any SQL connection, or skips.
@@ -151,10 +172,15 @@ func (c *liveClient) query(t *testing.T, connID, rawBody string) queryResult {
 }
 
 // TestQueryGuard_LiveBreachMatrix replays the manual breach tests against the
-// running API as a view-only user. Every write/DDL/tampered request must be
-// refused with error_code "write_not_allowed"; legitimate reads must succeed.
+// running API. After #23 the raw /query path is gated to design/manage, so the
+// verb-guard matrix runs as the DESIGN user (the guard, not the capability
+// gate, is what must refuse the writes). Every write/DDL/tampered request must
+// be refused with error_code "write_not_allowed"; legitimate reads succeed.
+// The separate TestQueryEndpoint_CapabilityGate covers the view-user 403.
 func TestQueryGuard_LiveBreachMatrix(t *testing.T) {
-	c := newLiveClientOrSkip(t)
+	vc := newLiveClientOrSkip(t)
+	// Raw /query now requires design; mint a Designer token for the matrix.
+	c := vc.withToken(mintTokenOrSkip(t, vc.http, vc.base, designUserGUID))
 	connID := c.firstSQLConnectionID(t)
 
 	// Use a table that does not exist so even an erroneously-permitted write
@@ -214,10 +240,96 @@ func TestQueryGuard_LiveBreachMatrix(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				r := c.query(t, connID, tc.body)
 				if !r.Success {
-					t.Fatalf("legitimate read was refused (View Mode would break): code=%q err=%q body=%s",
+					t.Fatalf("legitimate read was refused (design user should pass): code=%q err=%q body=%s",
 						r.ErrorCode, r.Error, tc.body)
 				}
 			})
 		}
 	})
+}
+
+// TestQueryEndpoint_CapabilityGate is the #23 regression: the raw /query
+// endpoint is closed to view users (they can no longer replay a rewritten
+// SQL query), while a design user may still use it. Skips (never fails) when
+// the stack isn't up.
+func TestQueryEndpoint_CapabilityGate(t *testing.T) {
+	view := newLiveClientOrSkip(t) // view-only "Support" token
+	connID := view.firstSQLConnectionID(t)
+
+	// A view user's raw SELECT (a legitimate read pre-#23) is now refused
+	// at the endpoint with 403 — the whole point of execute-by-reference.
+	t.Run("view user is 403 on raw query", func(t *testing.T) {
+		r := view.query(t, connID, `{"query":{"raw":"SELECT 1","type":"sql"}}`)
+		if r.status != http.StatusForbidden {
+			t.Fatalf("SECURITY: view user raw /query returned %d, want 403 (arbitrary-SQL hole)", r.status)
+		}
+	})
+
+	// The same view user can still see data by REFERENCE: the server runs
+	// the stored query, so there's nothing to inject. We just assert the
+	// endpoint is reachable (not 403/404-by-capability). Pick any SQL-backed
+	// component; skip if none.
+	t.Run("view user can execute a component by reference", func(t *testing.T) {
+		compID := view.firstComponentIDForConnection(t, connID)
+		if compID == "" {
+			t.Skip("no component bound to a SQL connection — skipping by-reference check")
+		}
+		status := view.componentData(t, compID, `{}`)
+		if status == http.StatusForbidden {
+			t.Fatalf("view user was 403 on execute-by-reference — dashboards would break")
+		}
+	})
+
+	// A design user is still allowed on the raw path (authoring/preview).
+	t.Run("design user allowed on raw query", func(t *testing.T) {
+		design := view.withToken(mintTokenOrSkip(t, view.http, view.base, designUserGUID))
+		r := design.query(t, connID, `{"query":{"raw":"SELECT 1","type":"sql"}}`)
+		if r.status == http.StatusForbidden {
+			t.Fatalf("design user was 403 on raw /query — preview/authoring would break")
+		}
+	})
+}
+
+// firstComponentIDForConnection returns any component id whose connection_id
+// matches connID, or "" if none.
+func (c *liveClient) firstComponentIDForConnection(t *testing.T, connID string) string {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodGet, c.base+"/api/components?limit=500", nil)
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Components []struct {
+			ID           string `json:"id"`
+			ConnectionID string `json:"connection_id"`
+		} `json:"components"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return ""
+	}
+	for _, comp := range body.Components {
+		if comp.ConnectionID == connID {
+			return comp.ID
+		}
+	}
+	return ""
+}
+
+// componentData posts to the execute-by-reference endpoint and returns the
+// HTTP status (we care about the capability outcome, not the payload here).
+func (c *liveClient) componentData(t *testing.T, compID, body string) int {
+	t.Helper()
+	url := fmt.Sprintf("%s/api/components/%s/data", c.base, compID)
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		t.Fatalf("component data request failed: %v", err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
 }

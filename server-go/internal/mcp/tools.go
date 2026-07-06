@@ -569,7 +569,10 @@ func (r *ToolRegistry) registerConnectionTools() {
 					Params: getMap(queryMap, "params"),
 				},
 			}
-			resp, err := r.connectionService.QueryConnection(context.Background(), id, req)
+			// Trusted internal call (#23): the /mcp surface is gated to
+			// design at its route, so raw queries here are authored by a
+			// design-capable principal. The verb guard still applies.
+			resp, err := r.connectionService.QueryConnection(service.WithTrustedQuery(context.Background()), id, req)
 			if err != nil || resp == nil || resp.ResultSet == nil {
 				return resp, err
 			}

@@ -29,7 +29,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { queryData, queryBackfillShared } from '../api/dataClient';
+import { queryData, queryComponentData, queryBackfillShared } from '../api/dataClient';
 import apiClient from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getStreamBufferSize } from '../utils/streamBufferConfig';
@@ -102,7 +102,14 @@ function applyParser(record, parser) {
   return result;
 }
 
-export function useData({ connectionId, query, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
+// componentId (optional) switches polling to execute-by-reference (#23):
+// the fetch POSTs only runtime values to /api/components/:id/data and the
+// SERVER runs the component's stored query — no query text on the wire.
+// Only view surfaces pass it (PanelContent, ComponentExpandModal); editor/AI
+// previews must NOT, since their query is dirty/unsaved and needs the raw
+// /query path. The `query` prop is still required either way — token
+// presence and value identity (what triggers refetches) are derived from it.
+export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
   // A per-call maxBuffer wins; otherwise use the deployment-wide default
   // (admin setting stream_buffer_size, set at bootstrap). Applies to both
   // spec-driven and eval'd custom-code charts.
@@ -620,6 +627,25 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
   // vs a background refresh (keeps showing current data)
   const isInitialFetchRef = useRef(true);
 
+  // Single fetch dispatcher for the polling paths. With a componentId we
+  // execute by reference — runtime values only, extracted from the same
+  // effectiveQuery params the raw path would have sent (so refetch
+  // triggers and value semantics are identical). Without one (design/AI
+  // previews, legacy code-supplied queries) the raw query body goes out
+  // as before.
+  const runQuery = useCallback(async (useCacheArg) => {
+    if (componentId) {
+      const params = query?.params || {};
+      const runtime = { connection_id: connectionId };
+      // Preserve an explicit '' — token present with no value set must
+      // still reach the server so it can answer "variable not set".
+      if ('dashboard_variable' in params) runtime.dashboard_variable = params.dashboard_variable;
+      if (params.range) runtime.range = params.range;
+      return queryComponentData(componentId, runtime, useCacheArg);
+    }
+    return queryData(connectionId, query, useCacheArg);
+  }, [componentId, connectionId, queryKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchData = useCallback(async (forceShowLoading = false) => {
     if (!connectionId || !query) {
       setError(new Error('connectionId and query are required'));
@@ -642,7 +668,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
       }
       setError(null);
 
-      const result = await queryData(connectionId, query, useCache);
+      const result = await runQuery(useCache);
 
       if (mountedRef.current) {
         setData(result.data);
@@ -658,7 +684,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
     } finally {
       fetchingRef.current = false;
     }
-  }, [connectionId, queryKey, useCache]);
+  }, [connectionId, queryKey, useCache, runQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset initial fetch flag when datasource or query changes
   useEffect(() => {
@@ -771,7 +797,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
       }
       setError(null);
 
-      const result = await queryData(connectionId, query, false);
+      const result = await runQuery(false);
 
       if (mountedRef.current) {
         setData(result.data);
@@ -786,7 +812,7 @@ export function useData({ connectionId, query, refreshInterval = null, useCache 
     } finally {
       fetchingRef.current = false;
     }
-  }, [connectionId, queryKey, datasourceType]);
+  }, [connectionId, queryKey, datasourceType, runQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear buffer function (for streaming)
   const clearBuffer = useCallback(() => {

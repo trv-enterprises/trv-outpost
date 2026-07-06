@@ -38,6 +38,47 @@ export async function queryData(connectionId, query, useCache = true, opts = {})
   }
 }
 
+/**
+ * Execute a component's STORED query by reference (#23). View mode uses
+ * this instead of queryData so the query text never crosses the wire —
+ * the server loads the component's query_config and merges only the
+ * runtime values below.
+ * @param {string} componentId - ID of the (post-override effective) component
+ * @param {object} runtime - { connection_id?, dashboard_variable?, range? }
+ *   connection_id: effective connection when a connection-swap variable is active
+ *   dashboard_variable: active filter-variable value (send '' for token-present/no-value)
+ *   range: structured range intent ({type:'relative',token} | {type:'absolute',from,to})
+ * @param {boolean} useCache - Same informational flag as queryData
+ * @param {object} [opts] - { timeout?: number }
+ * @returns {Promise<object>} same shape as queryData()
+ */
+export async function queryComponentData(componentId, runtime = {}, useCache = true, opts = {}) {
+  try {
+    const body = {};
+    if (runtime.connection_id) body.connection_id = runtime.connection_id;
+    if (runtime.dashboard_variable !== undefined && runtime.dashboard_variable !== null) {
+      body.dashboard_variable = runtime.dashboard_variable;
+    }
+    if (runtime.range) body.range = runtime.range;
+
+    const requestOpts = {
+      method: 'POST',
+      body: JSON.stringify(body),
+    };
+    if (typeof opts.timeout === 'number') requestOpts.timeout = opts.timeout;
+    const response = await apiClient.request(`/api/components/${componentId}/data`, requestOpts);
+
+    return {
+      data: response.result_set,
+      source: useCache ? 'cache' : 'connection',
+      cached: useCache
+    };
+  } catch (error) {
+    console.error('Component data query error:', error);
+    throw new Error(error.message || 'Failed to query data');
+  }
+}
+
 // ── Shared backfill dedup ──────────────────────────────────────────────
 // Streaming charts share ONE websocket per connection (StreamConnection-
 // Manager), but each panel historically ran its OWN backfill REST query.

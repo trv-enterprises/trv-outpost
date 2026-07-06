@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -330,8 +331,17 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 		return
 	}
 
-	response, err := h.service.QueryConnection(c.Request.Context(), id, &req)
+	// Stamp the authenticated caller so the service can enforce
+	// design/manage for raw queries against guarded (SQL/EdgeLake)
+	// connections (#23). View users are refused with 403 here; they
+	// run stored queries via /api/components/:id/data instead.
+	ctx := service.WithQueryCaller(c.Request.Context(), middleware.GetUser(c))
+	response, err := h.service.QueryConnection(ctx, id, &req)
 	if err != nil {
+		if errors.Is(err, service.ErrQueryForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return

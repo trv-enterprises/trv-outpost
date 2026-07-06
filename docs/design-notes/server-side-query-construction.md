@@ -1,7 +1,34 @@
 # Execute-by-reference: stop the client sending the query body at runtime (issue #23)
 
-**Status:** Planned (design). Tracks GitHub issue
+**Status:** IMPLEMENTED (2026-07-06, branch `issue-23-execute-by-reference`).
+Tracks GitHub issue
 [#23](https://github.com/trv-enterprises/trv-outpost/issues/23).
+
+**As-built notes (where the implementation refined the design):**
+- Gate scope is **SQL/EdgeLake only**, enforced in the **service layer**
+  (`ConnectionService.QueryConnection`), not by a blanket auth rule. A
+  context-stamped `queryAuth{caller|trusted}` drives a default-deny check for
+  `MustGuard` types; other types stay view-open (streaming backfill + non-SQL
+  raw reads unaffected). The `/query` suffix auth special-case is untouched —
+  the endpoint is still route-open, the capability decision is now in the
+  service.
+- The new endpoint is `POST /api/components/:id/data` (view-level via a
+  pattern-scoped auth rule `componentDataRE`; `getRequiredCapability` now
+  honors `PathPattern`). It merges only the reserved runtime keys
+  (`dashboard_variable`, `range`) onto the STORED query and calls
+  `QueryConnection` as a **trusted** internal call. A `connection_id` override
+  is honored only when it names an existing **same-type** connection.
+- **MCP was a live bypass** (view-only API keys could reach `query_connection`
+  because `/mcp/*` defaulted to view). Closed by gating the whole `/mcp`
+  surface to **design** at the route (mirrors `/api/ai/sessions`); MCP + AI +
+  toolops query calls are stamped trusted, justified by their design-gated
+  routes.
+- Client: `useData` gained an opt-in `componentId`; only view surfaces
+  (`PanelContent` with the post-override effective component,
+  `ComponentExpandModal`) pass it. Editor/AI previews and streaming backfill
+  keep the raw `/query` path.
+- **No migration needed** — a prod audit found 0 components with inline SQL
+  `useData` calls (the only 3 `useData` callers are MQTT controls).
 **Author:** design note, 2026-06-13 (rewritten after scoping — see "Scoping correction").
 **Scope:** close the arbitrary-SQL hole by having **view-mode runtime** queries
 execute *by reference* to the stored component (server reads the stored query,

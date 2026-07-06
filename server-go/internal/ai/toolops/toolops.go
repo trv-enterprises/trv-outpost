@@ -448,7 +448,12 @@ func (ts *Toolset) QueryConnection(ctx context.Context, in QueryConnectionInput)
 			Params: in.Params,
 		},
 	}
-	resp, err := ts.Connections.QueryConnection(ctx, in.ConnectionID, queryReq)
+	// Trusted internal call (#23): both callers of this toolset — the
+	// in-app Dashboard Assistant (AI sessions require design at their
+	// route) and the MCP bridge (design-gated at /mcp) — are authoring
+	// surfaces already gated to design, so the raw-query capability check
+	// is satisfied upstream. The write/DDL verb guard still applies.
+	resp, err := ts.Connections.QueryConnection(service.WithTrustedQuery(ctx), in.ConnectionID, queryReq)
 	if err != nil || resp == nil || resp.ResultSet == nil {
 		return resp, err
 	}

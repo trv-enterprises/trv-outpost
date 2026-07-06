@@ -22,6 +22,12 @@ import (
 // (auth-required, legacy) doesn't accidentally inherit Public exemption.
 var tsstoreSecretWebhookRE = regexp.MustCompile(`^/api/webhooks/tsstore/[^/]+/[^/]+/?$`)
 
+// componentDataRE matches the execute-by-reference data endpoint
+// (POST /api/components/:id/data, #23). It's a POST that only READS —
+// the server runs the component's STORED query — so it must be exempt
+// from the "components writes require design" rule below.
+var componentDataRE = regexp.MustCompile(`^/api/components/[^/]+/data/?$`)
+
 const (
 	// UserContextKey is the key used to store user in gin context.
 	// Post-refactor this holds a JWT-derived *models.User shim, not
@@ -196,6 +202,13 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/connections", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/connections", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
 
+		// Execute-by-reference component data (#23) — view-level read
+		// despite being a POST: the server runs the component's STORED
+		// query with runtime variable values only. Must appear BEFORE the
+		// components write rule (first match wins). Empty Required
+		// resolves to view in Authorize().
+		{PathPrefix: "/api/components/", PathPattern: componentDataRE, Method: "POST"},
+
 		// Components - design required for write
 		{PathPrefix: "/api/components", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/components", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
@@ -209,6 +222,16 @@ func buildRouteRules() []RouteCapability {
 		// AI sessions - design required (AI builder is part of design)
 		{PathPrefix: "/api/ai/sessions", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/ai/sessions", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+
+		// MCP bridge (external agents: Claude Desktop, etc.) — the whole
+		// surface is the dashboard-BUILDER integration, an authoring
+		// activity, so it requires design (mirrors the AI-sessions gate).
+		// This is what lets the MCP query_connection tool run raw queries
+		// as a trusted internal call (#23): the design gate here is the
+		// real enforcement; a view-only API key gets 403 at the route
+		// before it can reach the tool. No method filter — both the SSE
+		// connection and the JSON-RPC message endpoint are gated.
+		{PathPrefix: "/mcp", Required: models.CapabilityDesign},
 
 		// Control execution — its own capability, independent of
 		// view/design/manage. A view-only kiosk (e.g. a lobby
@@ -595,6 +618,12 @@ func (m *AuthMiddleware) getRequiredCapability(path, method string) models.Capab
 			matches = path == rule.PathPrefix || path == rule.PathPrefix+"/"
 		} else {
 			matches = strings.HasPrefix(path, rule.PathPrefix)
+		}
+		// PathPattern narrows a prefix rule to specific shapes (mirrors
+		// ruleMatches) — without this, pattern-scoped rules like the
+		// component-data exemption would swallow their whole prefix.
+		if matches && rule.PathPattern != nil && !rule.PathPattern.MatchString(path) {
+			matches = false
 		}
 		if matches {
 			if rule.Method == "" || rule.Method == method {
