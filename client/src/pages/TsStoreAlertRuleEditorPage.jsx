@@ -645,7 +645,12 @@ function TsStoreAlertRuleEditorPage() {
                 )}
                 {Array.isArray(fields) && fields.length > 0 && (
                   <div className="field-pills-row">
-                    {fields.map((name) => (
+                    {/* Sort the pills alphabetically (locale-aware,
+                        case-insensitive) so a field is easy to find — the
+                        schema returns them in discovery order otherwise. */}
+                    {[...fields]
+                      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+                      .map((name) => (
                       <Tag
                         key={name}
                         type="blue"
