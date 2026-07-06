@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
@@ -18,12 +19,17 @@ import (
 // ComponentHandler handles component-related HTTP requests
 type ComponentHandler struct {
 	service *service.ComponentService
+	// connectionService powers the execute-by-reference data endpoint
+	// (#23): the handler loads the stored component and runs its query
+	// through the same service path as /api/connections/:id/query.
+	connectionService *service.ConnectionService
 }
 
 // NewComponentHandler creates a new component handler
-func NewComponentHandler(service *service.ComponentService) *ComponentHandler {
+func NewComponentHandler(service *service.ComponentService, connectionService *service.ConnectionService) *ComponentHandler {
 	return &ComponentHandler{
-		service: service,
+		service:           service,
+		connectionService: connectionService,
 	}
 }
 
@@ -82,6 +88,117 @@ func (h *ComponentHandler) GetComponent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, component)
+}
+
+// buildComponentDataQuery assembles the query to execute for an
+// execute-by-reference data request: the component's STORED query config
+// plus only the reserved runtime keys from the client (dashboard_variable,
+// range). Stored positional params can never be overridden by the caller.
+func buildComponentDataQuery(component *models.Component, req *models.ComponentDataRequest) (models.Query, error) {
+	if component.QueryConfig == nil || component.QueryConfig.Raw == "" {
+		return models.Query{}, errors.New("component has no stored query")
+	}
+
+	params := make(map[string]interface{}, len(component.QueryConfig.Params)+2)
+	for k, v := range component.QueryConfig.Params {
+		params[k] = v
+	}
+	if req.DashboardVariable != nil {
+		params[connection.DashboardVariableParam] = req.DashboardVariable
+	}
+	if req.Range != nil {
+		params[connection.RangeParam] = req.Range
+	}
+
+	return models.Query{
+		Raw:    component.QueryConfig.Raw,
+		Type:   models.QueryType(component.QueryConfig.Type),
+		Params: params,
+	}, nil
+}
+
+// GetComponentData executes a component's STORED query and returns the data.
+// Execute-by-reference (#23): view mode calls this with runtime values only —
+// the query text never crosses the wire, so a tampering client has nothing to
+// inject. Variable/range substitution happens server-side exactly as on the
+// raw /query path.
+// @Summary Execute a component's stored query
+// @Description Runs the component's stored query_config against its connection, merging only the reserved runtime values (dashboard_variable, range) from the request. The optional connection_id override (dashboard connection-swap) must reference a connection of the same type as the stored one.
+// @Tags components
+// @Accept json
+// @Produce json
+// @Param id path string true "Component ID"
+// @Param request body models.ComponentDataRequest false "Runtime values"
+// @Success 200 {object} models.QueryResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /components/{id}/data [post]
+func (h *ComponentHandler) GetComponentData(c *gin.Context) {
+	id := c.Param("id")
+
+	var req models.ComponentDataRequest
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	component, err := h.service.GetComponent(c.Request.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if component.ConnectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Component has no connection configured"})
+		return
+	}
+
+	// Resolve the effective connection. A connection-swap override is only
+	// honored when it names an existing connection of the SAME type as the
+	// stored one — a view user must not be able to point a stored query at
+	// an arbitrary other-dialect connection.
+	connectionID := component.ConnectionID
+	if req.ConnectionID != "" && req.ConnectionID != component.ConnectionID {
+		stored, err := h.connectionService.GetConnection(c.Request.Context(), component.ConnectionID)
+		if err != nil || stored == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Component's connection not found"})
+			return
+		}
+		target, err := h.connectionService.GetConnection(c.Request.Context(), req.ConnectionID)
+		if err != nil || target == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Connection override not found"})
+			return
+		}
+		if target.Type != stored.Type {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Connection override type does not match the component's connection type"})
+			return
+		}
+		connectionID = req.ConnectionID
+	}
+
+	query, err := buildComponentDataQuery(component, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	response, err := h.connectionService.QueryConnection(c.Request.Context(), connectionID, &models.QueryRequest{Query: query})
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // GetComponentVersion retrieves a specific version of a component

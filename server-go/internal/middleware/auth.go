@@ -22,6 +22,12 @@ import (
 // (auth-required, legacy) doesn't accidentally inherit Public exemption.
 var tsstoreSecretWebhookRE = regexp.MustCompile(`^/api/webhooks/tsstore/[^/]+/[^/]+/?$`)
 
+// componentDataRE matches the execute-by-reference data endpoint
+// (POST /api/components/:id/data, #23). It's a POST that only READS —
+// the server runs the component's STORED query — so it must be exempt
+// from the "components writes require design" rule below.
+var componentDataRE = regexp.MustCompile(`^/api/components/[^/]+/data/?$`)
+
 const (
 	// UserContextKey is the key used to store user in gin context.
 	// Post-refactor this holds a JWT-derived *models.User shim, not
@@ -195,6 +201,13 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/connections", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/connections", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/connections", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+
+		// Execute-by-reference component data (#23) — view-level read
+		// despite being a POST: the server runs the component's STORED
+		// query with runtime variable values only. Must appear BEFORE the
+		// components write rule (first match wins). Empty Required
+		// resolves to view in Authorize().
+		{PathPrefix: "/api/components/", PathPattern: componentDataRE, Method: "POST"},
 
 		// Components - design required for write
 		{PathPrefix: "/api/components", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
@@ -595,6 +608,12 @@ func (m *AuthMiddleware) getRequiredCapability(path, method string) models.Capab
 			matches = path == rule.PathPrefix || path == rule.PathPrefix+"/"
 		} else {
 			matches = strings.HasPrefix(path, rule.PathPrefix)
+		}
+		// PathPattern narrows a prefix rule to specific shapes (mirrors
+		// ruleMatches) — without this, pattern-scoped rules like the
+		// component-data exemption would swallow their whole prefix.
+		if matches && rule.PathPattern != nil && !rule.PathPattern.MatchString(path) {
+			matches = false
 		}
 		if matches {
 			if rule.Method == "" || rule.Method == method {
