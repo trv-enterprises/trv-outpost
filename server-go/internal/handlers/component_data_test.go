@@ -99,16 +99,27 @@ func TestBuildComponentDataQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("component without stored query is rejected", func(t *testing.T) {
+	t.Run("nil QueryConfig is rejected", func(t *testing.T) {
 		c := base()
 		c.QueryConfig = nil
 		if _, err := buildComponentDataQuery(c, &models.ComponentDataRequest{}); err == nil {
 			t.Error("expected error for nil QueryConfig")
 		}
-		c = base()
+	})
+
+	t.Run("empty stored raw is VALID (connection defines the query)", func(t *testing.T) {
+		// An API connection's URL is the endpoint; a streaming tsstore
+		// connection's transport is the source. Both legitimately store
+		// raw:"" — the by-reference endpoint must not reject them.
+		c := base()
 		c.QueryConfig.Raw = ""
-		if _, err := buildComponentDataQuery(c, &models.ComponentDataRequest{}); err == nil {
-			t.Error("expected error for empty stored raw")
+		c.QueryConfig.Type = "api"
+		q, err := buildComponentDataQuery(c, &models.ComponentDataRequest{})
+		if err != nil {
+			t.Fatalf("empty raw must be allowed, got error: %v", err)
+		}
+		if q.Raw != "" || q.Type != models.QueryType("api") {
+			t.Errorf("expected empty raw + type api, got raw=%q type=%q", q.Raw, q.Type)
 		}
 	})
 }

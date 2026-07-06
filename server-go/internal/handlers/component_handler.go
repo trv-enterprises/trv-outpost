@@ -94,9 +94,16 @@ func (h *ComponentHandler) GetComponent(c *gin.Context) {
 // execute-by-reference data request: the component's STORED query config
 // plus only the reserved runtime keys from the client (dashboard_variable,
 // range). Stored positional params can never be overridden by the caller.
+//
+// An EMPTY Raw is valid, not an error: some connection types define the whole
+// query in the connection itself (an API connection's URL is the endpoint; a
+// streaming tsstore connection's transport is the source), so the stored
+// query_config legitimately carries `raw: ""`. The adapter decides what an
+// empty raw means for its type. We only require that a QueryConfig exists at
+// all; the handler separately requires the component to have a connection.
 func buildComponentDataQuery(component *models.Component, req *models.ComponentDataRequest) (models.Query, error) {
-	if component.QueryConfig == nil || component.QueryConfig.Raw == "" {
-		return models.Query{}, errors.New("component has no stored query")
+	if component.QueryConfig == nil {
+		return models.Query{}, errors.New("component has no stored query config")
 	}
 
 	params := make(map[string]interface{}, len(component.QueryConfig.Params)+2)
