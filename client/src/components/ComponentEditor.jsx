@@ -814,6 +814,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const [availableColumns, setAvailableColumns] = useState([]);
+  // Alphabetically-sorted view of availableColumns for the data-mapping
+  // dropdowns (x/y/series/filter/time-bucket/sliding-window). The raw
+  // availableColumns keeps its query/fetch order (used only as a default
+  // seed, e.g. filters default to [0]); the dropdowns render this sorted
+  // copy so the option lists aren't in an arbitrary column order.
+  const sortedColumns = useMemo(
+    () => [...availableColumns].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+    [availableColumns]
+  );
   // The single query-results table lives at the bottom of the Data Mapping tab
   // (it's filter-aware). It's easy to miss after running a query, so we scroll
   // to it when a NEW run lands. Keyed on previewData (a fresh fetch), NOT on the
@@ -2335,6 +2344,34 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (!name.trim()) {
       alert('Please enter a chart name');
       return;
+    }
+
+    // Guard against silently saving away a configured chart's data binding.
+    // The save block below gates connection_id / query_config / data_mapping
+    // entirely on selectedConnectionId — if that's empty at save time (a
+    // reported case where the connection was bound but somehow got cleared),
+    // all three get written as null and the chart looks unconfigured after
+    // reload. Rather than persist that loss, block the save when the chart
+    // clearly HAS configured data (a query, an axis mapping, filters, etc.)
+    // but no connection. A genuinely blank new chart (nothing configured yet)
+    // is still allowed to save as a stub.
+    if (componentType === 'chart' && !showCustomCode && !selectedConnectionId) {
+      const hasConfiguredData = !!(
+        queryRaw?.trim() ||
+        xAxisColumn ||
+        (Array.isArray(yAxisColumns) && yAxisColumns.some((c) => typeof c === 'string' && c.trim())) ||
+        seriesColumn ||
+        groupByColumn ||
+        (Array.isArray(filters) && filters.length > 0)
+      );
+      if (hasConfiguredData) {
+        alert(
+          'This chart has data-mapping configured but no connection selected. ' +
+          'Saving now would drop the connection and data mapping. Re-select the ' +
+          'connection on the Details tab before saving.'
+        );
+        return;
+      }
     }
 
     // Sliding window requires a timestamp column to be meaningful, but
@@ -4162,7 +4199,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                                 size="sm"
                                 className="filter-field-select"
                               >
-                                {availableColumns.map(col => (
+                                {sortedColumns.map(col => (
                                   <SelectItem key={col} value={col} text={col} />
                                 ))}
                               </Select>
@@ -4307,7 +4344,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               onChange={(e) => updateAggregation('sortBy', e.target.value)}
                             >
                               <SelectItem value="" text="Select column..." />
-                              {availableColumns.map(col => (
+                              {sortedColumns.map(col => (
                                 <SelectItem key={col} value={col} text={col} />
                               ))}
                             </Select>
@@ -4322,7 +4359,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               onChange={(e) => updateAggregation('field', e.target.value)}
                             >
                               <SelectItem value="" text="Select column..." />
-                              {availableColumns.map(col => (
+                              {sortedColumns.map(col => (
                                 <SelectItem key={col} value={col} text={col} />
                               ))}
                             </Select>
@@ -4352,7 +4389,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               onChange={(e) => setSortBy(e.target.value)}
                             >
                               <SelectItem value="" text="None" />
-                              {availableColumns.map(col => (
+                              {sortedColumns.map(col => (
                                 <SelectItem key={col} value={col} text={col} />
                               ))}
                             </Select>
@@ -4510,7 +4547,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               text={slidingWindowTimestampCol}
                             />
                           )}
-                          {availableColumns.map(col => (
+                          {sortedColumns.map(col => (
                             <SelectItem key={col} value={col} text={col} />
                           ))}
                         </Select>
@@ -4647,7 +4684,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               onChange={(e) => setTimeBucketTimestampCol(e.target.value)}
                             >
                               <SelectItem value="" text="Select timestamp..." />
-                              {availableColumns.map(col => (
+                              {sortedColumns.map(col => (
                                 <SelectItem key={col} value={col} text={col} />
                               ))}
                             </Select>
@@ -4656,7 +4693,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             <div className="value-cols-selector">
                               <label className="cds--label">Value Columns to Aggregate</label>
                               <div className="column-tags">
-                                {availableColumns.filter(c => c !== timeBucketTimestampCol).map(col => (
+                                {sortedColumns.filter(c => c !== timeBucketTimestampCol).map(col => (
                                   <Tag
                                     key={col}
                                     type={timeBucketValueCols.includes(col) ? 'blue' : 'gray'}
