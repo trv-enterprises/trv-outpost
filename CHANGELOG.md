@@ -6,6 +6,23 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.38.2] — 2026-07-06
+
+### Fixed
+
+- **Standard components with a connection-defined query no longer error under
+  execute-by-reference (#23 regression).** The by-reference endpoint rejected
+  any component whose stored `query_config.raw` was empty with "component has
+  no stored query". But an empty raw is valid for connection types where the
+  connection itself defines the query — an API connection's URL *is* the
+  endpoint (e.g. `/api/stats/goroutines`), a streaming ts-store connection's
+  transport is the source. Such components (e.g. a dataview on an API
+  connection) showed a "Data Error" banner in view mode. The endpoint now only
+  rejects a genuinely missing query config; an empty-but-typed query passes
+  through and the adapter interprets it. Broader than the v0.38.1 custom-code
+  fix — this covers standard/spec-driven charts on connection-defined-query
+  connections too.
+
 ## [0.38.1] — 2026-07-06
 
 ### Fixed
