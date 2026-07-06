@@ -127,6 +127,11 @@ function PanelContent({
                     // Dashboard-variable connection-swap: override the
                     // component's design-time connection when active.
                     connectionId: resolveConnectionId ? resolveConnectionId(chart) : chart.connection_id,
+                    // Execute-by-reference (#23): view mode sends runtime
+                    // values only; the server runs this component's stored
+                    // query. `chart` is already the post-override effective
+                    // component, so its id is the one to reference.
+                    componentId: chart.id,
                     queryConfig: chart.query_config,
                     dashboardVariableValue,
                     rangeValue,

@@ -82,6 +82,9 @@ export default function ComponentExpandModal({
               componentMeta: chart,
               dataMapping: chart.data_mapping,
               connectionId: chart.connection_id,
+              // Execute-by-reference (#23): expanded view runs the stored
+              // query by reference, same as the panel it expands.
+              componentId: chart.id,
               queryConfig: chart.query_config,
               dashboardVariableValue,
               rangeValue,
