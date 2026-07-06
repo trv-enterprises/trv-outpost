@@ -6,6 +6,33 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.38.0] — 2026-07-06
+
+### Security
+
+- **Execute-by-reference closes the arbitrary-SQL read hole (#23).** In View
+  mode the dashboard viewer no longer sends the query body to the server on
+  every refresh. Charts now execute *by reference* against a new endpoint
+  `POST /api/components/:id/data` — the client sends only runtime values
+  (`connection_id`, `dashboard_variable`, `range`) and the server runs the
+  component's **stored** query. With no client-supplied SQL at view time, a
+  tampering viewer has nothing to inject. The v0.29 verb guard already blocked
+  writes/DDL; this closes the remaining arbitrary-*read* path.
+- **Raw `/api/connections/:id/query` gated to design/manage.** The raw query
+  path (still used by design-mode preview and the query builders) now requires
+  design or manage capability for SQL/EdgeLake connections, enforced in the
+  service layer. View users receive `403` and use execute-by-reference instead.
+  Other connection types are unaffected.
+- **MCP bridge gated to design.** `/mcp/*` previously defaulted to view, so a
+  view-only API key could reach the `query_connection` tool. The whole MCP
+  surface now requires design (mirrors the AI-sessions gate).
+
+### Notes
+
+- No data migration and no model change — components keep their stored query
+  config; only *who turns it into a live query* changed. Design-mode preview,
+  the AI builder, and streaming backfill are unaffected.
+
 ## [0.37.4] — 2026-07-03
 
 ### Fixed
