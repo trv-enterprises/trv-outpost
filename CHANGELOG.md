@@ -6,6 +6,37 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.38.1] — 2026-07-06
+
+### Fixed
+
+- **Custom-code components no longer error under execute-by-reference (#23
+  regression).** Custom-code components fetch their own data via `useData()`
+  calls inside their code and leave `query_config.raw` empty. In view mode the
+  loader still routed its own (empty) query through the new by-reference
+  endpoint, which rejected it with "component has no stored query" — surfaced
+  as a "Data Error" banner. Custom-code components now stay on the raw fetch
+  path; standard charts keep using execute-by-reference.
+- **Editor clears a stale raw query on a connection TYPE change.** Switching a
+  component's connection to a different type (e.g. tsstore → API) left the old
+  dialect-specific query in place, which could silently corrupt the new
+  connection's request (a leftover tsstore `since:1h` glued onto an API URL as
+  `?…=true/since:1h`, dropping fields from the response). The query now resets
+  when the connection type changes; re-selecting the same or same-type
+  connection keeps it.
+- **Save guard against dropping a chart's data binding.** Saving a chart that
+  has data-mapping configured but no connection selected would silently write
+  the connection, query, and mapping as null. The editor now blocks that save
+  with a message to re-select the connection; a genuinely blank new chart still
+  saves as a stub.
+
+### Changed
+
+- **Sorted column/field dropdowns.** The component-editor data-mapping column
+  dropdowns (x/y/series/filter/aggregation/time-bucket/sliding-window) and the
+  ts-store alert-rule "Available fields" pills now render alphabetically
+  instead of in raw schema-discovery order.
+
 ## [0.38.0] — 2026-07-06
 
 ### Security
