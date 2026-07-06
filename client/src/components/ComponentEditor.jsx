@@ -1656,6 +1656,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (newDatasourceId) {
       const ds = connObj || (connections.length > 0 ? connections.find(d => d.id === newDatasourceId) : null);
       if (ds) {
+        // Clear a stale query when switching to a DIFFERENT connection type.
+        // A raw query is dialect-specific — a tsstore "since:1h", an EdgeLake
+        // SQL string, an API path fragment — and carrying it across a type
+        // change silently corrupts the new connection's request. (Concretely:
+        // a leftover tsstore "since:1h" on an API connection gets glued onto
+        // the URL as "?…=true/since:1h", dropping fields from the response.)
+        // Only reset on a real TYPE change so re-selecting the same connection
+        // (or another of the same type) keeps a query the user may want. The
+        // type-specific branches below still set their own sensible defaults
+        // (e.g. tsstore REST → "newest", mqtt → topic flow) after this.
+        const prevType = selectedDatasource?.type;
+        if (prevType && prevType !== ds.type) {
+          setQueryRaw('');
+        }
         switch (ds.type) {
           case 'sql':
             setQueryType('sql');
