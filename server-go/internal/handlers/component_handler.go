@@ -188,7 +188,12 @@ func (h *ComponentHandler) GetComponentData(c *gin.Context) {
 		return
 	}
 
-	response, err := h.connectionService.QueryConnection(c.Request.Context(), connectionID, &models.QueryRequest{Query: query})
+	// Trusted internal call: the query text came from the STORED component,
+	// not the client, so it's exempt from the raw-query capability gate
+	// (the verb guard still applies). This is what lets view users run
+	// their dashboards' SQL/EdgeLake components without design.
+	ctx := service.WithTrustedQuery(c.Request.Context())
+	response, err := h.connectionService.QueryConnection(ctx, connectionID, &models.QueryRequest{Query: query})
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})

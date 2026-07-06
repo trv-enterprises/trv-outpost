@@ -32,9 +32,14 @@ func TestGetRequiredCapability_ComponentData(t *testing.T) {
 		{"version delete still requires design", "/api/components/abc-123/versions/2", "DELETE", models.CapabilityDesign},
 		// The data rule must not leak onto other POST shapes.
 		{"draft-like POST path is not exempted", "/api/components/abc-123/data/extra", "POST", models.CapabilityDesign},
-		// Pre-existing suffix special-cases stay intact.
-		{"raw query endpoint stays open", "/api/connections/abc-123/query", "POST", ""},
+		// Pre-existing suffix special-cases stay intact. The raw /query
+		// endpoint is still route-open; the design/manage gate for it is
+		// enforced in the service layer (#23), not here.
+		{"raw query endpoint stays route-open", "/api/connections/abc-123/query", "POST", ""},
 		{"stream endpoint stays open", "/api/connections/abc-123/stream", "GET", ""},
+		// MCP bridge is design-gated at the route (#23).
+		{"mcp message requires design", "/mcp/message", "POST", models.CapabilityDesign},
+		{"mcp sse requires design", "/mcp/sse", "GET", models.CapabilityDesign},
 	}
 
 	for _, tt := range tests {

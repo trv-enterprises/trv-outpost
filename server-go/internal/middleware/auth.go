@@ -223,6 +223,16 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/ai/sessions", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/ai/sessions", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
 
+		// MCP bridge (external agents: Claude Desktop, etc.) — the whole
+		// surface is the dashboard-BUILDER integration, an authoring
+		// activity, so it requires design (mirrors the AI-sessions gate).
+		// This is what lets the MCP query_connection tool run raw queries
+		// as a trusted internal call (#23): the design gate here is the
+		// real enforcement; a view-only API key gets 403 at the route
+		// before it can reach the tool. No method filter — both the SSE
+		// connection and the JSON-RPC message endpoint are gated.
+		{PathPrefix: "/mcp", Required: models.CapabilityDesign},
+
 		// Control execution — its own capability, independent of
 		// view/design/manage. A view-only kiosk (e.g. a lobby
 		// display) can render dashboards but gets 403 when it tries

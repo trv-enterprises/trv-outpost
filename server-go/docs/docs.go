@@ -1131,6 +1131,60 @@ const docTemplate = `{
                 }
             }
         },
+        "/components/{id}/data": {
+            "post": {
+                "description": "Runs the component's stored query_config against its connection, merging only the reserved runtime values (dashboard_variable, range) from the request. The optional connection_id override (dashboard connection-swap) must reference a connection of the same type as the stored one.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "components"
+                ],
+                "summary": "Execute a component's stored query",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Component ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Runtime values",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/models.ComponentDataRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.QueryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/components/{id}/draft": {
             "get": {
                 "description": "Get the draft version of a component (if exists)",
@@ -7937,6 +7991,24 @@ const docTemplate = `{
                 "version": {
                     "description": "Version number (1, 2, 3...)",
                     "type": "integer"
+                }
+            }
+        },
+        "models.ComponentDataRequest": {
+            "description": "Runtime values for executing a component's stored query",
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "description": "ConnectionID optionally overrides the component's stored connection\n(dashboard connection-swap variable). It must reference an existing\nconnection of the SAME type as the stored one.",
+                    "type": "string"
+                },
+                "dashboard_variable": {
+                    "description": "DashboardVariable is the active filter-variable value. Merged into\nthe stored query's params under the reserved dashboard_variable key\nonly when present in the request (an explicit \"\" is meaningful: it\nyields the server's structured variable-not-set response)."
+                },
+                "range": {
+                    "description": "Range is the structured range intent, same shape the raw /query path\naccepts today: {type:\"relative\",token} or {type:\"absolute\",from,to}.",
+                    "type": "object",
+                    "additionalProperties": true
                 }
             }
         },
