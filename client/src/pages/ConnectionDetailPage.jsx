@@ -144,6 +144,28 @@ function ConnectionDetailPage() {
   // could type. Reset to null to fall back to value-based detection.
   const [parserPresetOverride, setParserPresetOverride] = useState(null);
 
+  // Socket custom-header rows (#132). Kept as an ordered array with stable
+  // ids — NOT derived from the config map each render — so editing a header
+  // name doesn't rekey the input (focus loss) and two not-yet-named rows can
+  // coexist (a map can't hold duplicate keys). Synced INTO config.socket.headers
+  // on every change; seeded FROM config when a connection loads. rowIdRef gives
+  // each row a stable key without Date.now()/Math.random().
+  const [socketHeaderRows, setSocketHeaderRows] = useState([]);
+  const rowIdRef = useRef(0);
+  const nextRowId = () => { rowIdRef.current += 1; return rowIdRef.current; };
+  const seedSocketHeaderRows = (headersMap) => {
+    const entries = Object.entries(headersMap || {});
+    setSocketHeaderRows(entries.map(([name, value]) => ({ id: nextRowId(), name, value })));
+  };
+  const commitSocketHeaderRows = (rows) => {
+    setSocketHeaderRows(rows);
+    // Build the map from named rows only; unnamed rows are in-progress and
+    // aren't persisted. Later duplicates win (last write), matching a map.
+    const map = {};
+    rows.forEach((r) => { if (r.name.trim()) map[r.name] = r.value; });
+    updateConfig('socket.headers', map);
+  };
+
   // Test connection state
   const [testing, setTesting] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
@@ -205,6 +227,7 @@ function ConnectionDetailPage() {
       setDescription(data.description || '');
       setType(data.type);
       setConfig(data.config || {});
+      seedSocketHeaderRows(data.config?.socket?.headers);
       setTags(data.tags || []);
       setNamespace(data.namespace || 'default');
     } catch (err) {
@@ -229,6 +252,7 @@ function ConnectionDetailPage() {
       setDescription(data.description || '');
       setType(data.type || 'sql');
       setConfig(scrubbedConfig);
+      seedSocketHeaderRows(scrubbedConfig?.socket?.headers);
       setTags(data.tags || []);
       setNamespace(data.namespace || 'default');
       // A clone is an unsaved new record — enable Save without requiring an
@@ -453,6 +477,20 @@ function ConnectionDetailPage() {
       for (const key in prepared.api.auth_credentials) {
         if (prepared.api.auth_credentials[key] === '' && originalCreds[key] === SECRET_MASKED_VALUE) {
           prepared.api.auth_credentials[key] = SECRET_MASKED_VALUE;
+        }
+      }
+    }
+
+    // For Socket: preserve masked auth-header values (#132). The server masks
+    // Authorization / X-API-Key / … on read, so on load scrubMaskedSecrets
+    // cleared them to ''. A blank value here for a header that WAS masked means
+    // "unchanged" — keep the sentinel so the server resolves it from the stored
+    // secret rather than wiping the header.
+    if (prepared.socket && prepared.socket.headers) {
+      const originalHeaders = connection?.config?.socket?.headers || {};
+      for (const key in prepared.socket.headers) {
+        if (prepared.socket.headers[key] === '' && originalHeaders[key] === SECRET_MASKED_VALUE) {
+          prepared.socket.headers[key] = SECRET_MASKED_VALUE;
         }
       }
     }
@@ -833,6 +871,76 @@ function ConnectionDetailPage() {
             onChange={(e) => updateConfig('socket.bidirectional', e.target.checked)}
           />
         )}
+
+        {/* Custom Headers — sent on the WebSocket/TCP handshake (#132). The
+            model (SocketConfig.Headers) and adapter already support these; the
+            server masks auth-header VALUES (Authorization, X-API-Key, Cookie,
+            …) on read exactly like the API type, so a Bearer token here never
+            leaks into a URL query string. Backed by socketHeaderRows (stable
+            ids) rather than the config map so name edits don't lose focus and
+            two blank rows can coexist. */}
+        {(() => {
+          const setRowName = (id, newName) => commitSocketHeaderRows(
+            socketHeaderRows.map((r) => (r.id === id ? { ...r, name: newName } : r))
+          );
+          const setRowValue = (id, newValue) => commitSocketHeaderRows(
+            socketHeaderRows.map((r) => (r.id === id ? { ...r, value: newValue } : r))
+          );
+          const removeRow = (id) => commitSocketHeaderRows(socketHeaderRows.filter((r) => r.id !== id));
+          const addRow = () => commitSocketHeaderRows([...socketHeaderRows, { id: nextRowId(), name: '', value: '' }]);
+          const addBearer = () => commitSocketHeaderRows([...socketHeaderRows, { id: nextRowId(), name: 'Authorization', value: '' }]);
+          const hasAuthorization = socketHeaderRows.some((r) => r.name.toLowerCase() === 'authorization');
+          return (
+            <div className="socket-headers-section">
+              <label className="cds--label">Custom Headers</label>
+              <p className="helper-text">
+                Sent on the connection handshake. Use for auth (e.g.{' '}
+                <code>Authorization: Bearer &lt;token&gt;</code>) so the token isn&apos;t
+                exposed in the URL. Values of auth headers (Authorization, X-API-Key,
+                Cookie, …) are masked after saving.
+              </p>
+              {socketHeaderRows.map((row, idx) => {
+                const isAuthHeader = ['authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'x-api-key', 'x-auth-token', 'x-access-token'].includes(row.name.toLowerCase());
+                const ValueInput = isAuthHeader ? SecretTextInput : TextInput;
+                return (
+                  <div className="socket-header-row" key={row.id}>
+                    <TextInput
+                      id={`socket-header-name-${row.id}`}
+                      labelText={idx === 0 ? 'Header Name' : undefined}
+                      hideLabel={idx !== 0}
+                      value={row.name}
+                      onChange={(e) => setRowName(row.id, e.target.value)}
+                      placeholder="Authorization"
+                    />
+                    <ValueInput
+                      id={`socket-header-value-${row.id}`}
+                      labelText={idx === 0 ? 'Value' : undefined}
+                      hideLabel={idx !== 0}
+                      value={row.value}
+                      onChange={(e) => setRowValue(row.id, e.target.value)}
+                      placeholder={isAuthHeader ? 'Bearer <token>' : 'value'}
+                    />
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      hasIconOnly
+                      renderIcon={TrashCan}
+                      iconDescription="Remove header"
+                      onClick={() => removeRow(row.id)}
+                      className="socket-header-remove"
+                    />
+                  </div>
+                );
+              })}
+              <div className="socket-header-actions">
+                <Button kind="tertiary" size="sm" onClick={addRow}>Add header</Button>
+                {!hasAuthorization && (
+                  <Button kind="ghost" size="sm" onClick={addBearer}>Add Authorization (Bearer)</Button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         <Checkbox
           id="socket-reconnect"

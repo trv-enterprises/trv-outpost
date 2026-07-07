@@ -58,6 +58,35 @@
       margin-bottom: spacing.$spacing-05;
     }
 
+    // Socket custom-header rows (#132): name + value + remove button.
+    .socket-headers-section {
+      margin-bottom: spacing.$spacing-05;
+
+      .helper-text code {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.6875rem;
+      }
+
+      .socket-header-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: spacing.$spacing-04;
+        align-items: end;
+        margin-bottom: spacing.$spacing-03;
+
+        @media (max-width: 672px) {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .socket-header-actions {
+        display: flex;
+        gap: spacing.$spacing-03;
+        margin-top: spacing.$spacing-03;
+        flex-wrap: wrap;
+      }
+    }
+
     // Unified form field styling - applies to all fields in form
     .cds--label {
       color: #c6c6c6 !important;
