@@ -46,6 +46,12 @@ function makeBubbleSizer(sizeValues) {
 function buildValueAxis(range, labelFormatter, labelRotate) {
   const r = range || {};
   const def = { type: r.scale === 'log' ? 'log' : 'value' };
+  // scale:true makes the axis FIT the data range instead of anchoring at 0.
+  // ECharts value axes include 0 by default — fine for magnitudes near 0, but
+  // catastrophic for data far from 0 like epoch-second timestamps (~1.78e9):
+  // the axis would span 0…1.78e9 and cram every point against the right edge.
+  // A manual min/max overrides this, so only auto-scale when neither is set.
+  if (r.min == null && r.max == null) def.scale = true;
   if (r.min != null) def.min = Number(r.min);
   if (r.max != null) def.max = Number(r.max);
   def.axisLabel = { color: COLOR_TEXT_SECONDARY };
