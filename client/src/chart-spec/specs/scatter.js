@@ -43,7 +43,7 @@ function makeBubbleSizer(sizeValues) {
   };
 }
 
-function buildValueAxis(range, labelFormatter) {
+function buildValueAxis(range, labelFormatter, labelRotate) {
   const r = range || {};
   const def = { type: r.scale === 'log' ? 'log' : 'value' };
   if (r.min != null) def.min = Number(r.min);
@@ -53,26 +53,52 @@ function buildValueAxis(range, labelFormatter) {
   // the axis a value axis so points stay positioned by their numeric x. The
   // caller passes a formatter only when the x column is a timestamp.
   if (labelFormatter) def.axisLabel.formatter = labelFormatter;
+  if (labelRotate) def.axisLabel.rotate = Number(labelRotate);
   return def;
 }
 
-// isTimestampColumn: a column is timestamp-like when running its first
-// non-null value through formatCellValue with a timestamp preset CHANGES it
-// (formatCellValue passes non-timestamps through unchanged — same detection
-// line.js uses). Returns the format preset to use, or null when not a
-// timestamp. Mirrors line.js's resolveAutoXFormat intent without the
-// span/collision refinements (a scatter axis picks its own ticks).
+// resolveXTimestampFormat decides how to format a scatter x-axis when it's a
+// timestamp column, returning the format preset or null (not a timestamp →
+// leave the axis numeric). Detection mirrors line.js: a column is timestamp-
+// like when formatCellValue with a timestamp preset CHANGES its first value
+// (non-timestamps pass through unchanged).
+//
+// When the user picked an explicit format it wins. For 'auto' we pick by the
+// data's time SPAN so short windows get finer granularity (the reported case:
+// ~100 points over ~100 seconds want time+seconds, not a bare date+time):
+//   span ≥ ~1 day   → 'chart'                (date + time)
+//   span ≥ ~10 min  → 'chart_time'           (time only)
+//   span < ~10 min  → 'chart_time_seconds'   (time + seconds)
+// The 10-minute seconds cutoff matches the reported case: ~100 points over
+// ~100 seconds want second-granularity labels, not a bare HH:MM that repeats.
 function resolveXTimestampFormat(xValues, xCol, formatCellValue, xAxisFormat) {
   if (!formatCellValue) return null;
-  const sample = xValues.find((v) => v != null);
+  const nonNull = xValues.filter((v) => v != null);
+  const sample = nonNull[0];
   if (sample == null) return null;
-  // An explicit stored format wins; 'auto'/'chart' both resolve to 'chart'
-  // (date+time) as a sensible default for a scatter time axis.
-  const preset = xAxisFormat && xAxisFormat !== 'auto' ? xAxisFormat : 'chart';
-  const formatted = formatCellValue(sample, xCol, { timestampFormat: preset });
-  // No transformation → not a timestamp column → leave the axis numeric.
-  if (String(formatted) === String(sample)) return null;
-  return preset;
+
+  // Timestamp detection using an explicit preset that always transforms a real
+  // timestamp; if unchanged, it's not a timestamp column.
+  const probe = formatCellValue(sample, xCol, { timestampFormat: 'chart_time' });
+  if (String(probe) === String(sample)) return null;
+
+  // Explicit user choice wins.
+  if (xAxisFormat && xAxisFormat !== 'auto') return xAxisFormat;
+
+  // Auto: pick by span. Normalize the raw x values to ms for the span calc.
+  const ms = nonNull
+    .map((v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return NaN;
+      // seconds (~1.7e9) → ms; ms (~1.7e12) → as-is; anything else, best-effort.
+      return n < 1e11 ? n * 1000 : n;
+    })
+    .filter((n) => Number.isFinite(n));
+  if (ms.length < 2) return 'chart_time_seconds';
+  const span = Math.max(...ms) - Math.min(...ms);
+  if (span >= 24 * 60 * 60 * 1000) return 'chart';          // ≥ 1 day
+  if (span >= 10 * 60 * 1000) return 'chart_time';          // ≥ 10 minutes
+  return 'chart_time_seconds';                              // < 10 minutes
 }
 
 function withAxisName(axis, label, isX) {
@@ -149,6 +175,10 @@ export function buildOption(values, data, helpers = {}) {
     symbol,
     symbolSize: sizer ? (val) => sizer(val[2]) : baseSize,
   };
+  // Data labels: show the y-value next to each point (opt-in, mirrors line).
+  if (opts.chartShowDataLabels) {
+    seriesBase.label = { show: true, position: 'top', color: COLOR_TEXT_SECONDARY };
+  }
 
   let series;
   if (seriesIdx >= 0 && xIdx >= 0 && yIdx >= 0) {
@@ -213,7 +243,7 @@ export function buildOption(values, data, helpers = {}) {
     backgroundColor: TRANSPARENT_BG,
     tooltip,
     grid: { top: 30, left: 50, right: 20, bottom: gridBottom, containLabel: true },
-    xAxis: withAxisName(buildValueAxis(opts.xAxisRange, xLabelFormatter), dm.x_axis_label || '', true),
+    xAxis: withAxisName(buildValueAxis(opts.xAxisRange, xLabelFormatter, opts.xAxisLabelRotate), dm.x_axis_label || '', true),
     yAxis: withAxisName(buildValueAxis(opts.yAxisRange?.left), dm.y_axis_label || '', false),
     series,
   };

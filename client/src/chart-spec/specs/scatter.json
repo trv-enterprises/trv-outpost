@@ -61,6 +61,23 @@
               "placeholder": "Leave empty to hide"
             },
             {
+              "id": "x_axis_format",
+              "binds": "data_mapping.x_axis_format",
+              "type": "enum",
+              "label": "Timestamp format",
+              "helperText": "How to label the x-axis when it's a timestamp column. Non-timestamp x-axes ignore this and show the raw values.",
+              "default": "auto",
+              "options": [
+                { "value": "auto", "label": "Auto (fits the data)" },
+                { "value": "chart", "label": "Date + Time (1/15 10:30)" },
+                { "value": "chart_time", "label": "Time Only (10:30 AM)" },
+                { "value": "chart_time_seconds", "label": "Time + Seconds (10:30:05 AM)" },
+                { "value": "chart_date", "label": "Date Only (Jan 15)" },
+                { "value": "chart_datetime", "label": "Full (Jan 15, 10:30 AM)" },
+                { "value": "chart_datetime_seconds", "label": "Full + Seconds (Jan 15, 10:30:05 AM)" }
+              ]
+            },
+            {
               "id": "y_axis_label",
               "binds": "data_mapping.y_axis_label",
               "type": "text",
@@ -128,6 +145,28 @@
                 { "value": "diamond", "label": "Diamond" },
                 { "value": "pin", "label": "Pin" }
               ]
+            },
+            {
+              "id": "x_axis_label_rotate",
+              "binds": "options.xAxisLabelRotate",
+              "type": "enum",
+              "label": "X-axis label angle",
+              "helperText": "Rotate x-axis labels so long timestamp labels fit better.",
+              "default": 0,
+              "options": [
+                { "value": 0, "label": "Horizontal" },
+                { "value": 30, "label": "30°" },
+                { "value": 45, "label": "45°" },
+                { "value": 90, "label": "Vertical (90°)" }
+              ]
+            },
+            {
+              "id": "chart_show_data_labels",
+              "binds": "options.chartShowDataLabels",
+              "type": "boolean",
+              "label": "Data labels",
+              "helperText": "Show the y-value next to each point.",
+              "default": false
             }
           ]
         },
