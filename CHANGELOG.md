@@ -6,6 +6,42 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.39.0] — 2026-07-07
+
+### Added
+
+- **Custom Headers for WebSocket/TCP connections (#132).** The connection
+  editor now exposes a Custom Headers editor on the socket branch — key/value
+  rows with add/remove, a masked input for auth-header values (Authorization,
+  X-API-Key, Cookie, …), and an "Add Authorization (Bearer)" shortcut. So a
+  WebSocket connection can authenticate against an auth-gated endpoint without
+  putting the token in the URL query string. The model and adapter already
+  supported handshake headers; this is the missing UI.
+- **Scatter chart editor controls.** The scatter editor gained the applicable
+  line-chart controls it was missing: **Timestamp format** (x-axis format
+  override), **X-axis label angle** (rotate long timestamp labels), and **Data
+  labels** (show the y-value at each point).
+
+### Fixed
+
+- **Scatter timestamp x-axis.** Scatter ignored the x-axis format and rendered
+  timestamp columns as raw epoch numbers. It now formats a timestamp x-axis as
+  times, with a span-aware "auto" that picks second-granularity for short
+  windows.
+- **Scatter value axes anchored at 0.** ECharts value axes include 0 by
+  default, which crammed epoch-second timestamp data (~1.78e9) against the
+  right edge and made a tight window look like a multi-hour axis. Both axes now
+  fit the data range (unless a manual range is set).
+- **ts-store push stream timestamp scale.** Push-aggregated ts-store streams
+  leaked millisecond timestamps while the REST backfill emitted seconds, so a
+  scatter (value-axis) chart mixed scales and spread one window's data across a
+  bogus range. The stream now emits seconds consistently, matching every other
+  producer.
+- **Component AI agent model.** The in-editor Component agent used a hardcoded
+  model ID that Anthropic retired (404 on every request). It now resolves the
+  model from the `assistant.model` admin setting, same as the Dashboard
+  Assistant.
+
 ## [0.38.2] — 2026-07-06
 
 ### Fixed
