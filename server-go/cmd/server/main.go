@@ -423,12 +423,27 @@ func main() {
 	} else if !anthropicKeyAvailable {
 		fmt.Println("· Component AI agent disabled (no Anthropic key — set ASSISTANT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY)")
 	} else {
-		agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, nil) // nil config uses defaults
+		// Model selection from the SAME admin setting the Dashboard
+		// Assistant uses (assistant.model), resolved via the shared
+		// chat.ResolveModelID. Previously the Component agent passed a nil
+		// config and fell back to a hardcoded model ID, which 404'd once
+		// that snapshot was retired. Unknown/blank values resolve to the
+		// Sonnet default rather than failing.
+		componentModelID := chat.ResolveModelID("")
+		if modelSetting, err := settingsService.GetSetting(ctx, "assistant.model"); err == nil && modelSetting != nil {
+			if s, ok := modelSetting.Value.(string); ok && s != "" {
+				componentModelID = chat.ResolveModelID(s)
+			}
+		}
+		agent, err := ai.NewAgent(toolExecutor, aiSessionService, catalogProvider, &ai.AgentConfig{
+			Provider: "anthropic",
+			Model:    componentModelID,
+		})
 		if err != nil {
 			log.Printf("⚠️  Component AI agent disabled: %v", err)
 		} else {
 			aiAgent = agent
-			fmt.Println("✓ Component AI agent enabled (Anthropic SDK)")
+			fmt.Printf("✓ Component AI agent enabled (Anthropic SDK, model %s)\n", componentModelID)
 		}
 	}
 

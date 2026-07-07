@@ -55,10 +55,17 @@ type SessionService interface {
 	BroadcastEvent(sessionID string, event *models.AIEvent)
 }
 
+// DefaultComponentModel is the model used when NewAgent is called with a nil
+// config (tests / direct callers). The real server path resolves the model
+// from the assistant.model admin setting instead (cmd/server/main.go). Keep
+// this in sync with the chat agent's Sonnet default (chat.ModelSonnet) — a
+// retired snapshot here 404s at request time.
+const DefaultComponentModel = "claude-sonnet-4-6"
+
 // AgentConfig holds configuration for the AI agent
 type AgentConfig struct {
 	Provider string // "anthropic"
-	Model    string // model name (e.g., "claude-sonnet-4-20250514")
+	Model    string // model name (e.g., "claude-sonnet-4-6" or a pinned snapshot)
 	MaxTurns int
 	APIKey   string
 	BaseURL  string // for custom endpoints
@@ -69,9 +76,16 @@ type AgentConfig struct {
 // fully-populated system prompt (no filtering applied).
 func NewAgent(toolExecutor *ToolExecutor, sessionSvc SessionService, catalogProvider CatalogProvider, config *AgentConfig) (*Agent, error) {
 	if config == nil {
+		// Fallback default for a nil config. The real server path always
+		// passes an explicit config with the model resolved from the
+		// assistant.model admin setting (see cmd/server/main.go), so this
+		// only guards direct/nil-config callers (tests). Keep it pointed at
+		// a CURRENT model — a retired snapshot here 404s. DefaultComponentModel
+		// is the single source of truth for the fallback, mirrored from the
+		// chat agent's Sonnet default.
 		config = &AgentConfig{
 			Provider: "anthropic",
-			Model:    "claude-sonnet-4-20250514",
+			Model:    DefaultComponentModel,
 			MaxTurns: 10,
 		}
 	}
