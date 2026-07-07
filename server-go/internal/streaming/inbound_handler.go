@@ -158,11 +158,21 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 	}
 }
 
-// messageToRecord converts a ts-store push message to a Record
+// messageToRecord converts a ts-store push message to a Record.
+//
+// Timestamp scale: the whole system's wire convention is epoch SECONDS
+// (every raw stream uses time.Now().Unix(); the ts-store REST adapter and the
+// bucket aggregator both emit seconds). msg.Timestamp is nanoseconds, so we
+// normalize with /1e9. CRITICAL: the push payload's `data` map often carries
+// its OWN `timestamp` field, and for push-AGGREGATED streams (agg_window set)
+// ts-store emits that inner timestamp in a DIFFERENT scale (milliseconds,
+// ~1.78e12) — which previously overwrote our seconds value during the merge.
+// A value-axis consumer (scatter) then saw a mix of seconds (backfill) and
+// milliseconds (stream) and spread points across a bogus multi-year range.
+// Stamp the server-normalized seconds timestamp AFTER the merge so it always
+// wins — the single source of truth for the wire scale.
 func (h *InboundHandler) messageToRecord(msg *tsStorePushMessage) models.Record {
-	record := models.Record{
-		"timestamp": msg.Timestamp / 1e9, // nanoseconds -> seconds
-	}
+	record := models.Record{}
 
 	// Parse the data payload
 	var data map[string]interface{}
@@ -180,6 +190,10 @@ func (h *InboundHandler) messageToRecord(msg *tsStorePushMessage) models.Record 
 			record[k] = v
 		}
 	}
+
+	// Stamp the normalized timestamp LAST so a `timestamp` from the payload
+	// (possibly a different scale) can't clobber the canonical seconds value.
+	record["timestamp"] = float64(msg.Timestamp) / 1e9 // nanoseconds -> seconds
 
 	return record
 }
