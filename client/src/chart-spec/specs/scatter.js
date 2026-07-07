@@ -43,13 +43,36 @@ function makeBubbleSizer(sizeValues) {
   };
 }
 
-function buildValueAxis(range) {
+function buildValueAxis(range, labelFormatter) {
   const r = range || {};
   const def = { type: r.scale === 'log' ? 'log' : 'value' };
   if (r.min != null) def.min = Number(r.min);
   if (r.max != null) def.max = Number(r.max);
   def.axisLabel = { color: COLOR_TEXT_SECONDARY };
+  // Timestamp x-axes: format the numeric tick VALUES as times while keeping
+  // the axis a value axis so points stay positioned by their numeric x. The
+  // caller passes a formatter only when the x column is a timestamp.
+  if (labelFormatter) def.axisLabel.formatter = labelFormatter;
   return def;
+}
+
+// isTimestampColumn: a column is timestamp-like when running its first
+// non-null value through formatCellValue with a timestamp preset CHANGES it
+// (formatCellValue passes non-timestamps through unchanged — same detection
+// line.js uses). Returns the format preset to use, or null when not a
+// timestamp. Mirrors line.js's resolveAutoXFormat intent without the
+// span/collision refinements (a scatter axis picks its own ticks).
+function resolveXTimestampFormat(xValues, xCol, formatCellValue, xAxisFormat) {
+  if (!formatCellValue) return null;
+  const sample = xValues.find((v) => v != null);
+  if (sample == null) return null;
+  // An explicit stored format wins; 'auto'/'chart' both resolve to 'chart'
+  // (date+time) as a sensible default for a scatter time axis.
+  const preset = xAxisFormat && xAxisFormat !== 'auto' ? xAxisFormat : 'chart';
+  const formatted = formatCellValue(sample, xCol, { timestampFormat: preset });
+  // No transformation → not a timestamp column → leave the axis numeric.
+  if (String(formatted) === String(sample)) return null;
+  return preset;
 }
 
 function withAxisName(axis, label, isX) {
@@ -80,11 +103,14 @@ function buildLegend(legend) {
 /**
  * @param {Object} values  Form state: { data_mapping, options }
  * @param {Object} data    Query result: { columns: string[], rows: any[][] }
+ * @param {Object} [helpers] Runtime helpers from SpecDrivenChart:
+ *   { formatCellValue, xAxisFormat } — used to format a timestamp x-axis.
  * @returns {Object} an ECharts `option` literal
  */
-export function buildOption(values, data) {
+export function buildOption(values, data, helpers = {}) {
   const dm = values?.data_mapping || {};
   const opts = values?.options || {};
+  const { formatCellValue, xAxisFormat } = helpers;
 
   const xCol = dm.x_axis || '';
   // y_axis[0] may be a bare string (saved shape) or a { column } object
@@ -148,16 +174,28 @@ export function buildOption(values, data) {
     series = [];
   }
 
+  // Timestamp x-axis: when the x column is a timestamp, format both the axis
+  // tick labels and the tooltip's x line as times (the axis stays a value axis
+  // so points position by their raw numeric x). Without this the axis showed
+  // raw epoch numbers (e.g. 1,783,452,050) instead of "7/7 2:20 PM".
+  const xTsFormat = xIdx >= 0
+    ? resolveXTimestampFormat(rows.map((r) => r[xIdx]), xCol, formatCellValue, xAxisFormat)
+    : null;
+  const xLabelFormatter = xTsFormat
+    ? (val) => formatCellValue(val, xCol, { timestampFormat: xTsFormat })
+    : null;
+
   // Tooltip — point mode shows x/y (and size when present), formatted.
   const tt = opts.tooltip || {};
   const fmt = makeValueFormatter(tt.decimals, tt.units);
+  const fmtX = xLabelFormatter ? (v) => xLabelFormatter(v) : fmt;
   const tooltip = tt.mode === 'hidden'
     ? { show: false }
     : {
         trigger: 'item',
         formatter: (p) => {
           const v = p.value || [];
-          const lines = [`${xCol}: ${fmt(v[0])}`, `${yCol}: ${fmt(v[1])}`];
+          const lines = [`${xCol}: ${fmtX(v[0])}`, `${yCol}: ${fmt(v[1])}`];
           if (sizeIdx >= 0 && v[2] != null) lines.push(`${sizeCol}: ${fmt(v[2])}`);
           const head = p.seriesName ? `${p.marker || ''}${p.seriesName}` : '';
           return [head, ...lines].filter(Boolean).join('<br/>');
@@ -170,11 +208,12 @@ export function buildOption(values, data) {
   // name below the labels). Previously a flat 40 left a dead band under
   // label-less scatters, matching the line/area/bar fix.
   const gridBottom = dm.x_axis_label ? 38 : 8;
+
   const option = {
     backgroundColor: TRANSPARENT_BG,
     tooltip,
     grid: { top: 30, left: 50, right: 20, bottom: gridBottom, containLabel: true },
-    xAxis: withAxisName(buildValueAxis(opts.xAxisRange), dm.x_axis_label || '', true),
+    xAxis: withAxisName(buildValueAxis(opts.xAxisRange, xLabelFormatter), dm.x_axis_label || '', true),
     yAxis: withAxisName(buildValueAxis(opts.yAxisRange?.left), dm.y_axis_label || '', false),
     series,
   };
