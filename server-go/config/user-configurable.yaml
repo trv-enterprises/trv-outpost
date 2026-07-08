@@ -154,6 +154,11 @@ settings:
       input: 1000000
       output: 250000
 
+  - key: assistant.daily_budget_overage_pct
+    category: ai
+    description: "Server Restart Required. Grace band (percent) above the daily token budget before the Assistant refuses new messages. The daily cap is enforced when a message is SENT, so a conversation turn that crosses the cap mid-flight always finishes; once over the base cap the user sees a persistent over-budget notice on every send, and at cap + this percentage new messages are refused until the UTC-midnight reset. Default 10."
+    value: 10
+
   - key: assistant.model
     category: ai
     description: "Server Restart Required. Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Per-deployment choice; not per-user."

@@ -69,6 +69,10 @@ export default function useAssistantSession() {
   // session totals on each 'usage' event (issue #55), so we replace rather
   // than accumulate client-side. null until the first turn completes.
   const [tokenUsage, setTokenUsage] = useState(null);
+  // Daily-budget grace band (#58): the server emits 'budget_overage' at the
+  // start of every send while the user is over the base cap. Sticky for the
+  // session (a persistent notice under the composer), cleared on clearChat.
+  const [overBudgetNotice, setOverBudgetNotice] = useState(null);
 
   const sessionIdRef = useRef(null);
   const wsRef = useRef(null);
@@ -166,6 +170,12 @@ export default function useAssistantSession() {
         break;
       case 'budget_warn':
         if (data.reason) setWarning(String(data.reason));
+        break;
+      case 'budget_overage':
+        // Over the base daily cap, inside the grace band (#58). Persistent —
+        // re-broadcast by the server on every send while over, so we just
+        // keep the latest notice text.
+        if (data.notice) setOverBudgetNotice(String(data.notice));
         break;
       case 'error':
         if (data.error) setError(String(data.error));
@@ -304,6 +314,7 @@ export default function useAssistantSession() {
     setError(null);
     setWarning(null);
     setTokenUsage(null);
+    setOverBudgetNotice(null);
   }, [closeWebSocket]);
 
   // Resume a persisted session on mount (#117). The hook re-mounts on a
@@ -357,6 +368,7 @@ export default function useAssistantSession() {
     warning,
     error,
     tokenUsage,
+    overBudgetNotice,
     sendMessage,
     clearChat,
   };

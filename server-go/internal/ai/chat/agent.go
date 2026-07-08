@@ -270,12 +270,14 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 	for turn := 0; turn < a.maxTurns; turn++ {
 		anthropicTools := a.tools.AnthropicToolParams(revealedTierB)
 
-		// Budget check before each API call. Refuses the call
-		// entirely past the hard limit; warns the client past the
-		// soft limit.
+		// Budget check before each API call. The conversation cap
+		// refuses/warns on any turn; the daily cap is a TURN-START
+		// gate (turn == 0, #58) so an in-flight turn always finishes
+		// — a user is never cut mid-conversation, only refused a NEW
+		// message once past the cap's grace band.
 		if a.budget != nil {
 			approx := EstimateContextTokens(systemPrompt, anthropicMessageTextContent(messages))
-			verdict, _ := a.budget.CheckBeforeCall(ctx, callerGUID, approx)
+			verdict, _ := a.budget.CheckBeforeCall(ctx, callerGUID, approx, turn == 0)
 			if !verdict.Allowed {
 				err := fmt.Errorf("%s", verdict.Reason)
 				a.sessionSvc.SendErrorEvent(session.ID, err, "budget_exceeded")
@@ -286,6 +288,22 @@ func (a *Agent) ProcessMessage(ctx context.Context, session *models.AISession, u
 				a.sessionSvc.BroadcastEvent(session.ID, &models.AIEvent{
 					Type:      "budget_warn",
 					Data:      map[string]interface{}{"reason": verdict.Reason},
+					Timestamp: time.Now(),
+				})
+			}
+			// Grace band (#58): over the base cap but under the overage
+			// tolerance. Only set at turn start, so this fires once per
+			// user send — the persistent "you're over budget" reminder.
+			if verdict.OverBudget {
+				a.sessionSvc.BroadcastEvent(session.ID, &models.AIEvent{
+					Type: "budget_overage",
+					Data: map[string]interface{}{
+						"notice":      verdict.OverBudgetNotice,
+						"input_used":  verdict.DailyInputUsed,
+						"input_cap":   verdict.DailyInputCap,
+						"output_used": verdict.DailyOutputUsed,
+						"output_cap":  verdict.DailyOutputCap,
+					},
 					Timestamp: time.Now(),
 				})
 			}

@@ -138,6 +138,19 @@
   line-height: 1.4;
 }
 
+// Daily-budget overage notice (#58) — sits with the token counter under
+// the composer. Warning-toned but compact; persistent while the user is
+// in the grace band, so it must not shout like an error banner.
+.assistant-sidecard__over-budget {
+  margin-top: spacing.$spacing-03;
+  padding: spacing.$spacing-02 spacing.$spacing-03;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--cds-text-primary);
+  background-color: var(--cds-layer-01);
+  border-left: 3px solid var(--cds-support-warning);
+}
+
 .assistant-messagelist {
   flex: 1 1 auto;
   display: flex;

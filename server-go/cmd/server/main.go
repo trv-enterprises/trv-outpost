@@ -484,8 +484,9 @@ func main() {
 				int64(chat.DefaultDailyInputBudget),
 				int64(chat.DefaultDailyOutputBudget),
 			)
-			chatBudget := chat.NewBudget(chatUsageRepo, userRepo, inputCap, outputCap)
-			fmt.Printf("✓ Dashboard Assistant daily budget: %d input / %d output tokens/user\n", inputCap, outputCap)
+			overagePct := extractOveragePct(ctx, settingsService, int64(chat.DefaultOveragePct))
+			chatBudget := chat.NewBudget(chatUsageRepo, userRepo, inputCap, outputCap, overagePct)
+			fmt.Printf("✓ Dashboard Assistant daily budget: %d input / %d output tokens/user (+%d%% grace)\n", inputCap, outputCap, overagePct)
 
 			// Model selection from admin setting. Sonnet is the
 			// default; admins can opt into Opus for higher-fidelity
@@ -1297,6 +1298,25 @@ func resolveDocsPath() string {
 		}
 	}
 	return ""
+}
+
+// extractOveragePct reads the assistant.daily_budget_overage_pct
+// setting (#58): the grace band above the base daily caps before new
+// turns are refused. Falls back to the passed default when missing or
+// unparseable. Values are clamped to [0 → default, cap at 100].
+func extractOveragePct(ctx context.Context, settingsSvc *service.SettingsService, def int64) int64 {
+	setting, err := settingsSvc.GetSetting(ctx, "assistant.daily_budget_overage_pct")
+	if err != nil || setting == nil {
+		return def
+	}
+	n, ok := budgetCoerceInt64(setting.Value)
+	if !ok || n <= 0 {
+		return def
+	}
+	if n > 100 {
+		n = 100
+	}
+	return n
 }
 
 // extractBudgetCaps reads the assistant.daily_token_budget setting

@@ -300,6 +300,14 @@ export default function AssistantSidecard({
             {(session.tokenUsage.input + session.tokenUsage.output).toLocaleString()} total
           </div>
         )}
+        {/* Daily-budget grace band (#58): shown while the user is over the
+            base cap — the server re-emits the notice on every send, so this
+            reads as a standing reminder rather than a one-shot banner. */}
+        {session.overBudgetNotice && (
+          <div className="assistant-sidecard__over-budget" role="status">
+            {session.overBudgetNotice}
+          </div>
+        )}
       </footer>
 
       <ExportNameModal

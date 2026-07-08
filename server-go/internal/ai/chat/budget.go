@@ -45,6 +45,19 @@ const (
 	DefaultDailyOutputBudget = 250_000
 )
 
+// DefaultOveragePct is the grace band above the base daily cap (#58).
+// Daily enforcement happens at TURN START against usage recorded from
+// prior calls, so a turn that crosses the cap mid-flight always
+// finishes; the band absorbs that overshoot gracefully:
+//
+//	used < cap                → new turn allowed, no notice
+//	cap ≤ used < cap×(1+pct%) → new turn allowed, but every send gets
+//	                            a persistent over-budget notice
+//	used ≥ cap×(1+pct%)       → new turn refused
+//
+// Configurable via the assistant.daily_budget_overage_pct setting.
+const DefaultOveragePct = 10
+
 // Budget bundles the cost-guardrail dependencies. Constructed once
 // at server startup; the chat agent reads through it before each
 // Anthropic API call.
@@ -57,24 +70,32 @@ type Budget struct {
 	users          OverrideLookup
 	dailyInputCap  int64
 	dailyOutputCap int64
+	overagePct     int64
 }
 
 // NewBudget constructs a Budget. dailyInputCap and dailyOutputCap
 // of 0 mean "use the package defaults"; admins typically pass the
 // values from the assistant.daily_token_budget admin setting. `users`
 // resolves per-user overrides (may be nil → global caps only).
-func NewBudget(repo *repository.ChatUsageRepository, users OverrideLookup, dailyInputCap, dailyOutputCap int64) *Budget {
+// overagePct ≤ 0 means "use DefaultOveragePct" (see its doc for the
+// grace-band semantics); it applies on top of the effective (possibly
+// per-user-overridden) caps.
+func NewBudget(repo *repository.ChatUsageRepository, users OverrideLookup, dailyInputCap, dailyOutputCap, overagePct int64) *Budget {
 	if dailyInputCap <= 0 {
 		dailyInputCap = DefaultDailyInputBudget
 	}
 	if dailyOutputCap <= 0 {
 		dailyOutputCap = DefaultDailyOutputBudget
 	}
+	if overagePct <= 0 {
+		overagePct = DefaultOveragePct
+	}
 	return &Budget{
 		repo:           repo,
 		users:          users,
 		dailyInputCap:  dailyInputCap,
 		dailyOutputCap: dailyOutputCap,
+		overagePct:     overagePct,
 	}
 }
 
@@ -116,6 +137,13 @@ type CheckResult struct {
 	SoftWarn bool
 	Reason   string
 
+	// OverBudget is the grace-band state (#58): daily usage is past
+	// the base cap but under cap×(1+overage%). The call proceeds, but
+	// the client shows a persistent over-budget notice on every send.
+	// OverBudgetNotice carries the user-facing text.
+	OverBudget       bool
+	OverBudgetNotice string
+
 	// Per-user daily counters at the time of the check, for
 	// telemetry / future client surfacing.
 	DailyInputUsed  int64
@@ -130,7 +158,13 @@ type CheckResult struct {
 //  1. The approximate token count of the about-to-be-sent
 //     conversation (sum of system prompt length + all message
 //     content length / 4).
-//  2. The caller's per-day token consumption against the daily cap.
+//  2. The caller's per-day token consumption against the daily cap —
+//     but only when turnStart is true (#58). Daily enforcement is a
+//     turn-start gate: a turn that crosses the cap on its 2nd/3rd
+//     tool round-trip finishes normally (usage is still recorded;
+//     the next turn's gate reads the true total). The conversation
+//     cap stays per-call — it protects the context window, which
+//     grows within a turn.
 //
 // Returns a verdict the agent uses to either proceed, warn, or
 // refuse.
@@ -138,7 +172,7 @@ type CheckResult struct {
 // callerGUID may be empty (anonymous / test calls) — in that case
 // the daily-budget check is skipped and only the conversation cap
 // applies.
-func (b *Budget) CheckBeforeCall(ctx context.Context, callerGUID string, approxContextTokens int) (*CheckResult, error) {
+func (b *Budget) CheckBeforeCall(ctx context.Context, callerGUID string, approxContextTokens int, turnStart bool) (*CheckResult, error) {
 	res := &CheckResult{Allowed: true}
 
 	// Conversation-level caps.
@@ -158,8 +192,8 @@ func (b *Budget) CheckBeforeCall(ctx context.Context, callerGUID string, approxC
 		)
 	}
 
-	// Per-user daily cap.
-	if b == nil || b.repo == nil || callerGUID == "" {
+	// Per-user daily cap — turn-start gate only (see doc above).
+	if b == nil || b.repo == nil || callerGUID == "" || !turnStart {
 		return res, nil
 	}
 	now := time.Now()
@@ -179,21 +213,34 @@ func (b *Budget) CheckBeforeCall(ctx context.Context, callerGUID string, approxC
 	res.DailyInputCap = inputCap
 	res.DailyOutputCap = outputCap
 
-	if res.DailyInputUsed >= inputCap {
+	// Hard refuse at cap×(1+overage%): the grace band is spent.
+	hardInputCap := inputCap + inputCap*b.overagePct/100
+	hardOutputCap := outputCap + outputCap*b.overagePct/100
+	if res.DailyInputUsed >= hardInputCap || res.DailyOutputUsed >= hardOutputCap {
+		axis, used, cap := "input", res.DailyInputUsed, inputCap
+		if res.DailyInputUsed < hardInputCap {
+			axis, used, cap = "output", res.DailyOutputUsed, outputCap
+		}
 		res.Allowed = false
 		res.Reason = fmt.Sprintf(
-			"Daily input-token budget exhausted (%d / %d). Resets at UTC midnight, or ask an admin to raise your budget on the AI API Usage page.",
-			res.DailyInputUsed, inputCap,
+			"Daily %s-token budget exhausted (%d used, cap %d + %d%% grace). Resets at UTC midnight, or ask an admin to raise your budget on the AI API Usage page.",
+			axis, used, cap, b.overagePct,
 		)
 		return res, nil
 	}
-	if res.DailyOutputUsed >= outputCap {
-		res.Allowed = false
-		res.Reason = fmt.Sprintf(
-			"Daily output-token budget exhausted (%d / %d). Resets at UTC midnight, or ask an admin to raise your budget on the AI API Usage page.",
-			res.DailyOutputUsed, outputCap,
+
+	// Grace band: over the base cap but inside the overage tolerance.
+	// The turn proceeds; the client shows a persistent notice each send.
+	if res.DailyInputUsed >= inputCap || res.DailyOutputUsed >= outputCap {
+		axis, used, cap := "input", res.DailyInputUsed, inputCap
+		if res.DailyInputUsed < inputCap {
+			axis, used, cap = "output", res.DailyOutputUsed, outputCap
+		}
+		res.OverBudget = true
+		res.OverBudgetNotice = fmt.Sprintf(
+			"You're over your daily %s-token budget (%d / %d). New messages stop at %d%% over. Resets at UTC midnight.",
+			axis, used, cap, b.overagePct,
 		)
-		return res, nil
 	}
 
 	return res, nil
