@@ -72,6 +72,21 @@ check('tooltip: shown mode has a formatter', typeof ttShown.tooltip?.formatter =
 const line = ttShown.tooltip.formatter([{ dataIndex: 0 }]);
 check('tooltip: decimals + units applied', line.includes('20.0') && line.includes('%'), line);
 
+// SI mode (default ON) + no user decimals → 3 significant digits, not the
+// legacy 3-decimal default (52 must read "52", not "52.000").
+const noisyData = {
+  columns: ['ts', 'avg', 'lo', 'hi'],
+  rows: [[1700000000000, 52.68333333333333, 52, 56]],
+};
+const siOpt = buildOption({ data_mapping: baseDM, options: {} }, noisyData, { formatCellValue: fmt });
+const siLine = siOpt.tooltip.formatter([{ dataIndex: 0 }]);
+check('tooltip: SI default → 3 sig digits (52.7)', siLine.includes('52.7'), siLine);
+check('tooltip: SI default → whole values untouched (52 / 56)', siLine.includes('52 / 56'), siLine);
+// SI off → legacy 3-decimal default returns.
+const siOff = buildOption({ data_mapping: baseDM, options: { chartSiPrefixes: false } }, noisyData, { formatCellValue: fmt });
+const siOffLine = siOff.tooltip.formatter([{ dataIndex: 0 }]);
+check('tooltip: SI off → legacy 3-decimal default (52.000)', siOffLine.includes('52.000'), siOffLine);
+
 // ── Display: smooth / markers / sampling on the center line ────────────
 const centerOf = (opt) => opt.series.find((s) => s.type === 'line' && s.lineStyle?.width === 2);
 const smoothOn = centerOf(build({ chartSmooth: true }));

@@ -263,7 +263,11 @@ export function buildOption(values, data, helpers = {}) {
   // regardless of mode (a banded chart's tooltip is inherently the whole
   // envelope at the hovered x, not a single series).
   const tt = opts.tooltip || {};
-  const fmtVal = makeValueFormatter(tt.decimals != null ? tt.decimals : 3, tt.units || '', opts.chartSiPrefixes !== false);
+  // Decimals default: a USER-set value always wins. Otherwise SI mode
+  // formats at 3 significant digits (52 → "52", not "52.000"), and only
+  // SI-off keeps the legacy 3-decimal noise trim.
+  const si = opts.chartSiPrefixes !== false;
+  const fmtVal = makeValueFormatter(tt.decimals != null ? tt.decimals : (si ? null : 3), tt.units || '', si);
   const tooltipFormatter = (params) => {
     const i = params[0]?.dataIndex;
     if (i == null) return '';
