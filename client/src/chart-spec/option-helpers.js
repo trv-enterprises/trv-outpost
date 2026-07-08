@@ -223,10 +223,11 @@ export function firstNumericValue(data, name, fallback = 0) {
  *
  * @param {number|null} decimals  null/undefined → no rounding.
  * @param {string} [units]        appended after a space when non-empty.
- * @param {boolean} [si]          SI-abbreviate values ≥ 1k (#159). Takes
- *   precedence over `decimals` for those values — the per-component SI
- *   toggle is the off switch when full digits are wanted. Values under
- *   1k keep the decimals/raw behavior.
+ * @param {boolean} [si]          3-significant-digit formatting (#159):
+ *   values ≥ 1k SI-abbreviate (taking precedence over `decimals` — the
+ *   per-component SI toggle is the off switch when full digits are
+ *   wanted); smaller values round to 3 significant digits UNLESS an
+ *   explicit `decimals` is set, which wins for the sub-1k range.
  * @returns {(val:any)=>string}
  */
 export function makeValueFormatter(decimals, units = '', si = false) {
@@ -237,7 +238,7 @@ export function makeValueFormatter(decimals, units = '', si = false) {
     const num = Number(val);
     if (!Number.isFinite(num)) return String(val);
     let str;
-    if (si && Math.abs(num) >= 1000) str = formatSI(num);
+    if (si && (d == null || Math.abs(num) >= 1000)) str = formatSI(num);
     else str = d == null ? String(num) : num.toFixed(d);
     return u ? `${str} ${u}` : str;
   };
@@ -290,15 +291,20 @@ export function formatSIWithPrefix(val, prefix) {
 }
 
 /**
- * Per-value SI format for data labels (each point picks its own
- * prefix). Values under 1k pass through unchanged — small numbers keep
- * their existing rendering.
+ * Per-value SI format for data labels and tooltip values (each value
+ * picks its own prefix). Values under 1k get no prefix but still round
+ * to 3 significant digits — standard engineering practice, and what
+ * turns float noise like 43.96111111111125 into "44".
  */
 export function formatSI(val) {
   if (val == null) return '';
   const num = Number(val);
   if (!Number.isFinite(num)) return String(val);
-  return formatSIWithPrefix(num, siPrefixFor(num));
+  const prefix = siPrefixFor(num);
+  if (prefix) return formatSIWithPrefix(num, prefix);
+  // parseFloat trims the trailing zeros toPrecision keeps ("44.0" → 44)
+  // and collapses its exponential edge cases back to plain notation.
+  return String(parseFloat(num.toPrecision(3)));
 }
 
 /**

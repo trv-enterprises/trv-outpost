@@ -530,6 +530,16 @@ const data = {
   check('case 20: tooltip 49791.988… → 49.8k', typeof ttLine === 'string' && ttLine.includes('49.8k'));
   const ttSmall = ttFmt && ttFmt([{ axisValueLabel: 'x', seriesName: 's', value: 42.5 }]);
   check('case 20: tooltip small value passes through', typeof ttSmall === 'string' && ttSmall.includes('42.5'));
+  // Sub-1k float noise → 3 significant digits (43.96111111111125 → 44),
+  // unless the user pinned explicit tooltip decimals, which win below 1k.
+  const ttNoise = ttFmt && ttFmt([{ axisValueLabel: 'x', seriesName: 'avg', value: 43.96111111111125 }]);
+  check('case 20: tooltip sub-1k noise → 3 sig digits (44)', typeof ttNoise === 'string' && /avg: 44(<|$)/.test(ttNoise));
+  const withDecimals = buildOption(
+    { ...values, options: { tooltip: { decimals: 2 } } },
+    bigData,
+    { formatCellValue: fmt, chartType: 'line' },
+  ).tooltip.formatter([{ axisValueLabel: 'x', seriesName: 'avg', value: 43.96111111111125 }]);
+  check('case 20: explicit decimals win below 1k (43.96)', withDecimals.includes('43.96'));
 
   // Toggle OFF → no formatters, ticks untouched.
   const off = buildOption(
