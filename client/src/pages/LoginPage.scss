@@ -10,6 +10,7 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  min-height: 100dvh; // mobile: track the visible viewport (#138)
   background-color: var(--cds-background);
   padding: spacing.$spacing-05;
 }

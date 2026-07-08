@@ -23,6 +23,18 @@
     .viewer-toolbar {
       padding: spacing.$spacing-03 spacing.$spacing-05;
     }
+
+    // iPadOS Safari overlays its own fullscreen-exit (✕) pill at the
+    // TOP-LEFT of the screen, directly on top of the dashboard name
+    // (#138). There is no web API to move or style that system control,
+    // so on touch devices reserve a left gutter wide enough to clear it.
+    // pointer:coarse scopes this to touch-primary devices — desktop
+    // fullscreen (no system pill) keeps the flush title.
+    @media (pointer: coarse) {
+      .viewer-toolbar {
+        padding-left: 3.5rem;
+      }
+    }
   }
 
   // Edit mode: the toolbar carries more controls (dimension picker, zoom,

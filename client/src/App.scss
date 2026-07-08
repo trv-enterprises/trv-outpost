@@ -355,6 +355,12 @@ button.cds--header__action {
   padding: 0;
   height: calc(100vh - 48px); // Fixed height to fill viewport
   max-height: calc(100vh - 48px); // Ensure no overflow
+  // Mobile browsers: 100vh is the LARGE viewport (browser chrome
+  // collapsed), so with the URL bar visible the shell overflows the
+  // bottom edge (#138, iPad). dvh tracks the actual visible viewport;
+  // browsers without dvh keep the vh fallback above.
+  height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow: hidden !important; // Override Carbon defaults - child pages manage their own scroll
   transition: margin-left 0.11s cubic-bezier(0.2, 0, 1, 0.9);
 
@@ -383,6 +389,7 @@ button.cds--header__action {
   align-items: center;
   justify-content: center;
   height: calc(100vh - 48px);
+  height: calc(100dvh - 48px); // mobile: track the visible viewport (#138)
   color: var(--cds-text-secondary);
   text-align: center;
 
