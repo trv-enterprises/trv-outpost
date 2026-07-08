@@ -27,6 +27,7 @@ import {
   TRANSPARENT_BG,
   columnIndex,
   makeValueFormatter,
+  makeSIAxisFormatter,
 } from '../option-helpers.js';
 import { getScheme } from './band-schemes.js';
 
@@ -147,6 +148,12 @@ function baseOption(categories, yMin, yMax, legendPos, opts = {}, extra = {}) {
     axisLine: { lineStyle: { color: AXIS_LINE } },
     splitLine: { lineStyle: { color: SPLIT_LINE } },
   };
+  // SI-prefix tick labels (#159): the axis bounds are always concrete
+  // here (auto band envelope or manual range), so they bound every tick.
+  if (opts.chartSiPrefixes !== false) {
+    const siFmt = makeSIAxisFormatter([yAxisDef.min, yAxisDef.max]);
+    if (siFmt) yAxisDef.axisLabel.formatter = siFmt;
+  }
 
   // X-axis label angle (0 = horizontal default).
   const rotate = Number(opts.xAxisLabelRotate) || 0;

@@ -372,6 +372,7 @@ const DEFAULT_CHART_OPTIONS = {
   chartStacked: false,
   chartSmooth: true,
   chartShowDataLabels: false,
+  chartSiPrefixes: true,      // SI-prefix abbreviation of large values (#159)
   chartShowZoomSlider: false,
   xAxisLabelRotate: 0, // x-axis category label angle (deg): 0 | 30 | 45 | 90
 };
@@ -3920,6 +3921,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // chart_options
                       chart_smooth: chartOptions.chartSmooth !== false,
                       chart_show_data_labels: Boolean(chartOptions.chartShowDataLabels),
+                      chart_si_prefixes: chartOptions.chartSiPrefixes !== false,
                       chart_show_zoom_slider: Boolean(chartOptions.chartShowZoomSlider),
                       x_axis_label_rotate: chartOptions.xAxisLabelRotate ?? 0,
                       show_symbol: chartOptions.showSymbol !== false,
@@ -4056,6 +4058,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'chart_smooth': updateChartOption('chartSmooth', value); break;
                         case 'chart_show_data_labels': updateChartOption('chartShowDataLabels', value); break;
+                        case 'chart_si_prefixes': updateChartOption('chartSiPrefixes', value); break;
                         case 'chart_show_zoom_slider': updateChartOption('chartShowZoomSlider', value); break;
                         // Select values arrive as strings; store a number so the
                         // render's Number() coercion + axis rotate stay clean.

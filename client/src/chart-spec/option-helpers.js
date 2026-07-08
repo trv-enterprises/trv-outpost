@@ -237,6 +237,88 @@ export function makeValueFormatter(decimals, units = '') {
   };
 }
 
+// ── SI-prefix abbreviation for large values (#159) ───────────────────
+
+// Ordered largest-first so the first match wins. Values below 1k get no
+// prefix (nothing to abbreviate).
+const SI_PREFIXES = [
+  { value: 1e12, symbol: 'T' },
+  { value: 1e9, symbol: 'G' },
+  { value: 1e6, symbol: 'M' },
+  { value: 1e3, symbol: 'k' },
+];
+
+/**
+ * Pick the SI prefix for a magnitude. Returns `{ value, symbol }` or
+ * null when |maxAbs| < 1000 (leave the value unabbreviated).
+ */
+export function siPrefixFor(maxAbs) {
+  const m = Math.abs(Number(maxAbs));
+  if (!Number.isFinite(m)) return null;
+  for (const p of SI_PREFIXES) {
+    if (m >= p.value) return p;
+  }
+  return null;
+}
+
+/**
+ * Format one value against a FIXED prefix, 3 significant digits with
+ * trailing zeros trimmed (14,340,393,939 @ G → "14.3G"). The caller
+ * picks the prefix once per axis so every tick shares the same suffix.
+ * A null prefix passes the value through unformatted.
+ */
+export function formatSIWithPrefix(val, prefix) {
+  if (val == null) return '';
+  const num = Number(val);
+  if (!Number.isFinite(num)) return String(val);
+  if (!prefix) return String(num);
+  const scaled = num / prefix.value;
+  const abs = Math.abs(scaled);
+  // 3 significant digits: <10 → 2 decimals, <100 → 1, else integer.
+  // parseFloat trims trailing zeros so ticks read "5G", not "5.00G".
+  let str;
+  if (abs >= 100) str = String(Math.round(scaled));
+  else if (abs >= 10) str = String(parseFloat(scaled.toFixed(1)));
+  else str = String(parseFloat(scaled.toFixed(2)));
+  return `${str}${prefix.symbol}`;
+}
+
+/**
+ * Per-value SI format for data labels (each point picks its own
+ * prefix). Values under 1k pass through unchanged — small numbers keep
+ * their existing rendering.
+ */
+export function formatSI(val) {
+  if (val == null) return '';
+  const num = Number(val);
+  if (!Number.isFinite(num)) return String(val);
+  return formatSIWithPrefix(num, siPrefixFor(num));
+}
+
+/**
+ * Build an axisLabel.formatter that abbreviates with ONE shared prefix
+ * chosen from the axis's largest |value| — the issue #159 rule that all
+ * labels on an axis render with the same suffix. `range` (a manual
+ * {min, max} override) is folded into the magnitude so a pinned axis
+ * picks the prefix its ticks will actually reach. Returns null when the
+ * axis never leaves 3-digit territory, so callers skip the formatter
+ * entirely and ECharts' default tick rendering is untouched.
+ */
+export function makeSIAxisFormatter(values, range = {}) {
+  let maxAbs = 0;
+  const consider = (v) => {
+    if (v == null) return;
+    const n = Number(v);
+    if (Number.isFinite(n) && Math.abs(n) > maxAbs) maxAbs = Math.abs(n);
+  };
+  (values || []).forEach(consider);
+  consider(range?.min);
+  consider(range?.max);
+  const prefix = siPrefixFor(maxAbs);
+  if (!prefix) return null;
+  return (val) => formatSIWithPrefix(val, prefix);
+}
+
 // ── Shared option fragments ──────────────────────────────────────────
 
 /** Every chart renders on a transparent canvas (panel supplies bg). */

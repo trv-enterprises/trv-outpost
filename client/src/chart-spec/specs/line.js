@@ -30,6 +30,8 @@ import {
   paletteForCount,
   makeValueFormatter,
   applyAccumulator,
+  makeSIAxisFormatter,
+  formatSI,
 } from '../option-helpers.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
@@ -145,7 +147,7 @@ function normalizeYEntry(e) {
 }
 
 function buildSeriesForColumn(entry, idx, ctx) {
-  const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, chartType, seriesName, accumulatorResetPolicy } = ctx;
+  const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, siDataLabels, chartType, seriesName, accumulatorResetPolicy } = ctx;
   const colIdx = columnIndex(entry.column);
   let data = rows.map((r) => r[colIdx]);
   // Accumulator mode: plot this column's delta from the previous point (#8).
@@ -160,7 +162,12 @@ function buildSeriesForColumn(entry, idx, ctx) {
   if ((chartType === 'line' || chartType === 'area') && smooth) series.smooth = true;
   if (showSymbol === false) series.showSymbol = false;
   if (sampling && sampling !== 'off') series.sampling = sampling;
-  if (showDataLabels) series.label = { show: true, position: 'top' };
+  if (showDataLabels) {
+    series.label = { show: true, position: 'top' };
+    // SI abbreviation (#159): each point label picks its own prefix
+    // (unlike axis ticks, which share one). Only large values change.
+    if (siDataLabels) series.label.formatter = (p) => formatSI(p.value);
+  }
 
   // Resolve this series' color first so BOTH the line (itemStyle) and the area
   // fill (areaStyle) use it. ECharts' areaStyle does NOT inherit itemStyle.color
@@ -199,7 +206,9 @@ function buildSeriesForColumn(entry, idx, ctx) {
   return series;
 }
 
-function buildYAxisDefs(dualAxis, range) {
+function buildYAxisDefs(dualAxis, range, si = {}) {
+  // si.left / si.right are shared-prefix axisLabel formatters (#159),
+  // or null when that axis's values never reach 1k (ticks unchanged).
   const fromRange = (side) => {
     const r = (range && range[side]) || {};
     const def = { type: r.scale === 'log' ? 'log' : 'value' };
@@ -211,11 +220,13 @@ function buildYAxisDefs(dualAxis, range) {
     const left = fromRange('left');
     const right = fromRange('right');
     return [
-      { ...left, axisLabel: { color: LEFT_AXIS_COLOR }, axisLine: { show: true, lineStyle: { color: LEFT_AXIS_COLOR } } },
-      { ...right, axisLabel: { color: RIGHT_AXIS_COLOR }, axisLine: { show: true, lineStyle: { color: RIGHT_AXIS_COLOR } } },
+      { ...left, axisLabel: { color: LEFT_AXIS_COLOR, ...(si.left ? { formatter: si.left } : {}) }, axisLine: { show: true, lineStyle: { color: LEFT_AXIS_COLOR } } },
+      { ...right, axisLabel: { color: RIGHT_AXIS_COLOR, ...(si.right ? { formatter: si.right } : {}) }, axisLine: { show: true, lineStyle: { color: RIGHT_AXIS_COLOR } } },
     ];
   }
-  return fromRange('left');
+  const def = fromRange('left');
+  if (si.left) def.axisLabel = { formatter: si.left };
+  return def;
 }
 
 /**
@@ -470,6 +481,10 @@ export function buildOption(values, data, helpers = {}) {
   const smooth = opts.chartSmooth !== false;
   const showSymbol = opts.showSymbol !== false;
   const showDataLabels = Boolean(opts.chartShowDataLabels);
+  // SI-prefix abbreviation for large values (#159). Default ON —
+  // existing records without the key get it too; the editor toggle
+  // stores false to opt out.
+  const siPrefixes = opts.chartSiPrefixes !== false;
   const sampling = opts.sampling || 'off';
 
   let series = [];
@@ -523,6 +538,7 @@ export function buildOption(values, data, helpers = {}) {
             showSymbol,
             sampling,
             showDataLabels,
+            siDataLabels: siPrefixes,
             chartType,
             seriesName: String(g.sv),
           },
@@ -555,6 +571,7 @@ export function buildOption(values, data, helpers = {}) {
       showSymbol,
       sampling,
       showDataLabels,
+      siDataLabels: siPrefixes,
       chartType,
       seriesName: entry.label || entry.column,
       accumulatorResetPolicy,
@@ -570,7 +587,24 @@ export function buildOption(values, data, helpers = {}) {
     if (series[0]) series[0] = { ...series[0], markLine };
   }
 
-  const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange);
+  // SI axis-label formatters (#159): one shared prefix per axis, chosen
+  // from that axis's largest |value| across its series (plus any manual
+  // range bounds). Left and right axes each pick their own prefix.
+  let siAxis = {};
+  if (siPrefixes) {
+    const leftVals = [];
+    const rightVals = [];
+    series.forEach((s) => {
+      const bucket = s.yAxisIndex === 1 ? rightVals : leftVals;
+      (s.data || []).forEach((v) => bucket.push(v));
+    });
+    siAxis = {
+      left: makeSIAxisFormatter(leftVals, opts.yAxisRange?.left),
+      right: makeSIAxisFormatter(rightVals, opts.yAxisRange?.right),
+    };
+  }
+
+  const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange, siAxis);
 
   // Dual-axis dead-axis hide. When the user toggles off the only series
   // bound to one of the two y-axes via the legend, ECharts hides the

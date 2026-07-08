@@ -23,6 +23,8 @@ import {
   columnIndex,
   columnValues,
   makeValueFormatter,
+  makeSIAxisFormatter,
+  formatSI,
 } from '../option-helpers.js';
 
 // Bubble sizing: map a size column's values onto a pixel-diameter range
@@ -161,6 +163,8 @@ export function buildOption(values, data, helpers = {}) {
 
   const symbol = opts.symbolShape || 'circle';
   const baseSize = toNumber(opts.symbolSize, 15);
+  // SI-prefix abbreviation for large values (#159). Default ON.
+  const siPrefixes = opts.chartSiPrefixes !== false;
 
   // Bubble sizer built once over the whole size column so scaling is
   // consistent across (possibly multiple) series.
@@ -184,6 +188,8 @@ export function buildOption(values, data, helpers = {}) {
   // Data labels: show the y-value next to each point (opt-in, mirrors line).
   if (opts.chartShowDataLabels) {
     seriesBase.label = { show: true, position: 'top', color: COLOR_TEXT_SECONDARY };
+    // SI abbreviation (#159) on the labeled y-value; per-point prefix.
+    if (siPrefixes) seriesBase.label.formatter = (p) => formatSI(p.value?.[1]);
   }
 
   let series;
@@ -221,6 +227,16 @@ export function buildOption(values, data, helpers = {}) {
     ? (val) => formatCellValue(val, xCol, { timestampFormat: xTsFormat })
     : null;
 
+  // SI axis-label formatters (#159): shared prefix per axis from its
+  // largest |value| (+ manual range bounds). The x-axis only gets one
+  // when it's NOT a timestamp — time formatting wins over abbreviation.
+  const ySiFormatter = siPrefixes && yIdx >= 0
+    ? makeSIAxisFormatter(rows.map((r) => r[yIdx]), opts.yAxisRange?.left)
+    : null;
+  const xSiFormatter = siPrefixes && !xTsFormat && xIdx >= 0
+    ? makeSIAxisFormatter(rows.map((r) => r[xIdx]), opts.xAxisRange)
+    : null;
+
   // Tooltip — point mode shows x/y (and size when present), formatted.
   const tt = opts.tooltip || {};
   const fmt = makeValueFormatter(tt.decimals, tt.units);
@@ -249,8 +265,8 @@ export function buildOption(values, data, helpers = {}) {
     backgroundColor: TRANSPARENT_BG,
     tooltip,
     grid: { top: 30, left: 50, right: 20, bottom: gridBottom, containLabel: true },
-    xAxis: withAxisName(buildValueAxis(opts.xAxisRange, xLabelFormatter, opts.xAxisLabelRotate), dm.x_axis_label || '', true),
-    yAxis: withAxisName(buildValueAxis(opts.yAxisRange?.left), dm.y_axis_label || '', false),
+    xAxis: withAxisName(buildValueAxis(opts.xAxisRange, xLabelFormatter || xSiFormatter, opts.xAxisLabelRotate), dm.x_axis_label || '', true),
+    yAxis: withAxisName(buildValueAxis(opts.yAxisRange?.left, ySiFormatter), dm.y_axis_label || '', false),
     series,
   };
 

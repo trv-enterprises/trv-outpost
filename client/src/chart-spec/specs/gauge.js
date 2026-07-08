@@ -17,6 +17,7 @@ import {
   TRANSPARENT_BG,
   toNumber,
   firstNumericValue,
+  makeSIAxisFormatter,
 } from '../option-helpers.js';
 
 /**
@@ -77,6 +78,13 @@ export function buildOption(values, data) {
   };
   const detailFormatter = (v) => `${formatValue(v)}${unit ? unit : ''}`;
 
+  // SI-prefix dial tick labels (#159): min/max bound every tick, so a
+  // shared prefix from them covers the whole dial. The center detail
+  // value keeps its own decimals/unit formatting (full precision).
+  const siAxisFormatter = opts.chartSiPrefixes !== false
+    ? makeSIAxisFormatter([gaugeMin, gaugeMax])
+    : null;
+
   return {
     backgroundColor: TRANSPARENT_BG,
     series: [{
@@ -92,7 +100,7 @@ export function buildOption(values, data) {
       },
       axisTick: { show: false },
       splitLine: { length: 8, lineStyle: { width: 2, color: '#999' } },
-      axisLabel: { color: '#999' },
+      axisLabel: { color: '#999', ...(siAxisFormatter ? { formatter: siAxisFormatter } : {}) },
       pointer: { itemStyle: { color: COLOR_PRIMARY } },
       anchor: { show: true, showAbove: true, size: 14, itemStyle: { borderWidth: 6 } },
       title: { show: false },

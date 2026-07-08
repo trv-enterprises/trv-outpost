@@ -68,6 +68,7 @@ func ChartOptionsSchema() map[string]interface{} {
 			"chartSmooth":         map[string]interface{}{"type": "boolean", "description": "Smooth (curved) line segments. line/area only."},
 			"showSymbol":          map[string]interface{}{"type": "boolean", "description": "Show point markers on the line. Turn off for dense time series. line/area only."},
 			"chartShowDataLabels": map[string]interface{}{"type": "boolean", "description": "Render the value next to each data point."},
+			"chartSiPrefixes":     map[string]interface{}{"type": "boolean", "description": "Abbreviate large numbers with SI prefixes at 3 significant digits (14,340,393,939 → 14.3G) on axis ticks, gauge dial labels, and data labels; all labels on one axis share the same prefix. Default TRUE — only set this key (false) when the user asks for full/unabbreviated numbers."},
 			"chartShowZoomSlider": map[string]interface{}{"type": "boolean", "description": "Show the bottom zoom/pan slider. line/area/bar only."},
 			"xAxisLabelRotate": map[string]interface{}{
 				"type":        "number",
@@ -121,7 +122,7 @@ func ChartOptionsSchema() map[string]interface{} {
 var ChartOptionKeys = map[string]struct{}{
 	"yAxisRange": {}, "tooltip": {}, "yThresholds": {}, "yThresholdRenderMode": {},
 	"sampling": {}, "legend": {}, "chartSmooth": {}, "showSymbol": {},
-	"chartShowDataLabels": {}, "chartShowZoomSlider": {}, "chartStacked": {},
+	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
 	"xAxisLabelRotate": {},
 	"bandedBarStyle": {}, "numberFormat": {}, "numberDateFormat": {},
 	"numberDecimals": {}, "numberUnit": {}, "numberSize": {}, "title": {},

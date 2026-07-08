@@ -496,6 +496,50 @@ const data = {
   check('case 19: legacy accumulator_mode → both columns delta', mixed && legacy[0].data[1] === 10 && legacy[1].data[1] === 5);
 }
 
+// --- Case 20: SI-prefix axis + data labels (#159) ---
+{
+  const fmt = (val) => String(val ?? '');
+  const bigData = {
+    columns: ['ts', 'bytes'],
+    rows: [
+      [1700000000000, 14340393939],
+      [1700000060000, 9200000000],
+      [1700000120000, 500000000],
+    ],
+  };
+  const values = {
+    data_mapping: { x_axis: 'ts', y_axis: [{ column: 'bytes' }] },
+    options: { chartShowDataLabels: true },
+  };
+  const opt = buildOption(values, bigData, { formatCellValue: fmt, chartType: 'line' });
+  const axisFmt = opt.yAxis?.axisLabel?.formatter;
+  check('case 20: SI default ON → y-axis gets a formatter', typeof axisFmt === 'function');
+  check('case 20: 14,340,393,939 → 14.3G', axisFmt && axisFmt(14340393939) === '14.3G');
+  check('case 20: shared prefix — 500M renders as 0.5G on the same axis', axisFmt && axisFmt(500000000) === '0.5G');
+  check('case 20: round ticks trim zeros (5e9 → 5G)', axisFmt && axisFmt(5000000000) === '5G');
+  const lblFmt = opt.series?.[0]?.label?.formatter;
+  check('case 20: data labels get per-point SI formatter', typeof lblFmt === 'function');
+  check('case 20: data label 14,340,393,939 → 14.3G', lblFmt && lblFmt({ value: 14340393939 }) === '14.3G');
+  check('case 20: data label small value passes through', lblFmt && lblFmt({ value: 42.5 }) === '42.5');
+
+  // Toggle OFF → no formatters, ticks untouched.
+  const off = buildOption(
+    { ...values, options: { chartShowDataLabels: true, chartSiPrefixes: false } },
+    bigData,
+    { formatCellValue: fmt, chartType: 'line' },
+  );
+  check('case 20: chartSiPrefixes:false → no y-axis formatter', off.yAxis?.axisLabel?.formatter === undefined);
+  check('case 20: chartSiPrefixes:false → no data-label formatter', off.series?.[0]?.label?.formatter === undefined);
+
+  // Small-valued axis → no formatter even with SI on (nothing to abbreviate).
+  const small = buildOption(
+    { data_mapping: { x_axis: 'ts', y_axis: [{ column: 'bytes' }] }, options: {} },
+    { columns: ['ts', 'bytes'], rows: [[1, 12], [2, 900]] },
+    { formatCellValue: fmt, chartType: 'line' },
+  );
+  check('case 20: values under 1k → no formatter attached', small.yAxis?.axisLabel?.formatter === undefined);
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

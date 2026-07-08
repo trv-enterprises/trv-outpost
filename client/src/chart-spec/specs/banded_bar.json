@@ -120,6 +120,14 @@
               "default": false
             },
             {
+              "id": "chart_si_prefixes",
+              "binds": "options.chartSiPrefixes",
+              "type": "boolean",
+              "label": "Abbreviate large values (SI)",
+              "helperText": "Show large numbers with SI prefixes and 3 significant digits (14,340,393,939 → 14.3G). All labels on an axis share one prefix.",
+              "default": true
+            },
+            {
               "id": "show_symbol",
               "binds": "options.showSymbol",
               "type": "boolean",
