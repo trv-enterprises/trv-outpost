@@ -6,6 +6,28 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.39.1] — 2026-07-08
+
+### Changed
+
+- **Large numbers abbreviate with SI prefixes (#159).** Chart axis ticks,
+  gauge dial labels, data labels, and tooltip values now render large numbers
+  with SI prefixes at 3 significant digits (14,340,393,939 → 14.3G); all
+  labels on one axis share the prefix chosen from that axis's largest value.
+  Sub-1k tooltip/data-label values also round to 3 significant digits
+  (43.96111111111125 → 44) unless an explicit tooltip Decimals is set. On by
+  default for all charts; a new "Abbreviate large values (SI)" toggle in Chart
+  Options opts out per component. Data tables, CSV downloads, and number-tile
+  formats are unchanged.
+
+### Fixed
+
+- **iPad viewport sizing (#138).** Pages no longer overflow the bottom edge on
+  iPad/mobile browsers — full-height layouts now use `dvh` (visible-viewport)
+  sizing with the old `vh` fallback. In fullscreen, the dashboard name starts
+  clear of iPadOS Safari's system exit pill (reserved left gutter on touch
+  devices; desktop unchanged).
+
 ## [0.39.0] — 2026-07-07
 
 ### Added
