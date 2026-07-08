@@ -65,7 +65,7 @@ export function buildOption(values, data) {
   // shared formatter handles decimals + unit suffix; ECharts supplies
   // the percent via params.percent.
   const tt = opts.tooltip || {};
-  const formatValue = makeValueFormatter(tt.decimals, tt.units);
+  const formatValue = makeValueFormatter(tt.decimals, tt.units, opts.chartSiPrefixes !== false);
 
   const option = {
     backgroundColor: TRANSPARENT_BG,

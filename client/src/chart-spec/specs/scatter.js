@@ -239,7 +239,7 @@ export function buildOption(values, data, helpers = {}) {
 
   // Tooltip — point mode shows x/y (and size when present), formatted.
   const tt = opts.tooltip || {};
-  const fmt = makeValueFormatter(tt.decimals, tt.units);
+  const fmt = makeValueFormatter(tt.decimals, tt.units, siPrefixes);
   const fmtX = xLabelFormatter ? (v) => xLabelFormatter(v) : fmt;
   const tooltip = tt.mode === 'hidden'
     ? { show: false }

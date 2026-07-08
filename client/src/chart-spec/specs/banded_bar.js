@@ -263,7 +263,7 @@ export function buildOption(values, data, helpers = {}) {
   // regardless of mode (a banded chart's tooltip is inherently the whole
   // envelope at the hovered x, not a single series).
   const tt = opts.tooltip || {};
-  const fmtVal = makeValueFormatter(tt.decimals != null ? tt.decimals : 3, tt.units || '');
+  const fmtVal = makeValueFormatter(tt.decimals != null ? tt.decimals : 3, tt.units || '', opts.chartSiPrefixes !== false);
   const tooltipFormatter = (params) => {
     const i = params[0]?.dataIndex;
     if (i == null) return '';

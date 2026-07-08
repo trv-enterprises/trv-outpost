@@ -223,16 +223,22 @@ export function firstNumericValue(data, name, fallback = 0) {
  *
  * @param {number|null} decimals  null/undefined → no rounding.
  * @param {string} [units]        appended after a space when non-empty.
+ * @param {boolean} [si]          SI-abbreviate values ≥ 1k (#159). Takes
+ *   precedence over `decimals` for those values — the per-component SI
+ *   toggle is the off switch when full digits are wanted. Values under
+ *   1k keep the decimals/raw behavior.
  * @returns {(val:any)=>string}
  */
-export function makeValueFormatter(decimals, units = '') {
+export function makeValueFormatter(decimals, units = '', si = false) {
   const d = decimals == null ? null : Number(decimals);
   const u = units || '';
   return (val) => {
     if (val == null) return '';
     const num = Number(val);
     if (!Number.isFinite(num)) return String(val);
-    const str = d == null ? String(num) : num.toFixed(d);
+    let str;
+    if (si && Math.abs(num) >= 1000) str = formatSI(num);
+    else str = d == null ? String(num) : num.toFixed(d);
     return u ? `${str} ${u}` : str;
   };
 }

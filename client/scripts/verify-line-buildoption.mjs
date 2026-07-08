@@ -522,6 +522,15 @@ const data = {
   check('case 20: data label 14,340,393,939 → 14.3G', lblFmt && lblFmt({ value: 14340393939 }) === '14.3G');
   check('case 20: data label small value passes through', lblFmt && lblFmt({ value: 42.5 }) === '42.5');
 
+  // Tooltip values abbreviate too (the hover readout follows the toggle);
+  // small values keep raw precision.
+  const ttFmt = opt.tooltip?.formatter;
+  check('case 20: tooltip formatter exists', typeof ttFmt === 'function');
+  const ttLine = ttFmt && ttFmt([{ axisValueLabel: '7/7, 5:00 AM', seriesName: 'avg', value: 49791.98888888889 }]);
+  check('case 20: tooltip 49791.988… → 49.8k', typeof ttLine === 'string' && ttLine.includes('49.8k'));
+  const ttSmall = ttFmt && ttFmt([{ axisValueLabel: 'x', seriesName: 's', value: 42.5 }]);
+  check('case 20: tooltip small value passes through', typeof ttSmall === 'string' && ttSmall.includes('42.5'));
+
   // Toggle OFF → no formatters, ticks untouched.
   const off = buildOption(
     { ...values, options: { chartShowDataLabels: true, chartSiPrefixes: false } },
@@ -530,6 +539,8 @@ const data = {
   );
   check('case 20: chartSiPrefixes:false → no y-axis formatter', off.yAxis?.axisLabel?.formatter === undefined);
   check('case 20: chartSiPrefixes:false → no data-label formatter', off.series?.[0]?.label?.formatter === undefined);
+  const offTt = off.tooltip?.formatter?.([{ axisValueLabel: 'x', seriesName: 's', value: 49791.98888888889 }]);
+  check('case 20: chartSiPrefixes:false → tooltip raw value', typeof offTt === 'string' && offTt.includes('49791.98888888889'));
 
   // Small-valued axis → no formatter even with SI on (nothing to abbreviate).
   const small = buildOption(

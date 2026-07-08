@@ -232,9 +232,10 @@ function buildYAxisDefs(dualAxis, range, si = {}) {
 /**
  * Convert the spec's tooltip config into an ECharts `tooltip` block.
  * Mode 'hidden' → tooltip disabled. Mode 'single' → trigger 'item'.
- * Mode 'multi' (default) → trigger 'axis'.
+ * Mode 'multi' (default) → trigger 'axis'. `si` abbreviates large
+ * values (#159) — the hover readout follows the chart's SI toggle.
  */
-function buildTooltip(tt) {
+function buildTooltip(tt, si) {
   if (!tt || tt.mode === 'hidden') return { show: false };
   const block = { trigger: tt.mode === 'single' ? 'item' : 'axis' };
 
@@ -243,7 +244,7 @@ function buildTooltip(tt) {
   // is the right answer when a formatter genuinely needs JS, and
   // adding a freeform code field here multiplies the eval surface
   // for marginal benefit. The 80% case (decimals + units) is here.
-  const formatValue = makeValueFormatter(tt.decimals, tt.units);
+  const formatValue = makeValueFormatter(tt.decimals, tt.units, si);
   // Real function on the option literal — Stage 2 buildOption returns
   // a live JS object to React, so we don't need the __raw marker
   // trick the original draft used to keep it JSON-serializable.
@@ -578,7 +579,7 @@ export function buildOption(values, data, helpers = {}) {
     }));
   }
 
-  const tooltip = buildTooltip(opts.tooltip || {});
+  const tooltip = buildTooltip(opts.tooltip || {}, siPrefixes);
   const legend = buildLegend(opts.legend || {}, dualAxis, series.length > 1);
 
   const { markLine, visualMap, labelGutter } = buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
