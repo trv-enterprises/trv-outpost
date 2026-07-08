@@ -41,6 +41,16 @@ check('ceiling stop fraction = 1', opt.series[0].axisLine.lineStyle.color[2][0] 
 check('detail formatter appends unit', opt.series[0].detail.formatter(42) === '42%');
 check('NO option.title (ChartShell owns the title)', opt.title === undefined);
 
+// Center value precision (#159): SI mode (default) + auto decimals →
+// 3 significant digits; explicit gaugeDecimals wins; SI off → legacy locale.
+const fmtSi = opt.series[0].detail.formatter;
+check('SI default: float noise → 3 sig digits', fmtSi(44.69111) === '44.7%', fmtSi(44.69111));
+check('SI default: large value abbreviates', fmtSi(1019.46) === '1.02k%', fmtSi(1019.46));
+const fmtDec = buildOption(vals({ options: { gaugeDecimals: '2' } }), data).series[0].detail.formatter;
+check('explicit gaugeDecimals wins over SI', fmtDec(44.69111) === '44.69%', fmtDec(44.69111));
+const fmtOff = buildOption(vals({ options: { chartSiPrefixes: false } }), data).series[0].detail.formatter;
+check('SI off → legacy locale format', fmtOff(1019.46) === '1,019.46%', fmtOff(1019.46));
+
 // legacy flat value_column fallback
 const legacy = buildOption({ data_mapping: { value_column: 'cpu_percent' }, options: {} }, data);
 check('falls back to data_mapping.value_column', legacy.series[0].data[0].value === 42);

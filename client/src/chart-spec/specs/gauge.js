@@ -18,6 +18,7 @@ import {
   toNumber,
   firstNumericValue,
   makeSIAxisFormatter,
+  formatSI,
 } from '../option-helpers.js';
 
 /**
@@ -65,6 +66,7 @@ export function buildOption(values, data) {
   // places, a number = exactly that many. Without this the raw float
   // prints in full (e.g. 11.390740740742459).
   const decimals = opts.gaugeDecimals;
+  const siPrefixes = opts.chartSiPrefixes !== false;
   const formatValue = (v) => {
     const n = Number(v);
     if (!Number.isFinite(n)) return `${v}`;
@@ -74,6 +76,10 @@ export function buildOption(values, data) {
         return n.toLocaleString('en-US', { minimumFractionDigits: places, maximumFractionDigits: places });
       }
     }
+    // SI mode + auto decimals → 3 significant digits, same precedence as
+    // tooltips/data labels (#159): explicit decimals above win; the SI
+    // toggle is the off switch back to the locale format below.
+    if (siPrefixes) return formatSI(n);
     return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
   };
   const detailFormatter = (v) => `${formatValue(v)}${unit ? unit : ''}`;
