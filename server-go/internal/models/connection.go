@@ -550,15 +550,6 @@ func (c *TSStoreConfig) BaseURL() string {
 	return fmt.Sprintf("%s://%s:%d", protocol, c.Host, c.Port)
 }
 
-// WebSocketURL returns the WebSocket base URL built from protocol, host, and port
-func (c *TSStoreConfig) WebSocketURL() string {
-	wsProtocol := "ws"
-	if c.Protocol == TSStoreProtocolHTTPS {
-		wsProtocol = "wss"
-	}
-	return fmt.Sprintf("%s://%s:%d", wsProtocol, c.Host, c.Port)
-}
-
 // PrometheusConfig represents configuration for Prometheus data sources
 type PrometheusConfig struct {
 	URL      string `json:"url" bson:"url" binding:"required"`           // Prometheus server URL (e.g., "http://localhost:9090")

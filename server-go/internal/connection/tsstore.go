@@ -13,9 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
@@ -245,103 +243,13 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 	return a.toRegistryResultSet(ctx, objects)
 }
 
-// Stream implements streaming for TSStore using WebSocket
+// Stream is not supported on the adapter: ts-store removed the /ws/read
+// endpoint this used to dial (v0.14.x), and live ts-store streaming runs
+// through the streaming manager's TSStoreStream (REST backfill + push)
+// instead. CanStream stays true in Capabilities — it describes the
+// connection type, whose streaming rides that manager path.
 func (a *TSStoreAdapter) Stream(ctx context.Context, query registry.Query) (<-chan registry.Record, error) {
-	recordChan := make(chan registry.Record, 100)
-
-	wsURL, err := a.buildWebSocketURL(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build WebSocket URL: %w", err)
-	}
-
-	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	headers := http.Header{}
-	// Auth rides in the handshake header, not the URL — ts-store auth is
-	// header-only except /ws/write (query credentials leak into access logs).
-	// NOTE: ts-store removed /ws/read (v0.14.x); this Stream path is not
-	// reachable for live streaming (manager routes tsstore to TSStoreStream).
-	if a.config.APIKey != "" {
-		headers.Set("X-API-Key", a.config.APIKey)
-	}
-	for k, v := range a.config.Headers {
-		headers.Set(k, v)
-	}
-
-	conn, _, err := dialer.DialContext(ctx, wsURL, headers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to TSStore WebSocket: %w", err)
-	}
-
-	go func() {
-		defer close(recordChan)
-		defer conn.Close()
-
-		if a.config.DataType == models.TSStoreDataTypeSchema {
-			schema, err := a.fetchSchemaInternal(ctx)
-			if err == nil && schema != nil {
-				schemaRecord := registry.Record{
-					"_type": "schema",
-					"schema": map[string]interface{}{
-						"version": schema.Version,
-						"fields":  a.schemaFieldsToInterface(schema.Fields),
-					},
-				}
-				select {
-				case recordChan <- schemaRecord:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-				_, messageBytes, err := conn.ReadMessage()
-				if err != nil {
-					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-						return
-					}
-					if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
-						continue
-					}
-					return
-				}
-
-				var msg wsMessage
-				if err := json.Unmarshal(messageBytes, &msg); err != nil {
-					continue
-				}
-
-				switch msg.Type {
-				case "data":
-					record := a.wsMessageToRegistryRecord(&msg)
-					select {
-					case recordChan <- record:
-					case <-ctx.Done():
-						return
-					}
-				case "caught_up":
-					select {
-					case recordChan <- registry.Record{"_type": "caught_up"}:
-					case <-ctx.Done():
-						return
-					}
-				case "error":
-					select {
-					case recordChan <- registry.Record{"_type": "error", "message": msg.Message}:
-					case <-ctx.Done():
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	return recordChan, nil
+	return nil, fmt.Errorf("store.tsstore does not support adapter streaming — ts-store live data flows through the streaming manager")
 }
 
 // Write is not supported for TSStore adapter
@@ -512,34 +420,6 @@ func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadat
 	return &registry.ResultSet{Columns: columnOrder, Rows: rows, Metadata: metadata}, nil
 }
 
-// wsMessageToRegistryRecord converts WebSocket message to registry.Record
-func (a *TSStoreAdapter) wsMessageToRegistryRecord(msg *wsMessage) registry.Record {
-	record := registry.Record{
-		"_type":     "data",
-		"timestamp": msg.Timestamp / 1e9,
-	}
-
-	switch a.config.DataType {
-	case models.TSStoreDataTypeText:
-		var text string
-		if err := json.Unmarshal(msg.Data, &text); err != nil {
-			text = string(msg.Data)
-		}
-		record["data"] = text
-	default:
-		var data map[string]interface{}
-		if err := json.Unmarshal(msg.Data, &data); err != nil {
-			record["data"] = string(msg.Data)
-		} else {
-			for k, v := range data {
-				record[k] = v
-			}
-		}
-	}
-
-	return record
-}
-
 // fetchSchemaInternal fetches and caches schema
 func (a *TSStoreAdapter) fetchSchemaInternal(ctx context.Context) (*tsStoreSchema, error) {
 	if a.schema != nil {
@@ -571,58 +451,6 @@ func (a *TSStoreAdapter) fetchSchemaInternal(ctx context.Context) (*tsStoreSchem
 
 	a.schema = &schema
 	return a.schema, nil
-}
-
-// schemaFieldsToInterface converts schema fields to interface slice
-func (a *TSStoreAdapter) schemaFieldsToInterface(fields []tsStoreSchemaField) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(fields))
-	for i, f := range fields {
-		result[i] = map[string]interface{}{
-			"index": f.Index,
-			"name":  f.Name,
-			"type":  f.Type,
-		}
-	}
-	return result
-}
-
-// buildWebSocketURL constructs WebSocket URL
-func (a *TSStoreAdapter) buildWebSocketURL(query registry.Query) (string, error) {
-	baseURL := a.config.WebSocketURL()
-	params := url.Values{}
-
-	from := "now"
-	if f, ok := query.Params["from"].(string); ok && f != "" {
-		from = f
-	} else if f, ok := query.Params["from"].(int64); ok {
-		from = strconv.FormatInt(f, 10)
-	} else if f, ok := query.Params["from"].(float64); ok {
-		from = strconv.FormatInt(int64(f), 10)
-	}
-	// Range variable (structured path): a live stream clamps only the START —
-	// backfill from the window's `from` (Unix ns), then continue live. Relative
-	// intents resolve to an absolute start server-side.
-	if spec, ok := resolveRange(query.Params); ok {
-		if rf, _, rerr := rangeAbsolute(spec); rerr == nil {
-			if t, perr := time.Parse(time.RFC3339, rf); perr == nil {
-				from = strconv.FormatInt(t.UnixNano(), 10)
-			}
-		}
-	}
-	params.Set("from", from)
-
-	if a.config.DataType == models.TSStoreDataTypeSchema {
-		params.Set("format", "compact")
-	}
-
-	if filter := resolveFilterParam(query.Params); filter != "" {
-		params.Set("filter", filter)
-		if ignoreCase, ok := query.Params["filter_ignore_case"].(bool); ok && ignoreCase {
-			params.Set("filter_ignore_case", "true")
-		}
-	}
-
-	return fmt.Sprintf("%s/api/stores/%s/ws/read?%s", baseURL, a.config.StoreName, params.Encode()), nil
 }
 
 // addHeaders adds authentication and custom headers
@@ -800,16 +628,6 @@ type storeStatsResponse struct {
 	ActiveBlocks uint32 `json:"active_blocks"`
 	HeadBlock    uint32 `json:"head_block"`
 	TailBlock    uint32 `json:"tail_block"`
-}
-
-// wsMessage represents a WebSocket message from TSStore
-type wsMessage struct {
-	Type      string          `json:"type"`                // "data", "caught_up", "error"
-	Timestamp int64           `json:"timestamp,omitempty"` // For data messages
-	BlockNum  uint32          `json:"block_num,omitempty"` // For data messages
-	Size      uint32          `json:"size,omitempty"`      // For data messages
-	Data      json.RawMessage `json:"data,omitempty"`      // For data messages
-	Message   string          `json:"message,omitempty"`   // For error messages
 }
 
 // NewTSStoreDataSource creates a new TSStore datasource. Uses
@@ -1278,232 +1096,12 @@ func (t *TSStoreDataSource) addHeaders(req *http.Request) {
 	}
 }
 
-// Stream implements streaming for TSStore using WebSocket connection.
-// Connects to /api/stores/:store/ws/read endpoint for real-time data.
-// For schema stores, sends schema as first message, then streams compact data.
-// Query.Params can include:
-// - "from": start point - Unix nanosecond timestamp or "now" (default: "now")
-// - "filter": substring filter
-// - "filter_ignore_case": true/false for case-insensitive filtering
+// Stream is not supported on the datasource: ts-store removed the /ws/read
+// endpoint this used to dial (v0.14.x), and live ts-store streaming runs
+// through the streaming manager's TSStoreStream (REST backfill + push)
+// instead.
 func (t *TSStoreDataSource) Stream(ctx context.Context, query models.Query) (<-chan models.Record, error) {
-	recordChan := make(chan models.Record, 100)
-
-	// Build WebSocket URL
-	wsURL, err := t.buildWebSocketURL(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build WebSocket URL: %w", err)
-	}
-
-	// Connect to WebSocket
-	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
-	}
-
-	// Add custom headers for WebSocket connection
-	headers := http.Header{}
-	// Auth rides in the handshake header, not the URL — ts-store auth is
-	// header-only except /ws/write (query credentials leak into access logs).
-	// NOTE: ts-store removed /ws/read (v0.14.x); this Stream path is not
-	// reachable for live streaming (manager routes tsstore to TSStoreStream).
-	if t.config.APIKey != "" {
-		headers.Set("X-API-Key", t.config.APIKey)
-	}
-	for k, v := range t.config.Headers {
-		headers.Set(k, v)
-	}
-
-	conn, _, err := dialer.DialContext(ctx, wsURL, headers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to TSStore WebSocket: %w", err)
-	}
-
-	go func() {
-		defer close(recordChan)
-		defer conn.Close()
-
-		// For schema stores, send schema as first message
-		if t.config.DataType == models.TSStoreDataTypeSchema {
-			schema, err := t.fetchSchema(ctx)
-			if err == nil && schema != nil {
-				schemaRecord := models.Record{
-					"_type": "schema",
-					"schema": map[string]interface{}{
-						"version": schema.Version,
-						"fields":  t.schemaFieldsToInterface(schema.Fields),
-					},
-				}
-				select {
-				case recordChan <- schemaRecord:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-
-		// Read messages from WebSocket
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				// Set read deadline to allow checking context
-				conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-
-				_, messageBytes, err := conn.ReadMessage()
-				if err != nil {
-					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-						return
-					}
-					// Check if it's a timeout (expected, allows context check)
-					if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
-						continue
-					}
-					// Log error and try to reconnect or exit
-					// For now, just exit on error
-					return
-				}
-
-				var msg wsMessage
-				if err := json.Unmarshal(messageBytes, &msg); err != nil {
-					continue
-				}
-
-				switch msg.Type {
-				case "data":
-					record := t.wsMessageToRecord(&msg)
-					select {
-					case recordChan <- record:
-					case <-ctx.Done():
-						return
-					}
-				case "caught_up":
-					// Send a special record indicating we're caught up to real-time
-					caughtUpRecord := models.Record{
-						"_type": "caught_up",
-					}
-					select {
-					case recordChan <- caughtUpRecord:
-					case <-ctx.Done():
-						return
-					}
-				case "error":
-					// Send error as a record
-					errorRecord := models.Record{
-						"_type":   "error",
-						"message": msg.Message,
-					}
-					select {
-					case recordChan <- errorRecord:
-					case <-ctx.Done():
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	return recordChan, nil
-}
-
-// buildWebSocketURL constructs the WebSocket URL for TSStore streaming
-func (t *TSStoreDataSource) buildWebSocketURL(query models.Query) (string, error) {
-	// Get WebSocket base URL from config
-	baseURL := t.config.WebSocketURL()
-
-	// Build query parameters
-	params := url.Values{}
-
-	// Start point: default to "now" for real-time streaming
-	from := "now"
-	if f, ok := query.Params["from"].(string); ok && f != "" {
-		from = f
-	} else if f, ok := query.Params["from"].(int64); ok {
-		from = strconv.FormatInt(f, 10)
-	} else if f, ok := query.Params["from"].(float64); ok {
-		from = strconv.FormatInt(int64(f), 10)
-	}
-	// Range variable (structured path): a live stream has no fixed upper bound,
-	// so a range clamps only the START — backfill from the window's `from`
-	// instant, then continue live. ts-store's `from` is a Unix nanosecond
-	// timestamp. Relative intents resolve to an absolute start server-side.
-	if spec, ok := resolveRange(query.Params); ok {
-		if rf, _, rerr := rangeAbsolute(spec); rerr == nil {
-			if t, perr := time.Parse(time.RFC3339, rf); perr == nil {
-				from = strconv.FormatInt(t.UnixNano(), 10)
-			}
-		}
-	}
-	params.Set("from", from)
-
-	// For schema stores, request compact format
-	if t.config.DataType == models.TSStoreDataTypeSchema {
-		params.Set("format", "compact")
-	}
-
-	// Optional filter
-	if filter, ok := query.Params["filter"].(string); ok && filter != "" {
-		params.Set("filter", filter)
-		if ignoreCase, ok := query.Params["filter_ignore_case"].(bool); ok && ignoreCase {
-			params.Set("filter_ignore_case", "true")
-		}
-	}
-
-	return fmt.Sprintf("%s/api/stores/%s/ws/read?%s", baseURL, t.config.StoreName, params.Encode()), nil
-}
-
-// wsMessageToRecord converts a WebSocket data message to a Record
-func (t *TSStoreDataSource) wsMessageToRecord(msg *wsMessage) models.Record {
-	record := models.Record{
-		"_type":     "data",
-		"timestamp": msg.Timestamp / 1e9, // nanoseconds -> seconds
-	}
-
-	// Parse the data based on store type
-	switch t.config.DataType {
-	case models.TSStoreDataTypeText:
-		var text string
-		if err := json.Unmarshal(msg.Data, &text); err != nil {
-			text = string(msg.Data)
-		}
-		record["data"] = text
-
-	case models.TSStoreDataTypeSchema:
-		// Pass through compact data - frontend will expand using schema
-		var data map[string]interface{}
-		if err := json.Unmarshal(msg.Data, &data); err != nil {
-			record["data"] = string(msg.Data)
-		} else {
-			// Merge compact data into record (keys are indices like "1", "2", etc.)
-			for k, v := range data {
-				record[k] = v
-			}
-		}
-
-	default: // JSON
-		var data map[string]interface{}
-		if err := json.Unmarshal(msg.Data, &data); err != nil {
-			record["data"] = string(msg.Data)
-		} else {
-			for k, v := range data {
-				record[k] = v
-			}
-		}
-	}
-
-	return record
-}
-
-// schemaFieldsToInterface converts schema fields to interface slice for JSON
-func (t *TSStoreDataSource) schemaFieldsToInterface(fields []tsStoreSchemaField) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(fields))
-	for i, f := range fields {
-		result[i] = map[string]interface{}{
-			"index": f.Index,
-			"name":  f.Name,
-			"type":  f.Type,
-		}
-	}
-	return result
+	return nil, fmt.Errorf("tsstore does not support datasource streaming — ts-store live data flows through the streaming manager")
 }
 
 // Close closes the TSStore datasource
