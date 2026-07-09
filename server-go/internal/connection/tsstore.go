@@ -256,6 +256,13 @@ func (a *TSStoreAdapter) Stream(ctx context.Context, query registry.Query) (<-ch
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
 	headers := http.Header{}
+	// Auth rides in the handshake header, not the URL — ts-store auth is
+	// header-only except /ws/write (query credentials leak into access logs).
+	// NOTE: ts-store removed /ws/read (v0.14.x); this Stream path is not
+	// reachable for live streaming (manager routes tsstore to TSStoreStream).
+	if a.config.APIKey != "" {
+		headers.Set("X-API-Key", a.config.APIKey)
+	}
 	for k, v := range a.config.Headers {
 		headers.Set(k, v)
 	}
@@ -583,10 +590,6 @@ func (a *TSStoreAdapter) schemaFieldsToInterface(fields []tsStoreSchemaField) []
 func (a *TSStoreAdapter) buildWebSocketURL(query registry.Query) (string, error) {
 	baseURL := a.config.WebSocketURL()
 	params := url.Values{}
-
-	if a.config.APIKey != "" {
-		params.Set("api_key", a.config.APIKey)
-	}
 
 	from := "now"
 	if f, ok := query.Params["from"].(string); ok && f != "" {
@@ -1298,6 +1301,13 @@ func (t *TSStoreDataSource) Stream(ctx context.Context, query models.Query) (<-c
 
 	// Add custom headers for WebSocket connection
 	headers := http.Header{}
+	// Auth rides in the handshake header, not the URL — ts-store auth is
+	// header-only except /ws/write (query credentials leak into access logs).
+	// NOTE: ts-store removed /ws/read (v0.14.x); this Stream path is not
+	// reachable for live streaming (manager routes tsstore to TSStoreStream).
+	if t.config.APIKey != "" {
+		headers.Set("X-API-Key", t.config.APIKey)
+	}
 	for k, v := range t.config.Headers {
 		headers.Set(k, v)
 	}
@@ -1402,11 +1412,6 @@ func (t *TSStoreDataSource) buildWebSocketURL(query models.Query) (string, error
 
 	// Build query parameters
 	params := url.Values{}
-
-	// API key for authentication
-	if t.config.APIKey != "" {
-		params.Set("api_key", t.config.APIKey)
-	}
 
 	// Start point: default to "now" for real-time streaming
 	from := "now"
