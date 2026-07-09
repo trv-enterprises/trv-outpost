@@ -6,6 +6,29 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.39.2] — 2026-07-09
+
+### Added
+
+- **Assistant daily budget: graceful overage band (#58).** The per-user daily
+  token budget was enforced before every internal API call, so a user near the
+  cap could be hard-stopped mid-turn. Enforcement is now a turn-start gate with
+  a configurable grace band: under the cap is normal; between the cap and
+  cap + grace% new turns are still allowed and the chat panel shows a
+  persistent over-budget notice under the composer; past the grace band new
+  turns are refused. An in-flight turn always finishes — mid-turn calls never
+  re-check the daily cap. New admin setting
+  `assistant.daily_budget_overage_pct` (default 10, read at server boot);
+  per-user budget overrides compose with the percentage.
+
+### Fixed
+
+- **Gauge center value follows the 3-significant-digit SI rule (#159).** The
+  gauge center value was the last number surface on its own formatting,
+  showing 44.69 and 1,019.46 next to charts reading 44.7 and 1.02k. With SI on
+  and gauge Decimals at "auto" it now formats at 3 significant digits; an
+  explicit Decimals setting still wins, and SI off restores the locale format.
+
 ## [0.39.1] — 2026-07-08
 
 ### Changed
