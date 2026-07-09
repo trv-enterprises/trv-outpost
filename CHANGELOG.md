@@ -6,6 +6,26 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.39.3] — 2026-07-09
+
+### Fixed
+
+- **ts-store WebSocket dials no longer put the API key in the URL (#160).**
+  The next ts-store release makes auth header-only everywhere except
+  `/ws/write` (query credentials leak into proxy/access logs). The two
+  adapter WS dial sites now send `X-API-Key` as a handshake header. Audit
+  confirmed every other call site (REST paths, alerts service, streaming
+  backfill) was already header-only, and nothing uses `admin_key`.
+
+### Removed
+
+- **Dead ts-store `/ws/read` streaming code (#160).** ts-store removed the
+  `/ws/read` endpoint (v0.14.x), and live ts-store streaming runs through the
+  streaming manager (REST backfill + push) — the adapter WS dial paths were
+  unreachable. Both `Stream()` methods are now not-supported error stubs and
+  the WS machinery is deleted (−423 lines). No behavior change for ts-store
+  charts, streaming or otherwise.
+
 ## [0.39.2] — 2026-07-09
 
 ### Added
