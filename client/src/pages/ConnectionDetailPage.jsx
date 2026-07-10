@@ -380,7 +380,7 @@ function ConnectionDetailPage() {
             host: '',
             port: 32049,
             timeout: 20,
-            use_distributed_query: false
+            use_distributed_query: true
           }
         };
       case 'mqtt':

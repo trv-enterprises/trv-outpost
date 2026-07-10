@@ -26,6 +26,13 @@ export async function queryData(connectionId, query, useCache = true, opts = {})
     if (typeof opts.timeout === 'number') requestOpts.timeout = opts.timeout;
     const response = await apiClient.request(`/api/connections/${connectionId}/query`, requestOpts);
 
+    // Adapter failures come back as HTTP 200 with {success:false, error}
+    // — throw so useData's error state (and the panel's inline error
+    // notification) fires instead of rendering an empty chart.
+    if (response && response.success === false) {
+      throw new Error(response.error || 'Query failed');
+    }
+
     // The backend returns result_set with columns and rows
     return {
       data: response.result_set,
@@ -67,6 +74,11 @@ export async function queryComponentData(componentId, runtime = {}, useCache = t
     };
     if (typeof opts.timeout === 'number') requestOpts.timeout = opts.timeout;
     const response = await apiClient.request(`/api/components/${componentId}/data`, requestOpts);
+
+    // Same 200-with-{success:false} contract as queryData — surface it.
+    if (response && response.success === false) {
+      throw new Error(response.error || 'Query failed');
+    }
 
     return {
       data: response.result_set,

@@ -5,6 +5,7 @@
 package connection
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -37,7 +38,7 @@ func edgelakeConfigSchema() []registry.ConfigField {
 		{Name: "host", Type: "string", Required: true, Description: "EdgeLake node host"},
 		{Name: "port", Type: "int", Required: true, Description: "REST API port"},
 		{Name: "timeout", Type: "int", Required: false, Default: 20, Description: "Request timeout (seconds)"},
-		{Name: "use_distributed_query", Type: "bool", Required: false, Default: false, Description: "Use distributed queries"},
+		{Name: "use_distributed_query", Type: "bool", Required: false, Default: true, Description: "Send SQL queries to the network (destination: network header). Disable only when the connected node itself hosts the data locally."},
 	}
 }
 
@@ -64,6 +65,11 @@ func newEdgeLakeAdapterFromConfig(config map[string]interface{}) (*EdgeLakeAdapt
 	} else if timeout, ok := config["timeout"].(int); ok {
 		elConfig.Timeout = timeout
 	}
+	// Network routing defaults ON: EdgeLake data lives on operator nodes,
+	// and a query sent to a query node without `destination: network`
+	// fails with code 155. Only an explicit false opts into local-only
+	// execution on the connected node.
+	elConfig.UseDistributedQuery = true
 	if distributed, ok := config["use_distributed_query"].(bool); ok {
 		elConfig.UseDistributedQuery = distributed
 	}
@@ -363,6 +369,12 @@ func (a *EdgeLakeAdapter) executeCommandInternal(ctx context.Context, command, d
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		// Non-200 responses usually still carry EdgeLake's JSON error
+		// envelope (sometimes with leaked header lines around it) —
+		// surface the clean message instead of the raw dump.
+		if elErr := formatEdgeLakeError(extractJSONEnvelope(body)); elErr != nil {
+			return nil, elErr
+		}
 		return nil, fmt.Errorf("EdgeLake returned status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -371,6 +383,21 @@ func (a *EdgeLakeAdapter) executeCommandInternal(ctx context.Context, command, d
 	body = decodeChunkedBody(body)
 
 	return body, nil
+}
+
+// extractJSONEnvelope trims a response body down to the outermost {...}
+// span. EdgeLake's BaseHTTP server leaks header lines and chunked-encoding
+// artifacts into non-200 bodies, so the JSON envelope has to be cut out
+// before it can be parsed. Returns the input unchanged when no braces are
+// found (formatEdgeLakeError will then reject it and the caller falls back
+// to the raw dump).
+func extractJSONEnvelope(body []byte) []byte {
+	start := bytes.IndexByte(body, '{')
+	end := bytes.LastIndexByte(body, '}')
+	if start == -1 || end <= start {
+		return body
+	}
+	return body[start : end+1]
 }
 
 // decodeChunkedBody handles HTTP/1.0 responses that incorrectly use chunked transfer encoding.
@@ -450,6 +477,8 @@ func formatEdgeLakeError(body []byte) error {
 		hint = " (EdgeLake's SQL parser rejected the query — see the connection-type guidance for the subset of Postgres syntax it accepts)"
 	case 134: // Error in SQL Select statement
 		hint = " (SELECT statement error — usually an unsupported function like EXTRACT or DATE_TRUNC; see the connection-type guidance)"
+	case 155: // Failed to determine destination node
+		hint = " (the connected node could not route the query — enable \"distributed queries\" on the connection so SQL is sent with the destination: network header)"
 	}
 
 	if detail != "" {
@@ -651,6 +680,11 @@ func (e *EdgeLakeDataSource) executeCommand(ctx context.Context, command string,
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		// Same envelope treatment as the registry adapter — surface
+		// EdgeLake's clean error message when the body carries one.
+		if elErr := formatEdgeLakeError(extractJSONEnvelope(body)); elErr != nil {
+			return nil, elErr
+		}
 		return nil, fmt.Errorf("EdgeLake returned status %d: %s", resp.StatusCode, string(body))
 	}
 
