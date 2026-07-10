@@ -152,7 +152,12 @@ function EdgeLakeTerminalPage() {
   const [connectionsError, setConnectionsError] = useState(null);
 
   const [command, setCommand] = useState('');
-  const [destination, setDestination] = useState('');
+  // Default to network fan-out: a fanned-out single-node command fails
+  // with a distinct, recoverable error, whereas SQL against the query
+  // node WITHOUT network routing fails with the unhelpful code-155
+  // destination error. Network-by-default is the easier mistake to
+  // recover from. "(connection node)" stays one dropdown pick away.
+  const [destination, setDestination] = useState('network');
   const [methodMode, setMethodMode] = useState(''); // "" = Auto, "GET", "POST"
   const [timeoutSeconds, setTimeoutSeconds] = useState(DEFAULT_TIMEOUT_SECONDS);
   const [recentDestinations, setRecentDestinations] = useState(() => loadRecentDestinations());
