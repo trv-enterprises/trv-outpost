@@ -226,6 +226,29 @@ func (s *DashboardService) ListDashboards(ctx context.Context, params models.Das
 	}, nil
 }
 
+// ListDashboardNavRefs returns the full matching set as lightweight nav
+// refs (id + sort fields) for viewer prev/next ordering (#114). Same
+// filter semantics as the other list shapes; pagination params are
+// ignored (the repo caps at PageSizeAllCap).
+func (s *DashboardService) ListDashboardNavRefs(ctx context.Context, params models.DashboardQueryParams) (*models.DashboardNavListResponse, error) {
+	if len(params.Tags) > 0 {
+		params.Tags = models.NormalizeTags(params.Tags)
+	}
+	if err := s.resolveConnectionFilter(ctx, &params); err != nil {
+		return nil, err
+	}
+
+	refs, total, err := s.repo.ListNavRefs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list dashboard nav refs: %w", err)
+	}
+
+	return &models.DashboardNavListResponse{
+		Dashboards: refs,
+		Total:      total,
+	}, nil
+}
+
 // ListDashboardsWithDatasources retrieves dashboard summaries with data source names
 func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, params models.DashboardQueryParams) (*models.DashboardSummaryListResponse, error) {
 	// Normalize filter tags to match how they're stored.

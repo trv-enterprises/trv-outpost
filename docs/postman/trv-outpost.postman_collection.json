@@ -2285,7 +2285,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&component_id=&connection_id=&include_connections=&sort=&direction=&page=&page_size=",
+              "raw": "{{baseUrl}}/api/dashboards?name=&is_public=&component_id=&connection_id=&include_connections=&ids_only=&sort=&direction=&page=&page_size=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2322,6 +2322,12 @@
                   "key": "include_connections",
                   "value": "",
                   "description": "Include connection names from charts (returns DashboardSummary shape)",
+                  "disabled": true
+                },
+                {
+                  "key": "ids_only",
+                  "value": "",
+                  "description": "Return the FULL matching set as lightweight nav refs (id, name, namespace, created, updated), ignoring pagination (capped at 1000). For viewer navigation ordering.",
                   "disabled": true
                 },
                 {

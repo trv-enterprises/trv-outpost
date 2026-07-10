@@ -12,9 +12,11 @@ import {
   Button,
   Dropdown,
   Tag,
+  Pagination,
 } from '@carbon/react';
 import { Dashboard, StarFilled, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import usePaginatedList from '../hooks/usePaginatedList';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import TagFilter from '../components/shared/TagFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
@@ -22,28 +24,34 @@ import SortMenu from '../components/shared/SortMenu';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { dashboardUsesVariable } from '../utils/dashboardVariable';
+import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import { syncKioskFromUrl, getKioskDashboardIds, isKioskActive } from '../utils/kioskMode';
 import '../components/shared/FilterOverflowMenu.scss';
 import './DashboardTileViewPage.scss';
 
+const PAGE_SIZES = [25, 50, 100];
+
 /**
  * DashboardTileViewPage Component
  *
- * Landing page for View Mode showing all dashboards as tiles in a grid.
+ * Landing page for View Mode showing dashboards as tiles in a grid.
  * Each tile shows:
  * - Thumbnail image (if available)
  * - Dashboard name
  * - Description (truncated)
  * - Auto-refresh indicator
  * - Data sources used
+ *
+ * #114: server-side filter/sort/pagination via usePaginatedList — the same
+ * paged DashboardSummary path the design-mode list uses, so the two pages
+ * can't drift on filter semantics or response shape. The viewer's prev/next
+ * ordering no longer depends on this page loading everything: on a filtered
+ * tile click we fetch the full ordered id set from the ids_only nav
+ * projection and hand THAT to the viewer.
  */
 function DashboardTileViewPage({ canDesign = false }) {
   const navigate = useNavigate();
-  const [dashboards, setDashboards] = useState([]);
-  const [charts, setCharts] = useState({});
-  const [connections, setConnections] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [connections, setConnections] = useState({}); // id -> name, for the dropdown options
   // Filters persist across navigation within the same browser tab via
   // sessionStorage. Filters are session-y (not user-config-y) — fresh
   // tab / new browser = clean slate. Survives clicking into a viewer
@@ -66,6 +74,8 @@ function DashboardTileViewPage({ canDesign = false }) {
   // Single-select connection filter. 'all' = no filter.
   const [connectionFilter, setConnectionFilter] = useState(persistedFilters.connection || 'all');
   // Variable-driven only: keep dashboards that define + enable variables.
+  // #114: like design mode, this is a client-only post-filter on the loaded
+  // page — the dashboards API has no variable-driven field.
   const [variableOnly, setVariableOnly] = useState(!!persistedFilters.variableOnly);
   // Sort mode for the tile grid. 'manual' means honour the user's
   // drag-reorder; any other value disables drag and applies a key+dir
@@ -109,11 +119,78 @@ function DashboardTileViewPage({ canDesign = false }) {
   // unfiltered grid first.
   const [kioskIds] = useState(() => syncKioskFromUrl() || getKioskDashboardIds());
   const kiosk = isKioskActive();
+  // Kiosk dashboards are fetched by id (the kiosk set is a handful of
+  // explicit dashboards) instead of through the paginated list.
+  const [kioskDashboards, setKioskDashboards] = useState([]);
+  const [kioskLoading, setKioskLoading] = useState(kiosk);
+
+  // Server-side filter/sort/pagination (#114, mirroring DashboardsListPage
+  // #21). Rows are DashboardSummary objects (include_connections:true) —
+  // each carries component_usage/connection_usage {id,name} pairs +
+  // panel_count instead of the full panels array. 'manual' sort isn't a
+  // server field; send 'updated' desc and re-apply the pinned order
+  // client-side within the current page.
+  const serverSortKey = sortKey === 'manual' ? 'updated' : sortKey;
+  const serverSortDir = sortKey === 'manual' ? 'desc' : sortDirection;
+  const {
+    rows: dashboards,
+    total,
+    loading,
+    hasLoadedOnce,
+    error,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePaginatedList({
+    // Kiosk mode never consults the paginated list — resolve empty
+    // instead of fetching a page nobody renders.
+    fetcher: (q) => (kiosk ? Promise.resolve({ dashboards: [], total: 0 }) : apiClient.getDashboards(q)),
+    extract: (resp) => ({ rows: resp?.dashboards || [], total: resp?.total || 0, hasMore: resp?.has_more }),
+    filters: {
+      include_connections: true,
+      namespace: namespaceFilter,
+      tags: tagFilter,
+      connection_id: connectionFilter === 'all' ? '' : connectionFilter,
+    },
+    sortKey: serverSortKey,
+    sortDir: serverSortDir,
+    initialPageSize: getListPrefs('view-dashboards').pageSize || 25,
+    search: searchTerm,
+    searchKey: 'name',
+  });
 
   useEffect(() => {
-    fetchData();
     fetchUserConfig();
   }, []);
+
+  // One-shot all-connections fetch for the connection filter dropdown
+  // options (comprehensive set, independent of the paginated rows).
+  useEffect(() => {
+    if (kiosk) return undefined;
+    let cancelled = false;
+    apiClient.getConnections({ page_size: 'all' }).then((data) => {
+      if (cancelled || !data?.connections) return;
+      const connMap = {};
+      data.connections.forEach((conn) => { connMap[conn.id] = conn.name; });
+      setConnections(connMap);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [kiosk]);
+
+  // Kiosk mode: fetch exactly the manifest's dashboards by id. Failures
+  // (deleted id in a stale manifest) drop out silently.
+  useEffect(() => {
+    if (!kioskIds || kioskIds.length === 0) return undefined;
+    let cancelled = false;
+    Promise.all(kioskIds.map((id) => apiClient.getDashboard(id).catch(() => null)))
+      .then((list) => {
+        if (cancelled) return;
+        setKioskDashboards(list.filter(Boolean));
+        setKioskLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [kioskIds]);
 
   // Persist filter state to sessionStorage so it survives a
   // round-trip through the viewer (or a tab reload). Clears the
@@ -143,6 +220,12 @@ function DashboardTileViewPage({ canDesign = false }) {
       // quota / disabled — non-fatal, filters just don't survive.
     }
   }, [searchTerm, namespaceFilter, tagFilter, connectionFilter, variableOnly]);
+
+  // Page size is a durable UI preference (per-user list prefs), unlike
+  // the session-y filters above.
+  useEffect(() => {
+    setListPrefs('view-dashboards', { pageSize });
+  }, [pageSize]);
 
   const fetchUserConfig = async () => {
     const userGuid = apiClient.getCurrentUserGuid();
@@ -180,9 +263,7 @@ function DashboardTileViewPage({ canDesign = false }) {
   }, []);
 
   // Persist the user's tile order. Caller passes the new order array;
-  // we save and update local state. GC: drop entries pointing at
-  // dashboards the user no longer has access to (parallel to the
-  // fit-mode map's GC pattern in DashboardViewerPage.selectFitMode).
+  // we save and update local state.
   const persistTileOrder = useCallback((nextOrder) => {
     setTileOrder(nextOrder);
     const userGuid = apiClient.getCurrentUserGuid();
@@ -207,47 +288,17 @@ function DashboardTileViewPage({ canDesign = false }) {
     }
   };
 
-  const fetchData = async () => {
-    try {
-      // VIEW-mode tile grid needs the FULL dashboard set for prev/next nav
-      // and the kiosk rotation — not a single page. Ask for all explicitly
-      // (server-capped at 1000) rather than the old implicit page_size:100,
-      // which silently truncated at the 101st dashboard (#21).
-      const [dashboardsRes, chartsRes, connectionsRes] = await Promise.all([
-        apiClient.getDashboards({ page_size: 'all' }),
-        apiClient.getComponents(),
-        apiClient.getConnections({ page_size: 'all' })
-      ]);
+  // True when any SERVER-side filter narrows the set. variableOnly is
+  // deliberately excluded — it's a page-local client post-filter (no server
+  // field), so it narrows the visible tiles but not the viewer's nav set.
+  const serverFiltersActive = (
+    !!searchTerm ||
+    namespaceFilter.length > 0 ||
+    tagFilter.length > 0 ||
+    connectionFilter !== 'all'
+  );
 
-      if (dashboardsRes.dashboards) {
-        setDashboards(dashboardsRes.dashboards);
-      }
-
-      // Build component lookup (component_id -> chart)
-      if (chartsRes.components) {
-        const chartMap = {};
-        chartsRes.components.forEach(chart => {
-          chartMap[chart.id] = chart;
-        });
-        setCharts(chartMap);
-      }
-
-      // Build connection lookup (connection_id -> name)
-      if (connectionsRes.connections) {
-        const dsMap = {};
-        connectionsRes.connections.forEach(ds => {
-          dsMap[ds.id] = ds.name;
-        });
-        setConnections(dsMap);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTileClick = (dashboardId) => {
+  const handleTileClick = async (dashboardId) => {
     // Swallow the synthetic click that fires on the dropped tile
     // immediately after a drop. Scope is tight: only THIS tile, only
     // for ~250ms after the drop. Clicks on other tiles, and later
@@ -258,29 +309,39 @@ function DashboardTileViewPage({ canDesign = false }) {
       return;
     }
     // Carry the currently-filtered dashboard ID list into the viewer so
-    // its prev/next arrows walk the same set the user just saw.
-    // Filters are session-y, not preference-y, so they ride in route
-    // state (cleared on direct URL / new tab) rather than user config.
-    // The viewer also caches into sessionStorage so a tab reload keeps
-    // the filtered list intact.
+    // its prev/next arrows walk the same set the user just saw. Filters
+    // are session-y, so they ride in route state (cleared on direct URL /
+    // new tab); the viewer also caches into sessionStorage so a tab
+    // reload keeps the filtered list intact.
     //
-    // We pass the resolved ID list (not the criteria) so the viewer
-    // doesn't have to re-run filter logic that depends on components
-    // + connections data it'd otherwise have no reason to fetch.
-    const filteredIds = filteredDashboards.map(d => d.id);
-    const allIds = dashboards.map(d => d.id);
-    const isFiltered = filteredIds.length !== allIds.length;
-    if (isFiltered) {
-      navigate(`/view/dashboards/${dashboardId}`, {
-        state: { filteredDashboardIds: filteredIds },
-      });
-    } else {
-      // Unfiltered click — clear any stale viewer-side filter cache so
-      // the viewer's prev/next don't accidentally inherit a previous
-      // session's filter via sessionStorage.
-      try { sessionStorage.removeItem('viewer:filter'); } catch { /* no-op */ }
-      navigate(`/view/dashboards/${dashboardId}`);
+    // #114: the page only holds ONE page of rows, so the full filtered id
+    // set comes from the server's ids_only nav projection using the same
+    // filter params as the grid. Membership is what matters — the viewer
+    // re-applies the user's tile order/sort to whatever set it's given.
+    if (serverFiltersActive) {
+      try {
+        const resp = await apiClient.getDashboards({
+          ids_only: true,
+          name: searchTerm,
+          namespace: namespaceFilter,
+          tags: tagFilter,
+          connection_id: connectionFilter === 'all' ? '' : connectionFilter,
+        });
+        const filteredIds = (resp?.dashboards || []).map((d) => d.id);
+        navigate(`/view/dashboards/${dashboardId}`, {
+          state: { filteredDashboardIds: filteredIds },
+        });
+        return;
+      } catch {
+        // Nav-ref fetch failed — fall through to unfiltered navigation
+        // rather than blocking the click.
+      }
     }
+    // Unfiltered click — clear any stale viewer-side filter cache so
+    // the viewer's prev/next don't accidentally inherit a previous
+    // session's filter via sessionStorage.
+    try { sessionStorage.removeItem('viewer:filter'); } catch { /* no-op */ }
+    navigate(`/view/dashboards/${dashboardId}`);
   };
 
   // --- Drag-and-drop tile reorder ---
@@ -334,7 +395,7 @@ function DashboardTileViewPage({ canDesign = false }) {
     // The "insert at targetIdx" math is computed AFTER the filter,
     // so it already accounts for that. The only adjustment is
     // appending +1 when dropping on the right half.
-    const currentOrder = filteredDashboards.map(d => d.id);
+    const currentOrder = displayDashboards.map(d => d.id);
     const without = currentOrder.filter(id => id !== srcId);
     const targetIdx = without.indexOf(dropTargetId);
     if (targetIdx < 0) return;
@@ -358,76 +419,32 @@ function DashboardTileViewPage({ canDesign = false }) {
     persistTileOrder([]);
   };
 
-  // Apply namespace, tag, and search filters. Same semantics as the
-  // design-mode list (DashboardsListPage): namespace is OR within the
-  // selection, tags are OR (any tag matches), search is substring on
-  // name or description.
-  const filteredDashboards = useMemo(() => {
-    // Kiosk mode short-circuit: lock to the kiosk IDs in the kiosk
-    // order. User filters and saved sort/manual are ignored — the
-    // operator's URL manifest is the source of truth for what this
-    // session is allowed to see and in what order.
+  // Manual drag-reorder is only safe within a single page — it can't
+  // move rows that live on other pages. Disable it whenever the dataset
+  // spans more than one page (same rule as the design-mode list, #21).
+  const isPaginated = total > pageSize;
+
+  // Client-only transforms on top of the server-paged rows (#114).
+  // Filtering/search/namespace/tags/connection already happened
+  // server-side; what's left has no server equivalent:
+  //   - variableOnly: post-filter on the loaded page (variables are rare).
+  //   - tile order: orderDashboardsForViewer re-sequences the current page
+  //     so this page and the viewer walk dashboards in the same sequence.
+  // Kiosk short-circuits everything: the operator's URL manifest is the
+  // source of truth for the set AND the order.
+  const displayDashboards = useMemo(() => {
     if (kioskIds && kioskIds.length > 0) {
-      const allowed = new Set(kioskIds);
-      const filtered = dashboards.filter(d => allowed.has(d.id));
-      return orderDashboardsForViewer(filtered, kioskIds, { key: 'manual', direction: 'asc' });
+      return orderDashboardsForViewer(kioskDashboards, kioskIds, { key: 'manual', direction: 'asc' });
     }
 
     let result = [...dashboards];
-
-    if (namespaceFilter.length > 0) {
-      const wanted = new Set(namespaceFilter);
-      // Records missing a namespace stay visible — defensive against
-      // any pre-namespace records that survived the migration.
-      result = result.filter(d => !d.namespace || wanted.has(d.namespace));
-    }
-
-    if (tagFilter.length > 0) {
-      result = result.filter(d => {
-        const dTags = d.tags || [];
-        return tagFilter.some(t => dTags.includes(t));
-      });
-    }
-
-    // Connection filter: dashboard matches when any of its panels'
-    // components reference the selected connection — through top-level
-    // connection_id (charts/controls) OR display_config.frigate_connection_id
-    // / mqtt_connection_id (Frigate/weather displays).
-    if (connectionFilter !== 'all') {
-      result = result.filter(d => {
-        if (!d.panels || d.panels.length === 0) return false;
-        return d.panels.some(panel => {
-          if (!panel.component_id) return false;
-          const c = charts[panel.component_id];
-          if (!c) return false;
-          if (c.connection_id === connectionFilter) return true;
-          const dc = c.display_config;
-          if (dc?.frigate_connection_id === connectionFilter) return true;
-          if (dc?.mqtt_connection_id === connectionFilter) return true;
-          return false;
-        });
-      });
-    }
-
     if (variableOnly) {
       result = result.filter(d => dashboardUsesVariable(d));
     }
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(d =>
-        d.name.toLowerCase().includes(term) ||
-        (d.description && d.description.toLowerCase().includes(term))
-      );
-    }
-
-    // Order resolution lives in utils/dashboardOrder so the View
-    // Mode tile page and the dashboard viewer's prev/next arrows
-    // walk dashboards in the same sequence.
     return orderDashboardsForViewer(result, tileOrder, { key: sortKey, direction: sortDirection });
-  }, [kioskIds, dashboards, namespaceFilter, tagFilter, connectionFilter, variableOnly, charts, searchTerm, tileOrder, sortKey, sortDirection]);
+  }, [kioskIds, kioskDashboards, dashboards, variableOnly, tileOrder, sortKey, sortDirection]);
 
-  if (loading) {
+  if ((kiosk && kioskLoading) || (!kiosk && loading && !hasLoadedOnce)) {
     return (
       <div className="dashboard-tile-view-page">
         <Loading description="Loading dashboards..." withOverlay={false} />
@@ -438,7 +455,7 @@ function DashboardTileViewPage({ canDesign = false }) {
   if (error) {
     return (
       <div className="dashboard-tile-view-page">
-        <div className="error-message">Error: {error}</div>
+        <div className="error-message">Error: {error.message || String(error)}</div>
       </div>
     );
   }
@@ -548,7 +565,7 @@ function DashboardTileViewPage({ canDesign = false }) {
                 { key: 'namespace', label: 'Namespace', defaultDir: 'asc' },
               ]}
             />
-            {sortKey === 'manual' && tileOrder && tileOrder.length > 0 && (
+            {sortKey === 'manual' && !isPaginated && tileOrder && tileOrder.length > 0 && (
               <Button
                 kind="ghost"
                 size="sm"
@@ -563,9 +580,9 @@ function DashboardTileViewPage({ canDesign = false }) {
         )}
       </div>
 
-      {filteredDashboards.length === 0 ? (
+      {displayDashboards.length === 0 ? (
         <div className="no-dashboards">
-          {(searchTerm || namespaceFilter.length > 0 || tagFilter.length > 0) ? (
+          {(searchTerm || namespaceFilter.length > 0 || tagFilter.length > 0 || connectionFilter !== 'all' || variableOnly) ? (
             <p>No dashboards match your filters.</p>
           ) : (
             <p>No dashboards available. Create one in Design mode.</p>
@@ -573,18 +590,25 @@ function DashboardTileViewPage({ canDesign = false }) {
         </div>
       ) : (
         <div className="dashboard-tiles-grid">
-          {filteredDashboards.map((dashboard) => {
+          {displayDashboards.map((dashboard) => {
             const dropSide = dragOver?.id === dashboard.id ? dragOver.side : null;
             const isDefault = defaultDashboardId === dashboard.id;
-            // Drag-reorder is only meaningful in manual sort and
-            // disabled in kiosk mode (URL manifest owns the order).
-            const isManual = sortKey === 'manual' && !kiosk;
+            // Drag-reorder is only meaningful in manual sort, disabled in
+            // kiosk mode (URL manifest owns the order), and disabled while
+            // paginated (a drag can't move rows onto another page).
+            const isManual = sortKey === 'manual' && !kiosk && !isPaginated;
+            // #114: feed the tile pre-computed comps/conns from the
+            // summary's denormalized {id,name} fields. Kiosk rows are full
+            // docs fetched by id (no usage fields) — the chips just come up
+            // empty there, which a locked kiosk picker doesn't need anyway.
+            const tileComponentItems = (dashboard.component_usage || []).map((c) => ({ id: c.id, label: c.name }));
+            const tileConnectionItems = (dashboard.connection_usage || []).map((c) => ({ id: c.id, label: c.name }));
             return (
               <DashboardTile
                 key={dashboard.id}
                 dashboard={dashboard}
-                componentMap={charts}
-                connectionMap={connections}
+                componentItems={tileComponentItems}
+                connectionItems={tileConnectionItems}
                 onClick={() => handleTileClick(dashboard.id)}
                 showRefreshInterval
                 descriptionMode="inline"
@@ -619,6 +643,22 @@ function DashboardTileViewPage({ canDesign = false }) {
             );
           })}
         </div>
+      )}
+
+      {/* Server-side pagination (#114). Hidden in kiosk mode — the manifest
+          is the whole set. */}
+      {!kiosk && total > 0 && (
+        <Pagination
+          className="list-pagination list-pagination--tile"
+          page={page}
+          pageSize={pageSize}
+          pageSizes={PAGE_SIZES}
+          totalItems={total}
+          onChange={({ page: p, pageSize: ps }) => {
+            if (ps !== pageSize) setPageSize(ps);
+            setPage(p);
+          }}
+        />
       )}
     </div>
   );

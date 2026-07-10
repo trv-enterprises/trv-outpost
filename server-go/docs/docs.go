@@ -2356,6 +2356,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Return the FULL matching set as lightweight nav refs (id, name, namespace, created, updated), ignoring pagination (capped at 1000). For viewer navigation ordering.",
+                        "name": "ids_only",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Sort field (name, updated, created, namespace)",
                         "name": "sort",
@@ -2384,9 +2390,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Response when include_connections=true",
+                        "description": "Response when ids_only=true",
                         "schema": {
-                            "$ref": "#/definitions/models.DashboardSummaryListResponse"
+                            "$ref": "#/definitions/models.DashboardNavListResponse"
                         }
                     },
                     "400": {
@@ -8792,6 +8798,40 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "models.DashboardNavListResponse": {
+            "type": "object",
+            "properties": {
+                "dashboards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DashboardNavRef"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.DashboardNavRef": {
+            "type": "object",
+            "properties": {
+                "created": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "string"
                 }
             }
         },

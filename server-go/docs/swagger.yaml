@@ -1612,6 +1612,28 @@ definitions:
       total:
         type: integer
     type: object
+  models.DashboardNavListResponse:
+    properties:
+      dashboards:
+        items:
+          $ref: '#/definitions/models.DashboardNavRef'
+        type: array
+      total:
+        type: integer
+    type: object
+  models.DashboardNavRef:
+    properties:
+      created:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      namespace:
+        type: string
+      updated:
+        type: string
+    type: object
   models.DashboardPanel:
     description: Panel position and size in the grid with optional component reference
       or text config
@@ -5665,6 +5687,12 @@ paths:
         in: query
         name: include_connections
         type: boolean
+      - description: Return the FULL matching set as lightweight nav refs (id, name,
+          namespace, created, updated), ignoring pagination (capped at 1000). For
+          viewer navigation ordering.
+        in: query
+        name: ids_only
+        type: boolean
       - description: Sort field (name, updated, created, namespace)
         in: query
         name: sort
@@ -5687,9 +5715,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: Response when include_connections=true
+          description: Response when ids_only=true
           schema:
-            $ref: '#/definitions/models.DashboardSummaryListResponse'
+            $ref: '#/definitions/models.DashboardNavListResponse'
         "400":
           description: Bad Request
           schema:

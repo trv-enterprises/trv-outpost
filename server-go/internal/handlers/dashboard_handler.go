@@ -190,12 +190,14 @@ func (h *DashboardHandler) GetSwapCompatibility(c *gin.Context) {
 // @Param component_id query string false "Filter to dashboards using a specific component"
 // @Param connection_id query string false "Filter to dashboards using any component bound to this connection"
 // @Param include_connections query boolean false "Include connection names from charts (returns DashboardSummary shape)"
+// @Param ids_only query boolean false "Return the FULL matching set as lightweight nav refs (id, name, namespace, created, updated), ignoring pagination (capped at 1000). For viewer navigation ordering."
 // @Param sort query string false "Sort field (name, updated, created, namespace)"
 // @Param direction query string false "Sort direction (asc, desc)"
 // @Param page query int false "Page number" default(1)
 // @Param page_size query string false "Page size; 'all' or 0 returns up to 1000 in one response" default(20)
 // @Success 200 {object} models.DashboardListResponse "Standard response"
 // @Success 200 {object} models.DashboardSummaryListResponse "Response when include_connections=true"
+// @Success 200 {object} models.DashboardNavListResponse "Response when ids_only=true"
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /dashboards [get]
@@ -204,6 +206,18 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 	var params models.DashboardQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// ids_only wins over the other shapes: the nav-ref projection is the
+	// lightest response and ignores pagination (#114).
+	if params.IDsOnly {
+		response, err := h.service.ListDashboardNavRefs(c.Request.Context(), params)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, response)
 		return
 	}
 

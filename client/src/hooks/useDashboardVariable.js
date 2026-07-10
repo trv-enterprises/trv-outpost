@@ -159,7 +159,7 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
 
       Promise.all([
         apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
-        apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+        apiClient.getDashboards({ ids_only: true }).catch(() => ({ dashboards: [] })),
       ]).then(([cfg, dashboardsRes]) => {
         const existing = cfg?.settings?.dashboard_variable_values || {};
         const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];
@@ -232,7 +232,7 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
 
       Promise.all([
         apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
-        apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+        apiClient.getDashboards({ ids_only: true }).catch(() => ({ dashboards: [] })),
       ]).then(([cfg, dashboardsRes]) => {
         const existing = cfg?.settings?.dashboard_variable_values || {};
         const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];
@@ -317,7 +317,7 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
 
       Promise.all([
         apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
-        apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+        apiClient.getDashboards({ ids_only: true }).catch(() => ({ dashboards: [] })),
       ]).then(([cfg, dashboardsRes]) => {
         const existing = cfg?.settings?.dashboard_variable_values || {};
         const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];

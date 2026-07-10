@@ -638,7 +638,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
     Promise.all([
       apiClient.getUserConfig(userGuid).catch(() => ({ settings: {} })),
-      apiClient.getDashboards().catch(() => ({ dashboards: [] })),
+      // #114: ids_only returns the FULL id set — pruning against the old
+      // no-param call (first 20 only) wrongly dropped valid entries.
+      apiClient.getDashboards({ ids_only: true }).catch(() => ({ dashboards: [] })),
     ]).then(([cfg, dashboardsRes]) => {
       const existing = cfg?.settings?.dashboard_fit_modes || {};
       const liveList = dashboardsRes?.dashboards || dashboardsRes?.Dashboards || [];
@@ -1254,7 +1256,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
     const fetchDashboardList = async () => {
       try {
-        const data = await apiClient.getDashboards();
+        // #114: prev/next only needs ids + the sort fields — fetch the
+        // lightweight nav projection of the FULL set instead of full docs
+        // (the old no-param call silently truncated at the server's
+        // default page size of 20).
+        const data = await apiClient.getDashboards({ ids_only: true });
         let dashboards = data.dashboards || [];
 
         if (kioskIds && kioskIds.length > 0) {

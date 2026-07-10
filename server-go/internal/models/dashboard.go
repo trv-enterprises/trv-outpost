@@ -580,10 +580,31 @@ type DashboardQueryParams struct {
 	ComponentIDs       []string `form:"-"`                   // Internal: the component-id set a ConnectionID resolved to. Not a query param; populated by the service.
 	Tags               []string `form:"tags"`                // Filter dashboards with any of the given tags (OR)
 	IncludeConnections bool     `form:"include_connections"` // Include connection names from referenced components
+	IDsOnly            bool     `form:"ids_only"`            // Return the full matching set as lightweight nav refs (id + sort fields), ignoring pagination (capped at PageSizeAllCap). For viewer prev/next ordering (#114).
 	Sort               string   `form:"sort"`                // Sort field (allowlisted; see DashboardSortFields). Empty = default.
 	Direction          string   `form:"direction"`           // "asc" | "desc". Empty = entity default.
 	Page               int      `form:"page"`
 	PageSize           int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+}
+
+// DashboardNavRef is the minimal dashboard shape for viewer navigation
+// (#114): just the id plus the fields orderDashboardsForViewer sorts by.
+// Returned by GET /api/dashboards?ids_only=true so the viewer's
+// prev/next/home can walk the full ordered set without loading full docs.
+type DashboardNavRef struct {
+	ID        string    `json:"id" bson:"_id"`
+	Name      string    `json:"name" bson:"name"`
+	Namespace string    `json:"namespace" bson:"namespace"`
+	Created   time.Time `json:"created" bson:"created"`
+	Updated   time.Time `json:"updated" bson:"updated"`
+}
+
+// DashboardNavListResponse is the ids_only=true response shape. Not
+// paginated: it always carries the full matching set (capped at
+// PageSizeAllCap), in the requested sort order.
+type DashboardNavListResponse struct {
+	Dashboards []DashboardNavRef `json:"dashboards"`
+	Total      int64             `json:"total"`
 }
 
 // DashboardSummary is a lightweight dashboard representation for tile listings

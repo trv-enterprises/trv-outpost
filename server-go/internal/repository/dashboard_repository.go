@@ -122,9 +122,10 @@ func (r *DashboardRepository) RenameNamespace(ctx context.Context, oldName, newN
 	return res.ModifiedCount, nil
 }
 
-// List retrieves dashboards with optional filtering and pagination
-func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQueryParams) ([]models.Dashboard, int64, error) {
-	// Build filter
+// buildDashboardListFilter translates DashboardQueryParams into the Mongo
+// filter shared by List, ListWithConnections, and ListNavRefs — one source
+// of truth so the three list shapes can't drift on filter semantics (#114).
+func buildDashboardListFilter(params models.DashboardQueryParams) bson.M {
 	filter := bson.M{}
 	if params.Namespace != "" {
 		filter["namespace"] = params.Namespace
@@ -140,13 +141,22 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 	if params.ComponentID != "" {
 		filter["panels.component_id"] = params.ComponentID
 	}
-	// connection_id → resolved component-id set (see ListWithConnections).
+	// connection_id filter: the service resolved it to the component ids bound
+	// to that connection; match dashboards whose panels reference any of them.
+	// An empty resolved set means the connection is used by no component → no
+	// dashboard matches (filter to nothing, not "all").
 	if params.ConnectionID != "" {
 		filter["panels.component_id"] = bson.M{"$in": params.ComponentIDs}
 	}
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
 	}
+	return filter
+}
+
+// List retrieves dashboards with optional filtering and pagination
+func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQueryParams) ([]models.Dashboard, int64, error) {
+	filter := buildDashboardListFilter(params)
 
 	// Count total documents
 	total, err := r.collection.CountDocuments(ctx, filter)
@@ -190,6 +200,45 @@ func (r *DashboardRepository) List(ctx context.Context, params models.DashboardQ
 	}
 
 	return dashboards, total, nil
+}
+
+// ListNavRefs returns the FULL matching set (no pagination, capped at
+// PageSizeAllCap) as lightweight nav refs — id plus the sort fields the
+// viewer's prev/next ordering needs. Same filter + sort semantics as List
+// so navigation walks exactly the set the tile page showed (#114).
+func (r *DashboardRepository) ListNavRefs(ctx context.Context, params models.DashboardQueryParams) ([]models.DashboardNavRef, int64, error) {
+	filter := buildDashboardListFilter(params)
+
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count dashboards: %w", err)
+	}
+
+	opts := options.Find().
+		SetLimit(int64(models.PageSizeAllCap)).
+		SetSort(models.ResolveSort(
+			models.DashboardSortFields, params.Sort, params.Direction,
+			models.DashboardDefaultSortField, models.DashboardDefaultSortDir,
+		)).
+		SetProjection(bson.M{
+			"name":      1,
+			"namespace": 1,
+			"created":   1,
+			"updated":   1,
+		})
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to find dashboards: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var refs []models.DashboardNavRef
+	if err := cursor.All(ctx, &refs); err != nil {
+		return nil, 0, fmt.Errorf("failed to decode dashboard nav refs: %w", err)
+	}
+
+	return refs, total, nil
 }
 
 // Update updates a dashboard
@@ -333,32 +382,7 @@ func (r *DashboardRepository) FindByComponentID(ctx context.Context, componentID
 // ListWithConnections retrieves dashboard summaries with data source names using aggregation
 // This performs a multi-collection join: dashboards -> charts -> datasources
 func (r *DashboardRepository) ListWithConnections(ctx context.Context, params models.DashboardQueryParams, db *mongo.Database) ([]models.DashboardSummary, int64, error) {
-	// Build filter
-	filter := bson.M{}
-	if params.Namespace != "" {
-		filter["namespace"] = params.Namespace
-	}
-	if params.Name != "" {
-		// $regex does NOT respect collection collation (MongoDB limitation),
-		// so we must explicitly request case-insensitive matching.
-		filter["name"] = bson.M{"$regex": params.Name, "$options": "i"}
-	}
-	if params.IsPublic != nil {
-		filter["settings.is_public"] = *params.IsPublic
-	}
-	if params.ComponentID != "" {
-		filter["panels.component_id"] = params.ComponentID
-	}
-	// connection_id filter: the service resolved it to the component ids bound
-	// to that connection; match dashboards whose panels reference any of them.
-	// An empty resolved set means the connection is used by no component → no
-	// dashboard matches (filter to nothing, not "all").
-	if params.ConnectionID != "" {
-		filter["panels.component_id"] = bson.M{"$in": params.ComponentIDs}
-	}
-	if len(params.Tags) > 0 {
-		filter["tags"] = bson.M{"$in": params.Tags}
-	}
+	filter := buildDashboardListFilter(params)
 
 	// Count total documents (without aggregation for performance)
 	total, err := r.collection.CountDocuments(ctx, filter)
