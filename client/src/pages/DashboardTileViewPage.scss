@@ -5,19 +5,24 @@
 @use '@carbon/styles/scss/spacing' as spacing;
 @use '@carbon/colors' as colors;
 
-// Higher-specificity selector (matches App.scss `.app-content.cds--content > *`)
-// so overflow-y: auto wins over the parent's `overflow: hidden` rule.
+// Higher-specificity selector (matches App.scss `.app-content.cds--content > *`).
+// The page is a fixed-height flex column and only the inner tiles-content
+// region scrolls — that keeps the pagination footer pinned to the bottom of
+// the display instead of the bottom of the scrolled content.
 .app-content.cds--content > .dashboard-tile-view-page {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
 .dashboard-tile-view-page {
   padding: spacing.$spacing-05;
   height: 100%;
   background: var(--cds-background);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 
   .tile-view-header {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -53,11 +58,31 @@
     gap: spacing.$spacing-04;
     margin-bottom: spacing.$spacing-05;
     flex-wrap: wrap;
+    flex-shrink: 0;
 
     .header-search {
       flex: 1 1 240px;
       max-width: 400px;
     }
+  }
+
+  // Scrollable middle region between the fixed toolbar above and the
+  // pagination footer below. Small top headroom so the tile hover lift
+  // doesn't clip under the toolbar (same trick as .dashboards-content
+  // on the design-mode list).
+  .tiles-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: spacing.$spacing-02 0 spacing.$spacing-05;
+  }
+
+  // The page container already insets content with its own padding —
+  // zero out the shared tile-footer margin so the pagination bar sits
+  // flush above the container's bottom edge.
+  .list-pagination--tile {
+    margin: 0;
   }
 
   .no-dashboards {

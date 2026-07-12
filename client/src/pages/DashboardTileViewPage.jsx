@@ -580,6 +580,11 @@ function DashboardTileViewPage({ canDesign = false }) {
         )}
       </div>
 
+      {/* Scrollable tile region — the page itself is a fixed-height flex
+          column (like DashboardsListPage) so the pagination footer stays
+          pinned to the bottom of the display instead of riding at the end
+          of the scrolled content. */}
+      <div className="tiles-content">
       {displayDashboards.length === 0 ? (
         <div className="no-dashboards">
           {(searchTerm || namespaceFilter.length > 0 || tagFilter.length > 0 || connectionFilter !== 'all' || variableOnly) ? (
@@ -644,6 +649,7 @@ function DashboardTileViewPage({ canDesign = false }) {
           })}
         </div>
       )}
+      </div>
 
       {/* Server-side pagination (#114). Hidden in kiosk mode — the manifest
           is the whole set. */}
