@@ -22,6 +22,17 @@
   }
 }
 
+// Source-node label for payloads relayed from another node (#161) —
+// the stripped "[From Node <addr>]" header rendered as a quiet caption
+// above the parsed body.
+.trb-source-node {
+  color: var(--cds-text-helper);
+  font-style: italic;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  margin-bottom: spacing.$spacing-02;
+}
+
 // Wrapper around the JSON tree + action bar. Holds them stacked
 // vertically with the bar overhanging slightly above the tree on
 // hover. The actions are always rendered (no visibility flicker

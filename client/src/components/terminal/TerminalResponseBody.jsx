@@ -18,15 +18,101 @@ import './TerminalResponseBody.scss';
 //  - real JSON object/array (e.g. `get status`, `blockchain get *`)
 //  - JSON string that itself contains JSON (rare, but happens when a
 //    node escapes its response through one layer)
+//  - a payload relayed from ANOTHER node (destination=peer/network):
+//    prefixed with "[From Node <ip>:<port>]" line(s) and often encoded
+//    as a Python repr (single-quoted dicts, True/False/None) instead
+//    of JSON (#161)
 //  - tabular plain text (e.g. `test network`, `get processes`)
 //  - short scalar (e.g. `set debug on` echoing back the new state)
 //  - empty body (handled upstream, never reaches here)
 //
-// We try JSON.parse, and on success render the structured view. On
-// failure we fall through to plain monospace text — every legacy path
-// keeps working.
+// We split off any source-node header (shown as a label above the
+// payload), try JSON.parse, then fall back to a Python-repr→JSON
+// conversion. On failure we fall through to plain monospace text —
+// every legacy path keeps working.
 
 const INDENT = 2;
+
+// "[From Node 192.168.1.48:32048]" — the relay header EdgeLake puts in
+// front of a payload that came from a node other than the one the
+// connection points at. May repeat when several peers answer.
+const FROM_NODE_RE = /^\[from node ([^\]]+)\]\s*/i;
+
+// Split leading source-node header line(s) off the body. Returns the
+// node addresses and the remaining payload. When no header is present
+// the body passes through untouched.
+function splitSourceNodes(raw) {
+	if (typeof raw !== 'string') return { nodes: [], rest: raw };
+	let rest = raw.trimStart();
+	const nodes = [];
+	let m;
+	while ((m = FROM_NODE_RE.exec(rest)) !== null) {
+		nodes.push(m[1]);
+		rest = rest.slice(m[0].length).trimStart();
+	}
+	return { nodes, rest: nodes.length > 0 ? rest : raw };
+}
+
+// Convert a Python-repr payload (single-quoted strings, True/False/
+// None) into JSON text. A tiny tokenizer rather than regex swaps so
+// apostrophes inside strings and double quotes inside single-quoted
+// strings survive. Returns null the moment anything looks non-repr
+// (unterminated string, bare identifier that isn't a Python literal) —
+// the caller then falls back to plain text.
+function pythonReprToJSON(raw) {
+	let out = '';
+	let i = 0;
+	const n = raw.length;
+	while (i < n) {
+		const c = raw[i];
+		if (c === "'" || c === '"') {
+			const quote = c;
+			i++;
+			let str = '';
+			let closed = false;
+			while (i < n) {
+				const ch = raw[i];
+				if (ch === '\\' && i + 1 < n) {
+					const nx = raw[i + 1];
+					if (nx === quote) str += quote;
+					else if (nx === '\\') str += '\\';
+					else if (nx === 'n') str += '\n';
+					else if (nx === 't') str += '\t';
+					else if (nx === 'r') str += '\r';
+					else str += '\\' + nx; // unknown escape — keep verbatim
+					i += 2;
+					continue;
+				}
+				if (ch === quote) {
+					closed = true;
+					i++;
+					break;
+				}
+				str += ch;
+				i++;
+			}
+			if (!closed) return null;
+			out += JSON.stringify(str);
+			continue;
+		}
+		// Bare identifiers only occur as Python literals in a repr dump;
+		// anything else means this isn't a repr payload.
+		if (/[A-Za-z_]/.test(c)) {
+			let j = i;
+			while (j < n && /[A-Za-z_]/.test(raw[j])) j++;
+			const word = raw.slice(i, j);
+			if (word === 'True') out += 'true';
+			else if (word === 'False') out += 'false';
+			else if (word === 'None') out += 'null';
+			else return null;
+			i = j;
+			continue;
+		}
+		out += c;
+		i++;
+	}
+	return out;
+}
 
 // Default-open depth on initial render. Top-level + first nested layer
 // open so the root's immediate children are visible without a click;
@@ -62,6 +148,19 @@ function tryParseJSON(raw) {
 		}
 		return { ok: true, value: parsed };
 	} catch {
+		// Not JSON — relayed-node payloads are often Python repr
+		// (single-quoted dicts, True/False/None). Convert and retry
+		// before giving up (#161).
+		if (first === '{' || first === '[') {
+			const converted = pythonReprToJSON(trimmed);
+			if (converted !== null) {
+				try {
+					return { ok: true, value: JSON.parse(converted) };
+				} catch {
+					return { ok: false };
+				}
+			}
+		}
 		return { ok: false };
 	}
 }
@@ -238,7 +337,16 @@ function Tree({ value, depth, keyName, isLast, path, overrides, setOverrides }) 
  *   - error: bool                — when true, render in the error color
  */
 export default function TerminalResponseBody({ body, placeholder = false, error = false }) {
-	const parsed = useMemo(() => tryParseJSON(body), [body]);
+	// Relayed payloads carry "[From Node <addr>]" header line(s) — split
+	// them off so the payload underneath can go through JSON detection,
+	// and surface the source as a label above the rendered body (#161).
+	const { nodes: sourceNodes, rest } = useMemo(() => splitSourceNodes(body), [body]);
+	const parsed = useMemo(() => tryParseJSON(rest), [rest]);
+	const sourceLabel = sourceNodes.length > 0 && (
+		<div className="trb-source-node">
+			From node {sourceNodes.join(', ')}
+		</div>
+	);
 
 	// Per-path open/closed overrides. Empty map → use default-by-depth
 	// rule. Expand-all writes `true` for every container path; collapse-
@@ -327,6 +435,8 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 		return <pre className="trb-plain trb-plain--error">{body}</pre>;
 	}
 	if (!parsed.ok) {
+		// Keep the ORIGINAL body (header included) on the plain-text
+		// path — nothing is hidden when we can't make sense of it.
 		return <pre className="trb-plain">{body}</pre>;
 	}
 
@@ -337,9 +447,12 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 		// the parsed value inline; the type colors still apply. No
 		// expand/collapse affordance — nothing to expand.
 		return (
-			<pre className="trb-json">
-				<ScalarToken value={parsed.value} />
-			</pre>
+			<>
+				{sourceLabel}
+				<pre className="trb-json">
+					<ScalarToken value={parsed.value} />
+				</pre>
+			</>
 		);
 	}
 
@@ -350,6 +463,7 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 
 	return (
 		<div className="trb-json-wrap">
+			{sourceLabel}
 			{showBulkControls && (
 				<div className="trb-json-actions">
 					<IconButton
