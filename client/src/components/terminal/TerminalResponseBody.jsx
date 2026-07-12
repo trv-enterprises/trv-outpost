@@ -35,22 +35,38 @@ const INDENT = 2;
 
 // "[From Node 192.168.1.48:32048]" — the relay header EdgeLake puts in
 // front of a payload that came from a node other than the one the
-// connection points at. May repeat when several peers answer.
-const FROM_NODE_RE = /^\[from node ([^\]]+)\]\s*/i;
+// connection points at. A single reply can contain SEVERAL of these
+// blocks: a large payload (e.g. `blockchain get *`) is chunked into
+// multiple messages, each re-prefixed with the header, and a network
+// fan-out concatenates one block per answering peer.
+const FROM_NODE_RE = /^[ \t]*\[from node ([^\]]+)\][ \t]*\r?\n?/gim;
 
-// Split leading source-node header line(s) off the body. Returns the
-// node addresses and the remaining payload. When no header is present
-// the body passes through untouched.
-function splitSourceNodes(raw) {
-	if (typeof raw !== 'string') return { nodes: [], rest: raw };
-	let rest = raw.trimStart();
-	const nodes = [];
+// Split a body into relayed blocks: [{node, text}]. Text before the
+// first header (or the whole body when no header exists) becomes a
+// node:null block, so plain single-node responses flow through the
+// exact same path.
+function splitNodeBlocks(raw) {
+	if (typeof raw !== 'string') return [{ node: null, text: raw }];
+	FROM_NODE_RE.lastIndex = 0;
+	const blocks = [];
+	let lastNode = null;
+	let lastStart = 0;
 	let m;
-	while ((m = FROM_NODE_RE.exec(rest)) !== null) {
-		nodes.push(m[1]);
-		rest = rest.slice(m[0].length).trimStart();
+	while ((m = FROM_NODE_RE.exec(raw)) !== null) {
+		const chunk = raw.slice(lastStart, m.index);
+		// Blank chunks (body starts with a header, or two headers in a
+		// row) carry nothing to render — skip them.
+		if (chunk.trim() !== '') {
+			blocks.push({ node: lastNode, text: chunk });
+		}
+		lastNode = m[1];
+		lastStart = m.index + m[0].length;
 	}
-	return { nodes, rest: nodes.length > 0 ? rest : raw };
+	const tail = raw.slice(lastStart);
+	if (tail.trim() !== '' || blocks.length === 0) {
+		blocks.push({ node: lastNode, text: tail });
+	}
+	return blocks;
 }
 
 // Convert a Python-repr payload (single-quoted strings, True/False/
@@ -326,39 +342,21 @@ function Tree({ value, depth, keyName, isLast, path, overrides, setOverrides }) 
 }
 
 /**
- * Render an EdgeLake response body. Attempts JSON parsing; on success
- * renders a colorized, collapsible tree. On failure renders the raw
- * text verbatim in a <pre> — every existing behavior preserved.
- *
- * Props:
- *   - body: string                — the raw response text
- *   - placeholder: bool          — when true, render as italic helper text
- *                                   (caller uses this for empty 200 + similar)
- *   - error: bool                — when true, render in the error color
+ * One parsed JSON payload: bulk expand/collapse controls + the tree.
+ * Owns its own open/closed override state so a multi-block relayed
+ * response (#161) renders several independent trees.
  */
-export default function TerminalResponseBody({ body, placeholder = false, error = false }) {
-	// Relayed payloads carry "[From Node <addr>]" header line(s) — split
-	// them off so the payload underneath can go through JSON detection,
-	// and surface the source as a label above the rendered body (#161).
-	const { nodes: sourceNodes, rest } = useMemo(() => splitSourceNodes(body), [body]);
-	const parsed = useMemo(() => tryParseJSON(rest), [rest]);
-	const sourceLabel = sourceNodes.length > 0 && (
-		<div className="trb-source-node">
-			From node {sourceNodes.join(', ')}
-		</div>
-	);
-
+function JsonPayload({ value }) {
 	// Per-path open/closed overrides. Empty map → use default-by-depth
 	// rule. Expand-all writes `true` for every container path; collapse-
 	// all writes `false`. Per-row clicks flip a single path.
 	const [overrides, setOverrides] = useState(() => new Map());
 
 	const allContainerPaths = useMemo(() => {
-		if (!parsed.ok) return [];
-		const t = valueType(parsed.value);
+		const t = valueType(value);
 		if (t !== 'object' && t !== 'array') return [];
-		return collectContainerPaths(parsed.value);
-	}, [parsed]);
+		return collectContainerPaths(value);
+	}, [value]);
 
 	// Resolve the current open-state for a container path. Mirrors the
 	// rule used inside <Tree>: explicit override wins, otherwise the
@@ -428,31 +426,16 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 
 	const resetToDefault = () => setOverrides(new Map());
 
-	if (placeholder) {
-		return <pre className="trb-plain trb-plain--placeholder">{body}</pre>;
-	}
-	if (error) {
-		return <pre className="trb-plain trb-plain--error">{body}</pre>;
-	}
-	if (!parsed.ok) {
-		// Keep the ORIGINAL body (header included) on the plain-text
-		// path — nothing is hidden when we can't make sense of it.
-		return <pre className="trb-plain">{body}</pre>;
-	}
-
-	const t = valueType(parsed.value);
+	const t = valueType(value);
 
 	if (t !== 'object' && t !== 'array') {
 		// Top-level scalar (a JSON string or number response). Render
 		// the parsed value inline; the type colors still apply. No
 		// expand/collapse affordance — nothing to expand.
 		return (
-			<>
-				{sourceLabel}
-				<pre className="trb-json">
-					<ScalarToken value={parsed.value} />
-				</pre>
-			</>
+			<pre className="trb-json">
+				<ScalarToken value={value} />
+			</pre>
 		);
 	}
 
@@ -463,7 +446,6 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 
 	return (
 		<div className="trb-json-wrap">
-			{sourceLabel}
 			{showBulkControls && (
 				<div className="trb-json-actions">
 					<IconButton
@@ -510,7 +492,7 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 			)}
 			<pre className="trb-json">
 				<Tree
-					value={parsed.value}
+					value={value}
 					depth={0}
 					keyName={undefined}
 					isLast
@@ -520,5 +502,62 @@ export default function TerminalResponseBody({ body, placeholder = false, error 
 				/>
 			</pre>
 		</div>
+	);
+}
+
+/**
+ * Render an EdgeLake response body. Attempts JSON parsing (including
+ * relayed multi-block payloads and Python-repr encoding, #161); on
+ * success renders colorized, collapsible tree(s). On failure renders
+ * the raw text verbatim in a <pre> — every legacy path preserved.
+ *
+ * Props:
+ *   - body: string                — the raw response text
+ *   - placeholder: bool          — when true, render as italic helper text
+ *                                   (caller uses this for empty 200 + similar)
+ *   - error: bool                — when true, render in the error color
+ */
+export default function TerminalResponseBody({ body, placeholder = false, error = false }) {
+	// Split "[From Node <addr>]" blocks and parse each. A reply can
+	// carry several blocks — one per answering node, and sometimes the
+	// same node answers more than once with a full copy (observed with
+	// `blockchain get *` via the master). Each block renders as its own
+	// captioned section; no merging — the sections mirror exactly what
+	// came over the wire. `null` → at least one block didn't parse →
+	// plain-text fallback for the whole body.
+	const sections = useMemo(() => {
+		const blocks = splitNodeBlocks(body);
+		const parsedBlocks = [];
+		for (const b of blocks) {
+			const parsed = tryParseJSON(b.text);
+			if (!parsed.ok) return null;
+			parsedBlocks.push({ node: b.node, value: parsed.value });
+		}
+		return parsedBlocks;
+	}, [body]);
+
+	if (placeholder) {
+		return <pre className="trb-plain trb-plain--placeholder">{body}</pre>;
+	}
+	if (error) {
+		return <pre className="trb-plain trb-plain--error">{body}</pre>;
+	}
+	if (!sections) {
+		// Keep the ORIGINAL body (headers included) on the plain-text
+		// path — nothing is hidden when we can't make sense of it.
+		return <pre className="trb-plain">{body}</pre>;
+	}
+
+	return (
+		<>
+			{sections.map((s, i) => (
+				<div key={i} className="trb-section">
+					{s.node && (
+						<div className="trb-source-node">From node {s.node}</div>
+					)}
+					<JsonPayload value={s.value} />
+				</div>
+			))}
+		</>
 	);
 }

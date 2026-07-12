@@ -22,6 +22,12 @@
   }
 }
 
+// A relayed multi-node response renders one section per source node —
+// keep a small gap between stacked sections (#161).
+.trb-section + .trb-section {
+  margin-top: spacing.$spacing-04;
+}
+
 // Source-node label for payloads relayed from another node (#161) —
 // the stripped "[From Node <addr>]" header rendered as a quiet caption
 // above the parsed body.
