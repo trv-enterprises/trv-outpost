@@ -271,6 +271,13 @@ func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset i
 		return nil, 0, fmt.Errorf("error listing connections: %w", err)
 	}
 
+	// Namespace grants (issue #4): filter in-service on this legacy path
+	// (the paged ListConnectionsPaged does it at the repo level).
+	if allowed, restricted := authz.AllowedList(ctx); restricted {
+		connections = filterConnectionsByGrant(connections, allowed)
+		return connections, int64(len(connections)), nil
+	}
+
 	total, err := s.repo.Count(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error counting connections: %w", err)
@@ -279,7 +286,13 @@ func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset i
 	return connections, total, nil
 }
 
-// ListConnectionsByType retrieves connections by type with pagination
+// ListConnectionsByType retrieves connections by type with pagination.
+// Namespace grants (issue #4): the result is filtered to the caller's
+// granted namespaces IN-SERVICE (this legacy path doesn't thread grant
+// params through the repo). This is the method the tsstore-alerts
+// aggregator fans out over, so filtering here stops a restricted user
+// from seeing alerts on ungranted tsstore connections. Total is
+// adjusted to the visible count.
 func (s *ConnectionService) ListConnectionsByType(ctx context.Context, dsType models.ConnectionType, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {
 		limit = 20
@@ -293,12 +306,34 @@ func (s *ConnectionService) ListConnectionsByType(ctx context.Context, dsType mo
 		return nil, 0, fmt.Errorf("error listing connections by type: %w", err)
 	}
 
+	if allowed, restricted := authz.AllowedList(ctx); restricted {
+		connections = filterConnectionsByGrant(connections, allowed)
+		return connections, int64(len(connections)), nil
+	}
+
 	total, err := s.repo.CountByType(ctx, dsType)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error counting connections by type: %w", err)
 	}
 
 	return connections, total, nil
+}
+
+// filterConnectionsByGrant keeps only connections in the granted
+// namespace set (issue #4). Empty-namespace records fail closed, same
+// rule as applyNamespaceGrant / authz.Grants.Can.
+func filterConnectionsByGrant(connections []*models.Connection, allowed []string) []*models.Connection {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, ns := range allowed {
+		allowedSet[ns] = struct{}{}
+	}
+	out := make([]*models.Connection, 0, len(connections))
+	for _, conn := range connections {
+		if _, ok := allowedSet[conn.Namespace]; ok {
+			out = append(out, conn)
+		}
+	}
+	return out
 }
 
 // ListConnectionsPaged retrieves connections with server-side filter +

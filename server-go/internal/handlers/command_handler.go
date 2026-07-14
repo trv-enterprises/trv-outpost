@@ -6,11 +6,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -69,9 +71,13 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 		return
 	}
 
-	// Get the datasource
+	// Get the datasource (enforces namespace grants, issue #4).
 	datasource, err := h.connectionService.GetConnection(c.Request.Context(), id)
 	if err != nil {
+		if errors.Is(err, authz.ErrNamespaceForbidden) {
+			respondError(c, err)
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": "datasource not found"})
 		return
 	}
@@ -148,9 +154,14 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 		return
 	}
 
-	// Get the control (stored as a chart with component_type="control")
+	// Get the control (stored as a chart with component_type="control").
+	// Enforces namespace grants on the control itself (issue #4).
 	chart, err := h.componentService.GetComponent(c.Request.Context(), controlID)
 	if err != nil {
+		if errors.Is(err, authz.ErrNamespaceForbidden) {
+			respondError(c, err)
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": "control not found"})
 		return
 	}
@@ -176,9 +187,15 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 		return
 	}
 
-	// Get the connection
+	// Get the connection (enforces namespace grants on the control's
+	// connection too — component and connection can live in different
+	// namespaces, issue #4).
 	datasource, err := h.connectionService.GetConnection(c.Request.Context(), chart.ConnectionID)
 	if err != nil {
+		if errors.Is(err, authz.ErrNamespaceForbidden) {
+			respondError(c, err)
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})
 		return
 	}

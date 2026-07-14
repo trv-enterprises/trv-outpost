@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -170,15 +171,29 @@ func (h *ComponentHandler) GetComponentData(c *gin.Context) {
 	// honored when it names an existing connection of the SAME type as the
 	// stored one — a view user must not be able to point a stored query at
 	// an arbitrary other-dialect connection.
+	//
+	// Namespace grants (issue #4): BOTH the stored connection and the
+	// override target are resolved through GetConnection, which enforces
+	// the caller's grants. The override is the specific hole to watch —
+	// req.ConnectionID lets a caller name an arbitrary connection id, so
+	// an ungranted target must be refused here, not just at query time.
 	connectionID := component.ConnectionID
 	if req.ConnectionID != "" && req.ConnectionID != component.ConnectionID {
 		stored, err := h.connectionService.GetConnection(c.Request.Context(), component.ConnectionID)
-		if err != nil || stored == nil {
+		if err != nil {
+			if errors.Is(err, authz.ErrNamespaceForbidden) {
+				respondError(c, err)
+				return
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Component's connection not found"})
 			return
 		}
 		target, err := h.connectionService.GetConnection(c.Request.Context(), req.ConnectionID)
-		if err != nil || target == nil {
+		if err != nil {
+			if errors.Is(err, authz.ErrNamespaceForbidden) {
+				respondError(c, err)
+				return
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Connection override not found"})
 			return
 		}
@@ -204,6 +219,13 @@ func (h *ComponentHandler) GetComponentData(c *gin.Context) {
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		// Namespace grants (issue #4): the EFFECTIVE connection (stored
+		// or override) may be in an ungranted namespace — surface the
+		// uniform 403 so the panel renders its unauthorized state.
+		if errors.Is(err, authz.ErrNamespaceForbidden) {
+			respondError(c, err)
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

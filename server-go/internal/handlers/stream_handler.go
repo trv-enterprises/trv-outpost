@@ -9,23 +9,53 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/service"
 	"github.com/trv-enterprises/trve-dashboard/internal/streaming"
 )
 
 // StreamHandler handles SSE streaming for socket connections
 type StreamHandler struct {
 	manager *streaming.Manager
+	// connections enforces namespace grants at subscribe time (issue
+	// #4). The streaming manager fetches connections internally with
+	// background contexts (resubscribes, shared brokers), so the
+	// caller-facing grant check has to live here at the door. NOTE:
+	// the /stream routes are exempt from the capability table
+	// (middleware getRequiredCapability carve-out) — this check is the
+	// ONLY thing stopping a restricted user from streaming an
+	// ungranted connection's data.
+	connections *service.ConnectionService
 }
 
 // NewStreamHandler creates a new stream handler
-func NewStreamHandler(manager *streaming.Manager) *StreamHandler {
+func NewStreamHandler(manager *streaming.Manager, connections *service.ConnectionService) *StreamHandler {
 	return &StreamHandler{
-		manager: manager,
+		manager:     manager,
+		connections: connections,
 	}
+}
+
+// checkStreamAccess enforces the caller's namespace grants on the
+// target connection before any subscription is opened. Returns false
+// after writing the response when access is denied.
+func (h *StreamHandler) checkStreamAccess(c *gin.Context, connectionID string) bool {
+	if h.connections == nil {
+		return true // partial wiring (tests) — no grants to enforce
+	}
+	if _, err := h.connections.GetConnection(c.Request.Context(), connectionID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})
+			return false
+		}
+		respondError(c, err)
+		return false
+	}
+	return true
 }
 
 // StreamConnection streams data from a socket connection via SSE
@@ -43,6 +73,11 @@ func (h *StreamHandler) StreamConnection(c *gin.Context) {
 	connectionID := c.Param("id")
 	if connectionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connection ID is required"})
+		return
+	}
+
+	// Namespace grants (issue #4) — before any subscription exists.
+	if !h.checkStreamAccess(c, connectionID) {
 		return
 	}
 
@@ -168,6 +203,12 @@ func (h *StreamHandler) GetStreamStatus(c *gin.Context) {
 		return
 	}
 
+	// Namespace grants (issue #4): stream status leaks liveness +
+	// error details of the underlying connection.
+	if !h.checkStreamAccess(c, connectionID) {
+		return
+	}
+
 	status := h.manager.GetStreamStatus(connectionID)
 	if status == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream not found"})
@@ -239,6 +280,11 @@ func (h *StreamHandler) StreamAggregatedConnection(c *gin.Context) {
 	connectionID := c.Param("id")
 	if connectionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connection ID is required"})
+		return
+	}
+
+	// Namespace grants (issue #4) — before any subscription exists.
+	if !h.checkStreamAccess(c, connectionID) {
 		return
 	}
 

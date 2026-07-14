@@ -630,6 +630,14 @@ func routeRuleMatches(rule RouteCapability, path, method string) bool {
 }
 
 // getRequiredCapability returns the capability required for a path/method
+//
+// NOTE (issue #4): the /stream and /query carve-outs below exempt those
+// paths from CAPABILITY gating only. Namespace-grant enforcement for
+// them is NOT skipped — it happens in the handler/service layer
+// (StreamHandler.checkStreamAccess, ConnectionService.QueryConnection
+// via findAuthorized), which runs after Authenticate() has already
+// stamped the caller's grants onto the request context. A restricted
+// user therefore still cannot stream or query an ungranted connection.
 func (m *AuthMiddleware) getRequiredCapability(path, method string) models.Capability {
 	// Streaming endpoints are read operations, allow all authenticated users
 	// Even though /stream/aggregated uses POST, it's reading data not modifying it

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -106,8 +107,15 @@ func (h *EdgeLakeTerminalHandler) Execute(c *gin.Context) {
 		return
 	}
 
+	// GetConnection enforces namespace grants (issue #4) — a raw
+	// AnyLog command against an ungranted EdgeLake connection is the
+	// highest-value data path to seal.
 	conn, err := h.connections.GetConnection(c.Request.Context(), req.ConnectionID)
 	if err != nil || conn == nil {
+		if err != nil && errors.Is(err, authz.ErrNamespaceForbidden) {
+			respondError(c, err)
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})
 		return
 	}
