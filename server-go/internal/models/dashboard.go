@@ -585,6 +585,10 @@ type DashboardQueryParams struct {
 	Direction          string   `form:"direction"`           // "asc" | "desc". Empty = entity default.
 	Page               int      `form:"page"`
 	PageSize           int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+	// Internal (issue #4): the caller's namespace grants, stamped by the
+	// service from the authz context — never a query param.
+	NamespacesRestricted bool     `form:"-"`
+	AllowedNamespaces    []string `form:"-"`
 }
 
 // DashboardNavRef is the minimal dashboard shape for viewer navigation

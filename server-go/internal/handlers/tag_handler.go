@@ -44,7 +44,7 @@ func (h *TagHandler) ListTags(c *gin.Context) {
 		t.Connections += n
 		t.Count += n
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -53,7 +53,7 @@ func (h *TagHandler) ListTags(c *gin.Context) {
 		t.Dashboards += n
 		t.Count += n
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *TagHandler) ListTags(c *gin.Context) {
 		t.Components += n
 		t.Count += n
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

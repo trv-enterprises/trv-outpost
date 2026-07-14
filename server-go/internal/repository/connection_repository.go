@@ -126,6 +126,7 @@ func (r *ConnectionRepository) List(ctx context.Context, params models.Connectio
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
 	}
+	applyNamespaceGrant(filter, params.NamespacesRestricted, params.AllowedNamespaces)
 
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -173,6 +174,7 @@ func (r *ConnectionRepository) ListWithUsage(ctx context.Context, params models.
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
 	}
+	applyNamespaceGrant(filter, params.NamespacesRestricted, params.AllowedNamespaces)
 
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {

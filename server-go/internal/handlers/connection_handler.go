@@ -64,7 +64,7 @@ func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 
 	datasource, err := h.service.CreateConnection(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 	if c.Query("include_usage") == "true" {
 		rows, meta, err := h.service.ListConnectionsWithUsage(c.Request.Context(), params)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			respondError(c, err)
 			return
 		}
 		out := make([]gin.H, len(rows))
@@ -140,7 +140,7 @@ func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 
 	resp, err := h.service.ListConnectionsPaged(c.Request.Context(), params)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -214,7 +214,7 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *ConnectionHandler) TestConnection(c *gin.Context) {
 
 	response, err := h.service.TestConnection(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

@@ -151,6 +151,7 @@ func buildDashboardListFilter(params models.DashboardQueryParams) bson.M {
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
 	}
+	applyNamespaceGrant(filter, params.NamespacesRestricted, params.AllowedNamespaces)
 	return filter
 }
 

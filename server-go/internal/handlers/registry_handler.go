@@ -364,7 +364,7 @@ func (h *RegistryHandler) GetComponentType(c *gin.Context) {
 func (h *RegistryHandler) GetCatalog(c *gin.Context) {
 	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, cat)
@@ -411,7 +411,7 @@ func (h *RegistryHandler) ListIntegrations(c *gin.Context) {
 func (h *RegistryHandler) GetCatalogMarkdown(c *gin.Context) {
 	cat, err := registry.BuildCatalogWithLayout(c.Request.Context(), h.deviceTypeLister(), h.layoutDims, h.activeFilter(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(cat.RenderMarkdown()))

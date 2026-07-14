@@ -38,7 +38,7 @@ func NewAlertHandler(alerts *service.AlertService) *AlertHandler {
 func (h *AlertHandler) ListAlerts(c *gin.Context) {
 	resp, err := h.alerts.ListVisible(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, resp)
@@ -59,7 +59,7 @@ func (h *AlertHandler) MarkSeen(c *gin.Context) {
 		return
 	}
 	if err := h.alerts.MarkSeen(c.Request.Context(), c.Param("id"), user.GUID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -80,7 +80,7 @@ func (h *AlertHandler) Pin(c *gin.Context) {
 		return
 	}
 	if err := h.alerts.Pin(c.Request.Context(), c.Param("id"), user.GUID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -97,7 +97,7 @@ func (h *AlertHandler) Pin(c *gin.Context) {
 // @Router /alerts/{id}/pin [delete]
 func (h *AlertHandler) Unpin(c *gin.Context) {
 	if err := h.alerts.Unpin(c.Request.Context(), c.Param("id")); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)

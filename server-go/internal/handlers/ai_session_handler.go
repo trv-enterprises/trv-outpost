@@ -140,7 +140,7 @@ func (h *AISessionHandler) GetSession(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (h *AISessionHandler) HandleWebSocket(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

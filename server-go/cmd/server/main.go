@@ -26,6 +26,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth/idp"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
 	"github.com/trv-enterprises/trve-dashboard/internal/handlers"
@@ -661,7 +662,13 @@ func main() {
 	}
 	authSessionHandler := handlers.NewAuthSessionHandler(sessionService, idpRegistry, userService, cookieCfg)
 
-	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService)
+	// Namespace-grants resolver (issue #4): per-request grant
+	// resolution with a small TTL/LRU cache; user edits invalidate
+	// entries immediately via the UserService hook.
+	grantsResolver := authz.NewResolver(userService)
+	userService.SetGrantsInvalidator(grantsResolver)
+
+	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService, grantsResolver)
 
 	// Initialize MCP
 	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter, opsToolset)

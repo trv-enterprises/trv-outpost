@@ -77,7 +77,7 @@ func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
 	}
 	resp, err := h.rules.CreateAlert(c.Request.Context(), &req, callerGUID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, resp)
@@ -99,7 +99,7 @@ func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
 func (h *TSStoreAlertRulesHandler) ListAll(c *gin.Context) {
 	resp, err := h.rules.ListAll(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, resp)
@@ -126,7 +126,7 @@ func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
 	}
 	body, err := h.rules.GetAlertDetail(c.Request.Context(), connectionID, c.Param("alert_id"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Data(http.StatusOK, "application/json", body)
@@ -154,7 +154,7 @@ func (h *TSStoreAlertRulesHandler) DeleteAlert(c *gin.Context) {
 		return
 	}
 	if err := h.rules.DeleteAlert(c.Request.Context(), connectionID, c.Param("alert_id")); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)

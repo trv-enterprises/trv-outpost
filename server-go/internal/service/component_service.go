@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/componenttemplates"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
@@ -56,6 +57,11 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 	namespace := req.Namespace
 	if namespace == "" {
 		namespace = models.DefaultNamespace
+	}
+	// Namespace grants (issue #4): creating INTO an ungranted namespace
+	// is forbidden.
+	if err := authz.CheckNamespace(ctx, namespace); err != nil {
+		return nil, err
 	}
 
 	// Check (namespace, name) uniqueness — same name allowed across namespaces.
@@ -149,8 +155,11 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 	return component, nil
 }
 
-// GetComponent retrieves the latest version of a component by ID
-func (s *ComponentService) GetComponent(ctx context.Context, id string) (*models.Component, error) {
+// findAuthorized fetches the latest version of a component by id and
+// enforces the caller's namespace grants (issue #4). The uniform fetch
+// for every external by-id entry point in this service. Returns
+// authz.ErrNamespaceForbidden on a grant miss.
+func (s *ComponentService) findAuthorized(ctx context.Context, id string) (*models.Component, error) {
 	component, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving component: %w", err)
@@ -158,7 +167,15 @@ func (s *ComponentService) GetComponent(ctx context.Context, id string) (*models
 	if component == nil {
 		return nil, fmt.Errorf("component not found")
 	}
+	if err := authz.CheckNamespace(ctx, component.Namespace); err != nil {
+		return nil, err
+	}
 	return component, nil
+}
+
+// GetComponent retrieves the latest version of a component by ID
+func (s *ComponentService) GetComponent(ctx context.Context, id string) (*models.Component, error) {
+	return s.findAuthorized(ctx, id)
 }
 
 // GetComponentVersion retrieves a specific version of a component
@@ -169,6 +186,9 @@ func (s *ComponentService) GetComponentVersion(ctx context.Context, id string, v
 	}
 	if component == nil {
 		return nil, fmt.Errorf("component version not found")
+	}
+	if err := authz.CheckNamespace(ctx, component.Namespace); err != nil {
+		return nil, err
 	}
 	return component, nil
 }
@@ -182,11 +202,18 @@ func (s *ComponentService) GetComponentDraft(ctx context.Context, id string) (*m
 	if component == nil {
 		return nil, fmt.Errorf("no draft found for component")
 	}
+	if err := authz.CheckNamespace(ctx, component.Namespace); err != nil {
+		return nil, err
+	}
 	return component, nil
 }
 
 // GetVersionInfo returns version metadata for delete dialogs
 func (s *ComponentService) GetVersionInfo(ctx context.Context, id string) (*models.ComponentVersionInfo, error) {
+	// Namespace grants (issue #4).
+	if _, err := s.findAuthorized(ctx, id); err != nil {
+		return nil, err
+	}
 	info, err := s.repo.GetVersionInfo(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving version info: %w", err)
@@ -199,13 +226,11 @@ func (s *ComponentService) GetVersionInfo(ctx context.Context, id string) (*mode
 
 // ListComponentVersions retrieves all versions of a component
 func (s *ComponentService) ListComponentVersions(ctx context.Context, id string) ([]models.Component, error) {
-	// First check if component exists
-	latest, err := s.repo.FindByID(ctx, id)
+	// First check the component exists and the caller may see it
+	// (namespace grants, issue #4).
+	latest, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error checking component: %w", err)
-	}
-	if latest == nil {
-		return nil, fmt.Errorf("component not found")
+		return nil, err
 	}
 
 	// Get all versions - we need to add this method to repository
@@ -248,6 +273,14 @@ func (s *ComponentService) ListComponents(ctx context.Context, params models.Com
 		params.Tags = models.NormalizeTags(params.Tags)
 	}
 
+	// Namespace grants (issue #4): restrict to the caller's allowed set;
+	// an explicit namespace filter outside the grants → empty page.
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return &models.ComponentListResponse{Components: []models.Component{}, Page: params.Page, PageSize: params.PageSize}, nil
+	}
+
 	components, total, err := s.repo.FindAllLatest(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("error listing components: %w", err)
@@ -279,6 +312,13 @@ func (s *ComponentService) ListComponentsWithUsage(ctx context.Context, params m
 		params.Tags = models.NormalizeTags(params.Tags)
 	}
 
+	// Namespace grants (issue #4) — same rules as ListComponents.
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return &models.ComponentUsageListResponse{Components: []models.ComponentWithUsage{}, Page: params.Page, PageSize: params.PageSize}, nil
+	}
+
 	rows, total, err := s.repo.FindAllLatestWithUsage(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("error listing components with usage: %w", err)
@@ -295,19 +335,20 @@ func (s *ComponentService) ListComponentsWithUsage(ctx context.Context, params m
 
 // GetComponentSummaries returns lightweight component summaries for card display
 func (s *ComponentService) GetComponentSummaries(ctx context.Context, limit int64) ([]models.ComponentSummary, error) {
-	return s.repo.FindSummaries(ctx, limit)
+	// Namespace grants (issue #4): summaries previously had no namespace
+	// awareness at all and leaked names across namespaces.
+	allowed, restricted := authz.AllowedList(ctx)
+	return s.repo.FindSummaries(ctx, limit, restricted, allowed)
 }
 
 // UpdateComponent updates the latest version of a component in-place.
 // Used for manual edits (non-AI).
 func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *models.UpdateComponentRequest) (*models.Component, error) {
-	// Get existing component (latest version)
-	component, err := s.repo.FindByID(ctx, id)
+	// Get existing component (latest version); enforces namespace
+	// grants on the CURRENT namespace (issue #4).
+	component, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving component: %w", err)
-	}
-	if component == nil {
-		return nil, fmt.Errorf("component not found")
+		return nil, err
 	}
 
 	// Resolve post-update (namespace, name) and check uniqueness if either
@@ -317,6 +358,10 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 	newNamespace := component.Namespace
 	if req.Namespace != nil && *req.Namespace != "" {
 		newNamespace = *req.Namespace
+	}
+	// Moving into an ungranted namespace is forbidden (issue #4).
+	if err := authz.CheckNamespace(ctx, newNamespace); err != nil {
+		return nil, err
 	}
 	newName := component.Name
 	if req.Name != nil {
@@ -421,13 +466,9 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 // detect ErrComponentInUse via errors.Is and use the returned
 // ComponentUsage to render a useful error message.
 func (s *ComponentService) DeleteComponent(ctx context.Context, id string) (*ComponentUsage, error) {
-	// Check if component exists
-	component, err := s.repo.FindByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving component: %w", err)
-	}
-	if component == nil {
-		return nil, fmt.Errorf("component not found")
+	// Check the component exists and the caller may touch it (issue #4).
+	if _, err := s.findAuthorized(ctx, id); err != nil {
+		return nil, err
 	}
 
 	usage, err := s.componentUsage(ctx, id)
@@ -474,6 +515,9 @@ func (s *ComponentService) DeleteComponentVersion(ctx context.Context, id string
 	if component == nil {
 		return fmt.Errorf("component version not found")
 	}
+	if err := authz.CheckNamespace(ctx, component.Namespace); err != nil {
+		return err
+	}
 
 	if err := s.repo.DeleteVersion(ctx, id, version); err != nil {
 		return fmt.Errorf("error deleting component version: %w", err)
@@ -491,6 +535,9 @@ func (s *ComponentService) DeleteComponentDraft(ctx context.Context, id string) 
 	}
 	if draft == nil {
 		return fmt.Errorf("no draft found for component")
+	}
+	if err := authz.CheckNamespace(ctx, draft.Namespace); err != nil {
+		return err
 	}
 
 	if err := s.repo.DeleteVersion(ctx, id, draft.Version); err != nil {

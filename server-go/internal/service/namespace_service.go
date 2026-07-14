@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -123,8 +124,37 @@ func (s *NamespaceService) GetByID(ctx context.Context, id string) (*models.Name
 	return s.repo.FindByID(ctx, id)
 }
 
-// List returns all namespaces.
+// List returns the namespaces visible to the caller. Restricted
+// callers (issue #4) see only their granted namespaces — this single
+// filter keeps every picker/filter in the SPA granted-only, since they
+// all read from GET /api/namespaces via NamespaceContext. Admin
+// surfaces that need the full catalog use ListAll (?scope=all,
+// manage-gated at the handler).
 func (s *NamespaceService) List(ctx context.Context) (*models.NamespaceListResponse, error) {
+	items, total, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if allowed, restricted := authz.AllowedList(ctx); restricted {
+		allowedSet := make(map[string]struct{}, len(allowed))
+		for _, ns := range allowed {
+			allowedSet[ns] = struct{}{}
+		}
+		granted := make([]models.Namespace, 0, len(items))
+		for _, item := range items {
+			if _, ok := allowedSet[item.Name]; ok {
+				granted = append(granted, item)
+			}
+		}
+		items = granted
+		total = int64(len(granted))
+	}
+	return &models.NamespaceListResponse{Namespaces: items, Total: total}, nil
+}
+
+// ListAll returns every namespace regardless of the caller's grants.
+// ADMIN-plane surfaces only (grant assignment, namespace management).
+func (s *NamespaceService) ListAll(ctx context.Context) (*models.NamespaceListResponse, error) {
 	items, total, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err

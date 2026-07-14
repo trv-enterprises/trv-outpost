@@ -247,6 +247,10 @@ type ComponentQueryParams struct {
 	Direction     string   `form:"direction"`      // "asc" | "desc". Empty = entity default direction.
 	Page          int      `form:"page"`
 	PageSize      int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+	// Internal (issue #4): the caller's namespace grants, stamped by the
+	// service from the authz context — never a query param.
+	NamespacesRestricted bool     `form:"-"`
+	AllowedNamespaces    []string `form:"-"`
 }
 
 // ComponentSummary is a lightweight component representation for card listings

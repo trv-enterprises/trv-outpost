@@ -51,7 +51,7 @@ func (h *SnippetHandler) ListSnippets(c *gin.Context) {
 	}
 	rows, err := h.service.List(c.Request.Context(), user, contextKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	if rows == nil {
@@ -156,6 +156,6 @@ func (h *SnippetHandler) writeError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrSnippetInvalidScope), errors.Is(err, service.ErrSnippetInvalidField):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 	}
 }

@@ -34,7 +34,7 @@ func NewConfigHandler(service *service.ConfigService) *ConfigHandler {
 func (h *ConfigHandler) GetSystemConfig(c *gin.Context) {
 	config, err := h.service.GetSystemConfig(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *ConfigHandler) GetUserConfig(c *gin.Context) {
 
 	config, err := h.service.GetUserConfig(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *ConfigHandler) UpdateUserConfig(c *gin.Context) {
 
 	config, err := h.service.UpdateUserConfig(c.Request.Context(), userID, req.Settings)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

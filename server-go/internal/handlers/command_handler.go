@@ -79,7 +79,7 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 	// Create adapter from datasource
 	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), datasource)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	defer adapter.Close()
@@ -109,7 +109,7 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 
 	result, err := adapter.Write(c.Request.Context(), cmd)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 	// Create adapter
 	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), datasource)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	defer adapter.Close()
@@ -250,7 +250,7 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 
 	result, err := adapter.Write(c.Request.Context(), cmd)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

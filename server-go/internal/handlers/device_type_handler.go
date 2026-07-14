@@ -50,7 +50,7 @@ func (h *DeviceTypeHandler) CreateDeviceType(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (h *DeviceTypeHandler) GetDeviceType(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *DeviceTypeHandler) UpdateDeviceType(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *DeviceTypeHandler) DeleteDeviceType(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -175,7 +175,7 @@ func (h *DeviceTypeHandler) ListDeviceTypes(c *gin.Context) {
 
 	result, err := h.service.ListDeviceTypes(c.Request.Context(), &params)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

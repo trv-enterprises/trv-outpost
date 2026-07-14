@@ -83,7 +83,7 @@ func (h *ComponentHandler) GetComponent(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -157,7 +157,7 @@ func (h *ComponentHandler) GetComponentData(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *ComponentHandler) GetComponentVersion(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component version not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (h *ComponentHandler) ListComponentVersions(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -292,7 +292,7 @@ func (h *ComponentHandler) GetComponentVersionInfo(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -318,7 +318,7 @@ func (h *ComponentHandler) GetComponentDraft(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "No draft found for component"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -359,7 +359,7 @@ func (h *ComponentHandler) ListComponents(c *gin.Context) {
 	if c.Query("include_usage") == "true" {
 		response, err := h.service.ListComponentsWithUsage(c.Request.Context(), params)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			respondError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, response)
@@ -368,7 +368,7 @@ func (h *ComponentHandler) ListComponents(c *gin.Context) {
 
 	response, err := h.service.ListComponents(c.Request.Context(), params)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -394,7 +394,7 @@ func (h *ComponentHandler) GetComponentSummaries(c *gin.Context) {
 
 	summaries, err := h.service.GetComponentSummaries(c.Request.Context(), limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -465,7 +465,7 @@ func (h *ComponentHandler) DeleteComponent(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -498,7 +498,7 @@ func (h *ComponentHandler) DeleteComponentVersion(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Component version not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -523,7 +523,7 @@ func (h *ComponentHandler) DeleteComponentDraft(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "No draft found for component"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

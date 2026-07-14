@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -77,14 +78,39 @@ func NewDashboardService(repo *repository.DashboardRepository, db *mongo.Databas
 }
 
 // GetThumbnail returns the stored thumbnail data URL for a dashboard, or
-// "" when none has been captured.
+// "" when none has been captured. Enforces namespace grants (issue #4) —
+// a thumbnail is a rendering of the dashboard's content.
 func (s *DashboardService) GetThumbnail(ctx context.Context, id string) (string, error) {
+	if _, err := s.findAuthorized(ctx, id); err != nil {
+		return "", err
+	}
 	return s.thumbnailRepo.Get(ctx, id)
 }
 
 // SetThumbnail upserts a dashboard's thumbnail blob.
 func (s *DashboardService) SetThumbnail(ctx context.Context, id, data string) error {
+	if _, err := s.findAuthorized(ctx, id); err != nil {
+		return err
+	}
 	return s.thumbnailRepo.Put(ctx, id, data)
+}
+
+// findAuthorized fetches a dashboard by id and enforces the caller's
+// namespace grants (issue #4). The uniform fetch for every external
+// by-id entry point in this service. Returns
+// authz.ErrNamespaceForbidden on a grant miss.
+func (s *DashboardService) findAuthorized(ctx context.Context, id string) (*models.Dashboard, error) {
+	dashboard, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dashboard: %w", err)
+	}
+	if dashboard == nil {
+		return nil, fmt.Errorf("dashboard not found")
+	}
+	if err := authz.CheckNamespace(ctx, dashboard.Namespace); err != nil {
+		return nil, err
+	}
+	return dashboard, nil
 }
 
 // CreateDashboard creates a new dashboard. Namespace defaults to
@@ -92,6 +118,11 @@ func (s *DashboardService) SetThumbnail(ctx context.Context, id, data string) er
 func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.CreateDashboardRequest) (*models.Dashboard, error) {
 	if req.Namespace == "" {
 		req.Namespace = models.DefaultNamespace
+	}
+	// Namespace grants (issue #4): creating INTO an ungranted namespace
+	// is forbidden.
+	if err := authz.CheckNamespace(ctx, req.Namespace); err != nil {
+		return nil, err
 	}
 
 	// Uniqueness is (namespace, name) — same name allowed across namespaces.
@@ -139,14 +170,7 @@ func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.Crea
 
 // GetDashboard retrieves a dashboard by ID
 func (s *DashboardService) GetDashboard(ctx context.Context, id string) (*models.Dashboard, error) {
-	dashboard, err := s.repo.FindByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get dashboard: %w", err)
-	}
-	if dashboard == nil {
-		return nil, fmt.Errorf("dashboard not found")
-	}
-	return dashboard, nil
+	return s.findAuthorized(ctx, id)
 }
 
 // GetDashboardComponents returns the latest FINAL version of every component a
@@ -160,12 +184,11 @@ func (s *DashboardService) GetDashboard(ctx context.Context, id string) (*models
 // result; the viewer treats an unresolved panel component the same as a failed
 // single fetch (renders as a panel with no chart).
 func (s *DashboardService) GetDashboardComponents(ctx context.Context, id string) ([]models.Component, error) {
-	dashboard, err := s.repo.FindByID(ctx, id)
+	// Grants: the DASHBOARD's namespace gates this call; per-component
+	// namespace redaction of the result happens in Stage 3 (issue #4).
+	dashboard, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get dashboard: %w", err)
-	}
-	if dashboard == nil {
-		return nil, fmt.Errorf("dashboard not found")
+		return nil, err
 	}
 	ids := panelComponentIDs(dashboard)
 	if len(ids) == 0 {
@@ -206,6 +229,13 @@ func (s *DashboardService) ListDashboards(ctx context.Context, params models.Das
 	if err := s.resolveConnectionFilter(ctx, &params); err != nil {
 		return nil, err
 	}
+	// Namespace grants (issue #4): restrict to the caller's allowed set;
+	// an explicit namespace filter outside the grants → empty page.
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return &models.DashboardListResponse{Dashboards: []models.Dashboard{}, Page: 1, PageSize: params.PageSize}, nil
+	}
 	if params.Page < 1 {
 		params.Page = 1
 	}
@@ -237,6 +267,12 @@ func (s *DashboardService) ListDashboardNavRefs(ctx context.Context, params mode
 	if err := s.resolveConnectionFilter(ctx, &params); err != nil {
 		return nil, err
 	}
+	// Namespace grants (issue #4).
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return &models.DashboardNavListResponse{Dashboards: []models.DashboardNavRef{}}, nil
+	}
 
 	refs, total, err := s.repo.ListNavRefs(ctx, params)
 	if err != nil {
@@ -257,6 +293,12 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 	}
 	if err := s.resolveConnectionFilter(ctx, &params); err != nil {
 		return nil, err
+	}
+	// Namespace grants (issue #4).
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return &models.DashboardSummaryListResponse{Dashboards: []models.DashboardSummary{}, Page: 1, PageSize: params.PageSize}, nil
 	}
 	if params.Page < 1 {
 		params.Page = 1
@@ -279,13 +321,10 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 
 // UpdateDashboard updates a dashboard
 func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *models.UpdateDashboardRequest) (*models.Dashboard, error) {
-	// Check if dashboard exists
-	existing, err := s.repo.FindByID(ctx, id)
+	// Check the dashboard exists and the caller may touch it (issue #4).
+	existing, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error finding dashboard: %w", err)
-	}
-	if existing == nil {
-		return nil, fmt.Errorf("dashboard not found")
+		return nil, err
 	}
 
 	// Resolve post-update (namespace, name) and check uniqueness if either
@@ -293,6 +332,10 @@ func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *
 	newNamespace := existing.Namespace
 	if req.Namespace != nil && *req.Namespace != "" {
 		newNamespace = *req.Namespace
+	}
+	// Moving into an ungranted namespace is forbidden (issue #4).
+	if err := authz.CheckNamespace(ctx, newNamespace); err != nil {
+		return nil, err
 	}
 	newName := existing.Name
 	if req.Name != nil {
@@ -378,12 +421,9 @@ func panelComponentIDs(d *models.Dashboard) []string {
 // ComponentOverrides refs — a component used only via an override rule on
 // another dashboard must still count as "in use".
 func (s *DashboardService) DashboardOrphanPreview(ctx context.Context, id string) ([]EntityRef, error) {
-	target, err := s.repo.FindByID(ctx, id)
+	target, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error finding dashboard: %w", err)
-	}
-	if target == nil {
-		return nil, fmt.Errorf("dashboard not found")
+		return nil, err
 	}
 
 	candidateIDs := panelComponentIDs(target)
@@ -442,12 +482,8 @@ func (s *DashboardService) componentRefsExcluding(ctx context.Context, excludeID
 // before deletion, so a stale/tampered client list can never delete a
 // still-in-use component. Returns the IDs actually deleted.
 func (s *DashboardService) DeleteDashboardCascade(ctx context.Context, id string, deleteComponentIDs []string) ([]string, error) {
-	existing, err := s.repo.FindByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("error finding dashboard: %w", err)
-	}
-	if existing == nil {
-		return nil, fmt.Errorf("dashboard not found")
+	if _, err := s.findAuthorized(ctx, id); err != nil {
+		return nil, err
 	}
 
 	// Resolve the true orphan set BEFORE deleting the dashboard (the scan
@@ -509,12 +545,9 @@ func (s *DashboardService) GetVariableCandidates(ctx context.Context, dashboardI
 		return nil, fmt.Errorf("variable candidates not available: connection helpers not wired")
 	}
 
-	dashboard, err := s.repo.FindByID(ctx, dashboardID)
+	dashboard, err := s.findAuthorized(ctx, dashboardID)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving dashboard: %w", err)
-	}
-	if dashboard == nil {
-		return nil, fmt.Errorf("dashboard not found")
+		return nil, err
 	}
 
 	// Find the named connection_swap variable.
@@ -807,12 +840,9 @@ func (s *DashboardService) GetSwapCompatibility(ctx context.Context, dashboardID
 	if connectionID == "" {
 		return nil, fmt.Errorf("connection id is required")
 	}
-	dashboard, err := s.repo.FindByID(ctx, dashboardID)
+	dashboard, err := s.findAuthorized(ctx, dashboardID)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving dashboard: %w", err)
-	}
-	if dashboard == nil {
-		return nil, fmt.Errorf("dashboard not found")
+		return nil, err
 	}
 
 	resp := &models.SwapCompatibilityResponse{Variable: variableName, ConnectionID: connectionID}

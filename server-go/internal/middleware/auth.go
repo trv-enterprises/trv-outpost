@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
@@ -80,6 +81,7 @@ type AuthMiddleware struct {
 	userService *service.UserService
 	sessions    *auth.SessionService
 	apiKeys     *service.APIKeyService
+	grants      *authz.Resolver
 	rules       []RouteCapability
 }
 
@@ -96,11 +98,13 @@ func NewAuthMiddleware(
 	userService *service.UserService,
 	sessions *auth.SessionService,
 	apiKeys *service.APIKeyService,
+	grants *authz.Resolver,
 ) *AuthMiddleware {
 	return &AuthMiddleware{
 		userService: userService,
 		sessions:    sessions,
 		apiKeys:     apiKeys,
+		grants:      grants,
 		rules:       buildRouteRules(),
 	}
 }
@@ -419,6 +423,9 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			}
 			c.Set(ClaimsContextKey, claims)
 			c.Set(UserContextKey, user)
+			if !m.stampGrants(c, user) {
+				return
+			}
 			c.Next()
 			return
 		}
@@ -443,9 +450,36 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 		}
 
 		c.Set(ClaimsContextKey, claims)
-		c.Set(UserContextKey, claimsToUser(claims))
+		user := claimsToUser(claims)
+		c.Set(UserContextKey, user)
+		if !m.stampGrants(c, user) {
+			return
+		}
 		c.Next()
 	}
+}
+
+// stampGrants resolves the caller's data-plane namespace grants and
+// stamps them onto the REQUEST context (issue #4), so services can
+// enforce them via the authz package regardless of how deep the call
+// goes. Every authenticated request MUST pass through here — the
+// authz fail-open invariant (unstamped ctx = internal caller) depends
+// on it. Returns false after aborting the request when the resolver
+// can't answer; namespace grants never fail open for external calls.
+func (m *AuthMiddleware) stampGrants(c *gin.Context, user *models.User) bool {
+	if m.grants == nil {
+		// Tests that construct the middleware without a resolver get
+		// unrestricted behavior — matching pre-feature semantics.
+		return true
+	}
+	g, err := m.grants.Resolve(c.Request.Context(), user)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "authorization unavailable"})
+		c.Abort()
+		return false
+	}
+	c.Request = c.Request.WithContext(authz.WithGrants(c.Request.Context(), user, g))
+	return true
 }
 
 // claimsToUser builds a lightweight *User from JWT claims. Routine
