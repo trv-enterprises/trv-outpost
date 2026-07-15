@@ -7,31 +7,64 @@
 .namespace-detail-page {
   background-color: var(--cds-background);
   height: 100%;
-  overflow-y: auto;
-  padding: spacing.$spacing-05;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 
-  .page-header {
+  // Single compact header bar — back + title left, actions right.
+  // Mirrors ComponentDetailPage / ConnectionDetailPage so every edit
+  // page has the same 56px bar instead of its own stacked layout.
+  .page-header-bar {
     display: flex;
-    flex-direction: column;
-    gap: spacing.$spacing-03;
-    margin-bottom: spacing.$spacing-05;
+    justify-content: space-between;
+    align-items: center;
+    height: 56px;
+    padding: 0 spacing.$spacing-05;
+    background-color: transparent;
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+    flex-shrink: 0;
 
-    h1 {
+    .header-left {
       display: flex;
       align-items: center;
-      gap: spacing.$spacing-03;
+      gap: spacing.$spacing-04;
+      min-width: 0;
+
+      // Back button reads as primary text, not a link.
+      .cds--btn--ghost {
+        color: var(--cds-text-primary);
+
+        svg {
+          fill: var(--cds-text-primary);
+        }
+
+        &:hover {
+          color: var(--cds-text-primary);
+          background-color: var(--cds-layer-hover-01);
+        }
+      }
+    }
+
+    h1 {
       color: var(--cds-text-primary);
-      font-size: 1.5rem;
-      font-weight: 400;
+      font-size: 1.25rem;
+      font-weight: 600;
       margin: 0;
+      white-space: nowrap;
+    }
+
+    .page-actions {
+      display: flex;
+      gap: spacing.$spacing-03;
+      flex-shrink: 0;
     }
   }
 
-  .page-actions {
-    display: flex;
-    gap: spacing.$spacing-03;
-    justify-content: flex-end;
-    margin-bottom: spacing.$spacing-05;
+  // Everything below the fixed bar scrolls.
+  .page-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: spacing.$spacing-05;
   }
 
   .config-section {
@@ -41,6 +74,14 @@
     // 800px matches the connection/component editors so every edit page
     // reads the same width.
     max-width: 800px;
+
+    // The header bar already draws a divider, so the first section
+    // shouldn't draw a second one right beneath it.
+    &:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: none;
+    }
 
     &__header {
       display: flex;

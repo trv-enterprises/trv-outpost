@@ -188,10 +188,14 @@ function NamespaceDetailPage() {
     }
   };
 
+  // The page itself is an unpadded flex column (fixed bar + scrolling
+  // body), so these bail-out states supply their own padded body.
   if (loading) {
     return (
       <div className="namespace-detail-page">
-        <Loading description="Loading namespace..." withOverlay={false} />
+        <div className="page-body">
+          <Loading description="Loading namespace..." withOverlay={false} />
+        </div>
       </div>
     );
   }
@@ -199,10 +203,12 @@ function NamespaceDetailPage() {
   if (error) {
     return (
       <div className="namespace-detail-page">
-        <InlineNotification kind="error" title="Failed to load" subtitle={error} lowContrast hideCloseButton />
-        <Button kind="ghost" renderIcon={ArrowLeft} onClick={() => navigate('/manage/namespaces')}>
-          Back to namespaces
-        </Button>
+        <div className="page-body">
+          <InlineNotification kind="error" title="Failed to load" subtitle={error} lowContrast hideCloseButton />
+          <Button kind="ghost" renderIcon={ArrowLeft} onClick={() => navigate('/manage/namespaces')}>
+            Back to namespaces
+          </Button>
+        </div>
       </div>
     );
   }
@@ -226,27 +232,33 @@ function NamespaceDetailPage() {
 
   return (
     <div className="namespace-detail-page">
-      <div className="page-header">
-        <Button kind="ghost" size="sm" renderIcon={ArrowLeft} onClick={handleCancel}>
-          Namespaces
-        </Button>
-        <h1>
-          Edit namespace
+      {/* Single compact bar — back + title left, actions right — matching
+          the component/connection editors. */}
+      <div className="page-header-bar">
+        <div className="header-left">
+          <Button kind="ghost" size="md" renderIcon={ArrowLeft} onClick={handleCancel}>
+            Back
+          </Button>
+          <h1>Edit Namespace</h1>
           <Tag type="gray" style={namespaceChipStyle(formColor)}>{formName}</Tag>
-        </h1>
+        </div>
+        <div className="page-actions">
+          <Button kind="secondary" size="md" renderIcon={Close} onClick={handleCancel}>
+            Cancel
+          </Button>
+          <Button
+            kind="primary"
+            size="md"
+            renderIcon={Save}
+            onClick={handleSave}
+            disabled={saving || !formName.trim() || !hasChanges}
+          >
+            Save
+          </Button>
+        </div>
       </div>
 
-      <div className="page-actions">
-        <Button kind="secondary" renderIcon={Close} onClick={handleCancel}>Cancel</Button>
-        <Button
-          renderIcon={Save}
-          onClick={handleSave}
-          disabled={saving || !formName.trim() || !hasChanges}
-        >
-          Save
-        </Button>
-      </div>
-
+      <div className="page-body">
       {saveError && (
         <InlineNotification kind="error" title="Save failed" subtitle={saveError} lowContrast hideCloseButton />
       )}
@@ -403,6 +415,7 @@ function NamespaceDetailPage() {
             )}
           </DataTable>
         )}
+      </div>
       </div>
 
       <Modal
