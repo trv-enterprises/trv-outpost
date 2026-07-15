@@ -78,15 +78,29 @@ func (r *UserRepository) CreateIndexes(ctx context.Context) error {
 	return err
 }
 
-// FindByAllowedNamespace returns every RESTRICTED user granted the
-// given namespace (#4). Unrestricted users are deliberately excluded:
-// they can see every namespace, so listing them under one namespace's
-// "users with access" would be noise. The namespace detail page says
-// so explicitly.
+// FindByAllowedNamespace returns every user who can see the given
+// namespace (#4) — the honest answer to "who has access here", which
+// is what the namespace detail page asks. That's TWO populations:
+//
+//   - RESTRICTED users with an explicit grant on this namespace. These
+//     are revocable from the namespace page (pull the slug).
+//   - UNRESTRICTED users, who reach every namespace implicitly. These
+//     are NOT revocable here: "removing" one would mean restricting
+//     them to every-namespace-except-this, silently changing their
+//     access to every OTHER namespace too. Narrowing them is a
+//     per-user decision, so the page links to the user instead.
+//
+// Callers distinguish the two via the user's NamespacesRestricted flag.
 func (r *UserRepository) FindByAllowedNamespace(ctx context.Context, namespace string) ([]models.User, error) {
 	cursor, err := r.collection.Find(ctx, bson.M{
-		"namespaces_restricted": true,
-		"allowed_namespaces":    namespace,
+		"$or": []bson.M{
+			// Explicitly granted.
+			{"namespaces_restricted": true, "allowed_namespaces": namespace},
+			// Unrestricted → implicit access. `$ne: true` (not
+			// `false`) so records that predate the field — where it's
+			// absent entirely — are correctly counted as unrestricted.
+			{"namespaces_restricted": bson.M{"$ne": true}},
+		},
 	}, options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
 	if err != nil {
 		return nil, err

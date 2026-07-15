@@ -23,7 +23,7 @@ import {
   Dropdown,
   Tag,
 } from '@carbon/react';
-import { Save, Close, ArrowLeft, TrashCan, Add } from '@carbon/icons-react';
+import { Save, Close, ArrowLeft, TrashCan, Add, ArrowRight } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import { useNamespaces } from '../context/NamespaceContext';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
@@ -141,17 +141,19 @@ function NamespaceDetailPage() {
   };
 
   // Open the add-user picker. Candidates are RESTRICTED users who don't
-  // already have this grant — an unrestricted user already sees every
-  // namespace, so "adding" them here would be a no-op (or, worse, imply
-  // we'd restrict them).
+  // already have this grant. Unrestricted users are excluded because
+  // there's nothing to add — they already see every namespace (and they
+  // now appear in the list above as "All namespaces", so the `granted`
+  // set filters them out anyway; the explicit flag check keeps that
+  // intent legible rather than incidental).
   const openAddUser = async () => {
     setGrantError(null);
     setSelectedCandidate(null);
     try {
       const resp = await apiClient.getUsers({ page_size: 'all' });
-      const granted = new Set(users.map((u) => u.id));
+      const alreadyListed = new Set(users.map((u) => u.id));
       const eligible = (resp?.users || []).filter(
-        (u) => u.namespaces_restricted && !granted.has(u.id)
+        (u) => u.namespaces_restricted && !alreadyListed.has(u.id)
       );
       setCandidateUsers(eligible);
       setAddUserOpen(true);
@@ -207,12 +209,18 @@ function NamespaceDetailPage() {
   const userHeaders = [
     { key: 'name', header: 'User' },
     { key: 'email', header: 'Email' },
+    { key: 'access', header: 'Access' },
     { key: 'actions', header: '' },
   ];
+  // Two populations (#4): an explicit grant on this namespace, or
+  // unrestricted access to every namespace. Both genuinely see this
+  // namespace's content, so both are listed — but only the explicit
+  // grant is revocable here.
   const userRows = users.map((u) => ({
     id: u.id,
     name: u.name,
     email: u.email || '—',
+    access: u.namespaces_restricted ? 'Granted' : 'All namespaces',
   }));
 
   return (
@@ -292,8 +300,12 @@ function NamespaceDetailPage() {
           </Button>
         </div>
         <p className="section-description">
-          Users restricted to specific namespaces who have been granted this one.
-          Users who aren&apos;t restricted can see every namespace and aren&apos;t listed here.
+          Everyone who can see this namespace&apos;s connections, components, and
+          dashboards. <strong>Granted</strong> users were given this namespace
+          specifically and can be revoked here. <strong>All namespaces</strong> users
+          aren&apos;t restricted at all — to narrow one, open the user and choose the
+          namespaces they should have, since restricting them affects every other
+          namespace too.
         </p>
 
         {grantError && (
@@ -303,7 +315,13 @@ function NamespaceDetailPage() {
         {usersLoading ? (
           <Loading description="Loading users..." withOverlay={false} small />
         ) : users.length === 0 ? (
-          <p className="namespace-detail-page__empty">No restricted users have been granted this namespace.</p>
+          /* Unrestricted users are listed too, so an empty list means NOBODY
+             can see this namespace — every user is restricted and none was
+             granted it. Worth stating plainly rather than a neutral "no users". */
+          <p className="namespace-detail-page__empty">
+            No one can see this namespace. Every user is restricted to specific
+            namespaces and none of them has been granted this one.
+          </p>
         ) : (
           <DataTable rows={userRows} headers={userHeaders}>
             {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
@@ -321,20 +339,51 @@ function NamespaceDetailPage() {
                     {rows.map((row) => {
                       const { key, ...rest } = getRowProps({ row });
                       const user = users.find((u) => u.id === row.id);
+                      const isExplicit = !!user?.namespaces_restricted;
                       return (
                         <TableRow key={key} {...rest}>
                           {row.cells.map((cell) => {
+                            if (cell.info.header === 'access') {
+                              return (
+                                <TableCell key={cell.id}>
+                                  {isExplicit ? (
+                                    <Tag type="green" size="sm">Granted</Tag>
+                                  ) : (
+                                    <Tooltip label="This user isn't restricted to specific namespaces, so they can see every namespace — including this one." align="bottom">
+                                      <span><Tag type="gray" size="sm">All namespaces</Tag></span>
+                                    </Tooltip>
+                                  )}
+                                </TableCell>
+                              );
+                            }
                             if (cell.info.header === 'actions') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <IconButton
-                                    kind="ghost"
-                                    size="sm"
-                                    label="Revoke access"
-                                    onClick={() => removeUserGrant(user)}
-                                  >
-                                    <TrashCan />
-                                  </IconButton>
+                                  {isExplicit ? (
+                                    <IconButton
+                                      kind="ghost"
+                                      size="sm"
+                                      label="Revoke access to this namespace"
+                                      onClick={() => removeUserGrant(user)}
+                                    >
+                                      <TrashCan />
+                                    </IconButton>
+                                  ) : (
+                                    // An unrestricted user can't be revoked from
+                                    // here: "removing" them would mean restricting
+                                    // them to every-namespace-except-this-one,
+                                    // silently changing their access to every OTHER
+                                    // namespace. That's a per-user decision — send
+                                    // the admin to the user instead.
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      renderIcon={ArrowRight}
+                                      onClick={() => navigate(`/manage/users/${user.id}`)}
+                                    >
+                                      Edit user
+                                    </Button>
+                                  )}
                                 </TableCell>
                               );
                             }

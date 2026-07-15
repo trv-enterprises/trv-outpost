@@ -265,11 +265,13 @@ func (s *NamespaceService) Update(ctx context.Context, id string, req *models.Up
 	return s.repo.FindByID(ctx, id)
 }
 
-// UsersWithAccess returns the RESTRICTED users granted this namespace
-// (#4), for the namespace detail page's "users with access" list.
-// Unrestricted users are excluded by the repo query — they can see
-// every namespace, so listing them here would be noise; the page says
-// so. Returns an empty slice when the user dependency isn't wired.
+// UsersWithAccess returns every user who can see this namespace (#4):
+// those with an explicit grant AND those who are unrestricted (implicit
+// access to everything). The caller distinguishes them by each user's
+// NamespacesRestricted flag — only the explicitly-granted are revocable
+// from the namespace page; narrowing an unrestricted user is a per-user
+// decision (see FindByAllowedNamespace). Returns an empty slice when
+// the user dependency isn't wired.
 func (s *NamespaceService) UsersWithAccess(ctx context.Context, id string) ([]models.User, error) {
 	ns, err := s.repo.FindByID(ctx, id)
 	if err != nil {
