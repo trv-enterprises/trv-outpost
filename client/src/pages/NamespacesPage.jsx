@@ -3,6 +3,7 @@
 // See LICENSE file for details.
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   DataTable,
   TableContainer,
@@ -23,47 +24,26 @@ import {
   InlineNotification,
   Link,
 } from '@carbon/react';
-import { Add, TrashCan, Edit } from '@carbon/icons-react';
+import { Add, TrashCan } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import { useNamespaces } from '../context/NamespaceContext';
 import NamespaceChip from '../components/shared/NamespaceChip';
-import { NAMESPACE_DEFAULT_COLOR, namespaceChipStyle, canonicalNamespaceColor } from '../utils/namespaceColor';
+import { NAMESPACE_DEFAULT_COLOR, NAMESPACE_PALETTE, namespaceChipStyle } from '../utils/namespaceColor';
 import './NamespacesPage.scss';
 
-// Namespace color palette — ONE preset per distinct Carbon tag color, so the
-// picker is a true 1:1 key: each swatch is rendered as the actual Carbon tag
-// color the chip will use (via namespaceChipStyle), and what you pick is
-// exactly the chip you get. The stored `value` is the canonical hex for that
-// Carbon color (kept for back-compat with existing namespace records, which
-// store a hex; namespaceColor.js maps it to the tag color at render).
-//
-// Blue is intentionally NOT offered: user tags render type="blue" across the
-// app, so a blue namespace pill collides with the tag pills next to it and
-// stops reading as a namespace. (Existing namespaces already stored as blue
-// still render blue — we only removed it as a NEW choice.) Cool Gray + Warm
-// Gray are offered as the remaining distinct Carbon tag hues; on g100 dark
-// they read close to Gray, so revisit with custom hues if that's too subtle.
-const NAMESPACE_PALETTE = [
-  { name: 'Gray',      value: '#6f6f6f' },
-  { name: 'Cool Gray', value: '#4d5358' },
-  { name: 'Warm Gray', value: '#565151' },
-  { name: 'Cyan',      value: '#1192e8' },
-  { name: 'Teal',      value: '#009d9a' },
-  { name: 'Green',     value: '#24a148' },
-  { name: 'Red',       value: '#da1e28' },
-  { name: 'Magenta',   value: '#d02670' },
-  { name: 'Purple',    value: '#8a3ffc' },
-];
+// NAMESPACE_PALETTE moved to utils/namespaceColor so this page's create
+// modal and the namespace detail page's edit form share one source (#4).
 
 function NamespacesPage() {
+  const navigate = useNavigate();
   const { namespaces, refresh } = useNamespaces();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Editor modal (both create and edit). `editing` === null means create;
-  // an existing record means edit.
+  // CREATE modal only. Editing moved to /manage/namespaces/:id (#4) —
+  // a namespace now also owns its user-access list, which a modal has
+  // no room for, and row-click-to-edit matches the other Manage lists.
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formColor, setFormColor] = useState(NAMESPACE_DEFAULT_COLOR);
@@ -80,21 +60,9 @@ function NamespacesPage() {
   }, [refresh]);
 
   const openCreate = () => {
-    setEditing(null);
     setFormName('');
     setFormDescription('');
     setFormColor(NAMESPACE_DEFAULT_COLOR);
-    setFormError(null);
-    setModalOpen(true);
-  };
-
-  const openEdit = (ns) => {
-    setEditing(ns);
-    setFormName(ns.name);
-    setFormDescription(ns.description || '');
-    // Normalize legacy/dropped colors to the surviving palette swatch so the
-    // picker highlights the right one (and re-saving stores the canonical hex).
-    setFormColor(canonicalNamespaceColor(ns.color || NAMESPACE_DEFAULT_COLOR));
     setFormError(null);
     setModalOpen(true);
   };
@@ -103,19 +71,11 @@ function NamespacesPage() {
     setLoading(true);
     setFormError(null);
     try {
-      if (editing) {
-        await apiClient.updateNamespace(editing.id, {
-          name: formName,
-          description: formDescription,
-          color: formColor,
-        });
-      } else {
-        await apiClient.createNamespace({
-          name: formName,
-          description: formDescription,
-          color: formColor,
-        });
-      }
+      await apiClient.createNamespace({
+        name: formName,
+        description: formDescription,
+        color: formColor,
+      });
       setModalOpen(false);
       await refresh();
     } catch (err) {
@@ -123,7 +83,7 @@ function NamespacesPage() {
     } finally {
       setLoading(false);
     }
-  }, [editing, formName, formDescription, formColor, refresh]);
+  }, [formName, formDescription, formColor, refresh]);
 
   const startDelete = (ns) => {
     setDeleteTarget(ns);
@@ -200,18 +160,35 @@ function NamespacesPage() {
             <Table {...getTableProps()}>
               <TableHead>
                 <TableRow>
-                  {h.map((header) => (
-                    <TableHeader key={header.key} {...getHeaderProps({ header })}>
-                      {header.header}
-                    </TableHeader>
-                  ))}
+                  {h.map((header) => {
+                    // getHeaderProps returns an object that INCLUDES `key`, so
+                    // it must be destructured out — spreading it into JSX
+                    // passes the key via spread, which React 19 warns about
+                    // (and won't read as a key).
+                    const { key, ...headerProps } = getHeaderProps({ header });
+                    return (
+                      <TableHeader key={key} {...headerProps}>
+                        {header.header}
+                      </TableHeader>
+                    );
+                  })}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {r.map((row) => {
                   const ns = rows.find((x) => x.id === row.id)?.record;
+                  const { key, ...rowProps } = getRowProps({ row });
                   return (
-                    <TableRow key={row.id} {...getRowProps({ row })}>
+                    // Row-click → detail page, matching the other Manage
+                    // lists (users, connections, components). #4: the edit
+                    // modal became a page so it can also show the
+                    // namespace's users.
+                    <TableRow
+                      key={key}
+                      {...rowProps}
+                      className="clickable-row"
+                      onClick={() => navigate(`/manage/namespaces/${ns.id}`)}
+                    >
                       <TableCell>
                         <NamespaceChip name={ns?.name} size="md" />
                       </TableCell>
@@ -219,15 +196,7 @@ function NamespacesPage() {
                       <TableCell>
                         <code className="namespaces-page__hex">{ns?.color}</code>
                       </TableCell>
-                      <TableCell>
-                        <IconButton
-                          kind="ghost"
-                          size="sm"
-                          label="Edit namespace"
-                          onClick={() => openEdit(ns)}
-                        >
-                          <Edit size={16} />
-                        </IconButton>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <IconButton
                           kind="ghost"
                           size="sm"
@@ -247,10 +216,10 @@ function NamespacesPage() {
         )}
       </DataTable>
 
-      {/* Create/Edit Modal */}
+      {/* Create modal (edit lives at /manage/namespaces/:id — #4) */}
       <Modal
         open={modalOpen}
-        modalHeading={editing ? `Edit namespace “${editing.name}”` : 'Create namespace'}
+        modalHeading="Create namespace"
         primaryButtonText="Save"
         secondaryButtonText="Cancel"
         onRequestClose={() => setModalOpen(false)}
@@ -269,16 +238,10 @@ function NamespacesPage() {
           )}
           <TextInput
             id="ns-name"
-            labelText={editing?.name === 'default' ? 'Name (slug) — locked' : 'Name (slug)'}
-            helperText={editing?.name === 'default'
-              ? 'The "default" slug is fixed — it\'s used by server-side fallbacks and the startup seed. Description and color are editable.'
-              : 'Lowercase letters, numbers, and hyphens. 3–32 characters.'}
+            labelText="Name (slug)"
+            helperText="Lowercase letters, numbers, and hyphens. 3–32 characters."
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
-            // The `default` slug is the server's fallback target and
-            // startup-seed identity; renaming it would break those
-            // invariants. Description and color stay editable.
-            disabled={editing?.name === 'default'}
           />
           <TextArea
             id="ns-description"

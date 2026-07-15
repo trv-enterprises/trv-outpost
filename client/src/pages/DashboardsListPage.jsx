@@ -41,6 +41,7 @@ import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import VariableIndicator from '../components/shared/VariableIndicator';
 import { dashboardUsesVariable } from '../utils/dashboardVariable';
+import { toUsageItems } from '../utils/usageRefs';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import DashboardExportModal from '../components/DashboardExportModal';
@@ -667,8 +668,8 @@ function DashboardsListPage() {
                 };
                 // #21: feed the tile pre-computed comps/conns from the
                 // summary's denormalized {id,name} fields — both navigable.
-                const tileComponentItems = (dashboard.component_usage || []).map((c) => ({ id: c.id, label: c.name }));
-                const tileConnectionItems = (dashboard.connection_usage || []).map((c) => ({ id: c.id, label: c.name }));
+                const tileComponentItems = toUsageItems(dashboard.component_usage);
+                const tileConnectionItems = toUsageItems(dashboard.connection_usage);
                 return (
                 <DashboardTile
                   key={dashboard.id}

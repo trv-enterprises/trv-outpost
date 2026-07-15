@@ -1,0 +1,27 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Namespace rows inside the edit-form dropdown. Mirrors the header
+// NamespacePicker's item/swatch treatment so the two pickers read as
+// one system (see NamespacePicker.scss __item / __item-swatch).
+.namespace-select__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.namespace-select__swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.namespace-select__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

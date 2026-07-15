@@ -78,7 +78,7 @@ func (h *DashboardHandler) GetDashboard(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *DashboardHandler) GetVariableCandidates(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *DashboardHandler) GetSwapCompatibility(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -214,7 +214,7 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 	if params.IDsOnly {
 		response, err := h.service.ListDashboardNavRefs(c.Request.Context(), params)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			respondError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, response)
@@ -225,7 +225,7 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 	if params.IncludeConnections {
 		response, err := h.service.ListDashboardsWithDatasources(c.Request.Context(), params)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			respondError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, response)
@@ -234,7 +234,7 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 
 	response, err := h.service.ListDashboards(c.Request.Context(), params)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -315,7 +315,7 @@ func (h *DashboardHandler) GetDashboardThumbnail(c *gin.Context) {
 
 	dataURL, err := h.service.GetThumbnail(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	if dataURL == "" {
@@ -372,7 +372,7 @@ func (h *DashboardHandler) PutDashboardThumbnail(c *gin.Context) {
 	}
 
 	if err := h.service.SetThumbnail(c.Request.Context(), id, body.Thumbnail); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -394,17 +394,20 @@ func (h *DashboardHandler) PutDashboardThumbnail(c *gin.Context) {
 func (h *DashboardHandler) GetDashboardComponents(c *gin.Context) {
 	id := c.Param("id")
 
-	components, err := h.service.GetDashboardComponents(c.Request.Context(), id)
+	components, unauthorized, err := h.service.GetDashboardComponentsAuthorized(c.Request.Context(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"components": components})
+	// `unauthorized` lists panel components the caller can't see (#4) so
+	// the viewer renders an error panel instead of a blank one. Omitted
+	// (nil) for unrestricted callers.
+	c.JSON(http.StatusOK, gin.H{"components": components, "unauthorized": unauthorized})
 }
 
 // DeleteDashboard deletes a dashboard
@@ -433,7 +436,7 @@ func (h *DashboardHandler) DeleteDashboard(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -461,7 +464,7 @@ func (h *DashboardHandler) GetDashboardDeletePreview(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"orphaned_components": orphans})

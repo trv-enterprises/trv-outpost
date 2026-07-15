@@ -134,6 +134,10 @@ type ConnectionQueryParams struct {
 	Direction string   `form:"direction"` // "asc" | "desc". Empty = entity default.
 	Page      int      `form:"page"`
 	PageSize  int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+	// Internal (issue #4): the caller's namespace grants, stamped by the
+	// service from the authz context — never a query param.
+	NamespacesRestricted bool     `form:"-"`
+	AllowedNamespaces    []string `form:"-"`
 }
 
 // ConnectionListResponse is the paginated list envelope for connections,
@@ -157,6 +161,9 @@ type ConnectionWithUsage struct {
 	Connection     `bson:",inline"`
 	ComponentUsage []EntityRef `json:"component_usage" bson:"component_usage"`
 	ComponentCount int         `json:"component_count" bson:"component_count"`
+	// HasUnauthorizedDeps (#4): set by the service when a referencing
+	// component is in a namespace the caller can't see. Never stored.
+	HasUnauthorizedDeps bool `json:"has_unauthorized_deps,omitempty" bson:"-"`
 }
 
 // DiscoveredValueList is one column's cached distinct values for the

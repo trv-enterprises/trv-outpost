@@ -47,15 +47,29 @@
     flex: 1;
     overflow: auto;
 
-    // Inner content constrained to max-width
+    // Inner content constrained to max-width. 800px matches the
+    // connection/component editors so every edit page reads the same width.
     > .form-row,
     > .config-section {
-      max-width: 600px;
+      max-width: 800px;
     }
 
     // Consistent form row spacing
     .form-row {
       margin-bottom: spacing.$spacing-05;
+    }
+
+    // Two-column metadata row. Collapses to one column below the Carbon
+    // `md` breakpoint so the inputs never get squeezed unreadable.
+    .form-row--split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: spacing.$spacing-05;
+      align-items: start;
+
+      @media (max-width: 672px) {
+        grid-template-columns: 1fr;
+      }
     }
 
     // Unified form field styling
@@ -103,7 +117,7 @@
     margin-top: spacing.$spacing-05;
     padding-top: spacing.$spacing-05;
     border-top: 1px solid #393939;
-    max-width: 600px;
+    max-width: 800px;
 
     h3 {
       color: #f4f4f4;
@@ -121,9 +135,14 @@
     }
 
     .capabilities-form {
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: spacing.$spacing-04;
+      align-items: start;
+
+      @media (max-width: 672px) {
+        grid-template-columns: 1fr;
+      }
 
       .capability-item {
         display: flex;
@@ -145,6 +164,31 @@
           margin-left: 1.5rem;
         }
       }
+    }
+  }
+
+  // Capabilities | Namespaces tab strip. Reads as TABS, not a giant
+  // segmented control: Carbon's ContentSwitcher is full-width by
+  // default, which at the page's 800px would stretch two labels across
+  // the entire form. Shrink it to its own content, and drop the
+  // config-section divider above it — the tab strip IS the divider.
+  //
+  // MUST come after the .config-section rule: same specificity, so the
+  // later block wins the border-top/padding reset.
+  .access-tabs {
+    border-top: none;
+    padding-top: 0;
+    margin-bottom: spacing.$spacing-03;
+
+    .cds--content-switcher {
+      display: inline-flex;
+      width: auto;
+    }
+
+    .cds--content-switcher-btn {
+      flex: 0 0 auto;
+      width: auto;
+      padding-inline: spacing.$spacing-05;
     }
   }
 

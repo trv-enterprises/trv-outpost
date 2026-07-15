@@ -293,6 +293,7 @@ func buildLatestPipeline(params models.ComponentQueryParams) mongo.Pipeline {
 	if params.Status != "" {
 		matchFilter["status"] = params.Status
 	}
+	applyNamespaceGrant(matchFilter, params.NamespacesRestricted, params.AllowedNamespaces)
 
 	return mongo.Pipeline{
 		// Match initial filters
@@ -450,7 +451,7 @@ func (r *ComponentRepository) FindAllLatestWithUsage(ctx context.Context, params
 						}}}}}},
 					}},
 				}}}}},
-				{{Key: "$project", Value: bson.D{{Key: "_id", Value: 0}, {Key: "id", Value: "$_id"}, {Key: "name", Value: 1}}}},
+				{{Key: "$project", Value: bson.D{{Key: "_id", Value: 0}, {Key: "id", Value: "$_id"}, {Key: "name", Value: 1}, {Key: "namespace", Value: 1}}}}, // #4: namespace for grant redaction
 			}},
 			{Key: "as", Value: "dashboard_usage"},
 		}}},
@@ -477,14 +478,23 @@ func (r *ComponentRepository) FindAll(ctx context.Context, params models.Compone
 	return r.FindAllLatest(ctx, params)
 }
 
-// FindSummaries returns lightweight component summaries for the latest version of each component
-func (r *ComponentRepository) FindSummaries(ctx context.Context, limit int64) ([]models.ComponentSummary, error) {
+// FindSummaries returns lightweight component summaries for the latest
+// version of each component. restricted/allowed are the caller's
+// namespace grants (issue #4) — pre-grants this method had NO
+// namespace awareness at all and leaked names across namespaces via
+// the summaries endpoint + AI tools.
+func (r *ComponentRepository) FindSummaries(ctx context.Context, limit int64, restricted bool, allowed []string) ([]models.ComponentSummary, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 
+	grantFilter := bson.M{}
+	applyNamespaceGrant(grantFilter, restricted, allowed)
+
 	// Aggregation to get latest version of each component with projection
 	pipeline := mongo.Pipeline{
+		// Namespace grants first — cheap index-friendly narrowing.
+		{{Key: "$match", Value: grantFilter}},
 		// Sort by id and version descending
 		{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}, {Key: "version", Value: -1}}}},
 		// Group by id, taking the first (latest version)

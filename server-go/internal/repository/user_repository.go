@@ -64,10 +64,89 @@ func (r *UserRepository) CreateIndexes(ctx context.Context) error {
 			Keys:    bson.D{{Key: "email", Value: 1}},
 			Options: options.Index().SetSparse(true),
 		},
+		// Namespace grants (#4): multikey index over the grant array
+		// backs the "users with access to namespace X" reverse lookup
+		// (namespace detail page) and the rename/delete cascades.
+		// Sparse — unrestricted users have no allowed_namespaces.
+		{
+			Keys:    bson.D{{Key: "allowed_namespaces", Value: 1}},
+			Options: options.Index().SetSparse(true),
+		},
 	}
 
 	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
 	return err
+}
+
+// FindByAllowedNamespace returns every user who can see the given
+// namespace (#4) — the honest answer to "who has access here", which
+// is what the namespace detail page asks. That's TWO populations:
+//
+//   - RESTRICTED users with an explicit grant on this namespace. These
+//     are revocable from the namespace page (pull the slug).
+//   - UNRESTRICTED users, who reach every namespace implicitly. These
+//     are NOT revocable here: "removing" one would mean restricting
+//     them to every-namespace-except-this, silently changing their
+//     access to every OTHER namespace too. Narrowing them is a
+//     per-user decision, so the page links to the user instead.
+//
+// Callers distinguish the two via the user's NamespacesRestricted flag.
+func (r *UserRepository) FindByAllowedNamespace(ctx context.Context, namespace string) ([]models.User, error) {
+	cursor, err := r.collection.Find(ctx, bson.M{
+		"$or": []bson.M{
+			// Explicitly granted.
+			{"namespaces_restricted": true, "allowed_namespaces": namespace},
+			// Unrestricted → implicit access. `$ne: true` (not
+			// `false`) so records that predate the field — where it's
+			// absent entirely — are correctly counted as unrestricted.
+			{"namespaces_restricted": bson.M{"$ne": true}},
+		},
+	}, options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []models.User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// RenameNamespaceGrants rewrites the slug inside every user's
+// allowed_namespaces array when a namespace is renamed (#4). Without
+// this, a rename silently strips access for every restricted user
+// granted the old slug. Implements the same contract as the entity
+// repos' RenameNamespace so NamespaceService can fan out to it.
+func (r *UserRepository) RenameNamespace(ctx context.Context, oldName, newName string) (int64, error) {
+	res, err := r.collection.UpdateMany(
+		ctx,
+		bson.M{"allowed_namespaces": oldName},
+		bson.M{"$set": bson.M{"allowed_namespaces.$[elem]": newName}},
+		options.Update().SetArrayFilters(options.ArrayFilters{
+			Filters: []interface{}{bson.M{"elem": oldName}},
+		}),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
+// PullNamespaceGrant removes a namespace from every user's
+// allowed_namespaces (#4). Called when the namespace is deleted so no
+// user carries a dangling grant.
+func (r *UserRepository) PullNamespaceGrant(ctx context.Context, namespace string) (int64, error) {
+	res, err := r.collection.UpdateMany(
+		ctx,
+		bson.M{"allowed_namespaces": namespace},
+		bson.M{"$pull": bson.M{"allowed_namespaces": namespace}},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
 }
 
 // Create creates a new user

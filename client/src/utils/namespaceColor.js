@@ -92,3 +92,31 @@ export function namespaceChipStyle(nsOrHex) {
 }
 
 export const NAMESPACE_DEFAULT_COLOR = DEFAULT_COLOR;
+
+// Namespace color palette — ONE preset per distinct Carbon tag color, so the
+// picker is a true 1:1 key: each swatch renders as the actual Carbon tag color
+// the chip will use (via namespaceChipStyle), and what you pick is exactly the
+// chip you get. The stored `value` is the canonical hex for that Carbon color
+// (kept for back-compat with existing namespace records, which store a hex;
+// PRESET_TO_TAG above maps it to the tag color at render).
+//
+// Blue is intentionally NOT offered: user tags render type="blue" across the
+// app, so a blue namespace pill collides with the tag pills next to it and
+// stops reading as a namespace. (Existing namespaces already stored as blue
+// still render blue — we only removed it as a NEW choice.) Cool Gray + Warm
+// Gray are offered as the remaining distinct Carbon tag hues; on g100 dark
+// they read close to Gray, so revisit with custom hues if that's too subtle.
+//
+// Lives here (not in a page) so the namespace LIST create-modal and the
+// namespace DETAIL page edit form stay in lockstep (#4).
+export const NAMESPACE_PALETTE = [
+  { name: 'Gray',      value: '#6f6f6f' },
+  { name: 'Cool Gray', value: '#4d5358' },
+  { name: 'Warm Gray', value: '#565151' },
+  { name: 'Cyan',      value: '#1192e8' },
+  { name: 'Teal',      value: '#009d9a' },
+  { name: 'Green',     value: '#24a148' },
+  { name: 'Red',       value: '#da1e28' },
+  { name: 'Magenta',   value: '#d02670' },
+  { name: 'Purple',    value: '#8a3ffc' },
+];

@@ -182,6 +182,14 @@
       }
     }
 
+    // #4: unauthorized-dependency warning badge.
+    .tile-unauthorized-badge {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      color: var(--cds-support-warning);
+    }
+
     .tile-name {
       margin: 0;
       font-size: 1rem;

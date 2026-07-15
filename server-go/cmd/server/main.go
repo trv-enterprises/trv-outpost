@@ -26,6 +26,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth/idp"
 	"github.com/trv-enterprises/trve-dashboard/internal/database"
 	"github.com/trv-enterprises/trve-dashboard/internal/handlers"
@@ -537,7 +538,7 @@ func main() {
 	aiSessionHandler := handlers.NewAISessionHandler(aiSessionService, aiAgent, chatAgent, configService, chartHub)
 	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
 	debugHandler := handlers.NewDebugHandler()
-	streamHandler := handlers.NewStreamHandler(streamManager)
+	streamHandler := handlers.NewStreamHandler(streamManager, connectionService)
 	configHandler := handlers.NewConfigHandler(configService)
 	authHandler := handlers.NewAuthHandler(userService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
@@ -559,13 +560,21 @@ func main() {
 	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub, alertService, webhookSecretRepo)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	// Resolve connection id → name so the status stream summary can label
-	// streams by name instead of only the opaque id. One FindAll per status
-	// build; nil-safe in the handler if this is never wired.
-	statusHandler.SetConnectionNameLookup(func() map[string]string {
-		conns, err := connectionRepo.FindAll(context.Background(), 1000, 0)
+	// streams by name instead of only the opaque id. One list call per
+	// status build; nil-safe in the handler if this is never wired.
+	//
+	// Goes through the SERVICE (not the repo) with the CALLER's context so
+	// namespace grants apply (#4) — a restricted user must not learn the
+	// names of connections in namespaces they can't see. This previously
+	// used connectionRepo.FindAll(context.Background(), …), which the authz
+	// fail-open invariant treated as an internal caller and returned every
+	// connection.
+	statusHandler.SetConnectionNameLookup(func(ctx context.Context) map[string]string {
+		resp, err := connectionService.ListConnectionsPaged(ctx, models.ConnectionQueryParams{PageSize: 1000})
 		if err != nil {
 			return nil
 		}
+		conns := resp.Connections
 		m := make(map[string]string, len(conns))
 		for _, c := range conns {
 			if c != nil {
@@ -661,7 +670,18 @@ func main() {
 	}
 	authSessionHandler := handlers.NewAuthSessionHandler(sessionService, idpRegistry, userService, cookieCfg)
 
-	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService)
+	// Namespace-grants resolver (issue #4): per-request grant
+	// resolution with a small TTL/LRU cache; user edits invalidate
+	// entries immediately via the UserService hook.
+	grantsResolver := authz.NewResolver(userService)
+	userService.SetGrantsInvalidator(grantsResolver)
+	// #4: namespace lifecycle must cascade into users' allowed_namespaces
+	// (rename rewrites the slug, delete pulls it) and flush the grants
+	// cache. Wired here (post-resolver) rather than in the constructor so
+	// the existing early-bootstrap callers stay unchanged.
+	namespaceService.SetGrantDependencies(userRepo, grantsResolver)
+
+	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService, grantsResolver)
 
 	// Initialize MCP
 	mcpRegistry := mcp.NewToolRegistry(connectionService, dashboardService, componentService, deviceTypeService, settingsService, typeFilter, opsToolset)
@@ -942,6 +962,9 @@ func main() {
 			namespaces.PUT("/:id", namespaceHandler.UpdateNamespace)
 			namespaces.DELETE("/:id", namespaceHandler.DeleteNamespace)
 			namespaces.GET("/:id/usage", namespaceHandler.GetUsage)
+			// #4: users granted this namespace. Manage-gated via the
+			// route-capability table (namespacesUsersRE).
+			namespaces.GET("/:id/users", namespaceHandler.GetNamespaceUsers)
 		}
 
 		// Device Type routes

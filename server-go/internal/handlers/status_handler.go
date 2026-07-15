@@ -31,7 +31,12 @@ type StatusHandler struct {
 	// summary. Returns a map of all known connections so a single call covers
 	// every active stream per status build (no per-stream Mongo round-trip).
 	// Optional — nil leaves stream names empty (ids still shown).
-	connNameLookup func() map[string]string
+	//
+	// Takes the CALLER's context (#4): the lookup reads connections, so it
+	// must run under their namespace grants. Handing it a background
+	// context would return every connection's name across every namespace
+	// (the authz fail-open invariant treats unstamped as internal).
+	connNameLookup func(ctx context.Context) map[string]string
 }
 
 // NewStatusHandler creates a new status handler
@@ -46,7 +51,7 @@ func NewStatusHandler(mongodb *database.MongoDB, streamManager *streaming.Manage
 // SetConnectionNameLookup wires a resolver that maps connection id → name,
 // used to label streams in the status summary. Inject it from main where the
 // connection repo/service is available so the handler stays decoupled.
-func (h *StatusHandler) SetConnectionNameLookup(lookup func() map[string]string) {
+func (h *StatusHandler) SetConnectionNameLookup(lookup func(ctx context.Context) map[string]string) {
 	h.connNameLookup = lookup
 }
 
@@ -160,6 +165,11 @@ func (h *StatusHandler) HandleStatusWebSocket(c *gin.Context) {
 	}
 	defer conn.Close()
 
+	// The status loop below runs for the life of THIS handler, so the
+	// request context stays valid — and it carries the caller's
+	// namespace grants, which the connection-name lookup needs (#4).
+	ctx := c.Request.Context()
+
 	// Register this connection with the client registry
 	clientRegistry := registry.GetClientRegistry()
 	clientID := clientRegistry.Register(registry.ConnectionTypeStatusMonitor, map[string]interface{}{
@@ -171,7 +181,7 @@ func (h *StatusHandler) HandleStatusWebSocket(c *gin.Context) {
 	fmt.Printf("[StatusHandler] Status WebSocket connected (client: %d, interval: %s)\n", clientID, intervalStr)
 
 	// Send initial status
-	status := h.buildStatus()
+	status := h.buildStatus(ctx)
 	if err := h.sendStatus(conn, status); err != nil {
 		fmt.Printf("[StatusHandler] Error sending initial status: %v\n", err)
 		return
@@ -203,7 +213,7 @@ func (h *StatusHandler) HandleStatusWebSocket(c *gin.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			status := h.buildStatus()
+			status := h.buildStatus(ctx)
 			if err := h.sendStatus(conn, status); err != nil {
 				fmt.Printf("[StatusHandler] Error sending status: %v\n", err)
 				return
@@ -227,7 +237,7 @@ func (h *StatusHandler) HandleStatusWebSocket(c *gin.Context) {
 // @Success 200 {object} StatusPayload
 // @Router /stats [get]
 func (h *StatusHandler) GetStats(c *gin.Context) {
-	c.JSON(http.StatusOK, h.buildStatus())
+	c.JSON(http.StatusOK, h.buildStatus(c.Request.Context()))
 }
 
 // GoroutineGroup is a count of goroutines sharing the same identifying frame.
@@ -300,7 +310,7 @@ func (h *StatusHandler) GetGoroutines(c *gin.Context) {
 }
 
 // buildStatus creates a complete status payload
-func (h *StatusHandler) buildStatus() *StatusPayload {
+func (h *StatusHandler) buildStatus(ctx context.Context) *StatusPayload {
 	now := time.Now()
 
 	// Get version info
@@ -346,7 +356,7 @@ func (h *StatusHandler) buildStatus() *StatusPayload {
 	}
 
 	// Get stream info from StreamManager
-	streamSummary := h.buildStreamSummary()
+	streamSummary := h.buildStreamSummary(ctx)
 
 	return &StatusPayload{
 		Timestamp:   now,
@@ -382,13 +392,13 @@ func (h *StatusHandler) checkMongoDB() ServiceStatus {
 }
 
 // buildStreamSummary gathers stream information
-func (h *StatusHandler) buildStreamSummary() StreamSummary {
+func (h *StatusHandler) buildStreamSummary(ctx context.Context) StreamSummary {
 	streamIDs := h.streamManager.ListStreams()
 
 	// Resolve id → name once for all streams in this build (nil-safe).
 	var nameByID map[string]string
 	if h.connNameLookup != nil {
-		nameByID = h.connNameLookup()
+		nameByID = h.connNameLookup(ctx)
 	}
 
 	streams := make([]StreamInfo, 0, len(streamIDs))

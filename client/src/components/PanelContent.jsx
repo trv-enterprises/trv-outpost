@@ -42,6 +42,10 @@ function PanelContent({
   effectiveComponentId,
   hasText,
   hasChart,
+  // #4: "component" | "connection" when this panel's component (or the
+  // connection it reads) is in a namespace the viewer can't see. The
+  // dashboard still mounts; only the affected panels show this error.
+  unauthorizedReason = null,
   swapIssue = null,
   resolveConnectionId,
   dashboardVariableText = '',
@@ -75,7 +79,20 @@ function PanelContent({
           </Tooltip>
         </div>
       )}
-      {hasText ? (
+      {unauthorizedReason ? (
+        // #4: no name/namespace is available here by design — the server
+        // sends only the component id + a reason, so nothing about the
+        // ungranted entity can leak into the panel.
+        <div className="panel-unauthorized">
+          <WarningAltFilled size={20} className="panel-unauthorized__icon" />
+          <div className="panel-unauthorized__title">Unauthorized</div>
+          <div className="panel-unauthorized__detail">
+            {unauthorizedReason === 'connection'
+              ? 'This component reads from a connection in a namespace you don\'t have access to.'
+              : 'This component is in a namespace you don\'t have access to.'}
+          </div>
+        </div>
+      ) : hasText ? (
         <div className="component-wrapper text-wrapper">
           <PanelText config={panel.text_config} dashboardVariableText={dashboardVariableText} variableValues={variableValues} />
         </div>
@@ -158,6 +175,7 @@ PanelContent.propTypes = {
   effectiveComponentId: PropTypes.string,
   hasText: PropTypes.bool,
   hasChart: PropTypes.bool,
+  unauthorizedReason: PropTypes.oneOf(['component', 'connection', null]),
   swapIssue: PropTypes.shape({
     missing: PropTypes.arrayOf(PropTypes.string),
     componentName: PropTypes.string,

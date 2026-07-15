@@ -80,6 +80,24 @@ type User struct {
 	// Set by an admin from the AI API Usage page. See the type for scope
 	// semantics.
 	AssistantBudgetOverride *AssistantBudgetOverride `json:"assistant_budget_override,omitempty" bson:"assistant_budget_override,omitempty"`
+	// NamespacesRestricted + AllowedNamespaces are the data-plane
+	// namespace grants (issue #4). When Restricted is false (the
+	// default — every pre-existing record decodes to false) the user
+	// sees all namespaces, exactly the pre-feature behavior. When true,
+	// the user's content access (connections, components, dashboards,
+	// and all data through them) is limited to AllowedNamespaces.
+	//
+	// Grants are DATA-plane only: the manage capability's ADMIN plane
+	// (user CRUD, namespace CRUD, grant assignment, settings) is
+	// namespace-blind — any manager can grant any namespace to anyone,
+	// including themselves. Restricting a manager restricts what
+	// content they see, not what they can administer.
+	//
+	// The explicit bool (rather than nil-vs-empty slice) exists because
+	// bson omitempty would collapse "restricted to nothing" into
+	// "unrestricted" — a dangerous default flip.
+	NamespacesRestricted bool     `json:"namespaces_restricted" bson:"namespaces_restricted"`
+	AllowedNamespaces    []string `json:"allowed_namespaces,omitempty" bson:"allowed_namespaces,omitempty"`
 	Created      time.Time    `json:"created" bson:"created"`
 	Updated      time.Time    `json:"updated" bson:"updated"`
 }
@@ -179,6 +197,10 @@ type UserCapabilitiesResponse struct {
 	// CanManage because control is its own axis and not implied by
 	// either elevation.
 	CanControl   bool         `json:"can_control"`
+	// Data-plane namespace grants (issue #4). The SPA uses these to
+	// explain restricted states; actual enforcement is server-side.
+	NamespacesRestricted bool     `json:"namespaces_restricted"`
+	AllowedNamespaces    []string `json:"allowed_namespaces,omitempty"`
 }
 
 // CreateUserRequest represents a request to create a user
@@ -187,6 +209,9 @@ type CreateUserRequest struct {
 	Name         string       `json:"name" binding:"required"`
 	Email        string       `json:"email,omitempty"`
 	Capabilities []Capability `json:"capabilities,omitempty"`
+	// Data-plane namespace grants (issue #4). Omitted = unrestricted.
+	NamespacesRestricted bool     `json:"namespaces_restricted,omitempty"`
+	AllowedNamespaces    []string `json:"allowed_namespaces,omitempty"`
 }
 
 // UpdateUserRequest represents a request to update a user
@@ -202,6 +227,11 @@ type UpdateUserRequest struct {
 	// it's available for cases where the email in Clerk has drifted
 	// from what's stored on the User record.
 	ClerkUserID  *string       `json:"clerk_user_id,omitempty"`
+	// Data-plane namespace grants (issue #4). Pointers = "not provided";
+	// an explicit empty AllowedNamespaces slice means "restricted to
+	// nothing" (valid: user sees no content until granted).
+	NamespacesRestricted *bool     `json:"namespaces_restricted,omitempty"`
+	AllowedNamespaces    *[]string `json:"allowed_namespaces,omitempty"`
 }
 
 // UserListResponse represents a paginated list of users

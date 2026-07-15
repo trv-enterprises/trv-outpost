@@ -65,6 +65,7 @@ import AIUsagePage from './pages/AIUsagePage';
 import SystemUsersPage from './pages/SystemUsersPage';
 import DevicesPage from './pages/DevicesPage';
 import NamespacesPage from './pages/NamespacesPage';
+import NamespaceDetailPage from './pages/NamespaceDetailPage';
 import ApiKeysListPage from './pages/ApiKeysListPage';
 import TsStoreAlertsExtensionPage from './pages/TsStoreAlertsExtensionPage';
 import TsStoreAlertRuleEditorPage from './pages/TsStoreAlertRuleEditorPage';
@@ -853,7 +854,9 @@ function AppContent({ onDisconnect }) {
                   connections). Manage-only users administer the
                   system rather than author content, so they don't
                   need it. Gate on Design specifically. */}
-              {userCapabilities.can_design && <NamespacePicker />}
+              {userCapabilities.can_design && (
+                <NamespacePicker canManage={userCapabilities.can_manage} />
+              )}
 
               {/* Dev user impersonation pill removed — initial
                   load now accepts a `?user_id=<guid>` URL param,
@@ -1010,6 +1013,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/manage/settings" element={<SettingsPage />} />
           <Route path="/manage/ai-usage" element={<AIUsagePage />} />
           <Route path="/manage/namespaces" element={<NamespacesPage />} />
+          <Route path="/manage/namespaces/:id" element={<NamespaceDetailPage />} />
 
           {/* API Keys is per-user account settings, not Manage Mode.
               The old /manage/api-keys path redirects to the new

@@ -365,6 +365,98 @@ func (h *ConfigHandler) GetUserConfig(c *gin.Context) {
 against `c.Param("user_id")`. Same pattern works for any future
 "self-only" or "owns-resource" check.
 
+## Namespace authorization (issue #4)
+
+Capabilities answer "which MODES can you use." Namespace grants answer
+"which CONTENT can you see." They are orthogonal, and the split is the
+whole design:
+
+| Plane | Governed by | Scope |
+|-------|-------------|-------|
+| **Admin** — user CRUD, namespace CRUD, grant assignment, settings | `manage` capability | **Namespace-blind.** Any manager administers every namespace and can grant any namespace to anyone, including themselves. |
+| **Data** — viewing/designing/querying connections, components, dashboards, and their data | namespace grants | Grant-governed **for everyone, managers included**. |
+
+Why the admin plane is namespace-blind: if granting a namespace
+required already holding it, nobody could grant the first one. Scoping
+admins to a subset of namespaces is tenant-scoped administration —
+that's the separate multitenancy roadmap item, not this feature.
+
+### The grant record
+
+Two fields on `User`:
+
+```go
+NamespacesRestricted bool     `bson:"namespaces_restricted"`
+AllowedNamespaces    []string `bson:"allowed_namespaces,omitempty"`
+```
+
+An **absent** field decodes to `false` = unrestricted = exactly the
+pre-feature behavior, so the feature shipped with **no migration**. The
+explicit bool (rather than nil-vs-empty slice) exists because bson
+`omitempty` would collapse "restricted to nothing" into "unrestricted"
+— a dangerous default flip.
+
+### Resolution (`internal/authz`)
+
+Grants deliberately **do not ride the JWT**: claims freeze for the
+access-token TTL (default 15 min), and grant lists can be long.
+Instead the middleware resolves them per request and stamps them on the
+request context:
+
+- `Resolver` caches by GUID — 30s TTL, 500-entry LRU. Cost bound: one
+  Mongo read per active user per TTL. `UserService` invalidates the
+  entry on any user edit, so grant changes are effectively instant; a
+  namespace rename/delete **flushes** the whole cache (it can invalidate
+  any user's set).
+- The API-key path already loads the full user, so it skips the cache.
+
+**The fail-open invariant**: a context with *no* grants stamped is an
+INTERNAL caller (startup jobs, streaming internals) and is allowed
+everything. This is safe only because the middleware stamps EVERY
+authenticated request — asserted by `middleware/grants_stamp_test.go`.
+Never hand a bare `context.Background()` to a grants-checking service
+method on behalf of an external caller; that silently restores
+pre-feature behavior with no visible symptom. The MCP surface has a
+source-level regression guard for exactly this
+(`mcp/grants_ctx_test.go`).
+
+### Where enforcement lives
+
+- **Lists** — services stamp internal `form:"-"` grant params onto the
+  query params; one shared repo helper (`applyNamespaceGrant`) adds the
+  `namespace $in` clause. An explicit namespace filter outside the
+  caller's grants yields an **empty page, not a 403** (filters aren't
+  existence probes).
+- **By-id + writes** — a per-service `findAuthorized(ctx, id)` helper is
+  the uniform fetch. Creating or moving INTO an ungranted namespace is
+  refused.
+- **403 shape** — `{"error":"forbidden","code":"namespace_forbidden"}`,
+  no entity details. Handlers use `respondError`; those whose fallback
+  is a 400 call `respondIfNamespaceForbidden` FIRST so an authorization
+  failure never reports as a bad request.
+- **`GET /api/namespaces`** returns granted-only — the single chokepoint
+  that makes every SPA picker and filter granted-only via
+  `NamespaceContext`. `?scope=all` (manage-gated) serves admin surfaces.
+- **No name leakage** — usage aggregations carry `namespace` so the
+  SERVICE can redact ungranted refs to `{unauthorized:true, kind}` (id,
+  name, and namespace all stripped — the namespace is itself a leak) and
+  set `has_unauthorized_deps` for the list badge. Redaction is never
+  done client-side.
+- **Viewer** — a dashboard with ungranted dependencies still MOUNTS;
+  `GetDashboardComponentsAuthorized` returns visible components plus
+  `[{id, reason}]` placeholders (`reason` = `component` | `connection`),
+  and only the affected panels render an Unauthorized error panel.
+
+### Deliberate gaps
+
+- **Frigate media** (`GET /api/frigate/*`) is `Public: true` for kiosk
+  displays, so there's no identity to resolve grants from and the media
+  is namespace-blind. Closing it means solving kiosk auth first. Every
+  authenticated frigate-adjacent surface IS enforced.
+- **System users** are created unrestricted (kiosks and webhook
+  receivers depend on it). Restrict one via `PUT /api/users/:id`; the
+  System Users page has no edit form today.
+
 ## Client side
 
 ### Bootstrap (App.jsx)

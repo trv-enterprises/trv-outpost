@@ -83,7 +83,7 @@ func NewSettingsHandler(service *service.SettingsService) *SettingsHandler {
 func (h *SettingsHandler) GetAllSettings(c *gin.Context) {
 	settings, err := h.service.GetAllSettings(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	// Settings are config the client reads on load and acts on immediately
@@ -115,7 +115,7 @@ func (h *SettingsHandler) GetSetting(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	// No caching — see GetAllSettings. A freshly-changed setting must not

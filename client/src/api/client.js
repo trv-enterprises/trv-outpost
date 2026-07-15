@@ -857,6 +857,22 @@ class APIClient {
     return res?.components || [];
   }
 
+  /**
+   * Like getDashboardComponents but returns the full envelope:
+   * { components: [...], unauthorized: [{ id, reason }] }. The
+   * `unauthorized` list names panel components the caller can't see
+   * (#4) — either the component itself or its connection is in an
+   * ungranted namespace — so the viewer renders an error panel instead
+   * of a blank one. `unauthorized` is absent/empty for unrestricted users.
+   */
+  async getDashboardComponentsAuthorized(id) {
+    const res = await this.request(`/api/dashboards/${id}/components`);
+    return {
+      components: res?.components || [],
+      unauthorized: res?.unauthorized || [],
+    };
+  }
+
   // List candidate connections for a connection_swap dashboard variable.
   // Returns { variable, candidates: [{ id, name, namespace, type_id, compatible, reason }] }.
   async getDashboardVariableCandidates(id, variableName) {
@@ -1616,12 +1632,28 @@ class APIClient {
   // ── Namespaces ────────────────────────────────────────────────────
   // Namespaces partition connection/component/dashboard records into
   // separate conflict domains — uniqueness is (namespace, name) not name.
-  async getNamespaces() {
-    return this.request('/api/namespaces');
+  /**
+   * List namespaces. By default the server returns only the caller's
+   * GRANTED namespaces (#4) — that's what every picker/filter wants.
+   * Pass { scope: 'all' } on ADMIN surfaces (user grant assignment,
+   * namespace management) to get the full catalog; requires manage.
+   */
+  async getNamespaces({ scope } = {}) {
+    const q = scope === 'all' ? '?scope=all' : '';
+    return this.request(`/api/namespaces${q}`);
   }
 
   async getNamespace(id) {
     return this.request(`/api/namespaces/${id}`);
+  }
+
+  /**
+   * Users granted access to a namespace (#4). Restricted users only —
+   * unrestricted users see every namespace and are excluded by design.
+   * Manage-gated. Returns { users: [...] }.
+   */
+  async getNamespaceUsers(id) {
+    return this.request(`/api/namespaces/${id}/users`);
   }
 
   async createNamespace(body) {

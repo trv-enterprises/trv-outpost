@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai"
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/chat"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -140,7 +141,7 @@ func (h *AISessionHandler) GetSession(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -188,6 +189,13 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 	// goroutine.
 	callerUser := middleware.GetUser(c)
 	callerNamespace := h.resolveCallerNamespace(c.Request.Context(), callerUser)
+	// Same reason, for namespace grants (#4): the agent runs on a
+	// DETACHED context (the request's is cancelled when this handler
+	// returns), so capture the grants the middleware stamped and
+	// re-stamp them onto the goroutine's context below. Without this
+	// the agent would run as an unstamped — i.e. internal, unrestricted
+	// — caller and the user's grants would not apply to anything it does.
+	_, callerGrants, callerGrantsOK := authz.FromContext(c.Request.Context())
 	// Surface context comes off the request body — captured here
 	// (synchronously with the request) so the goroutine can hand it
 	// to the chat agent's prompt builder.
@@ -201,7 +209,12 @@ func (h *AISessionHandler) SendMessage(c *gin.Context) {
 	// in place — we fail loudly in that case rather than silently
 	// dropping the message.
 	go func() {
+		// Detached from the request (which is already over), but NOT
+		// from the caller's authorization: re-stamp their grants (#4).
 		ctx := context.Background()
+		if callerGrantsOK {
+			ctx = authz.WithGrants(ctx, callerUser, callerGrants)
+		}
 
 		sessionResp, err := h.service.GetSession(ctx, id)
 		if err != nil {
@@ -268,7 +281,7 @@ func (h *AISessionHandler) HandleWebSocket(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

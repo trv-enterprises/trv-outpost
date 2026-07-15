@@ -2,14 +2,23 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { Select, SelectItem } from '@carbon/react';
+import { Dropdown } from '@carbon/react';
 import { useNamespaces } from '../../context/NamespaceContext';
+import { namespaceChipStyle } from '../../utils/namespaceColor';
+import './NamespaceSelect.scss';
 
 /**
  * NamespaceSelect
  *
- * A Carbon Select pre-populated with every namespace the system knows
- * about. Used in edit forms for connections / components / dashboards.
+ * A namespace picker for edit forms (connections / components /
+ * dashboards / import). Each row shows the namespace's color swatch
+ * next to its name, matching the header NamespacePicker so the color
+ * reads as the same key everywhere in the app.
+ *
+ * Carbon `Dropdown`, not `Select`: a native <select> renders real
+ * <option> elements, and browsers won't render markup inside an
+ * <option> — a swatch is impossible there. Dropdown renders a custom
+ * listbox, which is what the header picker uses too.
  *
  * Props:
  *   id         — required; Carbon needs unique input IDs per page.
@@ -30,18 +39,43 @@ export default function NamespaceSelect({
   disabled = false,
 }) {
   const { namespaces } = useNamespaces();
+
+  // Dropdown selects by item object, not raw value. Resolve the current
+  // slug to its record so the trigger renders the right swatch; an
+  // empty/unknown slug selects nothing (create-mode "inherit active").
+  const selectedItem = namespaces.find((ns) => ns.name === value) || null;
+
+  const renderNamespace = (ns) => {
+    if (!ns) return '';
+    return (
+      <span className="namespace-select__item">
+        <span
+          className="namespace-select__swatch"
+          // Match the chip exactly: the mapped Carbon tag-background
+          // color, NOT the raw hex — so this dropdown is a true key for
+          // the chips it represents (same rule as the header picker).
+          style={{ backgroundColor: namespaceChipStyle(ns).backgroundColor }}
+        />
+        <span className="namespace-select__name">{ns.name}</span>
+      </span>
+    );
+  };
+
   return (
-    <Select
+    <Dropdown
       id={id}
-      labelText={labelText}
+      titleText={labelText}
       helperText={helperText}
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
+      label="Select a namespace"
+      items={namespaces}
+      selectedItem={selectedItem}
+      // itemToString drives a11y + type-ahead, so it stays the plain
+      // slug even though the row itself renders rich.
+      itemToString={(ns) => (ns ? ns.name : '')}
+      itemToElement={renderNamespace}
+      renderSelectedItem={renderNamespace}
+      onChange={({ selectedItem: next }) => onChange(next ? next.name : '')}
       disabled={disabled}
-    >
-      {namespaces.map((ns) => (
-        <SelectItem key={ns.id} value={ns.name} text={ns.name} />
-      ))}
-    </Select>
+    />
   );
 }

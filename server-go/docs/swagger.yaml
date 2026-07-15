@@ -1550,6 +1550,10 @@ definitions:
   models.CreateUserRequest:
     description: Request body for creating a new user
     properties:
+      allowed_namespaces:
+        items:
+          type: string
+        type: array
       capabilities:
         items:
           $ref: '#/definitions/models.Capability'
@@ -1558,6 +1562,9 @@ definitions:
         type: string
       name:
         type: string
+      namespaces_restricted:
+        description: 'Data-plane namespace grants (issue #4). Omitted = unrestricted.'
+        type: boolean
     required:
     - name
     type: object
@@ -1750,6 +1757,13 @@ definitions:
         type: string
       description:
         type: string
+      has_unauthorized_deps:
+        description: |-
+          HasUnauthorizedDeps is set by the service (#4) when at least one
+          referenced component or connection is in a namespace the caller
+          can't see — drives the "unauthorized dependency" warning badge on
+          the list/tile. Computed AFTER redaction; never stored.
+        type: boolean
       id:
         type: string
       name:
@@ -2066,8 +2080,13 @@ definitions:
     properties:
       id:
         type: string
+      kind:
+        description: '"component" | "connection" (set only when Unauthorized)'
+        type: string
       name:
         type: string
+      unauthorized:
+        type: boolean
     type: object
   models.ExportBundle:
     description: Portable bundle representing one or more dashboards plus their dependencies
@@ -3411,6 +3430,10 @@ definitions:
     properties:
       active:
         type: boolean
+      allowed_namespaces:
+        items:
+          type: string
+        type: array
       capabilities:
         items:
           $ref: '#/definitions/models.Capability'
@@ -3427,6 +3450,12 @@ definitions:
         type: string
       name:
         type: string
+      namespaces_restricted:
+        description: |-
+          Data-plane namespace grants (issue #4). Pointers = "not provided";
+          an explicit empty AllowedNamespaces slice means "restricted to
+          nothing" (valid: user sees no content until granted).
+        type: boolean
     type: object
   models.User:
     description: User account with authentication and capabilities
@@ -3434,6 +3463,10 @@ definitions:
       active:
         description: Whether user is active
         type: boolean
+      allowed_namespaces:
+        items:
+          type: string
+        type: array
       assistant_budget_override:
         allOf:
         - $ref: '#/definitions/models.AssistantBudgetOverride'
@@ -3479,6 +3512,25 @@ definitions:
       name:
         description: Display name
         type: string
+      namespaces_restricted:
+        description: |-
+          NamespacesRestricted + AllowedNamespaces are the data-plane
+          namespace grants (issue #4). When Restricted is false (the
+          default — every pre-existing record decodes to false) the user
+          sees all namespaces, exactly the pre-feature behavior. When true,
+          the user's content access (connections, components, dashboards,
+          and all data through them) is limited to AllowedNamespaces.
+
+          Grants are DATA-plane only: the manage capability's ADMIN plane
+          (user CRUD, namespace CRUD, grant assignment, settings) is
+          namespace-blind — any manager can grant any namespace to anyone,
+          including themselves. Restricting a manager restricts what
+          content they see, not what they can administer.
+
+          The explicit bool (rather than nil-vs-empty slice) exists because
+          bson omitempty would collapse "restricted to nothing" into
+          "unrestricted" — a dangerous default flip.
+        type: boolean
       updated:
         type: string
     type: object
@@ -3487,6 +3539,10 @@ definitions:
     properties:
       active:
         type: boolean
+      allowed_namespaces:
+        items:
+          type: string
+        type: array
       can_control:
         description: |-
           CanControl mirrors HasControlAccess(); separate from CanDesign /
@@ -3506,6 +3562,11 @@ definitions:
         type: string
       name:
         type: string
+      namespaces_restricted:
+        description: |-
+          Data-plane namespace grants (issue #4). The SPA uses these to
+          explain restricted states; actual enforcement is server-side.
+        type: boolean
       user_id:
         description: Mongo _id of the user record
         type: string
@@ -7405,6 +7466,12 @@ paths:
       - MCP
   /namespaces:
     get:
+      parameters:
+      - description: Set to 'all' to list every namespace regardless of the caller's
+          grants (requires manage capability)
+        in: query
+        name: scope
+        type: string
       produces:
       - application/json
       responses:
@@ -7412,6 +7479,11 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.NamespaceListResponse'
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
       summary: List namespaces
       tags:
       - namespaces
@@ -7544,6 +7616,31 @@ paths:
           schema:
             $ref: '#/definitions/models.NamespaceUsage'
       summary: Get namespace usage counts
+      tags:
+      - namespaces
+  /namespaces/{id}/users:
+    get:
+      parameters:
+      - description: Namespace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{ users: [...] }'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List users with access to a namespace
       tags:
       - namespaces
   /registry/catalog:

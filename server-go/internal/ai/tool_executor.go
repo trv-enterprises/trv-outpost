@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/ai/toolops"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/hub"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
@@ -112,10 +113,43 @@ type ToolResult struct {
 	ChartUpdated bool        `json:"chart_updated,omitempty"`
 }
 
+// checkComponentAccess enforces the caller's namespace grants (#4) on
+// the component this agent session is editing. Looks the component up
+// by (id, version) — the same coordinates every tool uses — and
+// compares its namespace against the grants stamped on ctx by the auth
+// middleware. An unstamped ctx (internal caller) passes, per the authz
+// package invariant.
+//
+// A missing component is NOT an error here: the tools each surface
+// their own "component not found" message, and pre-empting that with a
+// different error would change existing behavior for a case that has
+// nothing to do with authorization.
+func (e *ToolExecutor) checkComponentAccess(ctx context.Context, chartID string, chartVersion int) error {
+	if e.componentRepo == nil {
+		return nil
+	}
+	component, err := e.componentRepo.FindByIDAndVersion(ctx, chartID, chartVersion)
+	if err != nil || component == nil {
+		return nil
+	}
+	return authz.CheckNamespace(ctx, component.Namespace)
+}
+
 // ExecuteTool executes a tool and returns the result
 func (e *ToolExecutor) ExecuteTool(ctx context.Context, chartID string, chartVersion int, toolName string, input json.RawMessage) (*ToolResult, error) {
 	fmt.Printf("[ToolExecutor] Executing tool: %s for chart %s v%d\n", toolName, chartID, chartVersion)
 	fmt.Printf("[ToolExecutor] Input: %s\n", string(input))
+
+	// Namespace grants (#4). This executor talks to REPOSITORIES
+	// directly (not the service layer, which is where by-id enforcement
+	// lives), so the gate goes here at the single entry point: every
+	// tool below operates on THIS component, so authorizing the
+	// component's namespace once covers all of them. Tools that reach a
+	// CONNECTION (query/schema) additionally go through
+	// ConnectionService, which enforces the connection's own namespace.
+	if err := e.checkComponentAccess(ctx, chartID, chartVersion); err != nil {
+		return nil, err
+	}
 
 	switch toolName {
 	case ToolUpdateComponentType:

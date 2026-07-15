@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -58,7 +59,7 @@ func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
 func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 	ns, err := h.service.GetByID(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	if ns == nil {
@@ -68,19 +69,63 @@ func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 	c.JSON(http.StatusOK, ns)
 }
 
-// ListNamespaces lists all namespaces.
+// ListNamespaces lists the namespaces visible to the caller (granted
+// only, for restricted users — issue #4). scope=all returns the full
+// catalog for admin surfaces and requires the manage capability; the
+// route-rule table can't see query params, so the elevation is checked
+// here.
 // @Summary List namespaces
 // @Tags namespaces
 // @Produce json
+// @Param scope query string false "Set to 'all' to list every namespace regardless of the caller's grants (requires manage capability)"
 // @Success 200 {object} models.NamespaceListResponse
+// @Failure 403 {object} map[string]interface{}
 // @Router /namespaces [get]
 func (h *NamespaceHandler) ListNamespaces(c *gin.Context) {
+	if c.Query("scope") == "all" {
+		user := middleware.GetUser(c)
+		if user == nil || !user.HasManageAccess() {
+			c.JSON(http.StatusForbidden, gin.H{"error": "manage capability required for scope=all"})
+			return
+		}
+		resp, err := h.service.ListAll(c.Request.Context())
+		if err != nil {
+			respondError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+		return
+	}
 	resp, err := h.service.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// GetNamespaceUsers lists the users granted access to this namespace
+// (#4). Restricted users only — unrestricted users implicitly see
+// every namespace, so listing them here would be noise (the page
+// states this). Manage-gated by the route table.
+// @Summary List users with access to a namespace
+// @Tags namespaces
+// @Produce json
+// @Param id path string true "Namespace ID"
+// @Success 200 {object} map[string]interface{} "{ users: [...] }"
+// @Failure 404 {object} map[string]string
+// @Router /namespaces/{id}/users [get]
+func (h *NamespaceHandler) GetNamespaceUsers(c *gin.Context) {
+	users, err := h.service.UsersWithAccess(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "namespace not found"})
+			return
+		}
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
 // UpdateNamespace updates a namespace by ID.
@@ -144,7 +189,7 @@ func (h *NamespaceHandler) DeleteNamespace(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -162,7 +207,7 @@ func (h *NamespaceHandler) DeleteNamespace(c *gin.Context) {
 func (h *NamespaceHandler) GetUsage(c *gin.Context) {
 	ns, err := h.service.GetByID(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	if ns == nil {
@@ -171,7 +216,7 @@ func (h *NamespaceHandler) GetUsage(c *gin.Context) {
 	}
 	usage, err := h.service.Usage(c.Request.Context(), ns.Name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, usage)

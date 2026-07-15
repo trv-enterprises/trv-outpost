@@ -73,7 +73,7 @@ func (h *APIKeyHandler) ListMyAPIKeys(c *gin.Context) {
 	}
 	keys, err := h.service.ListByUser(c.Request.Context(), user.GUID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, keys)
@@ -91,7 +91,7 @@ func (h *APIKeyHandler) ListMyAPIKeys(c *gin.Context) {
 func (h *APIKeyHandler) ListAllAPIKeys(c *gin.Context) {
 	keys, err := h.service.ListAll(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, keys)
@@ -123,7 +123,7 @@ func (h *APIKeyHandler) RevokeAPIKey(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "api key not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)

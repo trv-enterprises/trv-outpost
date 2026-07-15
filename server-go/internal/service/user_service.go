@@ -8,18 +8,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
+
+// GrantsInvalidator lets the user service drop cached namespace
+// grants when a user record changes (issue #4). Satisfied by
+// *authz.Resolver; an interface here avoids a service→authz→service
+// import knot and keeps tests trivial.
+type GrantsInvalidator interface {
+	Invalidate(guid string)
+}
 
 // UserService handles user business logic
 type UserService struct {
 	repo       *repository.UserRepository
 	apiKeyRepo *repository.APIKeyRepository
 	configRepo *repository.ConfigRepository
+	// grantsInvalidator is optional (nil in tests/partial wiring);
+	// set via SetGrantsInvalidator after the authz resolver exists.
+	grantsInvalidator GrantsInvalidator
 }
 
 // NewUserService creates a new user service. apiKeyRepo and configRepo are
@@ -27,6 +40,21 @@ type UserService struct {
 // to skip the corresponding cascade (tests, partial wiring).
 func NewUserService(repo *repository.UserRepository, apiKeyRepo *repository.APIKeyRepository, configRepo *repository.ConfigRepository) *UserService {
 	return &UserService{repo: repo, apiKeyRepo: apiKeyRepo, configRepo: configRepo}
+}
+
+// SetGrantsInvalidator wires the namespace-grants cache invalidation
+// hook (issue #4). Called once at startup after the authz resolver is
+// constructed (the resolver depends on this service, so it can't be a
+// constructor arg).
+func (s *UserService) SetGrantsInvalidator(inv GrantsInvalidator) {
+	s.grantsInvalidator = inv
+}
+
+// invalidateGrants drops the cached grants for a user, if wired.
+func (s *UserService) invalidateGrants(guid string) {
+	if s.grantsInvalidator != nil {
+		s.grantsInvalidator.Invalidate(guid)
+	}
 }
 
 // CreateUser creates a new user
@@ -47,13 +75,15 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 	}
 
 	user := &models.User{
-		ID:           uuid.New().String(),
-		GUID:         uuid.New().String(),
-		Name:         req.Name,
-		Email:        req.Email,
-		Capabilities: capabilities,
-		Active:       true,
-		Kind:         models.UserKindHuman,
+		ID:                   uuid.New().String(),
+		GUID:                 uuid.New().String(),
+		Name:                 req.Name,
+		Email:                req.Email,
+		Capabilities:         capabilities,
+		Active:               true,
+		Kind:                 models.UserKindHuman,
+		NamespacesRestricted: req.NamespacesRestricted,
+		AllowedNamespaces:    normalizeNamespaceGrants(req.AllowedNamespaces),
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
@@ -85,6 +115,13 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 // only because the route-rule table didn't enforce view explicitly;
 // the new structural floor (Authorize() requires view on any route
 // without an explicit Required) means we can drop the injection.
+// Namespace grants (#4): system users are created UNRESTRICTED, which
+// preserves the pre-feature behavior every kiosk/webhook principal
+// depends on (a kiosk display and a ts-store webhook receiver both need
+// to reach whatever they were pointed at). To restrict one, an admin
+// sets namespaces_restricted + allowed_namespaces via
+// PUT /api/users/:id — the same write the user edit page uses; the
+// System Users page has no edit form of its own today.
 func (s *UserService) CreateSystemUser(ctx context.Context, name string, capabilities []models.Capability) (*models.User, error) {
 	if name == "" {
 		return nil, errors.New("system user name is required")
@@ -211,9 +248,20 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *models.Upd
 		user.Active = *req.Active
 	}
 
+	if req.NamespacesRestricted != nil {
+		user.NamespacesRestricted = *req.NamespacesRestricted
+	}
+	if req.AllowedNamespaces != nil {
+		user.AllowedNamespaces = normalizeNamespaceGrants(*req.AllowedNamespaces)
+	}
+
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
+
+	// Grant/capability edits must take effect on the user's next
+	// request, not after the grants-cache TTL (issue #4).
+	s.invalidateGrants(user.GUID)
 
 	// ClerkUserID is updated via a separate $set/$unset path so the
 	// sparse-unique index doesn't reject an empty string. We do this
@@ -268,7 +316,29 @@ func (s *UserService) DeleteUser(ctx context.Context, id string) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
+	s.invalidateGrants(user.GUID)
 	return nil
+}
+
+// normalizeNamespaceGrants dedupes and drops empty entries from a
+// grant list. Nil in, nil out.
+func normalizeNamespaceGrants(namespaces []string) []string {
+	if namespaces == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(namespaces))
+	out := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		if ns == "" {
+			continue
+		}
+		if _, dup := seen[ns]; dup {
+			continue
+		}
+		seen[ns] = struct{}{}
+		out = append(out, ns)
+	}
+	return out
 }
 
 // ListUsers returns a paginated list of users
@@ -297,15 +367,28 @@ func (s *UserService) ListUsers(ctx context.Context, params models.UserQueryPara
 // to render the header user pill, persist identity to localStorage,
 // and gate Design/Manage UI without any further user lookups.
 func (s *UserService) GetCapabilities(ctx context.Context, user *models.User) *models.UserCapabilitiesResponse {
+	// Namespace grants: the caller here is usually the JWT claims shim
+	// (no grants fields), but the auth middleware has already resolved
+	// grants onto the request context — read them from there so /me
+	// always reflects the live grant state (issue #4).
+	restricted := user.NamespacesRestricted
+	allowed := user.AllowedNamespaces
+	if _, g, ok := authz.FromContext(ctx); ok {
+		restricted = g.Restricted
+		allowed, _ = g.List()
+		sort.Strings(allowed)
+	}
 	return &models.UserCapabilitiesResponse{
-		UserID:       user.ID,
-		GUID:         user.GUID,
-		Name:         user.Name,
-		Active:       user.Active,
-		Capabilities: user.Capabilities,
-		CanDesign:    user.HasDesignAccess(),
-		CanManage:    user.HasManageAccess(),
-		CanControl:   user.HasControlAccess(),
+		UserID:               user.ID,
+		GUID:                 user.GUID,
+		Name:                 user.Name,
+		Active:               user.Active,
+		Capabilities:         user.Capabilities,
+		CanDesign:            user.HasDesignAccess(),
+		CanManage:            user.HasManageAccess(),
+		CanControl:           user.HasControlAccess(),
+		NamespacesRestricted: restricted,
+		AllowedNamespaces:    allowed,
 	}
 }
 

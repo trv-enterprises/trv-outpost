@@ -141,6 +141,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   const [dashboard, setDashboard] = useState(null);
   const [chartsMap, setChartsMap] = useState({}); // Chart data keyed by component_id
+  // #4: component_id → unauthorized reason ("component" | "connection")
+  // for panels whose component or connection is in a namespace the
+  // viewer can't see. Drives the per-panel error panel. Empty for
+  // unrestricted users.
+  const [unauthorizedComponents, setUnauthorizedComponents] = useState({});
   const [loading, setLoading] = useState(true);
   // Transient spin feedback for the manual Refresh button. The refetch is
   // out-of-band (per-chart, via refreshTick) with no central completion
@@ -1186,12 +1191,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // component-swap override, so a swap renders instantly) in ONE request
         // (#60), replacing the old per-panel getComponent N+1. The server
         // returns latest FINAL versions de-duped; we key them by component id.
-        const charts = await apiClient.getDashboardComponents(id).catch(() => []);
+        const { components: charts, unauthorized } = await apiClient
+          .getDashboardComponentsAuthorized(id)
+          .catch(() => ({ components: [], unauthorized: [] }));
         const newChartsMap = {};
         charts.forEach(chart => {
           if (chart) newChartsMap[chart.id] = chart;
         });
         setChartsMap(newChartsMap);
+        // #4: component ids the caller can't see → error panels. Map id →
+        // reason ("component" | "connection") so the panel shows the right
+        // message. Empty for unrestricted users.
+        const unauthMap = {};
+        (unauthorized || []).forEach((u) => { if (u?.id) unauthMap[u.id] = u.reason; });
+        setUnauthorizedComponents(unauthMap);
       }
 
       setLastRefresh(new Date());
@@ -3437,6 +3450,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           resolveConnectionId={resolveConnectionId}
           resolveComponent={resolveComponent}
           swapIssuesByPanel={swapIssuesByPanel}
+          unauthorizedComponents={unauthorizedComponents}
           dashboardVariableText={dashboardVariableText}
           variableValues={variableValues}
           dashboardVariableValue={dashFilterValue}

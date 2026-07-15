@@ -208,6 +208,9 @@ type ComponentWithUsage struct {
 	Component      `bson:",inline"`
 	DashboardUsage []EntityRef `json:"dashboard_usage" bson:"dashboard_usage"`
 	DashboardCount int         `json:"dashboard_count" bson:"dashboard_count"`
+	// HasUnauthorizedDeps (#4): set by the service when a referencing
+	// dashboard is in a namespace the caller can't see. Never stored.
+	HasUnauthorizedDeps bool `json:"has_unauthorized_deps,omitempty" bson:"-"`
 }
 
 // ComponentUsageListResponse is the include_usage variant of the component
@@ -247,6 +250,10 @@ type ComponentQueryParams struct {
 	Direction     string   `form:"direction"`      // "asc" | "desc". Empty = entity default direction.
 	Page          int      `form:"page"`
 	PageSize      int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+	// Internal (issue #4): the caller's namespace grants, stamped by the
+	// service from the authz context — never a query param.
+	NamespacesRestricted bool     `form:"-"`
+	AllowedNamespaces    []string `form:"-"`
 }
 
 // ComponentSummary is a lightweight component representation for card listings

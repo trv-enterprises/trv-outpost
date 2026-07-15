@@ -38,6 +38,7 @@ import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
+import { toUsageItems } from '../utils/usageRefs';
 import CreateMenu from '../components/CreateMenu';
 import ConnectionPickerModal from '../components/ConnectionPickerModal';
 import './ConnectionsPage.scss';
@@ -556,9 +557,10 @@ function ConnectionsPage() {
                               );
                             }
                             if (cell.info.header === 'components') {
-                              // Server returns component_usage as [{id,name}];
-                              // CountListPopover wants [{id,label}].
-                              const items = (connection._componentUsage || []).map((u) => ({ id: u.id, label: u.name }));
+                              // Server returns component_usage as [{id,name}]
+                              // or {unauthorized,kind} placeholders (#4);
+                              // toUsageItems maps both to CountListPopover shape.
+                              const items = toUsageItems(connection._componentUsage);
                               return (
                                 <TableCell key={cell.id} className="components-cell" onClick={(e) => e.stopPropagation()}>
                                   <CountListPopover

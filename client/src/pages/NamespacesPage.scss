@@ -70,4 +70,14 @@
       box-shadow: 0 0 0 2px rgba(15, 98, 254, 0.3);
     }
   }
+
+  // Row-click → detail page (#4), matching the other Manage lists.
+  .clickable-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+
+    &:hover td {
+      background-color: var(--cds-layer-hover-01);
+    }
+  }
 }

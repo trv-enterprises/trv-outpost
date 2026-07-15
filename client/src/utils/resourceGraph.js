@@ -138,6 +138,35 @@ const missingDashboard = (refId) => ({
   panelCount: 0,
 });
 
+// #4: the server redacts usage refs the caller may not see into opaque
+// {unauthorized:true, kind} placeholders — no id, no name, no
+// namespace. These render as a labeled placeholder node rather than a
+// navigable one. `unauthorizedIndex` keeps tree ids unique (Carbon
+// TreeNode requires it) since the refs carry no id of their own.
+let unauthorizedIndex = 0;
+const isUnauthorizedRef = (ref) => !!ref?.unauthorized;
+const unauthorizedEntity = (kind) => {
+  unauthorizedIndex += 1;
+  const label = kind === 'connection'
+    ? 'Unauthorized Connection'
+    : kind === 'dashboard'
+      ? 'Unauthorized Dashboard'
+      : 'Unauthorized Component';
+  return {
+    id: `unauthorized-${kind || 'component'}-${unauthorizedIndex}`,
+    name: label,
+    type: '',
+    namespace: '',
+    unauthorized: true,
+    connectionIds: [],
+    componentUsage: [],
+    componentCount: 0,
+    dashboardUsage: [],
+    dashboardCount: 0,
+    panelCount: 0,
+  };
+};
+
 const countLabel = (n, singular) => `${n} ${singular}${n === 1 ? '' : 's'}`;
 
 // --- rooting transforms ----------------------------------------------------
@@ -156,7 +185,9 @@ export function toDashboardRooted(graph, { showConnectionsUnderComponents = fals
     .map((dash) => {
       const base = `dash:${dash.id}`;
       const componentNodes = dash.componentUsage.map((ref) => {
-        const comp = componentsById.get(ref.id) || missingComponent(ref.id);
+        const comp = isUnauthorizedRef(ref)
+          ? unauthorizedEntity('component')
+          : (componentsById.get(ref.id) || missingComponent(ref.id));
         const compPath = `${base}/comp:${comp.id}`;
         const connChildren = showConnectionsUnderComponents
           ? comp.connectionIds.map((cid) => {
@@ -164,13 +195,15 @@ export function toDashboardRooted(graph, { showConnectionsUnderComponents = fals
               return node(`${compPath}/conn:${conn.id}`, 'connection', conn.id, conn.name, conn.type);
             })
           : [];
-        return node(compPath, 'component', comp.id, comp.name, comp.type, connChildren);
+        return node(compPath, 'component', comp.unauthorized ? null : comp.id, comp.name, comp.type, connChildren);
       });
 
       // Flat connection group at the just-under-dashboard level.
       const connGroupChildren = dash.connectionUsage.map((ref) => {
-        const conn = connectionsById.get(ref.id) || missingConnection(ref.id);
-        return node(`${base}/conngroup/conn:${conn.id}`, 'connection', conn.id, conn.name, conn.type);
+        const conn = isUnauthorizedRef(ref)
+          ? unauthorizedEntity('connection')
+          : (connectionsById.get(ref.id) || missingConnection(ref.id));
+        return node(`${base}/conngroup/conn:${conn.id}`, 'connection', conn.unauthorized ? null : conn.id, conn.name, conn.type);
       });
       const children = [...componentNodes];
       if (connGroupChildren.length) {
@@ -200,13 +233,17 @@ export function toConnectionRooted(graph) {
     .map((conn) => {
       const base = `conn:${conn.id}`;
       const compNodes = conn.componentUsage.map((ref) => {
-        const comp = componentsById.get(ref.id) || missingComponent(ref.id);
+        const comp = isUnauthorizedRef(ref)
+          ? unauthorizedEntity('component')
+          : (componentsById.get(ref.id) || missingComponent(ref.id));
         const compPath = `${base}/comp:${comp.id}`;
         const dashNodes = comp.dashboardUsage.map((dref) => {
-          const dash = dashboardsById.get(dref.id) || missingDashboard(dref.id);
-          return node(`${compPath}/dash:${dash.id}`, 'dashboard', dash.id, dash.name, null);
+          const dash = isUnauthorizedRef(dref)
+            ? unauthorizedEntity('dashboard')
+            : (dashboardsById.get(dref.id) || missingDashboard(dref.id));
+          return node(`${compPath}/dash:${dash.id}`, 'dashboard', dash.unauthorized ? null : dash.id, dash.name, null);
         });
-        return node(compPath, 'component', comp.id, comp.name, comp.type, dashNodes);
+        return node(compPath, 'component', comp.unauthorized ? null : comp.id, comp.name, comp.type, dashNodes);
       });
       return node(base, 'connection', conn.id, conn.name, countLabel(conn.componentCount, 'component'), compNodes);
     });
@@ -223,8 +260,10 @@ export function toComponentRooted(graph) {
     .map((comp) => {
       const base = `comp:${comp.id}`;
       const dashNodes = comp.dashboardUsage.map((dref) => {
-        const dash = dashboardsById.get(dref.id) || missingDashboard(dref.id);
-        return node(`${base}/dash:${dash.id}`, 'dashboard', dash.id, dash.name, null);
+        const dash = isUnauthorizedRef(dref)
+          ? unauthorizedEntity('dashboard')
+          : (dashboardsById.get(dref.id) || missingDashboard(dref.id));
+        return node(`${base}/dash:${dash.id}`, 'dashboard', dash.unauthorized ? null : dash.id, dash.name, null);
       });
       const connNodes = comp.connectionIds.map((cid) => {
         const conn = connectionsById.get(cid) || missingConnection(cid);

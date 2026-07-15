@@ -10,7 +10,10 @@ import {
   Modal,
   TextInput,
   Checkbox,
-  Toggle
+  Toggle,
+  ContentSwitcher,
+  Switch,
+  InlineNotification
 } from '@carbon/react';
 import { Save, Close, ArrowLeft } from '@carbon/icons-react';
 import apiClient from '../api/client';
@@ -39,6 +42,14 @@ function UserDetailPage() {
     manage: false,
     control: false
   });
+  // Namespace grants (#4). `restricted` false = this user sees every
+  // namespace (the pre-feature default). When true, `allowed` is the
+  // granted set. These govern the DATA plane only — a restricted
+  // manager still administers every namespace.
+  const [namespacesRestricted, setNamespacesRestricted] = useState(false);
+  const [allowedNamespaces, setAllowedNamespaces] = useState([]);
+  const [allNamespaces, setAllNamespaces] = useState([]);
+  const [activeTab, setActiveTab] = useState(0); // 0 = Capabilities, 1 = Namespaces
   const [loading, setLoading] = useState(!isCreateMode);
   const [error, setError] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
@@ -51,6 +62,17 @@ function UserDetailPage() {
       fetchUser();
     }
   }, [id]);
+
+  // Full namespace catalog for the grants tab (#4). scope=all because
+  // this is an ADMIN surface: an admin must be able to grant a
+  // namespace they themselves aren't granted.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getNamespaces({ scope: 'all' })
+      .then((data) => { if (!cancelled) setAllNamespaces(data?.namespaces || []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchUser = async () => {
     try {
@@ -74,6 +96,8 @@ function UserDetailPage() {
         caps[cap] = true;
       });
       setCapabilities(caps);
+      setNamespacesRestricted(!!data.namespaces_restricted);
+      setAllowedNamespaces(data.allowed_namespaces || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -113,6 +137,16 @@ function UserDetailPage() {
     setHasChanges(true);
   };
 
+  // #4: toggle one namespace grant.
+  const handleNamespaceGrantChange = (namespaceName, checked) => {
+    setAllowedNamespaces((prev) => (
+      checked
+        ? [...prev, namespaceName]
+        : prev.filter((n) => n !== namespaceName)
+    ));
+    setHasChanges(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -126,6 +160,11 @@ function UserDetailPage() {
         email: email || undefined,
         capabilities: capsArray,
         active,
+        // #4 grants. Always sent so clearing the restriction (or the
+        // last granted namespace) persists — the server treats an
+        // explicit empty array as "restricted to nothing", not "unset".
+        namespaces_restricted: namespacesRestricted,
+        allowed_namespaces: namespacesRestricted ? allowedNamespaces : [],
       };
 
       // Only send clerk_user_id when editing — admins use this to
@@ -221,8 +260,9 @@ function UserDetailPage() {
 
       {/* Form content */}
       <div className="form-content">
-        {/* User Name */}
-        <div className="form-row">
+        {/* Identity metadata — two columns at the page's full width;
+            collapses to one on narrow viewports. */}
+        <div className="form-row form-row--split">
           <TextInput
             id="user-name"
             labelText="Name"
@@ -237,10 +277,6 @@ function UserDetailPage() {
             invalid={!!nameError}
             invalidText={nameError}
           />
-        </div>
-
-        {/* Email */}
-        <div className="form-row">
           <TextInput
             id="user-email"
             labelText="Email (optional)"
@@ -289,8 +325,22 @@ function UserDetailPage() {
           />
         </div>
 
+        {/* Access section — Capabilities (what modes) vs Namespaces
+            (which content). Two orthogonal planes (#4), so they get a
+            switcher rather than one long stacked form. */}
+        <div className="config-section access-tabs">
+          <ContentSwitcher
+            selectedIndex={activeTab}
+            onChange={({ index }) => setActiveTab(index)}
+            size="md"
+          >
+            <Switch name="capabilities" text="Capabilities" />
+            <Switch name="namespaces" text="Namespaces" />
+          </ContentSwitcher>
+        </div>
+
         {/* Capabilities Section */}
-        <div className="config-section">
+        <div className="config-section" hidden={activeTab !== 0}>
           <h3>Capabilities</h3>
           <p className="section-description">
             Select the capabilities this user should have. Capabilities determine which modes the user can access.
@@ -345,6 +395,70 @@ function UserDetailPage() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Namespaces Section (#4) — the DATA plane. Restricting a user
+            limits which connections/components/dashboards (and their
+            data) they can see. It does NOT limit the admin plane: a
+            restricted user with Manage still administers every
+            namespace, which is what avoids the "who grants the first
+            namespace" deadlock. */}
+        <div className="config-section" hidden={activeTab !== 1}>
+          <h3>Namespace Access</h3>
+          <p className="section-description">
+            Namespaces control which connections, components, and dashboards this
+            user can see and query. By default a user has access to every namespace.
+          </p>
+
+          <Toggle
+            id="user-namespaces-restricted"
+            labelText="Restrict to specific namespaces"
+            labelA="All namespaces"
+            labelB="Restricted"
+            toggled={namespacesRestricted}
+            onToggle={(checked) => {
+              setNamespacesRestricted(checked);
+              setHasChanges(true);
+            }}
+          />
+
+          {namespacesRestricted && (
+            <>
+              {capabilities.manage && (
+                <InlineNotification
+                  kind="info"
+                  lowContrast
+                  hideCloseButton
+                  title="Manage capability is not restricted"
+                  subtitle="This user can still administer every namespace (create, rename, and assign grants). The restriction below applies only to the dashboards, components, and connections they can view and design."
+                />
+              )}
+              {allowedNamespaces.length === 0 && (
+                <InlineNotification
+                  kind="warning"
+                  lowContrast
+                  hideCloseButton
+                  title="No namespaces granted"
+                  subtitle="This user will not see any connections, components, or dashboards until you grant at least one namespace."
+                />
+              )}
+              <div className="capabilities-form">
+                {allNamespaces.map((ns) => (
+                  <div className="capability-item" key={ns.id}>
+                    <Checkbox
+                      id={`ns-grant-${ns.id}`}
+                      labelText={ns.name}
+                      checked={allowedNamespaces.includes(ns.name)}
+                      onChange={(e) => handleNamespaceGrantChange(ns.name, e.target.checked)}
+                    />
+                    {ns.description && (
+                      <span className="capability-description">{ns.description}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* GUID Display (edit mode only) */}

@@ -24,6 +24,7 @@ import SortMenu from '../components/shared/SortMenu';
 import DashboardTile from '../components/DashboardTile';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { dashboardUsesVariable } from '../utils/dashboardVariable';
+import { toUsageItems } from '../utils/usageRefs';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
 import { syncKioskFromUrl, getKioskDashboardIds, isKioskActive } from '../utils/kioskMode';
 import '../components/shared/FilterOverflowMenu.scss';
@@ -606,8 +607,8 @@ function DashboardTileViewPage({ canDesign = false }) {
             // summary's denormalized {id,name} fields. Kiosk rows are full
             // docs fetched by id (no usage fields) — the chips just come up
             // empty there, which a locked kiosk picker doesn't need anyway.
-            const tileComponentItems = (dashboard.component_usage || []).map((c) => ({ id: c.id, label: c.name }));
-            const tileConnectionItems = (dashboard.connection_usage || []).map((c) => ({ id: c.id, label: c.name }));
+            const tileComponentItems = toUsageItems(dashboard.component_usage);
+            const tileConnectionItems = toUsageItems(dashboard.connection_usage);
             return (
               <DashboardTile
                 key={dashboard.id}

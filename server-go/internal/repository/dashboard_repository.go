@@ -151,6 +151,7 @@ func buildDashboardListFilter(params models.DashboardQueryParams) bson.M {
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
 	}
+	applyNamespaceGrant(filter, params.NamespacesRestricted, params.AllowedNamespaces)
 	return filter
 }
 
@@ -454,6 +455,7 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 					"_id":           "$id",
 					"id":            bson.M{"$first": "$id"},
 					"name":          bson.M{"$first": "$name"},
+					"namespace":     bson.M{"$first": "$namespace"}, // #4: for grant redaction
 					"connection_id": bson.M{"$first": "$connection_id"},
 				}}},
 			}},
@@ -495,6 +497,7 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 					{Key: "_id", Value: 0},
 					{Key: "id", Value: bson.D{{Key: "$toString", Value: "$_id"}}},
 					{Key: "name", Value: 1},
+					{Key: "namespace", Value: 1}, // #4: for grant redaction
 				}}},
 			}},
 			{Key: "as", Value: "matched_datasources"},
@@ -509,16 +512,21 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 			{Key: "tags", Value: 1},
 			{Key: "panel_count", Value: bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels", bson.A{}}}}}}},
 			{Key: "connection_names", Value: "$matched_datasources.name"}, // back-compat (names only)
-			// {id,name} per referenced component → navigable component popover.
+			// {id,name,namespace} per referenced component → navigable
+			// component popover (namespace drives #4 grant redaction in the
+			// service; it is stripped from the response before it reaches
+			// the client for entries the caller can't see).
 			{Key: "component_usage", Value: bson.D{{Key: "$map", Value: bson.D{
 				{Key: "input", Value: "$matched_components"},
 				{Key: "as", Value: "c"},
 				{Key: "in", Value: bson.D{
 					{Key: "id", Value: "$$c.id"},
 					{Key: "name", Value: "$$c.name"},
+					{Key: "namespace", Value: "$$c.namespace"},
 				}},
 			}}}},
-			// {id,name} per referenced connection → navigable connection links.
+			// {id,name,namespace} per referenced connection → navigable
+			// connection links (namespace for #4 redaction).
 			{Key: "connection_usage", Value: "$matched_datasources"},
 			{Key: "created", Value: 1},
 			{Key: "updated", Value: 1},

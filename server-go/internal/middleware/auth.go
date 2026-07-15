@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/auth"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
@@ -27,6 +28,12 @@ var tsstoreSecretWebhookRE = regexp.MustCompile(`^/api/webhooks/tsstore/[^/]+/[^
 // the server runs the component's STORED query — so it must be exempt
 // from the "components writes require design" rule below.
 var componentDataRE = regexp.MustCompile(`^/api/components/[^/]+/data/?$`)
+
+// namespaceUsersRE matches GET /api/namespaces/<id>/users — the #4
+// "who has access to this namespace" reverse lookup. It returns user
+// records, so unlike the other namespace READS (open, so every client
+// can populate pickers) it needs Manage.
+var namespaceUsersRE = regexp.MustCompile(`^/api/namespaces/[^/]+/users/?$`)
 
 const (
 	// UserContextKey is the key used to store user in gin context.
@@ -80,6 +87,7 @@ type AuthMiddleware struct {
 	userService *service.UserService
 	sessions    *auth.SessionService
 	apiKeys     *service.APIKeyService
+	grants      *authz.Resolver
 	rules       []RouteCapability
 }
 
@@ -96,11 +104,13 @@ func NewAuthMiddleware(
 	userService *service.UserService,
 	sessions *auth.SessionService,
 	apiKeys *service.APIKeyService,
+	grants *authz.Resolver,
 ) *AuthMiddleware {
 	return &AuthMiddleware{
 		userService: userService,
 		sessions:    sessions,
 		apiKeys:     apiKeys,
+		grants:      grants,
 		rules:       buildRouteRules(),
 	}
 }
@@ -169,6 +179,16 @@ func buildRouteRules() []RouteCapability {
 		// deployment perimeter (e.g. tailnet, LAN, VPN) is the real
 		// access control. Reconsider when we ship a public-facing
 		// deployment.
+		//
+		// Namespace grants (#4) DO NOT apply here, by decision: these
+		// routes are Public, so there's no authenticated identity to
+		// resolve grants from — a kiosk <img> sends no credentials.
+		// Frigate media is therefore namespace-blind, and a restricted
+		// user who knows a connection UUID can still fetch its media.
+		// Closing this means solving kiosk auth first (signed URLs or a
+		// kiosk token), which is its own tracked problem. Every
+		// AUTHENTICATED frigate-adjacent surface (the connection
+		// record, its config, its component) is grant-enforced.
 		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
 
 		// ts-store Alerts extension — read available to any
@@ -251,7 +271,11 @@ func buildRouteRules() []RouteCapability {
 
 		// Namespaces - manage required for write (lives in Manage mode UI).
 		// Reads are open so every authenticated client can populate pickers
-		// and render namespace chips on list pages.
+		// and render namespace chips on list pages — EXCEPT the #4
+		// users-with-access lookup, which returns user records and so is
+		// Manage-gated. Must precede the generic namespace rules
+		// (first-match-wins).
+		{PathPrefix: "/api/namespaces/", PathPattern: namespaceUsersRE, Method: "GET", Required: models.CapabilityManage},
 		{PathPrefix: "/api/namespaces", Method: "POST", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "DELETE", Required: models.CapabilityManage, WriteOnly: true},
@@ -419,6 +443,9 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			}
 			c.Set(ClaimsContextKey, claims)
 			c.Set(UserContextKey, user)
+			if !m.stampGrants(c, user) {
+				return
+			}
 			c.Next()
 			return
 		}
@@ -443,9 +470,36 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 		}
 
 		c.Set(ClaimsContextKey, claims)
-		c.Set(UserContextKey, claimsToUser(claims))
+		user := claimsToUser(claims)
+		c.Set(UserContextKey, user)
+		if !m.stampGrants(c, user) {
+			return
+		}
 		c.Next()
 	}
+}
+
+// stampGrants resolves the caller's data-plane namespace grants and
+// stamps them onto the REQUEST context (issue #4), so services can
+// enforce them via the authz package regardless of how deep the call
+// goes. Every authenticated request MUST pass through here — the
+// authz fail-open invariant (unstamped ctx = internal caller) depends
+// on it. Returns false after aborting the request when the resolver
+// can't answer; namespace grants never fail open for external calls.
+func (m *AuthMiddleware) stampGrants(c *gin.Context, user *models.User) bool {
+	if m.grants == nil {
+		// Tests that construct the middleware without a resolver get
+		// unrestricted behavior — matching pre-feature semantics.
+		return true
+	}
+	g, err := m.grants.Resolve(c.Request.Context(), user)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "authorization unavailable"})
+		c.Abort()
+		return false
+	}
+	c.Request = c.Request.WithContext(authz.WithGrants(c.Request.Context(), user, g))
+	return true
 }
 
 // claimsToUser builds a lightweight *User from JWT claims. Routine
@@ -596,6 +650,14 @@ func routeRuleMatches(rule RouteCapability, path, method string) bool {
 }
 
 // getRequiredCapability returns the capability required for a path/method
+//
+// NOTE (issue #4): the /stream and /query carve-outs below exempt those
+// paths from CAPABILITY gating only. Namespace-grant enforcement for
+// them is NOT skipped — it happens in the handler/service layer
+// (StreamHandler.checkStreamAccess, ConnectionService.QueryConnection
+// via findAuthorized), which runs after Authenticate() has already
+// stamped the caller's grants onto the request context. A restricted
+// user therefore still cannot stream or query an ungranted connection.
 func (m *AuthMiddleware) getRequiredCapability(path, method string) models.Capability {
 	// Streaming endpoints are read operations, allow all authenticated users
 	// Even though /stream/aggregated uses POST, it's reading data not modifying it

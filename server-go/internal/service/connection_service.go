@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
@@ -158,6 +159,11 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.Cr
 	if namespace == "" {
 		namespace = models.DefaultNamespace
 	}
+	// Namespace grants (issue #4): creating INTO an ungranted namespace
+	// is forbidden.
+	if err := authz.CheckNamespace(ctx, namespace); err != nil {
+		return nil, err
+	}
 
 	// Check (namespace, name) uniqueness — same name is allowed in
 	// different namespaces.
@@ -193,14 +199,31 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.Cr
 	return connection, nil
 }
 
-// GetConnection retrieves a connection by ID
-func (s *ConnectionService) GetConnection(ctx context.Context, id string) (*models.Connection, error) {
-	connection, err := s.repo.FindByID(ctx, id)
+// findAuthorized fetches a connection by id and enforces the caller's
+// namespace grants (issue #4). The uniform fetch for every external
+// by-id entry point in this service — using it (rather than
+// s.repo.FindByID) is what keeps a restricted user from reaching a
+// connection, its config, its schema, or its data in an ungranted
+// namespace. Returns authz.ErrNamespaceForbidden on a grant miss.
+func (s *ConnectionService) findAuthorized(ctx context.Context, id string) (*models.Connection, error) {
+	conn, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving connection: %w", err)
 	}
-	if connection == nil {
+	if conn == nil {
 		return nil, fmt.Errorf("connection not found")
+	}
+	if err := authz.CheckNamespace(ctx, conn.Namespace); err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+// GetConnection retrieves a connection by ID
+func (s *ConnectionService) GetConnection(ctx context.Context, id string) (*models.Connection, error) {
+	connection, err := s.findAuthorized(ctx, id)
+	if err != nil {
+		return nil, err
 	}
 	return connection, nil
 }
@@ -219,12 +242,9 @@ func (s *ConnectionService) SaveDiscoveredValues(ctx context.Context, id, column
 	if column == "" {
 		return nil, fmt.Errorf("column is required")
 	}
-	connection, err := s.repo.FindByID(ctx, id)
+	connection, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if connection == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 	if list.CapturedAt.IsZero() {
 		list.CapturedAt = time.Now()
@@ -254,6 +274,13 @@ func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset i
 		return nil, 0, fmt.Errorf("error listing connections: %w", err)
 	}
 
+	// Namespace grants (issue #4): filter in-service on this legacy path
+	// (the paged ListConnectionsPaged does it at the repo level).
+	if allowed, restricted := authz.AllowedList(ctx); restricted {
+		connections = filterConnectionsByGrant(connections, allowed)
+		return connections, int64(len(connections)), nil
+	}
+
 	total, err := s.repo.Count(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error counting connections: %w", err)
@@ -262,7 +289,13 @@ func (s *ConnectionService) ListConnections(ctx context.Context, limit, offset i
 	return connections, total, nil
 }
 
-// ListConnectionsByType retrieves connections by type with pagination
+// ListConnectionsByType retrieves connections by type with pagination.
+// Namespace grants (issue #4): the result is filtered to the caller's
+// granted namespaces IN-SERVICE (this legacy path doesn't thread grant
+// params through the repo). This is the method the tsstore-alerts
+// aggregator fans out over, so filtering here stops a restricted user
+// from seeing alerts on ungranted tsstore connections. Total is
+// adjusted to the visible count.
 func (s *ConnectionService) ListConnectionsByType(ctx context.Context, dsType models.ConnectionType, limit, offset int64) ([]*models.Connection, int64, error) {
 	if limit <= 0 {
 		limit = 20
@@ -276,12 +309,34 @@ func (s *ConnectionService) ListConnectionsByType(ctx context.Context, dsType mo
 		return nil, 0, fmt.Errorf("error listing connections by type: %w", err)
 	}
 
+	if allowed, restricted := authz.AllowedList(ctx); restricted {
+		connections = filterConnectionsByGrant(connections, allowed)
+		return connections, int64(len(connections)), nil
+	}
+
 	total, err := s.repo.CountByType(ctx, dsType)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error counting connections by type: %w", err)
 	}
 
 	return connections, total, nil
+}
+
+// filterConnectionsByGrant keeps only connections in the granted
+// namespace set (issue #4). Empty-namespace records fail closed, same
+// rule as applyNamespaceGrant / authz.Grants.Can.
+func filterConnectionsByGrant(connections []*models.Connection, allowed []string) []*models.Connection {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, ns := range allowed {
+		allowedSet[ns] = struct{}{}
+	}
+	out := make([]*models.Connection, 0, len(connections))
+	for _, conn := range connections {
+		if _, ok := allowedSet[conn.Namespace]; ok {
+			out = append(out, conn)
+		}
+	}
+	return out
 }
 
 // ListConnectionsPaged retrieves connections with server-side filter +
@@ -297,6 +352,15 @@ func (s *ConnectionService) ListConnectionsPaged(ctx context.Context, params mod
 	params.PageSize, _ = models.ClampPageSize(params.PageSize, 20)
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
+	}
+
+	// Namespace grants (issue #4): restrict the query to the caller's
+	// allowed set; an explicit namespace filter outside the grants
+	// yields an empty page.
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return &models.ConnectionListResponse{Connections: []*models.Connection{}, Page: params.Page, PageSize: params.PageSize}, nil
 	}
 
 	limit := int64(params.PageSize)
@@ -330,12 +394,25 @@ func (s *ConnectionService) ListConnectionsWithUsage(ctx context.Context, params
 		params.Tags = models.NormalizeTags(params.Tags)
 	}
 
+	// Namespace grants (issue #4) — same rules as ListConnectionsPaged.
+	var filterAllowed bool
+	params.AllowedNamespaces, params.NamespacesRestricted, filterAllowed = namespaceGrantsForList(ctx, params.Namespace)
+	if !filterAllowed {
+		return []models.ConnectionWithUsage{}, &models.ConnectionListResponse{Page: params.Page, PageSize: params.PageSize}, nil
+	}
+
 	limit := int64(params.PageSize)
 	offset := int64((params.Page - 1) * params.PageSize)
 
 	rows, total, err := s.repo.ListWithUsage(ctx, params, limit, offset)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error listing connections with usage: %w", err)
+	}
+
+	// Redact ungranted component-usage refs (#4): a connection the caller
+	// can see may be referenced by a component in an ungranted namespace.
+	for i := range rows {
+		rows[i].ComponentUsage, rows[i].HasUnauthorizedDeps = redactUsageRefs(ctx, rows[i].ComponentUsage, "component")
 	}
 
 	meta := &models.ConnectionListResponse{
@@ -350,12 +427,9 @@ func (s *ConnectionService) ListConnectionsWithUsage(ctx context.Context, params
 // UpdateConnection updates an existing connection
 func (s *ConnectionService) UpdateConnection(ctx context.Context, id string, req *models.UpdateConnectionRequest) (*models.Connection, error) {
 	// Get existing connection
-	connection, err := s.repo.FindByID(ctx, id)
+	connection, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if connection == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	// Resolve the post-update namespace + name. Both can change in the
@@ -364,6 +438,11 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, id string, req
 	newNamespace := connection.Namespace
 	if req.Namespace != "" {
 		newNamespace = req.Namespace
+	}
+	// Namespace grants (issue #4): moving into an ungranted namespace is
+	// forbidden (the CURRENT namespace was already checked at fetch).
+	if err := authz.CheckNamespace(ctx, newNamespace); err != nil {
+		return nil, err
 	}
 	newName := connection.Name
 	if req.Name != "" {
@@ -605,6 +684,14 @@ func (s *ConnectionService) resolveMaskedSecrets(ctx context.Context, req *model
 	if err != nil || existing == nil {
 		return
 	}
+	// Namespace grants (issue #4): never resolve another namespace's
+	// stored secrets into a test request — a restricted caller could
+	// otherwise exercise (though not read) an ungranted connection's
+	// credentials by testing with its id. Fail closed: secrets stay
+	// masked and the test fails.
+	if authz.CheckNamespace(ctx, existing.Namespace) != nil {
+		return
+	}
 	preserveSecrets(&req.Config, &existing.Config)
 }
 
@@ -613,13 +700,9 @@ func (s *ConnectionService) resolveMaskedSecrets(ctx context.Context, req *model
 // ErrConnectionInUse via errors.Is and call ConnectionUsage to retrieve
 // the offender list (also returned alongside the error).
 func (s *ConnectionService) DeleteConnection(ctx context.Context, id string) (*ConnectionUsage, error) {
-	// Check if connection exists
-	conn, err := s.repo.FindByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if conn == nil {
-		return nil, fmt.Errorf("connection not found")
+	// Check if connection exists (and the caller may touch it).
+	if _, err := s.findAuthorized(ctx, id); err != nil {
+		return nil, err
 	}
 
 	usage, err := s.connectionUsage(ctx, id)
@@ -727,12 +810,9 @@ func (s *ConnectionService) TestConnection(ctx context.Context, req *models.Test
 
 // CheckHealth checks the health of a connection and updates its status
 func (s *ConnectionService) CheckHealth(ctx context.Context, id string) (*models.HealthInfo, error) {
-	connection, err := s.repo.FindByID(ctx, id)
+	connection, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if connection == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	startTime := time.Now()
@@ -1415,12 +1495,9 @@ func (s *ConnectionService) testFrigateConnection(ctx context.Context, config *m
 // QueryConnection executes a query against a connection
 func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req *models.QueryRequest) (*models.QueryResponse, error) {
 	// Get connection configuration
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	// Server-side verb guard: /query is a no-capability endpoint (View Mode
@@ -1504,12 +1581,9 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 // Only SQL connections implement SchemaProvider; others return an error
 func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.SchemaResponse, error) {
 	// Get connection configuration
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	// Handle Prometheus schema separately
@@ -1581,12 +1655,9 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 // (mirrors GetSchema). Step 1 implements SQL + EdgeLake via a generated GROUP BY
 // query; streaming/record-based capture and the API/CSV dedupe path land next.
 func (s *ConnectionService) GetVariableValues(ctx context.Context, id string, req *models.VariableValuesRequest) (*models.VariableValuesResponse, error) {
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 	if req == nil || req.Column == "" {
 		return &models.VariableValuesResponse{Success: false, Error: "column is required"}, nil
@@ -1936,12 +2007,9 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 // GetPrometheusLabelValues retrieves all values for a specific label from a Prometheus connection
 func (s *ConnectionService) GetPrometheusLabelValues(ctx context.Context, id string, labelName string) ([]string, error) {
 	// Get connection configuration
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	// Only Prometheus connections support this
@@ -1967,12 +2035,9 @@ func (s *ConnectionService) GetPrometheusLabelValues(ctx context.Context, id str
 
 // GetEdgeLakeDatabases retrieves all databases from an EdgeLake data source
 func (s *ConnectionService) GetEdgeLakeDatabases(ctx context.Context, id string) ([]string, error) {
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	if ds.Type != models.ConnectionTypeEdgeLake {
@@ -1995,12 +2060,9 @@ func (s *ConnectionService) GetEdgeLakeDatabases(ctx context.Context, id string)
 
 // GetEdgeLakeTables retrieves tables for a specific database from an EdgeLake data source
 func (s *ConnectionService) GetEdgeLakeTables(ctx context.Context, id string, database string) ([]string, error) {
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	if ds.Type != models.ConnectionTypeEdgeLake {
@@ -2023,12 +2085,9 @@ func (s *ConnectionService) GetEdgeLakeTables(ctx context.Context, id string, da
 
 // GetEdgeLakeSchema retrieves the column schema for a table from an EdgeLake data source
 func (s *ConnectionService) GetEdgeLakeSchema(ctx context.Context, id string, database, table string) ([]models.EdgeLakeColumnInfo, error) {
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 
 	if ds.Type != models.ConnectionTypeEdgeLake {
@@ -2051,12 +2110,9 @@ func (s *ConnectionService) GetEdgeLakeSchema(ctx context.Context, id string, da
 
 // GetMQTTTopics discovers available topics from an MQTT broker by subscribing briefly
 func (s *ConnectionService) GetMQTTTopics(ctx context.Context, id string) ([]string, error) {
-	ds, err := s.repo.FindByID(ctx, id)
+	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
 		return nil, err
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
 	}
 	if ds.Type != models.ConnectionTypeMQTT || ds.Config.MQTT == nil {
 		return nil, fmt.Errorf("connection is not an MQTT connection")
@@ -2111,12 +2167,9 @@ done:
 // plus one sample row, with a short timeout. Used by the chart editor to discover
 // the message schema for a topic before configuring data mapping.
 func (s *ConnectionService) SampleMQTTTopic(ctx context.Context, connectionID string, topic string) (map[string]interface{}, error) {
-	ds, err := s.repo.FindByID(ctx, connectionID)
+	ds, err := s.findAuthorized(ctx, connectionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find connection: %w", err)
-	}
-	if ds == nil {
-		return nil, fmt.Errorf("connection not found")
+		return nil, err
 	}
 	if ds.Type != models.ConnectionTypeMQTT || ds.Config.MQTT == nil {
 		return nil, fmt.Errorf("connection is not an MQTT connection")

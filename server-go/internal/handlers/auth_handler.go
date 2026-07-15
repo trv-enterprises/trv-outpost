@@ -65,7 +65,7 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 
 	response, err := h.userService.ListUsers(c.Request.Context(), params)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *AuthHandler) GetUserByGUID(c *gin.Context) {
 
 	user, err := h.userService.GetUserByGUID(c.Request.Context(), guid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	if user == nil {
@@ -203,7 +203,7 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
@@ -60,6 +61,14 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 	namespaceCounts := make(map[string]int)
 
 	// Pass 1: load dashboards + collect chart/connection IDs they reference.
+	//
+	// Namespace grants (#4): an export bundles FULL records — including
+	// connection configs — so every entity that lands in the bundle must
+	// be one the caller can see. An ungranted entity anywhere in the
+	// dependency graph BLOCKS the whole export rather than silently
+	// shipping a partial bundle: a bundle missing a connection imports
+	// into a broken dashboard, and the list already badges which
+	// dashboards have unauthorized dependencies.
 	for _, id := range dashboardIDs {
 		dash, err := s.repo.FindByID(ctx, id)
 		if err != nil {
@@ -67,6 +76,9 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 		}
 		if dash == nil {
 			return nil, fmt.Errorf("dashboard %s not found", id)
+		}
+		if err := authz.CheckNamespace(ctx, dash.Namespace); err != nil {
+			return nil, err
 		}
 		dashboards = append(dashboards, *dash)
 		namespaceCounts[dash.Namespace]++
@@ -98,6 +110,10 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 			// import-side preview will surface it.
 			continue
 		}
+		// #4: refuse to bundle a component the caller can't see.
+		if err := authz.CheckNamespace(ctx, ch.Namespace); err != nil {
+			return nil, err
+		}
 		components = append(components, *ch)
 		if ch.ConnectionID != "" {
 			dsIDsSeen[ch.ConnectionID] = struct{}{}
@@ -126,6 +142,12 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 			// Same orphan tolerance as charts — log via warnings, don't
 			// block the export.
 			continue
+		}
+		// #4: refuse to bundle a connection the caller can't see. This is
+		// the highest-value arm of the export gate — the bundle carries
+		// the connection's config (host/port/db, secrets masked).
+		if err := authz.CheckNamespace(ctx, ds.Namespace); err != nil {
+			return nil, err
 		}
 		connections = append(connections, *ds.SanitizeForExport())
 	}

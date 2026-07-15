@@ -77,7 +77,7 @@ func (h *SystemUserHandler) CreateSystemUser(c *gin.Context) {
 func (h *SystemUserHandler) ListSystemUsers(c *gin.Context) {
 	users, err := h.users.ListSystemUsers(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"users": users})
@@ -109,7 +109,7 @@ func (h *SystemUserHandler) DeleteSystemUser(c *gin.Context) {
 		return
 	}
 	if err := h.users.DeleteUser(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -177,7 +177,7 @@ func (h *SystemUserHandler) ListSystemUserAPIKeys(c *gin.Context) {
 	}
 	keys, err := h.apiKeys.ListByUser(c.Request.Context(), user.GUID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, keys)

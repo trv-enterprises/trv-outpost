@@ -88,12 +88,15 @@ func (r *ToolRegistry) GetTools() []Tool {
 }
 
 // CallTool executes a tool by name.
-func (r *ToolRegistry) CallTool(name string, args map[string]interface{}) (interface{}, error) {
+// CallTool executes a tool by name. ctx MUST be the caller's request
+// context: it carries their namespace grants (#4), and the service
+// layer enforces those grants off it.
+func (r *ToolRegistry) CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error) {
 	handler, ok := r.handlers[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
-	return handler(args)
+	return handler(ctx, args)
 }
 
 func (r *ToolRegistry) registerTool(tool Tool, handler ToolHandler) {
@@ -219,8 +222,8 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			return registry.BuildCatalog(context.Background(), r.deviceTypeLister(), r.typeFilter)
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			return registry.BuildCatalog(ctx, r.deviceTypeLister(), r.typeFilter)
 		},
 	)
 
@@ -233,7 +236,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			items := registry.ListIntegrations()
 			if r.typeFilter != nil {
 				filtered := items[:0]
@@ -257,7 +260,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			return map[string]interface{}{"types": r.filterConnectionTypes(registry.List())}, nil
 		},
 	)
@@ -271,7 +274,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			return map[string]interface{}{"types": r.filterComponentTypes(registry.ListComponentTypes(registry.CategoryChart), registry.CategoryChart)}, nil
 		},
 	)
@@ -285,7 +288,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			return map[string]interface{}{"types": r.filterComponentTypes(registry.ListComponentTypes(registry.CategoryControl), registry.CategoryControl)}, nil
 		},
 	)
@@ -299,7 +302,7 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			return map[string]interface{}{"types": r.filterComponentTypes(registry.ListComponentTypes(registry.CategoryDisplay), registry.CategoryDisplay)}, nil
 		},
 	)
@@ -313,11 +316,11 @@ func (r *ToolRegistry) registerCatalogTools() {
 				Properties: map[string]PropertySchema{},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			if r.deviceTypeService == nil {
 				return map[string]interface{}{"device_types": []interface{}{}, "count": 0}, nil
 			}
-			resp, err := r.deviceTypeService.ListDeviceTypes(context.Background(), &models.DeviceTypeQueryParams{Page: 1, PageSize: 500})
+			resp, err := r.deviceTypeService.ListDeviceTypes(ctx, &models.DeviceTypeQueryParams{Page: 1, PageSize: 500})
 			if err != nil {
 				return nil, err
 			}
@@ -350,7 +353,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 				}, "name, created_at, updated_at, type, namespace"),
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			in := toolops.ListConnectionsInput{
 				Namespace: getString(args, "namespace"),
 				Name:      getString(args, "name"),
@@ -366,9 +369,9 @@ func (r *ToolRegistry) registerConnectionTools() {
 			// masking). Fall back to direct service calls only when toolops
 			// isn't wired (early bootstrap, tests).
 			if r.toolops != nil {
-				return r.toolops.ListConnections(context.Background(), in)
+				return r.toolops.ListConnections(ctx, in)
 			}
-			resp, err := r.connectionService.ListConnectionsPaged(context.Background(), models.ConnectionQueryParams{
+			resp, err := r.connectionService.ListConnectionsPaged(ctx, models.ConnectionQueryParams{
 				Namespace: in.Namespace, Name: in.Name, Type: in.Type, Tags: in.Tags,
 				Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
 			})
@@ -404,15 +407,15 @@ func (r *ToolRegistry) registerConnectionTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id, ok := args["id"].(string)
 			if !ok {
 				return nil, fmt.Errorf("id must be a string")
 			}
 			if r.toolops != nil {
-				return r.toolops.GetConnection(context.Background(), toolops.GetConnectionInput{ID: id})
+				return r.toolops.GetConnection(ctx, toolops.GetConnectionInput{ID: id})
 			}
-			conn, err := r.connectionService.GetConnection(context.Background(), id)
+			conn, err := r.connectionService.GetConnection(ctx, id)
 			if err != nil {
 				return nil, err
 			}
@@ -441,7 +444,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 				Required: []string{"name", "type", "config"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			req := &models.CreateConnectionRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
@@ -454,7 +457,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
-			return r.connectionService.CreateConnection(context.Background(), req)
+			return r.connectionService.CreateConnection(ctx, req)
 		},
 	)
 
@@ -475,7 +478,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
 			req := &models.UpdateConnectionRequest{
 				Name:        getString(args, "name"),
@@ -493,7 +496,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 			if tagsRaw, ok := args["tags"].([]interface{}); ok {
 				req.Tags = parseStringArray(tagsRaw)
 			}
-			return r.connectionService.UpdateConnection(context.Background(), id, req)
+			return r.connectionService.UpdateConnection(ctx, id, req)
 		},
 	)
 
@@ -509,9 +512,9 @@ func (r *ToolRegistry) registerConnectionTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if _, err := r.connectionService.DeleteConnection(context.Background(), id); err != nil {
+			if _, err := r.connectionService.DeleteConnection(ctx, id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Connection %s deleted", id)}, nil
@@ -530,8 +533,8 @@ func (r *ToolRegistry) registerConnectionTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			return r.connectionService.CheckHealth(context.Background(), getString(args, "id"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			return r.connectionService.CheckHealth(ctx, getString(args, "id"))
 		},
 	)
 
@@ -549,12 +552,12 @@ func (r *ToolRegistry) registerConnectionTools() {
 				Required: []string{"connection_id", "query"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "connection_id")
 			queryMap, _ := args["query"].(map[string]interface{})
 			limit := getInt(args, "limit")
 			if r.toolops != nil {
-				return r.toolops.QueryConnection(context.Background(), toolops.QueryConnectionInput{
+				return r.toolops.QueryConnection(ctx, toolops.QueryConnectionInput{
 					ConnectionID: id,
 					Raw:          getString(queryMap, "raw"),
 					Type:         getString(queryMap, "type"),
@@ -572,7 +575,7 @@ func (r *ToolRegistry) registerConnectionTools() {
 			// Trusted internal call (#23): the /mcp surface is gated to
 			// design at its route, so raw queries here are authored by a
 			// design-capable principal. The verb guard still applies.
-			resp, err := r.connectionService.QueryConnection(service.WithTrustedQuery(context.Background()), id, req)
+			resp, err := r.connectionService.QueryConnection(service.WithTrustedQuery(ctx), id, req)
 			if err != nil || resp == nil || resp.ResultSet == nil {
 				return resp, err
 			}
@@ -615,8 +618,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			resp, err := r.connectionService.GetSchema(context.Background(), getString(args, "connection_id"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			resp, err := r.connectionService.GetSchema(ctx, getString(args, "connection_id"))
 			if err != nil || resp == nil || resp.PrometheusSchema == nil {
 				return resp, err
 			}
@@ -689,8 +692,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			topics, err := r.connectionService.GetMQTTTopics(context.Background(), getString(args, "connection_id"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			topics, err := r.connectionService.GetMQTTTopics(ctx, getString(args, "connection_id"))
 			if err != nil {
 				return nil, err
 			}
@@ -711,8 +714,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id", "topic"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			return r.connectionService.SampleMQTTTopic(context.Background(), getString(args, "connection_id"), getString(args, "topic"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			return r.connectionService.SampleMQTTTopic(ctx, getString(args, "connection_id"), getString(args, "topic"))
 		},
 	)
 
@@ -728,8 +731,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			dbs, err := r.connectionService.GetEdgeLakeDatabases(context.Background(), getString(args, "connection_id"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			dbs, err := r.connectionService.GetEdgeLakeDatabases(ctx, getString(args, "connection_id"))
 			if err != nil {
 				return nil, err
 			}
@@ -750,8 +753,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id", "database"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			tables, err := r.connectionService.GetEdgeLakeTables(context.Background(), getString(args, "connection_id"), getString(args, "database"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			tables, err := r.connectionService.GetEdgeLakeTables(ctx, getString(args, "connection_id"), getString(args, "database"))
 			if err != nil {
 				return nil, err
 			}
@@ -773,8 +776,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id", "database", "table"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			cols, err := r.connectionService.GetEdgeLakeSchema(context.Background(), getString(args, "connection_id"), getString(args, "database"), getString(args, "table"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			cols, err := r.connectionService.GetEdgeLakeSchema(ctx, getString(args, "connection_id"), getString(args, "database"), getString(args, "table"))
 			if err != nil {
 				return nil, err
 			}
@@ -795,8 +798,8 @@ func (r *ToolRegistry) registerDiscoveryTools() {
 				Required: []string{"connection_id", "label"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			values, err := r.connectionService.GetPrometheusLabelValues(context.Background(), getString(args, "connection_id"), getString(args, "label"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			values, err := r.connectionService.GetPrometheusLabelValues(ctx, getString(args, "connection_id"), getString(args, "label"))
 			if err != nil {
 				return nil, err
 			}
@@ -828,7 +831,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				}, "name, updated, created, component_type, chart_type, status, namespace"),
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			in := toolops.ListComponentsInput{
 				Namespace:     getString(args, "namespace"),
 				Name:          getString(args, "name"),
@@ -844,9 +847,9 @@ func (r *ToolRegistry) registerComponentTools() {
 				PageSize:      getInt(args, "page_size"),
 			}
 			if r.toolops != nil {
-				return r.toolops.ListComponents(context.Background(), in)
+				return r.toolops.ListComponents(ctx, in)
 			}
-			result, err := r.componentService.ListComponents(context.Background(), models.ComponentQueryParams{
+			result, err := r.componentService.ListComponents(ctx, models.ComponentQueryParams{
 				Namespace: in.Namespace, Name: in.Name, ChartType: in.ChartType,
 				ComponentType: in.ComponentType, Status: in.Status, ConnectionID: in.ConnectionID,
 				Tags: in.Tags, Tag: in.Tag, Sort: in.Sort, Direction: in.Direction,
@@ -871,8 +874,8 @@ func (r *ToolRegistry) registerComponentTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			return r.componentService.GetComponent(context.Background(), getString(args, "id"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			return r.componentService.GetComponent(ctx, getString(args, "id"))
 		},
 	)
 
@@ -887,12 +890,12 @@ func (r *ToolRegistry) registerComponentTools() {
 				},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			limit := int64(50)
 			if l := getInt(args, "limit"); l > 0 {
 				limit = int64(l)
 			}
-			return r.componentService.GetComponentSummaries(context.Background(), limit)
+			return r.componentService.GetComponentSummaries(ctx, limit)
 		},
 	)
 
@@ -923,7 +926,7 @@ func (r *ToolRegistry) registerComponentTools() {
 				Required: []string{"name"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			// Fail loud on the text-panel mistake: agents have tried to make
 			// section headers via create_component with a text_config arg (no
 			// such field → silently dropped → a blank component shell). Text
@@ -980,7 +983,7 @@ func (r *ToolRegistry) registerComponentTools() {
 			// Stamp the AI-provenance tag server-side (issue #59). MCP creates
 			// directly via the service (not toolops), so apply it here too.
 			req.Tags = models.WithAITag(req.Tags)
-			out, err := r.componentService.CreateComponent(context.Background(), req)
+			out, err := r.componentService.CreateComponent(ctx, req)
 			if err != nil {
 				return nil, err
 			}
@@ -1018,7 +1021,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
 			req := &models.UpdateComponentRequest{}
 			if name := getString(args, "name"); name != "" {
@@ -1080,7 +1083,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				v := getBool(args, "uses_dashboard_variable")
 				req.UsesDashboardVariable = &v
 			}
-			out, err := r.componentService.UpdateComponent(context.Background(), id, req)
+			out, err := r.componentService.UpdateComponent(ctx, id, req)
 			if err != nil {
 				return nil, err
 			}
@@ -1100,9 +1103,9 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if _, err := r.componentService.DeleteComponent(context.Background(), id); err != nil {
+			if _, err := r.componentService.DeleteComponent(ctx, id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Component %s deleted", id)}, nil
@@ -1121,7 +1124,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				Required: []string{"component_id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			in := toolops.ListDashboardsInput{
 				ComponentID: getString(args, "component_id"),
 				Sort:        getString(args, "sort"),
@@ -1130,9 +1133,9 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				PageSize:    getInt(args, "page_size"),
 			}
 			if r.toolops != nil {
-				return r.toolops.ListDashboards(context.Background(), in)
+				return r.toolops.ListDashboards(ctx, in)
 			}
-			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{
+			result, err := r.dashboardService.ListDashboards(ctx, models.DashboardQueryParams{
 				ComponentID: in.ComponentID, Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
 			})
 			if err != nil {
@@ -1157,7 +1160,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 				Required: []string{"chart_type"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			ct := getString(args, "chart_type")
 			if ct == "" {
 				return nil, fmt.Errorf("chart_type is required")
@@ -1196,7 +1199,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 				}, "name, updated, created, namespace"),
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			in := toolops.ListDashboardsInput{
 				Namespace:    getString(args, "namespace"),
 				Name:         getString(args, "name"),
@@ -1213,9 +1216,9 @@ func (r *ToolRegistry) registerDashboardTools() {
 				in.IsPublic = &b
 			}
 			if r.toolops != nil {
-				return r.toolops.ListDashboards(context.Background(), in)
+				return r.toolops.ListDashboards(ctx, in)
 			}
-			result, err := r.dashboardService.ListDashboards(context.Background(), models.DashboardQueryParams{
+			result, err := r.dashboardService.ListDashboards(ctx, models.DashboardQueryParams{
 				Namespace: in.Namespace, Name: in.Name, IsPublic: in.IsPublic, ComponentID: in.ComponentID,
 				ConnectionID: in.ConnectionID,
 				Tags:         in.Tags, Sort: in.Sort, Direction: in.Direction, Page: in.Page, PageSize: in.PageSize,
@@ -1239,8 +1242,8 @@ func (r *ToolRegistry) registerDashboardTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			return r.dashboardService.GetDashboard(context.Background(), getString(args, "id"))
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			return r.dashboardService.GetDashboard(ctx, getString(args, "id"))
 		},
 	)
 
@@ -1261,7 +1264,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 				Required: []string{"name"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			req := &models.CreateDashboardRequest{
 				Name:        getString(args, "name"),
 				Description: getString(args, "description"),
@@ -1284,7 +1287,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 			}
 			// AI-provenance tag (issue #59) — MCP creates directly via service.
 			req.Tags = models.WithAITag(req.Tags)
-			return r.dashboardService.CreateDashboard(context.Background(), req)
+			return r.dashboardService.CreateDashboard(ctx, req)
 		},
 	)
 
@@ -1305,7 +1308,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
 			req := &models.UpdateDashboardRequest{}
 			if name := getString(args, "name"); name != "" {
@@ -1336,7 +1339,7 @@ func (r *ToolRegistry) registerDashboardTools() {
 				tags := parseStringArray(tagsRaw)
 				req.Tags = &tags
 			}
-			return r.dashboardService.UpdateDashboard(context.Background(), id, req)
+			return r.dashboardService.UpdateDashboard(ctx, id, req)
 		},
 	)
 
@@ -1352,9 +1355,9 @@ func (r *ToolRegistry) registerDashboardTools() {
 				Required: []string{"id"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			id := getString(args, "id")
-			if err := r.dashboardService.DeleteDashboard(context.Background(), id); err != nil {
+			if err := r.dashboardService.DeleteDashboard(ctx, id); err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"success": true, "message": fmt.Sprintf("Dashboard %s deleted", id)}, nil

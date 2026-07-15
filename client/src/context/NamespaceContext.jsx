@@ -45,26 +45,31 @@ export function NamespaceProvider({ currentUserGuid, children }) {
   }, []);
 
   // Restore the active namespace from the user's app_config. If the
-  // stored value doesn't match any namespace the system knows about
-  // (e.g., the namespace was deleted), fall back to "default".
+  // stored value doesn't match any namespace the server returned —
+  // deleted, or no longer GRANTED to this user (#4: the server filters
+  // GET /api/namespaces to the caller's grants) — fall back to
+  // "default" when visible, else the first granted namespace.
   const restoreActive = useCallback(async (list) => {
+    const validNames = new Set((list || []).map((n) => n.name));
+    const fallback = validNames.has(FALLBACK_NAMESPACE)
+      ? FALLBACK_NAMESPACE
+      : (list?.[0]?.name || FALLBACK_NAMESPACE);
     if (!currentUserGuid) {
-      setActiveNamespaceState(FALLBACK_NAMESPACE);
+      setActiveNamespaceState(fallback);
       return;
     }
     try {
       const cfg = await apiClient.getUserConfig(currentUserGuid);
       const stored = cfg?.settings?.active_namespace;
-      const validNames = new Set((list || []).map((n) => n.name));
       if (stored && validNames.has(stored)) {
         setActiveNamespaceState(stored);
       } else {
-        setActiveNamespaceState(FALLBACK_NAMESPACE);
+        setActiveNamespaceState(fallback);
       }
     } catch {
       // User config fetch is best-effort; a failure just leaves us at
       // the fallback rather than blocking the whole UI.
-      setActiveNamespaceState(FALLBACK_NAMESPACE);
+      setActiveNamespaceState(fallback);
     }
   }, [currentUserGuid]);
 
