@@ -22,6 +22,7 @@ import {
   Modal,
   Dropdown,
   Tag,
+  Tooltip,
 } from '@carbon/react';
 import { Save, Close, ArrowLeft, TrashCan, Add, ArrowRight } from '@carbon/icons-react';
 import apiClient from '../api/client';
