@@ -26,8 +26,8 @@ func (r *ToolRegistry) registerGuidanceTools() {
 				"Call this when the user hasn't specified a canvas size — the presets are what the dashboard editor uses and what the grid math (cols/rows) is keyed off.",
 			InputSchema: InputSchema{Type: "object"},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
-			return r.handleListDashboardDimensions()
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			return r.handleListDashboardDimensions(ctx)
 		},
 	)
 
@@ -48,7 +48,7 @@ func (r *ToolRegistry) registerGuidanceTools() {
 				Required: []string{"type"},
 			},
 		},
-		func(args map[string]interface{}) (interface{}, error) {
+		func(_ context.Context, args map[string]interface{}) (interface{}, error) {
 			typeID := getString(args, "type")
 			if typeID == "" {
 				return nil, fmt.Errorf("type is required")
@@ -62,11 +62,10 @@ func (r *ToolRegistry) registerGuidanceTools() {
 	)
 }
 
-func (r *ToolRegistry) handleListDashboardDimensions() (interface{}, error) {
+func (r *ToolRegistry) handleListDashboardDimensions(ctx context.Context) (interface{}, error) {
 	if r.settingsService == nil {
 		return nil, fmt.Errorf("settings service unavailable")
 	}
-	ctx := context.Background()
 
 	presets, err := r.settingsService.GetSetting(ctx, "layout_dimensions")
 	if err != nil {

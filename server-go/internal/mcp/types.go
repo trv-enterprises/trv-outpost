@@ -4,7 +4,10 @@
 
 package mcp
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
 // JSON-RPC 2.0 types for MCP protocol
 
@@ -101,8 +104,14 @@ func (p PropertySchema) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alias(p))
 }
 
-// ToolHandler is a function type for handling tool calls
-type ToolHandler func(args map[string]interface{}) (interface{}, error)
+// ToolHandler is a function type for handling tool calls.
+//
+// ctx is the CALLER's request context — it carries the MCP caller's
+// namespace grants (issue #4), so every service call a handler makes
+// must pass it through rather than using context.Background(). A
+// background context would be treated as an internal caller and skip
+// grant enforcement entirely.
+type ToolHandler func(ctx context.Context, args map[string]interface{}) (interface{}, error)
 
 // ServerInfo represents MCP server information
 type ServerInfo struct {

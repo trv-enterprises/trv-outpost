@@ -174,7 +174,9 @@ func (h *Handler) HandleMessage(c *gin.Context) {
 	case "tools/list":
 		result = h.handleToolsList()
 	case "tools/call":
-		result, err = h.handleToolsCall(req.Params)
+		// Pass the REQUEST context: it carries the MCP caller's
+		// namespace grants, stamped by the auth middleware (#4).
+		result, err = h.handleToolsCall(c.Request.Context(), req.Params)
 	case "prompts/list":
 		result = h.handlePromptsList()
 	case "prompts/get":
@@ -380,6 +382,10 @@ this preamble — call the list tools for those, they change constantly.
 
 `)
 
+	// context.Background() is correct here (#4): the catalog is TYPES —
+	// connection/component type specs + device types — not namespaced
+	// entity instances, so there are no grants to enforce. Every OTHER
+	// MCP path threads the caller's request context.
 	cat, err := registry.BuildCatalog(context.Background(), h.registry.deviceTypeLister(), h.registry.typeFilter)
 	if err != nil {
 		log.Printf("[MCP] Failed to build catalog for initialize instructions: %v", err)
@@ -397,8 +403,10 @@ func (h *Handler) handleToolsList() ToolsListResult {
 	}
 }
 
-// handleToolsCall handles the tools/call method
-func (h *Handler) handleToolsCall(params map[string]interface{}) (interface{}, error) {
+// handleToolsCall handles the tools/call method. ctx is the caller's
+// request context — it carries their namespace grants (#4), which the
+// service layer enforces; never substitute context.Background().
+func (h *Handler) handleToolsCall(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	name, ok := params["name"].(string)
 	if !ok {
 		return nil, fmt.Errorf("tool name is required")
@@ -411,7 +419,7 @@ func (h *Handler) handleToolsCall(params map[string]interface{}) (interface{}, e
 	coerceStringifiedJSONArgs(args)
 
 	log.Printf("[MCP] Calling tool: %s with args: %v", name, args)
-	result, err := h.registry.CallTool(name, args)
+	result, err := h.registry.CallTool(ctx, name, args)
 	if err != nil {
 		return nil, err
 	}
