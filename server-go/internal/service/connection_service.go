@@ -406,6 +406,12 @@ func (s *ConnectionService) ListConnectionsWithUsage(ctx context.Context, params
 		return nil, nil, fmt.Errorf("error listing connections with usage: %w", err)
 	}
 
+	// Redact ungranted component-usage refs (#4): a connection the caller
+	// can see may be referenced by a component in an ungranted namespace.
+	for i := range rows {
+		rows[i].ComponentUsage, rows[i].HasUnauthorizedDeps = redactUsageRefs(ctx, rows[i].ComponentUsage, "component")
+	}
+
 	meta := &models.ConnectionListResponse{
 		Total:    total,
 		Page:     params.Page,

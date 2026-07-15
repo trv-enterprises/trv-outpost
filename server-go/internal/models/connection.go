@@ -161,6 +161,9 @@ type ConnectionWithUsage struct {
 	Connection     `bson:",inline"`
 	ComponentUsage []EntityRef `json:"component_usage" bson:"component_usage"`
 	ComponentCount int         `json:"component_count" bson:"component_count"`
+	// HasUnauthorizedDeps (#4): set by the service when a referencing
+	// component is in a namespace the caller can't see. Never stored.
+	HasUnauthorizedDeps bool `json:"has_unauthorized_deps,omitempty" bson:"-"`
 }
 
 // DiscoveredValueList is one column's cached distinct values for the

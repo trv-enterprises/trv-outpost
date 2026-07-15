@@ -219,6 +219,7 @@ func (r *ConnectionRepository) ListWithUsage(ctx context.Context, params models.
 						}}},
 						"$name",
 					}}}},
+					{Key: "namespace", Value: 1}, // #4: for grant redaction
 				}}},
 			}},
 			{Key: "as", Value: "component_usage"},

@@ -324,6 +324,12 @@ func (s *ComponentService) ListComponentsWithUsage(ctx context.Context, params m
 		return nil, fmt.Errorf("error listing components with usage: %w", err)
 	}
 
+	// Redact ungranted dashboard-usage refs (#4): a component the caller
+	// can see may be referenced by a dashboard in an ungranted namespace.
+	for i := range rows {
+		rows[i].DashboardUsage, rows[i].HasUnauthorizedDeps = redactUsageRefs(ctx, rows[i].DashboardUsage, "dashboard")
+	}
+
 	return &models.ComponentUsageListResponse{
 		Components: rows,
 		Total:      total,

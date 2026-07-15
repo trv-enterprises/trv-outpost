@@ -394,7 +394,7 @@ func (h *DashboardHandler) PutDashboardThumbnail(c *gin.Context) {
 func (h *DashboardHandler) GetDashboardComponents(c *gin.Context) {
 	id := c.Param("id")
 
-	components, err := h.service.GetDashboardComponents(c.Request.Context(), id)
+	components, unauthorized, err := h.service.GetDashboardComponentsAuthorized(c.Request.Context(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
@@ -404,7 +404,10 @@ func (h *DashboardHandler) GetDashboardComponents(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"components": components})
+	// `unauthorized` lists panel components the caller can't see (#4) so
+	// the viewer renders an error panel instead of a blank one. Omitted
+	// (nil) for unrestricted callers.
+	c.JSON(http.StatusOK, gin.H{"components": components, "unauthorized": unauthorized})
 }
 
 // DeleteDashboard deletes a dashboard

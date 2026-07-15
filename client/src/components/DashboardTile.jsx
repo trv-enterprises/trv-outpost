@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Tag, Tooltip } from '@carbon/react';
-import { Dashboard, DataBase, Information, Time, Copy } from '@carbon/icons-react';
+import { Dashboard, DataBase, Information, Time, Copy, WarningAltFilled } from '@carbon/icons-react';
 import NamespaceChip from './shared/NamespaceChip';
 import VariableIndicator from './shared/VariableIndicator';
 import CountListPopover from './shared/CountListPopover';
@@ -273,6 +273,17 @@ function DashboardTile({
         <div className="tile-header">
           <div className="tile-name-row">
             <h3 className="tile-name">{dashboard.name}</h3>
+            {/* #4: this dashboard references a component or connection in
+                a namespace the viewer can't see. The affected panels
+                render as error panels in the viewer; the badge warns
+                up-front from the list. */}
+            {dashboard.has_unauthorized_deps && (
+              <Tooltip label="This dashboard uses a component or connection you don't have access to. Some panels will show an error." align="bottom">
+                <span className="tile-unauthorized-badge" aria-label="Has unauthorized dependencies">
+                  <WarningAltFilled size={16} />
+                </span>
+              </Tooltip>
+            )}
           </div>
           <IdCopyButton id={dashboard.id} />
           {descriptionMode === 'tooltip' && dashboard.description && (

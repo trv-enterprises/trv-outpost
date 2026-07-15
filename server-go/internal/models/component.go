@@ -208,6 +208,9 @@ type ComponentWithUsage struct {
 	Component      `bson:",inline"`
 	DashboardUsage []EntityRef `json:"dashboard_usage" bson:"dashboard_usage"`
 	DashboardCount int         `json:"dashboard_count" bson:"dashboard_count"`
+	// HasUnauthorizedDeps (#4): set by the service when a referencing
+	// dashboard is in a namespace the caller can't see. Never stored.
+	HasUnauthorizedDeps bool `json:"has_unauthorized_deps,omitempty" bson:"-"`
 }
 
 // ComponentUsageListResponse is the include_usage variant of the component

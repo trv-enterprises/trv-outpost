@@ -857,6 +857,22 @@ class APIClient {
     return res?.components || [];
   }
 
+  /**
+   * Like getDashboardComponents but returns the full envelope:
+   * { components: [...], unauthorized: [{ id, reason }] }. The
+   * `unauthorized` list names panel components the caller can't see
+   * (#4) — either the component itself or its connection is in an
+   * ungranted namespace — so the viewer renders an error panel instead
+   * of a blank one. `unauthorized` is absent/empty for unrestricted users.
+   */
+  async getDashboardComponentsAuthorized(id) {
+    const res = await this.request(`/api/dashboards/${id}/components`);
+    return {
+      components: res?.components || [],
+      unauthorized: res?.unauthorized || [],
+    };
+  }
+
   // List candidate connections for a connection_swap dashboard variable.
   // Returns { variable, candidates: [{ id, name, namespace, type_id, compatible, reason }] }.
   async getDashboardVariableCandidates(id, variableName) {

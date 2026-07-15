@@ -634,8 +634,24 @@ type DashboardSummary struct {
 	// (#21).
 	ComponentUsage  []EntityRef `json:"component_usage,omitempty" bson:"component_usage,omitempty"`
 	ConnectionUsage []EntityRef `json:"connection_usage,omitempty" bson:"connection_usage,omitempty"`
-	Created         time.Time   `json:"created" bson:"created"`
-	Updated         time.Time   `json:"updated" bson:"updated"`
+	// HasUnauthorizedDeps is set by the service (#4) when at least one
+	// referenced component or connection is in a namespace the caller
+	// can't see — drives the "unauthorized dependency" warning badge on
+	// the list/tile. Computed AFTER redaction; never stored.
+	HasUnauthorizedDeps bool      `json:"has_unauthorized_deps,omitempty" bson:"-"`
+	Created             time.Time `json:"created" bson:"created"`
+	Updated             time.Time `json:"updated" bson:"updated"`
+}
+
+// UnauthorizedRef marks a dashboard-referenced component the caller may
+// not see (#4). Reason distinguishes the component itself being in an
+// ungranted namespace ("component") from a visible component whose
+// connection is ungranted ("connection"). Only the id is carried so
+// the viewer can map the panel and render an "unauthorized" error
+// panel — no name or namespace leaks.
+type UnauthorizedRef struct {
+	ID     string `json:"id"`
+	Reason string `json:"reason"` // "component" | "connection"
 }
 
 // DashboardSummaryListResponse represents a paginated list of dashboard summaries

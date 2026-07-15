@@ -55,6 +55,10 @@ function DashboardGrid({
   resolveConnectionId,
   resolveComponent,
   swapIssuesByPanel = {},
+  // #4: component_id → "component" | "connection" for panels whose
+  // component (or its connection) is in a namespace the viewer can't
+  // see. Empty for unrestricted users.
+  unauthorizedComponents = {},
   dashboardVariableText = '',
   variableValues = {},
   dashboardVariableValue = null,
@@ -248,6 +252,12 @@ function DashboardGrid({
               ? resolveComponent(panel)
               : panel.component_id;
             const chart = effectiveComponentId ? chartsMap[effectiveComponentId] : null;
+            // #4: the caller (viewer) can't see this panel's component or
+            // its connection — render an "unauthorized" error panel
+            // instead of a blank one. Reason: "component" | "connection".
+            const unauthorizedReason = effectiveComponentId
+              ? (unauthorizedComponents[effectiveComponentId] || null)
+              : null;
             const hasText = !!panel.text_config;
             // A panel has chart content when its component is a chart, control,
             // or display. Spec-driven charts (use_custom_code=false) carry an
@@ -332,6 +342,7 @@ function DashboardGrid({
                   effectiveComponentId={effectiveComponentId}
                   hasText={hasText}
                   hasChart={hasChart}
+                  unauthorizedReason={unauthorizedReason}
                   swapIssue={swapIssuesByPanel[panel.id] || null}
                   resolveConnectionId={resolveConnectionId}
                   dashboardVariableText={dashboardVariableText}
@@ -362,6 +373,7 @@ DashboardGrid.propTypes = {
   resolveConnectionId: PropTypes.func,
   resolveComponent: PropTypes.func,
   swapIssuesByPanel: PropTypes.object,
+  unauthorizedComponents: PropTypes.object,
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,

@@ -49,6 +49,7 @@ import NamespaceFilter from '../components/shared/NamespaceFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
+import { toUsageItems } from '../utils/usageRefs';
 import './ComponentsListPage.scss';
 import '../components/shared/FilterOverflowMenu.scss';
 
@@ -812,9 +813,10 @@ function ComponentsListPage() {
                               );
                             }
                             if (cell.info.header === 'dashboards') {
-                              // Server returns dashboard_usage as [{id,name}];
-                              // CountListPopover wants [{id,label}].
-                              const items = (chart?.dashboard_usage || []).map((u) => ({ id: u.id, label: u.name }));
+                              // Server returns dashboard_usage as [{id,name}]
+                              // or {unauthorized,kind} placeholders (#4);
+                              // toUsageItems maps both to CountListPopover shape.
+                              const items = toUsageItems(chart?.dashboard_usage);
                               return (
                                 <TableCell key={cell.id} className="dashboards-cell" onClick={(e) => e.stopPropagation()}>
                                   <CountListPopover

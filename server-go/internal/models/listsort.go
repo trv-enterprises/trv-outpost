@@ -15,9 +15,18 @@ import "go.mongodb.org/mongo-driver/bson"
 // human-readable cross-entity references (and navigate to them) without a
 // second round-trip. Used by the list usage-denormalization (#21) and the
 // delete-orphan/usage flows. service.EntityRef aliases this.
+//
+// Namespace is decoded from the usage aggregations (#4) purely so the
+// service redaction pass can decide whether the caller may see this
+// ref. It is json:"-" — the raw namespace never reaches the client;
+// RedactUsageRefs replaces an ungranted ref with {unauthorized:true,
+// kind:...} instead. Unauthorized/Kind are the redacted OUTPUT shape.
 type EntityRef struct {
-	ID   string `json:"id" bson:"id"`
-	Name string `json:"name" bson:"name"`
+	ID           string `json:"id,omitempty" bson:"id"`
+	Name         string `json:"name,omitempty" bson:"name"`
+	Namespace    string `json:"-" bson:"namespace,omitempty"`
+	Unauthorized bool   `json:"unauthorized,omitempty" bson:"-"`
+	Kind         string `json:"kind,omitempty" bson:"-"` // "component" | "connection" (set only when Unauthorized)
 }
 
 // PageSizeAllCap is the hard upper bound returned when a caller asks for

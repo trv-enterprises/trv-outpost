@@ -184,20 +184,65 @@ func (s *DashboardService) GetDashboard(ctx context.Context, id string) (*models
 // result; the viewer treats an unresolved panel component the same as a failed
 // single fetch (renders as a panel with no chart).
 func (s *DashboardService) GetDashboardComponents(ctx context.Context, id string) ([]models.Component, error) {
-	// Grants: the DASHBOARD's namespace gates this call; per-component
-	// namespace redaction of the result happens in Stage 3 (issue #4).
+	components, _, err := s.GetDashboardComponentsAuthorized(ctx, id)
+	return components, err
+}
+
+// GetDashboardComponentsAuthorized is GetDashboardComponents plus the
+// #4 authorization partition. The dashboard's OWN namespace gates the
+// call (findAuthorized). Each referenced component is then classified:
+//
+//   - visible → returned in `components`
+//   - the component itself is in an ungranted namespace →
+//     {id, reason:"component"} placeholder
+//   - the component is visible but its connection is in an ungranted
+//     namespace → {id, reason:"connection"} placeholder
+//
+// Placeholders keep only the id so the viewer can map the panel and
+// render an "unauthorized" error panel — no name/namespace leaks.
+func (s *DashboardService) GetDashboardComponentsAuthorized(ctx context.Context, id string) ([]models.Component, []models.UnauthorizedRef, error) {
 	dashboard, err := s.findAuthorized(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ids := panelComponentIDs(dashboard)
 	if len(ids) == 0 {
-		return []models.Component{}, nil
+		return []models.Component{}, nil, nil
 	}
 	if s.chartRepo == nil {
-		return nil, fmt.Errorf("component repository not configured")
+		return nil, nil, fmt.Errorf("component repository not configured")
 	}
-	return s.chartRepo.FindLatestFinalByIDs(ctx, ids)
+	// Fetch WITHOUT grant filtering (internal ctx) so we can classify
+	// every referenced component, then partition by the caller's grants.
+	all, err := s.chartRepo.FindLatestFinalByIDs(context.Background(), ids)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	_, grants, ok := authz.FromContext(ctx)
+	if !ok || !grants.Restricted {
+		return all, nil, nil
+	}
+
+	visible := make([]models.Component, 0, len(all))
+	var unauthorized []models.UnauthorizedRef
+	for _, comp := range all {
+		if !grants.Can(comp.Namespace) {
+			unauthorized = append(unauthorized, models.UnauthorizedRef{ID: comp.ID, Reason: "component"})
+			continue
+		}
+		// Component is visible; check its connection's namespace. Use a
+		// background context so the lookup itself isn't grant-blocked —
+		// we're classifying, not serving the connection.
+		if comp.ConnectionID != "" && s.connectionRepo != nil {
+			if conn, cErr := s.connectionRepo.FindByID(context.Background(), comp.ConnectionID); cErr == nil && conn != nil && !grants.Can(conn.Namespace) {
+				unauthorized = append(unauthorized, models.UnauthorizedRef{ID: comp.ID, Reason: "connection"})
+				continue
+			}
+		}
+		visible = append(visible, comp)
+	}
+	return visible, unauthorized, nil
 }
 
 // resolveConnectionFilter expands a ConnectionID filter into the set of
@@ -308,6 +353,24 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 	summaries, total, err := s.repo.ListWithConnections(ctx, params, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list dashboards with datasources: %w", err)
+	}
+
+	// Redact ungranted component/connection refs (#4). The dashboard
+	// itself is visible (its own namespace passed the list filter), but
+	// it may reference components/connections in namespaces the caller
+	// can't see — those become opaque "Unauthorized" placeholders and
+	// flip the dashboard's warning badge.
+	for i := range summaries {
+		var compRedacted, connRedacted bool
+		summaries[i].ComponentUsage, compRedacted = redactUsageRefs(ctx, summaries[i].ComponentUsage, "component")
+		summaries[i].ConnectionUsage, connRedacted = redactUsageRefs(ctx, summaries[i].ConnectionUsage, "connection")
+		summaries[i].HasUnauthorizedDeps = compRedacted || connRedacted
+		// connection_names is the deprecated names-only field — drop it
+		// entirely for restricted callers so it can't leak an ungranted
+		// connection's name alongside the redacted connection_usage.
+		if _, g, ok := authz.FromContext(ctx); ok && g.Restricted {
+			summaries[i].ConnectionNames = nil
+		}
 	}
 
 	return &models.DashboardSummaryListResponse{

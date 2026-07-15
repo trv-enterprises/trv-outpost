@@ -7,6 +7,13 @@ import PropTypes from 'prop-types';
 import { Popover, PopoverContent } from '@carbon/react';
 import './CountListPopover.scss';
 
+// Map an unauthorized ref's kind to its display noun (#4).
+function unauthorizedLabel(kind) {
+  if (kind === 'connection') return 'Connection';
+  if (kind === 'dashboard') return 'Dashboard';
+  return 'Component';
+}
+
 /**
  * CountListPopover — a list-page count cell that, on click, opens a popover
  * with a clickable list of the related items. Clicking an item calls that
@@ -97,20 +104,32 @@ export default function CountListPopover({
                 )}
                 {secItems.length > 0 ? (
                   <ul className="count-list-popover__list">
-                    {secItems.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          className="count-list-popover__item"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpen(false);
-                            section.onItemClick?.(item);
-                          }}
-                        >
-                          {item.label}
-                        </button>
-                      </li>
+                    {secItems.map((item, idx) => (
+                      // #4: an unauthorized item is a namespace the caller
+                      // can't see — render a non-clickable red placeholder
+                      // with no id/name leak. `unauthorized-<idx>` keys it
+                      // since it has no id.
+                      item.unauthorized ? (
+                        <li key={`unauthorized-${idx}`}>
+                          <span className="count-list-popover__item count-list-popover__item--unauthorized">
+                            {`Unauthorized ${unauthorizedLabel(item.kind)}`}
+                          </span>
+                        </li>
+                      ) : (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className="count-list-popover__item"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpen(false);
+                              section.onItemClick?.(item);
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        </li>
+                      )
                     ))}
                   </ul>
                 ) : (
@@ -129,6 +148,8 @@ export default function CountListPopover({
 const itemShape = PropTypes.arrayOf(PropTypes.shape({
   id: PropTypes.string,
   label: PropTypes.string,
+  unauthorized: PropTypes.bool,
+  kind: PropTypes.string,
 }));
 
 CountListPopover.propTypes = {

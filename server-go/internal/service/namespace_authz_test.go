@@ -132,3 +132,48 @@ func TestNamespaceGrantErrorsAreForbidden(t *testing.T) {
 		t.Error("granted namespace must not error")
 	}
 }
+
+// TestRedactUsageRefs covers the #4 redaction pass: ungranted refs
+// become opaque {unauthorized, kind} placeholders; granted refs keep
+// their id/name but lose the decode-only namespace; unrestricted
+// callers see everything (namespace still stripped).
+func TestRedactUsageRefs(t *testing.T) {
+	refs := []models.EntityRef{
+		{ID: "1", Name: "Alpha", Namespace: "home"},
+		{ID: "2", Name: "Beta", Namespace: "prod"},
+		{ID: "3", Name: "Gamma", Namespace: "lab"},
+	}
+
+	t.Run("restricted caller redacts ungranted refs", func(t *testing.T) {
+		in := append([]models.EntityRef(nil), refs...)
+		out, any := redactUsageRefs(grantsCtx("home", "lab"), in, "component")
+		if !any {
+			t.Fatal("expected redaction to be reported")
+		}
+		if out[0].Name != "Alpha" || out[0].Namespace != "" {
+			t.Errorf("granted ref wrong: %+v", out[0])
+		}
+		if !out[1].Unauthorized || out[1].Kind != "component" || out[1].ID != "" || out[1].Name != "" {
+			t.Errorf("ungranted ref not fully redacted: %+v", out[1])
+		}
+		if out[2].Name != "Gamma" {
+			t.Errorf("granted ref lost: %+v", out[2])
+		}
+	})
+
+	t.Run("unrestricted caller sees all, namespace stripped", func(t *testing.T) {
+		in := append([]models.EntityRef(nil), refs...)
+		out, any := redactUsageRefs(context.Background(), in, "component")
+		if any {
+			t.Error("unrestricted caller should have no redactions")
+		}
+		for _, r := range out {
+			if r.Namespace != "" {
+				t.Errorf("namespace leaked to client: %+v", r)
+			}
+			if r.Unauthorized {
+				t.Errorf("unrestricted ref marked unauthorized: %+v", r)
+			}
+		}
+	})
+}

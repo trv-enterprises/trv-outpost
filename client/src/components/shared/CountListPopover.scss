@@ -144,6 +144,18 @@
       outline: 2px solid var(--cds-focus);
       outline-offset: -2px;
     }
+
+    // #4: unauthorized placeholder — a namespace the caller can't see.
+    // Non-clickable, red, italic; no hover affordance.
+    &--unauthorized {
+      color: var(--cds-text-error);
+      font-style: italic;
+      cursor: default;
+
+      &:hover {
+        background-color: transparent;
+      }
+    }
   }
 
   &__empty {

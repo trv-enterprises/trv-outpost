@@ -451,7 +451,7 @@ func (r *ComponentRepository) FindAllLatestWithUsage(ctx context.Context, params
 						}}}}}},
 					}},
 				}}}}},
-				{{Key: "$project", Value: bson.D{{Key: "_id", Value: 0}, {Key: "id", Value: "$_id"}, {Key: "name", Value: 1}}}},
+				{{Key: "$project", Value: bson.D{{Key: "_id", Value: 0}, {Key: "id", Value: "$_id"}, {Key: "name", Value: 1}, {Key: "namespace", Value: 1}}}}, // #4: namespace for grant redaction
 			}},
 			{Key: "as", Value: "dashboard_usage"},
 		}}},
