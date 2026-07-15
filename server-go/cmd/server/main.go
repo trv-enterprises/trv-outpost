@@ -667,6 +667,11 @@ func main() {
 	// entries immediately via the UserService hook.
 	grantsResolver := authz.NewResolver(userService)
 	userService.SetGrantsInvalidator(grantsResolver)
+	// #4: namespace lifecycle must cascade into users' allowed_namespaces
+	// (rename rewrites the slug, delete pulls it) and flush the grants
+	// cache. Wired here (post-resolver) rather than in the constructor so
+	// the existing early-bootstrap callers stay unchanged.
+	namespaceService.SetGrantDependencies(userRepo, grantsResolver)
 
 	authMiddleware := middleware.NewAuthMiddleware(userService, sessionService, apiKeyService, grantsResolver)
 
@@ -949,6 +954,9 @@ func main() {
 			namespaces.PUT("/:id", namespaceHandler.UpdateNamespace)
 			namespaces.DELETE("/:id", namespaceHandler.DeleteNamespace)
 			namespaces.GET("/:id/usage", namespaceHandler.GetUsage)
+			// #4: users granted this namespace. Manage-gated via the
+			// route-capability table (namespacesUsersRE).
+			namespaces.GET("/:id/users", namespaceHandler.GetNamespaceUsers)
 		}
 
 		// Device Type routes

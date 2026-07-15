@@ -4430,7 +4430,7 @@
     },
     {
       "name": "Namespaces",
-      "description": "namespaces endpoints (6).",
+      "description": "namespaces endpoints (7).",
       "item": [
         {
           "name": "Create a namespace",
@@ -4587,16 +4587,59 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/namespaces",
+              "raw": "{{baseUrl}}/api/namespaces?scope=",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "namespaces"
+              ],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "",
+                  "description": "Set to 'all' to list every namespace regardless of the caller's grants (requires manage capability)",
+                  "disabled": true
+                }
               ]
             },
-            "description": "List namespaces\n\n\nResponses: 200"
+            "description": "List namespaces\n\n\nResponses: 200, 403"
+          },
+          "response": []
+        },
+        {
+          "name": "List users with access to a namespace",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/namespaces/{id}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "namespaces",
+                ":id",
+                "users"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Namespace ID"
+                }
+              ]
+            },
+            "description": "List users with access to a namespace\n\n\nResponses: 200, 404"
           },
           "response": []
         },
@@ -5787,7 +5830,7 @@
             "description": "Create a new user\n\nCreates a new user account\n\n\nResponses: 201, 400",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"email\": \"\",\n  \"name\": \"\"\n}",
+              "raw": "{\n  \"allowed_namespaces\": [\n    \"\"\n  ],\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"email\": \"\",\n  \"name\": \"\",\n  \"namespaces_restricted\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5995,7 +6038,7 @@
             "description": "Update a user\n\nUpdates an existing user's information\n\n\nResponses: 200, 400, 404",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"active\": false,\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"clerk_user_id\": \"\",\n  \"email\": \"\",\n  \"name\": \"\"\n}",
+              "raw": "{\n  \"active\": false,\n  \"allowed_namespaces\": [\n    \"\"\n  ],\n  \"capabilities\": [\n    \"view\"\n  ],\n  \"clerk_user_id\": \"\",\n  \"email\": \"\",\n  \"name\": \"\",\n  \"namespaces_restricted\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"

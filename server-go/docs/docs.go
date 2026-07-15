@@ -4885,11 +4885,26 @@ const docTemplate = `{
                     "namespaces"
                 ],
                 "summary": "List namespaces",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Set to 'all' to list every namespace regardless of the caller's grants (requires manage capability)",
+                        "name": "scope",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.NamespaceListResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -5090,6 +5105,44 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.NamespaceUsage"
+                        }
+                    }
+                }
+            }
+        },
+        "/namespaces/{id}/users": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "namespaces"
+                ],
+                "summary": "List users with access to a namespace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{ users: [...] }",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -8713,6 +8766,12 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "allowed_namespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "capabilities": {
                     "type": "array",
                     "items": {
@@ -8724,6 +8783,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "namespaces_restricted": {
+                    "description": "Data-plane namespace grants (issue #4). Omitted = unrestricted.",
+                    "type": "boolean"
                 }
             }
         },
@@ -8950,6 +9013,10 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
+                },
+                "has_unauthorized_deps": {
+                    "description": "HasUnauthorizedDeps is set by the service (#4) when at least one\nreferenced component or connection is in a namespace the caller\ncan't see — drives the \"unauthorized dependency\" warning badge on\nthe list/tile. Computed AFTER redaction; never stored.",
+                    "type": "boolean"
                 },
                 "id": {
                     "type": "string"
@@ -9403,8 +9470,15 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "kind": {
+                    "description": "\"component\" | \"connection\" (set only when Unauthorized)",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
+                },
+                "unauthorized": {
+                    "type": "boolean"
                 }
             }
         },
@@ -11245,6 +11319,12 @@ const docTemplate = `{
                 "active": {
                     "type": "boolean"
                 },
+                "allowed_namespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "capabilities": {
                     "type": "array",
                     "items": {
@@ -11260,6 +11340,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "namespaces_restricted": {
+                    "description": "Data-plane namespace grants (issue #4). Pointers = \"not provided\";\nan explicit empty AllowedNamespaces slice means \"restricted to\nnothing\" (valid: user sees no content until granted).",
+                    "type": "boolean"
                 }
             }
         },
@@ -11270,6 +11354,12 @@ const docTemplate = `{
                 "active": {
                     "description": "Whether user is active",
                     "type": "boolean"
+                },
+                "allowed_namespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "assistant_budget_override": {
                     "description": "AssistantBudgetOverride raises (or lowers) this user's daily\nDashboard Assistant token caps relative to the global\nassistant.daily_token_budget. Nil = no override (use global caps).\nSet by an admin from the AI API Usage page. See the type for scope\nsemantics.",
@@ -11316,6 +11406,10 @@ const docTemplate = `{
                     "description": "Display name",
                     "type": "string"
                 },
+                "namespaces_restricted": {
+                    "description": "NamespacesRestricted + AllowedNamespaces are the data-plane\nnamespace grants (issue #4). When Restricted is false (the\ndefault — every pre-existing record decodes to false) the user\nsees all namespaces, exactly the pre-feature behavior. When true,\nthe user's content access (connections, components, dashboards,\nand all data through them) is limited to AllowedNamespaces.\n\nGrants are DATA-plane only: the manage capability's ADMIN plane\n(user CRUD, namespace CRUD, grant assignment, settings) is\nnamespace-blind — any manager can grant any namespace to anyone,\nincluding themselves. Restricting a manager restricts what\ncontent they see, not what they can administer.\n\nThe explicit bool (rather than nil-vs-empty slice) exists because\nbson omitempty would collapse \"restricted to nothing\" into\n\"unrestricted\" — a dangerous default flip.",
+                    "type": "boolean"
+                },
                 "updated": {
                     "type": "string"
                 }
@@ -11327,6 +11421,12 @@ const docTemplate = `{
             "properties": {
                 "active": {
                     "type": "boolean"
+                },
+                "allowed_namespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "can_control": {
                     "description": "CanControl mirrors HasControlAccess(); separate from CanDesign /\nCanManage because control is its own axis and not implied by\neither elevation.",
@@ -11350,6 +11450,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "namespaces_restricted": {
+                    "description": "Data-plane namespace grants (issue #4). The SPA uses these to\nexplain restricted states; actual enforcement is server-side.",
+                    "type": "boolean"
                 },
                 "user_id": {
                     "description": "Mongo _id of the user record",

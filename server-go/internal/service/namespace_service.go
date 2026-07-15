@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/authz"
@@ -46,13 +47,44 @@ type NamespaceRenamer interface {
 	RenameNamespace(ctx context.Context, oldName, newName string) (int64, error)
 }
 
+// NamespaceGrantHolder is the user-side dependency for namespace
+// lifecycle (#4). A rename must rewrite the slug inside every
+// restricted user's allowed_namespaces (otherwise the rename silently
+// revokes their access), a delete must pull it, and the detail page
+// needs the reverse lookup. Satisfied by *repository.UserRepository.
+type NamespaceGrantHolder interface {
+	NamespaceRenamer
+	FindByAllowedNamespace(ctx context.Context, namespace string) ([]models.User, error)
+	PullNamespaceGrant(ctx context.Context, namespace string) (int64, error)
+}
+
 // NamespaceService handles namespace CRUD plus the cross-entity checks
 // (delete-guard, rename-cascade) that pure repo code can't own.
 type NamespaceService struct {
-	repo           *repository.NamespaceRepository
-	connections    namespaceEntity
-	components     namespaceEntity
-	dashboards     namespaceEntity
+	repo        *repository.NamespaceRepository
+	connections namespaceEntity
+	components  namespaceEntity
+	dashboards  namespaceEntity
+	// users + grantsFlusher are the #4 grant-side dependencies, wired
+	// after construction (SetGrantDependencies) to keep the existing
+	// constructor signature and its early-bootstrap callers intact.
+	users         NamespaceGrantHolder
+	grantsFlusher GrantsFlusher
+}
+
+// GrantsFlusher drops the whole namespace-grants cache. A rename or
+// delete invalidates cached Allowed sets for potentially every user,
+// so it's a flush rather than a per-user invalidate.
+type GrantsFlusher interface {
+	Flush()
+}
+
+// SetGrantDependencies wires the #4 user-grant cascade + reverse
+// lookup. Both are optional (nil = skip), which keeps tests and
+// early-bootstrap wiring working.
+func (s *NamespaceService) SetGrantDependencies(users NamespaceGrantHolder, flusher GrantsFlusher) {
+	s.users = users
+	s.grantsFlusher = flusher
 }
 
 // namespaceEntity is the composite dependency shape: the service needs
@@ -212,12 +244,44 @@ func (s *NamespaceService) Update(ctx context.Context, id string, req *models.Up
 				return nil, fmt.Errorf("renaming dashboards: %w", err)
 			}
 		}
+		// Users are the FOURTH cascade target (#4): a restricted user's
+		// allowed_namespaces holds the slug too. Skipping this would
+		// silently revoke every grant on the renamed namespace.
+		if s.users != nil {
+			if _, err := s.users.RenameNamespace(ctx, oldName, newName); err != nil {
+				return nil, fmt.Errorf("renaming user namespace grants: %w", err)
+			}
+		}
+		// Cached Allowed sets still hold the old slug — flush (a rename
+		// can touch any user, so per-user invalidation isn't enough).
+		if s.grantsFlusher != nil {
+			s.grantsFlusher.Flush()
+		}
 	}
 
 	if err := s.repo.Update(ctx, id, req); err != nil {
 		return nil, err
 	}
 	return s.repo.FindByID(ctx, id)
+}
+
+// UsersWithAccess returns the RESTRICTED users granted this namespace
+// (#4), for the namespace detail page's "users with access" list.
+// Unrestricted users are excluded by the repo query — they can see
+// every namespace, so listing them here would be noise; the page says
+// so. Returns an empty slice when the user dependency isn't wired.
+func (s *NamespaceService) UsersWithAccess(ctx context.Context, id string) ([]models.User, error) {
+	ns, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ns == nil {
+		return nil, mongo.ErrNoDocuments
+	}
+	if s.users == nil {
+		return []models.User{}, nil
+	}
+	return s.users.FindByAllowedNamespace(ctx, ns.Name)
 }
 
 // Delete removes a namespace after verifying no records still reference
@@ -245,6 +309,20 @@ func (s *NamespaceService) Delete(ctx context.Context, id string) (*models.Names
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return nil, err
+	}
+
+	// Pull the now-dead slug from every user's grants (#4) so nobody
+	// carries a dangling grant, then flush cached Allowed sets. The
+	// namespace row is already gone, so a failure here is logged-and-
+	// tolerated rather than fatal: a stale grant on a nonexistent
+	// namespace grants access to nothing.
+	if s.users != nil {
+		if _, err := s.users.PullNamespaceGrant(ctx, ns.Name); err != nil {
+			log.Printf("warning: failed to pull namespace grant %q from users: %v", ns.Name, err)
+		}
+	}
+	if s.grantsFlusher != nil {
+		s.grantsFlusher.Flush()
 	}
 	return nil, nil
 }

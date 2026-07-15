@@ -29,6 +29,12 @@ var tsstoreSecretWebhookRE = regexp.MustCompile(`^/api/webhooks/tsstore/[^/]+/[^
 // from the "components writes require design" rule below.
 var componentDataRE = regexp.MustCompile(`^/api/components/[^/]+/data/?$`)
 
+// namespaceUsersRE matches GET /api/namespaces/<id>/users — the #4
+// "who has access to this namespace" reverse lookup. It returns user
+// records, so unlike the other namespace READS (open, so every client
+// can populate pickers) it needs Manage.
+var namespaceUsersRE = regexp.MustCompile(`^/api/namespaces/[^/]+/users/?$`)
+
 const (
 	// UserContextKey is the key used to store user in gin context.
 	// Post-refactor this holds a JWT-derived *models.User shim, not
@@ -255,7 +261,11 @@ func buildRouteRules() []RouteCapability {
 
 		// Namespaces - manage required for write (lives in Manage mode UI).
 		// Reads are open so every authenticated client can populate pickers
-		// and render namespace chips on list pages.
+		// and render namespace chips on list pages — EXCEPT the #4
+		// users-with-access lookup, which returns user records and so is
+		// Manage-gated. Must precede the generic namespace rules
+		// (first-match-wins).
+		{PathPrefix: "/api/namespaces/", PathPattern: namespaceUsersRE, Method: "GET", Required: models.CapabilityManage},
 		{PathPrefix: "/api/namespaces", Method: "POST", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "PUT", Required: models.CapabilityManage, WriteOnly: true},
 		{PathPrefix: "/api/namespaces", Method: "DELETE", Required: models.CapabilityManage, WriteOnly: true},

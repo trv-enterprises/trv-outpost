@@ -206,9 +206,12 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.Cr
 // connection, its config, its schema, or its data in an ungranted
 // namespace. Returns authz.ErrNamespaceForbidden on a grant miss.
 func (s *ConnectionService) findAuthorized(ctx context.Context, id string) (*models.Connection, error) {
-	conn, err := s.findAuthorized(ctx, id)
+	conn, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error retrieving connection: %w", err)
+	}
+	if conn == nil {
+		return nil, fmt.Errorf("connection not found")
 	}
 	if err := authz.CheckNamespace(ctx, conn.Namespace); err != nil {
 		return nil, err

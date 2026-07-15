@@ -104,6 +104,30 @@ func (h *NamespaceHandler) ListNamespaces(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetNamespaceUsers lists the users granted access to this namespace
+// (#4). Restricted users only — unrestricted users implicitly see
+// every namespace, so listing them here would be noise (the page
+// states this). Manage-gated by the route table.
+// @Summary List users with access to a namespace
+// @Tags namespaces
+// @Produce json
+// @Param id path string true "Namespace ID"
+// @Success 200 {object} map[string]interface{} "{ users: [...] }"
+// @Failure 404 {object} map[string]string
+// @Router /namespaces/{id}/users [get]
+func (h *NamespaceHandler) GetNamespaceUsers(c *gin.Context) {
+	users, err := h.service.UsersWithAccess(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "namespace not found"})
+			return
+		}
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users})
+}
+
 // UpdateNamespace updates a namespace by ID.
 // @Summary Update a namespace
 // @Tags namespaces

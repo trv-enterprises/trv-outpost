@@ -174,6 +174,10 @@ func (h *ConnectionHandler) GetConnection(c *gin.Context) {
 
 	datasource, err := h.service.GetConnection(c.Request.Context(), id)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -240,6 +244,10 @@ func (h *ConnectionHandler) DeleteConnection(c *gin.Context) {
 
 	usage, err := h.service.DeleteConnection(c.Request.Context(), id)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if errors.Is(err, service.ErrConnectionInUse) {
 			c.JSON(http.StatusConflict, gin.H{
 				"error": err.Error(),
@@ -299,6 +307,10 @@ func (h *ConnectionHandler) CheckConnectionHealth(c *gin.Context) {
 
 	health, err := h.service.CheckHealth(c.Request.Context(), id)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -338,6 +350,10 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 	ctx := service.WithQueryCaller(c.Request.Context(), middleware.GetUser(c))
 	response, err := h.service.QueryConnection(ctx, id, &req)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if errors.Is(err, service.ErrQueryForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			return
@@ -368,6 +384,10 @@ func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 
 	response, err := h.service.GetSchema(c.Request.Context(), id)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -416,6 +436,10 @@ func (h *ConnectionHandler) GetVariableValues(c *gin.Context) {
 
 	response, err := h.service.GetVariableValues(c.Request.Context(), id, req)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "connection not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
@@ -454,6 +478,10 @@ func (h *ConnectionHandler) SaveDiscoveredValues(c *gin.Context) {
 		Partial: req.Partial,
 	})
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "connection not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
@@ -482,6 +510,10 @@ func (h *ConnectionHandler) GetPrometheusLabelValues(c *gin.Context) {
 
 	values, err := h.service.GetPrometheusLabelValues(c.Request.Context(), id, label)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -511,6 +543,10 @@ func (h *ConnectionHandler) GetEdgeLakeDatabases(c *gin.Context) {
 
 	databases, err := h.service.GetEdgeLakeDatabases(c.Request.Context(), id)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -546,6 +582,10 @@ func (h *ConnectionHandler) GetEdgeLakeTables(c *gin.Context) {
 
 	tables, err := h.service.GetEdgeLakeTables(c.Request.Context(), id, database)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -588,6 +628,10 @@ func (h *ConnectionHandler) GetEdgeLakeSchema(c *gin.Context) {
 
 	columns, err := h.service.GetEdgeLakeSchema(c.Request.Context(), id, database, table)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -618,6 +662,10 @@ func (h *ConnectionHandler) GetMQTTTopics(c *gin.Context) {
 
 	topics, err := h.service.GetMQTTTopics(c.Request.Context(), id)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return
@@ -652,6 +700,10 @@ func (h *ConnectionHandler) SampleMQTTTopic(c *gin.Context) {
 
 	result, err := h.service.SampleMQTTTopic(c.Request.Context(), id, topic)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		if err.Error() == "datasource not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
 			return

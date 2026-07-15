@@ -206,6 +206,10 @@ func (h *ComponentHandler) GetComponentData(c *gin.Context) {
 
 	query, err := buildComponentDataQuery(component, &req)
 	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

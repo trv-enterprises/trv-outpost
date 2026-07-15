@@ -1,0 +1,113 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.namespace-detail-page {
+  background-color: var(--cds-background);
+  height: 100%;
+  overflow-y: auto;
+  padding: spacing.$spacing-05;
+
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+    margin-bottom: spacing.$spacing-05;
+
+    h1 {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+      color: var(--cds-text-primary);
+      font-size: 1.5rem;
+      font-weight: 400;
+      margin: 0;
+    }
+  }
+
+  .page-actions {
+    display: flex;
+    gap: spacing.$spacing-03;
+    justify-content: flex-end;
+    margin-bottom: spacing.$spacing-05;
+  }
+
+  .config-section {
+    margin-top: spacing.$spacing-05;
+    padding-top: spacing.$spacing-05;
+    border-top: 1px solid var(--cds-border-subtle-01);
+    max-width: 720px;
+
+    &__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: spacing.$spacing-04;
+    }
+
+    h3 {
+      color: var(--cds-text-primary);
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: spacing.$spacing-03;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .section-description {
+      color: var(--cds-text-secondary);
+      font-size: 0.875rem;
+      margin-bottom: spacing.$spacing-05;
+    }
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-05;
+  }
+
+  &__empty {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  &__palette {
+    border: 0;
+    padding: 0;
+    margin: 0;
+
+    legend {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+      margin-bottom: spacing.$spacing-03;
+    }
+  }
+
+  &__swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: spacing.$spacing-03;
+  }
+
+  &__swatch {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+
+    &.is-selected {
+      border-color: var(--cds-text-primary);
+      box-shadow: 0 0 0 2px var(--cds-background);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: 2px;
+    }
+  }
+}

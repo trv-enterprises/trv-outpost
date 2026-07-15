@@ -51,3 +51,33 @@ func TestGetRequiredCapability_ComponentData(t *testing.T) {
 		})
 	}
 }
+
+// TestGetRequiredCapability_NamespaceUsers covers the #4 reverse-lookup
+// route: /api/namespaces/<id>/users returns USER records, so it needs
+// Manage — unlike the other namespace reads, which stay open so every
+// authenticated client can populate its namespace pickers.
+func TestGetRequiredCapability_NamespaceUsers(t *testing.T) {
+	m := &AuthMiddleware{rules: buildRouteRules()}
+
+	tests := []struct {
+		name   string
+		path   string
+		method string
+		want   models.Capability
+	}{
+		{"namespace users lookup requires manage", "/api/namespaces/home/users", "GET", models.CapabilityManage},
+		{"trailing slash too", "/api/namespaces/home/users/", "GET", models.CapabilityManage},
+		{"plain namespace list stays open", "/api/namespaces", "GET", ""},
+		{"single namespace read stays open", "/api/namespaces/home", "GET", ""},
+		{"namespace usage read stays open", "/api/namespaces/home/usage", "GET", ""},
+		{"namespace write still requires manage", "/api/namespaces/home", "PUT", models.CapabilityManage},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.getRequiredCapability(tt.path, tt.method); got != tt.want {
+				t.Errorf("getRequiredCapability(%q, %q) = %q, want %q", tt.path, tt.method, got, tt.want)
+			}
+		})
+	}
+}
