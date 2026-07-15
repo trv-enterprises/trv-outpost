@@ -36,6 +36,12 @@ in most any environment.
   colliding. The active namespace lives in the header (drives
   defaults for new records); list pages multi-select-filter by
   namespace
+- **Per-user namespace access** — restrict a user to specific
+  namespaces and they see only that content, and can never read data
+  through a connection they weren't granted (enforced server-side).
+  Users are unrestricted by default. A dashboard that depends on
+  something out of reach still opens — only the affected panels show
+  an error, and the out-of-reach names never reach the browser
 - **Dashboard export / import** — bundle one or more dashboards plus
   their referenced components and connections into a single JSON
   file. Re-import to update in place (preserved IDs, same target

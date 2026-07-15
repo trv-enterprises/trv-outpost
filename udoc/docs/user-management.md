@@ -39,7 +39,41 @@ Click a user row to open the detail page. You can modify:
 - **Name**: Must be unique across all users
 - **Email**: Optional contact information
 - **Status**: Toggle between Active and Inactive. Inactive users cannot log in.
-- **Capabilities**: Add or remove View, Control, Design, Manage access
+- **Capabilities** tab: Add or remove View, Control, Design, Manage access
+- **Namespaces** tab: Limit which content the user can see (below)
+
+## Namespace Access
+
+Capabilities decide *what a user can do*; namespaces decide *what
+content they can do it to*. The two are independent.
+
+By default a user can see **every namespace** — that's what all
+existing users have, and nothing changed for them.
+
+To limit a user, open their **Namespaces** tab, turn on **Restrict to
+specific namespaces**, and tick the ones they should have. That user
+then sees only those namespaces in pickers and filters, sees only the
+connections/components/dashboards inside them, and **cannot read data
+through a connection they weren't granted** — enforced on the server,
+not merely hidden.
+
+A dashboard they can see that depends on something they can't still
+opens; only the affected panels show an *Unauthorized* message, and
+the out-of-reach item's name is never sent to their browser.
+
+You can also grant access from the other direction: **Manage →
+Namespaces → _(the namespace)_** has a *Users with access* list with an
+**Add user** button. Both routes write the same thing.
+
+:::note
+**Manage is not namespace-limited.** Any user with the Manage
+capability can create namespaces and grant any namespace to any user,
+including themselves — otherwise nobody could grant the first one.
+Restricting a manager still limits the content *they* see; it doesn't
+limit who they can administer.
+:::
+
+See [Namespaces](namespaces.md#namespace-access) for the full picture.
 
 ## Pseudo Users
 
