@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -97,6 +98,22 @@ func (h *TagHandler) aggregateTags(
 	updateFn func(*models.TagUsage, int),
 ) error {
 	pipeline := bson.A{}
+	// Namespace grants (#4): this handler aggregates the three entity
+	// collections DIRECTLY (no repo/service layer), so the grant filter
+	// is applied here. Restricted callers only see the tag vocabulary of
+	// content they can reach — otherwise the tag list leaks which tags
+	// exist in namespaces they're shut out of. Fail-closed on empty
+	// namespace matches applyNamespaceGrant / authz.Grants.Can.
+	// Prepended BEFORE prePipeline so the components' latest-version
+	// $group only ever sees granted rows.
+	if allowed, restricted := authz.AllowedList(ctx); restricted {
+		if allowed == nil {
+			allowed = []string{}
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.D{
+			{Key: "namespace", Value: bson.D{{Key: "$in", Value: allowed}}},
+		}}})
+	}
 	if len(prePipeline) > 0 {
 		pipeline = append(pipeline, prePipeline...)
 	}

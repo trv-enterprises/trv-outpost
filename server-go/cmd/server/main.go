@@ -560,13 +560,21 @@ func main() {
 	webhookHandler := handlers.NewWebhookHandler(connectionService, eventHub, alertService, webhookSecretRepo)
 	statusHandler := handlers.NewStatusHandler(mongodb, streamManager)
 	// Resolve connection id → name so the status stream summary can label
-	// streams by name instead of only the opaque id. One FindAll per status
-	// build; nil-safe in the handler if this is never wired.
-	statusHandler.SetConnectionNameLookup(func() map[string]string {
-		conns, err := connectionRepo.FindAll(context.Background(), 1000, 0)
+	// streams by name instead of only the opaque id. One list call per
+	// status build; nil-safe in the handler if this is never wired.
+	//
+	// Goes through the SERVICE (not the repo) with the CALLER's context so
+	// namespace grants apply (#4) — a restricted user must not learn the
+	// names of connections in namespaces they can't see. This previously
+	// used connectionRepo.FindAll(context.Background(), …), which the authz
+	// fail-open invariant treated as an internal caller and returned every
+	// connection.
+	statusHandler.SetConnectionNameLookup(func(ctx context.Context) map[string]string {
+		resp, err := connectionService.ListConnectionsPaged(ctx, models.ConnectionQueryParams{PageSize: 1000})
 		if err != nil {
 			return nil
 		}
+		conns := resp.Connections
 		m := make(map[string]string, len(conns))
 		for _, c := range conns {
 			if c != nil {

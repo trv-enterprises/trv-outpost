@@ -63,7 +63,7 @@ func (r *AlertRepository) Insert(ctx context.Context, a *models.Alert) error {
 // Pinned=true. Capped at `limit` (most-recent first). limit<=0
 // defaults to 200, which is well past the practical bell-panel
 // rendering ceiling but bounds payload size.
-func (r *AlertRepository) ListVisible(ctx context.Context, limit int64) ([]models.Alert, int64, error) {
+func (r *AlertRepository) ListVisible(ctx context.Context, limit int64, restricted bool, allowed []string) ([]models.Alert, int64, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -71,6 +71,11 @@ func (r *AlertRepository) ListVisible(ctx context.Context, limit int64) ([]model
 		{"seen": false},
 		{"pinned": true},
 	}}
+	// Namespace grants (#4): an alert carries the namespace of the
+	// connection that fired it, plus that connection's raw upstream
+	// payload — so it's DATA, gated exactly like the connection is.
+	// $and-composed because the visibility clause already owns $or.
+	applyNamespaceGrant(filter, restricted, allowed)
 	opts := options.Find().
 		SetSort(bson.D{{Key: "fired_at", Value: -1}}).
 		SetLimit(limit)
@@ -95,6 +100,22 @@ func (r *AlertRepository) ListVisible(ctx context.Context, limit int64) ([]model
 		return alerts, int64(len(alerts)), nil
 	}
 	return alerts, visible, nil
+}
+
+// FindByID returns one alert, or (nil, nil) when it doesn't exist.
+// Used by the service to authorize the by-id mutations (#4): dismissing
+// or pinning an alert is visible to every other user, so a caller must
+// hold a grant on the alert's namespace to act on it.
+func (r *AlertRepository) FindByID(ctx context.Context, alertID string) (*models.Alert, error) {
+	var alert models.Alert
+	err := r.collection.FindOne(ctx, bson.M{"_id": alertID}).Decode(&alert)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &alert, nil
 }
 
 // MarkSeen flips an alert's Seen flag to true. Idempotent —

@@ -48,7 +48,9 @@ func (h *EventsHandler) Stream(c *gin.Context) {
 		return
 	}
 
-	sub := h.hub.Subscribe(user.ID)
+	// Pass the request context: the hub captures the caller's namespace
+	// grants off it and filters pushed events against them (#4).
+	sub := h.hub.Subscribe(c.Request.Context(), user.ID)
 	defer sub.Close()
 
 	c.Header("Content-Type", "text/event-stream")

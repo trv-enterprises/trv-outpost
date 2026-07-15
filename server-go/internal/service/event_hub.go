@@ -5,10 +5,12 @@
 package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 )
 
 // Event is the envelope every client receives over the SSE stream.
@@ -67,11 +69,22 @@ type EventHub struct {
 }
 
 type subscriber struct {
-	id        string
-	userID    string // Mongo _id of the authenticated user
-	ch        chan Event
-	closed    chan struct{}
-	closeOnce sync.Once
+	id     string
+	userID string // Mongo _id of the authenticated user
+	// grants is the subscriber's namespace access, captured at
+	// Subscribe time from their request context (#4). Publish filters
+	// on it so a restricted user never receives an event fired by a
+	// connection in a namespace they can't see. Captured (not looked up
+	// per publish) because the SSE request context is long-lived while
+	// Publish runs on the producer's goroutine.
+	grants authz.Grants
+	// grantsKnown distinguishes "unrestricted" from "no grants stamped"
+	// (an internal subscriber). Both receive everything; kept explicit
+	// so the distinction is legible rather than accidental.
+	grantsKnown bool
+	ch          chan Event
+	closed      chan struct{}
+	closeOnce   sync.Once
 }
 
 // NewEventHub constructs an empty hub. Lifetime is the server process —
@@ -95,15 +108,22 @@ func (s *Subscription) Close() { s.close() }
 
 // Subscribe registers a new subscriber and returns a Subscription
 // handle. userID identifies which dashboard user the SSE stream
-// belongs to; today it is purely informational (we fan out to every
-// subscriber), but a future namespace-permissioning pass will use
-// it to filter on Publish.
-func (h *EventHub) Subscribe(userID string) *Subscription {
+// belongs to.
+//
+// ctx MUST be the subscriber's REQUEST context: their namespace grants
+// are read off it here and held for the life of the subscription, and
+// Publish filters events against them (#4). Pass a context with no
+// grants stamped only for genuinely internal subscribers — that reads
+// as "unrestricted", per the authz package invariant.
+func (h *EventHub) Subscribe(ctx context.Context, userID string) *Subscription {
+	_, grants, grantsKnown := authz.FromContext(ctx)
 	sub := &subscriber{
-		id:     uuid.New().String(),
-		userID: userID,
-		ch:     make(chan Event, 32),
-		closed: make(chan struct{}),
+		id:          uuid.New().String(),
+		userID:      userID,
+		grants:      grants,
+		grantsKnown: grantsKnown,
+		ch:          make(chan Event, 32),
+		closed:      make(chan struct{}),
 	}
 	h.mu.Lock()
 	h.subscribers[sub.id] = sub
@@ -122,10 +142,17 @@ func (h *EventHub) Subscribe(userID string) *Subscription {
 	}
 }
 
-// Publish fans an event out to every current subscriber. Sends are
-// non-blocking — if a subscriber's buffer is full, the event is
-// dropped for that subscriber (logged at the producer). Other
+// Publish fans an event out to every subscriber ALLOWED to see it.
+// Sends are non-blocking — if a subscriber's buffer is full, the event
+// is dropped for that subscriber (logged at the producer). Other
 // subscribers are unaffected.
+//
+// Namespace grants (#4): an event carries the namespace of the
+// connection that produced it (see Event.Namespace). A restricted
+// subscriber only receives events from their granted namespaces —
+// filtering the bell's REST list alone wouldn't help, since a
+// live-fired alert would still push straight to every open tab. An
+// event with no namespace is system-wide and goes to everyone.
 func (h *EventHub) Publish(ev Event) {
 	h.mu.RLock()
 	subs := make([]*subscriber, 0, len(h.subscribers))
@@ -135,6 +162,9 @@ func (h *EventHub) Publish(ev Event) {
 	h.mu.RUnlock()
 
 	for _, s := range subs {
+		if !s.canSee(ev) {
+			continue
+		}
 		select {
 		case s.ch <- ev:
 		case <-s.closed:
@@ -145,6 +175,17 @@ func (h *EventHub) Publish(ev Event) {
 			// chronically-slow clients.
 		}
 	}
+}
+
+// canSee reports whether this subscriber may receive the event (#4).
+// An event with no namespace is system-wide (not connection-scoped) and
+// goes to everyone. A subscriber whose context carried no grants is an
+// internal/unrestricted listener.
+func (s *subscriber) canSee(ev Event) bool {
+	if ev.Namespace == "" || !s.grantsKnown {
+		return true
+	}
+	return s.grants.Can(ev.Namespace)
 }
 
 // SubscriberCount returns the current number of open subscribers.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -405,18 +406,27 @@ func (s *DashboardService) requireImportRepos() error {
 //  2. bundle.SourceNamespace if it exists locally as a namespace
 //  3. "default"
 // Returns the slug the importer will write into.
+// resolveTargetNamespace picks the namespace an import lands in, and is
+// the single gate both import paths (preflight + apply) share — so the
+// #4 grant check lives here: an import WRITES connections, components,
+// and dashboards into the target, and a restricted user must not be
+// able to create content in a namespace they can't see.
 func (s *DashboardService) resolveTargetNamespace(ctx context.Context, requested, sourceNs string) (string, error) {
-	if requested != "" {
-		return requested, nil
-	}
-	if sourceNs != "" {
+	target := models.DefaultNamespace
+	switch {
+	case requested != "":
+		target = requested
+	case sourceNs != "":
 		var ns models.Namespace
 		err := s.db.Collection("namespaces").FindOne(ctx, bson.M{"name": sourceNs}).Decode(&ns)
 		if err == nil {
-			return sourceNs, nil
+			target = sourceNs
 		}
 	}
-	return models.DefaultNamespace, nil
+	if err := authz.CheckNamespace(ctx, target); err != nil {
+		return "", err
+	}
+	return target, nil
 }
 
 // equalBySanitizedJSON compares two values after marshaling both to

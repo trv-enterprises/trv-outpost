@@ -115,6 +115,13 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 // only because the route-rule table didn't enforce view explicitly;
 // the new structural floor (Authorize() requires view on any route
 // without an explicit Required) means we can drop the injection.
+// Namespace grants (#4): system users are created UNRESTRICTED, which
+// preserves the pre-feature behavior every kiosk/webhook principal
+// depends on (a kiosk display and a ts-store webhook receiver both need
+// to reach whatever they were pointed at). To restrict one, an admin
+// sets namespaces_restricted + allowed_namespaces via
+// PUT /api/users/:id — the same write the user edit page uses; the
+// System Users page has no edit form of its own today.
 func (s *UserService) CreateSystemUser(ctx context.Context, name string, capabilities []models.Capability) (*models.User, error) {
 	if name == "" {
 		return nil, errors.New("system user name is required")

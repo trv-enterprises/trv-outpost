@@ -179,6 +179,16 @@ func buildRouteRules() []RouteCapability {
 		// deployment perimeter (e.g. tailnet, LAN, VPN) is the real
 		// access control. Reconsider when we ship a public-facing
 		// deployment.
+		//
+		// Namespace grants (#4) DO NOT apply here, by decision: these
+		// routes are Public, so there's no authenticated identity to
+		// resolve grants from — a kiosk <img> sends no credentials.
+		// Frigate media is therefore namespace-blind, and a restricted
+		// user who knows a connection UUID can still fetch its media.
+		// Closing this means solving kiosk auth first (signed URLs or a
+		// kiosk token), which is its own tracked problem. Every
+		// AUTHENTICATED frigate-adjacent surface (the connection
+		// record, its config, its component) is grant-enforced.
 		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
 
 		// ts-store Alerts extension — read available to any
