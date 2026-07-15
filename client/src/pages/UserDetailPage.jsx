@@ -260,8 +260,9 @@ function UserDetailPage() {
 
       {/* Form content */}
       <div className="form-content">
-        {/* User Name */}
-        <div className="form-row">
+        {/* Identity metadata — two columns at the page's full width;
+            collapses to one on narrow viewports. */}
+        <div className="form-row form-row--split">
           <TextInput
             id="user-name"
             labelText="Name"
@@ -276,10 +277,6 @@ function UserDetailPage() {
             invalid={!!nameError}
             invalidText={nameError}
           />
-        </div>
-
-        {/* Email */}
-        <div className="form-row">
           <TextInput
             id="user-email"
             labelText="Email (optional)"
@@ -331,7 +328,7 @@ function UserDetailPage() {
         {/* Access section — Capabilities (what modes) vs Namespaces
             (which content). Two orthogonal planes (#4), so they get a
             switcher rather than one long stacked form. */}
-        <div className="config-section">
+        <div className="config-section access-tabs">
           <ContentSwitcher
             selectedIndex={activeTab}
             onChange={({ index }) => setActiveTab(index)}

@@ -252,6 +252,9 @@ function NamespaceDetailPage() {
 
       <div className="config-section">
         <h3>Details</h3>
+        {/* Two columns at the page's full width: name + color pair on the
+            first row, description spans both beneath (a TextArea reads
+            badly at half width). Collapses to one column when narrow. */}
         <div className="namespace-detail-page__form">
           <TextInput
             id="ns-name"
@@ -262,13 +265,6 @@ function NamespaceDetailPage() {
             value={formName}
             onChange={(e) => { setFormName(e.target.value); setHasChanges(true); }}
             disabled={isDefault}
-          />
-          <TextArea
-            id="ns-description"
-            labelText="Description"
-            rows={2}
-            value={formDescription}
-            onChange={(e) => { setFormDescription(e.target.value); setHasChanges(true); }}
           />
           <fieldset className="namespace-detail-page__palette">
             <legend>Color</legend>
@@ -289,6 +285,14 @@ function NamespaceDetailPage() {
               ))}
             </div>
           </fieldset>
+          <TextArea
+            className="namespace-detail-page__span"
+            id="ns-description"
+            labelText="Description"
+            rows={2}
+            value={formDescription}
+            onChange={(e) => { setFormDescription(e.target.value); setHasChanges(true); }}
+          />
         </div>
       </div>
 

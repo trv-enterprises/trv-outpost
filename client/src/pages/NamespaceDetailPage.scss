@@ -38,7 +38,9 @@
     margin-top: spacing.$spacing-05;
     padding-top: spacing.$spacing-05;
     border-top: 1px solid var(--cds-border-subtle-01);
-    max-width: 720px;
+    // 800px matches the connection/component editors so every edit page
+    // reads the same width.
+    max-width: 800px;
 
     &__header {
       display: flex;
@@ -63,10 +65,22 @@
     }
   }
 
+  // Two-column metadata: name + color pair on the first row, the
+  // description spans both beneath (a TextArea reads badly at half
+  // width). One column when narrow.
   &__form {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: spacing.$spacing-05;
+    align-items: start;
+
+    @media (max-width: 672px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  &__span {
+    grid-column: 1 / -1;
   }
 
   &__empty {
