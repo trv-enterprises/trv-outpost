@@ -160,11 +160,18 @@ function NamespacesPage() {
             <Table {...getTableProps()}>
               <TableHead>
                 <TableRow>
-                  {h.map((header) => (
-                    <TableHeader key={header.key} {...getHeaderProps({ header })}>
-                      {header.header}
-                    </TableHeader>
-                  ))}
+                  {h.map((header) => {
+                    // getHeaderProps returns an object that INCLUDES `key`, so
+                    // it must be destructured out — spreading it into JSX
+                    // passes the key via spread, which React 19 warns about
+                    // (and won't read as a key).
+                    const { key, ...headerProps } = getHeaderProps({ header });
+                    return (
+                      <TableHeader key={key} {...headerProps}>
+                        {header.header}
+                      </TableHeader>
+                    );
+                  })}
                 </TableRow>
               </TableHead>
               <TableBody>
