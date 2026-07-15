@@ -6,6 +6,55 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.40.0] — 2026-07-15
+
+### Added
+
+- **Per-user namespace authorization (#4).** Namespaces become an access
+  boundary, not just an organizational one. A user can be restricted to
+  specific namespaces (Manage → Users → the new **Namespaces** tab); they
+  then see only that content and can never reach data through a connection
+  they weren't granted. Two orthogonal planes: the `manage` capability's
+  ADMIN plane (user CRUD, namespace CRUD, grant assignment) stays
+  namespace-blind, so any manager can grant any namespace to anyone —
+  what a manager can *see* is still governed by their own grants.
+  Grants resolve per request through a 30s TTL/LRU cache rather than
+  riding the JWT, so a grant change applies immediately instead of after
+  the token TTL. **Existing users are unaffected and no migration is
+  needed** — an absent grant field means unrestricted.
+- Ungranted cross-references are redacted server-side to an opaque
+  "Unauthorized" placeholder (id, name, and namespace all stripped) across
+  dashboard/component/connection lists and the resource navigator. A
+  dashboard with an ungranted dependency still mounts; only the affected
+  panels render an error panel, and lists badge those dashboards up front.
+- Namespace management moved from a modal to a page (`/manage/namespaces/:id`)
+  listing everyone who can see the namespace — explicitly granted users and
+  unrestricted ones alike. The namespace list is now click-row-to-edit.
+- `GET /api/namespaces/:id/users` (manage-gated) and `?scope=all` on the
+  namespace list for admin surfaces.
+- **View-mode dashboards page now paginates server-side (#114)**, on the same
+  path Design mode has used since #21 — search, namespace, tag, and connection
+  filters run server-side instead of loading every dashboard into the browser.
+  Adds a lightweight `ids_only` nav projection.
+- EdgeLake terminal destination now defaults to network fan-out.
+
+### Fixed
+
+- **EdgeLake query errors surfaced instead of vanishing (#28).** Adapter
+  failures returned HTTP 200 with an error body that the client dropped, so
+  panels rendered blank with no explanation.
+- **EdgeLake distributed queries default on (#28)** — queries were failing with
+  an unhelpful "failed to determine destination node" because network routing
+  defaulted off.
+- EdgeLake terminal parses relayed multi-block payloads into the JSON tree (#161).
+- ts-store alerts respected no namespace boundary — the bell returned every
+  alert in every namespace, including the raw upstream payload from the firing
+  connection. Now grant-filtered on both the list and the live SSE push.
+- `/api/stats` returned connection names across every namespace.
+- The viewer's prev/next dashboard list silently truncated at 20 dashboards.
+- View-mode pagination footer pins to the bottom of the display rather than the
+  end of the scrolled content.
+
 ## [0.39.3] — 2026-07-09
 
 ### Fixed
