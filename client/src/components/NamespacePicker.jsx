@@ -19,14 +19,18 @@ import './NamespacePicker.scss';
  * NamespacePicker
  *
  * Header widget showing the active namespace as a colored chip. Click
- * to open a list of all namespaces; pick one to switch context. Bottom
- * entry jumps to /manage/namespaces for CRUD.
+ * to open a list of all namespaces; pick one to switch context.
  *
  * The chip's color is deterministic from the namespace's `color` field,
  * so users see the same color for the same namespace everywhere in the
  * app (column chips, editor pickers, header).
+ *
+ * @param {boolean} canManage - When true, the menu offers a "Manage
+ *   namespaces…" jump to /manage/namespaces. That page is Manage-mode
+ *   CRUD, so a designer without the manage capability would land on a
+ *   route they can't use — don't offer it.
  */
-export default function NamespacePicker() {
+export default function NamespacePicker({ canManage = false }) {
   const { namespaces, activeNamespace, setActiveNamespace, getNamespace } = useNamespaces();
   const navigate = useNavigate();
 
@@ -96,16 +100,18 @@ export default function NamespacePicker() {
           onClick={() => setActiveNamespace(ns.name)}
         />
       ))}
-      <OverflowMenuItem
-        itemText={
-          <span className="namespace-picker__item">
-            <Settings size={14} />
-            <span style={{ marginLeft: '0.5rem' }}>Manage namespaces…</span>
-          </span>
-        }
-        hasDivider
-        onClick={() => navigate('/manage/namespaces')}
-      />
+      {canManage && (
+        <OverflowMenuItem
+          itemText={
+            <span className="namespace-picker__item">
+              <Settings size={14} />
+              <span style={{ marginLeft: '0.5rem' }}>Manage namespaces…</span>
+            </span>
+          }
+          hasDivider
+          onClick={() => navigate('/manage/namespaces')}
+        />
+      )}
     </OverflowMenu>
       <span className="namespace-picker__divider" aria-hidden="true" />
     </div>

@@ -854,7 +854,9 @@ function AppContent({ onDisconnect }) {
                   connections). Manage-only users administer the
                   system rather than author content, so they don't
                   need it. Gate on Design specifically. */}
-              {userCapabilities.can_design && <NamespacePicker />}
+              {userCapabilities.can_design && (
+                <NamespacePicker canManage={userCapabilities.can_manage} />
+              )}
 
               {/* Dev user impersonation pill removed — initial
                   load now accepts a `?user_id=<guid>` URL param,
