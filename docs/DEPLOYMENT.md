@@ -14,14 +14,20 @@ There are two ways to deploy the dashboard with Docker Compose:
 
 ## Quick Start (deploy from published images)
 
+> **You must configure a login before this is usable.** The deploy
+> compose ships secure-by-default, which means *no* credential channel is
+> enabled out of the box. Read [No login configured](#no-login-configured)
+> first — a stack started with pure defaults comes up healthy and serves
+> the app, but cannot be signed into.
+
 ```bash
 git clone https://github.com/trv-enterprises/trv-outpost
 cd trv-outpost
 
-# Optional: copy and edit .env to set DOMAIN, IMAGE_TAG,
-# ASSISTANT_ANTHROPIC_API_KEY (for AI; falls back to ANTHROPIC_API_KEY),
-# CLERK_SECRET_KEY + CLERK_PUBLISHABLE_KEY (for sign-in), or non-default ports.
-# The defaults work for `http://localhost` evaluation as-is.
+# Copy and edit .env. At minimum, configure a login (Clerk, or legacy
+# GUID for localhost-only evaluation) — see "No login configured" below.
+# Also used for DOMAIN, IMAGE_TAG, ASSISTANT_ANTHROPIC_API_KEY (for AI;
+# falls back to ANTHROPIC_API_KEY), and non-default ports.
 cp .env.example .env
 
 docker compose -f docker-compose.deploy.yml up -d
@@ -37,6 +43,112 @@ Your dashboard will be available at:
 Pin a specific release with `IMAGE_TAG=v0.10.0` in `.env`; otherwise
 `latest` is used. Available tags:
 <https://github.com/trv-enterprises/trv-outpost/releases>.
+
+## No login configured
+
+`docker-compose.deploy.yml` sets `DASHBOARD_AUTH_ALLOW_LEGACY_GUID=false`
+and leaves Clerk unset. Those are each individually correct defaults, but
+together they leave the server with **no credential channel at all**:
+
+- **Clerk unset** → no browser sign-in.
+- **Legacy GUID off** → `?user_id=` / `X-User-ID` are not honored.
+- **API keys** → can't bootstrap you in; minting one needs an admin
+  session you have no way to obtain.
+
+The stack still comes up fully healthy and serves the SPA, which makes
+this look like a bug rather than a config gap. The symptoms:
+
+- `GET /api/auth/session` returns `401`
+- the UI reports **"login not configured"**
+- `docker compose -f docker-compose.deploy.yml logs server` shows both
+  `Clerk identity verifier disabled` and `Legacy GUID auth disabled`
+
+Pick one of the two options below.
+
+### Option 1 — Clerk (recommended for anything reachable)
+
+Set both keys in `.env` and restart. See
+[Clerk SSO setup](../udoc/docs/clerk-sso.md).
+
+```bash
+CLERK_SECRET_KEY=sk_test_…
+CLERK_PUBLISHABLE_KEY=pk_test_…
+```
+
+### Option 2 — legacy GUID (localhost evaluation only)
+
+Layer the `docker-compose.localhost.yml` overlay onto the deploy file:
+
+```bash
+docker compose -f docker-compose.deploy.yml \
+               -f docker-compose.localhost.yml up -d
+```
+
+Then browse to `http://localhost/?user_id=<guid>`. On a fresh database
+the server seeds a default admin user; its GUID is in the server logs on
+first boot, or read it from the `users` collection.
+
+> **This is identity assertion, not authentication.** It trusts *any*
+> GUID presented to it — anyone who can reach the port becomes any user
+> they name, including an admin.
+
+The overlay is ~10 lines and does exactly two things, which ship welded
+together on purpose:
+
+1. sets `DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true` — opens the door
+2. rebinds Caddy to `127.0.0.1` — confines it to your machine
+
+**Neither is safe without the other.** The deploy file publishes Caddy on
+`0.0.0.0`, so doing (1) alone would expose an open door to your whole
+LAN/tailnet. Don't split them apart, and don't layer this overlay onto a
+deployment anyone else can reach — use Clerk there instead.
+
+The `ports: !override` tag in the overlay is load-bearing: without it
+Compose *merges* the port lists and the original `0.0.0.0` bindings
+survive alongside the loopback ones, silently defeating the confinement.
+
+---
+
+## Migrating from the dev compose (existing MongoDB data)
+
+The repo's two compose files declare **different, non-interchangeable
+volumes**, and the names differ only by a hyphen vs an underscore:
+
+| File | Volume declared | Actual Docker volume |
+|------|-----------------|----------------------|
+| `docker-compose.yml` (local dev) | `mongodb-data` | `dashboard_mongodb-data` |
+| `docker-compose.deploy.yml` | `mongodb_data` | `dashboard_mongodb_data` |
+
+(Compose prefixes the project name — the directory, normally `dashboard`.)
+
+So running the deploy compose on a box that has been doing local dev
+comes up against a **brand-new empty database**, sitting next to your
+real one. Nothing is lost, but it presents as total data loss. Check
+what you actually have:
+
+```bash
+docker volume ls | grep mongodb
+```
+
+To point the deploy stack at your existing dev data, adopt the volume
+with a `docker-compose.override.yml`:
+
+```yaml
+services:
+  mongodb:
+    volumes:
+      - dashboard_mongodb-data:/data/db
+
+volumes:
+  dashboard_mongodb-data:
+    external: true
+```
+
+`external: true` means Compose expects the volume to already exist and
+will error rather than silently create an empty one — which is what you
+want here. Back up before switching (see [Backup & Restore](#backup--restore)).
+
+---
 
 ## Build from source
 
@@ -101,7 +213,9 @@ local code change.
 | `DASHBOARD_MONGODB_DATABASE` | `dashboard` | Database name |
 | `CADDY_TLS_DIRECTIVE` | _(empty)_ | TLS directive injected into the bundled Caddyfile, for HTTPS cert sources other than public ACME. Empty = today's behavior. E.g. `tls { get_certificate tailscale }` for a Tailscale `.ts.net` cert, or `tls internal` for an internal-CA hostname cert. See [Internal / Tailscale HTTPS](#internal--tailscale-https). |
 | `DASHBOARD_AUTH_COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS so the refresh cookie carries the `Secure` flag. Must match the scheme: a `Secure` cookie is dropped on a plain-HTTP origin, and an HTTP deployment needs this `false`. |
-| `HTTP_PORT` / `HTTPS_PORT` | `80` / `443` | Override the published host ports if those are taken. |
+| `DASHBOARD_AUTH_ALLOW_LEGACY_GUID` | `false` | Enables the `?user_id=` / `X-User-ID` identity channel. **Trusts any GUID presented to it** — localhost evaluation only, and pair it with a `127.0.0.1` port binding. With Clerk also unset, `false` means no login exists at all: see [No login configured](#no-login-configured). |
+| `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` | _(empty)_ | Set **both** to enable Clerk browser sign-in. See [No login configured](#no-login-configured). |
+| `HTTP_PORT` / `HTTPS_PORT` | `80` / `443` | Override the published host ports if those are taken. **Caveat:** Caddy builds its HTTP→HTTPS redirect from `DOMAIN` and doesn't know about the remap, so `http://localhost:8080/` redirects to `https://localhost/` (bare 443) and goes nowhere. Browse directly to the HTTPS port instead. |
 
 ---
 
@@ -354,6 +468,11 @@ docker compose -f docker-compose.prod.yml exec mongodb mongosh --eval "db.runCom
 
 1. **Firewall**: Only expose ports 80, 443 publicly
 2. **MongoDB**: Not exposed externally by default (good)
+3. **Legacy GUID auth**: Keep `DASHBOARD_AUTH_ALLOW_LEGACY_GUID=false` on
+   anything reachable — it trusts any GUID presented to it. If you enable
+   it for local evaluation, bind the Caddy ports to `127.0.0.1` so the
+   open door isn't reachable from your LAN/tailnet. See
+   [No login configured](#no-login-configured).
 4. **API Key**: Never commit `.env` to version control
 5. **Updates**: Regularly update base images for security patches
 

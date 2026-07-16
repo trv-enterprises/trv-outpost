@@ -1,0 +1,41 @@
+# Localhost evaluation overlay — layer this ON TOP of the deploy file:
+#
+#   docker compose -f docker-compose.deploy.yml \
+#                  -f docker-compose.localhost.yml up -d
+#   open http://localhost
+#
+# Why this exists: docker-compose.deploy.yml ships secure-by-default with
+# no credential channel enabled, so a pure-default stack comes up healthy
+# but cannot be signed into. This overlay trades that for one-command
+# evaluation on your own machine.
+#
+# ⚠️  YOUR MACHINE ONLY. NEVER layer this onto a reachable deployment.
+#
+# Legacy GUID auth is identity ASSERTION, not authentication: it trusts
+# ANY GUID presented to it. Anyone who can reach the port becomes any
+# user they name — including an admin. That is why the two settings
+# below ship welded together:
+#
+#   1. DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true  → opens the door
+#   2. 127.0.0.1 port binding                 → confines it to this host
+#
+# Neither is safe without the other. The deploy file publishes Caddy on
+# 0.0.0.0, so enabling (1) alone would expose an open door to your whole
+# LAN/tailnet. Don't split them apart.
+#
+# For a deployment anyone else can reach, use Clerk instead — set
+# CLERK_SECRET_KEY + CLERK_PUBLISHABLE_KEY and drop this overlay. See
+# "No login configured" in docs/DEPLOYMENT.md.
+
+services:
+  server:
+    environment:
+      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID=true
+
+  caddy:
+    # !override replaces the deploy file's port list rather than merging
+    # with it — without this tag Compose would ADD these and leave the
+    # original 0.0.0.0 bindings in place, defeating the confinement.
+    ports: !override
+      - "127.0.0.1:${HTTP_PORT:-80}:80"
+      - "127.0.0.1:${HTTPS_PORT:-443}:443"

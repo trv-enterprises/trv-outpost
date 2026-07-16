@@ -6,16 +6,25 @@
 #   docker compose -f docker-compose.deploy.yml up -d
 #   open http://localhost
 #
-# All env vars below have working defaults; no .env file is required to
-# get to a running dashboard. Copy .env.example to .env if you want to
-# customize anything (AI features, custom domain + HTTPS, MQTT, etc.).
-#
 # Defaults are tuned for "I want to see the dashboard on my laptop":
 #   - DOMAIN=localhost              → Caddy serves on :80 with self-
 #                                     signed cert; no DNS or LE needed
 #   - IMAGE_TAG=latest              → most recent tagged release
 #   - ANTHROPIC_API_KEY (unset)     → AI builder is disabled, the rest
 #                                     of the app works fine
+#
+# ⚠️  YOU MUST CONFIGURE A LOGIN. This file ships secure-by-default,
+# which means no credential channel is enabled out of the box: the
+# stack comes up healthy and serves the app, but you cannot sign in
+# until you pick one of:
+#   - Clerk       → set CLERK_SECRET_KEY + CLERK_PUBLISHABLE_KEY
+#   - Legacy GUID → localhost evaluation only; add the overlay:
+#                     -f docker-compose.deploy.yml
+#                     -f docker-compose.localhost.yml
+# See "No login configured" in docs/DEPLOYMENT.md.
+#
+# Every other env var has a working default. Copy .env.example to .env
+# to customize (AI features, custom domain + HTTPS, ports, etc.).
 #
 # For HTTPS with a real domain, see docs/DEPLOYMENT.md.
 
@@ -45,7 +54,12 @@ services:
       - "3001"
     environment:
       - ENV=production
-      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID=false
+      # Off by default: legacy GUID auth trusts ANY GUID presented to it.
+      # With Clerk unset (the default), this leaves the stack with NO
+      # configured login — the app serves but /api/auth/session 401s. See
+      # "No login configured" in docs/DEPLOYMENT.md. Enable it ONLY with
+      # the Caddy ports bound to 127.0.0.1 (see .env.example).
+      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID=${DASHBOARD_AUTH_ALLOW_LEGACY_GUID:-false}
       - DASHBOARD_SERVER_MODE=release
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017

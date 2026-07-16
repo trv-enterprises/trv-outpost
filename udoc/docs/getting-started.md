@@ -39,6 +39,12 @@ new deployments and must be explicitly enabled via
 `docker-compose.prod.yml` / `docker-compose.deploy.yml` set
 `ENV=production` and keep this off. Enable it only for development,
 single-user homelabs, or kiosks where you understand the trade-off.
+
+**If you're deploying with `docker-compose.deploy.yml` and haven't
+configured Clerk, this is the only credential channel available** — and
+with it off, the stack comes up healthy but cannot be signed into at
+all. See [No login configured](https://github.com/trv-enterprises/trv-outpost/blob/main/docs/DEPLOYMENT.md#no-login-configured)
+for the two ways out.
 :::
 
 ### Under the hood: session tokens (v0.17.0+)

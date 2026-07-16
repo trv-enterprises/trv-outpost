@@ -22,12 +22,20 @@ services:
       - "3001"
     environment:
       - ENV=production
-      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID=false
+      # Off by default: legacy GUID auth trusts ANY GUID presented to it.
+      # With Clerk unset, this leaves the stack with NO configured login —
+      # the app serves but /api/auth/session 401s. See "No login configured"
+      # in docs/DEPLOYMENT.md. Enable it ONLY with ports bound to 127.0.0.1.
+      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID=${DASHBOARD_AUTH_ALLOW_LEGACY_GUID:-false}
       - DASHBOARD_SERVER_MODE=release
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
       - DASHBOARD_MONGODB_DATABASE=dashboard
-      - DASHBOARD_LLM_API_KEY=${ANTHROPIC_API_KEY}
+      - DASHBOARD_LLM_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional: enable Clerk-backed sign-in by setting both vars.
+      # See udoc/docs/clerk-sso.md.
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY:-}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY:-}
     depends_on:
       mongodb:
         condition: service_healthy
