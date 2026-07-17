@@ -12,14 +12,7 @@ import FrigateAlertsGrid from './frigate/FrigateAlertsGrid';
 import WeatherDisplay from './weather/WeatherDisplay';
 import PanelText from './PanelText';
 import PanelErrorBoundary from './shared/PanelErrorBoundary';
-import { stepAwareRefreshMs } from '../utils/rangePresets';
-
-// Chart types that render a single latest/aggregate value rather than a series
-// over time. The dashboard range variable (a time window) is meaningless for
-// these, so the range is withheld from them — see the rangeValue prop below.
-// A blocklist (not an allowlist) so custom/dataview and any future series type
-// keep receiving the range by default.
-const RANGE_EXEMPT_CHART_TYPES = new Set(['gauge', 'number', 'pie']);
+import { stepAwareRefreshMs, RANGE_EXEMPT_CHART_TYPES } from '../utils/rangePresets';
 
 /**
  * Shared per-panel CONTENT subtree — the text / control / display / chart

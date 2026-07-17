@@ -15,6 +15,19 @@
 // The default preset set offered when a range variable declares none.
 export const DEFAULT_RANGE_PRESETS = ['1h', '6h', '24h', '7d', '30d'];
 
+// Chart types that render a single latest/aggregate value rather than a series
+// over time. The dashboard range variable (a time WINDOW) is meaningless for
+// these, so they neither receive it (PanelContent withholds it) nor count as a
+// range consumer when deciding whether to show the picker. Shared so those two
+// decisions can't drift.
+export const RANGE_EXEMPT_CHART_TYPES = new Set(['gauge', 'number', 'pie']);
+
+// Does a chart type render a time series that a range window can scope?
+// (The inverse of range-exempt, for non-exempt chart types.)
+export function chartTypeConsumesRange(chartType) {
+  return !!chartType && !RANGE_EXEMPT_CHART_TYPES.has(chartType);
+}
+
 // Human labels for the known preset tokens. Unknown tokens fall back to the
 // token itself (so a custom "12h" still renders sensibly).
 const PRESET_LABELS = {
