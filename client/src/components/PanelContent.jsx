@@ -13,6 +13,13 @@ import WeatherDisplay from './weather/WeatherDisplay';
 import PanelText from './PanelText';
 import PanelErrorBoundary from './shared/PanelErrorBoundary';
 
+// Chart types that render a single latest/aggregate value rather than a series
+// over time. The dashboard range variable (a time window) is meaningless for
+// these, so the range is withheld from them — see the rangeValue prop below.
+// A blocklist (not an allowlist) so custom/dataview and any future series type
+// keep receiving the range by default.
+const RANGE_EXEMPT_CHART_TYPES = new Set(['gauge', 'number', 'pie']);
+
 /**
  * Shared per-panel CONTENT subtree — the text / control / display / chart
  * render, including the streaming-capable <ComponentPanelWithActions>.
@@ -151,7 +158,15 @@ function PanelContent({
                     componentId: chart.id,
                     queryConfig: chart.query_config,
                     dashboardVariableValue,
-                    rangeValue,
+                    // The dashboard range variable scopes a TIME WINDOW, which
+                    // is only meaningful for series charts (a line/area/scatter
+                    // over time). Instantaneous charts — gauge, number, pie —
+                    // render a single latest/aggregate value; applying the range
+                    // would silently convert a live tile into a historical
+                    // (and, for ts-store with a step, downsampled) query. So
+                    // withhold the range from those types; everything else,
+                    // including custom/dataview, keeps today's behavior.
+                    rangeValue: RANGE_EXEMPT_CHART_TYPES.has(chart.chart_type) ? null : rangeValue,
                     dataRefreshInterval,
                     refreshTick,
                   }}
