@@ -49,6 +49,13 @@ in most any environment.
   Import preflight classifies every object as identical / conflict
   / new / blocked and surfaces per-object diffs for review before
   any writes
+- **Mobile view** — on a phone-sized screen the dashboard viewer
+  stacks every panel full-width in a single scrolling column (reading
+  order), so any dashboard is legible on mobile with no re-authoring;
+  tap any chart for an edge-to-edge fullscreen view (rotate to
+  landscape for wide charts), and streaming charts keep updating live.
+  Served from the same URL as desktop — the layout switches on viewport
+  width, and the mobile page is code-split so desktop never loads it
 - **MQTT retained-state replay** so panels repopulate instantly on
   dashboard switches instead of waiting for the next publish
 - **Shared tag filtering** across connections, components, and
@@ -278,7 +285,9 @@ source, backup + restore).
   and dashboards. AI Builder lives here as an alternate path to
   component creation.
 - **View mode** (`/view/*`) — end-user dashboard runtime with
-  real-time data, auto-refresh, fullscreen, and four fit modes.
+  real-time data, auto-refresh, fullscreen, and four fit modes. On a
+  phone it switches to a view-only **mobile layout** that stacks panels
+  vertically for legibility.
 - **Manage mode** (`/manage/*`) — admin settings, user management,
   device and device-type management.
 

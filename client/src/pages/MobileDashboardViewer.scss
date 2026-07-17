@@ -1,0 +1,231 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Mobile dashboard viewer — vertical panel stack. Panels render full-width,
+// one per row, scrolling down; the author's grid geometry is discarded here.
+// Theme-neutral Carbon tokens only (resolves through the root theme).
+
+.mobile-viewer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  // The app shell forces `overflow: hidden` on its direct child
+  // (.app-content.cds--content > *), so THIS element can't be the scroller —
+  // the scroll lives on the inner __stack below. Here we just fill the fixed
+  // height and lay out the sticky bar + scrolling stack as flex rows.
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  background: var(--cds-background);
+  color: var(--cds-text-primary);
+
+  &--center {
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 2rem 1rem;
+    min-height: 60vh;
+    text-align: center;
+  }
+
+  &__error {
+    color: var(--cds-text-error);
+    max-width: 32rem;
+  }
+
+  // Sticky title + refresh bar so the user always knows which dashboard they're
+  // on and can pull fresh data without scrolling back up.
+  &__bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--cds-layer-01);
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+  }
+
+  &__title {
+    // Take the space between the back + refresh buttons and truncate.
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--cds-text-secondary);
+  }
+
+  // The scrolling region. Takes the remaining height under the sticky bar and
+  // scrolls internally (the outer .mobile-viewer is pinned to the shell's fixed
+  // height and can't scroll — see the note above).
+  &__stack {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+}
+
+// Each stacked panel. A row is a self-contained box the panel content fills;
+// PanelContent's inner wrappers are width:100%/height:100% so ECharts and
+// spec-driven views size to it. Give charts a deterministic height (no grid
+// transform to borrow one from) via aspect-ratio, and let compact content
+// (controls, number tiles, text) take a smaller fixed height.
+.mobile-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  // CRITICAL: as flex children of the column stack, rows must NOT shrink —
+  // otherwise N panels each compress to fit the container height, the stack
+  // never overflows, and nothing scrolls. flex-shrink:0 makes each row keep
+  // its declared height so the stack grows past the viewport and scrolls.
+  flex: 0 0 auto;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 2px;
+  overflow: hidden;
+
+  // The inner PanelContent tree expects a sized flex parent.
+  > * {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  // Row heights use `min(<width-relative>, <height-relative>)` as the preferred
+  // clamp term so a SHORT landscape viewport (where vw is large but vh is
+  // small) clamps the row DOWN instead of overflowing — a plain vw box made
+  // the gauge taller than the whole landscape viewport. Portrait keeps the
+  // generous size (vh is large there, so the vw term wins).
+
+  // Charts / series / dataview: a readable landscape box.
+  &--chart,
+  &--dataview {
+    height: clamp(200px, min(56vw, 62vh), 320px);
+  }
+
+  // Number tiles are compact — no need for a tall box.
+  &--number {
+    height: clamp(140px, min(44vw, 50vh), 240px);
+  }
+
+  // Round charts (gauge, pie) draw an axis/labels around a circle and need a
+  // near-square, roomy box or the internal tick labels collide with the center
+  // value (a full-width short row squeezes the gauge into an unreadable knot).
+  &--gauge,
+  &--pie {
+    height: clamp(240px, min(78vw, 72vh), 360px);
+  }
+
+  // Datatables need vertical room to show rows but shouldn't run unbounded.
+  &--datatable {
+    height: clamp(220px, min(70vw, 75vh), 420px);
+  }
+
+  // Controls size to their own compact content.
+  &--control {
+    min-height: 96px;
+  }
+
+  // Text panels flow to their content height.
+  &--text {
+    height: auto;
+    min-height: 48px;
+  }
+
+  // Container-query context so the number tile's font can be made
+  // container-relative (see the NumberView override) instead of a fixed 120px
+  // that only reads correctly under the desktop grid's scale transform.
+  container-type: size;
+
+  // Fullscreen toggle — top-right of the row, above the chart content.
+  &__fullscreen-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    z-index: 3;
+    // Subtle until interacted with, so it doesn't fight the chart.
+    opacity: 0.65;
+
+    &:hover,
+    &:focus {
+      opacity: 1;
+    }
+  }
+}
+
+// Edge-to-edge fullscreen overlay for one panel. Fixed over the entire
+// viewport (above the app header). No header bar — the component renders its
+// own title; the close button floats over the top-right corner. Rotate to
+// landscape for a wide chart. Theme-neutral tokens only.
+.mobile-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  background: var(--cds-background);
+
+  // Floating close button over the component's top-right corner. A subtle
+  // layer background keeps the × legible over a busy chart.
+  &__close {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    background: var(--cds-layer-01);
+    border-radius: 2px;
+    opacity: 0.85;
+
+    &:hover,
+    &:focus {
+      opacity: 1;
+    }
+  }
+
+  // The single panel fills the entire overlay; PanelContent's inner wrappers
+  // are 100%/100% so the chart (and its own title band) expand to fill it.
+  &__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem;
+
+    > * {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+  }
+}
+
+// (The per-chart Download menu's leftward truncation on mobile is fixed
+// behaviorally in ComponentPanelWithActions — it drops the `flipped` prop on
+// mobile so the menu opens rightward — not via CSS here.)
+
+// NumberView renders its value at a fixed inline `${size}px` (default 120px),
+// which only looks right because the desktop grid is transform-scaled to fit.
+// In the mobile stack there is no such transform, so a 120px number would
+// overflow a full-width row. Cap it relative to the row box (which is a size
+// container above). `!important` is required to beat the inline style; scoping
+// to .mobile-panel keeps every other surface on the original inline px.
+.mobile-panel .number-view__value {
+  font-size: clamp(2rem, 22cqmin, 5rem) !important;
+}

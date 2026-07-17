@@ -266,6 +266,73 @@ budget that the kiosk doesn't have — see the kiosk caveat in
 > A truly unattended board (system user / secret URL, no human) depends
 > on the kiosk-auth strategy — see [auth-modes.md](auth-modes.md).
 
+## Mobile viewer (phone viewport)
+
+The desktop viewer lays panels on a fixed 32×32-px cell grid scaled to
+fit by a single CSS `transform`. On a phone that's an illegible shrunk
+or squashed desktop layout, so a narrow viewport gets a different render
+path instead: **`pages/MobileDashboardViewer.jsx`**, a **view-only,
+vertically-stacked** surface.
+
+- **Detection + routing.** `hooks/useIsMobile.js` (a `matchMedia(
+  '(max-width: 768px)')` hook — the app's single mobile breakpoint,
+  matching the tile-grid breakpoint) drives an `isMobile` flag in
+  `App.jsx`'s `AppContent`. When set, the `/view/dashboards/:id` route
+  renders `MobileDashboardViewer` instead of `DashboardViewerPage`, and
+  the header sheds its authoring/admin affordances (ModeToggle,
+  Assistant launcher, NamespacePicker, side nav) — leaving logo, Help,
+  Notifications, and the account menu. Same origin/port/build serves
+  both; the choice is purely runtime viewport width.
+  `MobileDashboardViewer` is a **`lazy()` import behind `Suspense`**, so
+  it code-splits into its own chunk — desktop sessions never download or
+  evaluate the mobile-only page. The dashboard **picker**
+  (`/view/dashboards`) is the existing `DashboardTileViewPage`; its
+  mobile CSS collapses the filter/sort controls behind a **Filters**
+  toggle (search stays visible) so tiles aren't pushed below a tall
+  toolbar, and constrains the tile grid so it can't overflow the
+  viewport width. Desktop tile layout is unchanged (the collapse wrapper
+  is `display: contents` above the breakpoint).
+- **Render model.** The author's `x/w/h` grid geometry is **discarded**.
+  Panels are sorted by `(y, x)` and rendered full-width, one per row,
+  scrolling down — so any existing dashboard is readable on a phone with
+  no re-authoring. There is no fit-mode transform.
+- **Reuse (streaming-safe).** It renders the same leaf the grid does —
+  `components/PanelContent.jsx` — so a streaming chart keeps its
+  `StreamConnectionManager` subscription (streams open lazily per-panel
+  deep inside `PanelContent → useData`; rendering the same component
+  type is all that's needed). Data and resolver wiring come from the
+  shared `useDashboardData` + `useDashboardVariable` hooks, and the
+  per-panel derivation from `utils/derivePanelProps.js` — the same pure
+  helper `DashboardGrid` uses, so the three render paths (grid, kiosk,
+  mobile) stay in sync. It wraps the stack in
+  `RefreshableComponentsProvider` and closes streams on unmount, exactly
+  like the viewer.
+- **Row sizing.** Without the grid transform to borrow a size from, each
+  row gets a deterministic height by content kind (charts a landscape
+  box, tiles/controls compact) in `MobileDashboardViewer.scss`. Heights
+  use `min(<vw>, <vh>)` as the preferred clamp term so a **short
+  landscape** viewport clamps the row down instead of overflowing (a
+  plain `vw` box made a gauge taller than the whole landscape screen).
+  The one component that needed a code fix is the number tile:
+  `NumberView` renders its value at a fixed inline `px` size that only
+  reads correctly when the grid is transform-scaled, so the mobile row
+  (a CSS *size container*) caps it container-relative via the
+  `.number-view__value` hook — desktop rendering is unchanged.
+- **Per-panel fullscreen.** Each chart/display row carries an expand
+  button; tapping it opens an **edge-to-edge overlay** (`position:
+  fixed; inset: 0`, above the header) showing that one panel. There is
+  no overlay header bar — the component renders its own title and a
+  close (×) button floats over the top-right corner (Esc also closes).
+  The overlay renders a **separate** `PanelContent` instance for the
+  panel (via the shared `renderPanelBody` helper, so props match the
+  inline row exactly); because streams are shared per-connection through
+  the `StreamConnectionManager`, the fullscreen copy streams alongside
+  the inline one — the same approach the desktop `ComponentExpandModal`
+  takes. Rotating to landscape gives a wide chart the full width.
+- **Phase 1 scope.** No variable **picker** UI (the hook still resolves
+  URL-param variable defaults), no `dashboardCommand` MQTT subscription,
+  no per-dashboard mobile layout. Those are follow-ups.
+
 ## Component title sizing and chart text (the `textStyle` gotcha)
 
 There are **two independent font systems** in a rendered chart panel, and

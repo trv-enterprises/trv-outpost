@@ -8,6 +8,7 @@ import { IconButton, OverflowMenu, OverflowMenuItem } from '@carbon/react';
 import { DataTable, Download } from '@carbon/icons-react';
 import DynamicComponentLoader, { DataContext } from './DynamicComponentLoader';
 import ComponentDataGridModal from './ComponentDataGridModal';
+import useIsMobile from '../hooks/useIsMobile';
 
 /**
  * ComponentPanelWithActions
@@ -57,6 +58,11 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
   const ctx = useContext(DataContext);
   const data = ctx?.data;
   const baseName = chart?.title || chart?.name || 'chart';
+  // On desktop the Download menu is `flipped` (opens leftward) to stay inside a
+  // wide panel. In the mobile viewer the download button sits near a narrow
+  // row's left edge, so flipping left pushes the options off-screen — open
+  // rightward there instead.
+  const isMobile = useIsMobile();
 
   // PNG of the live chart. Three cases, in order:
   //   1. No ECharts canvas in panel → html2canvas the DOM (e.g. dataview).
@@ -240,8 +246,8 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
         renderIcon={() => <Download size={14} />}
         iconDescription="Download"
         size="sm"
-        flipped
-        align="bottom-right"
+        flipped={!isMobile}
+        align={isMobile ? 'bottom-left' : 'bottom-right'}
         onClick={(e) => e.stopPropagation?.()}
         onMouseDown={(e) => e.stopPropagation()}
       >

@@ -52,6 +52,9 @@ const Router = isElectron() ? HashRouter : BrowserRouter;
 import DashboardsListPage from './pages/DashboardsListPage';
 // Dashboard design/edit lives in DashboardViewerPage edit mode
 import DashboardViewerPage from './pages/DashboardViewerPage';
+// Mobile viewer is code-split: desktop sessions never load the mobile-only
+// page chunk (it only renders when a phone-width viewport hits the route).
+const MobileDashboardViewer = lazy(() => import('./pages/MobileDashboardViewer'));
 import DashboardTileViewPage from './pages/DashboardTileViewPage';
 import KioskPage from './pages/KioskPage';
 import ModeToggle from './components/mode/ModeToggle';
@@ -82,6 +85,7 @@ import AccountMenu from './components/AccountMenu';
 import AboutDialog from './components/AboutDialog';
 import AssistantSidecard from './components/assistant/AssistantSidecard';
 import useAssistantSidecardState from './hooks/useAssistantSidecardState';
+import useIsMobile from './hooks/useIsMobile';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
@@ -181,6 +185,8 @@ function AppContent({ onDisconnect }) {
   const location = useLocation();
   const navigate = useNavigate();
   const electronMode = isElectron();
+  // Phone viewport → slim, view-only shell (mobile header + stacked viewer).
+  const isMobile = useIsMobile();
 
   // Dashboard Assistant sidecard state. Render-gated by the
   // chatAgentEnabled flag from /api/ai/availability (step 0 of the
@@ -815,13 +821,17 @@ function AppContent({ onDisconnect }) {
                 <span>TRV Outpost</span>
               </div>
             </HeaderName>
-            <div className="header-mode-group">
-              <ModeToggle
-                currentMode={currentMode}
-                onModeChange={handleModeChange}
-                capabilities={userCapabilities}
-              />
-            </div>
+            {/* Mode toggle is authoring/admin navigation — hidden on mobile,
+                which is a view-only surface. */}
+            {!isMobile && (
+              <div className="header-mode-group">
+                <ModeToggle
+                  currentMode={currentMode}
+                  onModeChange={handleModeChange}
+                  capabilities={userCapabilities}
+                />
+              </div>
+            )}
             <HeaderGlobalBar>
               {/* Dashboard Assistant launcher. Sits left of the rest
                   of the header-action cluster (NamespacePicker, Help,
@@ -836,7 +846,7 @@ function AppContent({ onDisconnect }) {
                        chat agent isn't built for (the design doc
                        explicitly excludes Manage-shaped tools like
                        system-user creation from v1). */}
-              {chatAgentEnabled && userCapabilities.can_design && (
+              {!isMobile && chatAgentEnabled && userCapabilities.can_design && (
                 <HeaderGlobalAction
                   aria-label={assistantSidecard.open ? 'Hide assistant' : 'Open assistant'}
                   onClick={assistantSidecard.toggle}
@@ -854,7 +864,7 @@ function AppContent({ onDisconnect }) {
                   connections). Manage-only users administer the
                   system rather than author content, so they don't
                   need it. Gate on Design specifically. */}
-              {userCapabilities.can_design && (
+              {!isMobile && userCapabilities.can_design && (
                 <NamespacePicker canManage={userCapabilities.can_manage} />
               )}
 
@@ -920,7 +930,7 @@ function AppContent({ onDisconnect }) {
           when the chat agent is disabled, but we keep the gate here
           too in case the icon is bypassed (e.g. a keyboard shortcut
           path someday). */}
-      {chatAgentEnabled && userCapabilities.can_design && (
+      {!isMobile && chatAgentEnabled && userCapabilities.can_design && (
         <AssistantSidecardWithNamespace
           open={assistantSidecard.open}
           width={assistantSidecard.width}
@@ -952,7 +962,7 @@ function AppContent({ onDisconnect }) {
         // the panel instead of being covered by it. Drag-resize on
         // the sidecard updates the width in real time.
         style={
-          chatAgentEnabled && userCapabilities.can_design && assistantSidecard.open
+          !isMobile && chatAgentEnabled && userCapabilities.can_design && assistantSidecard.open
             ? { paddingRight: `${assistantSidecard.width}px` }
             : undefined
         }
@@ -1000,7 +1010,17 @@ function AppContent({ onDisconnect }) {
 
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage canDesign={userCapabilities.can_design} />} />
-          <Route path="/view/dashboards/:id" element={<DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />} />
+          {/* Phone viewport gets the stacked, view-only mobile viewer; desktop
+              keeps the full grid viewer (which also carries edit mode). */}
+          <Route path="/view/dashboards/:id" element={
+            isMobile
+              ? (
+                <Suspense fallback={null}>
+                  <MobileDashboardViewer canControl={userCapabilities.can_control} />
+                </Suspense>
+              )
+              : <DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />
+          } />
           {/* /kiosk is handled by an early return above (it bypasses the app
               shell entirely), so no Route entry is needed here. */}
 

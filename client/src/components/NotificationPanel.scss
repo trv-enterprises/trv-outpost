@@ -32,6 +32,17 @@
     z-index: 10000;
   }
 
+  // Mobile: the desktop `right: 96px` offset assumes the user menu +
+  // namespace picker sit to the bell's right, but the mobile header drops
+  // those, so 96px + a 360px width pushes the panel's left edge off-screen.
+  // Anchor near the right edge instead and cap the width to the viewport.
+  @media (max-width: 768px) {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-width: calc(100vw - 16px);
+  }
+
   &__header {
     display: flex;
     align-items: center;

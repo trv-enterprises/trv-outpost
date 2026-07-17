@@ -93,14 +93,21 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
         position: 'absolute', top: titleText ? titleTextBottom : bodyTopPull, left: 0, right: 0, bottom: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <span style={{
-          fontSize: `${size}px`,
-          fontWeight: 600,
-          lineHeight: 1,
-          color: 'var(--cds-text-primary)',
-          fontVariantNumeric: 'tabular-nums',
-          whiteSpace: 'nowrap',
-        }}>
+        <span
+          // Stable hook so a surface without the desktop grid's scale transform
+          // (the mobile viewer) can cap this otherwise-fixed px size with a
+          // container-relative rule. The inline px below stays the default
+          // everywhere else — desktop rendering is unchanged.
+          className="number-view__value"
+          style={{
+            fontSize: `${size}px`,
+            fontWeight: 600,
+            lineHeight: 1,
+            color: 'var(--cds-text-primary)',
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {formatted}
           {unit ? <span style={{ marginLeft: '0.25em' }}>{unit}</span> : null}
         </span>

@@ -64,6 +64,14 @@
       flex: 1 1 240px;
       max-width: 400px;
     }
+
+    // On desktop the filter cluster is layout-transparent — its children act
+    // as direct flex items of .header-toolbar exactly as before the mobile
+    // collapse wrapper was introduced. The mobile @media block below turns it
+    // into a real flex container that can be hidden behind the Filters toggle.
+    .header-filters {
+      display: contents;
+    }
   }
 
   // Scrollable middle region between the fixed toolbar above and the
@@ -151,6 +159,12 @@
 // Responsive adjustments
 @media (max-width: 768px) {
   .dashboard-tile-view-page {
+    // Never let content push past the viewport width (the tile grid's
+    // 280px min-column + the toolbar's fixed-width dropdowns were causing a
+    // horizontal scrollbar on phones).
+    max-width: 100%;
+    overflow-x: hidden;
+
     .tile-view-header {
       flex-direction: column;
       align-items: flex-start;
@@ -161,8 +175,51 @@
       }
     }
 
+    // Compact filter toolbar: search + the Filters toggle on the top row,
+    // and the actual filter/sort controls collapse behind the toggle so they
+    // don't eat the screen above the tiles.
+    .header-toolbar {
+      gap: spacing.$spacing-03;
+      margin-bottom: spacing.$spacing-03;
+
+      .header-search {
+        flex: 1 1 auto;
+        max-width: none;
+      }
+
+      .mobile-filters-toggle {
+        flex: 0 0 auto;
+      }
+
+      // The collapsible filter cluster. Wraps to a full-width block below the
+      // search/toggle row; hidden entirely until the user taps Filters.
+      .header-filters {
+        flex: 1 1 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: spacing.$spacing-03;
+
+        &--collapsed {
+          display: none;
+        }
+
+        // Dropdowns share rows and shrink to fit rather than forcing width.
+        .cds--dropdown,
+        .cds--dropdown__wrapper,
+        .cds--multi-select,
+        .cds--list-box {
+          min-width: 0;
+          flex: 1 1 auto;
+        }
+      }
+    }
+
+    // One tile per row, and allow the column to shrink below the 280px min so
+    // a full-width tile can't overflow a ~360px viewport.
     .dashboard-tiles-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      gap: spacing.$spacing-04;
     }
   }
 }

@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import PanelContent from './PanelContent';
+import { derivePanelProps } from '../utils/derivePanelProps';
 import './DashboardGrid.scss';
 
 const CELL_WIDTH = 32;
@@ -244,35 +245,25 @@ function DashboardGrid({
           }}
         >
           {panels.map((panel) => {
-            // Effective component for this panel: a component-swap rule may pick
-            // an alternate component_id based on the active variable; otherwise
-            // the panel's own component_id. The resolved id must be in chartsMap
-            // (override components are pre-fetched by the caller).
-            const effectiveComponentId = resolveComponent
-              ? resolveComponent(panel)
-              : panel.component_id;
-            const chart = effectiveComponentId ? chartsMap[effectiveComponentId] : null;
-            // #4: the caller (viewer) can't see this panel's component or
-            // its connection — render an "unauthorized" error panel
-            // instead of a blank one. Reason: "component" | "connection".
-            const unauthorizedReason = effectiveComponentId
-              ? (unauthorizedComponents[effectiveComponentId] || null)
-              : null;
-            const hasText = !!panel.text_config;
-            // A panel has chart content when its component is a chart, control,
-            // or display. Spec-driven charts (use_custom_code=false) carry an
-            // EMPTY component_code — the render is synthesized from chart_type +
-            // data_mapping by the loader — so we must NOT gate on component_code.
-            // Custom-code charts also satisfy chart_type === 'chart'. The legacy
-            // `!!chart.component_code` term remains as a fallback for records
-            // that predate component_type being set.
-            const hasChart = !hasText && (
-              chart?.component_type === 'chart'
-              || chart?.component_type === 'control'
-              || chart?.component_type === 'display'
-              || !!chart?.component_code
-            );
-            const hasContent = hasText || hasChart;
+            // Per-panel data derivation (effective component, chart record,
+            // authorization, content flags, refresh interval) is shared with
+            // the mobile viewer via derivePanelProps — keep it in sync there.
+            const {
+              effectiveComponentId,
+              chart,
+              unauthorizedReason,
+              hasText,
+              hasChart,
+              hasContent,
+              effectiveRefreshInterval,
+            } = derivePanelProps(panel, {
+              chartsMap,
+              resolveComponent,
+              unauthorizedComponents,
+              dashboard,
+              dataRefreshInterval,
+              editMode,
+            });
 
             // Round-aspect charts (gauge, pie) must stay circular under
             // "stretch" (non-uniform) fit. Counter-scale the panel body back to
@@ -291,15 +282,6 @@ function DashboardGrid({
               || isLegacyChart
               || (chart?.component_type === 'display' && expandableDisplayTypes.has(chart?.display_config?.display_type))
             );
-
-            // View mode polls at the dashboard's refresh interval; edit
-            // mode passes null (no auto-refresh while designing). The caller
-            // can override via dataRefreshInterval.
-            const effectiveRefreshInterval = dataRefreshInterval != null
-              ? dataRefreshInterval
-              : (!editMode && dashboard?.settings?.refresh_interval > 0
-                ? dashboard.settings.refresh_interval * 1000
-                : null);
 
             return (
               <div

@@ -14,9 +14,10 @@ import {
   Tag,
   Pagination,
 } from '@carbon/react';
-import { Dashboard, StarFilled, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
+import { Dashboard, StarFilled, Reset, OverflowMenuVertical, Checkmark, Filter } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import usePaginatedList from '../hooks/usePaginatedList';
+import useIsMobile from '../hooks/useIsMobile';
 import NamespaceFilter from '../components/shared/NamespaceFilter';
 import TagFilter from '../components/shared/TagFilter';
 import ResetFiltersButton from '../components/shared/ResetFiltersButton';
@@ -84,6 +85,12 @@ function DashboardTileViewPage({ canDesign = false }) {
   // a stored tile order keep seeing their layout).
   const [sortKey, setSortKey] = useState('manual');
   const [sortDirection, setSortDirection] = useState('asc');
+
+  // On mobile the filter row (namespace/tag/connection dropdowns + sort) is
+  // collapsed behind a Filters toggle so it doesn't eat the screen above the
+  // tiles; search stays always visible. Desktop renders them inline as before.
+  const isMobile = useIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [defaultDashboardId, setDefaultDashboardId] = useState(null);
   // User-authored tile order: array of dashboard IDs the user has
   // explicitly placed via drag-and-drop. Partial coverage is fine —
@@ -489,6 +496,20 @@ function DashboardTileViewPage({ canDesign = false }) {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            {/* Mobile-only toggle: the filter/sort controls below collapse
+                behind this so they don't push tiles off the first screen. */}
+            {isMobile && (
+              <Button
+                className="mobile-filters-toggle"
+                kind={filtersOpen ? 'secondary' : 'tertiary'}
+                size="md"
+                renderIcon={Filter}
+                onClick={() => setFiltersOpen((v) => !v)}
+              >
+                Filters
+              </Button>
+            )}
+            <div className={`header-filters${isMobile && !filtersOpen ? ' header-filters--collapsed' : ''}`}>
             <NamespaceFilter
               id="namespace-filter-view-dashboards"
               selected={namespaceFilter}
@@ -577,6 +598,7 @@ function DashboardTileViewPage({ canDesign = false }) {
                 Reset manual order
               </Button>
             )}
+            </div>
           </>
         )}
       </div>
