@@ -183,9 +183,14 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 	// absolute → a [from,to] range fetch.
 	if spec, ok := resolveRange(query.Params); ok {
 		if tr, valid := tsstoreRangeFromSpec(spec); valid {
-			if !hasExplicitLimit {
-				limit = 100000
-			}
+			// A range query's WINDOW governs how many rows come back — the
+			// component's saved limit is the streaming buffer size (default
+			// 1000), a live-tail concern that has nothing to do with a
+			// historical window. Carrying it here silently truncates a wide
+			// window to the most-recent N rows (e.g. 6h@15s = 1081 rows clipped
+			// to 1000 ≈ 4h). Always use the range ceiling; the step clamp bounds
+			// the real point count well under it, so this is a cap, not a target.
+			limit = tsstoreRangeRowCap
 			if tr.Relative {
 				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step)
 			} else {
@@ -465,6 +470,13 @@ func (a *TSStoreAdapter) addHeaders(req *http.Request) {
 	}
 }
 
+// tsstoreRangeRowCap is the row ceiling for a ranged ts-store query. It exists
+// only to bound a pathological unbucketed pull; for any real window the step
+// clamp (tsstoreMaxPoints = 5000) keeps the actual row count far below it. A
+// ranged query must NOT inherit the component's streaming buffer limit (default
+// 1000) — that would truncate a wide window to its most-recent N rows.
+const tsstoreRangeRowCap = 100000
+
 // setStepParam applies a downsampling step to a ts-store data request.
 //
 // ts-store's `step` is a shorthand for `agg_window` that additionally implies
@@ -707,9 +719,10 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 	// the live ts-store path (factory → NewTSStoreDataSource).
 	if spec, ok := resolveRange(query.Params); ok {
 		if tr, valid := tsstoreRangeFromSpec(spec); valid {
-			if !hasExplicitLimit {
-				limit = 100000
-			}
+			// The range WINDOW governs the row count; the component's saved
+			// limit is the streaming buffer size and would truncate a wide
+			// window to the most-recent N. See the TSStoreAdapter.Query note.
+			limit = tsstoreRangeRowCap
 			if tr.Relative {
 				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step)
 			} else {
