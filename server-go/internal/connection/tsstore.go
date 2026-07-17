@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 	"github.com/trv-enterprises/trve-dashboard/internal/registry"
@@ -182,13 +183,18 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 	// absolute → a [from,to] range fetch.
 	if spec, ok := resolveRange(query.Params); ok {
 		if tr, valid := tsstoreRangeFromSpec(spec); valid {
-			if !hasExplicitLimit {
-				limit = 100000
-			}
+			// A range query's WINDOW governs how many rows come back — the
+			// component's saved limit is the streaming buffer size (default
+			// 1000), a live-tail concern that has nothing to do with a
+			// historical window. Carrying it here silently truncates a wide
+			// window to the most-recent N rows (e.g. 6h@15s = 1081 rows clipped
+			// to 1000 ≈ 4h). Always use the range ceiling; the step clamp bounds
+			// the real point count well under it, so this is a cap, not a target.
+			limit = tsstoreRangeRowCap
 			if tr.Relative {
-				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase)
+				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step)
 			} else {
-				objects, err = a.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase)
+				objects, err = a.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step)
 			}
 			if err != nil {
 				return nil, err
@@ -207,7 +213,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase)
+		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
 	case queryType == "oldest":
 		if !hasExplicitLimit {
 			limit = 10
@@ -218,14 +224,14 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 			limit = 100000
 		}
 		since := queryType[6:]
-		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase)
+		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, "")
 	case len(queryType) > 6 && queryType[:6] == "range:":
 		if !hasExplicitLimit {
 			limit = 100000
 		}
 		var startTime, endTime int64
 		if _, parseErr := fmt.Sscanf(queryType, "range:%d:%d", &startTime, &endTime); parseErr == nil {
-			objects, err = a.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase)
+			objects, err = a.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase, "")
 		} else {
 			return nil, fmt.Errorf("invalid range format")
 		}
@@ -233,7 +239,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase)
+		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
 	}
 
 	if err != nil {
@@ -464,8 +470,38 @@ func (a *TSStoreAdapter) addHeaders(req *http.Request) {
 	}
 }
 
-// fetchNewest retrieves newest objects
-func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool) ([]dataResponse, error) {
+// tsstoreRangeRowCap is the row ceiling for a ranged ts-store query. It exists
+// only to bound a pathological unbucketed pull; for any real window the step
+// clamp (tsstoreMaxPoints = 5000) keeps the actual row count far below it. A
+// ranged query must NOT inherit the component's streaming buffer limit (default
+// 1000) — that would truncate a wide window to its most-recent N rows.
+const tsstoreRangeRowCap = 100000
+
+// setStepParam applies a downsampling step to a ts-store data request.
+//
+// ts-store's `step` is a shorthand for `agg_window` that additionally implies
+// agg_default=avg (Prometheus-style downsampling: numeric fields are averaged
+// per bucket rather than agg_window's plain "last"). Empty step → no-op, and
+// ts-store returns raw records.
+//
+// ts-store REJECTS a request carrying BOTH step and agg_window ("set either
+// step or agg_window, not both", HTTP 400), so this must never be combined with
+// an agg_window param on the same request. Nothing sets agg_window on this path
+// today; this guard exists so that stays true.
+func setStepParam(params url.Values, step string) {
+	if strings.TrimSpace(step) == "" {
+		return
+	}
+	if params.Get("agg_window") != "" {
+		// Defensive: ts-store would 400. Prefer the explicit agg_window.
+		return
+	}
+	params.Set("step", step)
+}
+
+// fetchNewest retrieves newest objects. step (optional) downsamples server-side
+// — see setStepParam.
+func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
 	params := url.Values{}
 	params.Set("limit", strconv.Itoa(limit))
 	if since != "" {
@@ -480,6 +516,7 @@ func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since strin
 	if a.config.DataType == models.TSStoreDataTypeSchema {
 		params.Set("format", "compact")
 	}
+	setStepParam(params, step)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/newest?%s", a.config.StoreName, params.Encode())
 	return a.fetchList(ctx, endpoint)
@@ -509,12 +546,14 @@ func (a *TSStoreAdapter) fetchOldest(ctx context.Context, limit int, filter stri
 // NANOSECONDS, so we convert here — the one dialect-specific conversion
 // point, per "one user convention, backend converts as needed". (Sending
 // seconds verbatim silently returned zero rows.)
-func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool) ([]dataResponse, error) {
+// step (optional) downsamples server-side — see setStepParam.
+func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
 	params := url.Values{}
 	params.Set("start_time", strconv.FormatInt(toEpochNanos(startTime), 10))
 	params.Set("end_time", strconv.FormatInt(toEpochNanos(endTime), 10))
 	params.Set("limit", strconv.Itoa(limit))
 	params.Set("include_data", "true")
+	setStepParam(params, step)
 	if filter != "" {
 		params.Set("filter", filter)
 		if filterIgnoreCase {
@@ -680,13 +719,14 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 	// the live ts-store path (factory → NewTSStoreDataSource).
 	if spec, ok := resolveRange(query.Params); ok {
 		if tr, valid := tsstoreRangeFromSpec(spec); valid {
-			if !hasExplicitLimit {
-				limit = 100000
-			}
+			// The range WINDOW governs the row count; the component's saved
+			// limit is the streaming buffer size and would truncate a wide
+			// window to the most-recent N. See the TSStoreAdapter.Query note.
+			limit = tsstoreRangeRowCap
 			if tr.Relative {
-				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase)
+				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step)
 			} else {
-				objects, err = t.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase)
+				objects, err = t.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step)
 			}
 			if err != nil {
 				return nil, err
@@ -705,7 +745,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase)
+		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
 	case queryType == "oldest":
 		if !hasExplicitLimit {
 			limit = 10
@@ -717,7 +757,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 			limit = 100000 // High default for time-range queries
 		}
 		since := queryType[6:]
-		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase)
+		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, "")
 	case len(queryType) > 6 && queryType[:6] == "range:":
 		// Absolute time range: "range:START:END"
 		if !hasExplicitLimit {
@@ -725,7 +765,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		}
 		var startTime, endTime int64
 		if _, parseErr := fmt.Sscanf(queryType, "range:%d:%d", &startTime, &endTime); parseErr == nil {
-			objects, err = t.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase)
+			objects, err = t.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase, "")
 		} else {
 			return nil, fmt.Errorf("invalid range format, expected 'range:START_TIME:END_TIME'")
 		}
@@ -734,7 +774,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase)
+		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
 	}
 
 	if err != nil {
@@ -745,8 +785,9 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 	return t.toResultSet(ctx, objects)
 }
 
-// fetchNewest retrieves the N newest objects
-func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool) ([]dataResponse, error) {
+// fetchNewest retrieves the N newest objects. step (optional) downsamples
+// server-side — see setStepParam.
+func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
 	params := url.Values{}
 	params.Set("limit", strconv.Itoa(limit))
 	if since != "" {
@@ -762,6 +803,7 @@ func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since st
 	if t.config.DataType == models.TSStoreDataTypeSchema {
 		params.Set("format", "compact")
 	}
+	setStepParam(params, step)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/newest?%s", t.config.StoreName, params.Encode())
 	return t.fetchList(ctx, endpoint)
@@ -785,8 +827,9 @@ func (t *TSStoreDataSource) fetchOldest(ctx context.Context, limit int, filter s
 	return t.fetchList(ctx, endpoint)
 }
 
-// fetchRange retrieves objects within a time range
-func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool) ([]dataResponse, error) {
+// fetchRange retrieves objects within a time range. step (optional) downsamples
+// server-side — see setStepParam.
+func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
 	params := url.Values{}
 	// start/end arrive as epoch seconds; /data/range wants nanoseconds.
 	// See the TSStoreAdapter.fetchRange note above.
@@ -803,6 +846,7 @@ func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime i
 	if t.config.DataType == models.TSStoreDataTypeSchema {
 		params.Set("format", "compact")
 	}
+	setStepParam(params, step)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/range?%s", t.config.StoreName, params.Encode())
 	return t.fetchList(ctx, endpoint)

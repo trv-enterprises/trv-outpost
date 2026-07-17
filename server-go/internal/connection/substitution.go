@@ -117,13 +117,14 @@ func paramString(params map[string]interface{}, key string) string {
 }
 
 // RangeSpec is the decoded range INTENT from params.range. Exactly one of
-// (Token) / (From,To) is meaningful depending on Type. Step is Prometheus-only.
+// (Token) / (From,To) is meaningful depending on Type. Step is honored by the
+// step-aware adapters (Prometheus, ts-store) and ignored by the rest.
 type RangeSpec struct {
 	Type  string // "relative" | "absolute"
 	Token string // relative duration token, e.g. "1h" (Type=="relative")
 	From  string // RFC3339 (Type=="absolute")
 	To    string // RFC3339 (Type=="absolute")
-	Step  string // optional Prometheus step, e.g. "1m"
+	Step  string // optional downsampling step, e.g. "1m"
 }
 
 // resolveRange decodes params.range into a RangeSpec. ok is false when no range
@@ -209,28 +210,76 @@ type tsstoreRange struct {
 	Since     string // relative token, e.g. "1h" (Relative)
 	FromEpoch int64  // absolute lower bound, Unix seconds
 	ToEpoch   int64  // absolute upper bound, Unix seconds
+	Step       string // optional downsampling resolution, e.g. "1m" (clamped)
 }
 
 // tsstoreRangeFromSpec maps a RangeSpec to a tsstoreRange. ok is false when the
 // spec can't be resolved (unparseable relative token / unparseable absolute
 // instants).
+//
+// Step: ts-store's `step` is a shorthand for `agg_window` that additionally
+// implies agg_default=avg (Prometheus-style downsampling). Unlike Prometheus,
+// ts-store enforces NO server-side point cap — it serves whatever resolution it
+// is asked for — so the clamp here is the only thing standing between a fine
+// step over a wide window and a very large pull (a ranged ts-store query raises
+// limit to 100000). The clamp mirrors the client's so the UI's "effective step"
+// tooltip matches what the server actually requests.
 func tsstoreRangeFromSpec(spec RangeSpec) (tsstoreRange, bool) {
 	switch spec.Type {
 	case "relative":
 		if relativeTokenPattern.FindStringSubmatch(strings.TrimSpace(spec.Token)) == nil {
 			return tsstoreRange{}, false
 		}
-		return tsstoreRange{Relative: true, Since: spec.Token}, true
+		tr := tsstoreRange{Relative: true, Since: spec.Token}
+		if window, err := parsePromDuration(spec.Token); err == nil {
+			tr.Step = clampTSStoreStep(spec.Step, window)
+		}
+		return tr, true
 	case "absolute":
 		ft, ferr := time.Parse(time.RFC3339, spec.From)
 		tt, terr := time.Parse(time.RFC3339, spec.To)
 		if ferr != nil || terr != nil {
 			return tsstoreRange{}, false
 		}
-		return tsstoreRange{FromEpoch: ft.Unix(), ToEpoch: tt.Unix()}, true
+		return tsstoreRange{
+			FromEpoch: ft.Unix(),
+			ToEpoch:   tt.Unix(),
+			Step:      clampTSStoreStep(spec.Step, tt.Sub(ft)),
+		}, true
 	default:
 		return tsstoreRange{}, false
 	}
+}
+
+// tsstoreMaxPoints bounds how many points a ranged ts-store query may return.
+// Mirrors TSSTORE_MAX_POINTS in client/src/utils/rangePresets.js — the two must
+// agree or the client's effective-step tooltip misreports what the server did.
+const tsstoreMaxPoints = 5000
+
+// clampTSStoreStep raises step so window/step stays within tsstoreMaxPoints. The
+// step is a FLOOR (only raised, never lowered). Returns step unchanged when it
+// already fits, is empty, or can't be parsed.
+func clampTSStoreStep(step string, window time.Duration) string {
+	if strings.TrimSpace(step) == "" || window <= 0 {
+		return step
+	}
+	d, err := parsePromDuration(step)
+	if err != nil || d <= 0 {
+		return step
+	}
+	if window/d <= tsstoreMaxPoints {
+		return step
+	}
+	// Smallest whole-second step that fits the budget, rounded UP.
+	minStep := window / tsstoreMaxPoints
+	secs := int64(minStep / time.Second)
+	if minStep%time.Second != 0 {
+		secs++
+	}
+	if secs < 1 {
+		secs = 1
+	}
+	return strconv.FormatInt(secs, 10) + "s"
 }
 
 // promRangeFromSpec maps a RangeSpec to Prometheus start/end/step strings.
