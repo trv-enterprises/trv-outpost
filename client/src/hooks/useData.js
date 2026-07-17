@@ -41,6 +41,14 @@ import { useRegisterRefreshable } from '../context/RefreshableComponentsContext'
 // dashboard mount) doesn't trip the timeout before the rows arrive.
 const BACKFILL_TIMEOUT_MS = 45_000;
 
+// A ranged REST query (a whole time window, e.g. 24h of ts-store points) is as
+// heavy as a backfill and far heavier than a normal poll — a 24h ts-store pull
+// measured ~5.6s. Use the same generous ceiling as backfill so a legitimate
+// wide-window query isn't aborted before its rows arrive; the 15s client
+// default would trip a real 24h fetch. This bounds a truly hung request; a
+// superseded one is aborted immediately by the next fetch, not by this timeout.
+const REST_FETCH_TIMEOUT_MS = 45_000;
+
 /**
  * Extract a nested value from an object using dot-notation path.
  * E.g., getNestedValue({a: {b: {c: 1}}}, 'a.b.c') → 1
@@ -131,6 +139,19 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // Refs for cleanup
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
+  // Monotonic fetch generation. Bumped whenever the query identity changes so a
+  // slow in-flight fetch (a) doesn't block the new one and (b) can't apply its
+  // stale result over the newer query's data. Without this, rapidly switching a
+  // range (e.g. 24h → 6h before the slow 24h fetch returns) either dropped the
+  // new fetch — the fetchingRef "prevent concurrent" guard early-returned it —
+  // or let the late 24h response clobber the 6h data.
+  const fetchGenRef = useRef(0);
+  // AbortController for the in-flight REST fetch. A new fetch (query change or
+  // interval tick) aborts the previous one so the browser frees the connection
+  // instead of hanging on an abandoned slow request (e.g. a 24h ts-store pull
+  // superseded by a 6h switch). We can't stop the upstream ts-store work — that
+  // runs to completion or times out — but the browser stops waiting on it.
+  const fetchAbortRef = useRef(null);
   const intervalRef = useRef(null);
   const eventSourceRef = useRef(null);
   const columnsRef = useRef([]);
@@ -633,7 +654,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // triggers and value semantics are identical). Without one (design/AI
   // previews, legacy code-supplied queries) the raw query body goes out
   // as before.
-  const runQuery = useCallback(async (useCacheArg) => {
+  const runQuery = useCallback(async (useCacheArg, opts = {}) => {
     if (componentId) {
       const params = query?.params || {};
       const runtime = { connection_id: connectionId };
@@ -641,9 +662,9 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       // still reach the server so it can answer "variable not set".
       if ('dashboard_variable' in params) runtime.dashboard_variable = params.dashboard_variable;
       if (params.range) runtime.range = params.range;
-      return queryComponentData(componentId, runtime, useCacheArg);
+      return queryComponentData(componentId, runtime, useCacheArg, opts);
     }
-    return queryData(connectionId, query, useCacheArg);
+    return queryData(connectionId, query, useCacheArg, opts);
   }, [componentId, connectionId, queryKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = useCallback(async (forceShowLoading = false) => {
@@ -653,12 +674,21 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       return;
     }
 
-    // Prevent concurrent fetches
-    if (fetchingRef.current) {
-      return;
-    }
-
+    // This fetch's generation. runQuery closes over the current query (via the
+    // useCallback deps), so when queryKey changes a NEW fetchData is created
+    // with a bumped generation; a stale in-flight fetch is detectable by
+    // comparing its captured gen against the ref on return.
+    fetchGenRef.current += 1;
+    const myGen = fetchGenRef.current;
     fetchingRef.current = true;
+
+    // Abort the previous in-flight fetch so the browser stops waiting on a
+    // superseded request. Then arm this fetch's own controller with a timeout
+    // (the abort path below classifies as a normal failure, not applied data).
+    if (fetchAbortRef.current) fetchAbortRef.current.abort();
+    const abortController = new AbortController();
+    fetchAbortRef.current = abortController;
+    const timeoutHandle = setTimeout(() => abortController.abort(), REST_FETCH_TIMEOUT_MS);
 
     try {
       // Only show loading spinner on initial fetch or when explicitly requested
@@ -668,21 +698,32 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       }
       setError(null);
 
-      const result = await runQuery(useCache);
+      const result = await runQuery(useCache, { signal: abortController.signal });
 
-      if (mountedRef.current) {
+      // Drop a stale result: a newer fetch (newer query) superseded this one
+      // while it was in flight. Applying it would clobber the current query's
+      // data with the old query's rows.
+      if (mountedRef.current && myGen === fetchGenRef.current) {
         setData(result.data);
         setSource(result.source);
         setLoading(false);
         isInitialFetchRef.current = false; // Mark initial fetch as complete
       }
     } catch (err) {
-      if (mountedRef.current) {
+      // A superseded fetch was aborted on purpose — not a real error, and its
+      // successor is already running, so leave state to that newer fetch.
+      const aborted = abortController.signal.aborted && myGen !== fetchGenRef.current;
+      if (!aborted && mountedRef.current && myGen === fetchGenRef.current) {
         setError(err);
         setLoading(false);
       }
     } finally {
-      fetchingRef.current = false;
+      clearTimeout(timeoutHandle);
+      // Only clear the in-flight flag if we're still the latest fetch; a newer
+      // fetch may already own it.
+      if (myGen === fetchGenRef.current) {
+        fetchingRef.current = false;
+      }
     }
   }, [connectionId, queryKey, useCache, runQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -702,6 +743,9 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
 
     return () => {
       mountedRef.current = false;
+      // Abort any in-flight fetch on unmount / query change so a slow request
+      // doesn't hold the browser connection open past the panel's life.
+      if (fetchAbortRef.current) fetchAbortRef.current.abort();
     };
   }, [connectionId, queryKey, datasourceType, datasourceTransport, typeLoading, fetchData]);
 
