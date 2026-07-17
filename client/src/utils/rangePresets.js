@@ -173,6 +173,28 @@ export function maxPointsForType(connType) {
 }
 
 /**
+ * stepAwareRefreshMs — the effective refresh interval (ms) for a SERIES chart on
+ * a step-aware range dashboard. A coarse step means the data only advances every
+ * `step`, so re-firing a (potentially slow) query every `baseRefreshMs` just
+ * stacks near-identical requests. We refresh at ~step/2 — the open bucket still
+ * visibly refines between refreshes, but the requests stop piling up.
+ *
+ * ONLY ever SLOWS: returns the SLOWER of (baseRefreshMs, step/2), so a chart is
+ * never sped up past the dashboard's own refresh. Returns baseRefreshMs
+ * unchanged when there's no usable step (nothing to key off) or no base refresh.
+ *
+ * Instant tiles (gauge/number/pie) never reach here — they don't receive the
+ * range, so PanelContent leaves their refresh untouched.
+ */
+export function stepAwareRefreshMs(baseRefreshMs, step) {
+  if (!baseRefreshMs || baseRefreshMs <= 0) return baseRefreshMs;
+  const stepMs = presetDurationMs(step);
+  if (!stepMs || stepMs <= 0) return baseRefreshMs;
+  const halfStep = Math.floor(stepMs / 2);
+  return Math.max(baseRefreshMs, halfStep);
+}
+
+/**
  * clampStep — raise a step (a duration token like '1m'/'1h') so a window won't
  * exceed `maxPoints`, mirroring the server's clamp. The step is a FLOOR (only
  * raised, never lowered). `windowMs` is the resolved window width. Returns the
