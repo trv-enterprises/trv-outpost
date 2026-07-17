@@ -5,7 +5,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Dropdown, DatePicker, DatePickerInput, TimePicker, Tooltip } from '@carbon/react';
-import { DEFAULT_RANGE_PRESETS, presetLabel, resolveIntentToAbsolute, clampPromStep } from '../utils/rangePresets';
+import {
+  DEFAULT_RANGE_PRESETS,
+  STEP_PRESETS,
+  DEFAULT_STEP,
+  presetLabel,
+  resolveIntentToAbsolute,
+  clampStep,
+  maxPointsForType,
+} from '../utils/rangePresets';
 
 /**
  * DashboardRangePicker — the header control for a `range` dashboard variable.
@@ -15,18 +23,21 @@ import { DEFAULT_RANGE_PRESETS, presetLabel, resolveIntentToAbsolute, clampPromS
  * { type:'absolute', from, to }. Resolution to concrete instants happens
  * server-side per connection type (and client-side only for preview parity).
  *
- * For a Prometheus-typed range dashboard the picker also shows a `step`
- * (resolution) dropdown; the chosen step is folded into the emitted intent.
+ * For a step-aware range dashboard (Prometheus, ts-store) the picker also shows
+ * a `step` (resolution) dropdown; the chosen step is folded into the emitted
+ * intent. The step is clamped against that type's point budget so a fine step
+ * over a wide window can't request an unreasonable number of points — the
+ * clamped value is surfaced as an *effective* step with an explanatory tooltip
+ * rather than silently overriding the selection.
  *
  * @param {object}   props.variable   the range DashboardVariable (label, range config)
  * @param {object}   props.value      active range intent, or null
  * @param {Function} props.onChange   (intent|null) => void
- * @param {boolean}  props.showStep   show the Prometheus step dropdown
+ * @param {boolean}  props.showStep   show the step dropdown
+ * @param {string}   props.stepType   connection type driving the step budget
+ *                                    ('prometheus' | 'tsstore')
  */
 const CUSTOM = '__custom__';
-
-// Prometheus resolution steps (mirrors PrometheusQueryBuilder's STEP_PRESETS).
-const STEP_PRESETS = ['15s', '30s', '1m', '5m', '15m', '1h'];
 
 // Split an ISO instant into the { date: 'YYYY-MM-DD', time: 'HH:MM' } parts the
 // Carbon DatePicker + TimePicker inputs expect (local time).
@@ -51,7 +62,7 @@ function partsToIso(date, time) {
   return d.toISOString();
 }
 
-export default function DashboardRangePicker({ variable, value, onChange, showStep = false }) {
+export default function DashboardRangePicker({ variable, value, onChange, showStep = false, stepType = null }) {
   const label = variable?.label || 'Range';
   const cfg = variable?.range || {};
   const presets = Array.isArray(cfg.presets) && cfg.presets.length ? cfg.presets : DEFAULT_RANGE_PRESETS;
@@ -79,12 +90,9 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
   const customOpen = selectedId === CUSTOM;
   const selectedItem = selectedId ? items.find((i) => i.id === selectedId) || null : null;
 
-  // Default Prometheus step is 1h (a light pull / visual baseline). The author
-  // changes it via the step dropdown.
-  const DEFAULT_STEP = '1h';
   const step = value?.step || (showStep ? DEFAULT_STEP : undefined);
 
-  // When this is a Prometheus range dashboard and the active value carries no
+  // When this is a step-aware range dashboard and the active value carries no
   // step yet, fold in the default so it's persisted + applied downstream.
   useEffect(() => {
     if (showStep && value && value.type && !value.step) {
@@ -93,17 +101,18 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showStep, value?.type, value?.token, value?.from, value?.to, value?.step]);
 
-  // Effective step shown to the user: Prometheus caps a range query at ~11,000
-  // points, so a fine step over a wide window is auto-raised (server + client).
-  // When that happens, surface the coarser effective step so the dropdown
-  // selection isn't silently overridden without explanation.
+  // Effective step shown to the user: each step-aware type caps how many points
+  // a range query may return, so a fine step over a wide window is auto-raised
+  // (server + client). When that happens, surface the coarser effective step so
+  // the dropdown selection isn't silently overridden without explanation.
+  const maxPoints = maxPointsForType(stepType);
   const effectiveStep = useMemo(() => {
     if (!showStep || !step) return step;
     const abs = resolveIntentToAbsolute(value);
     if (!abs) return step;
     const windowMs = new Date(abs.to).getTime() - new Date(abs.from).getTime();
-    return clampPromStep(step, windowMs);
-  }, [showStep, step, value]);
+    return clampStep(step, windowMs, maxPoints);
+  }, [showStep, step, value, maxPoints]);
   const stepClamped = showStep && effectiveStep !== step;
 
   // Preserve the active step when switching window kind so a Prometheus
@@ -243,7 +252,7 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
           {stepClamped && (
             <Tooltip
               align="bottom"
-              label={`Effective step. A range query is capped at 10,000 points, so the requested ${step} step was raised to ${effectiveStep} to cover this time range.`}
+              label={`Effective step. A range query is capped at ${maxPoints?.toLocaleString()} points, so the requested ${step} step was raised to ${effectiveStep} to cover this time range.`}
             >
               <span className="dashboard-range-step-note" tabIndex={0}>
                 → {effectiveStep}
@@ -261,4 +270,5 @@ DashboardRangePicker.propTypes = {
   value: PropTypes.object,
   onChange: PropTypes.func.isRequired,
   showStep: PropTypes.bool,
+  stepType: PropTypes.oneOf(['prometheus', 'tsstore']),
 };

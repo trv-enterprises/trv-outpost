@@ -69,6 +69,7 @@ import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { useSwapCompatibility } from '../hooks/useSwapCompatibility';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
+import { maxPointsForType } from '../utils/rangePresets';
 import { DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import TagInput from '../components/shared/TagInput';
@@ -815,7 +816,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   }, [dashRangeVariable, rangeScopedConnIds]);
 
   const rangeMixedType = Array.isArray(rangeConnTypes) && rangeConnTypes.length > 1;
-  const rangeIsPrometheus = Array.isArray(rangeConnTypes) && rangeConnTypes.length === 1 && rangeConnTypes[0] === 'prometheus';
+  // The single connection type driving the range, or null when mixed/none. A
+  // range dashboard is expected to be single-type (rangeMixedType warns above),
+  // so this is the type whose step budget and semantics apply.
+  const rangeConnType = Array.isArray(rangeConnTypes) && rangeConnTypes.length === 1 ? rangeConnTypes[0] : null;
+  // Step is only meaningful for types that downsample server-side. Driven off
+  // the shared budget map so a new step-aware type only touches rangePresets.
+  const rangeSupportsStep = maxPointsForType(rangeConnType) !== null;
 
   // Surface the mixed-type guard once per dashboard.
   const rangeMixedWarnedRef = useRef(null);
@@ -3032,7 +3039,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 variable={dashRangeVariable}
                 value={dashRangeValue}
                 onChange={setDashRangeValue}
-                showStep={rangeIsPrometheus}
+                showStep={rangeSupportsStep}
+                stepType={rangeConnType}
               />
             )}
           </div>

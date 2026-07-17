@@ -141,31 +141,77 @@ export function resolveIntentToAbsolute(intent, now = new Date()) {
   return resolvePreset(intent.token, now);
 }
 
+// Resolution steps offered by the dashboard range picker's step dropdown.
+// Shared by every step-aware connection type — verified to parse under both
+// Prometheus and ts-store (whose parser is a superset of Go's, adding d/w/mo/y).
+export const STEP_PRESETS = ['15s', '30s', '1m', '5m', '15m', '1h'];
+
+// Default step folded into a step-aware range value that carries none.
+// A light pull / visual baseline; the author changes it via the dropdown.
+export const DEFAULT_STEP = '1h';
+
 // Prometheus caps a range query at ~11,000 points; we keep a margin below it.
+// This is Prometheus's OWN API limit — do not borrow it for other types.
 export const PROM_MAX_POINTS = 10000;
 
+// ts-store has no server-side point cap: it serves whatever step it is given,
+// so an unclamped fine step over a wide window is a very large pull (a ranged
+// ts-store query raises `limit` to 100000). This budget is ours, chosen for
+// chart readability rather than any upstream limit.
+export const TSSTORE_MAX_POINTS = 5000;
+
 /**
- * clampPromStep — raise a Prometheus step (a duration token like '1m'/'1h') so a
- * window won't exceed PROM_MAX_POINTS, mirroring the server's clamp. The step is
- * a FLOOR (only raised, never lowered). `windowMs` is the resolved window width.
- * Returns the original step when it already fits or can't be parsed.
+ * maxPointsForType — the point budget a connection type's step clamps against.
+ * Returns null for types with no step support (no clamp applies).
  */
-export function clampPromStep(step, windowMs) {
+export function maxPointsForType(connType) {
+  switch (connType) {
+    case 'prometheus': return PROM_MAX_POINTS;
+    case 'tsstore': return TSSTORE_MAX_POINTS;
+    default: return null;
+  }
+}
+
+/**
+ * clampStep — raise a step (a duration token like '1m'/'1h') so a window won't
+ * exceed `maxPoints`, mirroring the server's clamp. The step is a FLOOR (only
+ * raised, never lowered). `windowMs` is the resolved window width. Returns the
+ * original step when it already fits, can't be parsed, or has no budget.
+ *
+ * Note the raised value is expressed in whole seconds (e.g. '540s') and so may
+ * not be one of STEP_PRESETS — callers surface it as an *effective* step rather
+ * than a dropdown selection.
+ */
+export function clampStep(step, windowMs, maxPoints) {
   const stepMs = presetDurationMs(step);
   if (!stepMs || !windowMs || windowMs <= 0) return step;
-  if (windowMs / stepMs <= PROM_MAX_POINTS) return step;
-  const minSecs = Math.ceil(windowMs / PROM_MAX_POINTS / 1000);
+  if (!maxPoints || maxPoints <= 0) return step;
+  if (windowMs / stepMs <= maxPoints) return step;
+  const minSecs = Math.ceil(windowMs / maxPoints / 1000);
   return `${Math.max(1, minSecs)}s`;
+}
+
+/**
+ * clampPromStep — Prometheus-budget wrapper over clampStep, kept for callers
+ * that are Prometheus-specific by construction.
+ */
+export function clampPromStep(step, windowMs) {
+  return clampStep(step, windowMs, PROM_MAX_POINTS);
 }
 
 export default {
   DEFAULT_RANGE_PRESETS,
+  STEP_PRESETS,
+  DEFAULT_STEP,
   presetLabel,
   presetDurationMs,
   resolvePreset,
   isValidRangeIntent,
   parseRangeIntent,
   resolveIntentToAbsolute,
+  clampStep,
   clampPromStep,
+  maxPointsForType,
   PROM_MAX_POINTS,
+  TSSTORE_MAX_POINTS,
 };
