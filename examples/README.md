@@ -8,7 +8,7 @@ example with its own README + any supporting artifacts.
 
 | Example                                    | What it shows                                                                  |
 | ------------------------------------------ | ------------------------------------------------------------------------------ |
-| [`dashboards/`](./dashboards/)   | A multi-panel Prometheus monitoring dashboard built end-to-end from a single natural-language prompt (via the Dashboard Assistant / MCP) |
+| [`dashboards/`](./dashboards/)   | A gallery of dashboards running against live data — AI-built (Prometheus node metrics, a traffic-flow Sankey), the Assistant mid-edit, ts-store rollups under a range variable, and a camera/control/weather kiosk |
 
 Have a run worth preserving? Add it here with a screenshot + a README
 describing inputs, outputs, and what was surprising.

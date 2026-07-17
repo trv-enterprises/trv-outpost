@@ -69,7 +69,8 @@ in most any environment.
   the dashboard. The same capability is available to external agents
   through the MCP server. See [examples/dashboards](examples/dashboards/)
   for a walkthrough of a multi-panel Prometheus monitoring dashboard
-  built from a single prompt.
+  built from a single prompt, plus screenshots of the Assistant mid-edit
+  and an AI-built Sankey.
 - **Desktop app (macOS)** — an Electron build of the dashboard with a
   built-in **Claude Code sidebar** that launches the Claude Code CLI
   pre-wired to your dashboard's MCP server. It uses your existing Claude
@@ -290,8 +291,9 @@ source, backup + restore).
 - [MCP server](docs/mcp.md) — tool inventory, agent flow, and
   Claude Desktop setup via `mcp-proxy`
 - [Examples](examples/) — reference runs and demos
-  ([dashboards](examples/dashboards/) shows a multi-panel Prometheus
-  dashboard built from a single natural-language prompt)
+  ([dashboards](examples/dashboards/) is a screenshot gallery: AI-built
+  boards, the Assistant mid-edit, ts-store rollups under a range
+  variable, and a camera/control/weather kiosk)
 - [Deployment guide](docs/DEPLOYMENT.md) — production deployment
 - [Test plan](docs/TEST_PLAN.md)
 - [Project CLAUDE.md](CLAUDE.md) — conventions for contributors
