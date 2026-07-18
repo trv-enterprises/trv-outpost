@@ -21,6 +21,13 @@
   flex-direction: column;
   overflow: hidden;
 
+  // Desktop: layout-transparent — the title and toolbar keep their own rows
+  // exactly as before. The mobile @media block turns this into a wrapping flex
+  // row so title + search + Filters share a line when they fit.
+  .tile-view-headerbar {
+    display: contents;
+  }
+
   .tile-view-header {
     flex-shrink: 0;
     display: flex;
@@ -167,22 +174,36 @@
     max-width: 100%;
     overflow-x: hidden;
 
-    .tile-view-header {
-      flex-direction: column;
-      align-items: flex-start;
+    // One wrapping flex row for title + search + Filters. Landscape (wide
+    // enough) fits all three on one line, reclaiming vertical space for tiles;
+    // portrait wraps (the search's min-width pushes Filters to the next line,
+    // and the title sits on its own line above), matching the prior look.
+    .tile-view-headerbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: spacing.$spacing-03;
+      margin-bottom: spacing.$spacing-03;
+    }
 
-      .header-search {
-        width: 100%;
-        max-width: none;
+    // Title shrinks to its content so it doesn't hog the row; no bottom margin
+    // (the headerbar owns row spacing now).
+    .tile-view-header {
+      flex: 0 0 auto;
+      margin-bottom: 0;
+
+      .header-title h1 {
+        font-size: 1.25rem;
       }
     }
 
-    // Compact filter toolbar: search + the Filters toggle on the top row,
-    // and the actual filter/sort controls collapse behind the toggle so they
-    // don't eat the screen above the tiles.
+    // Search takes the remaining space but keeps a sensible min so a very
+    // narrow viewport wraps Filters below instead of squishing the search.
+    // The toolbar itself no longer needs its own row margin (headerbar owns it).
     .header-toolbar {
+      flex: 1 1 260px;
       gap: spacing.$spacing-03;
-      margin-bottom: spacing.$spacing-03;
+      margin-bottom: 0;
 
       .header-search {
         flex: 1 1 auto;

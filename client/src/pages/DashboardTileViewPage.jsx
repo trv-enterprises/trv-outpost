@@ -470,6 +470,11 @@ function DashboardTileViewPage({ canDesign = false }) {
 
   return (
     <div className="dashboard-tile-view-page">
+      {/* On mobile this wrapper becomes a single wrapping flex row so the
+          title + search + Filters share a line when there's room (landscape)
+          and wrap otherwise (portrait). On desktop it's display:contents —
+          layout-transparent, so the title and toolbar keep their own rows. */}
+      <div className="tile-view-headerbar">
       <div className="tile-view-header">
         <div className="header-title">
           <Dashboard size={24} />
@@ -601,6 +606,7 @@ function DashboardTileViewPage({ canDesign = false }) {
             </div>
           </>
         )}
+      </div>
       </div>
 
       {/* Scrollable tile region — the page itself is a fixed-height flex
