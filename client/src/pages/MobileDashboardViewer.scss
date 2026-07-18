@@ -61,6 +61,35 @@
     text-overflow: ellipsis;
   }
 
+  // Collapsible dashboard-variable controls, revealed by the Variables toggle.
+  // The shared pickers are toolbar-tuned on desktop (fixed widths, bottom-align);
+  // here we stack them full-width for a narrow screen.
+  &__variables {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--cds-layer-01);
+    border-bottom: 1px solid var(--cds-border-subtle-01);
+
+    // Undo the desktop toolbar layout on the shared picker wrapper so each
+    // control is a full-width stacked row instead of a fixed 12rem field with a
+    // left margin.
+    .dashboard-variable-picker,
+    .dashboard-range-picker {
+      margin: 0;
+      width: 100%;
+
+      .cds--dropdown,
+      .cds--dropdown__wrapper,
+      .cds--text-input,
+      .cds--list-box {
+        width: 100%;
+        max-width: none;
+      }
+    }
+  }
+
   &__empty {
     padding: 2rem 1rem;
     text-align: center;

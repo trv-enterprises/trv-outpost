@@ -112,6 +112,10 @@ the dashboard as a **single vertical column**:
   edge-to-edge, filling the whole screen. Rotate your phone to landscape
   for a wide chart. Tap the **×** (or press Escape) to return to the
   stack.
+- If the dashboard has [variables](dashboard-variables.md), a **gear
+  (Variables)** button appears in the top bar. Tap it to open the
+  variable controls — the same connection, filter, and time-range pickers
+  as on desktop — and your selection re-scopes every panel.
 - The header is simplified to the essentials — notifications and your
   account menu. Design and Manage tools are hidden; mobile is
   **view-only**.

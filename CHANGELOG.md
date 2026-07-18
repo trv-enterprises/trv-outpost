@@ -22,10 +22,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   live in fullscreen too. The header sheds its authoring/admin controls
   on mobile, leaving notifications and the account menu. On the
   dashboard picker, the filter/sort controls collapse behind a
-  **Filters** toggle so tiles aren't buried under a tall toolbar. Same
-  URL as desktop — the layout switches on viewport width, and the
-  mobile page is code-split so desktop sessions never load it. Phase 1 —
-  no per-dashboard mobile layout authoring or on-phone editing yet.
+  **Filters** toggle so tiles aren't buried under a tall toolbar. A
+  **Variables** toggle in the mobile viewer's title bar opens the
+  dashboard's connection-swap / filter / range pickers (the same controls
+  as desktop, extracted into shared components). Same URL as desktop —
+  the layout switches on viewport width (≤950px, so larger phones in
+  landscape get mobile), and the mobile page is code-split so desktop
+  sessions never load it. Phase 1 — no per-dashboard mobile layout
+  authoring or on-phone editing yet.
 
 ## [0.40.0] — 2026-07-15
 

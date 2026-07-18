@@ -5,9 +5,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Loading, Button } from '@carbon/react';
-import { Renew, ChevronLeft, Maximize, Close } from '@carbon/icons-react';
+import { Renew, ChevronLeft, Maximize, Close, Settings } from '@carbon/icons-react';
 import PanelContent from '../components/PanelContent';
+import ConnectionSwapPicker from '../components/ConnectionSwapPicker';
+import FilterVariablePicker from '../components/FilterVariablePicker';
+import DashboardRangePicker from '../components/DashboardRangePicker';
 import { RefreshableComponentsProvider } from '../context/RefreshableComponentsContext';
+import { useNotifications } from '../context/NotificationContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { derivePanelProps } from '../utils/derivePanelProps';
@@ -40,6 +44,7 @@ function MobileDashboardViewer({ canControl = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { addNotification } = useNotifications();
 
   const {
     dashboard,
@@ -77,17 +82,26 @@ function MobileDashboardViewer({ canControl = false }) {
     variable: dashVariable,
     candidates: dashVariableCandidates,
     selectedConnId: dashVariableValue,
+    setValue: setDashVariableValue,
     resolveConnectionId,
     resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
+    setFilterValue: setDashFilterValue,
+    rangeVariable: dashRangeVariable,
     rangeValue: dashRangeValue,
+    setRangeValue: setDashRangeValue,
   } = useDashboardVariable({
     dashboard,
     globalEnabled: dashboardVariableEnabled,
     getSearchParam,
     setSearchParam,
   });
+
+  // Any variable active for this dashboard? Drives whether the mobile viewer
+  // shows the Variables toggle at all.
+  const hasVariables = !!(dashVariable || dashFilterVariable || dashRangeVariable);
+  const [variablesOpen, setVariablesOpen] = useState(false);
 
   // Resolved display value of the connection-swap variable (tag-prefix label or
   // name), for {{variable:NAME}} tokens in text panels. Mirrors the viewer.
@@ -199,6 +213,17 @@ function MobileDashboardViewer({ canControl = false }) {
             onClick={() => navigate('/view/dashboards')}
           />
           <span className="mobile-viewer__title" title={title}>{title}</span>
+          {hasVariables && (
+            <Button
+              hasIconOnly
+              size="sm"
+              kind={variablesOpen ? 'secondary' : 'ghost'}
+              iconDescription="Variables"
+              renderIcon={Settings}
+              isSelected={variablesOpen}
+              onClick={() => setVariablesOpen((v) => !v)}
+            />
+          )}
           <Button
             hasIconOnly
             size="sm"
@@ -208,6 +233,36 @@ function MobileDashboardViewer({ canControl = false }) {
             onClick={onRefresh}
           />
         </div>
+
+        {/* Collapsible dashboard-variable controls. Same pickers the desktop
+            toolbar uses (shared components), stacked for a narrow screen.
+            Only the pickers whose variable exists render. */}
+        {hasVariables && variablesOpen && (
+          <div className="mobile-viewer__variables">
+            <ConnectionSwapPicker
+              variable={dashVariable}
+              candidates={dashVariableCandidates}
+              value={dashVariableValue}
+              onChange={setDashVariableValue}
+            />
+            <FilterVariablePicker
+              variable={dashFilterVariable}
+              value={dashFilterValue}
+              onChange={setDashFilterValue}
+              panels={orderedPanels}
+              chartsMap={chartsMap}
+              dashboard={dashboard}
+              addNotification={addNotification}
+            />
+            {dashRangeVariable && (
+              <DashboardRangePicker
+                variable={dashRangeVariable}
+                value={dashRangeValue}
+                onChange={setDashRangeValue}
+              />
+            )}
+          </div>
+        )}
 
         {orderedPanels.length === 0 ? (
           <div className="mobile-viewer__empty">This dashboard has no panels.</div>

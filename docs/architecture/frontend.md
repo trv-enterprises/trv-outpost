@@ -275,9 +275,12 @@ path instead: **`pages/MobileDashboardViewer.jsx`**, a **view-only,
 vertically-stacked** surface.
 
 - **Detection + routing.** `hooks/useIsMobile.js` (a `matchMedia(
-  '(max-width: 768px)')` hook — the app's single mobile breakpoint,
-  matching the tile-grid breakpoint) drives an `isMobile` flag in
-  `App.jsx`'s `AppContent`. When set, the `/view/dashboards/:id` route
+  '(max-width: 950px)')` hook — the app's single mobile breakpoint;
+  950px so larger phones in landscape still get mobile, not a shrunk
+  desktop grid) drives an `isMobile` flag in `App.jsx`'s `AppContent`.
+  The mobile-only SCSS media queries (tile-picker Filters collapse,
+  notification-panel re-anchor) are kept at the same 950px so CSS and JS
+  agree on when mobile is active. When set, the `/view/dashboards/:id` route
   renders `MobileDashboardViewer` instead of `DashboardViewerPage`, and
   the header sheds its authoring/admin affordances (ModeToggle,
   Assistant launcher, NamespacePicker, side nav) — leaving logo, Help,
@@ -329,9 +332,17 @@ vertically-stacked** surface.
   the `StreamConnectionManager`, the fullscreen copy streams alongside
   the inline one — the same approach the desktop `ComponentExpandModal`
   takes. Rotating to landscape gives a wide chart the full width.
-- **Phase 1 scope.** No variable **picker** UI (the hook still resolves
-  URL-param variable defaults), no `dashboardCommand` MQTT subscription,
-  no per-dashboard mobile layout. Those are follow-ups.
+- **Variable pickers.** A **Variables** toggle in the title bar (shown
+  only when the dashboard defines a variable) expands a collapsible panel
+  with the connection-swap / filter / range controls. These are the SAME
+  controls the desktop toolbar uses — `ConnectionSwapPicker`,
+  `FilterVariablePicker` (over the shared `useFilterVariableDiscovery`
+  hook), and `DashboardRangePicker` were extracted so both viewers render
+  one implementation. The filter picker keeps full parity, including
+  connection-discovered values (DISTINCT / one-shot / newest) and the
+  live-recapture modal for raw socket/mqtt.
+- **Phase 1 scope.** No `dashboardCommand` MQTT subscription and no
+  per-dashboard mobile layout yet — those are follow-ups.
 
 ## Component title sizing and chart text (the `textStyle` gotcha)
 

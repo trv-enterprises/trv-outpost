@@ -36,7 +36,8 @@
   // namespace picker sit to the bell's right, but the mobile header drops
   // those, so 96px + a 360px width pushes the panel's left edge off-screen.
   // Anchor near the right edge instead and cap the width to the viewport.
-  @media (max-width: 768px) {
+  // 950px matches useIsMobile.js (MOBILE_MAX_WIDTH).
+  @media (max-width: 950px) {
     right: 8px;
     left: 8px;
     width: auto;

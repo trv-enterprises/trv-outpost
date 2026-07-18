@@ -4,10 +4,12 @@
 
 import { useEffect, useState } from 'react';
 
-// Phone breakpoint. 768px matches the tile-grid breakpoint already used in
-// DashboardTileViewPage.scss, so the mobile viewer and the mobile dashboard
-// picker flip at the same width.
-const MOBILE_MAX_WIDTH = 768;
+// Mobile breakpoint. 950px so larger phones in landscape (e.g. iPhone Pro,
+// ~852–932px wide) still get the mobile viewer rather than the shrunk desktop
+// grid. Keep the SCSS media queries that gate mobile-only layout (the tile
+// picker's Filters collapse, the notification panel re-anchor) in sync with
+// this value.
+const MOBILE_MAX_WIDTH = 950;
 const MOBILE_QUERY = `(max-width: ${MOBILE_MAX_WIDTH}px)`;
 
 /**

@@ -156,8 +156,10 @@
   }
 }
 
-// Responsive adjustments
-@media (max-width: 768px) {
+// Responsive adjustments. 950px keeps this in sync with useIsMobile.js
+// (MOBILE_MAX_WIDTH) — the JS breakpoint that flips the viewer to mobile — so
+// the tile picker's mobile layout matches when the mobile viewer is active.
+@media (max-width: 950px) {
   .dashboard-tile-view-page {
     // Never let content push past the viewport width (the tile grid's
     // 280px min-column + the toolbar's fixed-width dropdowns were causing a
