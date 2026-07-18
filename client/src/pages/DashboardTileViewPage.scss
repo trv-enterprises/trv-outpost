@@ -217,10 +217,13 @@
       }
     }
 
-    // One tile per row, and allow the column to shrink below the 280px min so
-    // a full-width tile can't overflow a ~360px viewport.
+    // Auto-flow tiles: fit as many columns as will hold a tile at >=260px, so
+    // a portrait phone gets one column and a landscape phone gets two (or more
+    // on a tablet). The 260px min is below a narrow portrait viewport so the
+    // lone column still fits; auto-fill keeps a single wide tile from stretching
+    // edge-to-edge on landscape by packing a second column beside it.
     .dashboard-tiles-grid {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: spacing.$spacing-04;
     }
   }
