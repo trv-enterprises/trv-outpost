@@ -117,7 +117,7 @@ function applyParser(record, parser) {
 // previews must NOT, since their query is dirty/unsaved and needs the raw
 // /query path. The `query` prop is still required either way — token
 // presence and value identity (what triggers refetches) are derived from it.
-export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
+export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0, rangeValue = null }) {
   // A per-call maxBuffer wins; otherwise use the deployment-wide default
   // (admin setting stream_buffer_size, set at bootstrap). Applies to both
   // spec-driven and eval'd custom-code charts.
@@ -222,17 +222,10 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   const flushRAFRef = useRef(null);
   const backfillDoneRef = useRef(false); // Backfill once per useData lifecycle, not per reconnect
 
-  // Reset accumulated data when the connection changes (e.g. a dashboard
-  // connection-swap repoints this panel to a different connection). Without
-  // this, the old connection's rows linger, the new connection never
-  // re-backfills (backfillDoneRef stays true), and the panel only updates on a
-  // full page reload. Skip the very first mount — there's nothing to clear and
-  // the normal load path handles it.
-  const prevConnIdRef = useRef(connectionId);
-  useEffect(() => {
-    if (prevConnIdRef.current === connectionId) return;
-    prevConnIdRef.current = connectionId;
-    // Clear streaming buffers + displayed data so the new connection starts clean.
+  // Clear streaming buffers + displayed data and re-arm the backfill so the
+  // next load starts from a clean slate. Shared by the connection-change reset
+  // and the range-change reset (stage 2 of #162) so their behavior can't drift.
+  const resetForFreshLoad = useCallback(() => {
     pendingRecordsRef.current = [];
     if (flushRAFRef.current) {
       cancelAnimationFrame(flushRAFRef.current);
@@ -243,7 +236,20 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     setData(null);
     setError(null);
     setLoading(true);
-  }, [connectionId]);
+  }, []);
+
+  // Reset accumulated data when the connection changes (e.g. a dashboard
+  // connection-swap repoints this panel to a different connection). Without
+  // this, the old connection's rows linger, the new connection never
+  // re-backfills (backfillDoneRef stays true), and the panel only updates on a
+  // full page reload. Skip the very first mount — there's nothing to clear and
+  // the normal load path handles it.
+  const prevConnIdRef = useRef(connectionId);
+  useEffect(() => {
+    if (prevConnIdRef.current === connectionId) return;
+    prevConnIdRef.current = connectionId;
+    resetForFreshLoad();
+  }, [connectionId, resetForFreshLoad]);
 
   const flushPendingRecords = useCallback(() => {
     flushRAFRef.current = null;
@@ -393,11 +399,36 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     if (backfill === false) return null;
     if (backfill) return backfill;
     if (datasourceType === 'tsstore' && datasourceTransport === 'streaming') {
+      // When a dashboard range is active, the backfill should paint that WINDOW
+      // rather than the latest N. Pass the range INTENT through unchanged — the
+      // server's resolveRange/tsstoreRangeFromSpec translates it to since:/range:
+      // + a clamped step (the same merged path the polling /query side uses), so
+      // we must NOT build since:/range: strings here or the step clamp would
+      // diverge. The row cap (not the buffer limit) applies server-side, so a
+      // wide window isn't truncated. No range → the latest-N default.
+      if (rangeValue && rangeValue.type) {
+        return { raw: 'newest', type: 'tsstore', params: { range: rangeValue } };
+      }
       return { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
     }
     return null;
-  }, [backfill, datasourceType, datasourceTransport]);
+  }, [backfill, datasourceType, datasourceTransport, rangeValue]);
   const effectiveBackfillKey = useMemo(() => JSON.stringify(effectiveBackfill), [effectiveBackfill]);
+
+  // Re-init on a backfill-query change (stage 2 of #162): a dashboard range
+  // change alters effectiveBackfill (its params.range), so the streaming chart
+  // must re-backfill the NEW window over clean state. Without this reset,
+  // backfillDoneRef stays true from the first mount, the SSE effect re-runs (it
+  // depends on effectiveBackfillKey) but SKIPS the backfill, and the old
+  // window's rows stay in `data` while the new live subscription appends on top
+  // — stale history glued to new-window live data. Resetting re-arms the
+  // backfill so the re-run paints the new window fresh. Skip the first mount.
+  const prevBackfillKeyRef = useRef(effectiveBackfillKey);
+  useEffect(() => {
+    if (prevBackfillKeyRef.current === effectiveBackfillKey) return;
+    prevBackfillKeyRef.current = effectiveBackfillKey;
+    resetForFreshLoad();
+  }, [effectiveBackfillKey, resetForFreshLoad]);
 
   // Connect to SSE stream for socket datasources (raw or aggregated)
   useEffect(() => {

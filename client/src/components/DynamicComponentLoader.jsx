@@ -242,6 +242,10 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     timeBucket: timeBucketConfig,
     parser: parserConfig,
     refreshTick,
+    // Streaming backfill: useData builds the ts-store backfill query internally
+    // and needs the range to window it (the polling path already gets range via
+    // effectiveQuery.params.range). Harmless for non-streaming types.
+    rangeValue,
   });
 
   // Apply transforms to fetched data
