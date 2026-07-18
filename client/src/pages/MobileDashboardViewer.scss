@@ -144,10 +144,26 @@
   // the gauge taller than the whole landscape viewport. Portrait keeps the
   // generous size (vh is large there, so the vw term wins).
 
-  // Charts / series / dataview: a readable landscape box.
+  // Charts / series / dataview: a readable box.
   &--chart,
   &--dataview {
     height: clamp(200px, min(56vw, 62vh), 320px);
+  }
+
+  // Landscape phones are short: the title band + legend + zoom slider eat most
+  // of a ~244px box, squishing the plot to a sliver. Give series charts most
+  // of the viewport height there so the actual plot area is usable (one chart
+  // ~fills the screen; swipe/scroll to the next). Round tiles keep their
+  // near-square sizing. Only applies below the mobile breakpoint.
+  @media (orientation: landscape) and (max-width: 950px) {
+    &--chart,
+    &--dataview {
+      height: clamp(240px, 82vh, 460px);
+    }
+
+    &--datatable {
+      height: clamp(240px, 85vh, 520px);
+    }
   }
 
   // Number tiles are compact — no need for a tall box.

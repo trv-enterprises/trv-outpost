@@ -14,6 +14,7 @@ import { RefreshableComponentsProvider } from '../context/RefreshableComponentsC
 import { useNotifications } from '../context/NotificationContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
+import useRangeConnectionTypes from '../hooks/useRangeConnectionTypes';
 import { derivePanelProps } from '../utils/derivePanelProps';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import StreamConnectionManager from '../utils/streamConnectionManager';
@@ -102,6 +103,15 @@ function MobileDashboardViewer({ canControl = false }) {
   // shows the Variables toggle at all.
   const hasVariables = !!(dashVariable || dashFilterVariable || dashRangeVariable);
   const [variablesOpen, setVariablesOpen] = useState(false);
+
+  // Prometheus detection for the range picker's step field (shared with desktop).
+  const { rangeIsPrometheus } = useRangeConnectionTypes({
+    rangeVariable: dashRangeVariable,
+    panels: dashboard?.panels || [],
+    chartsMap,
+    dashboard,
+    addNotification,
+  });
 
   // Resolved display value of the connection-swap variable (tag-prefix label or
   // name), for {{variable:NAME}} tokens in text panels. Mirrors the viewer.
@@ -259,6 +269,7 @@ function MobileDashboardViewer({ canControl = false }) {
                 variable={dashRangeVariable}
                 value={dashRangeValue}
                 onChange={setDashRangeValue}
+                showStep={rangeIsPrometheus}
               />
             )}
           </div>

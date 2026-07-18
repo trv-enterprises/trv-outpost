@@ -59,6 +59,7 @@ import DashboardGrid from '../components/DashboardGrid';
 import DashboardRangePicker from '../components/DashboardRangePicker';
 import ConnectionSwapPicker from '../components/ConnectionSwapPicker';
 import FilterVariablePicker from '../components/FilterVariablePicker';
+import useRangeConnectionTypes from '../hooks/useRangeConnectionTypes';
 import PanelEditMenu from '../components/PanelEditMenu';
 import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
@@ -69,7 +70,6 @@ import apiClient from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { useSwapCompatibility } from '../hooks/useSwapCompatibility';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
-import { RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
@@ -696,73 +696,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // (Filter-variable `connection`-sourced value discovery moved to the shared
   // useFilterVariableDiscovery hook, consumed by FilterVariablePicker.)
 
-  // Connection ids backing RANGE-scoped components: a SQL/EdgeLake component
-  // whose query carries the {{range-variable}} token, OR any tsstore/Prometheus
-  // component (those auto-apply the window). Used to (a) detect a mixed-type
-  // range dashboard (error) and (b) decide whether to show the Prometheus step
-  // field. Only meaningful when a range variable is active.
-  const rangeScopedConnIds = useMemo(() => {
-    if (!dashRangeVariable) return [];
-    const ids = new Set();
-    for (const panel of panels || []) {
-      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
-      if (!comp || !comp.connection_id) continue;
-      const raw = comp.query_config?.raw;
-      if (typeof raw === 'string' && raw.includes(RANGE_VARIABLE_TOKEN)) {
-        ids.add(comp.connection_id);
-      }
-      // tsstore/Prometheus auto-apply — but we can't know type without the
-      // connection record; the resolver effect below classifies all referenced
-      // connections and keeps the time-series ones.
-    }
-    // Also include every referenced connection so the resolver can classify
-    // tsstore/Prometheus (auto-apply) panels; non-time types are dropped there.
-    for (const panel of panels || []) {
-      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
-      if (comp?.connection_id) ids.add(comp.connection_id);
-    }
-    return [...ids];
-  }, [dashRangeVariable, panels, chartsMap]);
-
-  // Resolved { type } per range-relevant connection, the distinct type set, and
-  // derived flags: mixed-type (error) + whether the dashboard is Prometheus
-  // (shows the step field). A range dashboard should be single-type.
-  const [rangeConnTypes, setRangeConnTypes] = useState(null); // string[] | null
-  useEffect(() => {
-    let cancelled = false;
-    if (!dashRangeVariable || rangeScopedConnIds.length === 0) {
-      setRangeConnTypes(null);
-      return undefined;
-    }
-    (async () => {
-      const conns = await Promise.all(
-        rangeScopedConnIds.map((id) => apiClient.getConnection(id).catch(() => null)),
-      );
-      if (cancelled) return;
-      // Keep only time-series-capable types (those a range can scope).
-      const TIME_TYPES = new Set(['sql', 'edgelake', 'tsstore', 'prometheus']);
-      const types = [...new Set(
-        conns.map((c) => c?.type || c?.config?.type).filter((t) => TIME_TYPES.has(t)),
-      )];
-      setRangeConnTypes(types);
-    })();
-    return () => { cancelled = true; };
-  }, [dashRangeVariable, rangeScopedConnIds]);
-
-  const rangeMixedType = Array.isArray(rangeConnTypes) && rangeConnTypes.length > 1;
-  const rangeIsPrometheus = Array.isArray(rangeConnTypes) && rangeConnTypes.length === 1 && rangeConnTypes[0] === 'prometheus';
-
-  // Surface the mixed-type guard once per dashboard.
-  const rangeMixedWarnedRef = useRef(null);
-  useEffect(() => {
-    if (!rangeMixedType) return;
-    const key = `${dashboard?.id || ''}`;
-    if (rangeMixedWarnedRef.current === key) return;
-    rangeMixedWarnedRef.current = key;
-    const msg = `This dashboard's time-range variable spans more than one connection type (${rangeConnTypes.join(', ')}). A range dashboard must be single-type — the range may not apply correctly.`;
-    pushToast({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
-    addNotification({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
-  }, [rangeMixedType, rangeConnTypes, dashboard?.id, pushToast, addNotification]);
+  // Range-scoped connection-type classification (Prometheus step field +
+  // mixed-type guard) is shared with the mobile viewer via this hook.
+  const { rangeIsPrometheus } = useRangeConnectionTypes({
+    rangeVariable: dashRangeVariable,
+    panels,
+    chartsMap,
+    dashboard,
+    pushToast,
+    addNotification,
+  });
 
   // (Filter-variable discovery + session-regenerate machinery moved to the
   // shared useFilterVariableDiscovery hook, consumed by FilterVariablePicker.)

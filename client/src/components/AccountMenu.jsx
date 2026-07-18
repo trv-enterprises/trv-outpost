@@ -8,6 +8,7 @@ import {
   OverflowMenuItem,
 } from '@carbon/react';
 import { Logout, Password, UserAvatar, Information } from '@carbon/icons-react';
+import useIsMobile from '../hooks/useIsMobile';
 import './AccountMenu.scss';
 
 /**
@@ -38,6 +39,9 @@ import './AccountMenu.scss';
  */
 function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOut, onAbout }) {
   const navigate = useNavigate();
+  // API key management is a desktop/authoring task; hide it on mobile
+  // (view-only) so the account menu stays focused on identity + sign-out.
+  const isMobile = useIsMobile();
 
   const displayName = currentUser?.name || (electronMode ? 'Connected' : 'No user');
   const email = currentUser?.email || '';
@@ -66,16 +70,19 @@ function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOu
         disabled
       />
 
-      <OverflowMenuItem
-        itemText={
-          <span className="account-menu-action">
-            <Password size={16} />
-            <span>API Keys</span>
-          </span>
-        }
-        onClick={() => navigate('/account/api-keys')}
-        hasDivider
-      />
+      {/* API key management is hidden on mobile (view-only surface). */}
+      {!isMobile && (
+        <OverflowMenuItem
+          itemText={
+            <span className="account-menu-action">
+              <Password size={16} />
+              <span>API Keys</span>
+            </span>
+          }
+          onClick={() => navigate('/account/api-keys')}
+          hasDivider
+        />
+      )}
 
       {onAbout && (
         <OverflowMenuItem
@@ -86,6 +93,9 @@ function AccountMenu({ currentUser, electronMode = false, onDisconnect, onSignOu
             </span>
           }
           onClick={onAbout}
+          // On mobile the API Keys item (which carried the divider) is gone, so
+          // About takes over the divider that separates actions from identity.
+          hasDivider={isMobile}
         />
       )}
 
