@@ -162,12 +162,60 @@ function MobileDashboardViewer({ canControl = false }) {
   // StreamConnectionManager, the fullscreen copy streams alongside the inline
   // one — same pattern as the desktop ComponentExpandModal. Escape/back closes.
   const [fullscreenPanelId, setFullscreenPanelId] = useState(null);
+
+  // Pair the overlay with NATIVE browser fullscreen so the phone's browser
+  // chrome (Safari's URL/tab bars, Android's URL + status bars) gets out of
+  // the way. Element fullscreen is long-standing on Android and arrived on
+  // iPhone in Safari 16.4; older browsers fall back to the plain overlay.
+  // Fullscreening documentElement (not the overlay node) keeps the request
+  // inside the tap's user-gesture window — the overlay isn't mounted yet at
+  // tap time — and the fixed inset-0 overlay covers the viewport either way.
+  const enterBrowserFullscreen = useCallback(() => {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    try {
+      const p = req.call(el);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch { /* unsupported/denied — overlay alone still works */ }
+  }, []);
+  const exitBrowserFullscreen = useCallback(() => {
+    if (!(document.fullscreenElement || document.webkitFullscreenElement)) return;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    try {
+      const p = exit && exit.call(document);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch { /* already exited */ }
+  }, []);
+
+  const openFullscreen = useCallback((panelId) => {
+    setFullscreenPanelId(panelId);
+    enterBrowserFullscreen();
+  }, [enterBrowserFullscreen]);
+  const closeFullscreen = useCallback(() => {
+    setFullscreenPanelId(null);
+    exitBrowserFullscreen();
+  }, [exitBrowserFullscreen]);
+
   useEffect(() => {
     if (!fullscreenPanelId) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setFullscreenPanelId(null); };
+    const onKey = (e) => { if (e.key === 'Escape') closeFullscreen(); };
+    // The system can exit fullscreen without us (iOS swipe-down, Android
+    // back). Keep the overlay in lockstep: fullscreen gone → overlay closes.
+    const onFsChange = () => {
+      if (!(document.fullscreenElement || document.webkitFullscreenElement)) {
+        setFullscreenPanelId(null);
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [fullscreenPanelId]);
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, [fullscreenPanelId, closeFullscreen]);
 
   // Resolve the panel + its derived props for the fullscreen overlay. Recomputed
   // from live chartsMap/resolvers so the fullscreen chart tracks variable/range
@@ -318,7 +366,7 @@ function MobileDashboardViewer({ canControl = false }) {
                       kind="ghost"
                       iconDescription="Fullscreen"
                       renderIcon={Maximize}
-                      onClick={() => setFullscreenPanelId(panel.id)}
+                      onClick={() => openFullscreen(panel.id)}
                     />
                   )}
                   {renderPanelBody(panel, derived)}
@@ -344,7 +392,7 @@ function MobileDashboardViewer({ canControl = false }) {
             kind="ghost"
             iconDescription="Close fullscreen"
             renderIcon={Close}
-            onClick={() => setFullscreenPanelId(null)}
+            onClick={closeFullscreen}
           />
           <div className="mobile-fullscreen__body">
             {renderPanelBody(fullscreenPanel.panel, fullscreenPanel.derived)}
