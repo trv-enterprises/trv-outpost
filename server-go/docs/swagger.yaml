@@ -5333,6 +5333,136 @@ paths:
       summary: List all connections
       tags:
       - connections
+    post:
+      consumes:
+      - application/json
+      description: Create a new data source (API, WebSocket, or File)
+      parameters:
+      - description: Connection to create
+        in: body
+        name: connection
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Connection'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a new connection
+      tags:
+      - connections
+  /connections/{id}:
+    delete:
+      description: Delete a connection by ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a connection
+      tags:
+      - connections
+    get:
+      description: Retrieve a single connection by its ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Connection'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a connection by ID
+      tags:
+      - connections
+    put:
+      consumes:
+      - application/json
+      description: Update an existing connection by ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Connection updates
+        in: body
+        name: connection
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Connection'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a connection
+      tags:
+      - connections
   /connections/{id}/command:
     post:
       consumes:
@@ -5446,12 +5576,148 @@ paths:
       summary: Save discovered dashboard-variable values for a connection column
       tags:
       - connections
+  /connections/{id}/edgelake/databases:
+    get:
+      description: Retrieve all database names from an EdgeLake node's blockchain
+        registry
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get databases from an EdgeLake data source
+      tags:
+      - connections
+  /connections/{id}/edgelake/schema:
+    get:
+      description: Retrieve column names and types for a specific table from an EdgeLake
+        node
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Database name
+        in: query
+        name: database
+        required: true
+        type: string
+      - description: Table name
+        in: query
+        name: table
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get table schema from an EdgeLake data source
+      tags:
+      - connections
+  /connections/{id}/edgelake/tables:
+    get:
+      description: Retrieve table names for a specific database from an EdgeLake node
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Database name
+        in: query
+        name: database
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get tables from an EdgeLake data source
+      tags:
+      - connections
+  /connections/{id}/health:
+    post:
+      description: Check the health of a specific connection and update its status
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.HealthInfo'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check connection health
+      tags:
+      - connections
   /connections/{id}/mqtt/sample:
     get:
       description: Subscribe to a topic and return the first message's schema (columns
         and sample values)
       parameters:
-      - description: Datasource ID
+      - description: Connection ID
         in: path
         name: id
         required: true
@@ -5481,12 +5747,12 @@ paths:
             type: object
       summary: Sample a single MQTT topic
       tags:
-      - datasources
+      - connections
   /connections/{id}/mqtt/topics:
     get:
       description: Subscribe briefly to discover available topics on an MQTT broker
       parameters:
-      - description: Datasource ID
+      - description: Connection ID
         in: path
         name: id
         required: true
@@ -5511,7 +5777,110 @@ paths:
             type: object
       summary: Get topics from an MQTT broker
       tags:
-      - datasources
+      - connections
+  /connections/{id}/prometheus/labels/{label}/values:
+    get:
+      description: Retrieve all possible values for a specific label from a Prometheus
+        connection
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Label name
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get values for a Prometheus label
+      tags:
+      - connections
+  /connections/{id}/query:
+    post:
+      consumes:
+      - application/json
+      description: Execute a query and return normalized results
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Query to execute
+        in: body
+        name: query
+        required: true
+        schema:
+          $ref: '#/definitions/models.QueryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.QueryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Execute a query against a connection
+      tags:
+      - connections
+  /connections/{id}/schema:
+    get:
+      description: Retrieve tables and columns for SQL connections. Only SQL-type
+        connections support this endpoint.
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SchemaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get database schema for a SQL connection
+      tags:
+      - connections
   /connections/{id}/stream:
     get:
       description: Opens an SSE connection to stream real-time data from a socket
@@ -5686,6 +6055,33 @@ paths:
             additionalProperties: true
             type: object
       summary: List active streams
+      tags:
+      - connections
+  /connections/test:
+    post:
+      consumes:
+      - application/json
+      description: Test a connection connection without saving it
+      parameters:
+      - description: Connection configuration to test
+        in: body
+        name: connection
+        required: true
+        schema:
+          $ref: '#/definitions/models.TestConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.TestConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Test a connection connection
       tags:
       - connections
   /controls/{id}/execute:
@@ -6250,403 +6646,6 @@ paths:
       summary: Preflight an import bundle
       tags:
       - dashboards
-  /datasources:
-    post:
-      consumes:
-      - application/json
-      description: Create a new data source (API, WebSocket, or File)
-      parameters:
-      - description: Datasource to create
-        in: body
-        name: datasource
-        required: true
-        schema:
-          $ref: '#/definitions/models.CreateConnectionRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.Connection'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Create a new datasource
-      tags:
-      - datasources
-  /datasources/{id}:
-    delete:
-      description: Delete a datasource by ID
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete a datasource
-      tags:
-      - datasources
-    get:
-      description: Retrieve a single datasource by its ID
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Connection'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get a datasource by ID
-      tags:
-      - datasources
-    put:
-      consumes:
-      - application/json
-      description: Update an existing datasource by ID
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Datasource updates
-        in: body
-        name: datasource
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateConnectionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Connection'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Update a datasource
-      tags:
-      - datasources
-  /datasources/{id}/edgelake/databases:
-    get:
-      description: Retrieve all database names from an EdgeLake node's blockchain
-        registry
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get databases from an EdgeLake data source
-      tags:
-      - datasources
-  /datasources/{id}/edgelake/schema:
-    get:
-      description: Retrieve column names and types for a specific table from an EdgeLake
-        node
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Database name
-        in: query
-        name: database
-        required: true
-        type: string
-      - description: Table name
-        in: query
-        name: table
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get table schema from an EdgeLake data source
-      tags:
-      - datasources
-  /datasources/{id}/edgelake/tables:
-    get:
-      description: Retrieve table names for a specific database from an EdgeLake node
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Database name
-        in: query
-        name: database
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get tables from an EdgeLake data source
-      tags:
-      - datasources
-  /datasources/{id}/health:
-    post:
-      description: Check the health of a specific datasource and update its status
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.HealthInfo'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Check datasource health
-      tags:
-      - datasources
-  /datasources/{id}/prometheus/labels/{label}/values:
-    get:
-      description: Retrieve all possible values for a specific label from a Prometheus
-        datasource
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Label name
-        in: path
-        name: label
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get values for a Prometheus label
-      tags:
-      - datasources
-  /datasources/{id}/query:
-    post:
-      consumes:
-      - application/json
-      description: Execute a query and return normalized results
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Query to execute
-        in: body
-        name: query
-        required: true
-        schema:
-          $ref: '#/definitions/models.QueryRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.QueryResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Execute a query against a datasource
-      tags:
-      - datasources
-  /datasources/{id}/schema:
-    get:
-      description: Retrieve tables and columns for SQL datasources. Only SQL-type
-        datasources support this endpoint.
-      parameters:
-      - description: Datasource ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SchemaResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get database schema for a SQL datasource
-      tags:
-      - datasources
-  /datasources/test:
-    post:
-      consumes:
-      - application/json
-      description: Test a datasource connection without saving it
-      parameters:
-      - description: Datasource configuration to test
-        in: body
-        name: datasource
-        required: true
-        schema:
-          $ref: '#/definitions/models.TestConnectionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.TestConnectionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Test a datasource connection
-      tags:
-      - datasources
   /device-types:
     get:
       description: List device types with optional filtering and pagination

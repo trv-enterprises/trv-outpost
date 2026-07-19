@@ -1482,8 +1482,198 @@
     },
     {
       "name": "connections",
-      "description": "connections endpoints (8).",
+      "description": "connections endpoints (22).",
       "item": [
+        {
+          "name": "Check connection health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "health"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Check connection health\n\nCheck the health of a specific connection and update its status\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Create a new connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections"
+              ]
+            },
+            "description": "Create a new connection\n\nCreate a new data source (API, WebSocket, or File)\n\n\nResponses: 201, 400, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"insecure_skip_verify\": null,\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"description\": \"\",\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a connection",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Delete a connection\n\nDelete a connection by ID\n\n\nResponses: 204, 400, 404, 409"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute a query against a connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "query"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Execute a query against a connection\n\nExecute a query and return normalized results\n\n\nResponses: 200, 400, 404",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get a connection by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get a connection by ID\n\nRetrieve a single connection by its ID\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
         {
           "name": "Get aggregator statistics",
           "request": {
@@ -1508,6 +1698,77 @@
               ]
             },
             "description": "Get aggregator statistics\n\nGet statistics about active bucket aggregators\n\n\nResponses: 200"
+          },
+          "response": []
+        },
+        {
+          "name": "Get database schema for a SQL connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/schema",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "schema"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get database schema for a SQL connection\n\nRetrieve tables and columns for SQL connections. Only SQL-type connections support this endpoint.\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get databases from an EdgeLake data source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/edgelake/databases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "edgelake",
+                "databases"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get databases from an EdgeLake data source\n\nRetrieve all database names from an EdgeLake node's blockchain registry\n\n\nResponses: 200, 400, 404"
           },
           "response": []
         },
@@ -1544,6 +1805,179 @@
               ]
             },
             "description": "Get stream status\n\nGet status information for an active stream\n\n\nResponses: 200, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get table schema from an EdgeLake data source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/edgelake/schema?database=&table=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "edgelake",
+                "schema"
+              ],
+              "query": [
+                {
+                  "key": "database",
+                  "value": "",
+                  "description": "Database name",
+                  "disabled": false
+                },
+                {
+                  "key": "table",
+                  "value": "",
+                  "description": "Table name",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get table schema from an EdgeLake data source\n\nRetrieve column names and types for a specific table from an EdgeLake node\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get tables from an EdgeLake data source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/edgelake/tables?database=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "edgelake",
+                "tables"
+              ],
+              "query": [
+                {
+                  "key": "database",
+                  "value": "",
+                  "description": "Database name",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get tables from an EdgeLake data source\n\nRetrieve table names for a specific database from an EdgeLake node\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get topics from an MQTT broker",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/mqtt/topics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "mqtt",
+                "topics"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Get topics from an MQTT broker\n\nSubscribe briefly to discover available topics on an MQTT broker\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "Get values for a Prometheus label",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/prometheus/labels/{label}/values",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "prometheus",
+                "labels",
+                ":label",
+                "values"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                },
+                {
+                  "key": "label",
+                  "value": "",
+                  "description": "Label name"
+                }
+              ]
+            },
+            "description": "Get values for a Prometheus label\n\nRetrieve all possible values for a specific label from a Prometheus connection\n\n\nResponses: 200, 400, 404"
           },
           "response": []
         },
@@ -1718,6 +2152,50 @@
           "response": []
         },
         {
+          "name": "Sample a single MQTT topic",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/mqtt/sample?topic=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "mqtt",
+                "sample"
+              ],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "",
+                  "description": "MQTT topic to sample",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Sample a single MQTT topic\n\nSubscribe to a topic and return the first message's schema (columns and sample values)\n\n\nResponses: 200, 400, 404"
+          },
+          "response": []
+        },
+        {
           "name": "Save discovered dashboard-variable values for a connection column",
           "request": {
             "method": "PUT",
@@ -1846,6 +2324,93 @@
               ]
             },
             "description": "Stream data from a socket connection\n\nOpens an SSE connection to stream real-time data from a socket connection\n\n\nResponses: 200, 400, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Test a connection connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                "test"
+              ]
+            },
+            "description": "Test a connection connection\n\nTest a connection connection without saving it\n\n\nResponses: 200, 400",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"insecure_skip_verify\": null,\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"id\": \"\",\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update a connection",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "Update a connection\n\nUpdate an existing connection by ID\n\n\nResponses: 200, 400, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": null,\n  \"description\": \"\",\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
           "response": []
         }
@@ -2576,116 +3141,8 @@
     },
     {
       "name": "Datasources (legacy alias of /connections)",
-      "description": "datasources endpoints (15).",
+      "description": "datasources endpoints (1).",
       "item": [
-        {
-          "name": "Check datasource health",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/health",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "health"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Check datasource health\n\nCheck the health of a specific datasource and update its status\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Create a new datasource",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources"
-              ]
-            },
-            "description": "Create a new datasource\n\nCreate a new data source (API, WebSocket, or File)\n\n\nResponses: 201, 400, 500",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"insecure_skip_verify\": null,\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"description\": \"\",\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete a datasource",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Delete a datasource\n\nDelete a datasource by ID\n\n\nResponses: 204, 400, 404, 409"
-          },
-          "response": []
-        },
         {
           "name": "Execute a command on a bidirectional datasource",
           "request": {
@@ -2725,463 +3182,6 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"action\": \"\",\n  \"payload\": {},\n  \"target\": \"\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Execute a query against a datasource",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/query",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "query"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Execute a query against a datasource\n\nExecute a query and return normalized results\n\n\nResponses: 200, 400, 404",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": null\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get a datasource by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get a datasource by ID\n\nRetrieve a single datasource by its ID\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get database schema for a SQL datasource",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/schema",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "schema"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get database schema for a SQL datasource\n\nRetrieve tables and columns for SQL datasources. Only SQL-type datasources support this endpoint.\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get databases from an EdgeLake data source",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/edgelake/databases",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "edgelake",
-                "databases"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get databases from an EdgeLake data source\n\nRetrieve all database names from an EdgeLake node's blockchain registry\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get table schema from an EdgeLake data source",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/edgelake/schema?database=&table=",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "edgelake",
-                "schema"
-              ],
-              "query": [
-                {
-                  "key": "database",
-                  "value": "",
-                  "description": "Database name",
-                  "disabled": false
-                },
-                {
-                  "key": "table",
-                  "value": "",
-                  "description": "Table name",
-                  "disabled": false
-                }
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get table schema from an EdgeLake data source\n\nRetrieve column names and types for a specific table from an EdgeLake node\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get tables from an EdgeLake data source",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/edgelake/tables?database=",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "edgelake",
-                "tables"
-              ],
-              "query": [
-                {
-                  "key": "database",
-                  "value": "",
-                  "description": "Database name",
-                  "disabled": false
-                }
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get tables from an EdgeLake data source\n\nRetrieve table names for a specific database from an EdgeLake node\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get topics from an MQTT broker",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/connections/{id}/mqtt/topics",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "connections",
-                ":id",
-                "mqtt",
-                "topics"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Get topics from an MQTT broker\n\nSubscribe briefly to discover available topics on an MQTT broker\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Get values for a Prometheus label",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}/prometheus/labels/{label}/values",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id",
-                "prometheus",
-                "labels",
-                ":label",
-                "values"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                },
-                {
-                  "key": "label",
-                  "value": "",
-                  "description": "Label name"
-                }
-              ]
-            },
-            "description": "Get values for a Prometheus label\n\nRetrieve all possible values for a specific label from a Prometheus datasource\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Sample a single MQTT topic",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/connections/{id}/mqtt/sample?topic=",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "connections",
-                ":id",
-                "mqtt",
-                "sample"
-              ],
-              "query": [
-                {
-                  "key": "topic",
-                  "value": "",
-                  "description": "MQTT topic to sample",
-                  "disabled": false
-                }
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Sample a single MQTT topic\n\nSubscribe to a topic and return the first message's schema (columns and sample values)\n\n\nResponses: 200, 400, 404"
-          },
-          "response": []
-        },
-        {
-          "name": "Test a datasource connection",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/test",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                "test"
-              ]
-            },
-            "description": "Test a datasource connection\n\nTest a datasource connection without saving it\n\n\nResponses: 200, 400",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"config\": {\n    \"api\": {\n      \"auth_credentials\": null,\n      \"auth_type\": null,\n      \"body\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"method\": null,\n      \"query_params\": null,\n      \"response_config\": null,\n      \"retry_count\": null,\n      \"retry_delay\": null,\n      \"timeout\": null,\n      \"url\": null\n    },\n    \"csv\": {\n      \"columns\": null,\n      \"delimiter\": null,\n      \"encoding\": null,\n      \"has_header\": null,\n      \"path\": null,\n      \"watch_changes\": null\n    },\n    \"edgelake\": {\n      \"host\": null,\n      \"port\": null,\n      \"timeout\": null,\n      \"use_distributed_query\": null\n    },\n    \"frigate\": {\n      \"go2rtc_port\": null,\n      \"host\": null,\n      \"password\": null,\n      \"port\": null,\n      \"username\": null\n    },\n    \"mqtt\": {\n      \"broker_url\": null,\n      \"buffer_size\": null,\n      \"clean_start\": null,\n      \"client_id\": null,\n      \"keep_alive\": null,\n      \"password\": null,\n      \"qos\": null,\n      \"tls\": null,\n      \"username\": null\n    },\n    \"prometheus\": {\n      \"insecure_skip_verify\": null,\n      \"password\": null,\n      \"timeout\": null,\n      \"url\": null,\n      \"username\": null\n    },\n    \"socket\": {\n      \"bidirectional\": null,\n      \"buffer_size\": null,\n      \"headers\": null,\n      \"insecure_skip_verify\": null,\n      \"message_format\": null,\n      \"parser\": null,\n      \"ping_interval\": null,\n      \"protocol\": null,\n      \"reconnect_delay\": null,\n      \"reconnect_on_error\": null,\n      \"url\": null\n    },\n    \"sql\": {\n      \"database\": null,\n      \"driver\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"max_connections\": null,\n      \"options\": null,\n      \"password\": null,\n      \"port\": null,\n      \"ssl\": null,\n      \"timeout\": null,\n      \"username\": null\n    },\n    \"tsstore\": {\n      \"api_key\": null,\n      \"data_type\": null,\n      \"headers\": null,\n      \"host\": null,\n      \"insecure_skip_verify\": null,\n      \"port\": null,\n      \"protocol\": null,\n      \"push\": null,\n      \"store_name\": null,\n      \"timeout\": null,\n      \"transport\": null\n    }\n  },\n  \"id\": \"\",\n  \"type\": null,\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update a datasource",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/datasources/{id}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "datasources",
-                ":id"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Datasource ID"
-                }
-              ]
-            },
-            "description": "Update a datasource\n\nUpdate an existing datasource by ID\n\n\nResponses: 200, 400, 404, 500",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"config\": null,\n  \"description\": \"\",\n  \"name\": \"\",\n  \"namespace\": \"\",\n  \"supported_schemas\": [\n    \"\"\n  ],\n  \"tags\": [\n    \"\"\n  ],\n  \"type_config\": {},\n  \"type_id\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

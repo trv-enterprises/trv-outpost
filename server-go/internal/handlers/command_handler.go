@@ -78,7 +78,7 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 			respondError(c, err)
 			return
 		}
-		c.JSON(http.StatusNotFound, gin.H{"error": "datasource not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})
 		return
 	}
 

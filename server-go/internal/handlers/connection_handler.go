@@ -32,29 +32,29 @@ func enrichWithCapabilities(ds *models.Connection) connectionResponse {
 	return resp
 }
 
-// ConnectionHandler handles datasource HTTP requests
+// ConnectionHandler handles connection HTTP requests
 type ConnectionHandler struct {
 	service *service.ConnectionService
 }
 
-// NewConnectionHandler creates a new datasource handler
+// NewConnectionHandler creates a new connection handler
 func NewConnectionHandler(service *service.ConnectionService) *ConnectionHandler {
 	return &ConnectionHandler{
 		service: service,
 	}
 }
 
-// CreateConnection handles datasource creation
-// @Summary Create a new datasource
+// CreateConnection handles connection creation
+// @Summary Create a new connection
 // @Description Create a new data source (API, WebSocket, or File)
-// @Tags datasources
+// @Tags connections
 // @Accept json
 // @Produce json
-// @Param datasource body models.CreateConnectionRequest true "Datasource to create"
+// @Param connection body models.CreateConnectionRequest true "Connection to create"
 // @Success 201 {object} models.Connection
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /datasources [post]
+// @Router /connections [post]
 func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 	var req models.CreateConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -62,14 +62,14 @@ func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 		return
 	}
 
-	datasource, err := h.service.CreateConnection(c.Request.Context(), &req)
+	connection, err := h.service.CreateConnection(c.Request.Context(), &req)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
 	// Sanitize sensitive fields and enrich with capabilities before returning
-	c.JSON(http.StatusCreated, enrichWithCapabilities(datasource.SanitizeForAPI()))
+	c.JSON(http.StatusCreated, enrichWithCapabilities(connection.SanitizeForAPI()))
 }
 
 // ListConnections handles connection listing
@@ -159,27 +159,27 @@ func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 	})
 }
 
-// GetConnection handles retrieving a single datasource
-// @Summary Get a datasource by ID
-// @Description Retrieve a single datasource by its ID
-// @Tags datasources
+// GetConnection handles retrieving a single connection
+// @Summary Get a connection by ID
+// @Description Retrieve a single connection by its ID
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {object} models.Connection
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id} [get]
+// @Router /connections/{id} [get]
 func (h *ConnectionHandler) GetConnection(c *gin.Context) {
 	id := c.Param("id")
 
-	datasource, err := h.service.GetConnection(c.Request.Context(), id)
+	connection, err := h.service.GetConnection(c.Request.Context(), id)
 	if err != nil {
 		// #4: a namespace-grant miss is a 403, not a bad request.
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -187,22 +187,22 @@ func (h *ConnectionHandler) GetConnection(c *gin.Context) {
 	}
 
 	// Sanitize sensitive fields and enrich with capabilities before returning
-	c.JSON(http.StatusOK, enrichWithCapabilities(datasource.SanitizeForAPI()))
+	c.JSON(http.StatusOK, enrichWithCapabilities(connection.SanitizeForAPI()))
 }
 
-// UpdateConnection handles datasource updates
-// @Summary Update a datasource
-// @Description Update an existing datasource by ID
-// @Tags datasources
+// UpdateConnection handles connection updates
+// @Summary Update a connection
+// @Description Update an existing connection by ID
+// @Tags connections
 // @Accept json
 // @Produce json
-// @Param id path string true "Datasource ID"
-// @Param datasource body models.UpdateConnectionRequest true "Datasource updates"
+// @Param id path string true "Connection ID"
+// @Param connection body models.UpdateConnectionRequest true "Connection updates"
 // @Success 200 {object} models.Connection
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /datasources/{id} [put]
+// @Router /connections/{id} [put]
 func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 	id := c.Param("id")
 
@@ -212,10 +212,10 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 		return
 	}
 
-	datasource, err := h.service.UpdateConnection(c.Request.Context(), id, &req)
+	connection, err := h.service.UpdateConnection(c.Request.Context(), id, &req)
 	if err != nil {
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		respondError(c, err)
@@ -223,22 +223,22 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 	}
 
 	// Sanitize sensitive fields and enrich with capabilities before returning
-	c.JSON(http.StatusOK, enrichWithCapabilities(datasource.SanitizeForAPI()))
+	c.JSON(http.StatusOK, enrichWithCapabilities(connection.SanitizeForAPI()))
 }
 
-// DeleteConnection handles datasource deletion. Returns 409 with a
+// DeleteConnection handles connection deletion. Returns 409 with a
 // usage payload when components or devices still reference the
 // connection — the frontend renders that into a clear "cannot delete"
 // dialog with the offender list.
-// @Summary Delete a datasource
-// @Description Delete a datasource by ID
-// @Tags datasources
-// @Param id path string true "Datasource ID"
+// @Summary Delete a connection
+// @Description Delete a connection by ID
+// @Tags connections
+// @Param id path string true "Connection ID"
 // @Success 204
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
-// @Router /datasources/{id} [delete]
+// @Router /connections/{id} [delete]
 func (h *ConnectionHandler) DeleteConnection(c *gin.Context) {
 	id := c.Param("id")
 
@@ -266,16 +266,16 @@ func (h *ConnectionHandler) DeleteConnection(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// TestConnection handles datasource connection testing
-// @Summary Test a datasource connection
-// @Description Test a datasource connection without saving it
-// @Tags datasources
+// TestConnection handles connection connection testing
+// @Summary Test a connection connection
+// @Description Test a connection connection without saving it
+// @Tags connections
 // @Accept json
 // @Produce json
-// @Param datasource body models.TestConnectionRequest true "Datasource configuration to test"
+// @Param connection body models.TestConnectionRequest true "Connection configuration to test"
 // @Success 200 {object} models.TestConnectionResponse
 // @Failure 400 {object} map[string]interface{}
-// @Router /datasources/test [post]
+// @Router /connections/test [post]
 func (h *ConnectionHandler) TestConnection(c *gin.Context) {
 	var req models.TestConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -292,16 +292,16 @@ func (h *ConnectionHandler) TestConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// CheckConnectionHealth handles health check for a specific datasource
-// @Summary Check datasource health
-// @Description Check the health of a specific datasource and update its status
-// @Tags datasources
+// CheckConnectionHealth handles health check for a specific connection
+// @Summary Check connection health
+// @Description Check the health of a specific connection and update its status
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {object} models.HealthInfo
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/health [post]
+// @Router /connections/{id}/health [post]
 func (h *ConnectionHandler) CheckConnectionHealth(c *gin.Context) {
 	id := c.Param("id")
 
@@ -311,8 +311,8 @@ func (h *ConnectionHandler) CheckConnectionHealth(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -322,18 +322,18 @@ func (h *ConnectionHandler) CheckConnectionHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, health)
 }
 
-// QueryConnection handles query execution for a datasource
-// @Summary Execute a query against a datasource
+// QueryConnection handles query execution for a connection
+// @Summary Execute a query against a connection
 // @Description Execute a query and return normalized results
-// @Tags datasources
+// @Tags connections
 // @Accept json
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param query body models.QueryRequest true "Query to execute"
 // @Success 200 {object} models.QueryResponse
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/query [post]
+// @Router /connections/{id}/query [post]
 func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 	id := c.Param("id")
 
@@ -358,8 +358,8 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -369,16 +369,16 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetConnectionSchema handles schema discovery for SQL datasources
-// @Summary Get database schema for a SQL datasource
-// @Description Retrieve tables and columns for SQL datasources. Only SQL-type datasources support this endpoint.
-// @Tags datasources
+// GetConnectionSchema handles schema discovery for SQL connections
+// @Summary Get database schema for a SQL connection
+// @Description Retrieve tables and columns for SQL connections. Only SQL-type connections support this endpoint.
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {object} models.SchemaResponse
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/schema [get]
+// @Router /connections/{id}/schema [get]
 func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 	id := c.Param("id")
 
@@ -388,8 +388,8 @@ func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -495,15 +495,15 @@ func (h *ConnectionHandler) SaveDiscoveredValues(c *gin.Context) {
 
 // GetPrometheusLabelValues retrieves possible values for a Prometheus label
 // @Summary Get values for a Prometheus label
-// @Description Retrieve all possible values for a specific label from a Prometheus datasource
-// @Tags datasources
+// @Description Retrieve all possible values for a specific label from a Prometheus connection
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param label path string true "Label name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/prometheus/labels/{label}/values [get]
+// @Router /connections/{id}/prometheus/labels/{label}/values [get]
 func (h *ConnectionHandler) GetPrometheusLabelValues(c *gin.Context) {
 	id := c.Param("id")
 	label := c.Param("label")
@@ -514,8 +514,8 @@ func (h *ConnectionHandler) GetPrometheusLabelValues(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -531,13 +531,13 @@ func (h *ConnectionHandler) GetPrometheusLabelValues(c *gin.Context) {
 // GetEdgeLakeDatabases retrieves databases from an EdgeLake data source
 // @Summary Get databases from an EdgeLake data source
 // @Description Retrieve all database names from an EdgeLake node's blockchain registry
-// @Tags datasources
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/edgelake/databases [get]
+// @Router /connections/{id}/edgelake/databases [get]
 func (h *ConnectionHandler) GetEdgeLakeDatabases(c *gin.Context) {
 	id := c.Param("id")
 
@@ -547,8 +547,8 @@ func (h *ConnectionHandler) GetEdgeLakeDatabases(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -563,14 +563,14 @@ func (h *ConnectionHandler) GetEdgeLakeDatabases(c *gin.Context) {
 // GetEdgeLakeTables retrieves tables for a database from an EdgeLake data source
 // @Summary Get tables from an EdgeLake data source
 // @Description Retrieve table names for a specific database from an EdgeLake node
-// @Tags datasources
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param database query string true "Database name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/edgelake/tables [get]
+// @Router /connections/{id}/edgelake/tables [get]
 func (h *ConnectionHandler) GetEdgeLakeTables(c *gin.Context) {
 	id := c.Param("id")
 	database := c.Query("database")
@@ -586,8 +586,8 @@ func (h *ConnectionHandler) GetEdgeLakeTables(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -603,15 +603,15 @@ func (h *ConnectionHandler) GetEdgeLakeTables(c *gin.Context) {
 // GetEdgeLakeSchema retrieves column schema for a table from an EdgeLake data source
 // @Summary Get table schema from an EdgeLake data source
 // @Description Retrieve column names and types for a specific table from an EdgeLake node
-// @Tags datasources
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param database query string true "Database name"
 // @Param table query string true "Table name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /datasources/{id}/edgelake/schema [get]
+// @Router /connections/{id}/edgelake/schema [get]
 func (h *ConnectionHandler) GetEdgeLakeSchema(c *gin.Context) {
 	id := c.Param("id")
 	database := c.Query("database")
@@ -632,8 +632,8 @@ func (h *ConnectionHandler) GetEdgeLakeSchema(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -650,9 +650,9 @@ func (h *ConnectionHandler) GetEdgeLakeSchema(c *gin.Context) {
 // GetMQTTTopics discovers available topics from an MQTT broker
 // @Summary Get topics from an MQTT broker
 // @Description Subscribe briefly to discover available topics on an MQTT broker
-// @Tags datasources
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
@@ -666,8 +666,8 @@ func (h *ConnectionHandler) GetMQTTTopics(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -682,9 +682,9 @@ func (h *ConnectionHandler) GetMQTTTopics(c *gin.Context) {
 // SampleMQTTTopic subscribes to a single MQTT topic and returns the message schema
 // @Summary Sample a single MQTT topic
 // @Description Subscribe to a topic and return the first message's schema (columns and sample values)
-// @Tags datasources
+// @Tags connections
 // @Produce json
-// @Param id path string true "Datasource ID"
+// @Param id path string true "Connection ID"
 // @Param topic query string true "MQTT topic to sample"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
@@ -704,8 +704,8 @@ func (h *ConnectionHandler) SampleMQTTTopic(c *gin.Context) {
 		if respondIfNamespaceForbidden(c, err) {
 			return
 		}
-		if err.Error() == "datasource not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

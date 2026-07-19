@@ -400,7 +400,7 @@ func (m *Manager) IsStreamingConnection(ctx context.Context, connectionID string
 		return false, err
 	}
 	if ds == nil {
-		return false, fmt.Errorf("datasource not found")
+		return false, fmt.Errorf("connection not found")
 	}
 	switch ds.Type {
 	case models.ConnectionTypeSocket, models.ConnectionTypeMQTT:
