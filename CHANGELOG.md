@@ -6,6 +6,33 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.41.1] — 2026-07-19
+
+### Fixed
+
+- **Mobile view: display and text panels no longer vanish.** A CSS
+  size-containment rule on every mobile row made row height independent
+  of content, so display panels (frigate cameras/alerts, weather) —
+  which had no explicit height rule — collapsed to zero height and
+  silently disappeared, and text panels were pinned to a sliver.
+  Containment now applies only where it's needed (the number tile's
+  container-relative font); displays get a proper chart-sized box.
+- **Mobile fullscreen now hides the browser chrome.** Tapping
+  fullscreen requests native browser fullscreen alongside the overlay —
+  Safari's URL/tab bars (iPhone, Safari 16.4+) and Android's URL/status
+  bars get out of the way, with safe-area padding for the notch/home
+  indicator and a clean fallback to the plain overlay on older
+  browsers. System exits (swipe-down, Android back) close the overlay
+  in lockstep.
+- **Missing connections return 404 again (and the API docs stopped
+  advertising dead routes).** The connection handler still carried the
+  retired "datasource" wording: requesting a missing connection fell
+  through to 400 instead of 404 on eleven endpoints (get, update,
+  query, schema, health, EdgeLake/Prometheus discovery), and Swagger +
+  the generated Postman collection documented 12 dead
+  `/api/datasources/*` paths while the live `/api/connections/*` routes
+  were absent. All renamed, regenerated, and consistent.
+
 ## [0.41.0] — 2026-07-19
 
 ### Added
