@@ -629,18 +629,52 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
             // Convert columnar result to record objects for processStreamRecord.
             // The chart trusts row order and never sorts (line.js builds a category
             // x-axis straight from arrival order), so backfill rows must be fed
-            // OLDEST-FIRST to paint left→right like SQL charts.
+            // OLDEST-FIRST to paint left→right, newest data on the right (the
+            // industry-standard time-series direction).
             //
-            // Source ordering differs by connection type:
-            //   - ts-store ('newest' / 'since:' both hit /data/newest) returns
-            //     NEWEST-first (descending) → reverse to oldest-first.
-            //   - raw socket / websocket / mqtt collect live records in ARRIVAL
-            //     order → already oldest-first; reversing them flips the chart to
-            //     right→left (the bug this guards against).
+            // Order is DETECTED from the data, not assumed from the connection
+            // type: ts-store's endpoints disagree — a plain `newest` pull returns
+            // NEWEST-first (descending), but a `since:`/`range:` + step pull
+            // returns OLDEST-first (ascending). Keying the reversal on type alone
+            // (the old `datasourceType === 'tsstore'` heuristic) flipped the
+            // stepped range path to newest-first → older data on the RIGHT.
+            // Raw socket / websocket / mqtt arrive in arrival order (oldest-first)
+            // and must not be reversed. Detecting from the timestamps handles all
+            // of these without a per-endpoint table.
             const { columns, rows } = result.data;
-            const sourceIsNewestFirst = datasourceType === 'tsstore';
-            const ordered = sourceIsNewestFirst ? [...rows].reverse() : rows;
+            const tsColIdx = columns.indexOf(
+              parser?.timestampField || 'timestamp'
+            );
+            const toMs = (v) => {
+              if (v == null) return null;
+              if (v instanceof Date) return v.getTime();
+              const n = Number(v);
+              // ts-store timestamps can be epoch ns/us/ms/s; magnitude-normalize
+              // only enough to compare ORDER (absolute scale is irrelevant here).
+              return Number.isFinite(n) ? n : Date.parse(v);
+            };
+            let descending = false;
+            if (tsColIdx >= 0 && rows.length >= 2) {
+              const firstTs = toMs(rows[0][tsColIdx]);
+              const lastTs = toMs(rows[rows.length - 1][tsColIdx]);
+              if (firstTs != null && lastTs != null) descending = firstTs > lastTs;
+            } else if (tsColIdx < 0) {
+              // No detectable timestamp column → fall back to the historical
+              // type heuristic so non-timestamped ts-store pulls still order.
+              descending = datasourceType === 'tsstore';
+            }
+            const ordered = descending ? [...rows].reverse() : rows;
             ordered.forEach(row => {
+              // A ts-store range/step pull emits a leading empty bucket with
+              // timestamp 0 (epoch 1970). Left in, it drags the x-axis origin to
+              // 1970 and crushes the real data into a sliver on the right. Drop
+              // rows whose timestamp is missing/non-positive — only when we HAVE
+              // a timestamp column to judge by (tsColIdx>=0), so non-timestamped
+              // sources are unaffected.
+              if (tsColIdx >= 0) {
+                const t = toMs(row[tsColIdx]);
+                if (t == null || t <= 0) return;
+              }
               const record = {};
               columns.forEach((col, i) => { record[col] = row[i]; });
               processStreamRecord(record);
