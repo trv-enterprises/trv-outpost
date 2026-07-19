@@ -1940,7 +1940,7 @@
             "description": "Apply an import bundle\n\nWrites the bundle's objects into the target namespace. Identical objects are skipped; conflicts are overwritten unless OverwriteDecisions explicitly opts out; blocked objects cause the whole apply to refuse.\n\n\nResponses: 200, 400",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"bundle\": {\n    \"exported_at\": \"\",\n    \"exported_by\": \"\",\n    \"format_version\": 0,\n    \"objects\": {\n      \"components\": null,\n      \"connections\": null,\n      \"dashboards\": null\n    },\n    \"source_namespace\": \"\"\n  },\n  \"overwrite_decisions\": {\n    \"<key>\": false\n  },\n  \"target_namespace\": \"\"\n}",
+              "raw": "{\n  \"bundle\": {\n    \"exported_at\": \"\",\n    \"exported_by\": \"\",\n    \"format_version\": 0,\n    \"objects\": {\n      \"components\": null,\n      \"connections\": null,\n      \"dashboards\": null\n    },\n    \"source_namespace\": \"\",\n    \"warnings\": [\n      \"\"\n    ]\n  },\n  \"overwrite_decisions\": {\n    \"<key>\": false\n  },\n  \"target_namespace\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2391,7 +2391,7 @@
             "description": "Preflight an import bundle\n\nClassifies each object in the bundle as identical/conflict/new/blocked so the UI can show what would change before the user commits.\n\n\nResponses: 200, 400",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"bundle\": {\n    \"exported_at\": \"\",\n    \"exported_by\": \"\",\n    \"format_version\": 0,\n    \"objects\": {\n      \"components\": null,\n      \"connections\": null,\n      \"dashboards\": null\n    },\n    \"source_namespace\": \"\"\n  },\n  \"target_namespace\": \"\"\n}",
+              "raw": "{\n  \"bundle\": {\n    \"exported_at\": \"\",\n    \"exported_by\": \"\",\n    \"format_version\": 0,\n    \"objects\": {\n      \"components\": null,\n      \"connections\": null,\n      \"dashboards\": null\n    },\n    \"source_namespace\": \"\",\n    \"warnings\": [\n      \"\"\n    ]\n  },\n  \"target_namespace\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
