@@ -7,12 +7,12 @@ import PropTypes from 'prop-types';
 import { Dropdown, DatePicker, DatePickerInput, TimePicker, Tooltip } from '@carbon/react';
 import {
   DEFAULT_RANGE_PRESETS,
-  STEP_PRESETS,
   DEFAULT_STEP,
   presetLabel,
   resolveIntentToAbsolute,
   clampStep,
   maxPointsForType,
+  stepsForWindow,
 } from '../utils/rangePresets';
 
 /**
@@ -106,14 +106,37 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
   // (server + client). When that happens, surface the coarser effective step so
   // the dropdown selection isn't silently overridden without explanation.
   const maxPoints = maxPointsForType(stepType);
+  const windowMs = useMemo(() => {
+    const abs = resolveIntentToAbsolute(value);
+    if (!abs) return 0;
+    return new Date(abs.to).getTime() - new Date(abs.from).getTime();
+  }, [value]);
   const effectiveStep = useMemo(() => {
     if (!showStep || !step) return step;
-    const abs = resolveIntentToAbsolute(value);
-    if (!abs) return step;
-    const windowMs = new Date(abs.to).getTime() - new Date(abs.from).getTime();
+    if (!windowMs) return step;
     return clampStep(step, windowMs, maxPoints);
-  }, [showStep, step, value, maxPoints]);
+  }, [showStep, step, windowMs, maxPoints]);
   const stepClamped = showStep && effectiveStep !== step;
+
+  // Only offer steps that draw a readable number of points for this window —
+  // hides sub-minute steps on wide ranges (see stepsForWindow). Falls back to
+  // the full list when the window isn't resolvable yet.
+  const stepItems = useMemo(
+    () => stepsForWindow(windowMs, maxPoints),
+    [windowMs, maxPoints]
+  );
+
+  // Widening the range can make the ACTIVE step (e.g. 15s) no longer offerable
+  // (15s on 24h isn't readable). Snap the stored step up to the finest still-
+  // offered one so the value that flows to the query matches the dropdown — the
+  // display-only snap on the Dropdown isn't enough; value.step must change too.
+  useEffect(() => {
+    if (!showStep || !value?.type || !value?.step) return;
+    if (stepItems.length && !stepItems.includes(value.step)) {
+      onChange({ ...value, step: stepItems[0] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showStep, stepItems, value?.step, value?.type, value?.token, value?.from, value?.to]);
 
   // Preserve the active step when switching window kind so a Prometheus
   // dashboard's resolution survives a preset/custom change.
@@ -244,9 +267,9 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
             size="sm"
             titleText="Step"
             label="Step"
-            items={STEP_PRESETS}
+            items={stepItems}
             itemToString={(item) => (item == null ? '' : String(item))}
-            selectedItem={step || null}
+            selectedItem={stepItems.includes(step) ? step : (stepItems[0] || null)}
             onChange={({ selectedItem: it }) => handleStep(it)}
           />
           {stepClamped && (
