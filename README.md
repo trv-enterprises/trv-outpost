@@ -289,6 +289,26 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production
 deployment options (HTTPS via Let's Encrypt, building images from
 source, backup + restore).
 
+### Install on a phone (Add to Home Screen)
+
+The app ships a web-app manifest, so a phone can run it like an
+installed app — launched from its own home-screen icon with **no
+browser UI at all**, which pairs with the mobile layout for an
+edge-to-edge dashboard. Nothing to configure server-side; just open
+your deployment's URL on the phone and install:
+
+- **iPhone / iPad (Safari)** — tap **Share → Add to Home Screen**,
+  then launch from the new icon. (On iPhone this is also the only
+  way to a truly fullscreen dashboard — Safari doesn't let web pages
+  fullscreen arbitrary elements, so the in-browser fullscreen view
+  keeps Safari's bars.)
+- **Android (Chrome)** — accept the **Install app** prompt, or menu
+  **⋮ → Add to Home screen**.
+
+Works over HTTPS (or plain HTTP on a trusted LAN). Sign-in state is
+kept separately from the browser tab, so you'll log in once on first
+launch.
+
 ## Application modes
 
 - **Design mode** (`/design/*`) — author connections, components,

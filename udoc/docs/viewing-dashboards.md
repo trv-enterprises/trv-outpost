@@ -125,5 +125,21 @@ dashboard tile grid — it reflows to a mobile-friendly layout, with the
 search box always visible and the namespace / tag / connection filters
 tucked behind a **Filters** button to save space.
 
+### Install as an app (Add to Home Screen)
+
+For a dashboard with **no browser UI at all**, install the app on your
+home screen — it launches edge-to-edge like a native app:
+
+- **iPhone / iPad (Safari)**: tap **Share → Add to Home Screen**, then
+  open from the new icon. On iPhone this is also the only way to get a
+  truly fullscreen view — Safari doesn't allow web pages to fullscreen
+  chart panels, so the in-browser fullscreen keeps Safari's bars.
+  (Android and iPad fullscreen the panel natively in the browser too.)
+- **Android (Chrome)**: accept the **Install app** prompt, or use
+  **⋮ → Add to Home screen**.
+
+You'll sign in once on first launch — the installed app keeps its own
+session, separate from the browser's.
+
 > **Note:** Mobile is a viewing experience. To create or edit dashboards,
 > components, or connections, use a desktop browser.
