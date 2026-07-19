@@ -33,6 +33,7 @@ import { queryData, queryComponentData, queryBackfillShared } from '../api/dataC
 import apiClient from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getStreamBufferSize } from '../utils/streamBufferConfig';
+import { TSSTORE_MAX_POINTS } from '../utils/rangePresets';
 import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
 
 // Backfill queries can pull up to the full stream buffer (e.g. `newest
@@ -121,7 +122,20 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // A per-call maxBuffer wins; otherwise use the deployment-wide default
   // (admin setting stream_buffer_size, set at bootstrap). Applies to both
   // spec-driven and eval'd custom-code charts.
-  const effectiveMaxBuffer = (Number.isFinite(maxBuffer) && maxBuffer > 0) ? maxBuffer : getStreamBufferSize();
+  //
+  // When a dashboard RANGE is active, the buffer must hold the whole windowed
+  // backfill — the live-tail default (1000) would re-clip a wide window to its
+  // most-recent 1000 points (e.g. 24h@1m = 1442 rows trimmed to ~16.6h), the
+  // client-side twin of the server buffer-limit trap. The server already caps a
+  // ranged pull at the step point budget, so that budget is the natural ceiling
+  // — the window can never return more. Take the larger of it and the live
+  // buffer so a bigger admin buffer isn't shrunk, and an explicit maxBuffer
+  // still wins. TSSTORE_MAX_POINTS is the right (and only) budget here: the
+  // ranged streaming-backfill path below is ts-store-only. If another step-aware
+  // type ever gains one, switch to maxPointsForType(datasourceType).
+  const rangeActive = !!(rangeValue && rangeValue.type);
+  const baseBuffer = (Number.isFinite(maxBuffer) && maxBuffer > 0) ? maxBuffer : getStreamBufferSize();
+  const effectiveMaxBuffer = rangeActive ? Math.max(baseBuffer, TSSTORE_MAX_POINTS) : baseBuffer;
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
