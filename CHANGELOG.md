@@ -6,6 +6,16 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.41.3] — 2026-07-19
+
+### Fixed
+
+- **Home-screen icon shows the logo instead of a letter tile on iOS.**
+  The PWA icons were encoded as 16-bit-per-channel PNGs (a side effect
+  of the SVG compose), which iOS rejects for apple-touch-icons — Safari
+  fell back to a monogram. Re-encoded as standard 8-bit PNGs and added
+  the `sizes` attribute to the icon link.
+
 ## [0.41.2] — 2026-07-19
 
 ### Added
