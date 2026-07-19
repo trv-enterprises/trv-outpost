@@ -9501,6 +9501,13 @@ const docTemplate = `{
                 "source_namespace": {
                     "description": "Empty string when the export spans multiple namespaces",
                     "type": "string"
+                },
+                "warnings": {
+                    "description": "Warnings captured at build time that can't be recomputed from Objects\nalone — e.g. a connection_swap target that was omitted because it's in a\nnamespace the exporter can't see. Recomputable warnings (dangling\ncomponent refs) are derived by bundleWarnings and not stored here.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

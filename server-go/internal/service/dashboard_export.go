@@ -22,12 +22,17 @@ func (s *DashboardService) PreviewExport(ctx context.Context, dashboardIDs []str
 	if err != nil {
 		return nil, err
 	}
+	// Recomputable warnings (dangling refs) + build-time warnings stored on the
+	// bundle (omitted swap targets, which can't be re-derived from Objects).
+	warnings := bundleWarnings(bundle)
+	warnings = append(warnings, bundle.Warnings...)
+
 	return &models.ExportPreview{
 		ConnectionCount: len(bundle.Objects.Connections),
 		ComponentCount:  len(bundle.Objects.Components),
 		DashboardCount:  len(bundle.Objects.Dashboards),
 		SourceNamespace: bundle.SourceNamespace,
-		Warnings:        bundleWarnings(bundle),
+		Warnings:        warnings,
 	}, nil
 }
 
@@ -58,6 +63,11 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 	dashboards := make([]models.Dashboard, 0, len(dashboardIDs))
 	chartIDsSeen := make(map[string]struct{})
 	dsIDsSeen := make(map[string]struct{})
+	// Connections discovered via connection_swap variables (matched by tag).
+	// Kept separate from dsIDsSeen because they're a looser dependency: an
+	// ungranted one is skipped with a warning rather than blocking the export.
+	swapDSIDsSeen := make(map[string]struct{})
+	var swapWarnings []string
 	namespaceCounts := make(map[string]int)
 
 	// Pass 1: load dashboards + collect chart/connection IDs they reference.
@@ -92,6 +102,34 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 				if ov.ComponentID != "" {
 					chartIDsSeen[ov.ComponentID] = struct{}{}
 				}
+			}
+		}
+
+		// connection_swap variables select between connections by TAG (not by a
+		// stored id), rediscovered on the target at view time. Bundle the
+		// connections that currently match so the variable's dropdown isn't
+		// empty on the far side. These are a LOOSER dependency than a component's
+		// connection_id — they're a live tag-query result, not an explicit
+		// reference — so a swap connection the caller can't see is SKIPPED (with
+		// a warning), not a hard export block. connByTags may be unwired in
+		// legacy/test construction; a nil discovery helper simply skips this.
+		for i := range dash.Settings.Variables {
+			v := &dash.Settings.Variables[i]
+			if v.Mode != models.VariableModeConnectionSwap || v.ConnectionSwap == nil {
+				continue
+			}
+			if s.connByTags == nil {
+				continue
+			}
+			matched, derr := s.discoverSwapConnections(ctx, dash.Namespace, v.ConnectionSwap)
+			if derr != nil {
+				return nil, fmt.Errorf("discovering swap connections for dashboard %s variable %q: %w", id, v.Name, derr)
+			}
+			for _, c := range matched {
+				if c == nil || c.ID == "" {
+					continue
+				}
+				swapDSIDsSeen[c.ID] = struct{}{}
 			}
 		}
 	}
@@ -152,6 +190,34 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 		connections = append(connections, *ds.SanitizeForExport())
 	}
 
+	// Pass 3b: connection_swap targets discovered by tag. Same load + sanitize
+	// path, but SKIP (don't block) when the connection is already bundled as a
+	// hard dependency, is missing, or the caller can't see it — a swap target is
+	// a looser, discovered dependency. Skips are surfaced as export warnings so
+	// the operator knows the far-side dropdown may be short a site.
+	for did := range swapDSIDsSeen {
+		if _, already := dsIDsSeen[did]; already {
+			continue // already bundled via a component's connection_id
+		}
+		ds, err := s.connectionRepo.FindByID(ctx, did)
+		if err != nil {
+			return nil, fmt.Errorf("loading swap connection %s: %w", did, err)
+		}
+		if ds == nil {
+			continue
+		}
+		if err := authz.CheckNamespace(ctx, ds.Namespace); err != nil {
+			// Ungranted swap target: skip it rather than blocking the whole
+			// export (unlike a hard connection dependency).
+			swapWarnings = append(swapWarnings, fmt.Sprintf(
+				"connection-swap target %q (%s) is in a namespace you can't export and was omitted; the variable's dropdown will be missing this option on import",
+				ds.Name, ds.ID,
+			))
+			continue
+		}
+		connections = append(connections, *ds.SanitizeForExport())
+	}
+
 	// Stable ordering inside each array so the bundle is deterministic
 	// (helps with diffs and re-import idempotency tests).
 	sort.SliceStable(connections, func(i, j int) bool { return connections[i].ID < connections[j].ID })
@@ -168,6 +234,7 @@ func (s *DashboardService) BuildExport(ctx context.Context, exportedBy string, d
 			Components:  components,
 			Dashboards:  dashboards,
 		},
+		Warnings: swapWarnings,
 	}, nil
 }
 
