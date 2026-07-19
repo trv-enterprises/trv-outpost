@@ -149,9 +149,12 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // Build transforms from dataMapping (memoized). The active dashboard-variable
   // value is threaded in so a {{dashboard-variable}} filter value resolves and
   // recomputes when the value changes (live re-filter for streaming panels).
+  // rangeActive suppresses the authored sliding window when a dashboard range
+  // is driving this panel — the range is the effective window (see #162).
+  const rangeActive = !!(rangeValue && rangeValue.type);
   const transforms = useMemo(
-    () => buildTransformsFromMapping(dataMapping, dashboardVariableValue),
-    [dataMapping, dashboardVariableValue]
+    () => buildTransformsFromMapping(dataMapping, dashboardVariableValue, null, rangeActive),
+    [dataMapping, dashboardVariableValue, rangeActive]
   );
 
   // Pass the active dashboard-variable value to the server in

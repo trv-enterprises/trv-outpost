@@ -725,11 +725,16 @@ export function stripRangePredicate(rawQuery = '') {
  *   the filter is dropped (no filter applied → show all).
  * @returns {Object|null} - Transforms config or null if no transforms needed
  */
-export function buildTransformsFromMapping(dataMapping, dashboardVariableValue = null, rangeFilter = null) {
+export function buildTransformsFromMapping(dataMapping, dashboardVariableValue = null, rangeFilter = null, rangeActive = false) {
   if (!dataMapping) return null;
 
   const { filters, aggregation, sort_by, sort_order, limit, sliding_window } = dataMapping;
-  const hasSlidingWindow = sliding_window?.duration > 0 && sliding_window?.timestamp_col;
+  // An ACTIVE dashboard range OVERRIDES the authored sliding window: the range
+  // IS the effective window now, and the backfill already fetched exactly that
+  // span. Leaving the sliding window on would re-clip the range data to the
+  // (usually shorter) authored duration — e.g. a 1h window silently trimming a
+  // 24h range to nothing. So suppress it while a range drives this panel.
+  const hasSlidingWindow = !rangeActive && sliding_window?.duration > 0 && sliding_window?.timestamp_col;
   // rangeFilter = { column, from, to } (absolute instants) for client-side
   // parity on streaming panels: clamp `column` to [from, to] the same way the
   // server's range expansion clamps the batch query.
