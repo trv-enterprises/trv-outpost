@@ -51,6 +51,23 @@ const BACKFILL_TIMEOUT_MS = 45_000;
 const REST_FETCH_TIMEOUT_MS = 45_000;
 
 /**
+ * isAbortError — was this error a deliberate fetch/stream abort, across browsers?
+ * Chrome throws a DOMException named 'AbortError'. Firefox, when a STREAMING
+ * fetch (response.body reader) is aborted mid-read, throws a TypeError whose
+ * message is "Error in input stream" or "NetworkError when attempting to fetch
+ * resource" — NOT named AbortError. Keying only on the name lets Firefox aborts
+ * fall through as real errors (spurious panel "Data Error", and — on the
+ * aggregated SSE path — an endless reconnect→new-aggregator loop). Prefer a
+ * caller-supplied signal when available; fall back to name + message sniffing.
+ */
+function isAbortError(err, signal = null) {
+  if (signal?.aborted) return true;
+  if (err?.name === 'AbortError') return true;
+  const msg = String(err?.message || '');
+  return /input stream|NetworkError when attempting to fetch/i.test(msg);
+}
+
+/**
  * Extract a nested value from an object using dot-notation path.
  * E.g., getNestedValue({a: {b: {c: 1}}}, 'a.b.c') → 1
  */
@@ -450,6 +467,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       return;
     }
 
+
     mountedRef.current = true;
     let reconnectTimeout = null;
     let abortController = null;
@@ -462,8 +480,15 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       const url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream/aggregated`;
 
       try {
-        // Build headers including user auth
-        const headers = { 'Content-Type': 'application/json' };
+        // Build headers including user auth. This is a fetch (not EventSource),
+        // so it carries the Bearer token via a header — the ?st= query is only
+        // for header-less EventSource/WebSocket. Without it the endpoint 401s on
+        // a session-JWT deployment (X-User-ID alone isn't valid when legacy GUID
+        // auth is off). X-User-ID stays for the legacy-GUID path.
+        const headers = {
+          'Content-Type': 'application/json',
+          ...apiClient.streamAuthHeaders(),
+        };
         const userGuid = apiClient.getCurrentUserGuid();
         if (userGuid) {
           headers['X-User-ID'] = userGuid;
@@ -528,7 +553,15 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           }
         }
       } catch (err) {
-        if (err.name === 'AbortError') return; // Normal cleanup
+        // A deliberate abort (effect cleanup / unmount / supersede) is normal —
+        // NOT a connection failure, and must not trigger a reconnect. Detect it
+        // by the SIGNAL, not the error name: Chrome throws AbortError, but
+        // Firefox throws "TypeError: Error in input stream" / "NetworkError"
+        // when a streaming fetch is aborted mid-read. Keying only on err.name
+        // let those fall through to handleConnectionError → reconnect → a NEW
+        // aggregator every cleanup, thrashing the SSE (browser-specific loop,
+        // seen in Firefox).
+        if (isAbortError(err, abortController?.signal)) return;
 
         console.error('[useData] Aggregated stream error:', err);
         if (mountedRef.current) {
@@ -663,7 +696,21 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
               // type heuristic so non-timestamped ts-store pulls still order.
               descending = datasourceType === 'tsstore';
             }
-            const ordered = descending ? [...rows].reverse() : rows;
+            let ordered = descending ? [...rows].reverse() : rows;
+            // Stage 3/4 seam (#162): when live data arrives via the AGGREGATED
+            // stream, drop the backfill's trailing bucket. The REST backfill
+            // Flushes its last window even when PARTIAL (batch.go), but the live
+            // aggregator emits only CLOSED buckets (aggregator.go, "don't emit
+            // current bucket"). So the newest backfill bucket is a partial avg,
+            // and live will later emit that same bucket boundary as a COMPLETE
+            // avg — appending both yields two rows at one timestamp (a doubled
+            // x-tick + a small kink at the handoff). Dropping the partial lets
+            // live own the leading edge cleanly. `ordered` is oldest-first, so
+            // the trailing bucket is the last element. Only when aggregated (a
+            // raw backfill has no live re-emit to defer to).
+            if (useAggregated && ordered.length > 0) {
+              ordered = ordered.slice(0, -1);
+            }
             ordered.forEach(row => {
               // A ts-store range/step pull emits a leading empty bucket with
               // timestamp 0 (epoch 1970). Left in, it drags the x-axis origin to
@@ -681,7 +728,11 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
             });
           }
         } catch (err) {
-          console.warn('[useData] Backfill query failed, streaming will start empty:', err.message);
+          // AbortError here is a deliberate cancel; anything else means the
+          // backfill couldn't paint history — the live stream still starts.
+          if (!isAbortError(err)) {
+            console.warn('[useData] Backfill query failed, streaming will start empty:', err.message);
+          }
         }
       }
 
@@ -789,20 +840,35 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         isInitialFetchRef.current = false; // Mark initial fetch as complete
       }
     } catch (err) {
-      // A superseded fetch was aborted on purpose — not a real error, and its
-      // successor is already running, so leave state to that newer fetch.
-      const aborted = abortController.signal.aborted && myGen !== fetchGenRef.current;
-      if (!aborted && mountedRef.current && myGen === fetchGenRef.current) {
-        setError(err);
+      // An AbortError is NEVER a user-facing error — it's always one of our own
+      // deliberate aborts: a superseded fetch (query/range/connection change), a
+      // timeout, or the unmount/cleanup abort. Surfacing it renders a spurious
+      // "Data Error: The operation was aborted" on the panel even though the data
+      // is fine (or a newer fetch is already replacing it). This is broader than
+      // the old myGen-only guard, which missed the case where the current fetch
+      // is aborted by the SSE/connection-swap cleanup without a newer fetch in
+      // THIS hook bumping the generation.
+      const aborted = isAbortError(err, abortController.signal);
+      if (mountedRef.current && myGen === fetchGenRef.current) {
+        // This is the LATEST fetch (no newer one superseded it), so nobody else
+        // will clear the loading state — we must, whether it errored or was
+        // aborted. A non-abort error surfaces to the panel; an abort of the
+        // latest fetch (e.g. the effect-cleanup abort with no successor, or a
+        // timeout) is NOT a user error but still ends "loading" — otherwise the
+        // panel hangs on the spinner forever with no error (the stuck-Loading
+        // bug). A SUPERSEDED abort (older gen) is skipped: its successor owns
+        // the state and will clear it.
+        if (!aborted) setError(err);
         setLoading(false);
       }
     } finally {
       clearTimeout(timeoutHandle);
-      // Only clear the in-flight flag if we're still the latest fetch; a newer
-      // fetch may already own it.
-      if (myGen === fetchGenRef.current) {
-        fetchingRef.current = false;
-      }
+      // ALWAYS release the in-flight flag — every fetch that set it must clear
+      // it, or a superseded fetch that never becomes "latest" leaves it stuck
+      // true forever, permanently blocking refetch() (which early-returns on
+      // fetchingRef) → the panel hangs on "Loading…". The generation guard is
+      // for APPLYING results (above), not for releasing this flag.
+      fetchingRef.current = false;
     }
   }, [connectionId, queryKey, useCache, runQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -929,7 +995,10 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       }
     } catch (err) {
       if (mountedRef.current) {
-        setError(err);
+        // AbortError is a deliberate cancel, not a data error — don't surface it.
+        // But ALWAYS end the loading state, or an aborted refetch leaves the
+        // spinner stuck (the same stuck-Loading bug as the main fetch path).
+        if (!isAbortError(err)) setError(err);
         setLoading(false);
       }
     } finally {

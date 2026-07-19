@@ -203,12 +203,22 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
   // Use data hook when we need to fetch (always called but disabled when not needed)
   // dataRefreshInterval is in milliseconds, passed from dashboard settings
   // timeBucket enables server-side aggregation for socket datasources
-  // Include series_col from dataMapping.series for time bucket partitioning
+  // Include series_col from dataMapping.series for time bucket partitioning.
+  //
+  // NOTE (#162 stage 3): an earlier cut SYNTHESIZED a timeBucket from the range
+  // step so live pushes bucketed to match the ranged backfill — but that routed
+  // EACH range-active chart to its OWN /stream/aggregated SSE, whereas the raw
+  // path shares ONE StreamConnectionManager stream per connection. N charts →
+  // N SSE streams saturated the browser's HTTP/1.1 per-host connection cap
+  // (~6) in dev, leaving late charts stuck "Loading…". Reverted: range-active
+  // streaming charts stay on the shared raw stream (the behavior that worked
+  // before range backfill). Matching the LIVE tail to the step is deferred —
+  // it must share a stream by configKey (#84) rather than one SSE per chart.
   const timeBucketConfig = useMemo(() => {
     if (!dataMapping?.time_bucket) return null;
     return {
       ...dataMapping.time_bucket,
-      series_col: dataMapping.series || '' // Include series for bucket partitioning
+      series_col: dataMapping.series || '',
     };
   }, [dataMapping?.time_bucket, dataMapping?.series]);
 
