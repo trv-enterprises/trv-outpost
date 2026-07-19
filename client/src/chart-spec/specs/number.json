@@ -102,7 +102,7 @@
               "binds": "options.numberSize",
               "type": "enum",
               "label": "Value size (px)",
-              "default": "120",
+              "default": "56",
               "options": [
                 { "value": "12", "label": "12 px" },
                 { "value": "14", "label": "14 px" },

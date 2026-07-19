@@ -179,12 +179,21 @@ function DashboardTile({
   const componentItems = componentItemsProp != null ? componentItemsProp : (() => {
     const out = [];
     const seen = new Set();
+    // A panel references its default component_id AND every component-swap
+    // override (connection-alt) component. Both count so the popover/count
+    // match the summary path (component_usage) and the delete-orphan scan.
+    const addRef = (cid) => {
+      if (!cid || seen.has(cid)) return;
+      const comp = componentMap[cid];
+      if (!comp) return;
+      seen.add(cid);
+      out.push({ id: cid, label: comp.title || comp.name || '(unnamed)' });
+    };
     for (const panel of dashboard.panels || []) {
-      if (!panel.component_id || seen.has(panel.component_id)) continue;
-      const comp = componentMap[panel.component_id];
-      if (!comp) continue;
-      seen.add(panel.component_id);
-      out.push({ id: panel.component_id, label: comp.title || comp.name || '(unnamed)' });
+      addRef(panel.component_id);
+      for (const ov of panel.component_overrides || []) {
+        addRef(ov.component_id);
+      }
     }
     return out;
   })();

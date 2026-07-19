@@ -21,6 +21,7 @@ import {
 import { Add, TrashCan, Play, Copy } from '@carbon/icons-react';
 import api from '../api/client';
 import { copyTextToClipboard } from '../utils/clipboard';
+import { STEP_PRESETS as SHARED_STEP_PRESETS } from '../utils/rangePresets';
 import './PrometheusQueryBuilder.scss';
 
 /**
@@ -73,15 +74,17 @@ const TIME_RANGE_PRESETS = [
   { id: '7d', label: 'Last 7 days' },
 ];
 
-// Step presets
-const STEP_PRESETS = [
-  { id: '15s', label: '15 seconds' },
-  { id: '30s', label: '30 seconds' },
-  { id: '1m', label: '1 minute' },
-  { id: '5m', label: '5 minutes' },
-  { id: '15m', label: '15 minutes' },
-  { id: '1h', label: '1 hour' },
-];
+// Step presets — ids come from the shared list so this builder and the
+// dashboard range picker can't drift apart; labels are spelled out here.
+const STEP_LABELS = {
+  '15s': '15 seconds',
+  '30s': '30 seconds',
+  '1m': '1 minute',
+  '5m': '5 minutes',
+  '15m': '15 minutes',
+  '1h': '1 hour',
+};
+const STEP_PRESETS = SHARED_STEP_PRESETS.map((id) => ({ id, label: STEP_LABELS[id] || id }));
 
 // Label match operators
 const LABEL_OPERATORS = [

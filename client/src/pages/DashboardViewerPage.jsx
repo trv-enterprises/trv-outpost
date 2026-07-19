@@ -698,7 +698,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Range-scoped connection-type classification (Prometheus step field +
   // mixed-type guard) is shared with the mobile viewer via this hook.
-  const { rangeIsPrometheus } = useRangeConnectionTypes({
+  const { rangeConnType, rangeSupportsStep, rangeHasConsumer } = useRangeConnectionTypes({
     rangeVariable: dashRangeVariable,
     panels,
     chartsMap,
@@ -2590,7 +2590,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             <IconButton
               kind="ghost"
               label="Back to dashboards"
-              align="bottom"
+              // bottom-left (not bottom): this button hugs the viewport's left
+              // edge, so a centered tooltip overflows past it and clips ("k to
+              // dashboards"). bottom-left anchors the tooltip to the button's
+              // start edge so it extends rightward into view.
+              align="bottom-left"
               onClick={handleBack}
             >
               <ArrowLeft size={20} />
@@ -2604,7 +2608,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             <IconButton
               kind="ghost"
               label="Cancel"
-              align="bottom"
+              // Same left-edge slot as the view-mode back arrow — anchor the
+              // tooltip to the start edge so it can't clip on the viewport left.
+              align="bottom-left"
               onClick={exitEditMode}
             >
               <ArrowLeft size={20} />
@@ -2690,13 +2696,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             {/* Range-type variable picker. A [from, to] time window the viewer
                 chooses, clamping time-series panels. Renders AFTER the
                 connection + filter pickers. Presets resolve to absolute
-                instants; "Custom…" reveals absolute from/to inputs. */}
-            {!isEditMode && dashRangeVariable && (
+                instants; "Custom…" reveals absolute from/to inputs. Hidden when
+                no panel actually consumes the range (rangeHasConsumer) — a
+                picker that drives nothing is worse than no picker. */}
+            {!isEditMode && dashRangeVariable && rangeHasConsumer && (
               <DashboardRangePicker
                 variable={dashRangeVariable}
                 value={dashRangeValue}
                 onChange={setDashRangeValue}
-                showStep={rangeIsPrometheus}
+                showStep={rangeSupportsStep}
+                stepType={rangeConnType}
               />
             )}
           </div>

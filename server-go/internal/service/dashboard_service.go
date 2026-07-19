@@ -585,6 +585,55 @@ func (s *DashboardService) DeleteDashboardCascade(ctx context.Context, id string
 	return deleted, nil
 }
 
+// discoverSwapConnections resolves the connections a connection_swap variable
+// selects between: connections whose tag set contains ALL of the variable's
+// discovery tags. SameNamespace (default false) restricts discovery to the
+// given dashboard namespace; otherwise it's cross-namespace.
+//
+// The underlying repo query (connByTags) matches tags with OR ($in), so this
+// narrows to AND semantics — a variable's tags are a conjunction (e.g. both
+// "system-stats" AND "ts-store"). Shared by GetVariableCandidates (viewer
+// dropdown) and BuildExport (bundle the swap targets); keep it the single
+// source of truth so the two can't drift on discovery semantics.
+//
+// Returns an error only when the discovery helper isn't wired or the query
+// fails; an empty result (no match) is not an error.
+func (s *DashboardService) discoverSwapConnections(ctx context.Context, dashboardNamespace string, cfg *models.ConnectionSwapConfig) ([]*models.Connection, error) {
+	if s.connByTags == nil {
+		return nil, fmt.Errorf("connection discovery not available: connection helpers not wired")
+	}
+	discoverNS := ""
+	if cfg.SameNamespace {
+		discoverNS = dashboardNamespace
+	}
+	candidates, err := s.connByTags(ctx, discoverNS, cfg.Tags)
+	if err != nil {
+		return nil, fmt.Errorf("error discovering connections: %w", err)
+	}
+	required := models.NormalizeTags(cfg.Tags)
+	if len(required) == 0 {
+		return candidates, nil
+	}
+	filtered := candidates[:0]
+	for _, c := range candidates {
+		have := make(map[string]struct{}, len(c.Tags))
+		for _, t := range models.NormalizeTags(c.Tags) {
+			have[t] = struct{}{}
+		}
+		all := true
+		for _, want := range required {
+			if _, ok := have[want]; !ok {
+				all = false
+				break
+			}
+		}
+		if all {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered, nil
+}
+
 // GetVariableCandidates returns the selectable connections for a dashboard's
 // connection_swap variable. Candidates are connections in the dashboard's
 // namespace matching the variable's discovery tags; each is annotated as
@@ -634,42 +683,10 @@ func (s *DashboardService) GetVariableCandidates(ctx context.Context, dashboardI
 		strict = "type_only"
 	}
 
-	// Discover candidates by tag. SameNamespace (default false) restricts to
-	// the dashboard's namespace; otherwise discovery is cross-namespace (empty
-	// namespace = no namespace filter in the repo).
-	discoverNS := ""
-	if cfg.SameNamespace {
-		discoverNS = dashboard.Namespace
-	}
-	candidates, err := s.connByTags(ctx, discoverNS, cfg.Tags)
+	// Discover the connections whose tag set matches the variable's filter.
+	candidates, err := s.discoverSwapConnections(ctx, dashboard.Namespace, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("error discovering connections: %w", err)
-	}
-
-	// AND semantics: the underlying repo matches tags with OR ($in), but a
-	// variable's tags are a conjunction — a candidate must carry ALL of them
-	// (e.g. both "system-stats" AND "ts-store"). Filter the OR results down to
-	// connections whose tag set is a superset of the (normalized) required set.
-	required := models.NormalizeTags(cfg.Tags)
-	if len(required) > 0 {
-		filtered := candidates[:0]
-		for _, c := range candidates {
-			have := make(map[string]struct{}, len(c.Tags))
-			for _, t := range models.NormalizeTags(c.Tags) {
-				have[t] = struct{}{}
-			}
-			all := true
-			for _, want := range required {
-				if _, ok := have[want]; !ok {
-					all = false
-					break
-				}
-			}
-			if all {
-				filtered = append(filtered, c)
-			}
-		}
-		candidates = filtered
+		return nil, err
 	}
 
 	// Resolve the reference connection (the one most panels currently point at).

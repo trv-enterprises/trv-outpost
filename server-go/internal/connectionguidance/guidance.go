@@ -375,8 +375,9 @@ of just the newest point:
     5 min). timestamp_col is the time column to window on — for ts-store
     that is the synthetic "timestamp" field present on every record.
   - raw "since:<dur>" (e.g. "since:1h") backfills that span on first
-    paint, then the window keeps the live buffer to the same duration.
-    Match the since: span to the window duration.
+    paint, then the window filters the rendered span to that same
+    duration as live records append (the underlying buffer keeps
+    more). Match the since: span to the window duration.
   - Map y_axis to RAW streamed columns (the dotted field names from the
     schema, e.g. cpu.pct, memory.pct) — never compute in the query, there
     is no SQL here. For unit/time DISPLAY on a number tile, map the raw

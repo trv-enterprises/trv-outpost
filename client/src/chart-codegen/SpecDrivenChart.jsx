@@ -61,7 +61,7 @@ export default function SpecDrivenChart({ specName }) {
     return build(values, dataCtx?.data || { columns: [], rows: [] }, {
       formatCellValue,
       chartType: specName,
-      xAxisFormat: config?.transforms?.x_axis_format || config?.data_mapping?.x_axis_format || 'chart',
+      xAxisFormat: config?.transforms?.x_axis_format || config?.data_mapping?.x_axis_format || 'auto',
       chartName: config?.title || config?.name || '',
       legendSelected,
     });

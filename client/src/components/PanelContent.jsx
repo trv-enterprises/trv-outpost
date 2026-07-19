@@ -12,6 +12,7 @@ import FrigateAlertsGrid from './frigate/FrigateAlertsGrid';
 import WeatherDisplay from './weather/WeatherDisplay';
 import PanelText from './PanelText';
 import PanelErrorBoundary from './shared/PanelErrorBoundary';
+import { stepAwareRefreshMs, RANGE_EXEMPT_CHART_TYPES } from '../utils/rangePresets';
 
 /**
  * Shared per-panel CONTENT subtree — the text / control / display / chart
@@ -57,6 +58,12 @@ function PanelContent({
   refreshTick = 0,
   dataRefreshInterval = null,
 }) {
+  // The dashboard range is withheld from instantaneous charts (gauge/number/
+  // pie), which render a single latest value — see RANGE_EXEMPT_CHART_TYPES.
+  // panelRange is the range this specific panel actually receives; it also
+  // drives the step-aware refresh below, so the two can't drift.
+  const panelRange = RANGE_EXEMPT_CHART_TYPES.has(chart?.chart_type) ? null : rangeValue;
+
   return (
     <PanelErrorBoundary
       resetKey={`${effectiveComponentId || panel.id}-${chart?.updated || ''}`}
@@ -151,8 +158,24 @@ function PanelContent({
                     componentId: chart.id,
                     queryConfig: chart.query_config,
                     dashboardVariableValue,
-                    rangeValue,
-                    dataRefreshInterval,
+                    // The dashboard range variable scopes a TIME WINDOW, which
+                    // is only meaningful for series charts (a line/area/scatter
+                    // over time). Instantaneous charts — gauge, number, pie —
+                    // render a single latest/aggregate value; applying the range
+                    // would silently convert a live tile into a historical
+                    // (and, for ts-store with a step, downsampled) query. So
+                    // withhold the range from those types; everything else,
+                    // including custom/dataview, keeps today's behavior.
+                    rangeValue: panelRange,
+                    // A series chart under a coarse step doesn't gain from
+                    // re-querying at the dashboard's fast refresh — the data
+                    // only advances every ~step, and each query can be a slow
+                    // upstream GET (e.g. a Pi). So slow JUST these panels to
+                    // ~step/2 (never faster than the dashboard refresh). Instant
+                    // tiles get panelRange === null → refresh untouched.
+                    dataRefreshInterval: panelRange?.step
+                      ? stepAwareRefreshMs(dataRefreshInterval, panelRange.step)
+                      : dataRefreshInterval,
                     refreshTick,
                   }}
                 />

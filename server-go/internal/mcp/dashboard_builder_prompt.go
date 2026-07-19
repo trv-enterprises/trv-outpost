@@ -64,6 +64,19 @@ create a dashboard whose panels reference those components.
   chart, so alignment/title-band/formatting match. Do NOT hand-roll a
   centered ` + "`" + `<div>` + "`" + ` around a big ` + "`" + `<span>` + "`" + ` — it centers on the full panel
   and sits misaligned next to real number tiles.
+- **Time-series charts — plot raw values, let the renderer scale + label.**
+  A native ` + "`" + `line` + "`" + `/` + "`" + `area` + "`" + ` chart auto-formats large Y values with a single
+  shared SI prefix (K/M/G/B) across the whole axis AND the tooltip — pick
+  the largest magnitude, apply one suffix to every tick. So map the RAW
+  ` + "`" + `bytes_sec` + "`" + ` / ` + "`" + `bytes` + "`" + ` column directly; do NOT divide by 1024 in the query
+  (or in custom code) to pre-scale to KB/MB. Plotting raw ` + "`" + `rx_bytes_sec` + "`" + `
+  renders a clean ` + "`" + `50K / 100K / 150K` + "`" + ` axis on its own. (` + "`" + `options.tooltip.units` + "`" + `
+  adds a cosmetic suffix like "B/s" on top; the SI scaling is automatic and
+  independent of it.) The X axis likewise formats timestamps natively (dated,
+  spaced, readable) — hand-rolled ECharts custom code typically produces a
+  WORSE time axis (undated, cramped ticks). For a plain time-series, native
+  ` + "`" + `line` + "`" + `/` + "`" + `area` + "`" + ` beats ` + "`" + `use_custom_code` + "`" + ` on both axes; reach for custom code
+  only when the chart shape itself is unsupported, not to format units.
 - **Color**: prefer Carbon Design System colors. When in doubt, use
   semantic tokens — don't hard-code hex values in component config.
 - **One component per chart** — don't create a single "monster"
@@ -254,6 +267,12 @@ xAxis: {
   type: 'category',
   data: chartData.map(d => Number(d.timestamp)),       // raw epoch ms
   axisLabel: {
+    // Custom code: pick a FIXED preset ('chart_time' time-only,
+    // 'chart_datetime' date+time). Do NOT use 'auto' in an ECharts
+    // axisLabel formatter — 'auto' is a per-cell decision there, so a
+    // multi-day axis mixes formats (today time-only, yesterday date+time).
+    // Span-aware 'auto' exists only on the spec-driven line/area path, which
+    // is the better default for a time-series anyway (see below).
     formatter: (v) => formatTimestamp(Number(v), 'chart_time'),
     color: '#c6c6c6'
   }

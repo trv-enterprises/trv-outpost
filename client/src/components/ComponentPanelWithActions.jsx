@@ -9,6 +9,7 @@ import { DataTable, Download } from '@carbon/icons-react';
 import DynamicComponentLoader, { DataContext } from './DynamicComponentLoader';
 import ComponentDataGridModal from './ComponentDataGridModal';
 import useIsMobile from '../hooks/useIsMobile';
+import { parseTimestamp } from '../utils/dataTransforms';
 
 /**
  * ComponentPanelWithActions
@@ -52,6 +53,27 @@ function csvEscape(v) {
   if (v == null) return '';
   const s = String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Index of the timestamp column in a result set: the chart's configured x-axis
+// if it's present, else a name match. -1 when none — exports then leave every
+// value raw.
+function timestampColIndex(columns, chart) {
+  if (!Array.isArray(columns)) return -1;
+  const xAxis = chart?.data_mapping?.x_axis;
+  if (xAxis && columns.includes(xAxis)) return columns.indexOf(xAxis);
+  const named = columns.indexOf('timestamp');
+  if (named >= 0) return named;
+  return columns.findIndex((c) => /^(time|ts)$|time(stamp)?/i.test(c));
+}
+
+// Format a value in the timestamp column as ISO 8601 for downloads — the
+// machine-readable form (re-importable/sortable) rather than the localized
+// display string. parseTimestamp normalizes ts-store's epoch seconds/ms/etc.
+// Non-timestamp values (or unparseable ones) pass through unchanged.
+function toIsoForDownload(value) {
+  const d = parseTimestamp(value);
+  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : value;
 }
 
 function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction }) {
@@ -220,23 +242,27 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
   const exportCSV = useCallback((e) => {
     e.stopPropagation();
     if (!data?.columns || !data?.rows) return;
+    const tsIdx = timestampColIndex(data.columns, chart);
     const header = data.columns.map(csvEscape).join(',');
-    const body = data.rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+    const body = data.rows.map((row) => row
+      .map((v, i) => csvEscape(i === tsIdx ? toIsoForDownload(v) : v))
+      .join(',')).join('\n');
     const csv = header + '\n' + body + '\n';
     triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${filenameSlug(baseName)}.csv`);
-  }, [data, baseName]);
+  }, [data, baseName, chart]);
 
   const exportJSON = useCallback((e) => {
     e.stopPropagation();
     if (!data?.columns || !data?.rows) return;
+    const tsIdx = timestampColIndex(data.columns, chart);
     const rows = data.rows.map((row) => {
       const o = {};
-      data.columns.forEach((c, i) => { o[c] = row[i]; });
+      data.columns.forEach((c, i) => { o[c] = i === tsIdx ? toIsoForDownload(row[i]) : row[i]; });
       return o;
     });
     const json = JSON.stringify(rows, null, 2);
     triggerDownload(new Blob([json], { type: 'application/json' }), `${filenameSlug(baseName)}.json`);
-  }, [data, baseName]);
+  }, [data, baseName, chart]);
 
   // CSV/JSON need real data. PNG just needs a rendered panel — the Download
   // menu itself stays enabled so users can always grab a screenshot, and

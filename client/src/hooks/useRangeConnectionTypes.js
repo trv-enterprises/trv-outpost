@@ -5,15 +5,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../api/client';
 import { RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
+import { maxPointsForType, chartTypeConsumesRange } from '../utils/rangePresets';
 
 /**
  * useRangeConnectionTypes — classify the connection types a range variable
- * scopes, so callers know whether to show the Prometheus step field and can
+ * scopes, so callers know whether to show the step field, which type's step
+ * budget applies, whether any panel actually consumes the range, and can
  * warn on a mixed-type range dashboard.
  *
  * Lifted out of DashboardViewerPage so the desktop viewer and the mobile viewer
- * share ONE implementation — the mobile range picker needs the same
- * `rangeIsPrometheus` flag to render the step dropdown. Behavior unchanged.
+ * share ONE implementation — both range pickers need the same step/consumer
+ * classification.
  *
  * @param {object}   p
  * @param {object}   p.rangeVariable  the range DashboardVariable (or null)
@@ -22,7 +24,7 @@ import { RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
  * @param {object}   p.dashboard      dashboard record (once-per-dash warn key)
  * @param {Function} [p.pushToast]        optional toast sink
  * @param {Function} [p.addNotification] optional notification sink
- * @returns {{ rangeConnTypes, rangeMixedType, rangeIsPrometheus }}
+ * @returns {{ rangeConnTypes, rangeMixedType, rangeConnType, rangeSupportsStep, rangeHasConsumer }}
  */
 export function useRangeConnectionTypes({
   rangeVariable,
@@ -79,8 +81,40 @@ export function useRangeConnectionTypes({
   }, [rangeVariable, rangeScopedConnIds]);
 
   const rangeMixedType = Array.isArray(rangeConnTypes) && rangeConnTypes.length > 1;
-  const rangeIsPrometheus = Array.isArray(rangeConnTypes)
-    && rangeConnTypes.length === 1 && rangeConnTypes[0] === 'prometheus';
+  // The single connection type driving the range, or null when mixed/none. A
+  // range dashboard is expected to be single-type (rangeMixedType warns below),
+  // so this is the type whose step budget and semantics apply.
+  const rangeConnType = Array.isArray(rangeConnTypes) && rangeConnTypes.length === 1 ? rangeConnTypes[0] : null;
+  // Step is only meaningful for types that downsample server-side. Driven off
+  // the shared budget map so a new step-aware type only touches rangePresets.
+  const rangeSupportsStep = maxPointsForType(rangeConnType) !== null;
+
+  // Whether ANY panel on the dashboard actually consumes the range. A range
+  // variable can exist with no consumer — a board of only gauges, or of
+  // streaming charts that don't yet honor range — in which case the picker
+  // should not appear (it would "show but do nothing"). A consumer is:
+  //   - an SQL/EdgeLake chart with the {{range-variable}} token in its query, OR
+  //   - a series (non gauge/number/pie) chart on a range-scoping connection type.
+  // rangeConnTypes resolves async; until it's known we optimistically show the
+  // picker (matches prior behavior) and hide it only once we KNOW there's no
+  // consumer, so a slow connection fetch never flickers the control away.
+  const rangeHasConsumer = useMemo(() => {
+    if (!rangeVariable) return false;
+    const timeTypeConns = new Set(rangeScopedConnIds); // referenced time-capable conns
+    for (const panel of panels || []) {
+      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
+      if (!comp) continue;
+      const raw = comp.query_config?.raw;
+      if (typeof raw === 'string' && raw.includes(RANGE_VARIABLE_TOKEN)) return true; // SQL/EdgeLake token
+      // Series chart on a connection the range can scope. rangeConnTypes null →
+      // not yet resolved; treat as "maybe" so we don't hide prematurely.
+      if (chartTypeConsumesRange(comp.chart_type) && comp.connection_id && timeTypeConns.has(comp.connection_id)) {
+        if (rangeConnTypes === null) return true; // unresolved → optimistic
+        if (maxPointsForType(rangeConnType) !== null || rangeConnType === 'sql' || rangeConnType === 'edgelake') return true;
+      }
+    }
+    return false;
+  }, [rangeVariable, panels, chartsMap, rangeScopedConnIds, rangeConnTypes, rangeConnType]);
 
   // Surface the mixed-type guard once per dashboard.
   const rangeMixedWarnedRef = useRef(null);
@@ -94,7 +128,7 @@ export function useRangeConnectionTypes({
     addNotification?.({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
   }, [rangeMixedType, rangeConnTypes, dashboard?.id, pushToast, addNotification]);
 
-  return { rangeConnTypes, rangeMixedType, rangeIsPrometheus };
+  return { rangeConnTypes, rangeMixedType, rangeConnType, rangeSupportsStep, rangeHasConsumer };
 }
 
 export default useRangeConnectionTypes;

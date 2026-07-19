@@ -24,6 +24,10 @@ export async function queryData(connectionId, query, useCache = true, opts = {})
       body: JSON.stringify({ query: query }),
     };
     if (typeof opts.timeout === 'number') requestOpts.timeout = opts.timeout;
+    // A caller-supplied abort signal lets useData cancel a superseded query
+    // (e.g. a range switch before the slow prior fetch returns) so the browser
+    // frees the connection instead of holding it open on an abandoned request.
+    if (opts.signal) requestOpts.signal = opts.signal;
     const response = await apiClient.request(`/api/connections/${connectionId}/query`, requestOpts);
 
     // Adapter failures come back as HTTP 200 with {success:false, error}
@@ -73,6 +77,8 @@ export async function queryComponentData(componentId, runtime = {}, useCache = t
       body: JSON.stringify(body),
     };
     if (typeof opts.timeout === 'number') requestOpts.timeout = opts.timeout;
+    // See queryData: a caller signal cancels a superseded fetch browser-side.
+    if (opts.signal) requestOpts.signal = opts.signal;
     const response = await apiClient.request(`/api/components/${componentId}/data`, requestOpts);
 
     // Same 200-with-{success:false} contract as queryData — surface it.
