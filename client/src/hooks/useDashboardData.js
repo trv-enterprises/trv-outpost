@@ -11,14 +11,18 @@ import apiClient from '../api/client';
  * dashboard, then fetch each referenced component into a `chartsMap` keyed by
  * component id.
  *
- * Used by the kiosk surface (and a candidate for the viewer to adopt later).
+ * Used by the kiosk surface and the mobile viewer (and a candidate for the
+ * desktop viewer to adopt later).
  *
  * @param {string|null} id dashboard id; null/empty → idle.
- * @returns {{ dashboard, chartsMap, loading, error, refetch }}
+ * @returns {{ dashboard, chartsMap, unauthorizedComponents, loading, error, refetch }}
+ *   unauthorizedComponents maps component_id → "component" | "connection" for
+ *   panels the caller can't see (#4); empty for unrestricted users.
  */
 export function useDashboardData(id) {
   const [dashboard, setDashboard] = useState(null);
   const [chartsMap, setChartsMap] = useState({});
+  const [unauthorizedComponents, setUnauthorizedComponents] = useState({});
   const [loading, setLoading] = useState(!!id);
   const [error, setError] = useState(null);
 
@@ -26,6 +30,7 @@ export function useDashboardData(id) {
     if (!id) {
       setDashboard(null);
       setChartsMap({});
+      setUnauthorizedComponents({});
       setLoading(false);
       return;
     }
@@ -36,14 +41,23 @@ export function useDashboardData(id) {
       setDashboard(data);
 
       const map = {};
+      const unauthorized = {};
       if (data.panels && data.panels.length > 0) {
         // Batch-fetch all referenced components (defaults + component-swap
-        // overrides, so a kiosk swap renders without a mid-render fetch) in ONE
-        // request (#60) instead of one getComponent per panel.
-        const charts = await apiClient.getDashboardComponents(id).catch(() => []);
-        charts.forEach((chart) => { if (chart) map[chart.id] = chart; });
+        // overrides, so a swap renders without a mid-render fetch) in ONE
+        // request (#60) instead of one getComponent per panel. Use the
+        // authorized envelope so callers can render an "unauthorized" panel
+        // (#4) instead of a blank one when a component/connection is in an
+        // ungranted namespace.
+        const res = await apiClient.getDashboardComponentsAuthorized(id)
+          .catch(() => ({ components: [], unauthorized: [] }));
+        (res.components || []).forEach((chart) => { if (chart) map[chart.id] = chart; });
+        (res.unauthorized || []).forEach((u) => {
+          if (u && u.id) unauthorized[u.id] = u.reason || 'component';
+        });
       }
       setChartsMap(map);
+      setUnauthorizedComponents(unauthorized);
     } catch (err) {
       setError(err.message || 'Failed to load dashboard');
     } finally {
@@ -61,7 +75,7 @@ export function useDashboardData(id) {
     return () => { cancelled = true; };
   }, [fetchDashboard]);
 
-  return { dashboard, chartsMap, loading, error, refetch: fetchDashboard };
+  return { dashboard, chartsMap, unauthorizedComponents, loading, error, refetch: fetchDashboard };
 }
 
 export default useDashboardData;

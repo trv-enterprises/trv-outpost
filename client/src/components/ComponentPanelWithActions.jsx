@@ -8,6 +8,7 @@ import { IconButton, OverflowMenu, OverflowMenuItem } from '@carbon/react';
 import { DataTable, Download } from '@carbon/icons-react';
 import DynamicComponentLoader, { DataContext } from './DynamicComponentLoader';
 import ComponentDataGridModal from './ComponentDataGridModal';
+import useIsMobile from '../hooks/useIsMobile';
 import { parseTimestamp } from '../utils/dataTransforms';
 
 /**
@@ -79,6 +80,26 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
   const ctx = useContext(DataContext);
   const data = ctx?.data;
   const baseName = chart?.title || chart?.name || 'chart';
+  // On desktop the Download menu is `flipped` (opens leftward) to stay inside a
+  // wide panel. In the mobile viewer the download button sits near a narrow
+  // row's left edge, so flipping left pushes the options off-screen — open
+  // rightward there instead.
+  const isMobile = useIsMobile();
+
+  // The trigger lives at the top-right of the panel. Near the bottom of the
+  // viewport the menu (opening down by default) overflows the bottom edge —
+  // the older OverflowMenu has no autoAlign, so measure the trigger on open
+  // and flip the menu UPWARD when there isn't room below. ~140px covers the
+  // 3-item menu; only relevant on mobile where rows fill the screen height.
+  const menuWrapRef = useRef(null);
+  const [menuDirection, setMenuDirection] = useState('bottom');
+  const updateMenuDirection = useCallback(() => {
+    const el = menuWrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setMenuDirection(spaceBelow < 160 ? 'top' : 'bottom');
+  }, []);
 
   // PNG of the live chart. Three cases, in order:
   //   1. No ECharts canvas in panel → html2canvas the DOM (e.g. dataview).
@@ -262,19 +283,25 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
           <DataTable size={14} />
         </IconButton>
       )}
-      <OverflowMenu
-        renderIcon={() => <Download size={14} />}
-        iconDescription="Download"
-        size="sm"
-        flipped
-        align="bottom-right"
-        onClick={(e) => e.stopPropagation?.()}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <OverflowMenuItem itemText="Download as CSV" onClick={exportCSV} disabled={!canExportData} />
-        <OverflowMenuItem itemText="Download as JSON" onClick={exportJSON} disabled={!canExportData} />
-        <OverflowMenuItem itemText="Download as PNG" onClick={exportPNG} />
-      </OverflowMenu>
+      <span ref={menuWrapRef} style={{ display: 'inline-flex' }}>
+        <OverflowMenu
+          renderIcon={() => <Download size={14} />}
+          iconDescription="Download"
+          size="sm"
+          flipped={!isMobile}
+          // Horizontal side from viewport (mobile opens right, desktop left);
+          // vertical side (top/bottom) flips up near the viewport bottom so the
+          // menu never overflows the bottom edge.
+          direction={menuDirection}
+          align={`${menuDirection}-${isMobile ? 'left' : 'right'}`}
+          onClick={(e) => { e.stopPropagation?.(); updateMenuDirection(); }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <OverflowMenuItem itemText="Download as CSV" onClick={exportCSV} disabled={!canExportData} />
+          <OverflowMenuItem itemText="Download as JSON" onClick={exportJSON} disabled={!canExportData} />
+          <OverflowMenuItem itemText="Download as PNG" onClick={exportPNG} />
+        </OverflowMenu>
+      </span>
     </div>
   );
 }

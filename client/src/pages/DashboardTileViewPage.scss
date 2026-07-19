@@ -21,6 +21,13 @@
   flex-direction: column;
   overflow: hidden;
 
+  // Desktop: layout-transparent — the title and toolbar keep their own rows
+  // exactly as before. The mobile @media block turns this into a wrapping flex
+  // row so title + search + Filters share a line when they fit.
+  .tile-view-headerbar {
+    display: contents;
+  }
+
   .tile-view-header {
     flex-shrink: 0;
     display: flex;
@@ -63,6 +70,14 @@
     .header-search {
       flex: 1 1 240px;
       max-width: 400px;
+    }
+
+    // On desktop the filter cluster is layout-transparent — its children act
+    // as direct flex items of .header-toolbar exactly as before the mobile
+    // collapse wrapper was introduced. The mobile @media block below turns it
+    // into a real flex container that can be hidden behind the Filters toggle.
+    .header-filters {
+      display: contents;
     }
   }
 
@@ -148,21 +163,89 @@
   }
 }
 
-// Responsive adjustments
-@media (max-width: 768px) {
+// Responsive adjustments. 950px keeps this in sync with useIsMobile.js
+// (MOBILE_MAX_WIDTH) — the JS breakpoint that flips the viewer to mobile — so
+// the tile picker's mobile layout matches when the mobile viewer is active.
+@media (max-width: 950px) {
   .dashboard-tile-view-page {
-    .tile-view-header {
-      flex-direction: column;
-      align-items: flex-start;
+    // Never let content push past the viewport width (the tile grid's
+    // 280px min-column + the toolbar's fixed-width dropdowns were causing a
+    // horizontal scrollbar on phones).
+    max-width: 100%;
+    overflow-x: hidden;
 
-      .header-search {
-        width: 100%;
-        max-width: none;
+    // One wrapping flex row for title + search + Filters. Landscape (wide
+    // enough) fits all three on one line, reclaiming vertical space for tiles;
+    // portrait wraps (the search's min-width pushes Filters to the next line,
+    // and the title sits on its own line above), matching the prior look.
+    .tile-view-headerbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: spacing.$spacing-03;
+      margin-bottom: spacing.$spacing-03;
+    }
+
+    // Title shrinks to its content so it doesn't hog the row; no bottom margin
+    // (the headerbar owns row spacing now).
+    .tile-view-header {
+      flex: 0 0 auto;
+      margin-bottom: 0;
+
+      .header-title h1 {
+        font-size: 1.25rem;
       }
     }
 
+    // Search takes the remaining space but keeps a sensible min so a very
+    // narrow viewport wraps Filters below instead of squishing the search.
+    // The toolbar itself no longer needs its own row margin (headerbar owns it).
+    .header-toolbar {
+      flex: 1 1 260px;
+      gap: spacing.$spacing-03;
+      margin-bottom: 0;
+
+      .header-search {
+        flex: 1 1 auto;
+        max-width: none;
+      }
+
+      .mobile-filters-toggle {
+        flex: 0 0 auto;
+      }
+
+      // The collapsible filter cluster. Wraps to a full-width block below the
+      // search/toggle row; hidden entirely until the user taps Filters.
+      .header-filters {
+        flex: 1 1 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: spacing.$spacing-03;
+
+        &--collapsed {
+          display: none;
+        }
+
+        // Dropdowns share rows and shrink to fit rather than forcing width.
+        .cds--dropdown,
+        .cds--dropdown__wrapper,
+        .cds--multi-select,
+        .cds--list-box {
+          min-width: 0;
+          flex: 1 1 auto;
+        }
+      }
+    }
+
+    // Auto-flow tiles: fit as many columns as will hold a tile at >=260px, so
+    // a portrait phone gets one column and a landscape phone gets two (or more
+    // on a tablet). The 260px min is below a narrow portrait viewport so the
+    // lone column still fits; auto-fill keeps a single wide tile from stretching
+    // edge-to-edge on landscape by packing a second column beside it.
     .dashboard-tiles-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: spacing.$spacing-04;
     }
   }
 }

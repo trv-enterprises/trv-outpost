@@ -6,6 +6,31 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Mobile view for dashboards (#170).** On a phone-sized viewport the
+  dashboard viewer switches to a view-only **mobile layout**: instead of
+  shrinking the whole desktop grid to fit (illegible), it stacks every
+  panel full-width in a single scrolling column, ordered top-to-bottom
+  then left-to-right. Any existing dashboard is readable on mobile with
+  no re-authoring, and streaming charts keep their live subscriptions
+  (the mobile viewer reuses the same panel-render leaf as the desktop
+  grid). Tap any chart for an **edge-to-edge fullscreen** view (rotate
+  to landscape for wide charts; × or Escape to exit) — streaming stays
+  live in fullscreen too. The header sheds its authoring/admin controls
+  on mobile, leaving notifications and the account menu. On the
+  dashboard picker, the filter/sort controls collapse behind a
+  **Filters** toggle so tiles aren't buried under a tall toolbar. A
+  **Variables** toggle in the mobile viewer's title bar opens the
+  dashboard's connection-swap / filter / range pickers (the same controls
+  as desktop, extracted into shared components). Same URL as desktop —
+  the layout switches on viewport width (≤950px, so larger phones in
+  landscape get mobile), and the mobile page is code-split so desktop
+  sessions never load it. Phase 1 — no per-dashboard mobile layout
+  authoring or on-phone editing yet.
+
 ## [0.40.0] — 2026-07-15
 
 ### Added

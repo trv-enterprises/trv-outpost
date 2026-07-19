@@ -54,10 +54,12 @@ import {
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
-import VariableValuePickerModal from '../components/VariableValuePickerModal';
 import ComponentExpandModal from '../components/ComponentExpandModal';
 import DashboardGrid from '../components/DashboardGrid';
 import DashboardRangePicker from '../components/DashboardRangePicker';
+import ConnectionSwapPicker from '../components/ConnectionSwapPicker';
+import FilterVariablePicker from '../components/FilterVariablePicker';
+import useRangeConnectionTypes from '../hooks/useRangeConnectionTypes';
 import PanelEditMenu from '../components/PanelEditMenu';
 import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
@@ -68,9 +70,6 @@ import apiClient from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { useSwapCompatibility } from '../hooks/useSwapCompatibility';
 import { orderDashboardsForViewer } from '../utils/dashboardOrder';
-import { deriveVariableColumn } from '../utils/deriveVariableColumn';
-import { maxPointsForType, chartTypeConsumesRange } from '../utils/rangePresets';
-import { DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import TagInput from '../components/shared/TagInput';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
@@ -694,325 +693,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     panelComponents: effectivePanelComponents,
   });
 
-  // ── Runtime value discovery for a `connection`-sourced filter variable ──
-  // When the filter variable's value_source is "connection", the header
-  // dropdown's options are discovered live: query distinct values of the bound
-  // column from the connection used by the dashboard's variable-driven
-  // components. Column/table are derived from the component's query the same way
-  // the editor's value picker does. If the variable-driven components span more
-  // than one connection, use the FIRST and warn (toast + notification, once).
-  const discoveryWarnedRef = useRef(null);
-  const discoveryTarget = useMemo(() => {
-    const cfg = dashFilterVariable?.filter_value || {};
-    if (!dashFilterVariable || cfg.value_source !== 'connection') return null;
+  // (Filter-variable `connection`-sourced value discovery moved to the shared
+  // useFilterVariableDiscovery hook, consumed by FilterVariablePicker.)
 
-    // Components that actually consume the token (query OR a filter value).
-    const driven = [];
-    for (const panel of panels || []) {
-      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
-      if (!comp || !comp.connection_id) continue;
-      const raw = comp.query_config?.raw;
-      const usesInQuery = typeof raw === 'string' && raw.includes(DASHBOARD_VARIABLE_TOKEN);
-      const usesInFilter = Array.isArray(comp.data_mapping?.filters)
-        && comp.data_mapping.filters.some((f) => typeof f.value === 'string' && f.value.trim() === DASHBOARD_VARIABLE_TOKEN);
-      if (usesInQuery || usesInFilter) driven.push(comp);
-    }
-    if (driven.length === 0) return null;
+  // Range-scoped connection-type classification (Prometheus step field +
+  // mixed-type guard) is shared with the mobile viewer via this hook.
+  const { rangeConnType, rangeSupportsStep, rangeHasConsumer } = useRangeConnectionTypes({
+    rangeVariable: dashRangeVariable,
+    panels,
+    chartsMap,
+    dashboard,
+    pushToast,
+    addNotification,
+  });
 
-    const connIds = [...new Set(driven.map((c) => c.connection_id))];
-    // Pick the first component on the first connection to derive column/table.
-    const firstConnId = connIds[0];
-    const comp = driven.find((c) => c.connection_id === firstConnId);
-    const raw = comp.query_config?.raw || '';
-    let { column, table } = deriveVariableColumn(raw);
-    // Non-SQL filter components: the bound column is the filter row whose value
-    // is the token (no table needed for those adapters).
-    if (!column && Array.isArray(comp.data_mapping?.filters)) {
-      const f = comp.data_mapping.filters.find((x) => typeof x.value === 'string' && x.value.trim() === DASHBOARD_VARIABLE_TOKEN);
-      if (f?.field) column = f.field;
-    }
-    const database = comp.query_config?.params?.database || '';
-    return { connId: firstConnId, column, table, database, multiConn: connIds.length > 1 };
-  }, [dashFilterVariable, panels, chartsMap]);
-
-  // Warn once per dashboard when discovery spans >1 connection (use first).
-  useEffect(() => {
-    if (!discoveryTarget?.multiConn) return;
-    const key = `${dashboard?.id || ''}`;
-    if (discoveryWarnedRef.current === key) return;
-    discoveryWarnedRef.current = key;
-    const msg = "This dashboard's variable spans more than one connection; using the first for value discovery.";
-    pushToast({ kind: 'warning', title: 'Multiple connections', subtitle: msg });
-    addNotification({ kind: 'warning', title: 'Dashboard variable: multiple connections', subtitle: msg });
-  }, [discoveryTarget, dashboard?.id, pushToast, addNotification]);
-
-  // Discovered options + fetch state for the connection-sourced filter variable.
-  // Dispatch by connection type:
-  //   - SQL/EdgeLake/API → getVariableValues (server-side DISTINCT / one-shot;
-  //     low latency, no storage).
-  //   - stream/socket → read the connection's persisted discovered_values[column]
-  //     (captured at authoring time; view-time stream capture is too slow). A
-  //     session-only "regenerate" (below) can override this list for this user.
-  const [discoveredOptions, setDiscoveredOptions] = useState(null);
-  const [discoveryLoading, setDiscoveryLoading] = useState(false);
-  // Session-only override the viewer's "regenerate" sets; wins over the stored
-  // list but is NOT persisted (persistence needs design authority in the editor).
-  const [sessionDiscoveredOverride, setSessionDiscoveredOverride] = useState(null);
-  // The connection type backing discovery (drives path + whether regenerate is
-  // offered). Set by the discovery effect.
-  const [discoveryConnType, setDiscoveryConnType] = useState(null);
-
-  // Connection ids backing RANGE-scoped components: a SQL/EdgeLake component
-  // whose query carries the {{range-variable}} token, OR any tsstore/Prometheus
-  // component (those auto-apply the window). Used to (a) detect a mixed-type
-  // range dashboard (error) and (b) decide whether to show the Prometheus step
-  // field. Only meaningful when a range variable is active.
-  const rangeScopedConnIds = useMemo(() => {
-    if (!dashRangeVariable) return [];
-    const ids = new Set();
-    for (const panel of panels || []) {
-      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
-      if (!comp || !comp.connection_id) continue;
-      const raw = comp.query_config?.raw;
-      if (typeof raw === 'string' && raw.includes(RANGE_VARIABLE_TOKEN)) {
-        ids.add(comp.connection_id);
-      }
-      // tsstore/Prometheus auto-apply — but we can't know type without the
-      // connection record; the resolver effect below classifies all referenced
-      // connections and keeps the time-series ones.
-    }
-    // Also include every referenced connection so the resolver can classify
-    // tsstore/Prometheus (auto-apply) panels; non-time types are dropped there.
-    for (const panel of panels || []) {
-      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
-      if (comp?.connection_id) ids.add(comp.connection_id);
-    }
-    return [...ids];
-  }, [dashRangeVariable, panels, chartsMap]);
-
-  // Resolved { type } per range-relevant connection, the distinct type set, and
-  // derived flags: mixed-type (error) + whether the dashboard is Prometheus
-  // (shows the step field). A range dashboard should be single-type.
-  const [rangeConnTypes, setRangeConnTypes] = useState(null); // string[] | null
-  useEffect(() => {
-    let cancelled = false;
-    if (!dashRangeVariable || rangeScopedConnIds.length === 0) {
-      setRangeConnTypes(null);
-      return undefined;
-    }
-    (async () => {
-      const conns = await Promise.all(
-        rangeScopedConnIds.map((id) => apiClient.getConnection(id).catch(() => null)),
-      );
-      if (cancelled) return;
-      // Keep only time-series-capable types (those a range can scope).
-      const TIME_TYPES = new Set(['sql', 'edgelake', 'tsstore', 'prometheus']);
-      const types = [...new Set(
-        conns.map((c) => c?.type || c?.config?.type).filter((t) => TIME_TYPES.has(t)),
-      )];
-      setRangeConnTypes(types);
-    })();
-    return () => { cancelled = true; };
-  }, [dashRangeVariable, rangeScopedConnIds]);
-
-  const rangeMixedType = Array.isArray(rangeConnTypes) && rangeConnTypes.length > 1;
-  // The single connection type driving the range, or null when mixed/none. A
-  // range dashboard is expected to be single-type (rangeMixedType warns above),
-  // so this is the type whose step budget and semantics apply.
-  const rangeConnType = Array.isArray(rangeConnTypes) && rangeConnTypes.length === 1 ? rangeConnTypes[0] : null;
-  // Step is only meaningful for types that downsample server-side. Driven off
-  // the shared budget map so a new step-aware type only touches rangePresets.
-  const rangeSupportsStep = maxPointsForType(rangeConnType) !== null;
-
-  // Whether ANY panel on the dashboard actually consumes the range. A range
-  // variable can exist with no consumer — a board of only gauges, or of
-  // streaming charts that don't yet honor range — in which case the picker
-  // should not appear (it would "show but do nothing"). A consumer is:
-  //   - an SQL/EdgeLake chart with the {{range-variable}} token in its query, OR
-  //   - a series (non gauge/number/pie) chart on a range-scoping connection type.
-  // rangeConnTypes resolves async; until it's known we optimistically show the
-  // picker (matches prior behavior) and hide it only once we KNOW there's no
-  // consumer, so a slow connection fetch never flickers the control away.
-  const rangeHasConsumer = useMemo(() => {
-    if (!dashRangeVariable) return false;
-    const timeTypeConns = new Set(rangeScopedConnIds); // referenced time-capable conns
-    for (const panel of panels || []) {
-      const comp = panel?.component_id ? chartsMap[panel.component_id] : null;
-      if (!comp) continue;
-      const raw = comp.query_config?.raw;
-      if (typeof raw === 'string' && raw.includes(RANGE_VARIABLE_TOKEN)) return true; // SQL/EdgeLake token
-      // Series chart on a connection the range can scope. rangeConnTypes null →
-      // not yet resolved; treat as "maybe" so we don't hide prematurely.
-      if (chartTypeConsumesRange(comp.chart_type) && comp.connection_id && timeTypeConns.has(comp.connection_id)) {
-        if (rangeConnTypes === null) return true; // unresolved → optimistic
-        if (maxPointsForType(rangeConnType) !== null || rangeConnType === 'sql' || rangeConnType === 'edgelake') return true;
-      }
-    }
-    return false;
-  }, [dashRangeVariable, panels, chartsMap, rangeScopedConnIds, rangeConnTypes, rangeConnType]);
-
-  // Surface the mixed-type guard once per dashboard.
-  const rangeMixedWarnedRef = useRef(null);
-  useEffect(() => {
-    if (!rangeMixedType) return;
-    const key = `${dashboard?.id || ''}`;
-    if (rangeMixedWarnedRef.current === key) return;
-    rangeMixedWarnedRef.current = key;
-    const msg = `This dashboard's time-range variable spans more than one connection type (${rangeConnTypes.join(', ')}). A range dashboard must be single-type — the range may not apply correctly.`;
-    pushToast({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
-    addNotification({ kind: 'error', title: 'Range variable: mixed connection types', subtitle: msg });
-  }, [rangeMixedType, rangeConnTypes, dashboard?.id, pushToast, addNotification]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSessionDiscoveredOverride(null); // clear stale session override on target change
-    if (!discoveryTarget || !discoveryTarget.connId || !discoveryTarget.column) {
-      setDiscoveredOptions(null);
-      setDiscoveryLoading(false);
-      setDiscoveryConnType(null);
-      return undefined;
-    }
-    setDiscoveryLoading(true);
-    (async () => {
-      try {
-        // Resolve the connection type (cached) to choose the discovery path.
-        const conn = await apiClient.getConnection(discoveryTarget.connId).catch(() => null);
-        if (cancelled) return;
-        const type = conn?.type || conn?.config?.type || null;
-        setDiscoveryConnType(type);
-        // Only RAW socket / mqtt are truly stream-only (no query API) — those
-        // read the authoring-captured stored list. tsstore (even streaming
-        // transport) answers "newest" over HTTP, so it uses the server path
-        // like SQL/EdgeLake/API — no stored list, no view-time capture.
-        const isStreamLike = type === 'socket' || type === 'mqtt';
-
-        if (isStreamLike) {
-          // Raw socket/mqtt: read the authoring-time captured list off the
-          // connection record. No view-time capture (too slow).
-          const stored = conn?.discovered_values?.[discoveryTarget.column];
-          setDiscoveredOptions(Array.isArray(stored?.values) ? stored.values : null);
-        } else {
-          // SQL/EdgeLake/API/tsstore: server-side discovery (DISTINCT for SQL/
-          // EdgeLake; one-shot fetch + harvest for API; newest 1000 for tsstore).
-          const res = await apiClient.getVariableValues(discoveryTarget.connId, {
-            column: discoveryTarget.column,
-            table: discoveryTarget.table,
-            database: discoveryTarget.database,
-          });
-          if (cancelled) return;
-          setDiscoveredOptions(res?.success && Array.isArray(res.values) ? res.values : null);
-        }
-      } catch {
-        if (!cancelled) setDiscoveredOptions(null); // fall back to static options
-      } finally {
-        if (!cancelled) setDiscoveryLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-    // Key on the resolved triple so it doesn't refire on unrelated renders.
-  }, [discoveryTarget?.connId, discoveryTarget?.column, discoveryTarget?.table, discoveryTarget?.database]);
-
-  // Session-only regenerate for a stream/socket variable: live-capture records
-  // via the connection's SSE stream, unique the bound column, and override the
-  // dropdown list for THIS session (not persisted — a designer makes it
-  // permanent via the editor). Mirrors the editor's capture-with-stop.
-  const regenerateCaptureRef = useRef(null);
-  const [regenerating, setRegenerating] = useState(false);
-  // Live-accumulating distinct values during a regenerate capture + the capture
-  // modal's open state. The modal shows the list growing in real time with a
-  // Stop button, so the user can watch and stop when it stabilizes.
-  const [regenLiveValues, setRegenLiveValues] = useState([]);
-  // Total stream records seen during the capture (every message, not just new
-  // distinct values) — shown in the modal so the user can see the stream is live.
-  const [regenRecordCount, setRegenRecordCount] = useState(0);
-  const [regenModalOpen, setRegenModalOpen] = useState(false);
-  const regenSeenRef = useRef(null);
-  // Set true on Stop so, after the modal closes, the dropdown auto-opens to
-  // signal the freshly-captured list is ready to pick from.
-  const [autoOpenFilterDropdown, setAutoOpenFilterDropdown] = useState(false);
-
-  const startSessionRegenerate = useCallback(() => {
-    const target = discoveryTarget;
-    if (!target?.connId || !target.column) return;
-    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
-    const seen = new Set();
-    regenSeenRef.current = seen;
-    setRegenLiveValues([]);
-    setRegenRecordCount(0);
-    setRegenModalOpen(true);
-    setRegenerating(true);
-    const authParam = apiClient.streamAuthQuery();
-    const sseUrl = `${apiClient.httpOriginForApi()}/api/connections/${target.connId}/stream?${authParam}`;
-    const es = new EventSource(sseUrl);
-    regenerateCaptureRef.current = es;
-    const values = [];
-    const CAP = 1000;
-    const finish = () => {
-      if (regenerateCaptureRef.current !== es) return;
-      es.close();
-      regenerateCaptureRef.current = null;
-      setRegenerating(false);
-    };
-    let records = 0;
-    es.addEventListener('record', (event) => {
-      try {
-        records += 1;
-        setRegenRecordCount(records); // live update → modal shows records processed
-        const rec = JSON.parse(event.data);
-        const v = rec?.[target.column];
-        if (v != null) {
-          const s = String(v);
-          if (s !== '' && !seen.has(s)) {
-            seen.add(s);
-            values.push(s);
-            setRegenLiveValues([...values]); // live update → modal re-renders
-          }
-        }
-        if (values.length >= CAP) finish();
-      } catch { /* ignore parse errors */ }
-    });
-    es.onerror = () => { if (regenerateCaptureRef.current === es) finish(); };
-    // Safety cap: stop after 5 minutes if the user walks away.
-    setTimeout(() => { if (regenerateCaptureRef.current === es) finish(); }, 300000);
-  }, [discoveryTarget]);
-
-  // Stop capturing — close the SSE, commit the accumulated list as the session
-  // override, close the modal, and flag the dropdown to auto-open so the user
-  // sees the new list is ready to pick from.
-  const stopSessionRegenerate = useCallback(() => {
-    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
-    setRegenerating(false);
-    setSessionDiscoveredOverride([...regenLiveValues]);
-    setRegenModalOpen(false);
-    setAutoOpenFilterDropdown(true);
-  }, [regenLiveValues]);
-
-  // Tear down any in-flight capture on unmount.
-  useEffect(() => () => {
-    if (regenerateCaptureRef.current) { regenerateCaptureRef.current.close(); regenerateCaptureRef.current = null; }
-  }, []);
-
-  // After a regenerate completes, auto-open the filter dropdown so the user
-  // sees the freshly-captured list is ready to pick from. Carbon's Dropdown has
-  // no controlled-open prop (Downshift-driven), so we click its trigger.
-  const filterDropdownRef = useRef(null);
-  useEffect(() => {
-    if (!autoOpenFilterDropdown || regenModalOpen) return;
-    setAutoOpenFilterDropdown(false);
-    const t = setTimeout(() => {
-      const trigger = filterDropdownRef.current?.querySelector('[role="combobox"], .cds--list-box__field');
-      if (trigger) trigger.click();
-    }, 50);
-    return () => clearTimeout(t);
-  }, [autoOpenFilterDropdown, regenModalOpen]);
-
-  // The list the dropdown actually uses: session override wins, else discovered.
-  const effectiveDiscoveredOptions = sessionDiscoveredOverride ?? discoveredOptions;
-  // Regenerate (live SSE re-capture) is only meaningful for RAW socket/mqtt
-  // variables, where the list is stored (no query API). tsstore uses the HTTP
-  // "newest" server path like SQL/API — it re-discovers on load, so no
-  // Regenerate button.
-  const discoveryIsStream = discoveryConnType === 'socket' || discoveryConnType === 'mqtt';
+  // (Filter-variable discovery + session-regenerate machinery moved to the
+  // shared useFilterVariableDiscovery hook, consumed by FilterVariablePicker.)
 
   const panelExtentCol = useMemo(() => {
     if (!panels || panels.length === 0) return 0;
@@ -2971,97 +2667,31 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             )}
             {/* Dashboard-variable picker (connection-swap). Renders only in
                 view mode when the feature is active for this dashboard. */}
-            {!isEditMode && dashVariable && (() => {
-              const items = (dashVariableCandidates || []).filter((c) => c.compatible);
-              const selected = items.find((c) => c.id === dashVariableValue) || null;
-              // Optional: label each candidate from a prefixed tag (e.g. a
-              // "host:trv-srv-001" tag → "trv-srv-001"), falling back to name.
-              const labelPrefix = dashVariable.connection_swap?.label_tag_prefix || '';
-              const vLabel = dashVariable.label || 'Variable';
-              return (
-                <div className="dashboard-variable-picker">
-                  <Dropdown
-                    id="dashboard-variable-picker"
-                    size="sm"
-                    titleText={vLabel}
-                    label="Select…"
-                    items={items}
-                    itemToString={(item) => candidateLabel(item, labelPrefix)}
-                    selectedItem={selected}
-                    onChange={({ selectedItem }) => setDashVariableValue(selectedItem?.id || null)}
-                  />
-                </div>
-              );
-            })()}
+            {!isEditMode && (
+              <ConnectionSwapPicker
+                variable={dashVariable}
+                candidates={dashVariableCandidates}
+                value={dashVariableValue}
+                onChange={setDashVariableValue}
+              />
+            )}
 
             {/* Filter-type variable picker. A value the viewer chooses that is
                 substituted server-side into the query ({{dashboard-variable}})
                 and client-side into filters. Static options → Dropdown;
                 freetext → TextInput. Coexists with the connection picker. */}
-            {!isEditMode && dashFilterVariable && (() => {
-              const cfg = dashFilterVariable.filter_value || {};
-              const label = dashFilterVariable.label || 'Filter';
-              if (cfg.value_source === 'freetext') {
-                return (
-                  <div className="dashboard-variable-picker">
-                    <TextInput
-                      id="dashboard-filter-variable"
-                      size="sm"
-                      labelText={label}
-                      placeholder="Enter a value…"
-                      value={dashFilterValue || ''}
-                      onChange={(e) => setDashFilterValue(e.target.value)}
-                    />
-                  </div>
-                );
-              }
-              // 'static' → the authored list; 'connection' → discovered values
-              // (server-side for SQL/API, stored list for stream/socket; session
-              // override wins), falling back to the static list (seed) on
-              // failure/empty.
-              const staticOptions = Array.isArray(cfg.options) ? cfg.options : [];
-              const options = cfg.value_source === 'connection'
-                ? (effectiveDiscoveredOptions ?? staticOptions)
-                : staticOptions;
-              const selectedOpt = options.includes(dashFilterValue) ? dashFilterValue : null;
-              const loading = cfg.value_source === 'connection' && discoveryLoading;
-              // Stream/socket variables store their list; offer a session-only
-              // "regenerate" (live re-capture) since the stored list can go
-              // stale or have been stopped too early. Not persisted (a designer
-              // makes it permanent via the editor).
-              const showRegenerate = cfg.value_source === 'connection' && discoveryIsStream;
-              return (
-                <div className="dashboard-variable-picker" ref={filterDropdownRef}>
-                  <Dropdown
-                    id="dashboard-filter-variable"
-                    size="sm"
-                    titleText={label}
-                    label={loading ? 'Loading…' : 'Select…'}
-                    items={options}
-                    disabled={loading || regenerating}
-                    itemToString={(item) => (item == null ? '' : String(item))}
-                    selectedItem={selectedOpt}
-                    onChange={({ selectedItem }) => setDashFilterValue(selectedItem ?? null)}
-                  />
-                  {/* Regenerate (live re-capture) opens a modal that accumulates
-                      the distinct values in real time with a Stop button. Only
-                      for raw socket/mqtt variables (stored list); tsstore/API/SQL
-                      re-discover on load. */}
-                  {showRegenerate && (
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      hasIconOnly
-                      renderIcon={Renew}
-                      iconDescription="Refresh values (live capture, this session)"
-                      tooltipPosition="bottom"
-                      onClick={startSessionRegenerate}
-                      disabled={regenerating}
-                    />
-                  )}
-                </div>
-              );
-            })()}
+            {!isEditMode && (
+              <FilterVariablePicker
+                variable={dashFilterVariable}
+                value={dashFilterValue}
+                onChange={setDashFilterValue}
+                panels={panels}
+                chartsMap={chartsMap}
+                dashboard={dashboard}
+                pushToast={pushToast}
+                addNotification={addNotification}
+              />
+            )}
 
             {/* Range-type variable picker. A [from, to] time window the viewer
                 chooses, clamping time-series panels. Renders AFTER the
@@ -3581,18 +3211,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           Stop commits the list (session-only) and closes — the dropdown then
           auto-opens. No selection inside the modal (the dashboard's pick UI is
           the dropdown). */}
-      <VariableValuePickerModal
-        open={regenModalOpen}
-        onClose={stopSessionRegenerate}
-        onSelect={() => {}}
-        connectionId={discoveryTarget?.connId}
-        providedValues={regenLiveValues}
-        providedLoading={regenerating}
-        providedPartial
-        providedRecordCount={regenRecordCount}
-        onStop={stopSessionRegenerate}
-        captureOnly
-      />
+      {/* (The filter-variable live-capture modal now lives inside
+          FilterVariablePicker, rendered in the toolbar above.) */}
 
       {/* Dashboard settings modal */}
       <DashboardExportModal

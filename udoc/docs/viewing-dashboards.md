@@ -90,3 +90,40 @@ The toolbar at the top of the viewer provides:
 - **Double-click** a chart panel to open a data modal showing the raw data table behind the visualization.
 
 See [Dashboard Navigation & Controls](viewer-controls.md) for keyboard navigation, fullscreen, fit modes, auto-refresh, and thumbnail capture.
+
+## Viewing on Mobile
+
+On a phone-sized screen the viewer switches to a **mobile layout** built
+for reading, not authoring. Instead of shrinking the whole desktop grid
+to fit — which leaves charts and numbers too small to read — it lays out
+the dashboard as a **single vertical column**:
+
+- Every panel is shown **full-width, one per row**, and you scroll down
+  through them. Panels appear in reading order (top-to-bottom, then
+  left-to-right) based on where they sit on the desktop layout.
+- The design-time grid arrangement (side-by-side panels, exact sizes) is
+  **not** preserved on mobile — the column layout is chosen for
+  legibility. You don't need to re-author anything; any existing
+  dashboard just works.
+- A slim bar at the top shows a **back** arrow (to the dashboard list),
+  the dashboard name, and a **Refresh** button. Live/streaming charts
+  keep updating exactly as they do on desktop.
+- **Tap the expand icon** on any chart to open it **fullscreen** —
+  edge-to-edge, filling the whole screen. Rotate your phone to landscape
+  for a wide chart. Tap the **×** (or press Escape) to return to the
+  stack.
+- If the dashboard has [variables](dashboard-variables.md), a **gear
+  (Variables)** button appears in the top bar. Tap it to open the
+  variable controls — the same connection, filter, and time-range pickers
+  as on desktop — and your selection re-scopes every panel.
+- The header is simplified to the essentials — notifications and your
+  account menu. Design and Manage tools are hidden; mobile is
+  **view-only**.
+
+To pick a different dashboard, tap the back arrow to return to the
+dashboard tile grid — it reflows to a mobile-friendly layout, with the
+search box always visible and the namespace / tag / connection filters
+tucked behind a **Filters** button to save space.
+
+> **Note:** Mobile is a viewing experience. To create or edit dashboards,
+> components, or connections, use a desktop browser.
