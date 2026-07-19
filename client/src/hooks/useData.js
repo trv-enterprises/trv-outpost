@@ -648,6 +648,13 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     // Backfill: fire a one-shot REST query to pre-populate the buffer before streaming.
     // Only on first mount, NOT on every effect re-run/reconnect (would duplicate data).
     const runBackfillThenConnect = async () => {
+      // Stage 5 (#162): an absolute range is a closed PAST window — there is
+      // no live edge to tail, so the panel renders the backfill statically
+      // and never subscribes to the stream. The range is folded into
+      // effectiveBackfillKey, so switching back to a relative range (or
+      // clearing it) re-runs this effect and restores the live tail.
+      const historicalMode = effectiveBackfill?.params?.range?.type === 'absolute';
+      let backfillError = null;
       if (effectiveBackfill && mountedRef.current && !backfillDoneRef.current) {
         backfillDoneRef.current = true;
         try {
@@ -708,7 +715,9 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
             // live own the leading edge cleanly. `ordered` is oldest-first, so
             // the trailing bucket is the last element. Only when aggregated (a
             // raw backfill has no live re-emit to defer to).
-            if (useAggregated && ordered.length > 0) {
+            // In historical mode there is no live re-emit — keep the partial
+            // trailing bucket rather than losing the window's last bucket.
+            if (useAggregated && !historicalMode && ordered.length > 0) {
               ordered = ordered.slice(0, -1);
             }
             ordered.forEach(row => {
@@ -732,8 +741,19 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           // backfill couldn't paint history — the live stream still starts.
           if (!isAbortError(err)) {
             console.warn('[useData] Backfill query failed, streaming will start empty:', err.message);
+            backfillError = err instanceof Error ? err : new Error(String(err));
           }
         }
+      }
+
+      if (historicalMode) {
+        if (mountedRef.current) {
+          handleConnectionSuccess();
+          // With no live stream to fall back on, a failed backfill would
+          // otherwise leave a silently empty panel — surface it.
+          if (backfillError) setError(backfillError);
+        }
+        return;
       }
 
       // Now connect to the stream
