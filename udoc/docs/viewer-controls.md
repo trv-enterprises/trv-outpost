@@ -38,6 +38,8 @@ Click the **fit mode** icon in the toolbar to pick how the dashboard scales to f
 
 Your fit mode is **per-dashboard, per-user** — opening different dashboards restores each one's own choice. New dashboards default to the system-wide setting (configured by an admin in [System Settings](system-settings.md), default `Stretch to fill`).
 
+Fit modes are a desktop concern: on a phone-sized viewport the viewer uses the single-column [mobile layout](viewing-dashboards.md#viewing-on-mobile) instead of scaling the grid.
+
 ## Auto-Refresh
 
 Dashboards can auto-refresh their data at a configurable interval:
@@ -46,6 +48,7 @@ Dashboards can auto-refresh their data at a configurable interval:
 - Set to 0 to disable auto-refresh
 - Configure via the [Dashboard Settings](dashboard-settings.md) modal in edit mode
 - Auto-refresh pauses while in edit mode
+- Series charts under a stepped [time-range](dashboard-variables.md#range-options) relax their own refresh to roughly half the step — the data only advances once per step, so refreshing faster just re-fetches the same bucket
 
 ## Save Thumbnail
 

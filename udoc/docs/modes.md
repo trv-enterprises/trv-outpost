@@ -12,6 +12,7 @@ The default mode for end users. View dashboards with live data, interact with co
 
 - **Dashboard tile grid** for selecting dashboards (with search, namespace filter, tag filter, and drag-reorder — see [Viewing Dashboards](viewing-dashboards.md))
 - **Full dashboard viewer** with real-time data refresh and four [fit modes](viewer-controls.md#fit-modes)
+- **Mobile layout** on phone-sized viewports — panels stack full-width in a single scrolling column, with tap-to-fullscreen per chart (see [Viewing on Mobile](viewing-dashboards.md#viewing-on-mobile))
 - **Edit mode** for layout changes (requires Design capability)
 
 ## Design Mode
@@ -111,10 +112,11 @@ time, so one dashboard serves many hosts/sites. The header shows a
 dropdown per variable (in normal view mode), and a kiosk entry can set a
 connection-swap variable from the URL (`<id>:connection=<connectionId>`).
 
-Variables come in two kinds — **connection swap** (repoint panels to a
-chosen connection) and **filter** (substitute a value into queries and
-filters) — and the dropdown values can be discovered automatically from
-the connection. For the full picture, including how to define them and
+Variables come in three kinds — **connection swap** (repoint panels to a
+chosen connection), **filter** (substitute a value into queries and
+filters), and **time range** (a window every time-series panel re-scopes
+to, including streaming charts) — and the dropdown values can be
+discovered automatically from the connection. For the full picture, including how to define them and
 how value discovery works per connection type, see the dedicated
 **[Dashboard Variables](dashboard-variables.md)** page.
 

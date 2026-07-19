@@ -42,7 +42,11 @@ dashboard name — one per variable:
 - A **range** variable shows a time-window picker: relative presets plus
   (when enabled) **Custom…** absolute from/to inputs. For connection types
   that downsample server-side (ts-store, Prometheus) a **step** dropdown
-  appears next to it — the offered steps are sized to the chosen window.
+  appears next to it — the offered steps are sized to the chosen window,
+  and the server additionally clamps the step to a point budget so a wide
+  window at a fine step can't overload the source. Series charts under a
+  stepped range also relax their refresh to roughly half the step (the
+  data only advances once per step).
   Picking a window re-queries polled panels and re-backfills streaming
   panels to that span; an **absolute** range freezes a streaming panel into
   a static historical view (there is no "live" for a closed past window),

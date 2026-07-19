@@ -154,13 +154,36 @@ need initial data get a bounded time-range pull when they connect.
 
 A streaming panel paints initial history with a one-shot REST
 backfill before the live stream takes over (`client/src/hooks/useData.js`,
-`runBackfillThenConnect`). The backfill query is one of two shapes:
+`runBackfillThenConnect`). The backfill query is one of three shapes:
 
 - **Count-based** — `{ raw: 'newest', params: { limit: N } }`. Pulls
   the newest *N* records, **unfiltered at the source**.
 - **Time-based** — `{ raw: 'since:<window>' }`. Pulls *every* record in
   the time window. Emitted automatically when the panel has a
-  **sliding window** set.
+  **sliding window** set. (The sliding window itself remains a
+  *render-time* filter — it sizes this backfill but never trims the
+  live buffer.)
+- **Range-driven** — `{ raw: 'newest', params: { range } }` when a
+  dashboard **range variable** is active. The client passes the range
+  INTENT through unchanged; the server (`resolveRange` /
+  `tsstoreRangeFromSpec`) expands it to the dialect's `since:`/`range:`
+  form plus the clamped **step**, so the step budget is enforced in one
+  place. A range change alters the serialized backfill
+  (`effectiveBackfillKey`), which clears the buffer, re-arms the
+  backfill latch, and re-backfills at the new window without
+  duplicates. Row order is **detected from the data's timestamps**, not
+  assumed per endpoint (plain `newest` returns newest-first;
+  `since:`/`range:`+step return oldest-first), and the leading epoch-0
+  bucket a stepped pull can emit is dropped. An **absolute** range is a
+  closed past window: the panel renders the backfill statically and
+  never subscribes to the live stream (historical mode); a relative
+  range keeps the live tail on the **shared raw stream** — a per-chart
+  aggregated-SSE cut was tried and reverted (one SSE per chart
+  saturates HTTP/1.1's per-host cap); matching the live tail to the
+  step is deferred to a configKey-shared aggregated stream (#84).
+  While a range is active the client buffer cap rises from the
+  `stream_buffer_size` default to the range point budget
+  (`TSSTORE_MAX_POINTS`) so a wide window isn't re-clipped.
 
 These are different contracts, and the difference matters when a panel
 is filtered by a **dashboard variable**:
@@ -200,6 +223,36 @@ The editor surfaces an inline hint on exactly this at-risk shape
 (tsstore-streaming + client-side variable filter + no source filter + no
 window), pointing to the source-side Filter or a window. Polling / SQL /
 API panels re-query per value and never have this problem.
+
+### Backfill sharing & superseded-run safety
+
+N identical panels on one connection used to fire N identical backfills
+at mount, overloading slow sources. `queryBackfillShared`
+(`client/src/api/dataClient.js`) dedups them: the key is
+`connectionId + JSON.stringify(query)`, concurrent identical calls join
+one in-flight request, and a 10-second TTL cache lets a panel that
+mounts moments later reuse the result. Panels backfilling a *different*
+window get their own fetch — the key carries the full query, so
+correctness is preserved. Sharing is semantically safe because a
+ts-store backfill carries no per-panel column projection; each panel
+maps its own columns from the shared row set and never mutates it.
+
+Two guards keep async backfills honest across effect re-runs in
+`useData`:
+
+- **Per-run `cancelled` flag.** `mountedRef` is shared by every run of
+  the stream effect and re-armed by each new run, so it cannot detect
+  that a run was *superseded* (e.g. a connection-swap value restoring
+  after mount repointed the panel). Each run closes over its own
+  `cancelled`, set only by that run's cleanup, and checks it after the
+  backfill await and before any subscribe — a stale backfill is
+  dropped instead of appending the old connection's rows and
+  subscribing a live stream nothing will ever unsubscribe.
+- **Latch after the fetch.** `backfillDoneRef` (the once-per-lifecycle
+  backfill latch) is set *after* the fetch resolves, not before — a run
+  cancelled mid-fetch leaves the latch open so its replacement
+  re-fetches (this also covers React StrictMode's dev double-mount).
+  Duplicate wire calls are prevented by the dedup above, not the latch.
 
 ## SSE handler
 
@@ -242,9 +295,14 @@ Key behaviors:
   Arriving subscribers within that window reuse the existing
   connection — the common case when the user flips between
   dashboards.
-- **1000-record client buffer.** A ring buffer per datasource on
-  the client side, flushed to new subscribers on mount (the
-  client-side analog of the backend buffer flush).
+- **Client buffer.** A ring buffer per datasource on the client side
+  (capped at the `stream_buffer_size` admin setting, default 1000),
+  flushed to new subscribers on mount (the client-side analog of the
+  backend buffer flush). Panels that run a REST backfill opt out of
+  the replay (`skipBufferReplay`) — the backfill is the authoritative
+  history and replaying on top of it would duplicate records. Panels
+  under an active dashboard range raise their own in-hook cap to the
+  range point budget instead (see "Backfill & per-value history").
 - **Heartbeat watchdog.** If 60 s pass without any event (not even
   a heartbeat), the manager tears the EventSource down and
   reconnects with exponential backoff.

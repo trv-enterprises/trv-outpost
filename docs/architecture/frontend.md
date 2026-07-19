@@ -41,7 +41,11 @@ client/src/
 ├── hooks/
 │   ├── useData.js            Data-fetching hook
 │   ├── useComponents.js      Component list / refresh
-│   └── useDatasources.js     Datasource list / refresh
+│   ├── useDatasources.js     Datasource list / refresh
+│   ├── useIsMobile.js        950px viewport breakpoint flag
+│   ├── useDashboardData.js   Dashboard fetch/refresh (shared by both viewers)
+│   ├── useRangeConnectionTypes.js   Range-type classification (step/consumer)
+│   └── useFilterVariableDiscovery.js Filter-variable value discovery
 ├── pages/                    Route components — one per top-level view
 ├── theme/
 │   └── carbonEchartsTheme.js ECharts theme wired to Carbon tokens
@@ -338,7 +342,11 @@ vertically-stacked** surface.
   controls the desktop toolbar uses — `ConnectionSwapPicker`,
   `FilterVariablePicker` (over the shared `useFilterVariableDiscovery`
   hook), and `DashboardRangePicker` were extracted so both viewers render
-  one implementation. The filter picker keeps full parity, including
+  one implementation. Range classification is shared the same way:
+  `useRangeConnectionTypes` resolves the range-scoped connection type set
+  and derives `rangeConnType` / `rangeSupportsStep` / `rangeHasConsumer`,
+  so the step dropdown and the hide-when-no-consumer gate behave
+  identically on desktop and mobile. The filter picker keeps full parity, including
   connection-discovered values (DISTINCT / one-shot / newest) and the
   live-recapture modal for raw socket/mqtt.
 - **Phase 1 scope.** No `dashboardCommand` MQTT subscription and no

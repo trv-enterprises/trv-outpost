@@ -113,6 +113,12 @@ repository file's `CreateIndexes` method. The general patterns:
   normalized (lowercase, kebab) before storage, and the cross-entity
   `/api/tags` endpoint uses `$unwind` + `$group` aggregations to
   build per-entity usage counts.
+- **Component-reference lookups on dashboards** — multikey indexes on
+  `panels.component_id` AND `panels.component_overrides.component_id`,
+  so reference queries (component-usage views, `?component_id=`
+  filters, orphan checks) see connection-based alternate components,
+  not just direct placements. Queries union the two via
+  `componentRefFilter` in `dashboard_repository.go`.
 - **Health monitoring fields** on connections (`health.status`,
   `health.last_check`) indexed for the background health-check
   sweep.

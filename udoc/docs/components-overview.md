@@ -46,7 +46,7 @@ Access the full component library from Design Mode > Components.
 - **Filter** by connection
 - **Sort** by name, type, connection, dashboard count, status, or date
 - **View toggle** between list and tile layouts
-- **Dashboard count** shows how many dashboards use each component
+- **Dashboard count** shows how many dashboards use each component — including use as a connection-based alternate (component-swap override), not just direct panel placement
 
 ### Component Status
 

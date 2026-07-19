@@ -44,11 +44,21 @@ in most any environment.
   an error, and the out-of-reach names never reach the browser
 - **Dashboard export / import** — bundle one or more dashboards plus
   their referenced components and connections into a single JSON
-  file. Re-import to update in place (preserved IDs, same target
+  file (including the connections a connection-swap variable can
+  select, bundled as soft dependencies with warnings when missing).
+  Re-import to update in place (preserved IDs, same target
   namespace) or to copy into a different namespace (re-minted IDs).
   Import preflight classifies every object as identical / conflict
   / new / blocked and surfaces per-object diffs for review before
   any writes
+- **Dashboard variables** — one dashboard serves many hosts or sites:
+  a connection-swap dropdown repoints every panel to another
+  connection, a filter value substitutes into each query, and a
+  **time-range picker** (relative presets or absolute from/to) drives
+  every time-series panel — including live streaming charts, which
+  re-backfill to the picked window and hold that span. Connection
+  types that downsample server-side (ts-store, Prometheus) get a
+  **step** control with presets sized to the window
 - **Mobile view** — on a phone-sized screen the dashboard viewer
   stacks every panel full-width in a single scrolling column (reading
   order), so any dashboard is legible on mobile with no re-authoring;
@@ -285,9 +295,10 @@ source, backup + restore).
   and dashboards. AI Builder lives here as an alternate path to
   component creation.
 - **View mode** (`/view/*`) — end-user dashboard runtime with
-  real-time data, auto-refresh, fullscreen, and four fit modes. On a
-  phone it switches to a view-only **mobile layout** that stacks panels
-  vertically for legibility.
+  real-time data, auto-refresh, fullscreen, four fit modes, and the
+  dashboard-variable controls (connection swap, filter, time range +
+  step). On a phone it switches to a view-only **mobile layout** that
+  stacks panels vertically for legibility.
 - **Manage mode** (`/manage/*`) — admin settings, user management,
   device and device-type management.
 

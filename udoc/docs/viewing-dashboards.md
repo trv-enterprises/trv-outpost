@@ -65,7 +65,7 @@ The star icon appears next to the dashboard name in the tile view. Each user has
 
 The viewer renders all dashboard panels with live data. Components refresh automatically based on the dashboard's configured refresh interval.
 
-If the dashboard defines a [dashboard variable](dashboard-variables.md), a dropdown appears after the dashboard name. Picking a value re-scopes every panel — either repointing them to a different connection or substituting a value into their queries and filters — so one dashboard can serve many sites or systems.
+If the dashboard defines [dashboard variables](dashboard-variables.md), their controls appear after the dashboard name. Picking a value re-scopes every panel — repointing them to a different connection, substituting a value into their queries and filters, or (for a **time-range** variable) re-scoping every time-series panel to the picked window, with a step dropdown for connection types that downsample server-side — so one dashboard can serve many sites, systems, or time spans.
 
 ### Toolbar
 

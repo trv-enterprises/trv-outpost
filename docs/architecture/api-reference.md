@@ -108,7 +108,16 @@ discriminates the three sub-types: `chart` (ECharts visualizations),
 | POST   | `/api/dashboards/import/apply` | Write the bundle (with per-conflict overwrite decisions) |
 
 The export endpoint walks the dependency graph: dashboards →
-components → connections. Connections are sanitized (secrets masked).
+components (including connection-based alternates from
+`panels[].component_overrides`) → connections. It also bundles the
+connections a `connection_swap` variable can select, discovered by tag
+via `discoverSwapConnections` (`dashboard_service.go`) — the same
+routine `GetVariableCandidates` uses, so export and the live dropdown
+can't disagree. Swap targets are **soft** dependencies: one that's
+missing or ungranted is skipped with an entry in
+`ExportBundle.Warnings` (surfaced by the preview) instead of blocking
+the export, unlike a component's own `connection_id`, which is
+required. Connections are sanitized (secrets masked).
 Bundle shape carries `format_version`, `source_namespace`, an
 `exported_at` timestamp, and arrays in dependency order so the
 importer can replay them as-is.

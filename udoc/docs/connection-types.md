@@ -91,7 +91,11 @@ Connect to a TS-Store time-series database.
 - Store name
 - API key
 
-**Usage**: Time-series data queries for monitoring dashboards.
+**Usage**: Time-series data queries for monitoring dashboards. Supports
+server-side downsampling: under a dashboard [time-range variable](dashboard-variables.md#range-options),
+ts-store charts get a **step** dropdown (both rest and streaming
+transports), and the server clamps the step to a point budget so a wide
+window at a fine step can't overload the store.
 
 ## Prometheus
 
@@ -107,7 +111,7 @@ Connect to a Prometheus metrics server.
 - Visual PromQL builder
 - Label value autocomplete
 
-**Usage**: Infrastructure monitoring dashboards. Supports instant queries and range queries.
+**Usage**: Infrastructure monitoring dashboards. Supports instant queries and range queries. Under a dashboard [time-range variable](dashboard-variables.md#range-options), range panels pick the window up automatically and get a **step** dropdown for server-side downsampling.
 
 ## EdgeLake
 

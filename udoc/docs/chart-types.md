@@ -45,6 +45,8 @@ Map query result fields to chart axes and series:
 | Option | Applicable Types |
 |--------|-----------------|
 | **Axis labels** (X/Y) | Bar, Line, Area, Scatter |
+| **X-axis timestamp format** | Time-series charts — defaults to **auto** (the chart picks time-only vs date+time from the data's actual span) |
+| **Number value size** | Number — value font size in px; defaults to the admin setting [Default Number Chart Value Size](system-settings.md) (56 px out of the box) |
 | **Smooth curves** | Line, Area |
 | **Stacked series** | Bar, Line, Area |
 | **Show data labels** | All chart types |
@@ -56,6 +58,8 @@ Map query result fields to chart axes and series:
 
 ## Auto-Refresh
 
-When placed in a dashboard with auto-refresh enabled, charts automatically re-query their data source at the configured interval. Streaming connections (WebSocket, MQTT) update in real-time without polling.
+When placed in a dashboard with auto-refresh enabled, charts automatically re-query their data source at the configured interval. Streaming connections (WebSocket, MQTT, streaming ts-store) update in real-time without polling.
+
+If the dashboard defines a [time-range variable](dashboard-variables.md#range-options), time-series charts re-scope to the picked window — including streaming ts-store charts, which re-backfill their history to the window and hold that span as live records arrive. An absolute (from/to) range renders a streaming chart as a static historical view until a relative preset is picked again. Instantaneous charts (gauge, number, pie) always show the latest value and ignore the range.
 
 ---

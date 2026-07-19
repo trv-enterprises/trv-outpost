@@ -16,9 +16,15 @@ When you export, the system follows the dashboard's dependency graph:
 
 - The selected dashboards themselves
 - Every component (chart / control / display) referenced by any
-  panel
+  panel — including **connection-based alternate components**
+  (component-swap overrides)
 - Every connection (datasource) those components talk to, plus any
   Frigate or MQTT connections referenced by display configs
+- The connections a **connection-swap variable** can select
+  (discovered by the variable's tags). These are *soft* dependencies:
+  a target that's missing or not visible to you is skipped with a
+  warning in the export preview instead of blocking the export —
+  unlike a component's own connection, which is required
 
 The bundle is a JSON file with this rough shape:
 
@@ -50,6 +56,10 @@ import side handles those specially (see "Secrets" below).
 4. Click **Export (N)** in the bulk-action bar. A modal previews
    what's about to download:
    *"Exporting 3 dashboards with 12 components and 4 connections."*
+   The preview also surfaces **warnings** — for example a
+   connection-swap target that couldn't be included (missing or not
+   visible to you). Warnings don't block the export; the bundle just
+   ships without that soft dependency.
 5. Click **Download**. The file lands as
    `<source_namespace>-YYYYMMDDTHHMMSS.json`.
 
@@ -86,6 +96,10 @@ with that dashboard pre-selected.
    - **Conflicts** — objects with the same ID but different content
      (review individually)
    - **Blocked** — objects that can't be imported as-is
+
+   Because bundles carry the connections a connection-swap variable
+   can select, an imported dashboard's swap dropdown is populated on
+   the target system instead of arriving empty.
 5. Click **Import**.
    - If there are conflicts, a diff modal opens. Review each
      conflict's unified diff, uncheck any you don't want to
