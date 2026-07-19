@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { Modal, Loading, InlineNotification } from '@carbon/react';
 import { AgGridReact } from 'ag-grid-react';
 import { DataContext } from './DynamicComponentLoader';
-import { formatCellValue } from '../utils/dataTransforms';
+import { formatCellValue, parseTimestamp } from '../utils/dataTransforms';
 
 /**
  * ComponentDataGridModal
@@ -63,8 +63,10 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
     if (tsCol < 0) return false;
     let prev = null;
     for (let i = 0; i < rows.length; i++) {
-      const v = rows[i]?.[tsCol];
-      const t = v instanceof Date ? v.getTime() : Date.parse(v) || Number(v);
+      // parseTimestamp so epoch-seconds gaps are measured in real ms (a raw
+      // Number(v) on epoch seconds makes every gap look like whole seconds).
+      const d = parseTimestamp(rows[i]?.[tsCol]);
+      const t = d ? d.getTime() : NaN;
       if (!Number.isFinite(t)) continue;
       if (prev != null) {
         const gap = Math.abs(t - prev);
@@ -77,13 +79,50 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, timestampFormat]);
 
-  // The format actually passed to formatCellValue. For 'auto' + sub-minute data
-  // we swap in the seconds-aware auto so the table can disambiguate rows that
-  // share a minute. (formatCellValue maps 'auto_seconds' → date+time+seconds
-  // or time+seconds by recency, mirroring the plain 'auto' rule.)
-  const effectiveTimestampFormat = (timestampFormat === 'auto' && autoSubMinute)
-    ? 'auto_seconds'
-    : timestampFormat;
+  // Multi-day span detection for 'auto'. Plain 'auto' decides PER CELL —
+  // same-day rows show time-only ('8:05 PM'), other-day rows show date+time
+  // ('7/17, 8:05 PM'). That's right for a live table (all recent), but a
+  // RANGED table spanning >1 day then mixes two formats in one column (today
+  // time-only, yesterday date+time). When the data crosses a day boundary,
+  // pin every cell to a concrete date+time preset so the column is uniform.
+  const autoMultiDay = useMemo(() => {
+    if (timestampFormat !== 'auto') return false;
+    const rows = data?.rows;
+    if (!Array.isArray(rows) || rows.length < 2) return false;
+    const tsCol = allColumns.indexOf('timestamp') >= 0
+      ? allColumns.indexOf('timestamp')
+      : allColumns.findIndex((c) => /^(time|ts)$|time(stamp)?/i.test(c));
+    if (tsCol < 0) return false;
+    let minT = Infinity;
+    let maxT = -Infinity;
+    for (let i = 0; i < rows.length; i++) {
+      // parseTimestamp normalizes epoch seconds/ms/µs/ns + ISO — a hand-rolled
+      // Number(v) would read epoch SECONDS as ms (→ 1970) and collapse every row
+      // to one day, defeating the very check this does.
+      const d = parseTimestamp(rows[i]?.[tsCol]);
+      const t = d ? d.getTime() : NaN;
+      if (!Number.isFinite(t)) continue;
+      if (t < minT) minT = t;
+      if (t > maxT) maxT = t;
+    }
+    if (!Number.isFinite(minT) || !Number.isFinite(maxT)) return false;
+    return new Date(minT).toDateString() !== new Date(maxT).toDateString();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, timestampFormat]);
+
+  // The format actually passed to formatCellValue. For 'auto':
+  //   - spans >1 day → a fixed date+time preset (uniform, no per-cell mixing);
+  //     with sub-minute gaps, the seconds variant so shared minutes stay distinct.
+  //   - single day + sub-minute → 'auto_seconds' (time-only + seconds).
+  //   - otherwise → plain 'auto'.
+  let effectiveTimestampFormat = timestampFormat;
+  if (timestampFormat === 'auto') {
+    if (autoMultiDay) {
+      effectiveTimestampFormat = autoSubMinute ? 'chart_datetime_seconds' : 'chart_datetime';
+    } else if (autoSubMinute) {
+      effectiveTimestampFormat = 'auto_seconds';
+    }
+  }
   // When the chart hasn't explicitly chosen a column order via
   // visible_columns, hoist the time + numeric-value columns to the
   // front — most data tables here are time-series, and the reader
