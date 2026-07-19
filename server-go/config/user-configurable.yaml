@@ -35,7 +35,7 @@ settings:
   - key: default_numeric_chart_number_size
     category: appearance
     description: "Default font size (px) for the value in new Number charts"
-    value: 120
+    value: 56
 
   - key: chart_preferred_color_options
     category: appearance

@@ -3956,7 +3956,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // case above (maps to yAxisColumns[0]). Size is an
                       // enum (string-valued options) so stringify the
                       // stored number; unit is free text.
-                      number_size: String(chartOptions.numberSize ?? 120),
+                      number_size: String(chartOptions.numberSize ?? 56),
                       number_unit: chartOptions.numberUnit || '',
                       // Decimal places enum. Stored as a string ('auto' |
                       // '0'..'4'); default 'auto' keeps the auto formatter.
