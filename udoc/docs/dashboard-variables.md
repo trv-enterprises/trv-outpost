@@ -9,7 +9,7 @@ hosts. Instead of building a near-identical board for every server, you build
 one and add a variable; a dropdown after the dashboard name then re-scopes
 every panel to the selected value.
 
-There are two kinds of variable, and a dashboard can use both at once:
+There are three kinds of variable, and a dashboard can combine them:
 
 - **Connection swap** — selecting a value repoints every panel to a different
   *connection*. Use this when each site/system is its own connection (e.g. a
@@ -17,6 +17,9 @@ There are two kinds of variable, and a dashboard can use both at once:
 - **Filter value** — selecting a value substitutes it into each component's
   *query or filter*. Use this when all sites share one connection and are
   distinguished by a column (e.g. a `location` field).
+- **Time range** — the viewer picks a time window (a relative preset like
+  *Last 24h*, or absolute from/to instants) and every time-series panel
+  re-queries to that window. At most one range variable per dashboard.
 
 > Where this lives in the app: you **define** variables while editing a
 > dashboard (the **Variables** button), and you **use** them from the header
@@ -36,6 +39,15 @@ dashboard name — one per variable:
 - A **filter** variable shows a dropdown (or a free-text box) of values.
   Picking one re-runs the query for query-based panels and re-filters the live
   data for streaming panels.
+- A **range** variable shows a time-window picker: relative presets plus
+  (when enabled) **Custom…** absolute from/to inputs. For connection types
+  that downsample server-side (ts-store, Prometheus) a **step** dropdown
+  appears next to it — the offered steps are sized to the chosen window.
+  Picking a window re-queries polled panels and re-backfills streaming
+  panels to that span; an **absolute** range freezes a streaming panel into
+  a static historical view (there is no "live" for a closed past window),
+  and live updates resume when you return to a relative preset. The picker
+  only appears when at least one panel actually consumes the range.
 
 In [Kiosk Mode](modes.md#kiosk-mode), a kiosk entry can set a connection-swap
 variable from the URL (`<id>:connection=<connectionId>`), so one layout rotates
@@ -74,6 +86,28 @@ escaped safely server-side) or in a client-side filter value. See
 | **Value source** | Where the dropdown gets its choices: a **list** you type, **free text** (type any value), or **from connection** (discovered live — see below). |
 | **Options** | The list of values (for *list* source; also the fallback list for *from connection*). |
 | **Default value** | Pre-selected on first load. |
+
+### Range options
+
+| Field | What it does |
+|-------|--------------|
+| **Variable label** | The header label. |
+| **Presets** | The relative windows offered (e.g. `1h`, `6h`, `24h`, `7d`, `30d`). |
+| **Default preset** | Pre-selected on first load. |
+| **Allow absolute** | Adds **Custom…** with absolute from/to date-time inputs. |
+
+How the window reaches each panel depends on its connection type:
+
+- **SQL / EdgeLake** — opt-in per component: write the time column followed by
+  the `{{range-variable}}` token in the `WHERE` clause (e.g.
+  `WHERE ts {{range-variable}}`); the server expands it into a bounded
+  predicate. Panels without the token ignore the range.
+- **ts-store / Prometheus** — time-series panels pick the window up
+  automatically, no token needed. This includes **streaming** ts-store charts:
+  the range drives the backfilled history and holds the span as live records
+  arrive.
+- **Instantaneous tiles** (gauge / number / pie) always show the latest value —
+  the range deliberately does not hijack them into a historical query.
 
 ## Value discovery (from connection)
 

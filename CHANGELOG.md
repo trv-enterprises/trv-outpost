@@ -6,7 +6,7 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.41.0] — 2026-07-19
 
 ### Added
 
@@ -30,6 +30,66 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   landscape get mobile), and the mobile page is code-split so desktop
   sessions never load it. Phase 1 — no per-dashboard mobile layout
   authoring or on-phone editing yet.
+
+- **Time-range control works end to end on ts-store charts (#171, #162).**
+  The dashboard **range variable** now actually drives ts-store panels on
+  both transports. Polled (`rest`) charts re-query to the picked window
+  (#171); **streaming** charts re-backfill their history to the window and
+  hold that span as live records append, instead of silently ignoring the
+  picker (#162). A **step** dropdown appears for connection types that
+  downsample server-side (ts-store, Prometheus), with offered presets sized
+  to the chosen window and a server-side point budget so a wide window at a
+  fine step can't overload the source. An **absolute** (from/to) range
+  switches streaming panels to a **static historical view** — no live
+  appends into a closed past window — and live resumes when the range goes
+  back to a relative preset or clears. Supporting behavior: the range
+  picker hides when no panel on the board actually consumes it;
+  instantaneous tiles (gauge/number/pie) keep showing the latest value
+  rather than being hijacked into a historical query; series charts on a
+  range dashboard refresh at a step-aware cadence; superseded fetches are
+  cancelled so rapid range switches (24h → 6h) land on the final selection
+  without hanging.
+
+### Changed
+
+- **Number-chart value font default is now 56 px** (was 120). New number
+  tiles start at a size that fits a typical small tile; saved charts that
+  stored an explicit size are unaffected. The deployment-wide default
+  remains editable at Manage → Settings
+  (`default_numeric_chart_number_size`) — existing deployments keep their
+  stored value.
+- **X-axis timestamp format defaults to auto everywhere** — charts pick
+  time-only vs date+time from the data's actual span instead of a fixed
+  format.
+
+### Fixed
+
+- **Export bundles now carry connection-swap targets (#176).** A dashboard
+  with a connection-swap variable exported only the components' own
+  connections — the swap candidates (discovered by tag at view time) were
+  never bundled, so the dropdown arrived empty on import. Export now
+  discovers each swap variable's targets and bundles them as soft
+  dependencies (missing/ungranted targets become a preview warning instead
+  of blocking the export). Connection-alt (component-swap override)
+  components are also now visible to dependency tracking — dashboard list
+  filters, component-usage views, and usage counts include them.
+- **Streaming panels no longer mix two connections' data after a
+  connection-swap restore.** When a panel mounted before the saved swap
+  selection finished restoring, the design-time connection's in-flight
+  backfill could resolve late, append its rows onto the already-repointed
+  panel (a second overlapping time span on the x-axis), and then subscribe
+  a never-cleaned-up live stream from the old connection. Each streaming
+  effect run now carries its own cancellation flag, so a superseded
+  backfill is dropped and never connects. Most visible on the mobile
+  viewer, where every viewport-mode switch re-ran the race.
+- Data tables keep one timestamp format across a day boundary instead of
+  mixing time-only and date+time rows (also applies to CSV/JSON downloads,
+  which now emit ISO 8601 timestamps).
+- Firefox no longer shows spurious "Data Error" panels or reconnect loops
+  when a streaming fetch is deliberately aborted (Firefox names aborts
+  differently than Chrome; the abort detection now covers both).
+- The viewer back-button tooltip no longer clips off the left viewport
+  edge.
 
 ## [0.40.0] — 2026-07-15
 
