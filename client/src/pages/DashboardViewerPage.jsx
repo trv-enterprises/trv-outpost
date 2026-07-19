@@ -2894,7 +2894,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             <IconButton
               kind="ghost"
               label="Back to dashboards"
-              align="bottom"
+              // bottom-left (not bottom): this button hugs the viewport's left
+              // edge, so a centered tooltip overflows past it and clips ("k to
+              // dashboards"). bottom-left anchors the tooltip to the button's
+              // start edge so it extends rightward into view.
+              align="bottom-left"
               onClick={handleBack}
             >
               <ArrowLeft size={20} />
@@ -2908,7 +2912,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             <IconButton
               kind="ghost"
               label="Cancel"
-              align="bottom"
+              // Same left-edge slot as the view-mode back arrow — anchor the
+              // tooltip to the start edge so it can't clip on the viewport left.
+              align="bottom-left"
               onClick={exitEditMode}
             >
               <ArrowLeft size={20} />
