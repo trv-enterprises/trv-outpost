@@ -33,6 +33,7 @@ import { queryData, queryComponentData, queryBackfillShared } from '../api/dataC
 import apiClient from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getStreamBufferSize } from '../utils/streamBufferConfig';
+import { TSSTORE_MAX_POINTS } from '../utils/rangePresets';
 import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
 
 // Backfill queries can pull up to the full stream buffer (e.g. `newest
@@ -48,6 +49,23 @@ const BACKFILL_TIMEOUT_MS = 45_000;
 // default would trip a real 24h fetch. This bounds a truly hung request; a
 // superseded one is aborted immediately by the next fetch, not by this timeout.
 const REST_FETCH_TIMEOUT_MS = 45_000;
+
+/**
+ * isAbortError — was this error a deliberate fetch/stream abort, across browsers?
+ * Chrome throws a DOMException named 'AbortError'. Firefox, when a STREAMING
+ * fetch (response.body reader) is aborted mid-read, throws a TypeError whose
+ * message is "Error in input stream" or "NetworkError when attempting to fetch
+ * resource" — NOT named AbortError. Keying only on the name lets Firefox aborts
+ * fall through as real errors (spurious panel "Data Error", and — on the
+ * aggregated SSE path — an endless reconnect→new-aggregator loop). Prefer a
+ * caller-supplied signal when available; fall back to name + message sniffing.
+ */
+function isAbortError(err, signal = null) {
+  if (signal?.aborted) return true;
+  if (err?.name === 'AbortError') return true;
+  const msg = String(err?.message || '');
+  return /input stream|NetworkError when attempting to fetch/i.test(msg);
+}
 
 /**
  * Extract a nested value from an object using dot-notation path.
@@ -117,11 +135,24 @@ function applyParser(record, parser) {
 // previews must NOT, since their query is dirty/unsaved and needs the raw
 // /query path. The `query` prop is still required either way — token
 // presence and value identity (what triggers refetches) are derived from it.
-export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0 }) {
+export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0, rangeValue = null }) {
   // A per-call maxBuffer wins; otherwise use the deployment-wide default
   // (admin setting stream_buffer_size, set at bootstrap). Applies to both
   // spec-driven and eval'd custom-code charts.
-  const effectiveMaxBuffer = (Number.isFinite(maxBuffer) && maxBuffer > 0) ? maxBuffer : getStreamBufferSize();
+  //
+  // When a dashboard RANGE is active, the buffer must hold the whole windowed
+  // backfill — the live-tail default (1000) would re-clip a wide window to its
+  // most-recent 1000 points (e.g. 24h@1m = 1442 rows trimmed to ~16.6h), the
+  // client-side twin of the server buffer-limit trap. The server already caps a
+  // ranged pull at the step point budget, so that budget is the natural ceiling
+  // — the window can never return more. Take the larger of it and the live
+  // buffer so a bigger admin buffer isn't shrunk, and an explicit maxBuffer
+  // still wins. TSSTORE_MAX_POINTS is the right (and only) budget here: the
+  // ranged streaming-backfill path below is ts-store-only. If another step-aware
+  // type ever gains one, switch to maxPointsForType(datasourceType).
+  const rangeActive = !!(rangeValue && rangeValue.type);
+  const baseBuffer = (Number.isFinite(maxBuffer) && maxBuffer > 0) ? maxBuffer : getStreamBufferSize();
+  const effectiveMaxBuffer = rangeActive ? Math.max(baseBuffer, TSSTORE_MAX_POINTS) : baseBuffer;
   // Common state
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -222,17 +253,10 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   const flushRAFRef = useRef(null);
   const backfillDoneRef = useRef(false); // Backfill once per useData lifecycle, not per reconnect
 
-  // Reset accumulated data when the connection changes (e.g. a dashboard
-  // connection-swap repoints this panel to a different connection). Without
-  // this, the old connection's rows linger, the new connection never
-  // re-backfills (backfillDoneRef stays true), and the panel only updates on a
-  // full page reload. Skip the very first mount — there's nothing to clear and
-  // the normal load path handles it.
-  const prevConnIdRef = useRef(connectionId);
-  useEffect(() => {
-    if (prevConnIdRef.current === connectionId) return;
-    prevConnIdRef.current = connectionId;
-    // Clear streaming buffers + displayed data so the new connection starts clean.
+  // Clear streaming buffers + displayed data and re-arm the backfill so the
+  // next load starts from a clean slate. Shared by the connection-change reset
+  // and the range-change reset (stage 2 of #162) so their behavior can't drift.
+  const resetForFreshLoad = useCallback(() => {
     pendingRecordsRef.current = [];
     if (flushRAFRef.current) {
       cancelAnimationFrame(flushRAFRef.current);
@@ -243,7 +267,20 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     setData(null);
     setError(null);
     setLoading(true);
-  }, [connectionId]);
+  }, []);
+
+  // Reset accumulated data when the connection changes (e.g. a dashboard
+  // connection-swap repoints this panel to a different connection). Without
+  // this, the old connection's rows linger, the new connection never
+  // re-backfills (backfillDoneRef stays true), and the panel only updates on a
+  // full page reload. Skip the very first mount — there's nothing to clear and
+  // the normal load path handles it.
+  const prevConnIdRef = useRef(connectionId);
+  useEffect(() => {
+    if (prevConnIdRef.current === connectionId) return;
+    prevConnIdRef.current = connectionId;
+    resetForFreshLoad();
+  }, [connectionId, resetForFreshLoad]);
 
   const flushPendingRecords = useCallback(() => {
     flushRAFRef.current = null;
@@ -393,17 +430,43 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     if (backfill === false) return null;
     if (backfill) return backfill;
     if (datasourceType === 'tsstore' && datasourceTransport === 'streaming') {
+      // When a dashboard range is active, the backfill should paint that WINDOW
+      // rather than the latest N. Pass the range INTENT through unchanged — the
+      // server's resolveRange/tsstoreRangeFromSpec translates it to since:/range:
+      // + a clamped step (the same merged path the polling /query side uses), so
+      // we must NOT build since:/range: strings here or the step clamp would
+      // diverge. The row cap (not the buffer limit) applies server-side, so a
+      // wide window isn't truncated. No range → the latest-N default.
+      if (rangeValue && rangeValue.type) {
+        return { raw: 'newest', type: 'tsstore', params: { range: rangeValue } };
+      }
       return { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
     }
     return null;
-  }, [backfill, datasourceType, datasourceTransport]);
+  }, [backfill, datasourceType, datasourceTransport, rangeValue]);
   const effectiveBackfillKey = useMemo(() => JSON.stringify(effectiveBackfill), [effectiveBackfill]);
+
+  // Re-init on a backfill-query change (stage 2 of #162): a dashboard range
+  // change alters effectiveBackfill (its params.range), so the streaming chart
+  // must re-backfill the NEW window over clean state. Without this reset,
+  // backfillDoneRef stays true from the first mount, the SSE effect re-runs (it
+  // depends on effectiveBackfillKey) but SKIPS the backfill, and the old
+  // window's rows stay in `data` while the new live subscription appends on top
+  // — stale history glued to new-window live data. Resetting re-arms the
+  // backfill so the re-run paints the new window fresh. Skip the first mount.
+  const prevBackfillKeyRef = useRef(effectiveBackfillKey);
+  useEffect(() => {
+    if (prevBackfillKeyRef.current === effectiveBackfillKey) return;
+    prevBackfillKeyRef.current = effectiveBackfillKey;
+    resetForFreshLoad();
+  }, [effectiveBackfillKey, resetForFreshLoad]);
 
   // Connect to SSE stream for socket datasources (raw or aggregated)
   useEffect(() => {
     if (typeLoading || !isStreamingType || !connectionId) {
       return;
     }
+
 
     mountedRef.current = true;
     let reconnectTimeout = null;
@@ -417,8 +480,15 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       const url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream/aggregated`;
 
       try {
-        // Build headers including user auth
-        const headers = { 'Content-Type': 'application/json' };
+        // Build headers including user auth. This is a fetch (not EventSource),
+        // so it carries the Bearer token via a header — the ?st= query is only
+        // for header-less EventSource/WebSocket. Without it the endpoint 401s on
+        // a session-JWT deployment (X-User-ID alone isn't valid when legacy GUID
+        // auth is off). X-User-ID stays for the legacy-GUID path.
+        const headers = {
+          'Content-Type': 'application/json',
+          ...apiClient.streamAuthHeaders(),
+        };
         const userGuid = apiClient.getCurrentUserGuid();
         if (userGuid) {
           headers['X-User-ID'] = userGuid;
@@ -483,7 +553,15 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           }
         }
       } catch (err) {
-        if (err.name === 'AbortError') return; // Normal cleanup
+        // A deliberate abort (effect cleanup / unmount / supersede) is normal —
+        // NOT a connection failure, and must not trigger a reconnect. Detect it
+        // by the SIGNAL, not the error name: Chrome throws AbortError, but
+        // Firefox throws "TypeError: Error in input stream" / "NetworkError"
+        // when a streaming fetch is aborted mid-read. Keying only on err.name
+        // let those fall through to handleConnectionError → reconnect → a NEW
+        // aggregator every cleanup, thrashing the SSE (browser-specific loop,
+        // seen in Firefox).
+        if (isAbortError(err, abortController?.signal)) return;
 
         console.error('[useData] Aggregated stream error:', err);
         if (mountedRef.current) {
@@ -570,6 +648,13 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     // Backfill: fire a one-shot REST query to pre-populate the buffer before streaming.
     // Only on first mount, NOT on every effect re-run/reconnect (would duplicate data).
     const runBackfillThenConnect = async () => {
+      // Stage 5 (#162): an absolute range is a closed PAST window — there is
+      // no live edge to tail, so the panel renders the backfill statically
+      // and never subscribes to the stream. The range is folded into
+      // effectiveBackfillKey, so switching back to a relative range (or
+      // clearing it) re-runs this effect and restores the live tail.
+      const historicalMode = effectiveBackfill?.params?.range?.type === 'absolute';
+      let backfillError = null;
       if (effectiveBackfill && mountedRef.current && !backfillDoneRef.current) {
         backfillDoneRef.current = true;
         try {
@@ -584,26 +669,91 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
             // Convert columnar result to record objects for processStreamRecord.
             // The chart trusts row order and never sorts (line.js builds a category
             // x-axis straight from arrival order), so backfill rows must be fed
-            // OLDEST-FIRST to paint left→right like SQL charts.
+            // OLDEST-FIRST to paint left→right, newest data on the right (the
+            // industry-standard time-series direction).
             //
-            // Source ordering differs by connection type:
-            //   - ts-store ('newest' / 'since:' both hit /data/newest) returns
-            //     NEWEST-first (descending) → reverse to oldest-first.
-            //   - raw socket / websocket / mqtt collect live records in ARRIVAL
-            //     order → already oldest-first; reversing them flips the chart to
-            //     right→left (the bug this guards against).
+            // Order is DETECTED from the data, not assumed from the connection
+            // type: ts-store's endpoints disagree — a plain `newest` pull returns
+            // NEWEST-first (descending), but a `since:`/`range:` + step pull
+            // returns OLDEST-first (ascending). Keying the reversal on type alone
+            // (the old `datasourceType === 'tsstore'` heuristic) flipped the
+            // stepped range path to newest-first → older data on the RIGHT.
+            // Raw socket / websocket / mqtt arrive in arrival order (oldest-first)
+            // and must not be reversed. Detecting from the timestamps handles all
+            // of these without a per-endpoint table.
             const { columns, rows } = result.data;
-            const sourceIsNewestFirst = datasourceType === 'tsstore';
-            const ordered = sourceIsNewestFirst ? [...rows].reverse() : rows;
+            const tsColIdx = columns.indexOf(
+              parser?.timestampField || 'timestamp'
+            );
+            const toMs = (v) => {
+              if (v == null) return null;
+              if (v instanceof Date) return v.getTime();
+              const n = Number(v);
+              // ts-store timestamps can be epoch ns/us/ms/s; magnitude-normalize
+              // only enough to compare ORDER (absolute scale is irrelevant here).
+              return Number.isFinite(n) ? n : Date.parse(v);
+            };
+            let descending = false;
+            if (tsColIdx >= 0 && rows.length >= 2) {
+              const firstTs = toMs(rows[0][tsColIdx]);
+              const lastTs = toMs(rows[rows.length - 1][tsColIdx]);
+              if (firstTs != null && lastTs != null) descending = firstTs > lastTs;
+            } else if (tsColIdx < 0) {
+              // No detectable timestamp column → fall back to the historical
+              // type heuristic so non-timestamped ts-store pulls still order.
+              descending = datasourceType === 'tsstore';
+            }
+            let ordered = descending ? [...rows].reverse() : rows;
+            // Stage 3/4 seam (#162): when live data arrives via the AGGREGATED
+            // stream, drop the backfill's trailing bucket. The REST backfill
+            // Flushes its last window even when PARTIAL (batch.go), but the live
+            // aggregator emits only CLOSED buckets (aggregator.go, "don't emit
+            // current bucket"). So the newest backfill bucket is a partial avg,
+            // and live will later emit that same bucket boundary as a COMPLETE
+            // avg — appending both yields two rows at one timestamp (a doubled
+            // x-tick + a small kink at the handoff). Dropping the partial lets
+            // live own the leading edge cleanly. `ordered` is oldest-first, so
+            // the trailing bucket is the last element. Only when aggregated (a
+            // raw backfill has no live re-emit to defer to).
+            // In historical mode there is no live re-emit — keep the partial
+            // trailing bucket rather than losing the window's last bucket.
+            if (useAggregated && !historicalMode && ordered.length > 0) {
+              ordered = ordered.slice(0, -1);
+            }
             ordered.forEach(row => {
+              // A ts-store range/step pull emits a leading empty bucket with
+              // timestamp 0 (epoch 1970). Left in, it drags the x-axis origin to
+              // 1970 and crushes the real data into a sliver on the right. Drop
+              // rows whose timestamp is missing/non-positive — only when we HAVE
+              // a timestamp column to judge by (tsColIdx>=0), so non-timestamped
+              // sources are unaffected.
+              if (tsColIdx >= 0) {
+                const t = toMs(row[tsColIdx]);
+                if (t == null || t <= 0) return;
+              }
               const record = {};
               columns.forEach((col, i) => { record[col] = row[i]; });
               processStreamRecord(record);
             });
           }
         } catch (err) {
-          console.warn('[useData] Backfill query failed, streaming will start empty:', err.message);
+          // AbortError here is a deliberate cancel; anything else means the
+          // backfill couldn't paint history — the live stream still starts.
+          if (!isAbortError(err)) {
+            console.warn('[useData] Backfill query failed, streaming will start empty:', err.message);
+            backfillError = err instanceof Error ? err : new Error(String(err));
+          }
         }
+      }
+
+      if (historicalMode) {
+        if (mountedRef.current) {
+          handleConnectionSuccess();
+          // With no live stream to fall back on, a failed backfill would
+          // otherwise leave a silently empty panel — surface it.
+          if (backfillError) setError(backfillError);
+        }
+        return;
       }
 
       // Now connect to the stream
@@ -710,20 +860,35 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         isInitialFetchRef.current = false; // Mark initial fetch as complete
       }
     } catch (err) {
-      // A superseded fetch was aborted on purpose — not a real error, and its
-      // successor is already running, so leave state to that newer fetch.
-      const aborted = abortController.signal.aborted && myGen !== fetchGenRef.current;
-      if (!aborted && mountedRef.current && myGen === fetchGenRef.current) {
-        setError(err);
+      // An AbortError is NEVER a user-facing error — it's always one of our own
+      // deliberate aborts: a superseded fetch (query/range/connection change), a
+      // timeout, or the unmount/cleanup abort. Surfacing it renders a spurious
+      // "Data Error: The operation was aborted" on the panel even though the data
+      // is fine (or a newer fetch is already replacing it). This is broader than
+      // the old myGen-only guard, which missed the case where the current fetch
+      // is aborted by the SSE/connection-swap cleanup without a newer fetch in
+      // THIS hook bumping the generation.
+      const aborted = isAbortError(err, abortController.signal);
+      if (mountedRef.current && myGen === fetchGenRef.current) {
+        // This is the LATEST fetch (no newer one superseded it), so nobody else
+        // will clear the loading state — we must, whether it errored or was
+        // aborted. A non-abort error surfaces to the panel; an abort of the
+        // latest fetch (e.g. the effect-cleanup abort with no successor, or a
+        // timeout) is NOT a user error but still ends "loading" — otherwise the
+        // panel hangs on the spinner forever with no error (the stuck-Loading
+        // bug). A SUPERSEDED abort (older gen) is skipped: its successor owns
+        // the state and will clear it.
+        if (!aborted) setError(err);
         setLoading(false);
       }
     } finally {
       clearTimeout(timeoutHandle);
-      // Only clear the in-flight flag if we're still the latest fetch; a newer
-      // fetch may already own it.
-      if (myGen === fetchGenRef.current) {
-        fetchingRef.current = false;
-      }
+      // ALWAYS release the in-flight flag — every fetch that set it must clear
+      // it, or a superseded fetch that never becomes "latest" leaves it stuck
+      // true forever, permanently blocking refetch() (which early-returns on
+      // fetchingRef) → the panel hangs on "Loading…". The generation guard is
+      // for APPLYING results (above), not for releasing this flag.
+      fetchingRef.current = false;
     }
   }, [connectionId, queryKey, useCache, runQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -850,7 +1015,10 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       }
     } catch (err) {
       if (mountedRef.current) {
-        setError(err);
+        // AbortError is a deliberate cancel, not a data error — don't surface it.
+        // But ALWAYS end the loading state, or an aborted refetch leaves the
+        // spinner stuck (the same stuck-Loading bug as the main fetch path).
+        if (!isAbortError(err)) setError(err);
         setLoading(false);
       }
     } finally {

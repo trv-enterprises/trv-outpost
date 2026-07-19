@@ -267,6 +267,12 @@ xAxis: {
   type: 'category',
   data: chartData.map(d => Number(d.timestamp)),       // raw epoch ms
   axisLabel: {
+    // Custom code: pick a FIXED preset ('chart_time' time-only,
+    // 'chart_datetime' date+time). Do NOT use 'auto' in an ECharts
+    // axisLabel formatter — 'auto' is a per-cell decision there, so a
+    // multi-day axis mixes formats (today time-only, yesterday date+time).
+    // Span-aware 'auto' exists only on the spec-driven line/area path, which
+    // is the better default for a time-series anyway (see below).
     formatter: (v) => formatTimestamp(Number(v), 'chart_time'),
     color: '#c6c6c6'
   }

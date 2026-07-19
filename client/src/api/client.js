@@ -1400,6 +1400,18 @@ class APIClient {
     return '';
   }
 
+  // streamAuthHeaders returns the Authorization header for a FETCH-based stream
+  // (the aggregated SSE POST). Unlike EventSource/WebSocket, fetch can send
+  // headers, so it uses the same Bearer channel as request() rather than the
+  // ?st= query. Same precedence as streamAuthQuery: API key wins, JWT falls
+  // through. Empty object when neither is set → the request 401s from the auth
+  // middleware, the correct failure signal.
+  streamAuthHeaders() {
+    if (this.apiKey) return { Authorization: `Bearer ${this.apiKey}` };
+    if (this.accessToken) return { Authorization: `Bearer ${this.accessToken}` };
+    return {};
+  }
+
   // wsOrigin resolves the `ws(s)://host[:port]` prefix for WebSocket
   // URLs. The subtlety: in Vite dev `this.baseURL` is '' (relative, so
   // HTTP rides the same-origin dev proxy). Naively doing

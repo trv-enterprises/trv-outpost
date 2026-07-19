@@ -234,6 +234,27 @@ export function clampPromStep(step, windowMs) {
   return clampStep(step, windowMs, PROM_MAX_POINTS);
 }
 
+/**
+ * stepsForWindow — the subset of STEP_PRESETS that produces a READABLE number
+ * of points for a window: a step is offered only when window/step stays within
+ * `maxPoints`. This hides sub-minute steps on wide windows (e.g. 15s on 24h =
+ * 5,760 points — unreadable and, after clamping, not even the resolution
+ * requested), so a viewer can't pick a step the range can't meaningfully draw.
+ *
+ * Always returns at least the coarsest preset, so the dropdown is never empty
+ * (a very wide window still offers the largest step). windowMs unknown/invalid
+ * → the full list (no basis to filter). Preserves STEP_PRESETS order.
+ */
+export function stepsForWindow(windowMs, maxPoints) {
+  if (!windowMs || windowMs <= 0 || !maxPoints || maxPoints <= 0) return STEP_PRESETS;
+  const viable = STEP_PRESETS.filter((s) => {
+    const ms = presetDurationMs(s);
+    return ms && windowMs / ms <= maxPoints;
+  });
+  if (viable.length > 0) return viable;
+  return [STEP_PRESETS[STEP_PRESETS.length - 1]]; // never empty — coarsest wins
+}
+
 export default {
   DEFAULT_RANGE_PRESETS,
   STEP_PRESETS,

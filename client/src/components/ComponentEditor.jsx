@@ -878,7 +878,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (!newConfig.hasXAxis) {
       setXAxisColumn('');
       setXAxisLabel('');
-      setXAxisFormat('chart');
+      setXAxisFormat('auto'); // auto adapts the timestamp granularity to the data span
     }
 
     // Clear Y-axis to single value if multiple not allowed
@@ -992,7 +992,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setQueryType(chart.query_config?.type || 'sql');
       setXAxisColumn(chart.data_mapping?.x_axis || '');
       setXAxisLabel(chart.data_mapping?.x_axis_label || '');
-      setXAxisFormat(chart.data_mapping?.x_axis_format || 'chart');
+      setXAxisFormat(chart.data_mapping?.x_axis_format || 'auto'); // pre-'auto' charts w/o a stored format now adapt to span
       // y_axis may be the new object form ({column,label,stack,axis,color}[]) or
       // the legacy string array. Extract the column strings for the (string-typed)
       // yAxisColumns state, and harvest per-column color + label from objects.
@@ -3956,7 +3956,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // case above (maps to yAxisColumns[0]). Size is an
                       // enum (string-valued options) so stringify the
                       // stored number; unit is free text.
-                      number_size: String(chartOptions.numberSize ?? 120),
+                      number_size: String(chartOptions.numberSize ?? 56),
                       number_unit: chartOptions.numberUnit || '',
                       // Decimal places enum. Stored as a string ('auto' |
                       // '0'..'4'); default 'auto' keeps the auto formatter.

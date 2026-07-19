@@ -33,6 +33,7 @@ import {
   makeSIAxisFormatter,
   formatSI,
 } from '../option-helpers.js';
+import { parseTimestamp } from '../../utils/dataTransforms.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
 // (matches legacy). N-series single-axis mode uses the Carbon
@@ -87,8 +88,12 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
   // today (same-day recent), where the date is obvious in context.
   const times = xValues
     .map((v) => {
-      const t = v instanceof Date ? v.getTime() : Date.parse(v) || Number(v);
-      return Number.isFinite(t) ? t : null;
+      // parseTimestamp normalizes ts-store epoch SECONDS (and ms/µs/ns + ISO).
+      // A raw `Date.parse(v) || Number(v)` reads epoch seconds as milliseconds
+      // → every point collapses to 1970, so the span/isToday checks below pick
+      // the wrong format (the CPU-temp-chart-shows-time-only bug).
+      const d = parseTimestamp(v);
+      return d && !Number.isNaN(d.getTime()) ? d.getTime() : null;
     })
     .filter((t) => t != null);
   let base = 'chart_time';

@@ -39,6 +39,12 @@ func (r *DashboardRepository) CreateIndexes(ctx context.Context) error {
 			Keys: bson.D{{Key: "panels.component_id", Value: 1}}, // For finding dashboards by component
 		},
 		{
+			// Companion to the default-component index: lets the $or in
+			// componentRefFilter stay indexed when a component is referenced
+			// only through a component-swap override (connection-alt).
+			Keys: bson.D{{Key: "panels.component_overrides.component_id", Value: 1}},
+		},
+		{
 			Keys: bson.D{{Key: "updated", Value: -1}},
 		},
 	}
@@ -122,6 +128,18 @@ func (r *DashboardRepository) RenameNamespace(ctx context.Context, oldName, newN
 	return res.ModifiedCount, nil
 }
 
+// componentRefFilter returns the $or branches that match a dashboard whose
+// panels reference ANY of the given component ids — either as the panel's
+// default component_id or as a component-swap override (connection-alt
+// component). Both count as a reference; see panelComponentIDs in the service
+// layer for the in-memory equivalent. Callers assign the result to filter["$or"].
+func componentRefFilter(ids bson.A) bson.A {
+	return bson.A{
+		bson.M{"panels.component_id": bson.M{"$in": ids}},
+		bson.M{"panels.component_overrides.component_id": bson.M{"$in": ids}},
+	}
+}
+
 // buildDashboardListFilter translates DashboardQueryParams into the Mongo
 // filter shared by List, ListWithConnections, and ListNavRefs — one source
 // of truth so the three list shapes can't drift on filter semantics (#114).
@@ -139,14 +157,21 @@ func buildDashboardListFilter(params models.DashboardQueryParams) bson.M {
 		filter["settings.is_public"] = *params.IsPublic
 	}
 	if params.ComponentID != "" {
-		filter["panels.component_id"] = params.ComponentID
+		// A component is "used" by a dashboard if any panel names it as its
+		// default OR as a component-swap override (connection-alt). Match both.
+		filter["$or"] = componentRefFilter(bson.A{params.ComponentID})
 	}
 	// connection_id filter: the service resolved it to the component ids bound
-	// to that connection; match dashboards whose panels reference any of them.
+	// to that connection; match dashboards whose panels reference any of them —
+	// as a panel default OR a component-swap override.
 	// An empty resolved set means the connection is used by no component → no
 	// dashboard matches (filter to nothing, not "all").
 	if params.ConnectionID != "" {
-		filter["panels.component_id"] = bson.M{"$in": params.ComponentIDs}
+		ids := make(bson.A, len(params.ComponentIDs))
+		for i, id := range params.ComponentIDs {
+			ids[i] = id
+		}
+		filter["$or"] = componentRefFilter(ids)
 	}
 	if len(params.Tags) > 0 {
 		filter["tags"] = bson.M{"$in": params.Tags}
@@ -364,7 +389,10 @@ func (r *DashboardRepository) AttachChartToPanel(ctx context.Context, dashboardI
 // FindByComponentID retrieves all dashboards using a specific component
 // Used for notifying dashboards when a component is updated
 func (r *DashboardRepository) FindByComponentID(ctx context.Context, componentID string) ([]models.Dashboard, error) {
-	filter := bson.M{"panels.component_id": componentID}
+	// Match the component as a panel default OR a component-swap override, so a
+	// component referenced only through a connection-alt rule still resolves its
+	// parent dashboards (usage view, ?component_id= filter, MCP tool).
+	filter := bson.M{"$or": componentRefFilter(bson.A{componentID})}
 
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
@@ -417,11 +445,34 @@ func (r *DashboardRepository) ListWithConnections(ctx context.Context, params mo
 		// Pagination
 		{{Key: "$skip", Value: skip}},
 		{{Key: "$limit", Value: limit}},
-		// Extract component_ids from panels
+		// Extract component_ids from panels — the panel defaults
+		// ($panels.component_id) UNION every component-swap override id
+		// ($panels.component_overrides.component_id, an array-per-panel that
+		// must be flattened with $reduce/$concatArrays). Both kinds are real
+		// references, so a connection-alt component shows up in component_usage,
+		// connection_usage, and the counts derived from them.
 		{{Key: "$addFields", Value: bson.D{
 			{Key: "component_ids", Value: bson.D{
 				{Key: "$filter", Value: bson.D{
-					{Key: "input", Value: "$panels.component_id"},
+					{Key: "input", Value: bson.D{
+						{Key: "$setUnion", Value: bson.A{
+							bson.D{{Key: "$ifNull", Value: bson.A{"$panels.component_id", bson.A{}}}},
+							bson.D{{Key: "$reduce", Value: bson.D{
+								{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$panels.component_overrides", bson.A{}}}}},
+								{Key: "initialValue", Value: bson.A{}},
+								{Key: "in", Value: bson.D{
+									{Key: "$concatArrays", Value: bson.A{
+										"$$value",
+										bson.D{{Key: "$map", Value: bson.D{
+											{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$$this", bson.A{}}}}},
+											{Key: "as", Value: "ov"},
+											{Key: "in", Value: "$$ov.component_id"},
+										}}},
+									}},
+								}},
+							}}},
+						}},
+					}},
 					{Key: "as", Value: "cid"},
 					{Key: "cond", Value: bson.D{
 						{Key: "$and", Value: bson.A{

@@ -324,8 +324,16 @@ function DashboardsListPage() {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
 
-  const getPanelCount = (dashboard) => {
-    // Summary rows carry panel_count instead of a full panels array.
+  const getComponentCount = (dashboard) => {
+    // The "Components" column counts referenced components, not panels — a
+    // dashboard can have text panels (no component) and component-swap
+    // overrides (extra components on one panel). component_usage is the
+    // server-denormalized set of referenced components (panel defaults +
+    // connection-alt overrides), so its length is the count that matches the
+    // popover list below. Fall back to panel_count for older summary shapes.
+    if (Array.isArray(dashboard.component_usage)) {
+      return dashboard.component_usage.length;
+    }
     return dashboard.panel_count || 0;
   };
 
@@ -400,7 +408,7 @@ function DashboardsListPage() {
     name: dashboard.name,
     namespace: dashboard.namespace || 'default',
     description: dashboard.description || '',
-    panels: getPanelCount(dashboard),
+    panels: getComponentCount(dashboard),
     connections: getConnectionNames(dashboard),
     tags: dashboard.tags || [],
     updated: formatDate(dashboard.updated)

@@ -181,7 +181,7 @@ func init() {
 			{Name: "numberDateFormat", Type: "select", Required: false, Default: "datetime", Options: []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"}, Description: "Date/time style when numberFormat=\"datetime\". Ignored otherwise."},
 			{Name: "numberDecimals", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "0", "1", "2", "3", "4"}, Description: "Decimal places, or \"auto\"."},
 			{Name: "numberUnit", Type: "string", Required: false, Description: "Unit suffix appended after the value (e.g. \"%\", \"°C\", \"GB\"). Cosmetic — does not scale the value."},
-			{Name: "numberSize", Type: "string", Required: false, Default: "120", Description: "Value font size in px (12–400). Size it to the panel height so the value doesn't overflow."},
+			{Name: "numberSize", Type: "string", Required: false, Default: "56", Description: "Value font size in px (12–400). Size it to the panel height so the value doesn't overflow."},
 		},
 	})
 

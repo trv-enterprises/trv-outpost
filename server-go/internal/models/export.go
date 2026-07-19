@@ -27,6 +27,11 @@ type ExportBundle struct {
 	ExportedBy      string        `json:"exported_by,omitempty"`
 	SourceNamespace string        `json:"source_namespace"` // Empty string when the export spans multiple namespaces
 	Objects         ExportObjects `json:"objects"`
+	// Warnings captured at build time that can't be recomputed from Objects
+	// alone — e.g. a connection_swap target that was omitted because it's in a
+	// namespace the exporter can't see. Recomputable warnings (dangling
+	// component refs) are derived by bundleWarnings and not stored here.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // ExportObjects holds the three entity arrays in dependency order:

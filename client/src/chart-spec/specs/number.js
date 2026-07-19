@@ -47,8 +47,8 @@ export function buildOption(values, data, helpers = {}) {
 
   // numberSize is stored as a number on the legacy path but the enum
   // field writes a string; coerce and floor at a sane minimum. >0 guard
-  // mirrors the legacy default of 120.
-  const size = toNumber(opts.numberSize, 120) > 0 ? toNumber(opts.numberSize, 120) : 120;
+  // mirrors the default of 56.
+  const size = toNumber(opts.numberSize, 56) > 0 ? toNumber(opts.numberSize, 56) : 56;
   const unit = opts.numberUnit || '';
 
   return {
