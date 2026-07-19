@@ -469,11 +469,20 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
 
 
     mountedRef.current = true;
+    // Per-RUN liveness. mountedRef CANNOT express "this effect run was
+    // superseded": it's one ref shared by every run, and the replacement run
+    // re-arms it to true — so an async continuation from a superseded run
+    // (a slow backfill resolving after a connection-swap repointed the panel)
+    // passes the mountedRef check, appends the OLD connection's rows into the
+    // freshly reset buffer, and then subscribes a ZOMBIE live stream whose
+    // cleanup already ran (nothing ever unsubscribes it). `cancelled` is
+    // closed over per-run: its cleanup — and only its cleanup — sets it.
+    let cancelled = false;
     let reconnectTimeout = null;
     let abortController = null;
 
     const connectAggregated = async () => {
-      if (!mountedRef.current) return;
+      if (cancelled || !mountedRef.current) return;
 
       // Use fetch with streaming for POST endpoint
       abortController = new AbortController();
@@ -578,7 +587,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     const topicFilter = (datasourceType === 'mqtt' && parsedQuery?.raw) ? parsedQuery.raw : null;
 
     const connectRawShared = () => {
-      if (!mountedRef.current) return;
+      if (cancelled || !mountedRef.current) return;
 
       // Use shared connection manager for raw streams
       const manager = StreamConnectionManager.getInstance();
@@ -656,7 +665,6 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       const historicalMode = effectiveBackfill?.params?.range?.type === 'absolute';
       let backfillError = null;
       if (effectiveBackfill && mountedRef.current && !backfillDoneRef.current) {
-        backfillDoneRef.current = true;
         try {
           // Deduped across panels on the same connection: N identical
           // panels share ONE backfill fetch instead of each issuing the
@@ -665,6 +673,18 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           // race). Backfills can be large, so give them a longer timeout
           // than the default API call.
           const result = await queryBackfillShared(connectionId, effectiveBackfill, { timeout: BACKFILL_TIMEOUT_MS });
+          // Superseded while awaiting (connection swap, range change,
+          // unmount): drop the stale rows and stop — the replacement run
+          // owns this panel now, and falling through would also subscribe
+          // the OLD connection's stream (the zombie).
+          if (cancelled) return;
+          // Latch AFTER the await, not before: a run cancelled mid-fetch must
+          // leave the latch open so its replacement re-fetches (latching
+          // up-front left StrictMode's remount — and any superseded run —
+          // with no backfill at all once the stale result was dropped).
+          // Concurrent duplicate fetches aren't a risk: only the newest run
+          // is uncancelled, and queryBackfillShared dedups the wire call.
+          backfillDoneRef.current = true;
           if (mountedRef.current && result.data?.columns && result.data?.rows) {
             // Convert columnar result to record objects for processStreamRecord.
             // The chart trusts row order and never sorts (line.js builds a category
@@ -737,6 +757,10 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
             });
           }
         } catch (err) {
+          if (cancelled) return;
+          // A real failure still latches: retrying on every reconnect would
+          // hammer a source that's already struggling.
+          backfillDoneRef.current = true;
           // AbortError here is a deliberate cancel; anything else means the
           // backfill couldn't paint history — the live stream still starts.
           if (!isAbortError(err)) {
@@ -746,6 +770,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         }
       }
 
+      if (cancelled) return;
       if (historicalMode) {
         if (mountedRef.current) {
           handleConnectionSuccess();
@@ -768,6 +793,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
 
     // Cleanup on unmount or type change
     return () => {
+      cancelled = true;
       mountedRef.current = false;
       if (flushRAFRef.current) {
         cancelAnimationFrame(flushRAFRef.current);
