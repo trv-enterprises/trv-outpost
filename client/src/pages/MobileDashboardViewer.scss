@@ -157,7 +157,8 @@
   // near-square sizing. Only applies below the mobile breakpoint.
   @media (orientation: landscape) and (max-width: 950px) {
     &--chart,
-    &--dataview {
+    &--dataview,
+    &--display {
       height: clamp(240px, 82vh, 460px);
     }
 
@@ -167,8 +168,21 @@
   }
 
   // Number tiles are compact — no need for a tall box.
+  // container-type lives HERE (not on .mobile-panel) because size containment
+  // computes height 0 for any row without an explicit height — it silently
+  // vanished display rows (no height rule) and squashed text rows. Only the
+  // number tile needs a container context (its cqmin-relative font below),
+  // and its height is explicit, so containment is safe on this row alone.
   &--number {
     height: clamp(140px, min(44vw, 50vh), 240px);
+    container-type: size;
+  }
+
+  // Displays (frigate cameras/alerts, weather) need a real box like charts —
+  // their content fills the parent height rather than driving it. Without an
+  // explicit height they collapse and the panel silently disappears.
+  &--display {
+    height: clamp(200px, min(56vw, 62vh), 320px);
   }
 
   // Round charts (gauge, pie) draw an axis/labels around a circle and need a
@@ -195,11 +209,6 @@
     min-height: 48px;
   }
 
-  // Container-query context so the number tile's font can be made
-  // container-relative (see the NumberView override) instead of a fixed 120px
-  // that only reads correctly under the desktop grid's scale transform.
-  container-type: size;
-
   // Fullscreen toggle — top-right of the row, above the chart content.
   &__fullscreen-btn {
     position: absolute;
@@ -224,6 +233,11 @@
   position: fixed;
   inset: 0;
   z-index: 9000;
+  // In NATIVE fullscreen (paired with the overlay via requestFullscreen) the
+  // page extends under the notch / home indicator; keep the chart + close
+  // button inside the safe area. env() resolves to 0 everywhere else.
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
   display: flex;
   flex-direction: column;
   background: var(--cds-background);
