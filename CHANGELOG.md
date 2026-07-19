@@ -6,6 +6,20 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.41.2] — 2026-07-19
+
+### Added
+
+- **Installable web app (Add to Home Screen).** The app now ships a
+  web-app manifest (`display: standalone`) with proper icons, so a
+  phone can run it from its own home-screen icon with **no browser UI
+  at all** — the supported route to a truly fullscreen dashboard on
+  iPhone, where Safari has no element-fullscreen API (v0.41.1's native
+  fullscreen works on Android and iPad; iPhone needs the home-screen
+  launch). iPhone/iPad: Share → Add to Home Screen. Android: the
+  Install prompt or ⋮ → Add to Home screen. Documented in the README
+  and the user manual's mobile page.
+
 ## [0.41.1] — 2026-07-19
 
 ### Fixed
