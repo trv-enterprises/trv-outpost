@@ -64,10 +64,14 @@ func (h *StreamHandler) checkStreamAccess(c *gin.Context, connectionID string) b
 // @Tags connections
 // @Produce text/event-stream
 // @Param id path string true "Connection ID"
+// @Param topics query string false "Comma-separated MQTT topic filter patterns (e.g. sensors/temp/#,home/+/status). MQTT connections subscribe only to matching topics at the broker level; ignored for non-MQTT streams."
 // @Success 200 {string} string "SSE stream"
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{} "Connection does not support streaming (must be socket or tsstore type)"
+// @Failure 403 {object} map[string]interface{} "Namespace grant denied"
+// @Failure 404 {object} map[string]interface{} "Connection not found"
+// @Failure 422 {object} map[string]interface{} "Terminal subscribe failure (e.g. rejected credentials) — body {error, code, terminal:true}; client should stop reconnecting"
+// @Failure 500 {object} map[string]interface{} "Unexpected service error"
+// @Failure 503 {object} map[string]interface{} "Transient subscribe failure (network, upstream 5xx) — body {error, code, terminal:false}; client may retry"
 // @Router /connections/{id}/stream [get]
 func (h *StreamHandler) StreamConnection(c *gin.Context) {
 	connectionID := c.Param("id")
@@ -272,9 +276,12 @@ type StreamAggregatedRequest struct {
 // @Param id path string true "Connection ID"
 // @Param config body StreamAggregatedRequest true "Aggregation configuration"
 // @Success 200 {string} string "SSE stream"
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{} "Invalid request body / invalid function / connection does not support streaming (must be socket or tsstore type)"
+// @Failure 403 {object} map[string]interface{} "Namespace grant denied"
+// @Failure 404 {object} map[string]interface{} "Connection not found"
+// @Failure 422 {object} map[string]interface{} "Terminal subscribe failure (e.g. rejected credentials) — body {error, code, terminal:true}; client should stop reconnecting"
+// @Failure 500 {object} map[string]interface{} "Unexpected service error"
+// @Failure 503 {object} map[string]interface{} "Transient subscribe failure (network, upstream 5xx) — body {error, code, terminal:false}; client may retry"
 // @Router /connections/{id}/stream/aggregated [post]
 func (h *StreamHandler) StreamAggregatedConnection(c *gin.Context) {
 	connectionID := c.Param("id")

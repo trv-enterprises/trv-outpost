@@ -38,13 +38,12 @@ func NewHandler(registry *ToolRegistry) *Handler {
 	}
 }
 
-// SSEConnect handles the SSE connection endpoint
-// @Summary MCP SSE Connection
-// @Description Establish an SSE connection for MCP protocol
-// @Tags MCP
-// @Produce text/event-stream
-// @Success 200 {string} string "SSE stream"
-// @Router /mcp/sse [get]
+// SSEConnect handles the SSE connection endpoint (GET /mcp/sse).
+//
+// MCP endpoints are deliberately not swag-annotated: swagger's basePath
+// is /api, so annotating them would render nonexistent /api/mcp/* paths.
+// The MCP surface is documented in CLAUDE.md and in the MCP initialize
+// instructions instead.
 func (h *Handler) SSEConnect(c *gin.Context) {
 	// Set SSE headers
 	c.Header("Content-Type", "text/event-stream")
@@ -109,16 +108,11 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 // `notifications/initialized`) are dispatched silently and answered
 // with `202 Accepted` per the streamable-HTTP spec. Anything with an
 // `id` gets a JSON-RPC response body.
-// @Summary Handle MCP Message
-// @Description Process a JSON-RPC message for MCP protocol
-// @Tags MCP
-// @Accept json
-// @Produce json
-// @Param message body JSONRPCRequest true "JSON-RPC request"
-// @Success 200 {object} JSONRPCResponse
-// @Failure 400 {object} JSONRPCResponse
-// @Failure 500 {object} JSONRPCResponse
-// @Router /mcp/message [post]
+//
+// MCP endpoints are deliberately not swag-annotated: swagger's basePath
+// is /api, so annotating this route would render a nonexistent
+// /api/mcp/message path. The MCP surface is documented in CLAUDE.md and
+// in the MCP initialize instructions instead.
 func (h *Handler) HandleMessage(c *gin.Context) {
 	var req JSONRPCRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

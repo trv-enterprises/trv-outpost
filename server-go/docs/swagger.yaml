@@ -356,34 +356,6 @@ definitions:
       today_output:
         type: integer
     type: object
-  mcp.JSONRPCError:
-    properties:
-      code:
-        type: integer
-      data: {}
-      message:
-        type: string
-    type: object
-  mcp.JSONRPCRequest:
-    properties:
-      id: {}
-      jsonrpc:
-        type: string
-      method:
-        type: string
-      params:
-        additionalProperties: true
-        type: object
-    type: object
-  mcp.JSONRPCResponse:
-    properties:
-      error:
-        $ref: '#/definitions/mcp.JSONRPCError'
-      id: {}
-      jsonrpc:
-        type: string
-      result: {}
-    type: object
   models.AIMessage:
     description: A message in the AI conversation
     properties:
@@ -4233,6 +4205,23 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: Chat-kind sessions require the Design capability
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: component_id was supplied but no final version of that component
+            exists
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Component already has an active AI session — delete the draft
+            first
+          schema:
+            additionalProperties: true
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -4441,6 +4430,10 @@ paths:
       - ai
   /alerts:
     get:
+      description: Returns every currently-visible alert (unseen OR pinned), most-recent
+        first, capped at 200 and filtered to the caller's granted namespaces. Used
+        to hydrate the notification bell on app load; live pushes arrive separately
+        via SSE.
       produces:
       - application/json
       responses:
@@ -4459,6 +4452,9 @@ paths:
       - Alerts
   /alerts/{id}/pin:
     delete:
+      description: Clears the alert's pin without touching Seen — an unseen alert
+        remains visible until someone dismisses it. Idempotent; authentication is
+        enforced by the /api group middleware.
       parameters:
       - description: Alert ID
         in: path
@@ -4478,6 +4474,9 @@ paths:
       tags:
       - Alerts
     post:
+      description: Marks the alert pinned and resets Seen to false so it reappears
+        on every user's bell. Pinning overrides the first-reader-clears dismiss behavior
+        — a pinned alert stays visible to everyone until unpinned. Idempotent.
       parameters:
       - description: Alert ID
         in: path
@@ -4498,6 +4497,10 @@ paths:
       - Alerts
   /alerts/{id}/seen:
     post:
+      description: Flips the alert's Seen flag to true. Seen is global, not per-user
+        — the first reader dismisses the alert for everyone, unless the alert is pinned
+        (pinned alerts stay visible until unpinned). Idempotent; unknown IDs are a
+        no-op.
       parameters:
       - description: Alert ID
         in: path
@@ -4518,6 +4521,9 @@ paths:
       - Alerts
   /api-keys:
     get:
+      description: Lists every key the calling user has issued, active and revoked,
+        newest first. Token hashes are stripped; only metadata (name, prefix, created,
+        revoked, expiry) is returned.
       produces:
       - application/json
       responses:
@@ -4539,6 +4545,10 @@ paths:
     post:
       consumes:
       - application/json
+      description: Issues a new API key owned by the calling user. The plaintext token
+        is returned exactly once in this response and never persisted (only a bcrypt
+        hash is stored) — it cannot be recovered later. An optional expires_at makes
+        the key stop validating after that time.
       parameters:
       - description: Key parameters
         in: body
@@ -4570,6 +4580,10 @@ paths:
       - api-keys
   /api-keys/{id}:
     delete:
+      description: Marks a key as revoked so it immediately stops authenticating.
+        Owners may revoke their own keys; callers with the manage capability may revoke
+        any user's key via this same endpoint. Revocation is permanent — there is
+        no un-revoke.
       parameters:
       - description: API key ID
         in: path
@@ -4596,6 +4610,8 @@ paths:
       - api-keys
   /api-keys/all:
     get:
+      description: Admin view of all API keys across every user, active and revoked.
+        Requires the manage capability; token hashes are stripped from the response.
       produces:
       - application/json
       responses:
@@ -4622,6 +4638,10 @@ paths:
       - api-keys
   /auth/logout:
     post:
+      description: Revokes the caller's entire refresh-token family (subsequent /auth/refresh
+        calls fail with 401) and clears the refresh cookie. Always responds 204 —
+        even with a missing, expired, or invalid refresh cookie the cookie is cleared
+        and logout is treated as successful.
       responses:
         "204":
           description: No Content
@@ -4649,6 +4669,11 @@ paths:
       - Auth
   /auth/refresh:
     post:
+      description: Reads the refresh token from the httpOnly cookie and mints a rotated
+        token pair in the same token family (default refresh TTL 7 days). The new
+        refresh token replaces the cookie; the old one is superseded. On any failure
+        (expired, family revoked, user deactivated) the cookie is cleared and 401
+        returned so the client knows to re-bootstrap via /auth/session.
       produces:
       - application/json
       responses:
@@ -4669,6 +4694,12 @@ paths:
     post:
       consumes:
       - application/json
+      description: Exchanges any supported inbound credential (Clerk JWT, API key,
+        legacy user headers) for a first-party token pair. The access token (default
+        TTL 15 min) is returned in the JSON body; the refresh token is set only on
+        an httpOnly cookie scoped to /api/auth and never appears in the body. This
+        is the sole public bootstrap route — all other API routes accept only the
+        access token.
       produces:
       - application/json
       responses:
@@ -4922,6 +4953,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5060,6 +5096,11 @@ paths:
       responses:
         "204":
           description: No Content
+        "400":
+          description: Invalid version number
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5093,6 +5134,11 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Component'
+        "400":
+          description: Invalid version number
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5381,6 +5427,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5411,6 +5462,11 @@ paths:
             $ref: '#/definitions/models.Connection'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -5493,6 +5549,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Connection not found
           schema:
@@ -5568,6 +5629,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5596,6 +5662,11 @@ paths:
             type: object
         "400":
           description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -5640,6 +5711,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5675,6 +5751,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5701,6 +5782,11 @@ paths:
             $ref: '#/definitions/models.HealthInfo'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -5740,6 +5826,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5767,6 +5858,11 @@ paths:
             type: object
         "400":
           description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -5803,6 +5899,11 @@ paths:
             type: object
         "400":
           description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -5843,6 +5944,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5873,6 +5979,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
         "404":
           description: Not Found
           schema:
@@ -5891,6 +6002,12 @@ paths:
         name: id
         required: true
         type: string
+      - description: Comma-separated MQTT topic filter patterns (e.g. sensors/temp/#,home/+/status).
+          MQTT connections subscribe only to matching topics at the broker level;
+          ignored for non-MQTT streams.
+        in: query
+        name: topics
+        type: string
       produces:
       - text/event-stream
       responses:
@@ -5899,17 +6016,35 @@ paths:
           schema:
             type: string
         "400":
-          description: Bad Request
+          description: Connection does not support streaming (must be socket or tsstore
+            type)
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Namespace grant denied
           schema:
             additionalProperties: true
             type: object
         "404":
-          description: Not Found
+          description: Connection not found
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Terminal subscribe failure (e.g. rejected credentials) — body
+            {error, code, terminal:true}; client should stop reconnecting
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal Server Error
+          description: Unexpected service error
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Transient subscribe failure (network, upstream 5xx) — body
+            {error, code, terminal:false}; client may retry
           schema:
             additionalProperties: true
             type: object
@@ -5941,17 +6076,35 @@ paths:
           schema:
             type: string
         "400":
-          description: Bad Request
+          description: Invalid request body / invalid function / connection does not
+            support streaming (must be socket or tsstore type)
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Namespace grant denied
           schema:
             additionalProperties: true
             type: object
         "404":
-          description: Not Found
+          description: Connection not found
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Terminal subscribe failure (e.g. rejected credentials) — body
+            {error, code, terminal:true}; client should stop reconnecting
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal Server Error
+          description: Unexpected service error
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Transient subscribe failure (network, upstream 5xx) — body
+            {error, code, terminal:false}; client may retry
           schema:
             additionalProperties: true
             type: object
@@ -6018,6 +6171,11 @@ paths:
             $ref: '#/definitions/models.VariableValuesResponse'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -6091,7 +6249,7 @@ paths:
       description: Executes the command configured on a control component, using either
         schema-based or legacy template interpolation
       parameters:
-      - description: Control (Chart) ID
+      - description: Control component ID
         in: path
         name: id
         required: true
@@ -6111,6 +6269,11 @@ paths:
             $ref: '#/definitions/handlers.ExecuteCommandResponse'
         "400":
           description: Bad request - not a control or missing connection
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
           schema:
             additionalProperties: true
             type: object
@@ -6230,16 +6393,32 @@ paths:
       - dashboards
   /dashboards/{id}:
     delete:
-      description: Delete a dashboard by ID
+      consumes:
+      - application/json
+      description: 'Delete a dashboard by ID. Accepts an optional cascade body { delete_component_ids:
+        string[] } naming components to delete alongside the dashboard; each ID is
+        re-validated server-side as actually orphaned. A plain DELETE with no body
+        deletes the dashboard only.'
       parameters:
       - description: Dashboard ID
         in: path
         name: id
         required: true
         type: string
+      - description: 'Optional cascade body: { delete_component_ids: string[] }'
+        in: body
+        name: body
+        schema:
+          type: object
       responses:
+        "200":
+          description: 'Components were cascade-deleted: { deleted_component_ids:
+            string[] }'
+          schema:
+            additionalProperties: true
+            type: object
         "204":
-          description: No Content
+          description: Dashboard deleted; no components deleted
         "404":
           description: Not Found
           schema:
@@ -7165,6 +7344,22 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Connection missing, not found, or not a Frigate connection
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to parse Frigate config
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; non-200 Frigate statuses are also
+            forwarded as-is with an {error} body
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get Frigate camera list
       tags:
       - Frigate
@@ -7189,6 +7384,22 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Connection invalid or event_id missing
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to build upstream request
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes are forwarded
+            as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get event clip
       tags:
       - Frigate
@@ -7213,6 +7424,22 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Connection invalid or event_id missing
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to build upstream request
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes are forwarded
+            as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get event snapshot
       tags:
       - Frigate
@@ -7245,6 +7472,17 @@ paths:
               additionalProperties: true
               type: object
             type: array
+        "400":
+          description: Connection invalid or camera name missing
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes are forwarded
+            as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get camera events
       tags:
       - Frigate
@@ -7266,6 +7504,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Connection missing, not found, or not a Frigate connection
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get Frigate connection info
       tags:
       - Frigate
@@ -7283,7 +7526,18 @@ paths:
         name: camera
         required: true
         type: string
-      responses: {}
+      responses:
+        "101":
+          description: Switching Protocols — WebSocket proxy to Frigate's JSMPEG stream;
+            post-upgrade failures surface as WebSocket close frames, not HTTP statuses
+          schema:
+            type: string
+        "400":
+          description: connection_id/camera missing, connection not found, or not
+            a Frigate connection
+          schema:
+            additionalProperties: true
+            type: object
       summary: Proxy Frigate JSMPEG live stream
       tags:
       - Frigate
@@ -7313,6 +7567,23 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Connection invalid, review_id missing, or camera query param
+            missing
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to build upstream request
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes are forwarded
+            as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get review thumbnail
       tags:
       - Frigate
@@ -7354,6 +7625,17 @@ paths:
               additionalProperties: true
               type: object
             type: array
+        "400":
+          description: Connection invalid
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes are forwarded
+            as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get camera review segments
       tags:
       - Frigate
@@ -7383,6 +7665,22 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Connection invalid, malformed body, or ids empty
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to encode or build the upstream request
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes (e.g. 422)
+            are forwarded as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Mark review segments as reviewed
       tags:
       - Frigate
@@ -7407,6 +7705,22 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Connection invalid or camera name missing
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to build upstream request
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Failed to reach Frigate; Frigate's own status codes are forwarded
+            as-is
+          schema:
+            additionalProperties: true
+            type: object
       summary: Get camera snapshot
       tags:
       - Frigate
@@ -7429,51 +7743,12 @@ paths:
       summary: Health check
       tags:
       - System
-  /mcp/message:
-    post:
-      consumes:
-      - application/json
-      description: Process a JSON-RPC message for MCP protocol
-      parameters:
-      - description: JSON-RPC request
-        in: body
-        name: message
-        required: true
-        schema:
-          $ref: '#/definitions/mcp.JSONRPCRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/mcp.JSONRPCResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/mcp.JSONRPCResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/mcp.JSONRPCResponse'
-      summary: Handle MCP Message
-      tags:
-      - MCP
-  /mcp/sse:
-    get:
-      description: Establish an SSE connection for MCP protocol
-      produces:
-      - text/event-stream
-      responses:
-        "200":
-          description: SSE stream
-          schema:
-            type: string
-      summary: MCP SSE Connection
-      tags:
-      - MCP
   /namespaces:
     get:
+      description: Lists the namespaces visible to the caller — restricted users see
+        only their granted namespaces. Pass scope=all to list every namespace regardless
+        of grants; that elevation requires the manage capability and returns 403 without
+        it.
       parameters:
       - description: Set to 'all' to list every namespace regardless of the caller's
           grants (requires manage capability)
@@ -7498,6 +7773,8 @@ paths:
     post:
       consumes:
       - application/json
+      description: Creates a namespace. The name must be a slug-safe string and globally
+        unique; color defaults to the standard namespace color when omitted.
       parameters:
       - description: Namespace to create
         in: body
@@ -7523,6 +7800,10 @@ paths:
       - namespaces
   /namespaces/{id}:
     delete:
+      description: Deletes a namespace only if nothing references it — when connections,
+        components, or dashboards still use it, responds 409 with per-type usage counts.
+        The default namespace can never be deleted (409). On success, the namespace
+        is also removed from every user's grants.
       parameters:
       - description: Namespace ID
         in: path
@@ -7549,6 +7830,8 @@ paths:
       tags:
       - namespaces
     get:
+      description: Retrieves a single namespace record (name, description, color)
+        by its ID.
       parameters:
       - description: Namespace ID
         in: path
@@ -7574,6 +7857,10 @@ paths:
     put:
       consumes:
       - application/json
+      description: Updates a namespace's name, description, or color. Renaming cascades
+        the new slug into every connection, component, and dashboard tagged with the
+        old slug, and into user namespace grants. The default namespace cannot be
+        renamed (409).
       parameters:
       - description: Namespace ID
         in: path
@@ -7610,6 +7897,9 @@ paths:
       - namespaces
   /namespaces/{id}/usage:
     get:
+      description: Returns per-entity-type counts (connections, components, dashboards)
+        of records in this namespace. The path parameter is the namespace ID (UUID),
+        not its slug.
       parameters:
       - description: Namespace ID
         in: path
@@ -7628,6 +7918,8 @@ paths:
       - namespaces
   /namespaces/{id}/users:
     get:
+      description: Lists the restricted users holding an explicit grant on this namespace.
+        Unrestricted users implicitly see every namespace and are not included.
       parameters:
       - description: Namespace ID
         in: path
@@ -8121,11 +8413,10 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: '{ users: models.User[] }'
           schema:
-            items:
-              $ref: '#/definitions/models.User'
-            type: array
+            additionalProperties: true
+            type: object
         "403":
           description: Forbidden
           schema:

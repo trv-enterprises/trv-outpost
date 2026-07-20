@@ -80,6 +80,9 @@ func NewAISessionHandler(service *service.AISessionService, agent *ai.Agent, cha
 // @Param request body models.CreateAISessionRequest true "Session creation request"
 // @Success 201 {object} models.AISessionResponse
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "Chat-kind sessions require the Design capability"
+// @Failure 404 {object} map[string]interface{} "component_id was supplied but no final version of that component exists"
+// @Failure 409 {object} map[string]interface{} "Component already has an active AI session — delete the draft first"
 // @Failure 500 {object} map[string]interface{}
 // @Router /ai/sessions [post]
 func (h *AISessionHandler) CreateSession(c *gin.Context) {

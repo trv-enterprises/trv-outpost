@@ -412,10 +412,13 @@ func (h *DashboardHandler) GetDashboardComponents(c *gin.Context) {
 
 // DeleteDashboard deletes a dashboard
 // @Summary Delete a dashboard
-// @Description Delete a dashboard by ID
+// @Description Delete a dashboard by ID. Accepts an optional cascade body { delete_component_ids: string[] } naming components to delete alongside the dashboard; each ID is re-validated server-side as actually orphaned. A plain DELETE with no body deletes the dashboard only.
 // @Tags dashboards
+// @Accept json
 // @Param id path string true "Dashboard ID"
-// @Success 204
+// @Param body body object false "Optional cascade body: { delete_component_ids: string[] }"
+// @Success 200 {object} map[string]interface{} "Components were cascade-deleted: { deleted_component_ids: string[] }"
+// @Success 204 "Dashboard deleted; no components deleted"
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /dashboards/{id} [delete]

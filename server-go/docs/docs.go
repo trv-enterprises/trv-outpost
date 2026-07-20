@@ -118,6 +118,27 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "Chat-kind sessions require the Design capability",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "component_id was supplied but no final version of that component exists",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Component already has an active AI session — delete the draft first",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -419,6 +440,7 @@ const docTemplate = `{
         },
         "/alerts": {
             "get": {
+                "description": "Returns every currently-visible alert (unseen OR pinned), most-recent first, capped at 200 and filtered to the caller's granted namespaces. Used to hydrate the notification bell on app load; live pushes arrive separately via SSE.",
                 "produces": [
                     "application/json"
                 ],
@@ -447,6 +469,7 @@ const docTemplate = `{
         },
         "/alerts/{id}/pin": {
             "post": {
+                "description": "Marks the alert pinned and resets Seen to false so it reappears on every user's bell. Pinning overrides the first-reader-clears dismiss behavior — a pinned alert stays visible to everyone until unpinned. Idempotent.",
                 "tags": [
                     "Alerts"
                 ],
@@ -476,6 +499,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "description": "Clears the alert's pin without touching Seen — an unseen alert remains visible until someone dismisses it. Idempotent; authentication is enforced by the /api group middleware.",
                 "tags": [
                     "Alerts"
                 ],
@@ -507,6 +531,7 @@ const docTemplate = `{
         },
         "/alerts/{id}/seen": {
             "post": {
+                "description": "Flips the alert's Seen flag to true. Seen is global, not per-user — the first reader dismisses the alert for everyone, unless the alert is pinned (pinned alerts stay visible until unpinned). Idempotent; unknown IDs are a no-op.",
                 "tags": [
                     "Alerts"
                 ],
@@ -538,6 +563,7 @@ const docTemplate = `{
         },
         "/api-keys": {
             "get": {
+                "description": "Lists every key the calling user has issued, active and revoked, newest first. Token hashes are stripped; only metadata (name, prefix, created, revoked, expiry) is returned.",
                 "produces": [
                     "application/json"
                 ],
@@ -567,6 +593,7 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "Issues a new API key owned by the calling user. The plaintext token is returned exactly once in this response and never persisted (only a bcrypt hash is stored) — it cannot be recovered later. An optional expires_at makes the key stop validating after that time.",
                 "consumes": [
                     "application/json"
                 ],
@@ -618,6 +645,7 @@ const docTemplate = `{
         },
         "/api-keys/all": {
             "get": {
+                "description": "Admin view of all API keys across every user, active and revoked. Requires the manage capability; token hashes are stripped from the response.",
                 "produces": [
                     "application/json"
                 ],
@@ -658,6 +686,7 @@ const docTemplate = `{
         },
         "/api-keys/{id}": {
             "delete": {
+                "description": "Marks a key as revoked so it immediately stops authenticating. Owners may revoke their own keys; callers with the manage capability may revoke any user's key via this same endpoint. Revocation is permanent — there is no un-revoke.",
                 "tags": [
                     "api-keys"
                 ],
@@ -698,6 +727,7 @@ const docTemplate = `{
         },
         "/auth/logout": {
             "post": {
+                "description": "Revokes the caller's entire refresh-token family (subsequent /auth/refresh calls fail with 401) and clears the refresh cookie. Always responds 204 — even with a missing, expired, or invalid refresh cookie the cookie is cleared and logout is treated as successful.",
                 "tags": [
                     "auth"
                 ],
@@ -740,6 +770,7 @@ const docTemplate = `{
         },
         "/auth/refresh": {
             "post": {
+                "description": "Reads the refresh token from the httpOnly cookie and mints a rotated token pair in the same token family (default refresh TTL 7 days). The new refresh token replaces the cookie; the old one is superseded. On any failure (expired, family revoked, user deactivated) the cookie is cleared and 401 returned so the client knows to re-bootstrap via /auth/session.",
                 "produces": [
                     "application/json"
                 ],
@@ -768,6 +799,7 @@ const docTemplate = `{
         },
         "/auth/session": {
             "post": {
+                "description": "Exchanges any supported inbound credential (Clerk JWT, API key, legacy user headers) for a first-party token pair. The access token (default TTL 15 min) is returned in the JSON body; the refresh token is set only on an httpOnly cookie scoped to /api/auth and never appears in the body. This is the sole public bootstrap route — all other API routes accept only the access token.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1175,6 +1207,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -1383,6 +1422,13 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.Component"
                         }
                     },
+                    "400": {
+                        "description": "Invalid version number",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -1424,6 +1470,13 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Invalid version number",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     },
                     "404": {
                         "description": "Not Found",
@@ -1897,6 +1950,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -1992,6 +2052,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2049,6 +2116,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad request - connection does not support write",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2163,6 +2237,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2202,6 +2283,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2265,6 +2353,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2316,6 +2411,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2354,6 +2456,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2410,6 +2519,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2449,6 +2565,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2500,6 +2623,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2560,6 +2690,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2603,6 +2740,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2630,6 +2774,12 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated MQTT topic filter patterns (e.g. sensors/temp/#,home/+/status). MQTT connections subscribe only to matching topics at the broker level; ignored for non-MQTT streams.",
+                        "name": "topics",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2640,21 +2790,42 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Connection does not support streaming (must be socket or tsstore type)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Namespace grant denied",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Connection not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "422": {
+                        "description": "Terminal subscribe failure (e.g. rejected credentials) — body {error, code, terminal:true}; client should stop reconnecting",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Unexpected service error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "503": {
+                        "description": "Transient subscribe failure (network, upstream 5xx) — body {error, code, terminal:false}; client may retry",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2702,21 +2873,42 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid request body / invalid function / connection does not support streaming (must be socket or tsstore type)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Namespace grant denied",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Connection not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "422": {
+                        "description": "Terminal subscribe failure (e.g. rejected credentials) — body {error, code, terminal:true}; client should stop reconnecting",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Unexpected service error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "503": {
+                        "description": "Transient subscribe failure (network, upstream 5xx) — body {error, code, terminal:false}; client may retry",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2819,6 +3011,13 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2845,7 +3044,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Control (Chart) ID",
+                        "description": "Control component ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -2869,6 +3068,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad request - not a control or missing connection",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3310,7 +3516,10 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete a dashboard by ID",
+                "description": "Delete a dashboard by ID. Accepts an optional cascade body { delete_component_ids: string[] } naming components to delete alongside the dashboard; each ID is re-validated server-side as actually orphaned. A plain DELETE with no body deletes the dashboard only.",
+                "consumes": [
+                    "application/json"
+                ],
                 "tags": [
                     "dashboards"
                 ],
@@ -3322,11 +3531,26 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional cascade body: { delete_component_ids: string[] }",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "type": "object"
+                        }
                     }
                 ],
                 "responses": {
+                    "200": {
+                        "description": "Components were cascade-deleted: { deleted_component_ids: string[] }",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "204": {
-                        "description": "No Content"
+                        "description": "Dashboard deleted; no components deleted"
                     },
                     "404": {
                         "description": "Not Found",
@@ -4421,6 +4645,27 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "400": {
+                        "description": "Connection missing, not found, or not a Frigate connection",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse Frigate config",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; non-200 Frigate statuses are also forwarded as-is with an {error} body",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -4457,6 +4702,27 @@ const docTemplate = `{
                         "schema": {
                             "type": "file"
                         }
+                    },
+                    "400": {
+                        "description": "Connection invalid or event_id missing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to build upstream request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -4492,6 +4758,27 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Connection invalid or event_id missing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to build upstream request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -4540,6 +4827,20 @@ const docTemplate = `{
                                 "additionalProperties": true
                             }
                         }
+                    },
+                    "400": {
+                        "description": "Connection invalid or camera name missing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -4566,6 +4867,13 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Connection missing, not found, or not a Frigate connection",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4597,7 +4905,21 @@ const docTemplate = `{
                         "required": true
                     }
                 ],
-                "responses": {}
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols — WebSocket proxy to Frigate's JSMPEG stream; post-upgrade failures surface as WebSocket close frames, not HTTP statuses",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "connection_id/camera missing, connection not found, or not a Frigate connection",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/frigate/{connection_id}/review/{review_id}/thumbnail": {
@@ -4638,6 +4960,27 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Connection invalid, review_id missing, or camera query param missing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to build upstream request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -4698,6 +5041,20 @@ const docTemplate = `{
                                 "additionalProperties": true
                             }
                         }
+                    },
+                    "400": {
+                        "description": "Connection invalid",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -4740,6 +5097,27 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "400": {
+                        "description": "Connection invalid, malformed body, or ids empty",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to encode or build the upstream request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes (e.g. 422) are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -4776,6 +5154,27 @@ const docTemplate = `{
                         "schema": {
                             "type": "file"
                         }
+                    },
+                    "400": {
+                        "description": "Connection invalid or camera name missing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to build upstream request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Failed to reach Frigate; Frigate's own status codes are forwarded as-is",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -4808,74 +5207,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/mcp/message": {
-            "post": {
-                "description": "Process a JSON-RPC message for MCP protocol",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "MCP"
-                ],
-                "summary": "Handle MCP Message",
-                "parameters": [
-                    {
-                        "description": "JSON-RPC request",
-                        "name": "message",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/mcp.JSONRPCRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/mcp.JSONRPCResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/mcp.JSONRPCResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/mcp.JSONRPCResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/mcp/sse": {
-            "get": {
-                "description": "Establish an SSE connection for MCP protocol",
-                "produces": [
-                    "text/event-stream"
-                ],
-                "tags": [
-                    "MCP"
-                ],
-                "summary": "MCP SSE Connection",
-                "responses": {
-                    "200": {
-                        "description": "SSE stream",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/namespaces": {
             "get": {
+                "description": "Lists the namespaces visible to the caller — restricted users see only their granted namespaces. Pass scope=all to list every namespace regardless of grants; that elevation requires the manage capability and returns 403 without it.",
                 "produces": [
                     "application/json"
                 ],
@@ -4908,6 +5242,7 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "Creates a namespace. The name must be a slug-safe string and globally unique; color defaults to the standard namespace color when omitted.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4950,6 +5285,7 @@ const docTemplate = `{
         },
         "/namespaces/{id}": {
             "get": {
+                "description": "Retrieves a single namespace record (name, description, color) by its ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -4985,6 +5321,7 @@ const docTemplate = `{
                 }
             },
             "put": {
+                "description": "Updates a namespace's name, description, or color. Renaming cascades the new slug into every connection, component, and dashboard tagged with the old slug, and into user namespace grants. The default namespace cannot be renamed (409).",
                 "consumes": [
                     "application/json"
                 ],
@@ -5041,6 +5378,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "description": "Deletes a namespace only if nothing references it — when connections, components, or dashboards still use it, responds 409 with per-type usage counts. The default namespace can never be deleted (409). On success, the namespace is also removed from every user's grants.",
                 "produces": [
                     "application/json"
                 ],
@@ -5082,6 +5420,7 @@ const docTemplate = `{
         },
         "/namespaces/{id}/usage": {
             "get": {
+                "description": "Returns per-entity-type counts (connections, components, dashboards) of records in this namespace. The path parameter is the namespace ID (UUID), not its slug.",
                 "produces": [
                     "application/json"
                 ],
@@ -5110,6 +5449,7 @@ const docTemplate = `{
         },
         "/namespaces/{id}/users": {
             "get": {
+                "description": "Lists the restricted users holding an explicit grant on this namespace. Unrestricted users implicitly see every namespace and are not included.",
                 "produces": [
                     "application/json"
                 ],
@@ -5822,12 +6162,10 @@ const docTemplate = `{
                 "summary": "List system users (admin only)",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "{ users: models.User[] }",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.User"
-                            }
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "403": {
@@ -7226,47 +7564,6 @@ const docTemplate = `{
                 "today_output": {
                     "type": "integer"
                 }
-            }
-        },
-        "mcp.JSONRPCError": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer"
-                },
-                "data": {},
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "mcp.JSONRPCRequest": {
-            "type": "object",
-            "properties": {
-                "id": {},
-                "jsonrpc": {
-                    "type": "string"
-                },
-                "method": {
-                    "type": "string"
-                },
-                "params": {
-                    "type": "object",
-                    "additionalProperties": true
-                }
-            }
-        },
-        "mcp.JSONRPCResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "$ref": "#/definitions/mcp.JSONRPCError"
-                },
-                "id": {},
-                "jsonrpc": {
-                    "type": "string"
-                },
-                "result": {}
             }
         },
         "models.AIMessage": {

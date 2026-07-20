@@ -63,6 +63,10 @@ func GetInboundHandler() *InboundHandler {
 
 // HandleInboundWebSocket handles incoming WebSocket connections from ts-store
 // Route: GET /api/streams/inbound/:connectionId
+//
+// Deliberately excluded from swagger: this is a machine-to-machine
+// WebSocket endpoint (ts-store push producers dial in), not a REST API
+// surface for interactive clients.
 func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
 	connectionID := c.Param("connectionId")
 	if connectionID == "" {

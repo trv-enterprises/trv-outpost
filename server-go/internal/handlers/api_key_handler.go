@@ -30,6 +30,7 @@ func NewAPIKeyHandler(svc *service.APIKeyService) *APIKeyHandler {
 // token is included in the response exactly once and never persisted —
 // the UI must surface a "save this now, you can't see it again" warning.
 // @Summary Create an API key for the calling user
+// @Description Issues a new API key owned by the calling user. The plaintext token is returned exactly once in this response and never persisted (only a bcrypt hash is stored) — it cannot be recovered later. An optional expires_at makes the key stop validating after that time.
 // @Tags api-keys
 // @Accept json
 // @Produce json
@@ -60,6 +61,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 // ListMyAPIKeys returns the calling user's keys (active + revoked).
 // Hashes are stripped at the service layer.
 // @Summary List the calling user's API keys
+// @Description Lists every key the calling user has issued, active and revoked, newest first. Token hashes are stripped; only metadata (name, prefix, created, revoked, expiry) is returned.
 // @Tags api-keys
 // @Produce json
 // @Success 200 {array} models.APIKey
@@ -82,6 +84,7 @@ func (h *APIKeyHandler) ListMyAPIKeys(c *gin.Context) {
 // ListAllAPIKeys is the admin view — every key in the deployment.
 // Requires the manage capability (gated by the route middleware).
 // @Summary List every API key in the deployment (admin)
+// @Description Admin view of all API keys across every user, active and revoked. Requires the manage capability; token hashes are stripped from the response.
 // @Tags api-keys
 // @Produce json
 // @Success 200 {array} models.APIKey
@@ -101,6 +104,7 @@ func (h *APIKeyHandler) ListAllAPIKeys(c *gin.Context) {
 // keys; admins (manage capability) may revoke anyone's via the same
 // endpoint — ownership check is skipped when the caller has manage.
 // @Summary Revoke an API key
+// @Description Marks a key as revoked so it immediately stops authenticating. Owners may revoke their own keys; callers with the manage capability may revoke any user's key via this same endpoint. Revocation is permanent — there is no un-revoke.
 // @Tags api-keys
 // @Param id path string true "API key ID"
 // @Success 204 "No Content"

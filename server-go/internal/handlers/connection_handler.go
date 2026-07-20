@@ -167,6 +167,7 @@ func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 // @Param id path string true "Connection ID"
 // @Success 200 {object} models.Connection
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id} [get]
 func (h *ConnectionHandler) GetConnection(c *gin.Context) {
@@ -236,6 +237,7 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 // @Param id path string true "Connection ID"
 // @Success 204
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Router /connections/{id} [delete]
@@ -300,6 +302,7 @@ func (h *ConnectionHandler) TestConnection(c *gin.Context) {
 // @Param id path string true "Connection ID"
 // @Success 200 {object} models.HealthInfo
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/health [post]
 func (h *ConnectionHandler) CheckConnectionHealth(c *gin.Context) {
@@ -332,6 +335,7 @@ func (h *ConnectionHandler) CheckConnectionHealth(c *gin.Context) {
 // @Param query body models.QueryRequest true "Query to execute"
 // @Success 200 {object} models.QueryResponse
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/query [post]
 func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
@@ -377,6 +381,7 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 // @Param id path string true "Connection ID"
 // @Success 200 {object} models.SchemaResponse
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/schema [get]
 func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
@@ -412,6 +417,7 @@ func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 // @Param capture_seconds query int false "Streaming capture window"
 // @Success 200 {object} models.VariableValuesResponse
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/variable-values [get]
 func (h *ConnectionHandler) GetVariableValues(c *gin.Context) {
@@ -462,6 +468,7 @@ func (h *ConnectionHandler) GetVariableValues(c *gin.Context) {
 // @Param request body models.SaveDiscoveredValuesRequest true "Column + values"
 // @Success 200 {object} models.Connection
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/discovered-values [put]
 func (h *ConnectionHandler) SaveDiscoveredValues(c *gin.Context) {
@@ -502,6 +509,7 @@ func (h *ConnectionHandler) SaveDiscoveredValues(c *gin.Context) {
 // @Param label path string true "Label name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/prometheus/labels/{label}/values [get]
 func (h *ConnectionHandler) GetPrometheusLabelValues(c *gin.Context) {
@@ -536,6 +544,7 @@ func (h *ConnectionHandler) GetPrometheusLabelValues(c *gin.Context) {
 // @Param id path string true "Connection ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/edgelake/databases [get]
 func (h *ConnectionHandler) GetEdgeLakeDatabases(c *gin.Context) {
@@ -569,6 +578,7 @@ func (h *ConnectionHandler) GetEdgeLakeDatabases(c *gin.Context) {
 // @Param database query string true "Database name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/edgelake/tables [get]
 func (h *ConnectionHandler) GetEdgeLakeTables(c *gin.Context) {
@@ -610,6 +620,7 @@ func (h *ConnectionHandler) GetEdgeLakeTables(c *gin.Context) {
 // @Param table query string true "Table name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/edgelake/schema [get]
 func (h *ConnectionHandler) GetEdgeLakeSchema(c *gin.Context) {
@@ -655,6 +666,7 @@ func (h *ConnectionHandler) GetEdgeLakeSchema(c *gin.Context) {
 // @Param id path string true "Connection ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/mqtt/topics [get]
 func (h *ConnectionHandler) GetMQTTTopics(c *gin.Context) {
@@ -688,6 +700,7 @@ func (h *ConnectionHandler) GetMQTTTopics(c *gin.Context) {
 // @Param topic query string true "MQTT topic to sample"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /connections/{id}/mqtt/sample [get]
 func (h *ConnectionHandler) SampleMQTTTopic(c *gin.Context) {

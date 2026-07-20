@@ -78,6 +78,7 @@ type SessionResponse struct {
 // can accept legacy inbound channels).
 //
 // @Summary Bootstrap a session from any supported inbound credential
+// @Description Exchanges any supported inbound credential (Clerk JWT, API key, legacy user headers) for a first-party token pair. The access token (default TTL 15 min) is returned in the JSON body; the refresh token is set only on an httpOnly cookie scoped to /api/auth and never appears in the body. This is the sole public bootstrap route — all other API routes accept only the access token.
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -112,6 +113,7 @@ func (h *AuthSessionHandler) CreateSession(c *gin.Context) {
 // the cookie so the client knows it has to re-bootstrap.
 //
 // @Summary Refresh access token using the refresh-cookie
+// @Description Reads the refresh token from the httpOnly cookie and mints a rotated token pair in the same token family (default refresh TTL 7 days). The new refresh token replaces the cookie; the old one is superseded. On any failure (expired, family revoked, user deactivated) the cookie is cleared and 401 returned so the client knows to re-bootstrap via /auth/session.
 // @Tags auth
 // @Produce json
 // @Success 200 {object} SessionResponse
@@ -149,6 +151,7 @@ func (h *AuthSessionHandler) Refresh(c *gin.Context) {
 // drop a session is to wait for refresh-token expiry.
 //
 // @Summary Revoke the current session
+// @Description Revokes the caller's entire refresh-token family (subsequent /auth/refresh calls fail with 401) and clears the refresh cookie. Always responds 204 — even with a missing, expired, or invalid refresh cookie the cookie is cleared and logout is treated as successful.
 // @Tags auth
 // @Success 204
 // @Router /auth/logout [post]

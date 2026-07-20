@@ -59,6 +59,7 @@ type ExecuteCommandResponse struct {
 // @Param command body ExecuteCommandRequest true "Command to execute"
 // @Success 200 {object} ExecuteCommandResponse
 // @Failure 400 {object} map[string]interface{} "Bad request - connection does not support write"
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{} "Connection not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /connections/{id}/command [post]
@@ -138,10 +139,11 @@ type ExecuteControlRequest struct {
 // @Tags controls
 // @Accept json
 // @Produce json
-// @Param id path string true "Control (Chart) ID"
+// @Param id path string true "Control component ID"
 // @Param request body ExecuteControlRequest true "Control value"
 // @Success 200 {object} ExecuteCommandResponse
 // @Failure 400 {object} map[string]interface{} "Bad request - not a control or missing connection"
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{} "Control not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /controls/{id}/execute [post]
@@ -154,7 +156,7 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 		return
 	}
 
-	// Get the control (stored as a chart with component_type="control").
+	// Get the control (stored as a component with component_type="control").
 	// Enforces namespace grants on the control itself (issue #4).
 	chart, err := h.componentService.GetComponent(c.Request.Context(), controlID)
 	if err != nil {

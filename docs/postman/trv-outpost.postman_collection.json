@@ -136,7 +136,7 @@
                 "sessions"
               ]
             },
-            "description": "Create a new AI session\n\nCreate a new AI session for chart creation or editing. Creates a chart draft.\n\n\nResponses: 201, 400, 500",
+            "description": "Create a new AI session\n\nCreate a new AI session for chart creation or editing. Creates a chart draft.\n\n\nResponses: 201, 400, 403, 404, 409, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"chart_type\": \"\",\n  \"component_id\": \"\",\n  \"component_type\": \"\",\n  \"connection_id\": \"\",\n  \"control_type\": \"\",\n  \"dashboard_id\": \"\",\n  \"initial_message\": \"\",\n  \"kind\": \"\",\n  \"panel_id\": \"\"\n}",
@@ -395,7 +395,7 @@
                 "alerts"
               ]
             },
-            "description": "List visible alerts\n\n\nResponses: 200, 401"
+            "description": "List visible alerts\n\nReturns every currently-visible alert (unseen OR pinned), most-recent first, capped at 200 and filtered to the caller's granted namespaces. Used to hydrate the notification bell on app load; live pushes arrive separately via SSE.\n\n\nResponses: 200, 401"
           },
           "response": []
         },
@@ -430,7 +430,7 @@
                 }
               ]
             },
-            "description": "Mark an alert seen (dismiss)\n\n\nResponses: 204, 401"
+            "description": "Mark an alert seen (dismiss)\n\nFlips the alert's Seen flag to true. Seen is global, not per-user — the first reader dismisses the alert for everyone, unless the alert is pinned (pinned alerts stay visible until unpinned). Idempotent; unknown IDs are a no-op.\n\n\nResponses: 204, 401"
           },
           "response": []
         },
@@ -465,7 +465,7 @@
                 }
               ]
             },
-            "description": "Pin an alert (keep visible)\n\n\nResponses: 204, 401"
+            "description": "Pin an alert (keep visible)\n\nMarks the alert pinned and resets Seen to false so it reappears on every user's bell. Pinning overrides the first-reader-clears dismiss behavior — a pinned alert stays visible to everyone until unpinned. Idempotent.\n\n\nResponses: 204, 401"
           },
           "response": []
         },
@@ -500,7 +500,7 @@
                 }
               ]
             },
-            "description": "Unpin an alert\n\n\nResponses: 204, 401"
+            "description": "Unpin an alert\n\nClears the alert's pin without touching Seen — an unseen alert remains visible until someone dismisses it. Idempotent; authentication is enforced by the /api group middleware.\n\n\nResponses: 204, 401"
           },
           "response": []
         }
@@ -536,7 +536,7 @@
                 "api-keys"
               ]
             },
-            "description": "Create an API key for the calling user\n\n\nResponses: 201, 400, 401",
+            "description": "Create an API key for the calling user\n\nIssues a new API key owned by the calling user. The plaintext token is returned exactly once in this response and never persisted (only a bcrypt hash is stored) — it cannot be recovered later. An optional expires_at makes the key stop validating after that time.\n\n\nResponses: 201, 400, 401",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"expires_at\": \"\",\n  \"name\": \"\"\n}",
@@ -572,7 +572,7 @@
                 "all"
               ]
             },
-            "description": "List every API key in the deployment (admin)\n\n\nResponses: 200, 401, 403"
+            "description": "List every API key in the deployment (admin)\n\nAdmin view of all API keys across every user, active and revoked. Requires the manage capability; token hashes are stripped from the response.\n\n\nResponses: 200, 401, 403"
           },
           "response": []
         },
@@ -598,7 +598,7 @@
                 "api-keys"
               ]
             },
-            "description": "List the calling user's API keys\n\n\nResponses: 200, 401"
+            "description": "List the calling user's API keys\n\nLists every key the calling user has issued, active and revoked, newest first. Token hashes are stripped; only metadata (name, prefix, created, revoked, expiry) is returned.\n\n\nResponses: 200, 401"
           },
           "response": []
         },
@@ -632,7 +632,7 @@
                 }
               ]
             },
-            "description": "Revoke an API key\n\n\nResponses: 204, 401, 404"
+            "description": "Revoke an API key\n\nMarks a key as revoked so it immediately stops authenticating. Owners may revoke their own keys; callers with the manage capability may revoke any user's key via this same endpoint. Revocation is permanent — there is no un-revoke.\n\n\nResponses: 204, 401, 404"
           },
           "response": []
         }
@@ -669,7 +669,7 @@
                 "session"
               ]
             },
-            "description": "Bootstrap a session from any supported inbound credential\n\n\nResponses: 200, 401",
+            "description": "Bootstrap a session from any supported inbound credential\n\nExchanges any supported inbound credential (Clerk JWT, API key, legacy user headers) for a first-party token pair. The access token (default TTL 15 min) is returned in the JSON body; the refresh token is set only on an httpOnly cookie scoped to /api/auth and never appears in the body. This is the sole public bootstrap route — all other API routes accept only the access token.\n\n\nResponses: 200, 401",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -732,7 +732,7 @@
                 "refresh"
               ]
             },
-            "description": "Refresh access token using the refresh-cookie\n\n\nResponses: 200, 401"
+            "description": "Refresh access token using the refresh-cookie\n\nReads the refresh token from the httpOnly cookie and mints a rotated token pair in the same token family (default refresh TTL 7 days). The new refresh token replaces the cookie; the old one is superseded. On any failure (expired, family revoked, user deactivated) the cookie is cleared and 401 returned so the client knows to re-bootstrap via /auth/session.\n\n\nResponses: 200, 401"
           },
           "response": []
         },
@@ -759,7 +759,7 @@
                 "logout"
               ]
             },
-            "description": "Revoke the current session\n\n\nResponses: 204"
+            "description": "Revoke the current session\n\nRevokes the caller's entire refresh-token family (subsequent /auth/refresh calls fail with 401) and clears the refresh cookie. Always responds 204 — even with a missing, expired, or invalid refresh cookie the cookie is cleared and logout is treated as successful.\n\n\nResponses: 204"
           },
           "response": []
         }
@@ -879,7 +879,7 @@
                 }
               ]
             },
-            "description": "Delete a component version\n\nDelete a specific version of a component\n\n\nResponses: 204, 404, 500"
+            "description": "Delete a component version\n\nDelete a specific version of a component\n\n\nResponses: 204, 400, 404, 500"
           },
           "response": []
         },
@@ -953,7 +953,7 @@
                 }
               ]
             },
-            "description": "Execute a component's stored query\n\nRuns the component's stored query_config against its connection, merging only the reserved runtime values (dashboard_variable, range) from the request. The optional connection_id override (dashboard connection-swap) must reference a connection of the same type as the stored one.\n\n\nResponses: 200, 400, 404",
+            "description": "Execute a component's stored query\n\nRuns the component's stored query_config against its connection, merging only the reserved runtime values (dashboard_variable, range) from the request. The optional connection_id override (dashboard connection-swap) must reference a connection of the same type as the stored one.\n\n\nResponses: 200, 400, 403, 404",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"connection_id\": \"\",\n  \"dashboard_variable\": null,\n  \"range\": {}\n}",
@@ -1037,7 +1037,7 @@
                 }
               ]
             },
-            "description": "Get a specific component version\n\nGet a specific version of a component by ID and version number\n\n\nResponses: 200, 404, 500"
+            "description": "Get a specific component version\n\nGet a specific version of a component by ID and version number\n\n\nResponses: 200, 400, 404, 500"
           },
           "response": []
         },
@@ -1515,7 +1515,7 @@
                 }
               ]
             },
-            "description": "Check connection health\n\nCheck the health of a specific connection and update its status\n\n\nResponses: 200, 400, 404"
+            "description": "Check connection health\n\nCheck the health of a specific connection and update its status\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1588,7 +1588,7 @@
                 }
               ]
             },
-            "description": "Delete a connection\n\nDelete a connection by ID\n\n\nResponses: 204, 400, 404, 409"
+            "description": "Delete a connection\n\nDelete a connection by ID\n\n\nResponses: 204, 400, 403, 404, 409"
           },
           "response": []
         },
@@ -1627,7 +1627,7 @@
                 }
               ]
             },
-            "description": "Execute a query against a connection\n\nExecute a query and return normalized results\n\n\nResponses: 200, 400, 404",
+            "description": "Execute a query against a connection\n\nExecute a query and return normalized results\n\n\nResponses: 200, 400, 403, 404",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"query\": {\n    \"params\": {},\n    \"raw\": \"\",\n    \"type\": null\n  }\n}",
@@ -1670,7 +1670,7 @@
                 }
               ]
             },
-            "description": "Get a connection by ID\n\nRetrieve a single connection by its ID\n\n\nResponses: 200, 400, 404"
+            "description": "Get a connection by ID\n\nRetrieve a single connection by its ID\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1732,7 +1732,7 @@
                 }
               ]
             },
-            "description": "Get database schema for a SQL connection\n\nRetrieve tables and columns for SQL connections. Only SQL-type connections support this endpoint.\n\n\nResponses: 200, 400, 404"
+            "description": "Get database schema for a SQL connection\n\nRetrieve tables and columns for SQL connections. Only SQL-type connections support this endpoint.\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1768,7 +1768,7 @@
                 }
               ]
             },
-            "description": "Get databases from an EdgeLake data source\n\nRetrieve all database names from an EdgeLake node's blockchain registry\n\n\nResponses: 200, 400, 404"
+            "description": "Get databases from an EdgeLake data source\n\nRetrieve all database names from an EdgeLake node's blockchain registry\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1854,7 +1854,7 @@
                 }
               ]
             },
-            "description": "Get table schema from an EdgeLake data source\n\nRetrieve column names and types for a specific table from an EdgeLake node\n\n\nResponses: 200, 400, 404"
+            "description": "Get table schema from an EdgeLake data source\n\nRetrieve column names and types for a specific table from an EdgeLake node\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1898,7 +1898,7 @@
                 }
               ]
             },
-            "description": "Get tables from an EdgeLake data source\n\nRetrieve table names for a specific database from an EdgeLake node\n\n\nResponses: 200, 400, 404"
+            "description": "Get tables from an EdgeLake data source\n\nRetrieve table names for a specific database from an EdgeLake node\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1934,7 +1934,7 @@
                 }
               ]
             },
-            "description": "Get topics from an MQTT broker\n\nSubscribe briefly to discover available topics on an MQTT broker\n\n\nResponses: 200, 400, 404"
+            "description": "Get topics from an MQTT broker\n\nSubscribe briefly to discover available topics on an MQTT broker\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -1977,7 +1977,7 @@
                 }
               ]
             },
-            "description": "Get values for a Prometheus label\n\nRetrieve all possible values for a specific label from a Prometheus connection\n\n\nResponses: 200, 400, 404"
+            "description": "Get values for a Prometheus label\n\nRetrieve all possible values for a specific label from a Prometheus connection\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -2147,7 +2147,7 @@
                 }
               ]
             },
-            "description": "List distinct column values for a dashboard-variable picker\n\nReturns the distinct values of a column (SQL/EdgeLake via GROUP BY). Column + table from query params; limit optional.\n\n\nResponses: 200, 400, 404"
+            "description": "List distinct column values for a dashboard-variable picker\n\nReturns the distinct values of a column (SQL/EdgeLake via GROUP BY). Column + table from query params; limit optional.\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -2191,7 +2191,7 @@
                 }
               ]
             },
-            "description": "Sample a single MQTT topic\n\nSubscribe to a topic and return the first message's schema (columns and sample values)\n\n\nResponses: 200, 400, 404"
+            "description": "Sample a single MQTT topic\n\nSubscribe to a topic and return the first message's schema (columns and sample values)\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },
@@ -2230,7 +2230,7 @@
                 }
               ]
             },
-            "description": "Save discovered dashboard-variable values for a connection column\n\nStores a column's distinct values on the connection (streams/sockets have no engine-side DISTINCT, so values are captured client-side at authoring time). Design capability required.\n\n\nResponses: 200, 400, 404",
+            "description": "Save discovered dashboard-variable values for a connection column\n\nStores a column's distinct values on the connection (streams/sockets have no engine-side DISTINCT, so values are captured client-side at authoring time). Design capability required.\n\n\nResponses: 200, 400, 403, 404",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"column\": \"\",\n  \"partial\": false,\n  \"values\": [\n    \"\"\n  ]\n}",
@@ -2279,7 +2279,7 @@
                 }
               ]
             },
-            "description": "Stream aggregated data from a socket connection\n\nOpens an SSE connection to stream time-bucketed aggregated data\n\n\nResponses: 200, 400, 404, 500",
+            "description": "Stream aggregated data from a socket connection\n\nOpens an SSE connection to stream time-bucketed aggregated data\n\n\nResponses: 200, 400, 403, 404, 422, 500, 503",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"function\": \"\",\n  \"interval\": 0,\n  \"series_col\": \"\",\n  \"timestamp_col\": \"\",\n  \"value_cols\": [\n    \"\"\n  ]\n}",
@@ -2305,7 +2305,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/connections/{id}/stream",
+              "raw": "{{baseUrl}}/api/connections/{id}/stream?topics=",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2315,6 +2315,14 @@
                 ":id",
                 "stream"
               ],
+              "query": [
+                {
+                  "key": "topics",
+                  "value": "",
+                  "description": "Comma-separated MQTT topic filter patterns (e.g. sensors/temp/#,home/+/status). MQTT connections subscribe only to matching topics at the broker level; ignored for non-MQTT streams.",
+                  "disabled": true
+                }
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -2323,7 +2331,7 @@
                 }
               ]
             },
-            "description": "Stream data from a socket connection\n\nOpens an SSE connection to stream real-time data from a socket connection\n\n\nResponses: 200, 400, 404, 500"
+            "description": "Stream data from a socket connection\n\nOpens an SSE connection to stream real-time data from a socket connection\n\n\nResponses: 200, 400, 403, 404, 422, 500, 503"
           },
           "response": []
         },
@@ -2451,11 +2459,11 @@
                 {
                   "key": "id",
                   "value": "",
-                  "description": "Control (Chart) ID"
+                  "description": "Control component ID"
                 }
               ]
             },
-            "description": "Execute a control component command\n\nExecutes the command configured on a control component, using either schema-based or legacy template interpolation\n\n\nResponses: 200, 400, 404, 500",
+            "description": "Execute a control component command\n\nExecutes the command configured on a control component, using either schema-based or legacy template interpolation\n\n\nResponses: 200, 400, 403, 404, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"value\": null\n}",
@@ -2622,6 +2630,10 @@
             "method": "DELETE",
             "header": [
               {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
                 "key": "X-User-ID",
                 "value": "{{userId}}",
                 "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
@@ -2646,7 +2658,16 @@
                 }
               ]
             },
-            "description": "Delete a dashboard\n\nDelete a dashboard by ID\n\n\nResponses: 204, 404, 500"
+            "description": "Delete a dashboard\n\nDelete a dashboard by ID. Accepts an optional cascade body { delete_component_ids: string[] } naming components to delete alongside the dashboard; each ID is re-validated server-side as actually orphaned. A plain DELETE with no body deletes the dashboard only.\n\n\nResponses: 200, 204, 404, 500",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
           "response": []
         },
@@ -3178,7 +3199,7 @@
                 }
               ]
             },
-            "description": "Execute a command on a bidirectional datasource\n\nSend a command to a datasource that supports write operations (e.g., stream.websocket-bidir)\n\n\nResponses: 200, 400, 404, 500",
+            "description": "Execute a command on a bidirectional datasource\n\nSend a command to a datasource that supports write operations (e.g., stream.websocket-bidir)\n\n\nResponses: 200, 400, 403, 404, 500",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"action\": \"\",\n  \"payload\": {},\n  \"target\": \"\"\n}",
@@ -3953,7 +3974,7 @@
                 }
               ]
             },
-            "description": "Get camera events\n\nReturns recent detection events for a camera\n\n\nResponses: 200"
+            "description": "Get camera events\n\nReturns recent detection events for a camera\n\n\nResponses: 200, 400, 502"
           },
           "response": []
         },
@@ -4014,7 +4035,7 @@
                 }
               ]
             },
-            "description": "Get camera review segments\n\nReturns Frigate review segments, defaulted to unreviewed alerts. Used by the Frigate Alerts widget.\n\n\nResponses: 200"
+            "description": "Get camera review segments\n\nReturns Frigate review segments, defaulted to unreviewed alerts. Used by the Frigate Alerts widget.\n\n\nResponses: 200, 400, 502"
           },
           "response": []
         },
@@ -4055,7 +4076,7 @@
                 }
               ]
             },
-            "description": "Get camera snapshot\n\nReturns the latest JPEG snapshot for a camera\n\n\nResponses: 200"
+            "description": "Get camera snapshot\n\nReturns the latest JPEG snapshot for a camera\n\n\nResponses: 200, 400, 500, 502"
           },
           "response": []
         },
@@ -4097,7 +4118,7 @@
                 }
               ]
             },
-            "description": "Get event clip\n\nReturns the MP4 clip for a detection event (supports Range headers)\n\n\nResponses: 200"
+            "description": "Get event clip\n\nReturns the MP4 clip for a detection event (supports Range headers)\n\n\nResponses: 200, 400, 500, 502"
           },
           "response": []
         },
@@ -4139,7 +4160,7 @@
                 }
               ]
             },
-            "description": "Get event snapshot\n\nReturns the JPEG snapshot for a detection event\n\n\nResponses: 200"
+            "description": "Get event snapshot\n\nReturns the JPEG snapshot for a detection event\n\n\nResponses: 200, 400, 500, 502"
           },
           "response": []
         },
@@ -4174,7 +4195,7 @@
                 }
               ]
             },
-            "description": "Get Frigate camera list\n\nReturns camera names from a Frigate NVR connection\n\n\nResponses: 200"
+            "description": "Get Frigate camera list\n\nReturns camera names from a Frigate NVR connection\n\n\nResponses: 200, 400, 500, 502"
           },
           "response": []
         },
@@ -4209,7 +4230,7 @@
                 }
               ]
             },
-            "description": "Get Frigate connection info\n\nReturns connection metadata needed for direct WebSocket access (go2rtc MSE)\n\n\nResponses: 200"
+            "description": "Get Frigate connection info\n\nReturns connection metadata needed for direct WebSocket access (go2rtc MSE)\n\n\nResponses: 200, 400"
           },
           "response": []
         },
@@ -4259,7 +4280,7 @@
                 }
               ]
             },
-            "description": "Get review thumbnail\n\nReturns the WebP thumbnail for a review segment\n\n\nResponses: 200"
+            "description": "Get review thumbnail\n\nReturns the WebP thumbnail for a review segment\n\n\nResponses: 200, 400, 500, 502"
           },
           "response": []
         },
@@ -4299,7 +4320,7 @@
                 }
               ]
             },
-            "description": "Mark review segments as reviewed\n\nMarks one or more Frigate review segments as reviewed (viewed), removing them from unreviewed listings\n\n\nResponses: 200",
+            "description": "Mark review segments as reviewed\n\nMarks one or more Frigate review segments as reviewed (viewed), removing them from unreviewed listings\n\n\nResponses: 200, 400, 500, 502",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -4349,80 +4370,7 @@
                 }
               ]
             },
-            "description": "Proxy Frigate JSMPEG live stream\n\nProxies the JSMPEG WebSocket stream for a camera through the backend\n\n\nResponses: "
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "MCP",
-      "description": "mcp endpoints (2).",
-      "item": [
-        {
-          "name": "Handle MCP Message",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/mcp/message",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "mcp",
-                "message"
-              ]
-            },
-            "description": "Handle MCP Message\n\nProcess a JSON-RPC message for MCP protocol\n\n\nResponses: 200, 400, 500",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id\": null,\n  \"jsonrpc\": \"\",\n  \"method\": \"\",\n  \"params\": {}\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "MCP SSE Connection",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-ID",
-                "value": "{{userId}}",
-                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/mcp/sse",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "mcp",
-                "sse"
-              ]
-            },
-            "description": "MCP SSE Connection\n\nEstablish an SSE connection for MCP protocol\n\n\nResponses: 200"
+            "description": "Proxy Frigate JSMPEG live stream\n\nProxies the JSMPEG WebSocket stream for a camera through the backend\n\n\nResponses: 101, 400"
           },
           "response": []
         }
@@ -4458,7 +4406,7 @@
                 "namespaces"
               ]
             },
-            "description": "Create a namespace\n\n\nResponses: 201, 400",
+            "description": "Create a namespace\n\nCreates a namespace. The name must be a slug-safe string and globally unique; color defaults to the standard namespace color when omitted.\n\n\nResponses: 201, 400",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"color\": \"\",\n  \"description\": \"\",\n  \"name\": \"\"\n}",
@@ -4501,7 +4449,7 @@
                 }
               ]
             },
-            "description": "Delete a namespace\n\n\nResponses: 204, 404, 409"
+            "description": "Delete a namespace\n\nDeletes a namespace only if nothing references it — when connections, components, or dashboards still use it, responds 409 with per-type usage counts. The default namespace can never be deleted (409). On success, the namespace is also removed from every user's grants.\n\n\nResponses: 204, 404, 409"
           },
           "response": []
         },
@@ -4535,7 +4483,7 @@
                 }
               ]
             },
-            "description": "Get a namespace\n\n\nResponses: 200, 404"
+            "description": "Get a namespace\n\nRetrieves a single namespace record (name, description, color) by its ID.\n\n\nResponses: 200, 404"
           },
           "response": []
         },
@@ -4570,7 +4518,7 @@
                 }
               ]
             },
-            "description": "Get namespace usage counts\n\n\nResponses: 200"
+            "description": "Get namespace usage counts\n\nReturns per-entity-type counts (connections, components, dashboards) of records in this namespace. The path parameter is the namespace ID (UUID), not its slug.\n\n\nResponses: 200"
           },
           "response": []
         },
@@ -4604,7 +4552,7 @@
                 }
               ]
             },
-            "description": "List namespaces\n\n\nResponses: 200, 403"
+            "description": "List namespaces\n\nLists the namespaces visible to the caller — restricted users see only their granted namespaces. Pass scope=all to list every namespace regardless of grants; that elevation requires the manage capability and returns 403 without it.\n\n\nResponses: 200, 403"
           },
           "response": []
         },
@@ -4639,7 +4587,7 @@
                 }
               ]
             },
-            "description": "List users with access to a namespace\n\n\nResponses: 200, 404"
+            "description": "List users with access to a namespace\n\nLists the restricted users holding an explicit grant on this namespace. Unrestricted users implicitly see every namespace and are not included.\n\n\nResponses: 200, 404"
           },
           "response": []
         },
@@ -4677,7 +4625,7 @@
                 }
               ]
             },
-            "description": "Update a namespace\n\n\nResponses: 200, 400, 404",
+            "description": "Update a namespace\n\nUpdates a namespace's name, description, or color. Renaming cascades the new slug into every connection, component, and dashboard tagged with the old slug, and into user namespace grants. The default namespace cannot be renamed (409).\n\n\nResponses: 200, 400, 404",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"color\": \"\",\n  \"description\": \"\",\n  \"name\": \"\"\n}",

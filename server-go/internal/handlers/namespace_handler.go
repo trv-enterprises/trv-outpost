@@ -27,6 +27,7 @@ func NewNamespaceHandler(svc *service.NamespaceService) *NamespaceHandler {
 
 // CreateNamespace creates a new namespace.
 // @Summary Create a namespace
+// @Description Creates a namespace. The name must be a slug-safe string and globally unique; color defaults to the standard namespace color when omitted.
 // @Tags namespaces
 // @Accept json
 // @Produce json
@@ -50,6 +51,7 @@ func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
 
 // GetNamespace retrieves a namespace by ID.
 // @Summary Get a namespace
+// @Description Retrieves a single namespace record (name, description, color) by its ID.
 // @Tags namespaces
 // @Produce json
 // @Param id path string true "Namespace ID"
@@ -75,6 +77,7 @@ func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 // route-rule table can't see query params, so the elevation is checked
 // here.
 // @Summary List namespaces
+// @Description Lists the namespaces visible to the caller — restricted users see only their granted namespaces. Pass scope=all to list every namespace regardless of grants; that elevation requires the manage capability and returns 403 without it.
 // @Tags namespaces
 // @Produce json
 // @Param scope query string false "Set to 'all' to list every namespace regardless of the caller's grants (requires manage capability)"
@@ -109,6 +112,7 @@ func (h *NamespaceHandler) ListNamespaces(c *gin.Context) {
 // every namespace, so listing them here would be noise (the page
 // states this). Manage-gated by the route table.
 // @Summary List users with access to a namespace
+// @Description Lists the restricted users holding an explicit grant on this namespace. Unrestricted users implicitly see every namespace and are not included.
 // @Tags namespaces
 // @Produce json
 // @Param id path string true "Namespace ID"
@@ -130,6 +134,7 @@ func (h *NamespaceHandler) GetNamespaceUsers(c *gin.Context) {
 
 // UpdateNamespace updates a namespace by ID.
 // @Summary Update a namespace
+// @Description Updates a namespace's name, description, or color. Renaming cascades the new slug into every connection, component, and dashboard tagged with the old slug, and into user namespace grants. The default namespace cannot be renamed (409).
 // @Tags namespaces
 // @Accept json
 // @Produce json
@@ -164,6 +169,7 @@ func (h *NamespaceHandler) UpdateNamespace(c *gin.Context) {
 // DeleteNamespace deletes a namespace, returning 409 with usage counts
 // if any records still reference it.
 // @Summary Delete a namespace
+// @Description Deletes a namespace only if nothing references it — when connections, components, or dashboards still use it, responds 409 with per-type usage counts. The default namespace can never be deleted (409). On success, the namespace is also removed from every user's grants.
 // @Tags namespaces
 // @Produce json
 // @Param id path string true "Namespace ID"
@@ -199,6 +205,7 @@ func (h *NamespaceHandler) DeleteNamespace(c *gin.Context) {
 // the namespace ID (UUID), not its slug — the service looks up the slug
 // internally so callers don't need to know the ID→slug mapping.
 // @Summary Get namespace usage counts
+// @Description Returns per-entity-type counts (connections, components, dashboards) of records in this namespace. The path parameter is the namespace ID (UUID), not its slug.
 // @Tags namespaces
 // @Produce json
 // @Param id path string true "Namespace ID"

@@ -153,6 +153,11 @@ func (h *WebhookHandler) HandleTSStoreAlert(c *gin.Context) {
 // user API key just to get alerts to flow back to the dashboard
 // they're already authoring in. ts-store fires with no Authorization
 // header; the secret in the URL is the only auth.
+//
+// Deliberately excluded from swagger: the URL embeds a per-connection
+// shared secret, so publishing the route shape in generated API docs
+// would invite probing of a path whose whole security model is
+// obscurity of the secret segment. Machine-to-machine only.
 func (h *WebhookHandler) HandleTSStoreAlertWithSecret(c *gin.Context) {
 	connectionID := c.Param("connection_id")
 	secret := c.Param("secret")

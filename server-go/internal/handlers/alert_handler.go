@@ -30,6 +30,7 @@ func NewAlertHandler(alerts *service.AlertService) *AlertHandler {
 // Pinned=true), most-recent first. Capped at 200 records — well
 // past the practical bell-rendering ceiling.
 // @Summary List visible alerts
+// @Description Returns every currently-visible alert (unseen OR pinned), most-recent first, capped at 200 and filtered to the caller's granted namespaces. Used to hydrate the notification bell on app load; live pushes arrive separately via SSE.
 // @Tags Alerts
 // @Produce json
 // @Success 200 {object} models.AlertListResponse
@@ -47,6 +48,7 @@ func (h *AlertHandler) ListAlerts(c *gin.Context) {
 // MarkSeen flips an alert's Seen flag to true. Used when the user
 // clicks "dismiss" on a bell entry. Idempotent — a 200 either way.
 // @Summary Mark an alert seen (dismiss)
+// @Description Flips the alert's Seen flag to true. Seen is global, not per-user — the first reader dismisses the alert for everyone, unless the alert is pinned (pinned alerts stay visible until unpinned). Idempotent; unknown IDs are a no-op.
 // @Tags Alerts
 // @Param id path string true "Alert ID"
 // @Success 204 "No Content"
@@ -68,6 +70,7 @@ func (h *AlertHandler) MarkSeen(c *gin.Context) {
 // Pin marks the alert pinned and unseen. Used when the user wants
 // to keep an alert visible so another user can see it.
 // @Summary Pin an alert (keep visible)
+// @Description Marks the alert pinned and resets Seen to false so it reappears on every user's bell. Pinning overrides the first-reader-clears dismiss behavior — a pinned alert stays visible to everyone until unpinned. Idempotent.
 // @Tags Alerts
 // @Param id path string true "Alert ID"
 // @Success 204 "No Content"
@@ -90,6 +93,7 @@ func (h *AlertHandler) Pin(c *gin.Context) {
 // the alert to drop off all bells, they should also mark it seen
 // (or use the UI "Dismiss" affordance, which does both).
 // @Summary Unpin an alert
+// @Description Clears the alert's pin without touching Seen — an unseen alert remains visible until someone dismisses it. Idempotent; authentication is enforced by the /api group middleware.
 // @Tags Alerts
 // @Param id path string true "Alert ID"
 // @Success 204 "No Content"

@@ -71,7 +71,7 @@ func (h *SystemUserHandler) CreateSystemUser(c *gin.Context) {
 // @Summary List system users (admin only)
 // @Tags SystemUsers
 // @Produce json
-// @Success 200 {array} models.User
+// @Success 200 {object} map[string]interface{} "{ users: models.User[] }"
 // @Failure 403 {object} map[string]string
 // @Router /system-users [get]
 func (h *SystemUserHandler) ListSystemUsers(c *gin.Context) {

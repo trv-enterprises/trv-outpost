@@ -139,6 +139,7 @@ func buildComponentDataQuery(component *models.Component, req *models.ComponentD
 // @Param request body models.ComponentDataRequest false "Runtime values"
 // @Success 200 {object} models.QueryResponse
 // @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
 // @Failure 404 {object} map[string]interface{}
 // @Router /components/{id}/data [post]
 func (h *ComponentHandler) GetComponentData(c *gin.Context) {
@@ -247,6 +248,7 @@ func (h *ComponentHandler) GetComponentData(c *gin.Context) {
 // @Param id path string true "Component ID"
 // @Param version path int true "Version number"
 // @Success 200 {object} models.Component
+// @Failure 400 {object} map[string]interface{} "Invalid version number"
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /components/{id}/versions/{version} [get]
@@ -505,6 +507,7 @@ func (h *ComponentHandler) DeleteComponent(c *gin.Context) {
 // @Param id path string true "Component ID"
 // @Param version path int true "Version number"
 // @Success 204
+// @Failure 400 {object} map[string]interface{} "Invalid version number"
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /components/{id}/versions/{version} [delete]
