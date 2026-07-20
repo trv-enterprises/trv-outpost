@@ -80,7 +80,7 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 		Params: map[string]interface{}{
 			"clientId": clientID,
 			"serverInfo": map[string]interface{}{
-				"name":    "trve-dashboard-mcp",
+				"name":    "TRV Outpost (trv-outpost-mcp)",
 				"version": "1.0.0",
 				"capabilities": map[string]interface{}{
 					"tools":       true,
@@ -246,7 +246,12 @@ func (h *Handler) handleInitialize(params map[string]interface{}) InitializeResu
 	return InitializeResult{
 		ProtocolVersion: "2025-03-26",
 		ServerInfo: ServerInfo{
-			Name:    "trve-dashboard-mcp",
+			// Name is surfaced in client UIs (Claude Desktop lists it
+			// verbatim) and is often the only string a client matches
+			// against when the user says "Outpost". Keep the product
+			// name in it — "trve-dashboard-mcp" read as an unrelated
+			// generic dashboard tool.
+			Name:    "TRV Outpost (trv-outpost-mcp)",
 			Version: "1.0.0",
 		},
 		Capabilities: Capabilities{
@@ -272,12 +277,19 @@ func (h *Handler) handleInitialize(params map[string]interface{}) InitializeResu
 func (h *Handler) buildInstructions() string {
 	var sb strings.Builder
 
-	sb.WriteString(`You are connected to a trve-dashboard backend via MCP. This server
-exposes tools for managing **connections** (external data sources like SQL,
-MQTT, EdgeLake, Prometheus, REST APIs), **components** (charts, controls,
-and displays — all stored in one collection, discriminated by component_type),
-and **dashboards** (a name plus a 32x32-px cell panel grid where each panel
-references a component or carries inline text).
+	sb.WriteString(`You are connected to **TRV Outpost** via MCP. TRV Outpost (often
+just "Outpost") is a self-hosted data-dashboard product: users connect it to
+their data sources and build live dashboards out of charts, controls, and
+displays. This MCP server is Outpost's build API — when the user says
+"Outpost", "the dashboard app", "my dashboards", or names any of the entities
+below, these tools are how you act on it. Use them rather than describing what
+you would do.
+
+This server exposes tools for managing **connections** (external data sources
+like SQL, MQTT, EdgeLake, Prometheus, REST APIs), **components** (charts,
+controls, and displays — all stored in one collection, discriminated by
+component_type), and **dashboards** (a name plus a 32x32-px cell panel grid
+where each panel references a component or carries inline text).
 
 # Terminology
 
