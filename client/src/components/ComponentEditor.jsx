@@ -100,8 +100,10 @@ const epochSecondsToDtLocal = (epochSec) => {
 };
 // Default ts-store record limit when a saved component has none.
 // Single-value charts (gauge, number) render only row 0, so 1 record
-// is the right default; everything else keeps the historical 100 (#169).
-const defaultTsstoreLimit = (type) => (type === 'gauge' || type === 'number' ? 1 : 100);
+// is the right default (#169); everything else gets 1000 — matching the
+// stream_buffer_size default, and conservative next to the 5000-point
+// clamp (TSSTORE_MAX_POINTS) already allowed on time-ranged queries.
+const defaultTsstoreLimit = (type) => (type === 'gauge' || type === 'number' ? 1 : 1000);
 // Build the range: DSL string from the two datetime-local inputs, or '' if
 // either bound is missing/invalid (callers fall back to a safe default).
 const buildTsstoreRangeRaw = (fromDtLocal, toDtLocal) => {
@@ -685,7 +687,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   // TSStore query configuration
   const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest, range
-  const [tsstoreLimit, setTsstoreLimit] = useState(100);
+  const [tsstoreLimit, setTsstoreLimit] = useState(defaultTsstoreLimit('line'));
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
   // Absolute from→to window for tsstoreQueryType==='range'. Stored as
   // datetime-local strings ("YYYY-MM-DDTHH:MM", local time); converted to epoch
@@ -918,14 +920,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Single-value charts (gauge, number) render only row 0, so a
     // newest/oldest ts-store query needs just 1 record (#169). Swap the
     // record-limit default when the type crosses the single-value
-    // boundary — but only when it still sits at the other default, so
-    // an explicitly-entered limit survives the switch.
+    // boundary — but only when it still sits at the old type's default,
+    // so an explicitly-entered limit survives the switch.
     const isSingleValue = newType === 'gauge' || newType === 'number';
     const wasSingleValue = chartType === 'gauge' || chartType === 'number';
-    if (isSingleValue && !wasSingleValue && tsstoreLimit === 100) {
-      setTsstoreLimit(1);
-    } else if (!isSingleValue && wasSingleValue && tsstoreLimit === 1) {
-      setTsstoreLimit(100);
+    // 100 was the pre-#169 default — components saved back then carry it
+    // explicitly, so treat it as "still at a default" too.
+    const atDefault = tsstoreLimit === defaultTsstoreLimit(chartType) || (!wasSingleValue && tsstoreLimit === 100);
+    if (isSingleValue !== wasSingleValue && atDefault) {
+      setTsstoreLimit(defaultTsstoreLimit(newType));
     }
 
     setChartType(newType);
@@ -1397,7 +1400,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         promQueryType: 'range',
         promTimeRange: '1h',
         promStep: '1m',
-        tsstoreLimit: 100,
+        tsstoreLimit: defaultTsstoreLimit('line'),
         tsstoreFilter: '',
         tsstoreFilterSource: 'literal',
         tsstoreFilterIgnoreCase: false,
@@ -1737,7 +1740,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               // REST transport — set default query
               setQueryRaw('newest');
               setTsstoreQueryType('newest');
-              setTsstoreLimit(100);
+              setTsstoreLimit(defaultTsstoreLimit(chartType));
               setTsstoreSinceDuration('1h');
               setPromQueryType('range');
               setPromTimeRange('1h');
@@ -1920,7 +1923,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTimeBucketValueCols([]);
     setTimeBucketTimestampCol('');
     setTsstoreQueryType('newest');
-    setTsstoreLimit(100);
+    setTsstoreLimit(defaultTsstoreLimit('line'));
     setTsstoreSinceDuration('1h');
     setPromQueryType('range');
     setPromTimeRange('1h');
@@ -2129,7 +2132,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // harvest sees enough distinct values; otherwise a small newest is
         // plenty for schema preview.
         rawQuery = 'newest';
-        queryParams = { limit: (variableBoundFilter && !effectiveVarValue) ? 1000 : (tsstoreLimit || 100) };
+        queryParams = { limit: (variableBoundFilter && !effectiveVarValue) ? 1000 : (tsstoreLimit || defaultTsstoreLimit(chartType)) };
         // Apply the source-side filter unless we're discovering distinct
         // values for the picker (variable bound + no value yet) — in that
         // case a variable filter would resolve to nothing and starve the harvest.
@@ -4190,6 +4193,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     chartTypeConfig.hasAggregation !== false ||
                     chartTypeConfig.hasSlidingWindow !== false
                   )) ||
+                  // Legacy client-side filters on a SQL/EdgeLake component
+                  // (pre-gating saves) — keep the tile so the Filters
+                  // subsection below can surface them.
+                  (chartTypeConfig.hasFilters !== false && filters.length > 0) ||
                   (selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false)
                 ) && (
                 <CollapsibleTile title="Client Side Processing" className="spec-section client-side-processing">
@@ -4199,8 +4206,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     (SQL WHERE / EdgeLake WHERE) — see
                     queryLanguageOwnsClientSideOps memo. Also hidden
                     for chart types that opt out via
-                    hasFilters:false. */}
-                {!showCustomCode && chartTypeConfig.hasFilters !== false && !queryLanguageOwnsClientSideOps && (
+                    hasFilters:false. EXCEPTION: components saved before
+                    the SQL gating (2026-05-27) can carry client-side
+                    filters that are still applied at render — surface
+                    the section whenever filters exist so an active
+                    filter is never invisible. Deleting them all (and
+                    re-saving) hides the section again. */}
+                {!showCustomCode && chartTypeConfig.hasFilters !== false && (!queryLanguageOwnsClientSideOps || filters.length > 0) && (
                 <div className="spec-subsection filters-section">
                   <div className="section-header">
                     <h5 className="spec-subsection__heading">Filters</h5>
@@ -4214,6 +4226,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       Add Filter
                     </Button>
                   </div>
+                  {queryLanguageOwnsClientSideOps && (
+                    <p className="spec-field-helper">
+                      This connection normally filters in the query itself (WHERE clause),
+                      but this component has saved client-side filters that are still
+                      applied after the query runs. Remove them all to hide this section,
+                      or move the condition into the SQL.
+                    </p>
+                  )}
                   {filters.length > 0 ? (
                     availableColumns.length > 0 ? (
                       <div className="filters-list">
