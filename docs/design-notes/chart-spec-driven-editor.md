@@ -298,6 +298,25 @@ Operators: `eq`, `neq`, `in`, `not_in`, `truthy`, `falsy`,
 `not_empty`. Evaluated client-side against the current form
 state. Server-side validation is the same predicate set.
 
+`visibleWhen.field` normally references a declared field id, but
+it may also reference a **derived field** — a computed predicate
+the host editor injects into formState rather than a value bound
+to the saved record (e.g. `any_accumulator` = "any Y column has
+Δ Delta ticked"). Specs declare these under a top-level
+`derived_fields` array so the schema validator can verify the
+reference (#175):
+
+```jsonc
+"derived_fields": [
+  { "id": "any_accumulator",
+    "description": "Injected by ComponentEditor formState: true when any y_axis_columns entry has accumulate ticked." }
+]
+```
+
+The runtime evaluator needs no special handling — `isVisible`
+reads `formState[field]`, and the injected key resolves exactly
+like a declared field's value.
+
 ### Library options block (library-specific extension)
 
 Library-specific fields go under a section with

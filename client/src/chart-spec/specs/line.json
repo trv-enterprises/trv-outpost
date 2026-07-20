@@ -26,6 +26,12 @@
     "has_axis_range": true,
     "has_thresholds": true
   },
+  "derived_fields": [
+    {
+      "id": "any_accumulator",
+      "description": "Injected by ComponentEditor formState: true when any y_axis_columns entry has Δ Delta (accumulate) ticked. Gates the Accumulator subsection."
+    }
+  ],
   "sections": [
     {
       "id": "data_mapping",

@@ -71,6 +71,12 @@
  */
 
 /**
+ * @typedef {Object} DerivedFieldSpec
+ * @property {string} id            formState key the host editor injects
+ * @property {string} [description] how the value is computed (documentation)
+ */
+
+/**
  * @typedef {Object} CodegenSpec
  * @property {string} library            "echarts" today; "d3" / "vis-network" later
  * @property {string} [template_id]      legacy Stage-1 string-emitter dispatch key. Optional in Stage 2+ — specs that ship a buildOption render path don't need it.
@@ -84,6 +90,7 @@
  * @property {string} library
  * @property {ChartTypeSpecDisplay} display
  * @property {ChartTypeSpecCapabilities} [capabilities]
+ * @property {DerivedFieldSpec[]} [derived_fields]  computed predicates the host editor injects into formState (valid visibleWhen targets, not bound to the saved record)
  * @property {SectionSpec[]} sections
  * @property {CodegenSpec} [codegen]   Optional in Stage 2+. Stage 1 specs (gauge) still ship a codegen block with template_id; Stage 2+ specs use the spec_name → buildOption registry instead.
  */
@@ -254,13 +261,13 @@ function collectFieldIds(section, out) {
 
 function checkVisibleWhen(section, path, known, errors) {
   if (section.visibleWhen && typeof section.visibleWhen.field === 'string' && !known.has(section.visibleWhen.field)) {
-    pushErr(errors, `${path}.visibleWhen.field`, `references unknown field id "${section.visibleWhen.field}" — must match an existing field in this spec`);
+    pushErr(errors, `${path}.visibleWhen.field`, `references unknown field id "${section.visibleWhen.field}" — must match a declared field or a derived_fields entry in this spec`);
   }
   if (Array.isArray(section.fields)) {
     section.fields.forEach((field, fi) => {
       const vw = field.visibleWhen;
       if (vw && typeof vw.field === 'string' && !known.has(vw.field)) {
-        pushErr(errors, `${path}.fields[${fi}].visibleWhen.field`, `references unknown field id "${vw.field}" — must match an existing field in this spec`);
+        pushErr(errors, `${path}.fields[${fi}].visibleWhen.field`, `references unknown field id "${vw.field}" — must match a declared field or a derived_fields entry in this spec`);
       }
     });
   }
@@ -269,10 +276,51 @@ function checkVisibleWhen(section, path, known, errors) {
   }
 }
 
+/**
+ * `derived_fields` declares formState keys the HOST EDITOR computes and
+ * injects (e.g. `any_accumulator` = "any y column has Δ Delta ticked").
+ * They are not bound to a saved-record path — no `binds` — but they are
+ * legitimate `visibleWhen` targets: the runtime evaluator (`isVisible`
+ * in binding.js) just reads `formState[field]`, so an injected key
+ * resolves the same way a declared field's value does. Validating them
+ * here keeps the "visibleWhen must reference something real" guarantee
+ * without forcing a phantom field declaration (#175).
+ */
+function validateDerivedFields(spec, errors, declaredIds) {
+  if (spec.derived_fields === undefined) return new Set();
+  const ids = new Set();
+  if (!Array.isArray(spec.derived_fields)) {
+    pushErr(errors, 'derived_fields', 'must be an array when present');
+    return ids;
+  }
+  spec.derived_fields.forEach((df, i) => {
+    if (!df || typeof df !== 'object') {
+      pushErr(errors, `derived_fields[${i}]`, 'must be an object { id, description? }');
+      return;
+    }
+    if (typeof df.id !== 'string' || !df.id) {
+      pushErr(errors, `derived_fields[${i}]`, 'missing "id"');
+      return;
+    }
+    if (ids.has(df.id)) {
+      pushErr(errors, `derived_fields[${i}]`, `duplicate derived field id "${df.id}"`);
+      return;
+    }
+    if (declaredIds.has(df.id)) {
+      pushErr(errors, `derived_fields[${i}]`, `derived field id "${df.id}" collides with a declared field id — the injected value would shadow the field's formState entry`);
+      return;
+    }
+    ids.add(df.id);
+  });
+  return ids;
+}
+
 function validateVisibleWhenRefs(spec, errors) {
   if (!Array.isArray(spec.sections)) return;
   const known = new Set();
   spec.sections.forEach((s) => collectFieldIds(s, known));
+  const derived = validateDerivedFields(spec, errors, known);
+  derived.forEach((id) => known.add(id));
   spec.sections.forEach((section, si) => checkVisibleWhen(section, `sections[${si}]`, known, errors));
 }
 
