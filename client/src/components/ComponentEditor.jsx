@@ -98,6 +98,10 @@ const epochSecondsToDtLocal = (epochSec) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+// Default ts-store record limit when a saved component has none.
+// Single-value charts (gauge, number) render only row 0, so 1 record
+// is the right default; everything else keeps the historical 100 (#169).
+const defaultTsstoreLimit = (type) => (type === 'gauge' || type === 'number' ? 1 : 100);
 // Build the range: DSL string from the two datetime-local inputs, or '' if
 // either bound is missing/invalid (callers fall back to a safe default).
 const buildTsstoreRangeRaw = (fromDtLocal, toDtLocal) => {
@@ -911,6 +915,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setLimitRows(0);
     }
 
+    // Single-value charts (gauge, number) render only row 0, so a
+    // newest/oldest ts-store query needs just 1 record (#169). Swap the
+    // record-limit default when the type crosses the single-value
+    // boundary — but only when it still sits at the other default, so
+    // an explicitly-entered limit survives the switch.
+    const isSingleValue = newType === 'gauge' || newType === 'number';
+    const wasSingleValue = chartType === 'gauge' || chartType === 'number';
+    if (isSingleValue && !wasSingleValue && tsstoreLimit === 100) {
+      setTsstoreLimit(1);
+    } else if (!isSingleValue && wasSingleValue && tsstoreLimit === 1) {
+      setTsstoreLimit(100);
+    }
+
     setChartType(newType);
   };
 
@@ -1123,10 +1140,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // shape of raw is the source of truth for which control to
       // restore.
       const rawQuery = chart.query_config?.raw || '';
+      // Restore the record limit for every raw shape (not just the
+      // branches that show the input) so live state always matches the
+      // dirty-tracking baseline's loadedTsstoreLimit — the fallback is
+      // chart-type-aware (1 for single-value gauge/number, #169), so an
+      // untouched useState default would read as a phantom change.
+      setTsstoreLimit(chart.query_config?.params?.limit || defaultTsstoreLimit(chart.chart_type));
       if (rawQuery.startsWith('since:')) {
         setTsstoreQueryType('since');
         setTsstoreSinceDuration(rawQuery.substring(6));
-        setTsstoreLimit(chart.query_config?.params?.limit || 100);
       } else if (rawQuery.startsWith('range:')) {
         // range:<startEpochSec>:<endEpochSec> → restore the two datetime pickers.
         setTsstoreQueryType('range');
@@ -1138,7 +1160,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       } else if (rawQuery === 'newest' || rawQuery === 'oldest') {
         setTsstoreQueryType(rawQuery);
         setTsstoreSinceDuration('1h');
-        setTsstoreLimit(chart.query_config?.params?.limit || 100);
       }
       // Restore the source-side filter. A filter equal to the variable token
       // restores in 'variable' mode (shows the chip); any other non-empty value
@@ -1259,7 +1280,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
       const loadedTsstoreRangeFrom = loadedTsRangeMatch ? epochSecondsToDtLocal(loadedTsRangeMatch[1]) : '';
       const loadedTsstoreRangeTo = loadedTsRangeMatch ? epochSecondsToDtLocal(loadedTsRangeMatch[2]) : '';
-      const loadedTsstoreLimit = chart.query_config?.params?.limit || 100;
+      const loadedTsstoreLimit = chart.query_config?.params?.limit || defaultTsstoreLimit(chart.chart_type);
       const loadedTsFilter = chart.query_config?.params?.filter;
       const loadedTsstoreFilterSource = loadedTsFilter === DASHBOARD_VARIABLE_TOKEN ? 'variable' : 'literal';
       const loadedTsstoreFilter = (typeof loadedTsFilter === 'string' && loadedTsFilter !== DASHBOARD_VARIABLE_TOKEN) ? loadedTsFilter : '';

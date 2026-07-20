@@ -49,6 +49,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"move_dashboard_thumbnails_v1", migrateMoveDashboardThumbnails},
 		{"strip_custom_code_title_div_v1", migrateStripCustomCodeTitleDiv},
 		{"refresh_interval_ms_to_seconds_v1", migrateRefreshIntervalMsToSeconds},
+		{"gauge_number_limit_one_v1", migrateGaugeNumberLimitOne},
 	}
 
 	coll := db.Collection("migrations")
@@ -762,6 +763,37 @@ func migrateAssistantEnabledToAIEnabled(ctx context.Context, db *mongo.Database)
 // so the DB matches the new model. Idempotent: only updates documents
 // that still carry the field, and the registry framework guards
 // against re-running.
+// migrateGaugeNumberLimitOne caps the stored ts-store record limit at 1
+// for single-value chart types (#169). Gauge and number renderers read
+// only row 0 (chart-spec/specs/{gauge,number}.js), so a saved
+// `query_config.params.limit` of 100+ fetches rows that are discarded on
+// every refresh. Scoped to chart_type gauge/number — `custom` charts
+// styled as tiles are untouched, as is streaming backfill depth (that
+// lives in generated component code, not query_config). Also scoped to
+// raw newest/oldest: those responses put the same record at row 0
+// regardless of limit (newest-first / oldest-first), so the cap is
+// provably behavior-preserving. `since:` responses are ASCENDING with
+// start-truncation (ts-store getObjectsInRangeV2), so capping a
+// since-shaped single-value chart could change which record renders —
+// those are left alone. Matches every numeric BSON type via $gt.
+// Idempotent: docs already at 1 don't match.
+func migrateGaugeNumberLimitOne(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("components").UpdateMany(
+		ctx,
+		bson.M{
+			"chart_type":                bson.M{"$in": []string{"gauge", "number"}},
+			"query_config.raw":          bson.M{"$in": []string{"newest", "oldest"}},
+			"query_config.params.limit": bson.M{"$gt": 1},
+		},
+		bson.M{"$set": bson.M{"query_config.params.limit": 1}},
+	)
+	if err != nil {
+		return fmt.Errorf("gauge/number limit to 1: %w", err)
+	}
+	log.Printf("  components: capped query limit to 1 on %d gauge/number documents", res.ModifiedCount)
+	return nil
+}
+
 func migrateDropMaskSecrets(ctx context.Context, db *mongo.Database) error {
 	res, err := db.Collection("connections").UpdateMany(
 		ctx,
