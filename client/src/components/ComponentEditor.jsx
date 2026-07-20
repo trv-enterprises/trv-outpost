@@ -578,8 +578,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
   const [xAxisFormat, setXAxisFormat] = useState('auto'); // Default timestamp format; 'auto' fits granularity to the data
   const [yAxisColumns, setYAxisColumns] = useState([]);
-  const [yAxisLabel, setYAxisLabel] = useState(''); // Legacy single y-axis label — kept for back-compat; use yAxisLabels for new code.
-  const [yAxisLabels, setYAxisLabels] = useState([]); // Per-column y-axis labels. Index matches yAxisColumns. Empty entries fall back to column name.
+  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label rendered along the Y axis (single-axis mode; scatter + line/bar/area). Dual-axis sides inherit their series label instead.
+  const [yAxisLabels, setYAxisLabels] = useState([]); // Per-SERIES labels (legend names). Index matches yAxisColumns. Empty entries fall back to column name.
   // Per-column series color overrides (resolved hex; '' = auto palette). Index
   // matches yAxisColumns, same parallel-array pattern as yAxisLabels. Saved into
   // the object-form y_axis entries' `color` field.
@@ -1029,18 +1029,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setYAxisColumns(loadedYCols);
       setYAxisColors(loadedYColors);
       setYAxisLabel(chart.data_mapping?.y_axis_label || '');
-      // Labels live in y_axis_labels (the per-column source of truth), falling
-      // back to the legacy single label. (Same computation as loadedYAxisLabels
-      // used for the dirty-tracking snapshot, so load doesn't read dirty.)
+      // Series labels live in y_axis_labels (the per-series source of
+      // truth). The legacy fallback that seeded them from the singular
+      // y_axis_label is gone — that field is now the AXIS label
+      // (rendered along the axis, matching scatter's semantics); the
+      // strip_y_axis_label_mirror migration removed the old save-path
+      // mirrors. (Same computation as loadedYAxisLabels used for the
+      // dirty-tracking snapshot, so load doesn't read dirty.)
       const loadedLabels = chart.data_mapping?.y_axis_labels;
-      if (Array.isArray(loadedLabels) && loadedLabels.length > 0) {
-        setYAxisLabels(loadedLabels);
-      } else if (chart.data_mapping?.y_axis_label) {
-        setYAxisLabels([chart.data_mapping.y_axis_label]);
-      } else {
-        setYAxisLabels([]);
-        setYAxisColors([]);
-      }
+      setYAxisLabels(Array.isArray(loadedLabels) && loadedLabels.length > 0 ? loadedLabels : []);
       setGroupByColumn(chart.data_mapping?.group_by || '');
       setSeriesColumn(chart.data_mapping?.series || '');
       // Per-column accumulator (#8). Prefer the parallel accumulator_columns
@@ -1254,15 +1251,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // charts saved before those keys existed.
       setChartOptions({ ...DEFAULT_CHART_OPTIONS, ...(chart.options || {}) });
       // Snapshot mirrors the post-load values for every field in the diff —
-      // including the legacy y_axis_label → y_axis_labels seeding and the
-      // default aggregation shape — so the form doesn't read as dirty on
-      // entry. Must list every field handleSave reads into the payload;
-      // anything missing here silently won't trip the Save button.
+      // including the default aggregation shape — so the form doesn't read
+      // as dirty on entry. Must list every field handleSave reads into the
+      // payload; anything missing here silently won't trip the Save button.
       const loadedYAxisLabels = (() => {
+        // Mirrors the load above: y_axis_labels only — y_axis_label is
+        // the axis label now, not a series-label seed.
         const arr = chart.data_mapping?.y_axis_labels;
-        if (Array.isArray(arr) && arr.length > 0) return arr;
-        if (chart.data_mapping?.y_axis_label) return [chart.data_mapping.y_axis_label];
-        return [];
+        return Array.isArray(arr) && arr.length > 0 ? arr : [];
       })();
       const loadedVisibleSnap = chart.data_mapping?.visible_columns;
       const loadedTb = chart.data_mapping?.time_bucket;
@@ -2458,8 +2454,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // can pick a column, but they shouldn't reach the wire — same for
         // their index-aligned labels + colors.
         y_axis: yAxisColumns.filter((c) => typeof c === 'string' && c.length > 0),
-        // y_axis_label kept for back-compat; y_axis_labels is the new per-column source of truth.
-        y_axis_label: (yAxisLabels && yAxisLabels[0]) || yAxisLabel || '',
+        // y_axis_label is the AXIS label (rendered along the axis, same
+        // semantics as scatter) — series labels live in y_axis_labels.
+        // The old back-compat mirror (first series label copied here) is
+        // gone; strip_y_axis_label_mirror cleaned the stored copies.
+        y_axis_label: yAxisLabel || '',
         y_axis_labels: (() => {
           if (!Array.isArray(yAxisLabels) || yAxisLabels.length === 0) return undefined;
           // Realign labels with the filtered y_axis. We compute the index

@@ -461,8 +461,8 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		XAxisLabel   *string             `json:"x_axis_label,omitempty"`
 		XAxisFormat  *string             `json:"x_axis_format,omitempty"`
 		YAxis        json.RawMessage     `json:"y_axis,omitempty"` // normalized via models.NormalizeYAxisColumns (tolerates [{"column":...}] / bare string)
-		YAxisLabel   *string             `json:"y_axis_label,omitempty"`  // legacy single label
-		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"` // per-column labels (preferred)
+		YAxisLabel   *string             `json:"y_axis_label,omitempty"`  // axis label (rendered along the axis; single-axis only)
+		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"` // per-series legend labels
 		YAxisColors  *[]string           `json:"y_axis_colors,omitempty"` // per-column color override (index|name|hex)
 		GroupBy      *string             `json:"group_by,omitempty"`
 		BandColumns  *models.BandColumns `json:"band_columns,omitempty"`
@@ -534,10 +534,9 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 	if params.YAxisLabels != nil {
 		chart.DataMapping.YAxisLabels = *params.YAxisLabels
-		// Keep the legacy singular in sync for back-compat consumers.
-		if len(*params.YAxisLabels) > 0 {
-			chart.DataMapping.YAxisLabel = (*params.YAxisLabels)[0]
-		}
+		// No singular sync: y_axis_label is the AXIS label (rendered along
+		// the axis), y_axis_labels are per-series legend labels. The old
+		// mirror here would re-create what strip_y_axis_label_mirror cleans.
 	}
 	if params.YAxisColors != nil {
 		// Resolve each token (index | Carbon name | hex) to a canonical hex.

@@ -137,7 +137,7 @@ export default function YAxisColumnsListField({ field }) {
             <div className="spec-yacl__label">
               <TextInput
                 id={`spec-${field.id}-${i}-label`}
-                labelText={i === 0 ? 'Column name' : undefined}
+                labelText={i === 0 ? 'Series label' : undefined}
                 hideLabel={i !== 0}
                 value={entry.label}
                 onChange={(e) => updateEntry(i, { label: e.target.value })}

@@ -561,6 +561,45 @@ const data = {
   check('case 20: values under 1k → no formatter attached', small.yAxis?.axisLabel?.formatter === undefined);
 }
 
+// --- Case 21: Y-axis names (Series/axis-label split) ---
+{
+  // Single-axis: explicit data_mapping.y_axis_label renders as yAxis.name.
+  const single = buildOption(
+    { data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu' }], y_axis_label: 'Utilization (%)' }, options: {} },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 21: single-axis yAxis.name from y_axis_label', single.yAxis?.name === 'Utilization (%)');
+  check('case 21: single-axis nameLocation middle', single.yAxis?.nameLocation === 'middle');
+
+  // Single-axis, no label → no name key forced on.
+  const bare = buildOption(
+    { data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu' }] }, options: {} },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 21: no y_axis_label → no yAxis.name', bare.yAxis?.name === undefined);
+
+  // Dual-axis: each side inherits its series label (fallback column name);
+  // the explicit y_axis_label is ignored.
+  const dual = buildOption(
+    {
+      data_mapping: {
+        x_axis: 'ts',
+        multiple_y_axis: true,
+        y_axis: [{ column: 'cpu', label: 'CPU %', axis: 'left' }, { column: 'mem', axis: 'right' }],
+        y_axis_label: 'SHOULD NOT RENDER',
+      },
+      options: {},
+    },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 21: dual left axis name = series label', dual.yAxis?.[0]?.name === 'CPU %');
+  check('case 21: dual right axis name = column fallback', dual.yAxis?.[1]?.name === 'mem');
+  check('case 21: dual ignores explicit y_axis_label', dual.yAxis?.[0]?.name !== 'SHOULD NOT RENDER' && dual.yAxis?.[1]?.name !== 'SHOULD NOT RENDER');
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

@@ -211,7 +211,7 @@ function buildSeriesForColumn(entry, idx, ctx) {
   return series;
 }
 
-function buildYAxisDefs(dualAxis, range, si = {}) {
+function buildYAxisDefs(dualAxis, range, si = {}, names = {}) {
   // si.left / si.right are shared-prefix axisLabel formatters (#159),
   // or null when that axis's values never reach 1k (ticks unchanged).
   const fromRange = (side) => {
@@ -221,17 +221,32 @@ function buildYAxisDefs(dualAxis, range, si = {}) {
     if (r.max != null) def.max = Number(r.max);
     return def;
   };
+  // Axis name (label rendered along the axis) — scatter's convention
+  // (nameLocation middle / nameGap 45). Single-axis: the explicit
+  // data_mapping.y_axis_label. Dual-axis: each side inherits its
+  // series label (names computed by the caller), tinted to match the
+  // axis color so name ↔ axis pairing stays obvious.
+  const withName = (def, name, color) => {
+    if (!name) return def;
+    return {
+      ...def,
+      name,
+      nameLocation: 'middle',
+      nameGap: 45,
+      nameTextStyle: { color },
+    };
+  };
   if (dualAxis) {
     const left = fromRange('left');
     const right = fromRange('right');
     return [
-      { ...left, axisLabel: { color: LEFT_AXIS_COLOR, ...(si.left ? { formatter: si.left } : {}) }, axisLine: { show: true, lineStyle: { color: LEFT_AXIS_COLOR } } },
-      { ...right, axisLabel: { color: RIGHT_AXIS_COLOR, ...(si.right ? { formatter: si.right } : {}) }, axisLine: { show: true, lineStyle: { color: RIGHT_AXIS_COLOR } } },
+      withName({ ...left, axisLabel: { color: LEFT_AXIS_COLOR, ...(si.left ? { formatter: si.left } : {}) }, axisLine: { show: true, lineStyle: { color: LEFT_AXIS_COLOR } } }, names.left, LEFT_AXIS_COLOR),
+      withName({ ...right, axisLabel: { color: RIGHT_AXIS_COLOR, ...(si.right ? { formatter: si.right } : {}) }, axisLine: { show: true, lineStyle: { color: RIGHT_AXIS_COLOR } } }, names.right, RIGHT_AXIS_COLOR),
     ];
   }
   const def = fromRange('left');
   if (si.left) def.axisLabel = { formatter: si.left };
-  return def;
+  return withName(def, names.left, COLOR_TEXT_SECONDARY);
 }
 
 /**
@@ -610,7 +625,27 @@ export function buildOption(values, data, helpers = {}) {
     };
   }
 
-  const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange, siAxis);
+  // Y-axis names. Single-axis: the explicit y_axis_label field (the
+  // Series/axis-label split — series labels feed the legend, this
+  // labels the axis itself). Dual-axis: no explicit fields — each side
+  // inherits its series label (fallback: column name), matched to the
+  // side-assignment rule in buildSeriesForColumn (axis==='right', or
+  // index 1 when unset).
+  const axisNames = { left: '', right: '' };
+  if (dualAxis) {
+    yEntries.forEach((e, i) => {
+      const sideRight = e.axis === 'right' || (e.axis == null && i === 1);
+      const name = e.label || e.column || '';
+      if (sideRight) {
+        if (!axisNames.right) axisNames.right = name;
+      } else if (!axisNames.left) {
+        axisNames.left = name;
+      }
+    });
+  } else {
+    axisNames.left = values?.data_mapping?.y_axis_label || '';
+  }
+  const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange, siAxis, axisNames);
 
   // Dual-axis dead-axis hide. When the user toggles off the only series
   // bound to one of the two y-axes via the legend, ECharts hides the
@@ -690,7 +725,11 @@ export function buildOption(values, data, helpers = {}) {
   // panel. A right-side legend already provides ample room, so only bump
   // the non-legend case (and never shrink below the existing budget).
   const baseGridRight = legendPos === 'right' ? 135 : 20;
-  const gridRight = Math.max(baseGridRight, (labelGutter || 0) + 12);
+  // A dual-axis right-side name renders rotated at nameGap 45 from the
+  // axis line — mostly inside the containLabel-reserved tick-label strip,
+  // but the default 20px flush pad can clip its tail. Floor at 30 when a
+  // right name is present (left side already has scatter's proven 50).
+  const gridRight = Math.max(baseGridRight, (labelGutter || 0) + 12, axisNames.right ? 30 : 0);
   const option = {
     backgroundColor: TRANSPARENT_BG,
     tooltip,

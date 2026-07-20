@@ -50,6 +50,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"strip_custom_code_title_div_v1", migrateStripCustomCodeTitleDiv},
 		{"refresh_interval_ms_to_seconds_v1", migrateRefreshIntervalMsToSeconds},
 		{"gauge_number_limit_one_v1", migrateGaugeNumberLimitOne},
+		{"strip_y_axis_label_mirror_v1", migrateStripYAxisLabelMirror},
 	}
 
 	coll := db.Collection("migrations")
@@ -763,6 +764,38 @@ func migrateAssistantEnabledToAIEnabled(ctx context.Context, db *mongo.Database)
 // so the DB matches the new model. Idempotent: only updates documents
 // that still carry the field, and the registry framework guards
 // against re-running.
+// migrateStripYAxisLabelMirror removes the legacy y_axis_label save
+// mirror from line/bar/area components. The old editor save path copied
+// the FIRST SERIES label into data_mapping.y_axis_label "for back-compat"
+// — the field was never rendered for these chart types, so the copy was
+// inert. Now y_axis_label is the rendered AXIS label everywhere (matching
+// scatter's semantics), and without this cleanup every mirrored record
+// would suddenly draw its first legend entry along the Y axis too.
+// Scoped to records where the singular exactly equals y_axis_labels[0]
+// (proving it is the automatic copy, not an authored axis label);
+// only-singular legacy records are left alone — their label becomes the
+// axis label, which is the closest reading of the author's intent.
+// Scatter is untouched (its y_axis_label was always the axis label).
+func migrateStripYAxisLabelMirror(ctx context.Context, db *mongo.Database) error {
+	res, err := db.Collection("components").UpdateMany(
+		ctx,
+		bson.M{
+			"chart_type": bson.M{"$in": []string{"line", "bar", "area"}},
+			"$expr": bson.M{"$and": bson.A{
+				bson.M{"$isArray": "$data_mapping.y_axis_labels"},
+				bson.M{"$gt": bson.A{bson.M{"$size": "$data_mapping.y_axis_labels"}, 0}},
+				bson.M{"$eq": bson.A{"$data_mapping.y_axis_label", bson.M{"$arrayElemAt": bson.A{"$data_mapping.y_axis_labels", 0}}}},
+			}},
+		},
+		bson.M{"$unset": bson.M{"data_mapping.y_axis_label": ""}},
+	)
+	if err != nil {
+		return fmt.Errorf("strip y_axis_label mirror: %w", err)
+	}
+	log.Printf("  components: stripped y_axis_label mirror from %d line/bar/area documents", res.ModifiedCount)
+	return nil
+}
+
 // migrateGaugeNumberLimitOne caps the stored ts-store record limit at 1
 // for single-value chart types (#169). Gauge and number renderers read
 // only row 0 (chart-spec/specs/{gauge,number}.js), so a saved
