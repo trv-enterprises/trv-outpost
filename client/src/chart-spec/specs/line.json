@@ -104,6 +104,7 @@
               "label": "Series",
               "required": true,
               "helperText": "Numeric columns to plot, one series each. The series label overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of series (series left out draw independently, stack-free — useful for a high-water total line). Tick Δ Delta on a series whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp.",
+              "helperTextDualAxis": "Numeric columns to plot, one series each — one per axis (Left/Right). The series label overrides what appears in the legend; leave empty to use the data column name. Tick Δ Delta on a series whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp.",
               "modeFieldId": "multipleYAxis",
               "maxInDualAxis": 2,
               "showAccumulator": true

@@ -97,8 +97,12 @@ export default function YAxisColumnsListField({ field }) {
 
   return (
     <div className={`spec-y-axis-columns-list ${isDualAxis ? 'spec-y-axis-columns-list--dual' : ''}`}>
-      {field.helperText && (
-        <div className="spec-field-helper">{field.helperText}</div>
+      {/* Dual-axis mode hides the In-stack checkbox (stacking two
+          different scales is meaningless), so the helper text must not
+          advertise it. Specs provide a dual-mode variant via
+          helperTextDualAxis; fall back to the single-axis text. */}
+      {(isDualAxis ? (field.helperTextDualAxis || field.helperText) : field.helperText) && (
+        <div className="spec-field-helper">{isDualAxis ? (field.helperTextDualAxis || field.helperText) : field.helperText}</div>
       )}
       <div className="spec-yacl__rows">
         {entries.map((entry, i) => {

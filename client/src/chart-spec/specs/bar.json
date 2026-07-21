@@ -98,6 +98,7 @@
               "label": "Series",
               "required": true,
               "helperText": "Numeric columns to plot, one series each. The series label overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of series (series left out draw independently, stack-free).",
+              "helperTextDualAxis": "Numeric columns to plot, one series each — one per axis (Left/Right). The series label overrides what appears in the legend; leave empty to use the data column name.",
               "modeFieldId": "multipleYAxis",
               "maxInDualAxis": 2
             }
