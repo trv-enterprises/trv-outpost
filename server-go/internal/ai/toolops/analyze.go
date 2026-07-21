@@ -28,6 +28,8 @@ const (
 	analyzeHistogramBins     = 12
 	analyzeMaxAnomalyWindows = 20
 	analyzeMaxSummaryColumns = 20
+	analyzeMaxGroups         = 20
+	analyzeMaxGroupColumns   = 5
 )
 
 // AnalyzeDatasetInput mirrors QueryConnectionInput for the fetch
@@ -45,6 +47,7 @@ type AnalyzeDatasetInput struct {
 	ColumnA         string                 `json:"column_a,omitempty"`
 	ColumnB         string                 `json:"column_b,omitempty"`
 	TimestampColumn string                 `json:"timestamp_column,omitempty"`
+	GroupBy         string                 `json:"group_by,omitempty"`
 	Sensitivity     float64                `json:"sensitivity,omitempty"`
 	MaxLag          int                    `json:"max_lag,omitempty"`
 	MaxRows         int                    `json:"max_rows,omitempty"`
@@ -55,23 +58,44 @@ type AnalyzeDatasetOutput struct {
 	RowCount    int                `json:"row_count"`
 	Truncated   bool               `json:"truncated,omitempty"`
 	Notes       []string           `json:"notes,omitempty"`
+	TimeRange   *AnalyzeTimeRange  `json:"time_range,omitempty"`
 	Columns     []ColumnSummary    `json:"columns,omitempty"`
+	Groups      []GroupSummary     `json:"groups,omitempty"`
+	GroupCount  int                `json:"group_count,omitempty"`
 	Anomaly     *AnomalyResult     `json:"anomaly,omitempty"`
 	Correlation *CorrelationResult `json:"correlation,omitempty"`
 	Trend       *TrendResult       `json:"trend,omitempty"`
 }
 
+// AnalyzeTimeRange reports the first/last parseable timestamp of the
+// summary's timestamp_column.
+type AnalyzeTimeRange struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
+}
+
+// GroupSummary carries per-group column stats for the summary
+// analysis's group_by mode. Grouped summaries skip percentiles and
+// histograms to keep the payload small.
+type GroupSummary struct {
+	Group    string          `json:"group"`
+	RowCount int             `json:"row_count"`
+	Columns  []ColumnSummary `json:"columns"`
+}
+
 type ColumnSummary struct {
-	Name        string             `json:"name"`
-	Count       int                `json:"count"`
-	NullCount   int                `json:"null_count,omitempty"`
-	NonNumeric  int                `json:"non_numeric,omitempty"`
-	Mean        float64            `json:"mean"`
-	StdDev      float64            `json:"std_dev"`
-	Min         float64            `json:"min"`
-	Max         float64            `json:"max"`
-	Percentiles map[string]float64 `json:"percentiles,omitempty"`
-	Histogram   []stats.Bin        `json:"histogram,omitempty"`
+	Name          string             `json:"name"`
+	Count         int                `json:"count"`
+	NullCount     int                `json:"null_count,omitempty"`
+	NonNumeric    int                `json:"non_numeric,omitempty"`
+	DistinctCount int                `json:"distinct_count,omitempty"` // distinct non-null raw values (numeric or not)
+	Mean          float64            `json:"mean"`
+	StdDev        float64            `json:"std_dev"`
+	Min           float64            `json:"min"`
+	Max           float64            `json:"max"`
+	Last          float64            `json:"last"` // final numeric value in row order; meaningful when count > 0
+	Percentiles   map[string]float64 `json:"percentiles,omitempty"`
+	Histogram     []stats.Bin        `json:"histogram,omitempty"`
 }
 
 type AnomalyResult struct {
@@ -206,39 +230,120 @@ func analyzeResultSet(in AnalyzeDatasetInput, analysis string, rs *models.Result
 // ─── summary ──────────────────────────────────────────────────────
 
 func analyzeSummary(in AnalyzeDatasetInput, rs *models.ResultSet, out *AnalyzeDatasetOutput) (*AnalyzeDatasetOutput, error) {
-	names := in.Columns
-	if len(names) == 0 {
-		names = rs.Columns
-		if len(names) > analyzeMaxSummaryColumns {
-			names = names[:analyzeMaxSummaryColumns]
-			out.Notes = append(out.Notes, fmt.Sprintf("result has %d columns; summarizing the first %d — pass columns to pick specific ones", len(rs.Columns), analyzeMaxSummaryColumns))
+	grouped := in.GroupBy != ""
+	gIdx := -1
+	if grouped {
+		var err error
+		if gIdx, err = columnIndex(rs, in.GroupBy); err != nil {
+			return nil, err
 		}
 	}
-	for _, name := range names {
+	maxCols := analyzeMaxSummaryColumns
+	if grouped {
+		maxCols = analyzeMaxGroupColumns
+	}
+	names := in.Columns
+	if len(names) == 0 {
+		for _, c := range rs.Columns {
+			if grouped && c == rs.Columns[gIdx] {
+				continue // summarizing the group key within its own groups is noise
+			}
+			names = append(names, c)
+		}
+	}
+	if len(names) > maxCols {
+		names = names[:maxCols]
+		out.Notes = append(out.Notes, fmt.Sprintf("summarizing the first %d columns — pass columns to pick specific ones", maxCols))
+	}
+	idxs := make([]int, len(names))
+	for i, name := range names {
 		idx, err := columnIndex(rs, name)
 		if err != nil {
 			return nil, err
 		}
-		cs := ColumnSummary{Name: rs.Columns[idx]}
-		var values []float64
-		for _, row := range rs.Rows {
-			if idx >= len(row) || row[idx] == nil {
-				cs.NullCount++
-				continue
-			}
-			v, ok := stats.ToFloat64(row[idx])
-			if !ok {
-				cs.NonNumeric++
-				continue
-			}
-			values = append(values, v)
+		idxs[i] = idx
+	}
+	if in.TimestampColumn != "" {
+		if err := summaryTimeRange(in.TimestampColumn, rs, out); err != nil {
+			return nil, err
 		}
-		cs.Count = len(values)
-		if cs.Count > 0 {
-			cs.Mean = sig6(stats.Mean(values))
-			cs.StdDev = sig6(stats.StdDev(values))
-			mn, mx := stats.MinMax(values)
-			cs.Min, cs.Max = sig6(mn), sig6(mx)
+	}
+	if !grouped {
+		for _, idx := range idxs {
+			out.Columns = append(out.Columns, buildColumnSummary(rs, idx, nil, true))
+		}
+		return out, nil
+	}
+
+	// Partition row indices by the group key's rendered value,
+	// preserving first-seen order for deterministic tie-breaks.
+	groups := map[string][]int{}
+	var order []string
+	for i, row := range rs.Rows {
+		key := "(null)"
+		if gIdx < len(row) && row[gIdx] != nil {
+			key = fmt.Sprintf("%v", row[gIdx])
+		}
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], i)
+	}
+	out.GroupCount = len(order)
+	sort.SliceStable(order, func(i, j int) bool { return len(groups[order[i]]) > len(groups[order[j]]) })
+	if len(order) > analyzeMaxGroups {
+		order = order[:analyzeMaxGroups]
+		out.Notes = append(out.Notes, fmt.Sprintf("reporting the %d largest of %d groups", analyzeMaxGroups, out.GroupCount))
+	}
+	for _, key := range order {
+		gs := GroupSummary{Group: key, RowCount: len(groups[key])}
+		for _, idx := range idxs {
+			// Grouped summaries skip percentiles/histograms so
+			// groups × columns stays well under the inline threshold.
+			gs.Columns = append(gs.Columns, buildColumnSummary(rs, idx, groups[key], false))
+		}
+		out.Groups = append(out.Groups, gs)
+	}
+	return out, nil
+}
+
+// buildColumnSummary computes one column's stats over the given row
+// indices (nil = all rows). full adds percentiles and a histogram.
+func buildColumnSummary(rs *models.ResultSet, idx int, rowIdxs []int, full bool) ColumnSummary {
+	cs := ColumnSummary{Name: rs.Columns[idx]}
+	distinct := map[string]struct{}{}
+	var values []float64
+	visit := func(row []interface{}) {
+		if idx >= len(row) || row[idx] == nil {
+			cs.NullCount++
+			return
+		}
+		distinct[fmt.Sprintf("%v", row[idx])] = struct{}{}
+		v, ok := stats.ToFloat64(row[idx])
+		if !ok {
+			cs.NonNumeric++
+			return
+		}
+		values = append(values, v)
+	}
+	if rowIdxs == nil {
+		for _, row := range rs.Rows {
+			visit(row)
+		}
+	} else {
+		for _, i := range rowIdxs {
+			visit(rs.Rows[i])
+		}
+	}
+	cs.Count = len(values)
+	cs.DistinctCount = len(distinct)
+	if cs.Count > 0 {
+		cs.Mean = sig6(stats.Mean(values))
+		cs.StdDev = sig6(stats.StdDev(values))
+		mn, mx := stats.MinMax(values)
+		cs.Min, cs.Max = sig6(mn), sig6(mx)
+		cs.Last = sig6(values[len(values)-1])
+		if full {
 			sorted := stats.SortedCopy(values)
 			cs.Percentiles = map[string]float64{
 				"p05": sig6(stats.Percentile(sorted, 5)),
@@ -249,9 +354,40 @@ func analyzeSummary(in AnalyzeDatasetInput, rs *models.ResultSet, out *AnalyzeDa
 			}
 			cs.Histogram = roundBins(stats.Histogram(values, analyzeHistogramBins))
 		}
-		out.Columns = append(out.Columns, cs)
 	}
-	return out, nil
+	return cs
+}
+
+// summaryTimeRange stamps the first/last parseable timestamp of the
+// requested time column onto the output.
+func summaryTimeRange(tsColumn string, rs *models.ResultSet, out *AnalyzeDatasetOutput) error {
+	tsIdx, err := columnIndex(rs, tsColumn)
+	if err != nil {
+		return err
+	}
+	var first, last time.Time
+	for _, row := range rs.Rows {
+		if tsIdx >= len(row) {
+			continue
+		}
+		t := stats.ParseTimestamp(row[tsIdx])
+		if t.IsZero() {
+			continue
+		}
+		if first.IsZero() || t.Before(first) {
+			first = t
+		}
+		if last.IsZero() || t.After(last) {
+			last = t
+		}
+	}
+	if !first.IsZero() {
+		out.TimeRange = &AnalyzeTimeRange{
+			Start: first.UTC().Format(time.RFC3339),
+			End:   last.UTC().Format(time.RFC3339),
+		}
+	}
+	return nil
 }
 
 // ─── anomaly ──────────────────────────────────────────────────────

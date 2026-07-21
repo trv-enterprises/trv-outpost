@@ -59,6 +59,84 @@ func TestAnalyzeSummary(t *testing.T) {
 	}
 }
 
+func TestAnalyzeSummaryDistinctLastTimeRange(t *testing.T) {
+	rs := fixtureRS([]string{"ts", "temp"}, [][]interface{}{
+		{"2026-07-20T10:00:00Z", 10.0},
+		{"2026-07-20T11:00:00Z", 20.0},
+		{"2026-07-20T12:00:00Z", 20.0},
+		{"2026-07-20T13:00:00Z", 35.0},
+	})
+	out, err := analyzeResultSet(AnalyzeDatasetInput{Columns: []string{"temp"}, TimestampColumn: "ts"}, "summary", rs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	temp := out.Columns[0]
+	if temp.DistinctCount != 3 {
+		t.Errorf("distinct = %d, want 3", temp.DistinctCount)
+	}
+	if temp.Last != 35 {
+		t.Errorf("last = %v, want 35", temp.Last)
+	}
+	if out.TimeRange == nil || out.TimeRange.Start != "2026-07-20T10:00:00Z" || out.TimeRange.End != "2026-07-20T13:00:00Z" {
+		t.Errorf("time_range = %+v", out.TimeRange)
+	}
+}
+
+func TestAnalyzeSummaryGroupBy(t *testing.T) {
+	rs := fixtureRS([]string{"location", "temp"}, [][]interface{}{
+		{"garage", 10.0}, {"garage", 20.0}, {"garage", 30.0},
+		{"attic", 40.0}, {"attic", 50.0},
+	})
+	out, err := analyzeResultSet(AnalyzeDatasetInput{GroupBy: "location"}, "summary", rs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.GroupCount != 2 || len(out.Groups) != 2 {
+		t.Fatalf("groups = %d/%d, want 2/2", out.GroupCount, len(out.Groups))
+	}
+	// Largest group first.
+	g := out.Groups[0]
+	if g.Group != "garage" || g.RowCount != 3 {
+		t.Fatalf("first group = %+v, want garage/3", g)
+	}
+	// The group-by column itself is excluded from default columns.
+	if len(g.Columns) != 1 || g.Columns[0].Name != "temp" {
+		t.Fatalf("group columns = %+v, want just temp", g.Columns)
+	}
+	if g.Columns[0].Mean != 20 {
+		t.Errorf("garage mean = %v, want 20", g.Columns[0].Mean)
+	}
+	// Grouped summaries stay slim: no percentiles/histogram.
+	if g.Columns[0].Percentiles != nil || g.Columns[0].Histogram != nil {
+		t.Error("grouped summary should omit percentiles and histogram")
+	}
+	if out.Groups[1].Columns[0].Mean != 45 {
+		t.Errorf("attic mean = %v, want 45", out.Groups[1].Columns[0].Mean)
+	}
+	// Ungrouped output absent in group mode.
+	if out.Columns != nil {
+		t.Error("grouped summary should not also emit flat columns")
+	}
+}
+
+func TestAnalyzeSummaryGroupByCap(t *testing.T) {
+	var rows [][]interface{}
+	for i := 0; i < 60; i++ {
+		rows = append(rows, []interface{}{fmt.Sprintf("g%02d", i%30), float64(i)})
+	}
+	rs := fixtureRS([]string{"g", "v"}, rows)
+	out, err := analyzeResultSet(AnalyzeDatasetInput{GroupBy: "g"}, "summary", rs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.GroupCount != 30 {
+		t.Errorf("group_count = %d, want 30", out.GroupCount)
+	}
+	if len(out.Groups) != 20 {
+		t.Errorf("reported groups = %d, want capped at 20", len(out.Groups))
+	}
+}
+
 func TestAnalyzeSummaryUnknownColumn(t *testing.T) {
 	rs := fixtureRS([]string{"a"}, [][]interface{}{{1.0}})
 	_, err := analyzeResultSet(AnalyzeDatasetInput{Columns: []string{"nope"}}, "summary", rs)
