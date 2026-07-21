@@ -8143,11 +8143,11 @@ const docTemplate = `{
                     }
                 },
                 "y_axis_label": {
-                    "description": "Legacy single y-axis label — kept for backwards compat. Prefer YAxisLabels (plural) going forward; this is populated from YAxisLabels[0] on save.",
+                    "description": "AXIS label rendered along the Y axis (single-axis charts only; dual-axis charts render no axis labels). Series/legend labels live in YAxisLabels. The old save-path mirror (YAxisLabels[0] copied here) was removed; strip_y_axis_label_mirror cleaned stored copies.",
                     "type": "string"
                 },
                 "y_axis_labels": {
-                    "description": "Per-column y-axis labels. When shorter than YAxis, missing entries fall back to the column name. Dual-axis charts use [0] for the left axis and [1] for the right. Three+ y-columns suppress axis names entirely (series legend carries the identity).",
+                    "description": "Per-SERIES labels (legend names), index-aligned to YAxis. Missing entries fall back to the column name. These never label the axes — the axis label is YAxisLabel (single-axis only).",
                     "type": "array",
                     "items": {
                         "type": "string"
