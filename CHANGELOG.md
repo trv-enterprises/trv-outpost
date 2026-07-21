@@ -6,6 +6,50 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.42.0] — 2026-07-20
+
+### Added
+
+- **Y-axis label for line/bar/area charts.** New field after the Dual
+  Y-axis toggle, rendered vertically along the axis (scatter's
+  convention, now universal). Single-axis mode only — dual-axis charts
+  deliberately render no axis labels (the legend and the left/right
+  axis colors identify each side).
+- **Series terminology in the Y-axis section.** The columns list is now
+  "Series"; each entry's label is a "Series label" (names the value-set
+  in the legend, falls back to the column name). Helper text adapts to
+  dual-axis mode (In-stack isn't advertised where it's hidden).
+- **Chart-spec `derived_fields`.** Specs can declare editor-computed
+  visibleWhen predicates (e.g. `any_accumulator`), fixing the spec
+  validation error thrown on every dev load.
+
+### Changed
+
+- **ts-store record-limit defaults**: regular charts default to 1000
+  records (was 100); gauge/number default to 1 (they render one value).
+  Existing over-fetching gauge/number records (newest/oldest queries)
+  are capped to 1 by migration `gauge_number_limit_one_v1`.
+- **`y_axis_label` now means "axis label" everywhere.** The old save
+  path mirrored the first series label into it; the mirror is removed
+  (editor + AI executor) and migration `strip_y_axis_label_mirror_v1`
+  cleans the stored copies. AI tool schemas updated to the same split.
+
+### Fixed
+
+- **Legacy client-side filters are visible again.** Components saved
+  before the SQL-gating change (2026-05-27) could carry filters that
+  still applied at render but no longer appeared in the editor. The
+  Filters section now surfaces whenever saved filters exist, with a
+  note explaining the way out (delete them or move into SQL WHERE).
+- **MCP server identifies as TRV Outpost** in its handshake and
+  instructions, so MCP clients connect the word "Outpost" to these
+  tools. Live MCP sessions must reconnect to pick it up.
+- **API docs accuracy sweep (#179)**: namespace-403s documented across
+  16 handlers, 18 missing endpoint descriptions added, stream
+  subscribe failures corrected to the real 422/503, frigate failure
+  codes filled in, MCP paths removed from swagger (they rendered under
+  the nonexistent `/api` prefix).
+
 ## [0.41.3] — 2026-07-19
 
 ### Fixed
