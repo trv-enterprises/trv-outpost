@@ -119,7 +119,7 @@ The tool inventory covers the full author workflow:
 | Group | Examples |
 |-------|----------|
 | **Catalog** | `get_type_catalog`, `list_chart_types`, `list_control_types`, `list_display_types` |
-| **Connections** | `list_connections`, `get_connection`, `create_connection`, `test_connection`, `query_connection` (now accepts `limit`) |
+| **Connections** | `list_connections`, `get_connection`, `create_connection`, `test_connection`, `query_connection` (now accepts `limit`), `analyze_dataset` (server-side summary / anomaly / correlation / trend over a connection's data) |
 | **Discovery** | `get_connection_schema`, `list_mqtt_topics`, `sample_mqtt_topic`, `list_edgelake_databases` → `list_edgelake_tables` → `get_edgelake_table_schema`, `list_prometheus_label_values` |
 | **Guidance** | `get_connection_type_guidance` (per-adapter `query_config` envelope cheat sheets), `list_dashboard_dimensions` (canvas presets) |
 | **Components** | `list_components`, `get_component`, `create_component`, `update_component`, `delete_component`, `get_component_template` |
