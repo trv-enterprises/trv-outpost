@@ -6,6 +6,37 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.43.0] — 2026-07-21
+
+### Added
+
+- **`analyze_dataset` AI tool** on the Dashboard Assistant and MCP
+  (one shared toolops implementation, #183 + the shipped half of #68).
+  The server fetches up to 50,000 rows from a connection and runs the
+  statistics in Go, returning a compact summary the model interprets —
+  no more pulling raw rows into the conversation to answer "anything
+  weird in my power data?". Four canned analyses:
+  - `summary` — per-column count/nulls/distinct/mean/stddev/min/max/
+    last, percentiles, histogram; optional `group_by` per-group stats
+    and a `time_range` readout.
+  - `anomaly` — rolling z-score outlier windows (IQR fallback for
+    small n; flat-signal spikes still flag).
+  - `correlation` — Pearson between two columns, optional lag scan.
+  - `trend` — regression slope + R², hour-of-day / day-of-week means.
+- **`internal/stats` package** — pure, golden-value-tested numeric
+  routines (percentiles, Pearson, linear regression, rolling
+  z-scores, cell/timestamp coercion) reusable by future features.
+
+### Security / behavior notes
+
+- Analyses are read-only and run through the same trusted-query path
+  as `query_connection` — the write/DDL verb guard and connection
+  access rules apply unchanged.
+- Tool descriptions steer agents to push plain aggregation into the
+  query on SQL/EdgeLake connections and to bound SQL with a LIMIT /
+  time window: the row cap trims after fetch (adapter-level fetch
+  caps tracked as #185).
+
 ## [0.42.0] — 2026-07-20
 
 ### Added
