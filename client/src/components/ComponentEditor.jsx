@@ -578,7 +578,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
   const [xAxisFormat, setXAxisFormat] = useState('auto'); // Default timestamp format; 'auto' fits granularity to the data
   const [yAxisColumns, setYAxisColumns] = useState([]);
-  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label rendered along the Y axis (single-axis mode; scatter + line/bar/area). Dual-axis sides inherit their series label instead.
+  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label rendered along the Y axis (single-axis mode; scatter + line/bar/area). Dual-axis charts render no axis labels — the legend + axis colors identify sides.
   const [yAxisLabels, setYAxisLabels] = useState([]); // Per-SERIES labels (legend names). Index matches yAxisColumns. Empty entries fall back to column name.
   // Per-column series color overrides (resolved hex; '' = auto palette). Index
   // matches yAxisColumns, same parallel-array pattern as yAxisLabels. Saved into

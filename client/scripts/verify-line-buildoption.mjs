@@ -580,8 +580,9 @@ const data = {
   );
   check('case 21: no y_axis_label → no yAxis.name', bare.yAxis?.name === undefined);
 
-  // Dual-axis: each side inherits its series label (fallback column name);
-  // the explicit y_axis_label is ignored.
+  // Dual-axis: NO axis names at all — the legend + axis colors identify
+  // each side; a name would duplicate the series label. The explicit
+  // y_axis_label is ignored too.
   const dual = buildOption(
     {
       data_mapping: {
@@ -595,9 +596,8 @@ const data = {
     data,
     { formatCellValue, chartType: 'line' },
   );
-  check('case 21: dual left axis name = series label', dual.yAxis?.[0]?.name === 'CPU %');
-  check('case 21: dual right axis name = column fallback', dual.yAxis?.[1]?.name === 'mem');
-  check('case 21: dual ignores explicit y_axis_label', dual.yAxis?.[0]?.name !== 'SHOULD NOT RENDER' && dual.yAxis?.[1]?.name !== 'SHOULD NOT RENDER');
+  check('case 21: dual left axis has no name', dual.yAxis?.[0]?.name === undefined);
+  check('case 21: dual right axis has no name', dual.yAxis?.[1]?.name === undefined);
 }
 
 if (FAILURES.length > 0) {

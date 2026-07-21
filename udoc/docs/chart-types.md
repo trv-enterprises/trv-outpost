@@ -38,7 +38,7 @@ Configure how data is fetched from the connection:
 Map query result fields to chart axes and series:
 - **X Axis**: Category or time field
 - **Series**: Value column(s) to plot — each series gets an optional **series label** that names it in the legend (falls back to the column name)
-- **Y-axis label**: Text rendered vertically along the Y axis (single-axis mode). With **Dual Y-axis** on, each axis takes its series label as the axis label instead
+- **Y-axis label**: Text rendered vertically along the Y axis (single-axis mode). With **Dual Y-axis** on there is no axis label — the legend and the left/right axis colors identify each side
 - **Filters**: Include/exclude specific values
 - **Aggregation**: Sum, average, count, min, max
 
