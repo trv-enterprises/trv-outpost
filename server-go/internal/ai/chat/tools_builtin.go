@@ -181,13 +181,40 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Handler: wrapQueryConnection(ops),
 	})
 
+	reg.Register(Tool{
+		Name:        "analyze_dataset",
+		Description: "Run a server-side statistical analysis over a connection's data and get back a compact summary — the server fetches the rows (up to 50k) and does the math in Go, so PREFER this over query_connection for any question about the shape, health, or behavior of data too big to read row-by-row (\"anything weird in my power data?\", \"is temperature trending up?\", \"does A track B?\"). Analyses: `summary` (per-column mean/stddev/min/max/last/distinct/percentiles/histogram; optional `group_by` for per-group stats, optional `timestamp_column` for the data's time range), `anomaly` (rolling z-score outlier windows; needs `column`, works best with `timestamp_column`), `correlation` (Pearson between `column_a`/`column_b`, optional `max_lag` row-shift scan), `trend` (regression slope + R² plus hour-of-day/day-of-week means; needs `column`, `timestamp_column`). EXCEPTION for plain summary/group_by stats on `sql` or EdgeLake connections: push the aggregation into the query itself (AVG/COUNT/GROUP BY via query_connection) — the database computes exact answers with less data moved; use this tool's summary mainly for sources that can't aggregate in-query (api, ts-store, csv, streams). anomaly/correlation/trend can't be pushed into a query and are appropriate on ANY source. IMPORTANT: `max_rows` trims AFTER the source returns — it does not limit the fetch. On sql/edgelake ALWAYS bound the query yourself in `raw` (a LIMIT and/or a time-window filter, ideally with ORDER BY on the time column): an unbounded SELECT can pull an entire table into server memory, and trimming an unordered result biases the analysis toward arbitrary rows. Query fields (`raw`, `type`, `params`) work exactly like query_connection — read the connection's `guidance` first.",
+		Tier:        TierA,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"connection_id":    map[string]interface{}{"type": "string", "description": "Connection ID to fetch data from"},
+				"raw":              map[string]interface{}{"type": "string", "description": "The query string (SQL, API path, filter expression, etc) — same semantics as query_connection"},
+				"type":             map[string]interface{}{"type": "string", "description": "Query type — sql, api, csv_filter, stream_filter"},
+				"params":           map[string]interface{}{"type": "object", "description": "Optional query parameters"},
+				"analysis":         map[string]interface{}{"type": "string", "enum": []string{"summary", "anomaly", "correlation", "trend"}, "description": "Which canned analysis to run"},
+				"columns":          map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "summary only: columns to summarize (default: all, capped at 20)"},
+				"column":           map[string]interface{}{"type": "string", "description": "anomaly/trend: the numeric column to analyze"},
+				"column_a":         map[string]interface{}{"type": "string", "description": "correlation: first numeric column"},
+				"column_b":         map[string]interface{}{"type": "string", "description": "correlation: second numeric column"},
+				"timestamp_column": map[string]interface{}{"type": "string", "description": "Time column (RFC3339 or epoch, seconds or millis). Sorts the series and enables time-based output (window timestamps, per-second slope, hour/day buckets, summary time_range)"},
+				"group_by":         map[string]interface{}{"type": "string", "description": "summary only: compute per-group stats keyed on this column's values (top 20 groups by row count; columns capped at 5 when grouped)"},
+				"sensitivity":      map[string]interface{}{"type": "number", "description": "anomaly: z-score threshold, default 3.0 (lower = more sensitive, range 1-10)"},
+				"max_lag":          map[string]interface{}{"type": "integer", "description": "correlation: scan row shifts up to ±max_lag for the strongest correlation (0 = no scan)"},
+				"max_rows":         map[string]interface{}{"type": "integer", "description": "Cap rows ANALYZED (default and max 50000). Trims after the source returns — not a fetch limit; bound sql/edgelake queries in `raw` with LIMIT / a time window"},
+			},
+			"required": []string{"connection_id", "raw", "analysis"},
+		},
+		Handler: wrapAnalyzeDataset(ops),
+	})
+
 	// Write surface for connections — Tier-B because the type-specific
 	// config shape is detailed and only relevant when the model is
 	// actually creating a connection. The model will load this via
 	// describe_tool after consulting get_type_catalog for the
 	// connection types it can use.
 	reg.Register(Tool{
-		Name: "create_connection",
+		Name:        "create_connection",
 		Description: "Create a new connection (SQL, API, MQTT, EdgeLake, etc). Returns the persisted record including its assigned ID. Pass the type_id from get_type_catalog (e.g. \"db.postgres\", \"stream.mqtt\", \"store.tsstore\") and a type_config object whose keys match that type's config_schema. The legacy `type`/`config` fields work too but type_id/type_config is preferred. Defaults: namespace=\"default\" when omitted.",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
@@ -237,7 +264,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	})
 
 	reg.Register(Tool{
-		Name: "create_component",
+		Name:        "create_component",
 		Description: "Create a chart, control, or display. Returns the persisted record including its assigned ID. For charts, prefer structured config (chart_type + query_config + data_mapping) over custom code — the server's codegen produces the React component from the structured fields. Set use_custom_code=true and supply component_code only when the structured config genuinely cannot represent what the user asked for. Defaults: component_type=\"chart\", namespace=\"default\". Reference the chart_types / control_types / display_types lists from get_type_catalog for valid type identifiers.",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
@@ -265,7 +292,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	})
 
 	reg.Register(Tool{
-		Name: "update_component",
+		Name:        "update_component",
 		Description: "Modify an existing component in place (charts, controls, displays). PREFER THIS over rewriting a chart as custom code: get_component first to see its current config, then patch only the fields that change. Only the fields you set are touched — omit the rest. For charts, changing chart_type / data_mapping / query_config / options keeps the component spec-driven and re-renders automatically; you do NOT need to (and should not) set component_code for a config chart. Set use_custom_code=true + component_code only when the structured config genuinely cannot express the request. Do not call this on a component the user is actively editing (see the active-edit rule).",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
@@ -310,8 +337,8 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 		Description: "List dashboards, filtered/sorted/paginated server-side. By default returns ALL matching dashboards (up to a 1000 cap). Pass component_id to find dashboards that use a specific component. total + has_more indicate truncation.",
 		Tier:        TierA,
 		InputSchema: listObjectSchema(map[string]interface{}{
-			"namespace":    map[string]interface{}{"type": "string", "description": "Filter by namespace"},
-			"name":         map[string]interface{}{"type": "string", "description": "Filter by name (partial match)"},
+			"namespace":     map[string]interface{}{"type": "string", "description": "Filter by namespace"},
+			"name":          map[string]interface{}{"type": "string", "description": "Filter by name (partial match)"},
 			"is_public":     map[string]interface{}{"type": "boolean", "description": "Filter by public status"},
 			"component_id":  map[string]interface{}{"type": "string", "description": "Only dashboards that reference this component"},
 			"connection_id": map[string]interface{}{"type": "string", "description": "Only dashboards using any component bound to this connection"},
@@ -335,7 +362,7 @@ func RegisterBuiltinTools(reg *ToolRegistry, ops *toolops.Toolset) {
 	})
 
 	reg.Register(Tool{
-		Name: "create_dashboard",
+		Name:        "create_dashboard",
 		Description: "Create a new dashboard. Returns the persisted record including its assigned ID. Panels are positioned on a 32×32-px grid via integer cell coords {x, y, w, h}; canvas size derives from settings.layout_dimension. Each panel references a component by component_id (which you must create FIRST via create_component). Defaults: namespace=\"default\".\n\nThe `settings.layout_dimension` value must match one of the preset names returned by `get_type_catalog` in the `layout_dimensions` array. Each entry tells you the cols × rows cell budget for panel coordinates — call get_type_catalog first if you need to pick a size. Keep all panel x+w ≤ cols and y+h ≤ rows for whichever preset you choose.",
 		Tier:        TierB,
 		InputSchema: map[string]interface{}{
@@ -531,23 +558,23 @@ func chartDataMappingSchema() map[string]interface{} {
 				"items":       map[string]interface{}{"type": "string"},
 				"description": "Column name(s) for the Y axis (values), as plain strings. Always an array even for a single column (e.g. [\"temp\"]) — gauge / number-tile charts read y_axis[0]. For multiple series pass multiple column names (e.g. [\"cpu\", \"mem\"]). Per-column STACKING and dual-axis are set via options/multiple_y_axis, NOT by making entries objects: set multiple_y_axis=true for left/right split, and options.chartStacked=true to stack.",
 			},
-			"multiple_y_axis": map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: the first two y columns split across left/right axes; pair with options.yAxisRange.right."},
-			"y_axis_label":   map[string]interface{}{"type": "string", "description": "AXIS label — rendered vertically along the Y axis. Single-axis charts only: dual-axis charts render NO axis labels (the legend and axis colors identify each side), so this is ignored there. NOT a series/legend label; use y_axis_labels for those."},
-			"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-SERIES labels, index-aligned to y_axis — shown in the legend. These name the value-sets, not the axis; the axis label is y_axis_label (single-axis only)."},
-			"y_axis_colors":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar). NOT for pivot charts (series set) — those auto-color. Omit to keep the default palette."},
-			"series":         map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
-			"group_by":       map[string]interface{}{"type": "string", "description": "Client-side grouping column."},
-			"accumulator_columns":     map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "boolean"}, "description": "Line/area only. PER-COLUMN delta transform: a boolean array index-aligned to y_axis — true at position i plots that column's DELTA (value[i]-value[i-1]) instead of the raw value, for monotonically-increasing counters (odometers, packet/request totals, kWh meters). Lets you delta one series and leave another raw. Prefer this over custom code or a SQL LAG()/Prometheus rate(). First point is a gap. Omit = none."},
+			"multiple_y_axis":          map[string]interface{}{"type": "boolean", "description": "Dual Y-axis mode. Off (default): all y columns share one axis (N columns allowed). On: the first two y columns split across left/right axes; pair with options.yAxisRange.right."},
+			"y_axis_label":             map[string]interface{}{"type": "string", "description": "AXIS label — rendered vertically along the Y axis. Single-axis charts only: dual-axis charts render NO axis labels (the legend and axis colors identify each side), so this is ignored there. NOT a series/legend label; use y_axis_labels for those."},
+			"y_axis_labels":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-SERIES labels, index-aligned to y_axis — shown in the legend. These name the value-sets, not the axis; the axis label is y_axis_label (single-axis only)."},
+			"y_axis_colors":            map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar). NOT for pivot charts (series set) — those auto-color. Omit to keep the default palette."},
+			"series":                   map[string]interface{}{"type": "string", "description": "Column that distinguishes series (e.g. \"location\" splits one column into per-location lines)."},
+			"group_by":                 map[string]interface{}{"type": "string", "description": "Client-side grouping column."},
+			"accumulator_columns":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "boolean"}, "description": "Line/area only. PER-COLUMN delta transform: a boolean array index-aligned to y_axis — true at position i plots that column's DELTA (value[i]-value[i-1]) instead of the raw value, for monotonically-increasing counters (odometers, packet/request totals, kWh meters). Lets you delta one series and leave another raw. Prefer this over custom code or a SQL LAG()/Prometheus rate(). First point is a gap. Omit = none."},
 			"accumulator_mode":         map[string]interface{}{"type": "boolean", "description": "Legacy chart-wide accumulator flag (deltas ALL y columns). Prefer accumulator_columns for per-column control; this is accepted for back-compat. Default false."},
 			"accumulator_reset_policy": map[string]interface{}{"type": "string", "enum": []string{"drop_negative", "clamp_zero", "keep_negative"}, "description": "Counter-reset (negative delta) handling for accumulating columns. 'drop_negative' (default): gap/break the line. 'clamp_zero': emit 0. 'keep_negative': raw negative delta. Ignored when no column accumulates."},
-			"label_col":      map[string]interface{}{"type": "string", "description": "Column used for pie/bar slice labels."},
-			"filters":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "object"}, "description": "Client-side filters: [{field, op, value}]. ops: eq, neq, gt, gte, lt, lte, contains, in, notIn, isNull, isNotNull."},
-			"aggregation":    map[string]interface{}{"type": "object", "description": "Optional aggregation: {type: first|last|min|max|avg|sum|count|limit, sort_by, field, count}."},
-			"sliding_window": map[string]interface{}{"type": "object", "description": "{duration: seconds, timestamp_col: \"ts\"} — keep only the last N seconds of streaming data. Size it to the data's CADENCE and intent: it must hold many records, not one. Hourly-rollup data (one record/hour) needs a span of many hours/days (a 'Weekly' board → 604800); high-frequency live streams → ~3600. Use the user's span if given (15 min → 900, 1 day → 86400). When EDITING an existing chart, preserve the current duration unless the user asks to change the time span — do NOT reset it on a chart_type or visual change."},
-			"time_bucket":    map[string]interface{}{"type": "object", "description": "{interval: seconds, function: avg|min|max|sum|count, value_cols: [\"temp\",\"humidity\"], timestamp_col: \"ts\"} — aggregate streaming rows into time buckets."},
-			"sort_by":        map[string]interface{}{"type": "string"},
-			"sort_order":     map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
-			"limit":          map[string]interface{}{"type": "integer", "description": "Max rows the chart should render."},
+			"label_col":                map[string]interface{}{"type": "string", "description": "Column used for pie/bar slice labels."},
+			"filters":                  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "object"}, "description": "Client-side filters: [{field, op, value}]. ops: eq, neq, gt, gte, lt, lte, contains, in, notIn, isNull, isNotNull."},
+			"aggregation":              map[string]interface{}{"type": "object", "description": "Optional aggregation: {type: first|last|min|max|avg|sum|count|limit, sort_by, field, count}."},
+			"sliding_window":           map[string]interface{}{"type": "object", "description": "{duration: seconds, timestamp_col: \"ts\"} — keep only the last N seconds of streaming data. Size it to the data's CADENCE and intent: it must hold many records, not one. Hourly-rollup data (one record/hour) needs a span of many hours/days (a 'Weekly' board → 604800); high-frequency live streams → ~3600. Use the user's span if given (15 min → 900, 1 day → 86400). When EDITING an existing chart, preserve the current duration unless the user asks to change the time span — do NOT reset it on a chart_type or visual change."},
+			"time_bucket":              map[string]interface{}{"type": "object", "description": "{interval: seconds, function: avg|min|max|sum|count, value_cols: [\"temp\",\"humidity\"], timestamp_col: \"ts\"} — aggregate streaming rows into time buckets."},
+			"sort_by":                  map[string]interface{}{"type": "string"},
+			"sort_order":               map[string]interface{}{"type": "string", "enum": []string{"asc", "desc"}},
+			"limit":                    map[string]interface{}{"type": "integer", "description": "Max rows the chart should render."},
 			"band_columns": map[string]interface{}{
 				"type":        "object",
 				"description": "Banded-bar per-row band mapping. ONLY used by chart_type 'banded_bar'; ignored elsewhere. Pick a `scheme`, then map that scheme's columns to row-column names. Each row carries its own band values (a per-row envelope that moves with the data) — there is no scalar/fixed-band convention. Schemes: 'sd' (±SD: mean + plus_1sd/minus_1sd/plus_2sd/minus_2sd), 'minmaxmean' (range: mean + min/max), 'spc' (control: target + lower_control/upper_control/lower_limit/upper_limit). Provide only the keys for the chosen scheme; the center column (mean for sd/minmaxmean, target for spc) is required.",
@@ -654,7 +681,7 @@ func dashboardSettingsSchema() map[string]interface{} {
 				"type":        "integer",
 				"description": "Display scale % (50-200). Scales the whole dashboard's component text + line sizes up at render. LEAVE UNSET to inherit the chosen layout_dimension's default scale (the cols × rows in get_type_catalog are already at that default — plan to them directly). ONLY set this when the user explicitly asks for a different scale (e.g. \"build it at 150%\"); then the usable grid is SMALLER than the catalog's cols × rows by roughly (default_scale ÷ requested_scale), so reduce your panel budget accordingly.",
 			},
-			"is_public":   map[string]interface{}{"type": "boolean"},
+			"is_public":    map[string]interface{}{"type": "boolean"},
 			"allow_export": map[string]interface{}{"type": "boolean"},
 			"variables_enabled": map[string]interface{}{
 				"type":        "boolean",
@@ -875,6 +902,20 @@ func wrapQueryConnection(ops *toolops.Toolset) ToolHandler {
 			return "", fmt.Errorf("invalid args: %w", err)
 		}
 		out, err := ops.QueryConnection(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		return jsonResult(out)
+	}
+}
+
+func wrapAnalyzeDataset(ops *toolops.Toolset) ToolHandler {
+	return func(ctx context.Context, env *DispatchEnv, args json.RawMessage) (string, error) {
+		var in toolops.AnalyzeDatasetInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return "", fmt.Errorf("invalid args: %w", err)
+		}
+		out, err := ops.AnalyzeDataset(ctx, in)
 		if err != nil {
 			return "", err
 		}

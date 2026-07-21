@@ -114,6 +114,7 @@ func boolPtr(b bool) *bool { return &b }
 // openWorldHint=true so a host knows the call touches an external system.
 var externalReadTools = map[string]bool{
 	"query_connection":             true,
+	"analyze_dataset":              true,
 	"test_connection":              true,
 	"sample_mqtt_topic":            true,
 	"list_mqtt_topics":             true,
@@ -138,7 +139,8 @@ var externalReadTools = map[string]bool{
 func annotationsForTool(name string) *ToolAnnotations {
 	switch {
 	case strings.HasPrefix(name, "get_"), strings.HasPrefix(name, "list_"),
-		name == "query_connection", name == "test_connection", name == "sample_mqtt_topic":
+		name == "query_connection", name == "test_connection", name == "sample_mqtt_topic",
+		name == "analyze_dataset":
 		a := &ToolAnnotations{ReadOnlyHint: boolPtr(true)}
 		if externalReadTools[name] {
 			a.OpenWorldHint = boolPtr(true)
@@ -592,6 +594,46 @@ func (r *ToolRegistry) registerConnectionTools() {
 				resp.ResultSet.Metadata["truncated_to"] = limit
 			}
 			return resp, nil
+		},
+	)
+
+	r.registerTool(
+		Tool{
+			Name:        "analyze_dataset",
+			Description: "Run a server-side statistical analysis over a connection's data and get back a compact JSON summary — the server fetches the rows (up to 50k) and does the math, so prefer this over query_connection for questions about the shape or behavior of data too big to read row-by-row. Analyses: `summary` (per-column stats/percentiles/histogram; optional `group_by` for per-group stats), `anomaly` (rolling z-score outlier windows; needs `column`), `correlation` (Pearson between `column_a`/`column_b`, optional `max_lag`), `trend` (regression slope + R² and hour-of-day/day-of-week means; needs `column` + `timestamp_column`). EXCEPTION for plain summary/group_by stats on `sql` or EdgeLake connections: push the aggregation into the query itself (AVG/COUNT/GROUP BY via query_connection) — exact answers, less data moved; use summary mainly for sources that can't aggregate in-query. anomaly/correlation/trend are appropriate on any source. IMPORTANT: `max_rows` trims AFTER the source returns — it does not limit the fetch. On sql/edgelake ALWAYS bound the query yourself in `raw` (LIMIT and/or a time-window filter, ideally ORDER BY the time column): an unbounded SELECT can pull an entire table into server memory, and trimming an unordered result biases the analysis toward arbitrary rows. The `raw`/`type`/`params` query fields work exactly like query_connection.",
+			InputSchema: InputSchema{
+				Type: "object",
+				Properties: map[string]PropertySchema{
+					"connection_id":    {Type: "string", Description: "Connection ID to fetch data from"},
+					"raw":              {Type: "string", Description: "The query string (SQL, API path, filter expression, etc)"},
+					"type":             {Type: "string", Description: "Query type — sql, api, csv_filter, stream_filter"},
+					"params":           {Type: "object", Description: "Optional query parameters"},
+					"analysis":         {Type: "string", Enum: []string{"summary", "anomaly", "correlation", "trend"}, Description: "Which analysis to run"},
+					"columns":          {Raw: map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "summary only: columns to summarize (default all, capped at 20)"}},
+					"column":           {Type: "string", Description: "anomaly/trend: the numeric column to analyze"},
+					"column_a":         {Type: "string", Description: "correlation: first numeric column"},
+					"column_b":         {Type: "string", Description: "correlation: second numeric column"},
+					"timestamp_column": {Type: "string", Description: "Time column (RFC3339 or epoch seconds/millis); sorts the series and enables time-based output"},
+					"group_by":         {Type: "string", Description: "summary only: per-group stats keyed on this column (top 20 groups by row count; columns capped at 5 when grouped)"},
+					"sensitivity":      {Type: "number", Description: "anomaly: z-score threshold, default 3.0 (range 1-10)"},
+					"max_lag":          {Type: "integer", Description: "correlation: scan row shifts up to ±max_lag for the strongest correlation"},
+					"max_rows":         {Type: "integer", Description: "Cap rows ANALYZED (default and max 50000). Trims after the source returns — not a fetch limit; bound sql/edgelake queries in `raw` with LIMIT / a time window"},
+				},
+				Required: []string{"connection_id", "raw", "analysis"},
+			},
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			if r.toolops == nil {
+				return nil, fmt.Errorf("analyze_dataset not available: toolops not wired")
+			}
+			// decodeInto keeps the args field-complete (#54) — a field
+			// added to AnalyzeDatasetInput flows through without a
+			// parser change here.
+			var in toolops.AnalyzeDatasetInput
+			if err := decodeInto(args, &in); err != nil {
+				return nil, fmt.Errorf("invalid analyze_dataset args: %w", err)
+			}
+			return r.toolops.AnalyzeDataset(ctx, in)
 		},
 	)
 }

@@ -92,6 +92,17 @@ want a **denser** board with more components, say so explicitly:
 You can also start from one of the suggestion chips in the Assistant's welcome
 screen and edit the prompt before sending.
 
+### Asking for data analysis
+
+The Assistant can also analyze the data behind your connections, not just build
+panels for it. Questions like *"anything weird in my power data this month?"*,
+*"is the garage temperature trending up?"*, or *"does CPU usage track
+network traffic?"* make it run a server-side statistical pass (summary
+statistics, anomaly detection, correlation, or trend fitting) over up to 50,000
+rows and interpret the result — far more data than it could read directly. The
+analysis is read-only and runs through the same access rules as any other
+query. If the result was truncated, the Assistant is told so and will say so.
+
 ## Zoom
 
 Use the zoom controls to shrink the canvas for an overview or detailed work:

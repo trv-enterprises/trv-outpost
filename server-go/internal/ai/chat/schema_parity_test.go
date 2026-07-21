@@ -125,6 +125,7 @@ func TestListToolInputSchemaParity(t *testing.T) {
 		}},
 		{"list_dashboards", toolops.ListDashboardsInput{}, nil},
 		{"list_connections", toolops.ListConnectionsInput{}, nil},
+		{"analyze_dataset", toolops.AnalyzeDatasetInput{}, nil},
 	}
 	for _, tc := range cases {
 		tl := reg.findTool(tc.tool)

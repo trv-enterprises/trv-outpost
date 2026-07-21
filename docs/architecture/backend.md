@@ -106,6 +106,9 @@ server-go/
     ├── registry/             Connection type registry (TypeID system)
     ├── repository/           MongoDB access per collection
     ├── service/              Business logic per entity
+    ├── stats/                Pure numeric routines (percentiles,
+    │                         Pearson, regression, rolling z-scores)
+    │                         behind the analyze_dataset agent tool
     ├── streaming/            SSE stream manager, MQTT + TSStore
     │                         streams, ring buffer, aggregators
     └── version/              Version info for /version endpoint
