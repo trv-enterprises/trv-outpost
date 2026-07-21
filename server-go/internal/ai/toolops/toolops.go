@@ -88,10 +88,10 @@ type GetCurrentUserInput struct {
 
 // GetCurrentUserOutput is the slim DTO the assistant gets back.
 type GetCurrentUserOutput struct {
-	GUID         string             `json:"guid"`
-	Name         string             `json:"name"`
+	GUID         string              `json:"guid"`
+	Name         string              `json:"name"`
 	Capabilities []models.Capability `json:"capabilities"`
-	Email        string             `json:"email,omitempty"`
+	Email        string              `json:"email,omitempty"`
 }
 
 // GetCurrentUser returns the caller's profile.
@@ -490,7 +490,7 @@ type ListComponentsInput struct {
 
 type ListComponentsOutput struct {
 	Components []models.Component `json:"components"`
-	Count      int64              `json:"count"`    // total matching the filter (NOT just this page)
+	Count      int64              `json:"count"` // total matching the filter (NOT just this page)
 	Page       int                `json:"page"`
 	PageSize   int                `json:"page_size"`
 	HasMore    bool               `json:"has_more"` // true when more records exist beyond this page
@@ -675,8 +675,8 @@ func (t *Toolset) ListDashboards(ctx context.Context, in ListDashboardsInput) (*
 		Tags:         in.Tags,
 		Sort:         in.Sort,
 		Direction:    in.Direction,
-		Page:        in.Page,
-		PageSize:    in.PageSize,
+		Page:         in.Page,
+		PageSize:     in.PageSize,
 	})
 	if err != nil {
 		return nil, err

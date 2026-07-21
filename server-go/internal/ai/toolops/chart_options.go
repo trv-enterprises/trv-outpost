@@ -75,7 +75,7 @@ func ChartOptionsSchema() map[string]interface{} {
 				"enum":        []interface{}{0, 30, 45, 90},
 				"description": "Rotation angle (degrees) for x-axis CATEGORY labels. 0 = horizontal (default); with horizontal labels ECharts hides some when long names overlap. Set 30/45/90 when category names are long and the chart has a SMALL, fixed set of categories (e.g. a handful of named bars) so they fit without overlap. ECharts still thins labels when there are many categories, so this does NOT help dense/streaming/timestamp x-axes. line/area/bar only.",
 			},
-			"chartStacked":        map[string]interface{}{"type": "boolean", "description": "Stack series on top of each other (bar/area). Per-column stacking can also be set on each data_mapping.y_axis entry."},
+			"chartStacked": map[string]interface{}{"type": "boolean", "description": "Stack series on top of each other (bar/area). Per-column stacking can also be set on each data_mapping.y_axis entry."},
 			"bandedBarStyle": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
@@ -124,7 +124,7 @@ var ChartOptionKeys = map[string]struct{}{
 	"sampling": {}, "legend": {}, "chartSmooth": {}, "showSymbol": {},
 	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
 	"xAxisLabelRotate": {},
-	"bandedBarStyle": {}, "numberFormat": {}, "numberDateFormat": {},
+	"bandedBarStyle":   {}, "numberFormat": {}, "numberDateFormat": {},
 	"numberDecimals": {}, "numberUnit": {}, "numberSize": {}, "title": {},
 }
 
