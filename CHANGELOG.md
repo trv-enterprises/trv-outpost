@@ -8,6 +8,20 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Legend width control for left/right legends** (line / area / bar).
+  A side-positioned legend previously reserved a flat ~135px regardless
+  of label length — too wide for short names, too narrow for long ones
+  (clipping labels like `dashboard-mongodb-1`, whose distinguishing part
+  is the suffix). The legend column now sizes to its labels: a new
+  **Legend width** control offers **Auto** (default — fits the longest
+  label, capped so it can't overrun the plot; longer labels wrap) and
+  **Manual** (pin an exact **Width** in px plus a **Long labels** choice
+  of **Wrap** or **Truncate**). Existing charts default to Auto, so they
+  simply get correctly-sized legends with no config change. The controls
+  only appear when the legend is positioned Left or Right.
+
 ### Fixed
 
 - **Dashboard time range no longer breaks API-backed panels.** A

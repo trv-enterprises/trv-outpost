@@ -30,6 +30,14 @@
     {
       "id": "any_accumulator",
       "description": "Injected by ComponentEditor formState: true when any y_axis_columns entry has Δ Delta (accumulate) ticked. Gates the Accumulator subsection."
+    },
+    {
+      "id": "legend_side_position",
+      "description": "Injected by ComponentEditor formState: true when the legend is shown AND positioned left or right. Gates the Legend width mode field (width only matters for a vertical side legend)."
+    },
+    {
+      "id": "legend_manual_side",
+      "description": "Injected by ComponentEditor formState: true when legend_side_position is true AND width mode is Manual. Gates the manual Width + Long-labels fields."
     }
   ],
   "sections": [
@@ -360,7 +368,7 @@
               "type": "enum",
               "label": "Position",
               "default": "top",
-              "helperText": "Top is the default and the recommended position. Left/right reserve ~135px of plot width for the legend column — widen the panel to compensate.",
+              "helperText": "Top is the default and the recommended position. Left/right place the legend in a vertical column beside the plot; its width is sized automatically to the labels (see Legend width).",
               "options": [
                 { "value": "top", "label": "Top" },
                 { "value": "bottom", "label": "Bottom" },
@@ -368,6 +376,43 @@
                 { "value": "right", "label": "Right" }
               ],
               "visibleWhen": { "field": "legend_show", "operator": "truthy" }
+            },
+            {
+              "id": "legend_width_mode",
+              "binds": "options.legend.widthMode",
+              "type": "enum",
+              "label": "Legend width",
+              "default": "auto",
+              "helperText": "Auto fits the legend column to the longest label (capped so it can't overrun the plot; longer labels wrap). Manual pins an exact width and how overflow is handled. Only applies to a Left/Right legend.",
+              "options": [
+                { "value": "auto", "label": "Auto (fit to labels)" },
+                { "value": "manual", "label": "Manual" }
+              ],
+              "visibleWhen": { "field": "legend_side_position", "operator": "truthy" }
+            },
+            {
+              "id": "legend_width_px",
+              "binds": "options.legend.width",
+              "type": "number",
+              "label": "Width (px)",
+              "default": 135,
+              "min": 40,
+              "max": 600,
+              "helperText": "Reserved width of the legend column in pixels.",
+              "visibleWhen": { "field": "legend_manual_side", "operator": "truthy" }
+            },
+            {
+              "id": "legend_overflow",
+              "binds": "options.legend.overflow",
+              "type": "enum",
+              "label": "Long labels",
+              "default": "wrap",
+              "helperText": "How labels wider than the column are handled. Wrap keeps the full label on two lines; Truncate clips with an ellipsis (hides the label's end).",
+              "options": [
+                { "value": "wrap", "label": "Wrap" },
+                { "value": "truncate", "label": "Truncate" }
+              ],
+              "visibleWhen": { "field": "legend_manual_side", "operator": "truthy" }
             }
           ]
         },
