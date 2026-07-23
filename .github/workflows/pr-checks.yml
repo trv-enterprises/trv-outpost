@@ -34,9 +34,12 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
 
+      # --legacy-peer-deps matches client/Dockerfile — the project has a
+      # known @clerk/clerk-react ↔ react peer-range conflict that strict
+      # npm-ci resolution rejects. This is how the image installs too.
       - name: Install deps
         working-directory: client
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       # Run the pre-release sub-steps directly rather than `npm run build`,
       # because `npm run build` first runs increment-build.js which bumps
