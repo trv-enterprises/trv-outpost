@@ -1,0 +1,122 @@
+name: PR Checks
+
+# Validation gates that run on every pull request into main (and on
+# pushes to main as a backstop). Mirrors the local pre-release gates so
+# a green PR means the same things `make release` would enforce, minus
+# the release-only steps (tagging, image build, build-number bump).
+#
+# The four jobs match the agreed feature-branch flow:
+#   client     — lint:strict + chart-spec verify + vite build
+#   server     — go build + go vet
+#   go-tests   — go test ./... (includes chat schema-parity guard)
+#   api-docs   — regenerate swagger + postman, fail if committed docs are stale
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A newer commit on the same PR/branch cancels the older in-flight run.
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    name: Client (lint + chart-spec + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      # --legacy-peer-deps matches client/Dockerfile — the project has a
+      # known @clerk/clerk-react ↔ react peer-range conflict that strict
+      # npm-ci resolution rejects. This is how the image installs too.
+      - name: Install deps
+        working-directory: client
+        run: npm ci --legacy-peer-deps
+
+      # Run the pre-release sub-steps directly rather than `npm run build`,
+      # because `npm run build` first runs increment-build.js which bumps
+      # client/build.json — a release-time concern, not a PR concern. We
+      # want the exact same lint + chart-spec + vite build gates without
+      # the side effect.
+      - name: Lint (strict)
+        working-directory: client
+        run: npm run lint:strict
+
+      - name: Verify chart-spec build options
+        working-directory: client
+        run: npm run verify:chart-spec
+
+      - name: Vite build
+        working-directory: client
+        run: npx vite build
+
+  server:
+    name: Server (go build + vet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-go/go.mod
+          cache-dependency-path: server-go/go.sum
+
+      - name: go build
+        working-directory: server-go
+        run: go build ./...
+
+      - name: go vet
+        working-directory: server-go
+        run: go vet ./...
+
+  go-tests:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-go/go.mod
+          cache-dependency-path: server-go/go.sum
+
+      - name: go test
+        working-directory: server-go
+        run: go test ./...
+
+  api-docs:
+    name: API docs in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-go/go.mod
+          cache-dependency-path: server-go/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Pin the swag CLI to the library version in server-go/go.mod so the
+      # generated spec matches what the running server serves. (Mismatched
+      # swag CLI vs library historically produced incompatible output.)
+      - name: Install swag CLI (matched to go.mod)
+        working-directory: server-go
+        run: |
+          swag_ver="$(go list -m -f '{{.Version}}' github.com/swaggo/swag)"
+          echo "Installing swag ${swag_ver}"
+          go install "github.com/swaggo/swag/cmd/swag@${swag_ver}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Regenerate + verify API docs are current
+        run: make api-docs-check

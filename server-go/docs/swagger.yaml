@@ -176,6 +176,26 @@ definitions:
           $ref: '#/definitions/registry.IntegrationInfo'
         type: array
     type: object
+  handlers.MultiplexAddSub:
+    properties:
+      connection_id:
+        type: string
+      key:
+        type: string
+      topics:
+        type: string
+    type: object
+  handlers.MultiplexSubsRequest:
+    properties:
+      add:
+        items:
+          $ref: '#/definitions/handlers.MultiplexAddSub'
+        type: array
+      remove:
+        items:
+          type: string
+        type: array
+    type: object
   handlers.RuntimeInfo:
     properties:
       goroutines:
@@ -3057,6 +3077,10 @@ definitions:
       TSStoreDataTypeJSON: Arbitrary JSON objects
       TSStoreDataTypeSchema: Schema-defined compact JSON
       TSStoreDataTypeText: UTF-8 text
+    x-enum-descriptions:
+    - Arbitrary JSON objects
+    - Schema-defined compact JSON
+    - UTF-8 text
     x-enum-varnames:
     - TSStoreDataTypeJSON
     - TSStoreDataTypeSchema
@@ -3069,6 +3093,9 @@ definitions:
     x-enum-comments:
       TSStoreProtocolHTTP: HTTP/WS (unencrypted)
       TSStoreProtocolHTTPS: HTTPS/WSS (encrypted)
+    x-enum-descriptions:
+    - HTTP/WS (unencrypted)
+    - HTTPS/WSS (encrypted)
     x-enum-varnames:
     - TSStoreProtocolHTTP
     - TSStoreProtocolHTTPS
@@ -3115,6 +3142,9 @@ definitions:
     x-enum-comments:
       TSStoreTransportREST: HTTP polling (default)
       TSStoreTransportStreaming: WebSocket push (real-time)
+    x-enum-descriptions:
+    - HTTP polling (default)
+    - WebSocket push (real-time)
     x-enum-varnames:
     - TSStoreTransportREST
     - TSStoreTransportStreaming
@@ -8407,6 +8437,79 @@ paths:
       summary: Get a goroutine accounting
       tags:
       - system
+  /streams/multiplex:
+    get:
+      description: 'Opens ONE long-lived Server-Sent-Events connection that carries
+        tagged frames for every raw connection stream this browser tab subscribes
+        to. Subscriptions are mutated via POST /streams/multiplex/{sid}/subs. Defeats
+        the browser 6-per-origin HTTP/1.1 cap (issue #187). The first frame is `event:
+        session` with the session id to use for subscription updates.'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Open a multiplexed SSE stream
+      tags:
+      - streams
+  /streams/multiplex/{sid}/subs:
+    post:
+      consumes:
+      - application/json
+      description: 'Add or remove raw-stream subscriptions on an open multiplex SSE
+        session (opened via GET /streams/multiplex). Each added subscription is namespace-grant
+        checked (issue #4). New subscriptions replay their buffered records as tagged
+        frames and emit a `subscribed` frame. This is a one-shot request; it holds
+        no connection-pool slot.'
+      parameters:
+      - description: Session ID from the `session` frame
+        in: path
+        name: sid
+        required: true
+        type: string
+      - description: Add/remove deltas
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.MultiplexSubsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update multiplex subscriptions
+      tags:
+      - streams
   /system-users:
     get:
       produces:

@@ -539,6 +539,7 @@ func main() {
 	aiAvailabilityHandler := handlers.NewAIAvailabilityHandler(aiAgent, chatAgentReady, settingsService)
 	debugHandler := handlers.NewDebugHandler()
 	streamHandler := handlers.NewStreamHandler(streamManager, connectionService)
+	multiplexHandler := handlers.NewMultiplexHandler(streamManager, connectionService)
 	configHandler := handlers.NewConfigHandler(configService)
 	authHandler := handlers.NewAuthHandler(userService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
@@ -768,6 +769,22 @@ func main() {
 		events := api.Group("/events")
 		{
 			events.GET("/stream", eventsHandler.Stream)
+		}
+
+		// Streams — the multiplexed SSE pipe (issue #187). ONE SSE
+		// connection per browser tab carries tagged frames for every
+		// raw connection stream the tab subscribes to, so a dashboard
+		// spanning many connections no longer exhausts the browser's
+		// 6-per-origin HTTP/1.1 pool. The GET opens the pipe (EventSource,
+		// ?st= token); the POST mutates its subscription set (fetch,
+		// Bearer). Both match the "/stream" read carve-out in
+		// getRequiredCapability — no capability gate; per-connection
+		// namespace grants are enforced inside the handler, same as the
+		// single-stream /connections/:id/stream path.
+		streams := api.Group("/streams")
+		{
+			streams.GET("/multiplex", multiplexHandler.StreamMultiplex)
+			streams.POST("/multiplex/:sid/subs", multiplexHandler.UpdateMultiplexSubscriptions)
 		}
 
 		// Alerts — persisted bell-panel records. The SSE stream
