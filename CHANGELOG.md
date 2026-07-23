@@ -23,6 +23,11 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   paths (`newest`/`since:`/`range:`) dropped a caller-supplied `step`.
   Requires ts-store **v0.18.0+**. (A >1000-distinct-series request is
   surfaced as a real error from ts-store, not a silent empty result.)
+  This now also covers **streaming** ts-store charts: the client-built
+  streaming backfill (`/connections/:id/query`) forwards the pivot's
+  series column as `group_by` too — previously only the polling
+  (`/components/:id/data`) path did, so a live-streaming pivot chart
+  still collapsed to one line under a step.
 
 ### Added
 

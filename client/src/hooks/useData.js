@@ -135,7 +135,7 @@ function applyParser(record, parser) {
 // previews must NOT, since their query is dirty/unsaved and needs the raw
 // /query path. The `query` prop is still required either way — token
 // presence and value identity (what triggers refetches) are derived from it.
-export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0, rangeValue = null }) {
+export function useData({ connectionId, query, componentId = null, refreshInterval = null, useCache = true, maxBuffer = null, timeBucket = null, backfill = null, parser = null, refreshTick = 0, rangeValue = null, seriesCol = '' }) {
   // A per-call maxBuffer wins; otherwise use the deployment-wide default
   // (admin setting stream_buffer_size, set at bootstrap). Applies to both
   // spec-driven and eval'd custom-code charts.
@@ -438,12 +438,17 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       // diverge. The row cap (not the buffer limit) applies server-side, so a
       // wide window isn't truncated. No range → the latest-N default.
       if (rangeValue && rangeValue.type) {
-        return { raw: 'newest', type: 'tsstore', params: { range: rangeValue } };
+        // Pivot charts forward their series column as group_by so ts-store
+        // partitions a stepped downsample per series (v0.18.0). Only meaningful
+        // WITH a step; the adapter's setGroupByParam no-ops it without one.
+        const params = { range: rangeValue };
+        if (seriesCol) params.group_by = seriesCol;
+        return { raw: 'newest', type: 'tsstore', params };
       }
       return { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
     }
     return null;
-  }, [backfill, datasourceType, datasourceTransport, rangeValue]);
+  }, [backfill, datasourceType, datasourceTransport, rangeValue, seriesCol]);
   const effectiveBackfillKey = useMemo(() => JSON.stringify(effectiveBackfill), [effectiveBackfill]);
 
   // Re-init on a backfill-query change (stage 2 of #162): a dashboard range
