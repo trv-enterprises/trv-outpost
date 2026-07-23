@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { FilterableMultiSelect } from '@carbon/react';
 import apiClient from '../../api/client';
 import { getAllTagsCached } from './tagsApi';
@@ -17,15 +17,24 @@ import './TagFilter.scss';
  * - selected:    string[]   currently selected tags
  * - onChange:    (string[]) => void
  * - label:       string     label (default "Filter by tag")
- * - id:          string     field id
+ * - id:          string     field id (defaults to a unique auto-id)
  */
 function TagFilter({
   entityType,
   selected = [],
   onChange,
   label = 'Filter by tag',
-  id = 'tag-filter',
+  id,
 }) {
+  // Every list page mounts SEVERAL TagFilters at once (toolbar + the
+  // always-mounted picker/filter modals). FilterableMultiSelect derives
+  // its internal Downshift element ids from this id and resolves them
+  // with getElementById, so a shared default id makes clicks resolve
+  // against the FIRST (hidden) instance — items render but nothing
+  // selects. Default to a per-instance unique id; strip the colons
+  // useId emits so the value stays querySelector-safe.
+  const autoId = useId().replace(/:/g, '');
+  const fieldId = id || `tag-filter-${autoId}`;
   const [allTags, setAllTags] = useState([]);
 
   // Refetch on every mount so newly-created tags show up after navigation.
@@ -87,7 +96,7 @@ function TagFilter({
   return (
     <div className="tag-filter">
       <FilterableMultiSelect
-        id={id}
+        id={fieldId}
         titleText=""
         placeholder={placeholder}
         items={items}
