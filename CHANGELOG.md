@@ -6,6 +6,18 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.43.1] — 2026-07-23
+
+### Fixed
+
+- **Tag filter items are selectable again on the list pages.** Every
+  list page mounts several tag filters at once (toolbar + hidden
+  picker/filter modals) and all shared one default DOM id; Carbon's
+  FilterableMultiSelect resolves internal elements by id, so clicks
+  landed on a hidden instance and selected nothing (broken since the
+  June 6 switch to the searchable dropdown, build 1835). Each filter
+  instance now gets a unique auto-generated id.
+
 ## [0.43.0] — 2026-07-21
 
 ### Added
