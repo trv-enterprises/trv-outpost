@@ -31,13 +31,18 @@ function formatPlain(n, decimals) {
 }
 
 // 1234567 → "1.23M". decimals controls the fraction digits on the scaled
-// value ('auto' → 1).
+// value ('auto' → 1). Uses the SI prefix table (T/G/M/k) to match the
+// chart SI helper (option-helpers.js formatSI, #159) — number tiles and
+// charts now abbreviate the same value identically (1e9 → "G" giga, not
+// "B" billion; 1e3 → lowercase SI "k"). Keeping the two in sync avoids a
+// dashboard showing "10.3G" on a line chart and "10.3B" on a number tile
+// for the same number.
 function formatCompact(n, decimals) {
   const places = (decimals != null && decimals !== 'auto' && Number.isFinite(Number(decimals)))
     ? Number(decimals) : 1;
   const abs = Math.abs(n);
   const units = [
-    [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K'],
+    [1e12, 'T'], [1e9, 'G'], [1e6, 'M'], [1e3, 'k'],
   ];
   for (const [factor, suffix] of units) {
     if (abs >= factor) return (n / factor).toFixed(places) + suffix;

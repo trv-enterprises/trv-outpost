@@ -21,6 +21,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   `query_config.type`. A proper time-range design for API connections
   is future work.
 
+- **Number tiles now abbreviate large values with SI suffixes,
+  matching charts.** A number tile set to the "Compact" format showed
+  billions as **B** (e.g. `10.3B`) while line/gauge/scatter charts
+  showed the same magnitude as SI **G** (e.g. `10.3G`, the `#159` SI
+  helper). The tile's compact formatter now uses the same SI table
+  (T/G/M/k), so a value reads identically wherever it appears. The
+  format's dropdown label is updated to "Compact SI (1.2M, 3.4G)".
+
 - **Large streaming dashboards no longer deadlock on plain HTTP.**
   Dashboards streaming from more than ~5 connections at once could
   leave many panels stuck on "Loading…" forever when viewed over
