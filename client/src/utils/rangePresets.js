@@ -28,6 +28,25 @@ export function chartTypeConsumesRange(chartType) {
   return !!chartType && !RANGE_EXEMPT_CHART_TYPES.has(chartType);
 }
 
+// Connection types the dashboard range variable can actually scope. The
+// range is a TIME WINDOW, meaningful only for time-series sources: SQL /
+// EdgeLake authors opt in via a `{{range-variable}}` predicate, and
+// ts-store / Prometheus auto-apply the window. Non-time connections
+// (notably `api`) have no range handling — injecting the range into their
+// query sends parameters the upstream rejects (e.g. Proxmox returns
+// "400 Parameter verification failed"). So the range is withheld from
+// them entirely. A time-window design for API connections is future work.
+// Keep in sync with TIME_TYPES in useRangeConnectionTypes.js (the picker's
+// classifier), so what shows the picker and what receives the range agree.
+export const RANGE_CAPABLE_CONNECTION_TYPES = new Set(['sql', 'edgelake', 'tsstore', 'prometheus']);
+
+// Can a connection of this type receive the dashboard range? Unknown/empty
+// types default to false (safer: never inject range into a source that
+// isn't known to handle it).
+export function connectionTypeConsumesRange(connectionType) {
+  return !!connectionType && RANGE_CAPABLE_CONNECTION_TYPES.has(connectionType);
+}
+
 // Human labels for the known preset tokens. Unknown tokens fall back to the
 // token itself (so a custom "12h" still renders sensibly).
 const PRESET_LABELS = {

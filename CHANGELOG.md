@@ -10,6 +10,17 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Dashboard time range no longer breaks API-backed panels.** A
+  dashboard with a time-range variable applied the range to *every*
+  panel, including charts reading from non-time **API** connections
+  (e.g. Proxmox), which rejected the unexpected time parameters with
+  `400 Parameter verification failed`. The range is now withheld from
+  connection types that can't scope a time window — it applies only to
+  `sql` / `edgelake` / `tsstore` / `prometheus`. The gate uses the
+  resolved *connection* type, not the (documentary, sometimes stale)
+  `query_config.type`. A proper time-range design for API connections
+  is future work.
+
 - **Large streaming dashboards no longer deadlock on plain HTTP.**
   Dashboards streaming from more than ~5 connections at once could
   leave many panels stuck on "Loading…" forever when viewed over

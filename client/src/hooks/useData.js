@@ -33,7 +33,7 @@ import { queryData, queryComponentData, queryBackfillShared } from '../api/dataC
 import apiClient from '../api/client';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getStreamBufferSize } from '../utils/streamBufferConfig';
-import { TSSTORE_MAX_POINTS } from '../utils/rangePresets';
+import { TSSTORE_MAX_POINTS, connectionTypeConsumesRange } from '../utils/rangePresets';
 import { useRegisterRefreshable } from '../context/RefreshableComponentsContext';
 
 // Backfill queries can pull up to the full stream buffer (e.g. `newest
@@ -787,17 +787,32 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // previews, legacy code-supplied queries) the raw query body goes out
   // as before.
   const runQuery = useCallback(async (useCacheArg, opts = {}) => {
+    // The dashboard range is a TIME WINDOW — only inject it for connection
+    // types that actually handle one (sql/edgelake/tsstore/prometheus).
+    // Non-time sources like `api` have no range handling; sending the range
+    // makes the upstream reject the request (e.g. Proxmox → "400 Parameter
+    // verification failed"). Gate on the RESOLVED connection type here (not
+    // query_config.type, which isn't reliably the connection type — many
+    // tsstore charts carry query_config.type:"api"). A time-window design
+    // for API connections is future work; until then APIs get no range.
+    const rangeOk = connectionTypeConsumesRange(datasourceType);
     if (componentId) {
       const params = query?.params || {};
       const runtime = { connection_id: connectionId };
       // Preserve an explicit '' — token present with no value set must
       // still reach the server so it can answer "variable not set".
       if ('dashboard_variable' in params) runtime.dashboard_variable = params.dashboard_variable;
-      if (params.range) runtime.range = params.range;
+      if (params.range && rangeOk) runtime.range = params.range;
       return queryComponentData(componentId, runtime, useCacheArg, opts);
     }
+    // Raw path: strip params.range when the connection can't consume it so
+    // the range never reaches an API adapter's request builder.
+    if (!rangeOk && query?.params?.range) {
+      const { range: _range, ...restParams } = query.params;
+      return queryData(connectionId, { ...query, params: restParams }, useCacheArg, opts);
+    }
     return queryData(connectionId, query, useCacheArg, opts);
-  }, [componentId, connectionId, queryKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [componentId, connectionId, queryKey, datasourceType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = useCallback(async (forceShowLoading = false) => {
     if (!connectionId || !query) {
