@@ -3964,6 +3964,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // legend
                       legend_show: chartOptions.legend?.show !== false,
                       legend_position: chartOptions.legend?.position || 'top',
+                      legend_width_mode: chartOptions.legend?.widthMode || 'auto',
+                      legend_width_px: chartOptions.legend?.width ?? 135,
+                      legend_overflow: chartOptions.legend?.overflow || 'wrap',
+                      // Derived gates for the legend-width fields (single-clause
+                      // visibleWhen can't express "shown AND side AND manual").
+                      legend_side_position: chartOptions.legend?.show !== false
+                        && (chartOptions.legend?.position === 'left' || chartOptions.legend?.position === 'right'),
+                      legend_manual_side: chartOptions.legend?.show !== false
+                        && (chartOptions.legend?.position === 'left' || chartOptions.legend?.position === 'right')
+                        && (chartOptions.legend?.widthMode || 'auto') === 'manual',
                       // thresholds
                       y_thresholds: Array.isArray(chartOptions.yThresholds) ? chartOptions.yThresholds : [],
                       y_threshold_render_mode: chartOptions.yThresholdRenderMode || 'line',
@@ -4120,6 +4130,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'legend_position':
                           updateChartOption('legend', { ...(chartOptions.legend || {}), position: value });
+                          break;
+                        case 'legend_width_mode':
+                          updateChartOption('legend', { ...(chartOptions.legend || {}), widthMode: value });
+                          break;
+                        case 'legend_width_px':
+                          updateChartOption('legend', { ...(chartOptions.legend || {}), width: value });
+                          break;
+                        case 'legend_overflow':
+                          updateChartOption('legend', { ...(chartOptions.legend || {}), overflow: value });
                           break;
                         case 'y_thresholds':
                           updateChartOption('yThresholds', value);

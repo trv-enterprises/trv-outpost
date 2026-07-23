@@ -277,27 +277,70 @@ function buildTooltip(tt, si) {
   return block;
 }
 
-function buildLegend(legend, dualAxis, multipleSeries) {
+// Legend-column width bounds (px) for a LEFT/RIGHT (vertical) legend.
+// AUTO fits the longest label between these; MANUAL is clamped to them too.
+// The upper cap keeps one long label from eating the plot — anything wider
+// wraps (AUTO) or wraps/truncates per the Manual overflow choice. Panel
+// width isn't available in buildOption (a static option builder), so the
+// cap is a fixed px, not a percentage. ~7px/char + marker + padding mirrors
+// the labelGutter estimate used for threshold labels in this file.
+const LEGEND_MIN_WIDTH = 60;
+const LEGEND_AUTO_MAX_WIDTH = 220;
+const LEGEND_CHAR_PX = 7;      // approx width of one label char at legend font size
+const LEGEND_MARKER_PAD = 26;  // color marker + gaps + inner padding
+
+// Compute the reserved width (px) of a vertical legend column. AUTO fits
+// the longest series label (clamped to [MIN, AUTO_MAX]); MANUAL uses the
+// author's width (clamped to [MIN, 600]).
+function computeLegendWidth(legend, seriesNames) {
+  if ((legend?.widthMode || 'auto') === 'manual') {
+    const w = Number(legend?.width);
+    return Number.isFinite(w) && w > 0 ? Math.min(600, Math.max(LEGEND_MIN_WIDTH, w)) : 135;
+  }
+  const longest = (seriesNames || []).reduce((m, n) => Math.max(m, String(n ?? '').length), 0);
+  const fit = longest * LEGEND_CHAR_PX + LEGEND_MARKER_PAD;
+  return Math.min(LEGEND_AUTO_MAX_WIDTH, Math.max(LEGEND_MIN_WIDTH, fit));
+}
+
+// buildLegend returns { block, reservedWidth } — reservedWidth is the px
+// the grid must reserve for a left/right legend (0 for top/bottom/hidden).
+function buildLegend(legend, dualAxis, multipleSeries, seriesNames) {
   // Default-true when there's more than one series; the user can
   // override either way via the toggle.
   const want = legend?.show != null ? Boolean(legend.show) : multipleSeries;
-  if (!want) return undefined;
+  if (!want) return { block: undefined, reservedWidth: 0 };
   const pos = legend?.position || 'top';
   const block = {
     type: 'scroll',
     textStyle: { color: COLOR_TEXT_SECONDARY },
   };
+  let reservedWidth = 0;
   switch (pos) {
     case 'bottom': block.bottom = 0; break;
-    case 'left':   block.left = 0; block.orient = 'vertical'; break;
-    case 'right':  block.right = 0; block.orient = 'vertical'; break;
+    case 'left':
+    case 'right': {
+      block[pos] = 0;
+      block.orient = 'vertical';
+      reservedWidth = computeLegendWidth(legend, seriesNames);
+      // Let the label text wrap/truncate WITHIN the reserved column so a
+      // long name never bleeds past it. AUTO always wraps (it already
+      // sized to fit up to the cap); MANUAL honors the overflow choice.
+      const overflow = (legend?.widthMode || 'auto') === 'manual'
+        ? (legend?.overflow === 'truncate' ? 'truncate' : 'break')
+        : 'break';
+      // Reserve the marker/padding out of the text width so wrapping
+      // measures the actual label area, not the whole column.
+      block.textStyle.width = Math.max(20, reservedWidth - LEGEND_MARKER_PAD);
+      block.textStyle.overflow = overflow;
+      break;
+    }
     case 'top':
     default:       block.top = 0; break;
   }
   // Default selection mode (ECharts: 'multiple' = clicking a series
   // toggles it independently). No explicit knob exposed — multi-toggle
   // is the universal expectation.
-  return block;
+  return { block, reservedWidth };
 }
 
 /**
@@ -600,7 +643,12 @@ export function buildOption(values, data, helpers = {}) {
   }
 
   const tooltip = buildTooltip(opts.tooltip || {}, siPrefixes);
-  const legend = buildLegend(opts.legend || {}, dualAxis, series.length > 1);
+  const { block: legend, reservedWidth: legendReservedWidth } = buildLegend(
+    opts.legend || {},
+    dualAxis,
+    series.length > 1,
+    series.map((s) => s.name),
+  );
 
   const { markLine, visualMap, labelGutter } = buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
   if (markLine) {
@@ -705,13 +753,16 @@ export function buildOption(values, data, helpers = {}) {
   // slider top (a little breathing room). 50 left an ~18px dead band.
   const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
-  const gridLeft = legendPos === 'left' ? 135 : 50;
-  // Right edge: 135px when the legend sits on the right, else a small 20px
-  // flush gap. When threshold labels render at the line's end (right edge),
-  // widen the gutter to fit the widest label so it isn't clipped by the
-  // panel. A right-side legend already provides ample room, so only bump
-  // the non-legend case (and never shrink below the existing budget).
-  const baseGridRight = legendPos === 'right' ? 135 : 20;
+  // Reserve the legend column's computed width (auto-fit to labels or the
+  // author's manual width) when the legend sits on that side; otherwise the
+  // usual small gap. Replaces the old flat 135px reservation.
+  const gridLeft = legendPos === 'left' ? legendReservedWidth : 50;
+  // Right edge: the legend column's width when the legend sits on the right,
+  // else a small 20px flush gap. When threshold labels render at the line's
+  // end (right edge), widen the gutter to fit the widest label so it isn't
+  // clipped by the panel. A right-side legend already provides ample room, so
+  // only bump the non-legend case (and never shrink below the existing budget).
+  const baseGridRight = legendPos === 'right' ? legendReservedWidth : 20;
   const gridRight = Math.max(baseGridRight, (labelGutter || 0) + 12);
   const option = {
     backgroundColor: TRANSPARENT_BG,
