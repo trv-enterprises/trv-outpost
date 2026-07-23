@@ -481,106 +481,62 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
     let reconnectTimeout = null;
     let abortController = null;
 
-    const connectAggregated = async () => {
-      if (cancelled || !mountedRef.current) return;
-
-      // Use fetch with streaming for POST endpoint
-      abortController = new AbortController();
-      const url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream/aggregated`;
-
-      try {
-        // Build headers including user auth. This is a fetch (not EventSource),
-        // so it carries the Bearer token via a header — the ?st= query is only
-        // for header-less EventSource/WebSocket. Without it the endpoint 401s on
-        // a session-JWT deployment (X-User-ID alone isn't valid when legacy GUID
-        // auth is off). X-User-ID stays for the legacy-GUID path.
-        const headers = {
-          'Content-Type': 'application/json',
-          ...apiClient.streamAuthHeaders(),
-        };
-        const userGuid = apiClient.getCurrentUserGuid();
-        if (userGuid) {
-          headers['X-User-ID'] = userGuid;
-        }
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            interval: timeBucket.interval,
-            function: timeBucket.function || 'avg',
-            value_cols: timeBucket.value_cols,
-            timestamp_col: timeBucket.timestamp_col,
-            series_col: timeBucket.series_col || '' // Column for bucket partitioning (e.g., location)
-          }),
-          signal: abortController.signal
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        handleConnectionSuccess();
-        setSource('aggregated-stream');
-
-        // Read the streaming response
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (mountedRef.current) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Parse SSE events from buffer
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.startsWith('event: ')) {
-              const eventType = line.substring(7);
-              const nextLine = lines[i + 1];
-              if (nextLine && nextLine.startsWith('data: ')) {
-                const data = nextLine.substring(6);
-                i++; // Skip the data line
-
-                if (eventType === 'bucket' && mountedRef.current) {
-                  try {
-                    const bucket = JSON.parse(data);
-                    // Remove internal bucket metadata before processing
-                    const { _bucket_function, _bucket_interval, _bucket_timestamp, ...record } = bucket;
-                    processStreamRecord(record);
-                  } catch (err) {
-                    console.error('[useData] Error parsing bucket:', err);
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (err) {
-        // A deliberate abort (effect cleanup / unmount / supersede) is normal —
-        // NOT a connection failure, and must not trigger a reconnect. Detect it
-        // by the SIGNAL, not the error name: Chrome throws AbortError, but
-        // Firefox throws "TypeError: Error in input stream" / "NetworkError"
-        // when a streaming fetch is aborted mid-read. Keying only on err.name
-        // let those fall through to handleConnectionError → reconnect → a NEW
-        // aggregator every cleanup, thrashing the SSE (browser-specific loop,
-        // seen in Firefox).
-        if (isAbortError(err, abortController?.signal)) return;
-
-        console.error('[useData] Aggregated stream error:', err);
-        if (mountedRef.current) {
-          reconnectTimeout = handleConnectionError(connectAggregated);
-        }
-      }
-    };
-
     // Reference to unsubscribe function for shared connection
     let unsubscribeFromManager = null;
+
+    const connectAggregated = () => {
+      if (cancelled || !mountedRef.current) return;
+
+      // Aggregated streams now ride the shared multiplex pipe (issue #187
+      // stage 2) instead of a dedicated fetch-stream per chart. Two charts
+      // with matching bucket params share one server-side aggregator AND
+      // one pipe subscription. The manager routes bucket records here; we
+      // strip the internal _bucket_* metadata before processing.
+      const manager = StreamConnectionManager.getInstance();
+      unsubscribeFromManager = manager.subscribeAggregated(
+        connectionId,
+        {
+          interval: timeBucket.interval,
+          function: timeBucket.function || 'avg',
+          value_cols: timeBucket.value_cols,
+          timestamp_col: timeBucket.timestamp_col,
+          series_col: timeBucket.series_col || '', // Column for bucket partitioning (e.g., location)
+        },
+        (bucket) => {
+          if (!mountedRef.current) return;
+          const { _bucket_function, _bucket_interval, _bucket_timestamp, ...record } = bucket;
+          processStreamRecord(record);
+        },
+        {
+          onConnect: () => {
+            if (mountedRef.current) {
+              handleConnectionSuccess();
+              setSource('aggregated-stream');
+            }
+          },
+          onDisconnect: () => {
+            if (mountedRef.current) {
+              handleConnectionError(() => {}); // manager handles reconnect
+            }
+          },
+          onReconnecting: () => {
+            if (mountedRef.current) setReconnecting(true);
+          },
+          onError: (info) => {
+            if (mountedRef.current) {
+              setReconnecting(false);
+              setError(new Error(info?.message || 'Aggregated stream failed'));
+            }
+          },
+        }
+      );
+
+      const status = manager.getStatus(connectionId);
+      if (status.connected) {
+        handleConnectionSuccess();
+        setSource('aggregated-stream');
+      }
+    };
 
     // Extract topic filter from query for MQTT datasources
     const parsedQuery = query ? (typeof query === 'string' ? null : query) : null;

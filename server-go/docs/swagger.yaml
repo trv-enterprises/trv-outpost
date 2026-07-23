@@ -178,12 +178,29 @@ definitions:
     type: object
   handlers.MultiplexAddSub:
     properties:
+      agg:
+        $ref: '#/definitions/handlers.MultiplexAggConfig'
       connection_id:
         type: string
       key:
         type: string
       topics:
         type: string
+    type: object
+  handlers.MultiplexAggConfig:
+    properties:
+      function:
+        type: string
+      interval:
+        type: integer
+      series_col:
+        type: string
+      timestamp_col:
+        type: string
+      value_cols:
+        items:
+          type: string
+        type: array
     type: object
   handlers.MultiplexSubsRequest:
     properties:
@@ -8464,11 +8481,12 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Add or remove raw-stream subscriptions on an open multiplex SSE
-        session (opened via GET /streams/multiplex). Each added subscription is namespace-grant
-        checked (issue #4). New subscriptions replay their buffered records as tagged
-        frames and emit a `subscribed` frame. This is a one-shot request; it holds
-        no connection-pool slot.'
+      description: 'Add or remove subscriptions on an open multiplex SSE session (opened
+        via GET /streams/multiplex). Each add is a raw connection stream, or an aggregated
+        (time-bucketed) stream when `agg` is set. Each added subscription is namespace-grant
+        checked (issue #4). Raw subscriptions replay their buffered records as tagged
+        frames; every add emits a `subscribed` frame. This is a one-shot request;
+        it holds no connection-pool slot.'
       parameters:
       - description: Session ID from the `session` frame
         in: path

@@ -5278,10 +5278,10 @@
                 }
               ]
             },
-            "description": "Update multiplex subscriptions\n\nAdd or remove raw-stream subscriptions on an open multiplex SSE session (opened via GET /streams/multiplex). Each added subscription is namespace-grant checked (issue #4). New subscriptions replay their buffered records as tagged frames and emit a `subscribed` frame. This is a one-shot request; it holds no connection-pool slot.\n\n\nResponses: 200, 400, 403, 404",
+            "description": "Update multiplex subscriptions\n\nAdd or remove subscriptions on an open multiplex SSE session (opened via GET /streams/multiplex). Each add is a raw connection stream, or an aggregated (time-bucketed) stream when `agg` is set. Each added subscription is namespace-grant checked (issue #4). Raw subscriptions replay their buffered records as tagged frames; every add emits a `subscribed` frame. This is a one-shot request; it holds no connection-pool slot.\n\n\nResponses: 200, 400, 403, 404",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"add\": [\n    {\n      \"connection_id\": \"\",\n      \"key\": \"\",\n      \"topics\": \"\"\n    }\n  ],\n  \"remove\": [\n    \"\"\n  ]\n}",
+              "raw": "{\n  \"add\": [\n    {\n      \"agg\": null,\n      \"connection_id\": \"\",\n      \"key\": \"\",\n      \"topics\": \"\"\n    }\n  ],\n  \"remove\": [\n    \"\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

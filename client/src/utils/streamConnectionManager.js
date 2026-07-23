@@ -211,6 +211,78 @@ class StreamConnectionManager {
   }
 
   /**
+   * Build a stable stream key for an aggregated subscription. Two charts
+   * with identical (connectionId, bucketConfig) produce the same key, so
+   * they share ONE server-side aggregator AND one pipe subscription —
+   * this is the SSE-layer aggregation sharing (aggregation-sharing.md).
+   * The order/normalization mirrors the server's BucketConfig.ConfigKey().
+   */
+  _aggStreamKey(connectionId, bucketConfig) {
+    const cols = [...(bucketConfig.value_cols || [])].sort().join(',');
+    return [
+      'agg',
+      connectionId,
+      bucketConfig.interval,
+      bucketConfig.function || 'avg',
+      bucketConfig.timestamp_col || '',
+      bucketConfig.series_col || '',
+      cols,
+    ].join('|');
+  }
+
+  /**
+   * Subscribe to a time-bucketed aggregated stream over the shared pipe.
+   * The aggregated bucket-records arrive as tagged `record` frames keyed
+   * on a synthetic agg stream key and are routed to `callback` like any
+   * other subscriber. No topic filtering or client buffer replay applies
+   * (aggregators emit computed buckets, not raw topic records).
+   * @param {string} connectionId
+   * @param {object} bucketConfig - { interval, function, value_cols, timestamp_col, series_col }
+   * @param {function} callback - Called with each bucket record
+   * @param {object} options - { onConnect, onDisconnect, onError, onReconnecting }
+   * @returns {function} Unsubscribe function
+   */
+  subscribeAggregated(connectionId, bucketConfig, callback, options = {}) {
+    if (!connectionId) {
+      console.error('[StreamConnectionManager] connectionId is required');
+      return () => {};
+    }
+    const streamKey = this._aggStreamKey(connectionId, bucketConfig);
+
+    if (!this.subscribers.has(streamKey)) {
+      this.subscribers.set(streamKey, new Set());
+    }
+
+    const subscriber = {
+      callback,
+      topics: null, // aggregated records carry no topic filter
+      skipBufferReplay: true, // no client-side buffer for aggregated streams
+      onConnect: options.onConnect || (() => {}),
+      onDisconnect: options.onDisconnect || (() => {}),
+      onError: options.onError || (() => {}),
+      onReconnecting: options.onReconnecting || (() => {}),
+    };
+    this.subscribers.get(streamKey).add(subscriber);
+
+    const pendingTimeout = this.gracePeriodTimeouts.get(streamKey);
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      this.gracePeriodTimeouts.delete(streamKey);
+    }
+
+    const connection = this.connections.get(streamKey);
+    if (connection) {
+      if (connection.connected) subscriber.onConnect();
+    } else {
+      this._connectAggregated(streamKey, connectionId, bucketConfig);
+    }
+
+    return () => {
+      this._unsubscribe(streamKey, subscriber);
+    };
+  }
+
+  /**
    * Check if a record matches a subscriber's topic filter.
    * Supports MQTT wildcards: + (single level) and # (multi-level).
    */
@@ -263,6 +335,36 @@ class StreamConnectionManager {
     // shared pipe (opening the pipe lazily if this is the first stream).
     this.muxDesired.set(connectionId, { topics });
     this._queueMuxDelta(connectionId, 'add');
+    this._ensureMuxPipe();
+  }
+
+  /**
+   * Internal: Register an aggregated subscription on the shared pipe. Like
+   * _connect, but the desired entry carries the real connId plus the `agg`
+   * bucket config, and there is no topic/buffer state. streamKey is the
+   * synthetic agg key so matching charts dedupe onto one pipe subscription.
+   */
+  _connectAggregated(streamKey, connectionId, bucketConfig) {
+    if (this.connections.has(streamKey)) return;
+
+    this.connections.set(streamKey, {
+      connected: false,
+      connectionId: streamKey,
+      topics: null,
+    });
+
+    this.muxDesired.set(streamKey, {
+      topics: '',
+      connId: connectionId,
+      agg: {
+        interval: bucketConfig.interval,
+        function: bucketConfig.function || 'avg',
+        value_cols: bucketConfig.value_cols,
+        timestamp_col: bucketConfig.timestamp_col,
+        series_col: bucketConfig.series_col || '',
+      },
+    });
+    this._queueMuxDelta(streamKey, 'add');
     this._ensureMuxPipe();
   }
 
@@ -396,20 +498,26 @@ class StreamConnectionManager {
       this.mux.lastActivity = Date.now();
       try {
         const frame = JSON.parse(event.data);
-        const connectionId = frame.key;
+        const streamKey = frame.key;
         const record = frame.record;
-        if (!connectionId || !record) return;
+        if (!streamKey || !record) return;
 
-        const buffer = this.buffers.get(connectionId) || [];
-        buffer.push(record);
-        const maxBufferSize = getStreamBufferSize();
-        if (buffer.length > maxBufferSize) buffer.shift();
-        this.buffers.set(connectionId, buffer);
+        // Aggregated streams (synthetic 'agg|…' key) carry computed bucket
+        // records — no client buffer, no topic filtering. Raw streams keep
+        // the per-connection ring buffer for late-subscriber replay.
+        const isAgg = typeof streamKey === 'string' && streamKey.startsWith('agg|');
+        if (!isAgg) {
+          const buffer = this.buffers.get(streamKey) || [];
+          buffer.push(record);
+          const maxBufferSize = getStreamBufferSize();
+          if (buffer.length > maxBufferSize) buffer.shift();
+          this.buffers.set(streamKey, buffer);
+        }
 
-        const subscribers = this.subscribers.get(connectionId);
+        const subscribers = this.subscribers.get(streamKey);
         if (subscribers) {
           subscribers.forEach(sub => {
-            if (this._matchesTopic(record, sub)) {
+            if (isAgg || this._matchesTopic(record, sub)) {
               sub.callback(record);
             }
           });
@@ -548,17 +656,22 @@ class StreamConnectionManager {
 
     const add = [];
     const remove = [];
-    for (const [connectionId, action] of this.muxPending) {
+    for (const [streamKey, action] of this.muxPending) {
       if (action === 'remove') {
-        remove.push(connectionId);
+        remove.push(streamKey);
       } else {
-        const desired = this.muxDesired.get(connectionId);
+        const desired = this.muxDesired.get(streamKey);
         if (!desired) continue; // dropped before flush
-        add.push({
-          key: connectionId,
-          connection_id: connectionId,
+        // connId falls back to the streamKey for raw subs (where the key
+        // IS the connectionId); aggregated subs carry a distinct synthetic
+        // key plus the real connId and an `agg` config.
+        const entry = {
+          key: streamKey,
+          connection_id: desired.connId || streamKey,
           topics: desired.topics || '',
-        });
+        };
+        if (desired.agg) entry.agg = desired.agg;
+        add.push(entry);
       }
     }
     this.muxPending.clear();

@@ -19,10 +19,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   tab's live streams now share a **single multiplexed SSE connection**
   (`GET /api/streams/multiplex`, with subscriptions mutated over a
   companion `POST /streams/multiplex/:sid/subs`), so the number of held
-  connections no longer scales with the number of streaming panels. The
-  per-connection `GET /api/connections/:id/stream` endpoint is retained
-  as a fallback. (Issue #187, stage 1 — raw streams; aggregated-chart
-  streams fold in as stage 2.)
+  connections no longer scales with the number of streaming panels.
+  **Both raw and time-bucketed (aggregated) chart streams** ride the one
+  pipe; aggregated charts with matching bucket settings additionally
+  share a single server-side aggregator over that shared transport. The
+  per-connection `GET /api/connections/:id/stream` and
+  `POST /api/connections/:id/stream/aggregated` endpoints are retained
+  as fallbacks. (Issue #187 — stage 1 raw + stage 2 aggregated.)
 
 ### Changed
 

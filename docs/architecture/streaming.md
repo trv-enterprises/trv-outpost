@@ -329,11 +329,17 @@ Both handlers share the same underlying `StreamManager` subscribe /
 ring-buffer machinery — the multiplex handler just tags each frame with
 its connection key and merges many channels onto one response.
 
-> **Aggregated streams are not multiplexed yet.** The aggregated path
-> (`POST /api/connections/:id/stream/aggregated`, see
-> [Aggregators](#aggregators)) is still a dedicated stream per
-> aggregated chart. Folding it into the multiplex pipe is stage 2 of
-> issue #187; see [`stream-multiplex-plan.md`](../design-notes/stream-multiplex-plan.md).
+**Aggregated subscriptions ride the same pipe.** An `add` delta may
+carry an `agg` config (`{interval, function, value_cols, timestamp_col,
+series_col}`); when present, the subscription is served from the
+`AggregatorRegistry` (see [Aggregators](#aggregators)) instead of the
+raw stream, and its bucket-records are tagged and merged onto the pipe
+just like raw records. Two charts with matching bucket params share one
+server aggregator **and** one pipe subscription — the SSE-layer
+aggregation sharing described in
+[`aggregation-sharing.md`](../design-notes/aggregation-sharing.md). The
+standalone `POST /api/connections/:id/stream/aggregated` endpoint is
+retained as a fallback alongside the single-stream raw endpoint.
 
 ## Client-side connection manager
 
@@ -387,9 +393,11 @@ Key behaviors:
   every subscribed connection. Subscribers see `onDisconnect` /
   `onReconnecting` during the gap.
 
-> The **aggregated** stream path (`useData` charts with a `timeBucket`)
-> still opens its own `POST …/stream/aggregated` fetch-stream and is
-> **not** on the multiplex pipe yet — stage 2 of issue #187.
+> **Aggregated** charts (`useData` with a `timeBucket`) now go through
+> `manager.subscribeAggregated(...)`, which registers a synthetic
+> `agg|…` stream key on the same pipe. Identical bucket configs across
+> charts collapse to one key → one shared aggregator + one pipe
+> subscription. No per-chart fetch-stream.
 
 ## Related docs
 
