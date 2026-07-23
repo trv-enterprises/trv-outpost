@@ -117,6 +117,15 @@ func buildComponentDataQuery(component *models.Component, req *models.ComponentD
 	if req.Range != nil {
 		params[connection.RangeParam] = req.Range
 	}
+	// Pivot charts (data_mapping.series set) pass their series column as
+	// group_by so ts-store partitions step/agg_window downsampling PER
+	// SERIES (v0.18.0). Derived server-side from the stored component — the
+	// client never supplies it. The ts-store adapter forwards it only when a
+	// step is present (group_by needs an aggregation window); other adapters
+	// ignore it. Without this, a stepped pivot chart collapses to one line.
+	if component.DataMapping != nil && component.DataMapping.Series != "" {
+		params[connection.GroupByParam] = component.DataMapping.Series
+	}
 
 	return models.Query{
 		Raw:    component.QueryConfig.Raw,

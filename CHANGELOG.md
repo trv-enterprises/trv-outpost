@@ -8,6 +8,22 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pivoted ts-store charts keep all their series under a time-range
+  step.** A line chart pivoted by a series column (e.g. one line per
+  `container`) collapsed to a **single line** whenever the dashboard
+  range carried a downsampling **step** — ts-store's `step`/`agg_window`
+  averaged across every series into one value per time bucket. ts-store
+  v0.18.0 adds a `group_by` parameter that partitions the downsampling
+  per series; the connector now forwards the pivot's series column as
+  `group_by` (derived server-side from `data_mapping.series`) on both
+  the range and raw-DSL query paths, so each series downsamples
+  independently. Also fixes a latent connector bug where the raw-DSL
+  paths (`newest`/`since:`/`range:`) dropped a caller-supplied `step`.
+  Requires ts-store **v0.18.0+**. (A >1000-distinct-series request is
+  surfaced as a real error from ts-store, not a silent empty result.)
+
 ### Added
 
 - **Legend width control for left/right legends** (line / area / bar).

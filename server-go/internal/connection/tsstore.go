@@ -174,6 +174,15 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 
 	filter := resolveFilterParam(query.Params)
 	filterIgnoreCase, _ := query.Params["filter_ignore_case"].(bool)
+	// group_by (pivot series column, v0.18.0) partitions step downsampling per
+	// series. Forwarded on BOTH the structured-range and raw-DSL paths;
+	// setGroupByParam only emits it when a step is actually present.
+	groupBy := resolveGroupByParam(query.Params)
+	// Raw-DSL step: the raw:"newest"/"since:"/"range:" paths previously
+	// hardcoded step to "" (dropping any step/agg_window the caller passed as
+	// flat params). Read it here so a raw stepped+grouped query works too. The
+	// structured range path uses tr.Step instead.
+	rawStep := resolveStepParam(query.Params)
 
 	var objects []dataResponse
 	var err error
@@ -192,9 +201,9 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 			// the real point count well under it, so this is a cap, not a target.
 			limit = tsstoreRangeRowCap
 			if tr.Relative {
-				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step)
+				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step, groupBy)
 			} else {
-				objects, err = a.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step)
+				objects, err = a.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step, groupBy)
 			}
 			if err != nil {
 				return nil, err
@@ -213,7 +222,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
+		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
 	case queryType == "oldest":
 		if !hasExplicitLimit {
 			limit = 10
@@ -224,14 +233,14 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 			limit = 100000
 		}
 		since := queryType[6:]
-		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, "")
+		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, rawStep, groupBy)
 	case len(queryType) > 6 && queryType[:6] == "range:":
 		if !hasExplicitLimit {
 			limit = 100000
 		}
 		var startTime, endTime int64
 		if _, parseErr := fmt.Sscanf(queryType, "range:%d:%d", &startTime, &endTime); parseErr == nil {
-			objects, err = a.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase, "")
+			objects, err = a.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase, rawStep, groupBy)
 		} else {
 			return nil, fmt.Errorf("invalid range format")
 		}
@@ -239,7 +248,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
+		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
 	}
 
 	if err != nil {
@@ -499,9 +508,27 @@ func setStepParam(params url.Values, step string) {
 	params.Set("step", step)
 }
 
+// setGroupByParam applies a per-series group_by (ts-store v0.18.0) to a data
+// request. group_by partitions step/agg_window downsampling so each series
+// (identified by the named field, e.g. `container`) downsamples independently
+// instead of being blended into one value per time bucket. It ONLY has an
+// effect alongside an aggregation window, so it is applied only when the
+// request already carries a step or agg_window — sending it on a raw
+// (unaggregated) pull would be a no-op at best. Empty group field → no-op.
+func setGroupByParam(params url.Values, groupBy string) {
+	if strings.TrimSpace(groupBy) == "" {
+		return
+	}
+	if params.Get("step") == "" && params.Get("agg_window") == "" {
+		// group_by only modifies aggregation; without a window it does nothing.
+		return
+	}
+	params.Set("group_by", groupBy)
+}
+
 // fetchNewest retrieves newest objects. step (optional) downsamples server-side
 // — see setStepParam.
-func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
+func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string, groupBy string) ([]dataResponse, error) {
 	params := url.Values{}
 	params.Set("limit", strconv.Itoa(limit))
 	if since != "" {
@@ -517,6 +544,7 @@ func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since strin
 		params.Set("format", "compact")
 	}
 	setStepParam(params, step)
+	setGroupByParam(params, groupBy)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/newest?%s", a.config.StoreName, params.Encode())
 	return a.fetchList(ctx, endpoint)
@@ -547,13 +575,14 @@ func (a *TSStoreAdapter) fetchOldest(ctx context.Context, limit int, filter stri
 // point, per "one user convention, backend converts as needed". (Sending
 // seconds verbatim silently returned zero rows.)
 // step (optional) downsamples server-side — see setStepParam.
-func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
+func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool, step string, groupBy string) ([]dataResponse, error) {
 	params := url.Values{}
 	params.Set("start_time", strconv.FormatInt(toEpochNanos(startTime), 10))
 	params.Set("end_time", strconv.FormatInt(toEpochNanos(endTime), 10))
 	params.Set("limit", strconv.Itoa(limit))
 	params.Set("include_data", "true")
 	setStepParam(params, step)
+	setGroupByParam(params, groupBy)
 	if filter != "" {
 		params.Set("filter", filter)
 		if filterIgnoreCase {
@@ -709,6 +738,10 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 	// Get filter params
 	filter := resolveFilterParam(query.Params)
 	filterIgnoreCase, _ := query.Params["filter_ignore_case"].(bool)
+	// group_by (pivot series column, v0.18.0) + raw-DSL step — see the
+	// TSStoreAdapter.Query notes; same forwarding on both paths.
+	groupBy := resolveGroupByParam(query.Params)
+	rawStep := resolveStepParam(query.Params)
 
 	var objects []dataResponse
 	var err error
@@ -724,9 +757,9 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 			// window to the most-recent N. See the TSStoreAdapter.Query note.
 			limit = tsstoreRangeRowCap
 			if tr.Relative {
-				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step)
+				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step, groupBy)
 			} else {
-				objects, err = t.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step)
+				objects, err = t.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step, groupBy)
 			}
 			if err != nil {
 				return nil, err
@@ -745,7 +778,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
+		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
 	case queryType == "oldest":
 		if !hasExplicitLimit {
 			limit = 10
@@ -757,7 +790,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 			limit = 100000 // High default for time-range queries
 		}
 		since := queryType[6:]
-		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, "")
+		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, rawStep, groupBy)
 	case len(queryType) > 6 && queryType[:6] == "range:":
 		// Absolute time range: "range:START:END"
 		if !hasExplicitLimit {
@@ -765,7 +798,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		}
 		var startTime, endTime int64
 		if _, parseErr := fmt.Sscanf(queryType, "range:%d:%d", &startTime, &endTime); parseErr == nil {
-			objects, err = t.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase, "")
+			objects, err = t.fetchRange(ctx, startTime, endTime, limit, filter, filterIgnoreCase, rawStep, groupBy)
 		} else {
 			return nil, fmt.Errorf("invalid range format, expected 'range:START_TIME:END_TIME'")
 		}
@@ -774,7 +807,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, "")
+		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
 	}
 
 	if err != nil {
@@ -787,7 +820,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 
 // fetchNewest retrieves the N newest objects. step (optional) downsamples
 // server-side — see setStepParam.
-func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
+func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string, groupBy string) ([]dataResponse, error) {
 	params := url.Values{}
 	params.Set("limit", strconv.Itoa(limit))
 	if since != "" {
@@ -804,6 +837,7 @@ func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since st
 		params.Set("format", "compact")
 	}
 	setStepParam(params, step)
+	setGroupByParam(params, groupBy)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/newest?%s", t.config.StoreName, params.Encode())
 	return t.fetchList(ctx, endpoint)
@@ -829,7 +863,7 @@ func (t *TSStoreDataSource) fetchOldest(ctx context.Context, limit int, filter s
 
 // fetchRange retrieves objects within a time range. step (optional) downsamples
 // server-side — see setStepParam.
-func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool, step string) ([]dataResponse, error) {
+func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime int64, limit int, filter string, filterIgnoreCase bool, step string, groupBy string) ([]dataResponse, error) {
 	params := url.Values{}
 	// start/end arrive as epoch seconds; /data/range wants nanoseconds.
 	// See the TSStoreAdapter.fetchRange note above.
@@ -847,6 +881,7 @@ func (t *TSStoreDataSource) fetchRange(ctx context.Context, startTime, endTime i
 		params.Set("format", "compact")
 	}
 	setStepParam(params, step)
+	setGroupByParam(params, groupBy)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/range?%s", t.config.StoreName, params.Encode())
 	return t.fetchList(ctx, endpoint)
