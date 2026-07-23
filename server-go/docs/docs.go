@@ -6181,7 +6181,7 @@ const docTemplate = `{
         },
         "/streams/multiplex/{sid}/subs": {
             "post": {
-                "description": "Add or remove raw-stream subscriptions on an open multiplex SSE session (opened via GET /streams/multiplex). Each added subscription is namespace-grant checked (issue #4). New subscriptions replay their buffered records as tagged frames and emit a ` + "`" + `subscribed` + "`" + ` frame. This is a one-shot request; it holds no connection-pool slot.",
+                "description": "Add or remove subscriptions on an open multiplex SSE session (opened via GET /streams/multiplex). Each add is a raw connection stream, or an aggregated (time-bucketed) stream when ` + "`" + `agg` + "`" + ` is set. Each added subscription is namespace-grant checked (issue #4). Raw subscriptions replay their buffered records as tagged frames; every add emits a ` + "`" + `subscribed` + "`" + ` frame. This is a one-shot request; it holds no connection-pool slot.",
                 "consumes": [
                     "application/json"
                 ],
@@ -7399,6 +7399,9 @@ const docTemplate = `{
         "handlers.MultiplexAddSub": {
             "type": "object",
             "properties": {
+                "agg": {
+                    "$ref": "#/definitions/handlers.MultiplexAggConfig"
+                },
                 "connection_id": {
                     "type": "string"
                 },
@@ -7407,6 +7410,29 @@ const docTemplate = `{
                 },
                 "topics": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.MultiplexAggConfig": {
+            "type": "object",
+            "properties": {
+                "function": {
+                    "type": "string"
+                },
+                "interval": {
+                    "type": "integer"
+                },
+                "series_col": {
+                    "type": "string"
+                },
+                "timestamp_col": {
+                    "type": "string"
+                },
+                "value_cols": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

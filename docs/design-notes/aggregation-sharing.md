@@ -115,11 +115,20 @@ Two aggregators on the same connection are independent computations.
 
 ## Open follow-ups
 
-### Priority — share at the SSE-stream layer
+### Priority — share at the SSE-stream layer — DONE (issue #187 stage 2)
 
-Today, two charts with matching `BucketConfig` share the aggregator but
-each opens its own SSE stream. For a dashboard with N identically-
-configured aggregate charts, this means N JSON-serializations and N
+**Resolved.** Aggregated charts now subscribe through the browser
+`StreamConnectionManager`'s multiplex pipe
+(`subscribeAggregated` → synthetic `agg|…` stream key →
+`POST /api/streams/multiplex/:sid/subs` with an `agg` config). Charts
+with matching bucket params collapse to one stream key, so they share
+**one** server aggregator **and** one outbound transport (the multiplex
+pipe), not one SSE stream each. The rest of this section is retained as
+the historical description of the pre-multiplex state.
+
+Previously, two charts with matching `BucketConfig` shared the aggregator but
+each opened its own SSE stream. For a dashboard with N identically-
+configured aggregate charts, this meant N JSON-serializations and N
 local HTTP streams for each bucket-record.
 
 The right shape would mirror the browser-side `StreamConnectionManager`

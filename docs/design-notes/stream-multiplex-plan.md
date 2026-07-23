@@ -1,6 +1,6 @@
 # Issue #187 — Multiplex chart streams over one SSE connection
 
-**Status:** Stage 1 implemented (PR [#188](https://github.com/trv-enterprises/trv-outpost/pull/188)) — raw streams multiplexed. Stage 2 (aggregated fold-in) not started.
+**Status:** Stage 1 (raw streams, PR [#188](https://github.com/trv-enterprises/trv-outpost/pull/188)) + Stage 2 (aggregated fold-in) both implemented. The whole class is closed: every browser streaming subscription — raw and aggregated — rides the one multiplex pipe.
 **Issue:** [#187](https://github.com/trv-enterprises/trv-outpost/issues/187) — HTTP/1.1 connection-pool starvation
 **Related:** [`aggregation-sharing.md`](./aggregation-sharing.md), memory `sse-http1-pool-starvation`
 

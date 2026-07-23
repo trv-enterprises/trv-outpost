@@ -64,13 +64,17 @@ type muxFrame struct {
 	data  string
 }
 
-// muxSubscription is one active raw-stream subscription within a session.
+// muxSubscription is one active subscription within a session — either a
+// raw connection stream or an aggregated (time-bucketed) stream. For
+// aggregated subs, aggConfigKey is set and unsubscribe goes through the
+// AggregatorRegistry instead of the raw manager.
 type muxSubscription struct {
-	key    string
-	connID string
-	topics []string
-	ch     chan models.Record
-	cancel context.CancelFunc
+	key          string
+	connID       string
+	topics       []string
+	ch           chan models.Record
+	cancel       context.CancelFunc
+	aggConfigKey string // non-empty when this is an aggregated subscription
 }
 
 // muxSession holds the per-tab state: the fan-in channel every
@@ -183,19 +187,34 @@ type MultiplexSubsRequest struct {
 	Remove []string          `json:"remove"`
 }
 
-// MultiplexAddSub describes one raw-stream subscription to open. Key is
-// the client-chosen streamKey the tagged frames will carry back (the
-// client keys its fan-out on it); ConnectionID + Topics identify the
-// upstream. Topics is a comma-separated MQTT filter list (optional).
+// MultiplexAddSub describes one subscription to open. Key is the
+// client-chosen streamKey the tagged frames will carry back (the client
+// keys its fan-out on it); ConnectionID identifies the upstream. Topics
+// is a comma-separated MQTT filter list (raw subs only, optional). When
+// Agg is set, this is an aggregated (time-bucketed) subscription and
+// Topics is ignored.
 type MultiplexAddSub struct {
-	Key          string `json:"key"`
-	ConnectionID string `json:"connection_id"`
-	Topics       string `json:"topics"`
+	Key          string              `json:"key"`
+	ConnectionID string              `json:"connection_id"`
+	Topics       string              `json:"topics"`
+	Agg          *MultiplexAggConfig `json:"agg,omitempty"`
+}
+
+// MultiplexAggConfig is the time-bucket aggregation config for an
+// aggregated multiplex subscription. Mirrors StreamAggregatedRequest —
+// two charts with matching params share one server-side aggregator (and,
+// now, ride the same multiplex pipe instead of a dedicated stream each).
+type MultiplexAggConfig struct {
+	Interval     int      `json:"interval"`
+	Function     string   `json:"function"`
+	ValueCols    []string `json:"value_cols"`
+	TimestampCol string   `json:"timestamp_col"`
+	SeriesCol    string   `json:"series_col"`
 }
 
 // UpdateMultiplexSubscriptions mutates a session's subscription set.
 // @Summary Update multiplex subscriptions
-// @Description Add or remove raw-stream subscriptions on an open multiplex SSE session (opened via GET /streams/multiplex). Each added subscription is namespace-grant checked (issue #4). New subscriptions replay their buffered records as tagged frames and emit a `subscribed` frame. This is a one-shot request; it holds no connection-pool slot.
+// @Description Add or remove subscriptions on an open multiplex SSE session (opened via GET /streams/multiplex). Each add is a raw connection stream, or an aggregated (time-bucketed) stream when `agg` is set. Each added subscription is namespace-grant checked (issue #4). Raw subscriptions replay their buffered records as tagged frames; every add emits a `subscribed` frame. This is a one-shot request; it holds no connection-pool slot.
 // @Tags streams
 // @Accept json
 // @Produce json
@@ -265,8 +284,6 @@ func (h *MultiplexHandler) addSub(reqCtx context.Context, sess *muxSession, add 
 	}
 	sess.mu.Unlock()
 
-	topics := streaming.ParseTopicFilters(add.Topics)
-
 	// Verify the connection actually streams before subscribing, so a
 	// misconfigured connection fails the POST rather than silently
 	// producing a dead subscription. Uses the request context (not the
@@ -278,6 +295,17 @@ func (h *MultiplexHandler) addSub(reqCtx context.Context, sess *muxSession, add 
 	if !isStreaming {
 		return fmt.Errorf("connection does not support streaming (must be socket or tsstore type)")
 	}
+
+	if add.Agg != nil {
+		return h.addAggSub(sess, add)
+	}
+	return h.addRawSub(sess, add)
+}
+
+// addRawSub opens a raw connection stream subscription and pumps its
+// records into the session as tagged frames.
+func (h *MultiplexHandler) addRawSub(sess *muxSession, add MultiplexAddSub) error {
+	topics := streaming.ParseTopicFilters(add.Topics)
 
 	var recordCh chan models.Record
 	var subErr error
@@ -325,7 +353,69 @@ func (h *MultiplexHandler) addSub(reqCtx context.Context, sess *muxSession, add 
 	// Pump goroutine: fan this subscription's records into the shared
 	// frame channel until the sub is cancelled or its upstream closes.
 	go h.pump(pumpCtx, sess, sub)
-	log.Printf("[Multiplex] sub added sid=%s key=%s conn=%s topics=%v", sess.id, add.Key, add.ConnectionID, topics)
+	log.Printf("[Multiplex] raw sub added sid=%s key=%s conn=%s topics=%v", sess.id, add.Key, add.ConnectionID, topics)
+	return nil
+}
+
+// addAggSub opens a time-bucketed aggregated subscription via the
+// AggregatorRegistry and pumps its bucket-records into the session as
+// tagged `record` frames. Two subs with matching bucket params share one
+// server-side aggregator; folding them onto the multiplex pipe also
+// means they share one transport (the SSE-layer sharing follow-up in
+// aggregation-sharing.md). Mirrors StreamAggregatedConnection.
+func (h *MultiplexHandler) addAggSub(sess *muxSession, add MultiplexAddSub) error {
+	agg := add.Agg
+	validFunctions := map[string]bool{"avg": true, "min": true, "max": true, "sum": true, "count": true}
+	if !validFunctions[agg.Function] {
+		return fmt.Errorf("invalid function, must be: avg, min, max, sum, or count")
+	}
+
+	// Ensure the raw stream is active (subscribe to start it if needed),
+	// then release the raw channel — the aggregator feeds off the same
+	// upstream. Same pattern as StreamAggregatedConnection.
+	rawCh, subErr := h.manager.SubscribeAndGetChannel(sess.ctx, add.ConnectionID)
+	if subErr != nil || rawCh == nil {
+		if subErr == nil {
+			subErr = fmt.Errorf("subscribe returned no channel")
+		}
+		return subErr
+	}
+	h.manager.Unsubscribe(add.ConnectionID, rawCh)
+
+	bucketConfig := streaming.BucketConfig{
+		ConnectionID: add.ConnectionID,
+		Interval:     agg.Interval,
+		Function:     agg.Function,
+		ValueCols:    agg.ValueCols,
+		TimestampCol: agg.TimestampCol,
+		SeriesCol:    agg.SeriesCol,
+	}
+	registry := streaming.GetRegistry()
+	aggCh, configKey := registry.Subscribe(bucketConfig)
+
+	pumpCtx, cancel := context.WithCancel(sess.ctx)
+	sub := &muxSubscription{
+		key:          add.Key,
+		connID:       add.ConnectionID,
+		ch:           aggCh,
+		cancel:       cancel,
+		aggConfigKey: configKey,
+	}
+
+	sess.mu.Lock()
+	if sess.done {
+		sess.mu.Unlock()
+		cancel()
+		registry.Unsubscribe(configKey, aggCh)
+		return fmt.Errorf("session closed")
+	}
+	sess.subs[add.Key] = sub
+	sess.mu.Unlock()
+
+	sess.emit(muxFrame{event: "subscribed", data: fmt.Sprintf("{\"key\":%q}", add.Key)})
+
+	go h.pump(pumpCtx, sess, sub)
+	log.Printf("[Multiplex] agg sub added sid=%s key=%s conn=%s config=%s", sess.id, add.Key, add.ConnectionID, configKey[:8])
 	return nil
 }
 
@@ -361,8 +451,18 @@ func (h *MultiplexHandler) removeSub(sess *muxSession, key string) {
 		return
 	}
 	sub.cancel()
-	h.manager.Unsubscribe(sub.connID, sub.ch)
+	h.unsubUpstream(sub)
 	log.Printf("[Multiplex] sub removed sid=%s key=%s conn=%s", sess.id, key, sub.connID)
+}
+
+// unsubUpstream releases a subscription's upstream channel — the
+// aggregator registry for aggregated subs, the raw manager otherwise.
+func (h *MultiplexHandler) unsubUpstream(sub *muxSubscription) {
+	if sub.aggConfigKey != "" {
+		streaming.GetRegistry().Unsubscribe(sub.aggConfigKey, sub.ch)
+		return
+	}
+	h.manager.Unsubscribe(sub.connID, sub.ch)
 }
 
 // teardownSession removes the session and unsubscribes all of its
@@ -387,7 +487,7 @@ func (h *MultiplexHandler) teardownSession(sid string) {
 
 	for _, s := range subs {
 		s.cancel()
-		h.manager.Unsubscribe(s.connID, s.ch)
+		h.unsubUpstream(s)
 	}
 }
 
