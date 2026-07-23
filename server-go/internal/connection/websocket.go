@@ -475,9 +475,14 @@ func (a *WebSocketAdapter) applyParserConfig(record registry.Record) registry.Re
 // WebSocketBidirAdapter - Bidirectional WebSocket with Write support
 // ============================================================================
 
-// WebSocketBidirAdapter extends WebSocketAdapter with Write capability
+// WebSocketBidirAdapter extends WebSocketAdapter with Write capability.
+// The base is embedded by POINTER (not value) so the base's sync.RWMutex
+// is never copied — copying a lock is a `go vet` error and would give the
+// bidir adapter a distinct mutex from the state it guards. All base
+// methods use pointer receivers, so pointer embedding preserves the same
+// method set and behavior.
 type WebSocketBidirAdapter struct {
-	WebSocketAdapter // Embeds base - inherits Query, Stream, Connect
+	*WebSocketAdapter // Embeds base - inherits Query, Stream, Connect
 }
 
 // newWebSocketBidirAdapterFromConfig creates a bidirectional WebSocket adapter
@@ -486,7 +491,7 @@ func newWebSocketBidirAdapterFromConfig(config map[string]interface{}) (*WebSock
 	if err != nil {
 		return nil, err
 	}
-	return &WebSocketBidirAdapter{WebSocketAdapter: *base}, nil
+	return &WebSocketBidirAdapter{WebSocketAdapter: base}, nil
 }
 
 // TypeID returns the adapter type identifier
