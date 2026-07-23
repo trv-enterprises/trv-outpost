@@ -5,9 +5,30 @@
 /**
  * Stream Connection Manager
  *
- * Provides a singleton manager for SSE/EventSource connections to socket connections.
- * Multiple components share a SINGLE connection per connection — topics from all
- * subscribers are combined into one SSE URL, and records are filtered client-side.
+ * Provides a singleton manager for streaming socket connections. Every
+ * subscriber shares a SINGLE multiplexed SSE pipe to the server
+ * (`/api/streams/multiplex`) — one EventSource for the whole tab, no
+ * matter how many connections are streamed. This defeats the browser's
+ * 6-per-origin HTTP/1.1 connection cap (issue #187): before this, each
+ * connectionId opened its own EventSource, so a dashboard spanning >5
+ * streaming connections exhausted the pool and every remaining request
+ * (tile queries, backfills) queued forever.
+ *
+ * Model:
+ *  - ONE EventSource → GET /api/streams/multiplex. Its first frame is
+ *    `event: session` carrying the `sid` used to mutate subscriptions.
+ *  - Per-connection subscriptions are added/removed over that pipe via
+ *    one-shot POST /api/streams/multiplex/:sid/subs (a fetch — pools
+ *    fine, holds no persistent slot). Deltas are debounced so a mount
+ *    wave produces one POST.
+ *  - Server tags every frame with the streamKey (here: the connectionId).
+ *    The manager routes each tagged `record` frame into the same
+ *    per-connection buffer + topic-filtered fan-out it always used, so
+ *    subscribers see no behavioral change.
+ *
+ * The per-connection state (subscribers, buffers, grace periods, combined
+ * topics) is unchanged; only the transport moved from N EventSources to
+ * one multiplexed pipe.
  *
  * Usage:
  * const manager = StreamConnectionManager.getInstance();
@@ -43,31 +64,52 @@ class StreamConnectionManager {
     this.reconnectDebounceTimeouts = new Map();
     this.reconnectDebounceMs = 150;
 
-    // The access token is baked into each SSE URL as ?st= at open
-    // time and can't be updated on a live EventSource. When apiClient
-    // rotates the token (proactive pre-expiry refresh, or the 401
-    // refresh path), reopen every active connection so it rides the
-    // fresh token instead of dying when the old one lapses server-side.
-    // A token → null transition (session ended) reconnects with an
-    // empty ?st=, which the server 401s — the dashboard surface
-    // re-bootstraps and remounts us, so we don't special-case it here.
+    // --- Shared multiplex pipe state (issue #187) ---------------------
+    // One EventSource for the whole tab. `mux.sid` is assigned from the
+    // server's first `session` frame and is required to POST subscription
+    // deltas. `mux.pendingSubs` accumulates add/remove deltas that are
+    // flushed (debounced) once the pipe has a sid.
+    this.mux = {
+      eventSource: null,
+      connected: false,
+      sid: null,
+      reconnecting: false,
+      reconnectAttempts: 0,
+      reconnectTimeout: null,
+      heartbeatTimer: null,
+      lastActivity: 0,
+    };
+    // connectionId -> { topics } — the intended subscription set on the
+    // pipe. This is the source of truth we re-send after a pipe reconnect
+    // (new sid) so every active connection is re-subscribed.
+    this.muxDesired = new Map();
+    // Debounce timer for flushing accumulated subscription deltas.
+    this.muxFlushTimeout = null;
+    // Pending deltas since the last flush: Map<connectionId, 'add'|'remove'>.
+    this.muxPending = new Map();
+
+    // The access token is baked into the pipe URL as ?st= at open time
+    // and can't be updated on a live EventSource. When apiClient rotates
+    // the token (proactive pre-expiry refresh, or the 401 refresh path),
+    // reopen the pipe so it rides the fresh token instead of dying when
+    // the old one lapses server-side. A token → null transition (session
+    // ended) reopens with an empty ?st=, which the server 401s — the
+    // dashboard surface re-bootstraps and remounts us, so we don't
+    // special-case it here.
     this._unsubscribeTokenChange = apiClient.onTokenChange(() => {
       this._reconnectAllForTokenChange();
     });
   }
 
   /**
-   * Reopen every active connection with its current topics so each
-   * picks up the freshly-rotated access token in its ?st= query.
-   * Reuses the topic-reconnect path (which rebuilds the EventSource
-   * via _createEventSource, reading apiClient.streamAuthQuery() anew).
+   * Reopen the shared pipe so it picks up the freshly-rotated access
+   * token in its ?st= query. The reopen gets a new sid and re-sends the
+   * full desired subscription set.
    */
   _reconnectAllForTokenChange() {
-    if (this.connections.size === 0) return;
-    console.log('[StreamConnectionManager] Access token rotated — reconnecting active streams');
-    for (const [connectionId, connection] of this.connections) {
-      this._reconnectWithTopics(connectionId, connection.topics);
-    }
+    if (!this.mux.eventSource && this.muxDesired.size === 0) return;
+    console.log('[StreamConnectionManager] Access token rotated — reconnecting multiplex pipe');
+    this._reopenMuxPipe();
   }
 
   static getInstance() {
@@ -199,19 +241,16 @@ class StreamConnectionManager {
   }
 
   /**
-   * Internal: Connect to a connection
+   * Internal: Register a logical connection and subscribe it on the
+   * shared multiplex pipe. The per-connection state object is retained
+   * (connected/topics/reconnect bookkeeping) but no longer owns its own
+   * EventSource — the transport is the single pipe.
    */
   _connect(connectionId, topics) {
     if (this.connections.has(connectionId)) return;
 
     this.connections.set(connectionId, {
-      eventSource: null,
       connected: false,
-      reconnecting: false,
-      reconnectTimeout: null,
-      reconnectAttempts: 0,
-      heartbeatTimer: null,
-      lastActivity: 0,
       connectionId,
       topics // Combined topics string or null
     });
@@ -220,14 +259,20 @@ class StreamConnectionManager {
       this.buffers.set(connectionId, []);
     }
 
-    this._createEventSource(connectionId);
+    // Record the desired subscription and queue an `add` delta on the
+    // shared pipe (opening the pipe lazily if this is the first stream).
+    this.muxDesired.set(connectionId, { topics });
+    this._queueMuxDelta(connectionId, 'add');
+    this._ensureMuxPipe();
   }
 
   /**
-   * Internal: Debounce a topic-change reconnect. Successive calls within
-   * reconnectDebounceMs reset the timer; only the last topic set wins.
-   * This is what lets a dashboard mounting N controls produce one
-   * reconnect instead of N.
+   * Internal: Debounce a topic-change re-subscribe. Successive calls
+   * within reconnectDebounceMs reset the timer; only the last topic set
+   * wins. This is what lets a dashboard mounting N controls produce one
+   * re-subscribe instead of N. A topic change is a re-subscribe of the
+   * one connectionId on the shared pipe (remove+add), NOT a reopen of
+   * the pipe — unrelated streams stay live.
    */
   _scheduleTopicReconnect(connectionId, reason) {
     const existing = this.reconnectDebounceTimeouts.get(connectionId);
@@ -238,112 +283,129 @@ class StreamConnectionManager {
       if (!connection) return;
       const targetTopics = this._getCombinedTopics(connectionId);
       if (targetTopics === connection.topics) return; // already converged
-      console.log(`[StreamConnectionManager] ${reason} for ${connectionId}, reconnecting`);
+      console.log(`[StreamConnectionManager] ${reason} for ${connectionId}, re-subscribing`);
       this._reconnectWithTopics(connectionId, targetTopics);
     }, this.reconnectDebounceMs);
     this.reconnectDebounceTimeouts.set(connectionId, timeout);
   }
 
   /**
-   * Internal: Reconnect with new topic set (topics added/removed)
+   * Internal: Re-subscribe one connection with a new topic set. On the
+   * shared pipe a topic change is remove+add of that streamKey (the
+   * server-side subscription must be reopened to change its broker-level
+   * topic filter). Other connections on the pipe are untouched.
    */
   _reconnectWithTopics(connectionId, newTopics) {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
-    // A concrete reconnect is happening — drop any still-pending debounce
-    // timer so it doesn't fire again immediately after.
     const pending = this.reconnectDebounceTimeouts.get(connectionId);
     if (pending) {
       clearTimeout(pending);
       this.reconnectDebounceTimeouts.delete(connectionId);
     }
 
-    // Close existing EventSource
-    this._stopHeartbeatWatchdog(connectionId);
-    if (connection.eventSource) {
-      connection.eventSource.close();
-      connection.eventSource = null;
-    }
-    if (connection.reconnectTimeout) {
-      clearTimeout(connection.reconnectTimeout);
-      connection.reconnectTimeout = null;
-    }
-
-    // Update topics and reconnect
-    connection.connected = false;
-    connection.reconnecting = false;
-    connection.reconnectAttempts = 0;
     connection.topics = newTopics;
-
-    this._createEventSource(connectionId);
+    this.muxDesired.set(connectionId, { topics: newTopics });
+    // Remove then re-add so the server drops the old broker filter and
+    // subscribes the new one. The flush sends both in one POST.
+    this._queueMuxDelta(connectionId, 'remove');
+    this._queueMuxDelta(connectionId, 'add');
   }
 
+  // --- Shared multiplex pipe --------------------------------------------
+
   /**
-   * Internal: Create EventSource connection
+   * Internal: Open the shared multiplex EventSource if it isn't already
+   * open. Idempotent. The pipe's `session` frame supplies the sid needed
+   * to POST subscription deltas; deltas queued before the sid arrives are
+   * flushed once it does.
    */
-  _createEventSource(connectionId) {
-    const connection = this.connections.get(connectionId);
-    if (!connection) return;
+  _ensureMuxPipe() {
+    if (this.mux.eventSource) return;
 
-    const { topics } = connection;
-
-    // Build URL. EventSource cannot set headers, so the access JWT
-    // rides ?st= instead. apiClient.streamAuthQuery() formats it.
-    // When the token is missing (pre-bootstrap), the SSE 401s with
-    // hint:"refresh"; the SSE consumer doesn't retry automatically
-    // here — the dashboard surface re-mounts on identity-resolved
-    // and SCM rebuilds.
+    // Build URL. EventSource cannot set headers, so the access JWT rides
+    // ?st= (apiClient.streamAuthQuery()). httpOriginForApi() returns the
+    // configured absolute base (Electron → any instance) or the page
+    // origin (browser/homelab same-origin) — same rationale as the old
+    // per-connection path.
     const auth = apiClient.streamAuthQuery();
-    const params = new URLSearchParams();
-    if (topics) params.set('topics', topics);
-    const queryString = [auth, params.toString()].filter(Boolean).join('&');
-    // Use the LIVE resolved http origin (the configured instance), not the
-    // frozen API_BASE constant: API_BASE is '' (same-origin) which an
-    // EventSource can't use under Electron's file:// renderer, and it ignores
-    // the user's configured serverUrl entirely. httpOriginForApi() returns the
-    // configured absolute base (Electron → any instance) or the page origin
-    // (browser/homelab same-origin). See client.js (#77).
-    let url = `${apiClient.httpOriginForApi()}/api/connections/${connectionId}/stream`;
-    if (queryString) url += `?${queryString}`;
+    let url = `${apiClient.httpOriginForApi()}/api/streams/multiplex`;
+    if (auth) url += `?${auth}`;
 
-    console.log(`[StreamConnectionManager] Connecting to ${connectionId}${topics ? ` (topics: ${topics})` : ''}`);
-
+    console.log('[StreamConnectionManager] Opening multiplex pipe');
     const eventSource = new EventSource(url);
-    connection.eventSource = eventSource;
+    this.mux.eventSource = eventSource;
+    this.mux.reconnecting = false;
 
-    eventSource.onopen = () => {
-      console.log(`[StreamConnectionManager] Connected to ${connectionId}`);
-      connection.connected = true;
-      connection.reconnecting = false;
-      connection.reconnectAttempts = 0;
-      connection.lastActivity = Date.now();
-
-      this._startHeartbeatWatchdog(connectionId);
-
-      const subscribers = this.subscribers.get(connectionId);
-      if (subscribers) {
-        subscribers.forEach(sub => sub.onConnect());
+    // The server's first frame carries the session id used for POSTs.
+    eventSource.addEventListener('session', (event) => {
+      try {
+        const { sid } = JSON.parse(event.data);
+        this.mux.sid = sid;
+        this.mux.connected = true;
+        this.mux.reconnectAttempts = 0;
+        this.mux.lastActivity = Date.now();
+        this._startMuxHeartbeatWatchdog();
+        console.log(`[StreamConnectionManager] Multiplex pipe connected (sid=${sid})`);
+        // Re-assert the full desired subscription set on the (possibly
+        // new) sid, then flush.
+        for (const cid of this.muxDesired.keys()) {
+          this._queueMuxDelta(cid, 'add');
+        }
+        this._flushMuxDeltas();
+        // Late-connect: fire onConnect for any already-registered
+        // connections and mark them connected.
+        for (const [cid, connection] of this.connections) {
+          if (!connection.connected) {
+            connection.connected = true;
+            const subs = this.subscribers.get(cid);
+            if (subs) subs.forEach(sub => sub.onConnect());
+          }
+        }
+      } catch (err) {
+        console.error('[StreamConnectionManager] Error parsing session frame:', err);
       }
-    };
-
-    eventSource.addEventListener('heartbeat', () => {
-      connection.lastActivity = Date.now();
     });
 
-    eventSource.addEventListener('record', (event) => {
-      connection.lastActivity = Date.now();
-      try {
-        const record = JSON.parse(event.data);
+    eventSource.addEventListener('heartbeat', () => {
+      this.mux.lastActivity = Date.now();
+    });
 
-        // Buffer the record (unfiltered — all topics)
+    // Per-key subscription acknowledgment — fire the connection's
+    // onConnect and mark it connected so buffer-replay on late subscribe
+    // works.
+    eventSource.addEventListener('subscribed', (event) => {
+      this.mux.lastActivity = Date.now();
+      try {
+        const { key } = JSON.parse(event.data);
+        const connection = this.connections.get(key);
+        if (connection && !connection.connected) {
+          connection.connected = true;
+          const subs = this.subscribers.get(key);
+          if (subs) subs.forEach(sub => sub.onConnect());
+        }
+      } catch (err) {
+        console.error('[StreamConnectionManager] Error parsing subscribed frame:', err);
+      }
+    });
+
+    // Tagged data frame: {key, record}. Route into the connectionId the
+    // key names, using the same buffer + topic-filtered fan-out as before.
+    eventSource.addEventListener('record', (event) => {
+      this.mux.lastActivity = Date.now();
+      try {
+        const frame = JSON.parse(event.data);
+        const connectionId = frame.key;
+        const record = frame.record;
+        if (!connectionId || !record) return;
+
         const buffer = this.buffers.get(connectionId) || [];
         buffer.push(record);
         const maxBufferSize = getStreamBufferSize();
         if (buffer.length > maxBufferSize) buffer.shift();
         this.buffers.set(connectionId, buffer);
 
-        // Distribute to matching subscribers only
         const subscribers = this.subscribers.get(connectionId);
         if (subscribers) {
           subscribers.forEach(sub => {
@@ -353,98 +415,178 @@ class StreamConnectionManager {
           });
         }
       } catch (err) {
-        console.error('[StreamConnectionManager] Error parsing record:', err);
+        console.error('[StreamConnectionManager] Error parsing record frame:', err);
       }
     });
 
     eventSource.onerror = () => {
-      this._stopHeartbeatWatchdog(connectionId);
-      eventSource.close();
-      connection.eventSource = null;
-      connection.connected = false;
+      this._handleMuxError();
+    };
+  }
 
+  /**
+   * Internal: Reopen the shared pipe from scratch (new sid), re-sending
+   * the full desired subscription set. Used on token rotation and as the
+   * reconnect path after a pipe error.
+   */
+  _reopenMuxPipe() {
+    this._stopMuxHeartbeatWatchdog();
+    if (this.mux.eventSource) {
+      this.mux.eventSource.close();
+      this.mux.eventSource = null;
+    }
+    if (this.mux.reconnectTimeout) {
+      clearTimeout(this.mux.reconnectTimeout);
+      this.mux.reconnectTimeout = null;
+    }
+    this.mux.connected = false;
+    this.mux.sid = null;
+    // Mark logical connections disconnected; they'll reconnect on the new
+    // session frame.
+    for (const connection of this.connections.values()) {
+      connection.connected = false;
+    }
+    if (this.muxDesired.size > 0) {
+      this._ensureMuxPipe();
+    }
+  }
+
+  /**
+   * Internal: Handle a pipe-level EventSource error with backoff, terminal-
+   * failure detection, and a token-refresh-on-first-error attempt. Mirrors
+   * the per-connection error handling the single-stream path used, but at
+   * the pipe level so one reconnect covers every subscribed connection.
+   */
+  _handleMuxError() {
+    this._stopMuxHeartbeatWatchdog();
+    if (this.mux.eventSource) {
+      this.mux.eventSource.close();
+      this.mux.eventSource = null;
+    }
+    this.mux.connected = false;
+    this.mux.sid = null;
+
+    // Nothing left to stream — stay closed.
+    if (this.muxDesired.size === 0) return;
+
+    // Surface the disconnect to every subscribed connection's subscribers.
+    for (const [connectionId, connection] of this.connections) {
+      connection.connected = false;
       const subscribers = this.subscribers.get(connectionId);
-      if (!subscribers || subscribers.size === 0) {
-        this._cleanup(connectionId);
+      if (subscribers && subscribers.size > 0) {
+        apiClient._reportConnectionFailure(connectionId);
+        subscribers.forEach(sub => sub.onDisconnect());
+      }
+    }
+
+    this.mux.reconnecting = true;
+    this.mux.reconnectAttempts++;
+
+    // On the FIRST error of an episode, the cause is often a stale/expired
+    // access token frozen into the pipe URL's ?st=. Proactively refresh:
+    // on success apiClient rotates the token → onTokenChange reopens the
+    // pipe with a fresh ?st= (and we cancel the redundant backoff). On
+    // failure (session ended) the backoff reopen still runs.
+    if (this.mux.reconnectAttempts === 1 && apiClient.accessToken && typeof apiClient._refreshSession === 'function') {
+      apiClient._refreshSession().then((ok) => {
+        if (ok && this.mux.reconnectTimeout) {
+          clearTimeout(this.mux.reconnectTimeout);
+          this.mux.reconnectTimeout = null;
+        }
+      }).catch(() => {});
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, this.mux.reconnectAttempts - 1), 30000);
+    if (this.mux.reconnectAttempts <= 1) {
+      console.debug(`[StreamConnectionManager] Reopening multiplex pipe in ${delay}ms`);
+    } else if (this.mux.reconnectAttempts % 5 === 0) {
+      console.warn(`[StreamConnectionManager] Reopening multiplex pipe (attempt ${this.mux.reconnectAttempts})`);
+    }
+
+    for (const [connectionId] of this.connections) {
+      const subscribers = this.subscribers.get(connectionId);
+      if (subscribers) subscribers.forEach(sub => sub.onReconnecting(this.mux.reconnectAttempts, delay));
+    }
+
+    this.mux.reconnectTimeout = setTimeout(() => {
+      if (this.muxDesired.size > 0) {
+        this._ensureMuxPipe();
+      }
+    }, delay);
+  }
+
+  /**
+   * Internal: Queue an add/remove subscription delta for the shared pipe,
+   * coalescing per connectionId (a later delta supersedes an earlier one
+   * for the same key), and schedule a debounced flush.
+   */
+  _queueMuxDelta(connectionId, action) {
+    this.muxPending.set(connectionId, action);
+    if (this.muxFlushTimeout) return;
+    this.muxFlushTimeout = setTimeout(() => {
+      this.muxFlushTimeout = null;
+      this._flushMuxDeltas();
+    }, this.reconnectDebounceMs);
+  }
+
+  /**
+   * Internal: POST the accumulated subscription deltas to the pipe. No-op
+   * until the pipe has a sid (deltas stay queued and are re-driven by the
+   * session frame). Failures are retried on the next flush / reconnect.
+   */
+  _flushMuxDeltas() {
+    if (this.muxFlushTimeout) {
+      clearTimeout(this.muxFlushTimeout);
+      this.muxFlushTimeout = null;
+    }
+    if (!this.mux.sid) {
+      // Pipe not ready yet — the session frame will re-drive the flush.
+      this._ensureMuxPipe();
+      return;
+    }
+    if (this.muxPending.size === 0) return;
+
+    const add = [];
+    const remove = [];
+    for (const [connectionId, action] of this.muxPending) {
+      if (action === 'remove') {
+        remove.push(connectionId);
+      } else {
+        const desired = this.muxDesired.get(connectionId);
+        if (!desired) continue; // dropped before flush
+        add.push({
+          key: connectionId,
+          connection_id: connectionId,
+          topics: desired.topics || '',
+        });
+      }
+    }
+    this.muxPending.clear();
+
+    const sid = this.mux.sid;
+    const url = `${apiClient.httpOriginForApi()}/api/streams/multiplex/${sid}/subs`;
+    const headers = { 'Content-Type': 'application/json', ...apiClient.streamAuthHeaders() };
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (userGuid) headers['X-User-ID'] = userGuid;
+
+    fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ add, remove }),
+    }).then((res) => {
+      if (res.status === 404) {
+        // Session expired server-side — reopen the pipe, which re-sends
+        // the full desired set on the new sid.
+        console.warn('[StreamConnectionManager] Multiplex session gone — reopening pipe');
+        this._reopenMuxPipe();
         return;
       }
-
-      // Surface the disconnect to the user. Same debounced helper
-      // the HTTP path uses, so a dashboard with multiple panels
-      // streaming from the same broken connection still produces
-      // exactly one toast per 30s window.
-      apiClient._reportConnectionFailure(connectionId);
-
-      subscribers.forEach(sub => sub.onDisconnect());
-
-      connection.reconnecting = true;
-      connection.reconnectAttempts++;
-
-      // On the FIRST error of an episode, find out WHY the stream failed.
-      // EventSource.onerror exposes no HTTP status/body, so probe the
-      // stream-status endpoint: if the server reports a TERMINAL failure
-      // (e.g. a rejected ts-store api-key), there's no point reconnecting —
-      // surface the actionable message to subscribers and stop. This kills
-      // the "many errors per second" loop a misconfigured connection caused.
-      if (connection.reconnectAttempts === 1 && typeof apiClient.getStreamStatus === 'function') {
-        apiClient.getStreamStatus(connectionId).then((status) => {
-          if (status && status.terminal && this.connections.has(connectionId)) {
-            const message = status.last_error || 'Stream connection failed';
-            console.warn(`[StreamConnectionManager] Terminal stream failure for ${connectionId}: ${message} — not reconnecting`);
-            // Cancel the pending backoff reconnect and stop the loop.
-            if (connection.reconnectTimeout) {
-              clearTimeout(connection.reconnectTimeout);
-              connection.reconnectTimeout = null;
-            }
-            connection.reconnecting = false;
-            const subs = this.subscribers.get(connectionId);
-            if (subs) subs.forEach(sub => sub.onError({ message, terminal: true }));
-            this._cleanup(connectionId);
-          }
-        }).catch(() => { /* status probe failed → fall through to normal backoff */ });
+      if (!res.ok) {
+        console.warn(`[StreamConnectionManager] Subscription update failed (${res.status})`);
       }
-
-      // On the FIRST error of an episode, the cause is often a stale/
-      // expired access token in the ?st= query (the token is frozen into
-      // the URL at open time and can't update on a live EventSource). A
-      // plain backoff-reconnect would just reopen with the SAME stale
-      // token and 401 again. So proactively refresh the access token
-      // first: on success apiClient rotates it, which fires the
-      // onTokenChange listener → _reconnectAllForTokenChange reopens this
-      // stream with a FRESH ?st= immediately (and we cancel the pending
-      // backoff to avoid a double-open). On failure (session truly ended)
-      // the backoff reconnect still runs as before. Coalesced in
-      // apiClient, so concurrent panels share one refresh. Gated to the
-      // first attempt so we don't refresh on every backoff tick.
-      if (connection.reconnectAttempts === 1 && apiClient.accessToken && typeof apiClient._refreshSession === 'function') {
-        apiClient._refreshSession().then((ok) => {
-          if (ok && this.connections.has(connectionId)) {
-            // Token rotated → the rotation listener handles the reopen.
-            // Cancel the redundant backoff timer queued below.
-            if (connection.reconnectTimeout) {
-              clearTimeout(connection.reconnectTimeout);
-              connection.reconnectTimeout = null;
-            }
-          }
-        }).catch(() => {});
-      }
-
-      const delay = Math.min(1000 * Math.pow(2, connection.reconnectAttempts - 1), 30000);
-
-      if (connection.reconnectAttempts <= 1) {
-        console.debug(`[StreamConnectionManager] Reconnecting to ${connectionId} in ${delay}ms`);
-      } else if (connection.reconnectAttempts % 5 === 0) {
-        console.warn(`[StreamConnectionManager] Reconnecting to ${connectionId} (attempt ${connection.reconnectAttempts})`);
-      }
-
-      subscribers.forEach(sub => sub.onReconnecting(connection.reconnectAttempts, delay));
-
-      connection.reconnectTimeout = setTimeout(() => {
-        if (this.connections.has(connectionId)) {
-          this._createEventSource(connectionId);
-        }
-      }, delay);
-    };
+    }).catch((err) => {
+      console.warn('[StreamConnectionManager] Subscription update error:', err?.message || err);
+    });
   }
 
   /**
@@ -509,64 +651,73 @@ class StreamConnectionManager {
       this.reconnectDebounceTimeouts.delete(connectionId);
     }
 
-    const connection = this.connections.get(connectionId);
-    if (connection) {
-      this._stopHeartbeatWatchdog(connectionId);
-      if (connection.eventSource) connection.eventSource.close();
-      if (connection.reconnectTimeout) clearTimeout(connection.reconnectTimeout);
-    }
+    // Drop the connection's subscription from the shared pipe.
+    this.muxDesired.delete(connectionId);
+    this._queueMuxDelta(connectionId, 'remove');
 
     this.connections.delete(connectionId);
     this.subscribers.delete(connectionId);
     this.buffers.delete(connectionId);
+
+    // Last stream gone — close the shared pipe entirely so we don't hold
+    // an idle SSE connection (and its pool slot) open.
+    if (this.muxDesired.size === 0) {
+      this._closeMuxPipe();
+    }
   }
 
   /**
-   * Internal: Start heartbeat watchdog
+   * Internal: Start the shared-pipe heartbeat watchdog. If no record or
+   * heartbeat arrives for 60s the pipe is presumed dead and reopened
+   * (one reopen covers every subscribed connection).
    */
-  _startHeartbeatWatchdog(connectionId) {
-    this._stopHeartbeatWatchdog(connectionId);
-    const connection = this.connections.get(connectionId);
-    if (!connection) return;
-
-    connection.heartbeatTimer = setInterval(() => {
-      const conn = this.connections.get(connectionId);
-      if (!conn || !conn.connected) return;
-
-      const elapsed = Date.now() - conn.lastActivity;
+  _startMuxHeartbeatWatchdog() {
+    this._stopMuxHeartbeatWatchdog();
+    this.mux.heartbeatTimer = setInterval(() => {
+      if (!this.mux.connected) return;
+      const elapsed = Date.now() - this.mux.lastActivity;
       if (elapsed > 60000) {
-        console.warn(`[StreamConnectionManager] No activity on ${connectionId} for ${Math.round(elapsed / 1000)}s — forcing reconnect`);
-        this._stopHeartbeatWatchdog(connectionId);
-
-        if (conn.eventSource) {
-          conn.eventSource.close();
-          conn.eventSource = null;
-        }
-        conn.connected = false;
-
-        const subscribers = this.subscribers.get(connectionId);
-        if (subscribers && subscribers.size > 0) {
-          subscribers.forEach(sub => sub.onDisconnect());
-          conn.reconnecting = true;
-          conn.reconnectAttempts = 0;
-          subscribers.forEach(sub => sub.onReconnecting(1, 0));
-          this._createEventSource(connectionId);
-        } else {
-          this._cleanup(connectionId);
-        }
+        console.warn(`[StreamConnectionManager] No activity on multiplex pipe for ${Math.round(elapsed / 1000)}s — forcing reopen`);
+        this._stopMuxHeartbeatWatchdog();
+        // Route through the error path so subscribers see disconnect +
+        // reconnecting and backoff applies.
+        this._handleMuxError();
       }
     }, 15000);
   }
 
   /**
-   * Internal: Stop heartbeat watchdog
+   * Internal: Stop the shared-pipe heartbeat watchdog.
    */
-  _stopHeartbeatWatchdog(connectionId) {
-    const connection = this.connections.get(connectionId);
-    if (connection?.heartbeatTimer) {
-      clearInterval(connection.heartbeatTimer);
-      connection.heartbeatTimer = null;
+  _stopMuxHeartbeatWatchdog() {
+    if (this.mux.heartbeatTimer) {
+      clearInterval(this.mux.heartbeatTimer);
+      this.mux.heartbeatTimer = null;
     }
+  }
+
+  /**
+   * Internal: Fully close the shared pipe and clear its timers/state.
+   */
+  _closeMuxPipe() {
+    this._stopMuxHeartbeatWatchdog();
+    if (this.mux.eventSource) {
+      this.mux.eventSource.close();
+      this.mux.eventSource = null;
+    }
+    if (this.mux.reconnectTimeout) {
+      clearTimeout(this.mux.reconnectTimeout);
+      this.mux.reconnectTimeout = null;
+    }
+    if (this.muxFlushTimeout) {
+      clearTimeout(this.muxFlushTimeout);
+      this.muxFlushTimeout = null;
+    }
+    this.mux.connected = false;
+    this.mux.sid = null;
+    this.mux.reconnecting = false;
+    this.mux.reconnectAttempts = 0;
+    this.muxPending.clear();
   }
 
   /**
@@ -579,8 +730,8 @@ class StreamConnectionManager {
 
     return {
       connected: connection?.connected || false,
-      reconnecting: connection?.reconnecting || false,
-      reconnectAttempts: connection?.reconnectAttempts || 0,
+      reconnecting: this.mux.reconnecting || false,
+      reconnectAttempts: this.mux.reconnectAttempts || 0,
       subscriberCount: subscribers?.size || 0,
       bufferSize: buffer?.length || 0,
       topics: connection?.topics || null,
@@ -599,7 +750,8 @@ class StreamConnectionManager {
   }
 
   /**
-   * Close all connections immediately, bypassing grace periods.
+   * Close all connections immediately, bypassing grace periods. Also
+   * tears down the shared multiplex pipe.
    */
   closeAll() {
     for (const [, timeout] of this.gracePeriodTimeouts) {
@@ -610,6 +762,10 @@ class StreamConnectionManager {
     for (const connectionId of [...this.connections.keys()]) {
       this._cleanup(connectionId);
     }
+    // Defensive: ensure the pipe is closed even if the last _cleanup
+    // didn't (e.g. no connections were ever registered).
+    this._closeMuxPipe();
+    this.muxDesired.clear();
   }
 }
 
