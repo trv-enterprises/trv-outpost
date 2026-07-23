@@ -45,12 +45,24 @@ const RangeVariableToken = "{{range-variable}}"
 // ts-store/Prometheus may consume the relative token natively.
 const RangeParam = "range"
 
+// GroupByParam is the key under which a pivot chart's series column is passed
+// so ts-store can partition its step/agg_window downsampling PER SERIES (ts-store
+// v0.18.0 group_by). Without it, aggregating a store with one row per series
+// per tick (e.g. *-docker-containers keyed by `container`) blends every series
+// into one meaningless value per time bucket — a pivoted chart collapses to a
+// single line. The server derives this from the component's data_mapping.series
+// (see buildComponentDataQuery); the ts-store adapter forwards it only when a
+// step is also present (ts-store requires an aggregation window for group_by).
+// Non-ts-store adapters ignore it.
+const GroupByParam = "group_by"
+
 // reservedQueryParams are param keys consumed by token substitution / structured
 // range handling — they must NOT be appended as stray positional bind args by
 // the SQL adapters.
 var reservedQueryParams = map[string]bool{
 	DashboardVariableParam: true,
 	RangeParam:             true,
+	GroupByParam:           true,
 }
 
 // ErrDashboardVariableNotSet is returned when a query contains the
@@ -89,6 +101,24 @@ func resolveFilterParam(params map[string]interface{}) string {
 		return "" // token but no value → unfiltered
 	}
 	return filter
+}
+
+// resolveGroupByParam reads the group_by field name from Query.Params. The
+// server derives it from a pivot component's data_mapping.series
+// (buildComponentDataQuery). Empty when absent.
+func resolveGroupByParam(params map[string]interface{}) string {
+	s, _ := params[GroupByParam].(string)
+	return s
+}
+
+// resolveStepParam reads a downsampling step from Query.Params flat keys.
+// Used by the raw-DSL query paths (raw:"newest"/"since:"/"range:") which
+// otherwise dropped step/agg_window entirely (hardcoded ""). The structured
+// range path carries step inside the RangeSpec instead, so it does not use
+// this.
+func resolveStepParam(params map[string]interface{}) string {
+	s, _ := params["step"].(string)
+	return s
 }
 
 // reporting whether the token should be substituted (present + non-empty).
