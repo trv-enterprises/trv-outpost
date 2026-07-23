@@ -91,6 +91,19 @@ The toolbar at the top of the viewer provides:
 
 See [Dashboard Navigation & Controls](viewer-controls.md) for keyboard navigation, fullscreen, fit modes, auto-refresh, and thumbnail capture.
 
+### Many live panels on one dashboard
+
+Dashboards that stream from **many connections at once** (for example a
+fleet overview pulling live data from a dozen hosts) load reliably — all
+of a tab's live streams now share a single connection to the server
+rather than opening one per data connection. Earlier versions could
+leave some panels stuck on "Loading…" indefinitely on large streaming
+dashboards viewed over plain `http://`; that limitation is gone.
+
+If you ever *do* see panels stall on "Loading…" on such a dashboard with
+an older build, viewing over `https://` (or reloading the tab) is the
+quickest workaround.
+
 ## Viewing on Mobile
 
 On a phone-sized screen the viewer switches to a **mobile layout** built

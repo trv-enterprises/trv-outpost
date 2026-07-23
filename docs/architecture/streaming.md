@@ -20,11 +20,23 @@ MQTT broker     ─▶  MQTTStream                   ──▶  StreamConnection
                       │  (per-connection streams)      (Weather, Frigate alerts,
                       │  (reference-counted subs)       controls, charts)
                       ▼
-                    stream_handler.go
-                      │  GET /api/connections/:id/stream?topics=…
+                    multiplex_handler.go
+                      │  GET /api/streams/multiplex        (ONE per tab)
+                      │  POST /streams/multiplex/:sid/subs (add/remove)
                       ▼
-                    SSE response ──────────────────▶   EventSource
+                    tagged SSE frames ─────────────▶   ONE EventSource
+                      {key, record}                     (fans out per key)
 ```
+
+> **One pipe per tab, not per connection.** All of a browser tab's
+> streaming subscriptions ride a single multiplexed SSE connection.
+> This is what keeps a dashboard with many streaming connections under
+> the browser's 6-per-origin HTTP/1.1 cap — see [SSE handler](#sse-handler)
+> and [Client-side connection manager](#client-side-connection-manager)
+> below, and the design note
+> [`stream-multiplex-plan.md`](../design-notes/stream-multiplex-plan.md)
+> (issue #187). The per-connection single-stream endpoint
+> (`GET /api/connections/:id/stream`) is retained as a fallback.
 
 ## Stream manager
 
@@ -256,8 +268,48 @@ Two guards keep async backfills honest across effect re-runs in
 
 ## SSE handler
 
-`internal/handlers/stream_handler.go` is the HTTP endpoint clients
-connect to. `GET /api/connections/:id/stream?topics=foo,bar`:
+### Multiplex handler (the default browser transport)
+
+`internal/handlers/multiplex_handler.go` carries **every** raw
+streaming subscription a browser tab needs over **one** long-lived SSE
+connection. This is the default path the client
+`StreamConnectionManager` uses; it exists to defeat the browser's
+6-per-origin HTTP/1.1 connection cap (issue #187 — before it, one
+EventSource per distinct connection meant a dashboard spanning >5
+streaming connections exhausted the pool and every remaining request,
+including tile queries and backfills, queued forever).
+
+Two routes:
+
+- **`GET /api/streams/multiplex`** — opens the pipe. Emits an
+  `event: session\ndata: {"sid":"…"}` frame first (the session id used
+  to mutate subscriptions), then tagged `event: record\ndata:
+  {"key":"<connectionId>","record":{…}}` frames for every subscribed
+  connection, plus a 30 s heartbeat. One goroutine per tab holds a
+  fan-in channel that each per-subscription pump writes into; a full
+  buffer drops the frame rather than stalling other subscriptions
+  (mirrors the non-blocking broadcast in `streaming.Stream`).
+- **`POST /api/streams/multiplex/:sid/subs`** — mutates the pipe's
+  subscription set with `{add:[{key,connection_id,topics?}],
+  remove:[key]}`. A one-shot request (pools/multiplexes fine, holds no
+  persistent slot). EventSource is GET-only and can't change its URL
+  live, so subscription changes as panels mount/unmount go over this
+  companion POST rather than reopening the pipe. Each `add` runs the
+  same namespace-grant check the single-stream door runs, verifies the
+  connection streams, subscribes the upstream channel, replays its
+  ring buffer as tagged frames, and emits an `event: subscribed\ndata:
+  {"key":…}` ack.
+
+Both routes match the `/stream` read carve-out in
+`middleware/auth.go::getRequiredCapability` — no capability gate; the
+per-connection namespace grant is enforced in-handler.
+
+### Single-stream handler (fallback)
+
+`internal/handlers/stream_handler.go` is the original one-SSE-per-
+connection endpoint, kept as a fallback (Electron `file://`, external
+consumers, and a clean bypass if the multiplex path ever misbehaves).
+`GET /api/connections/:id/stream?topics=foo,bar`:
 
 1. Validate the connection ID and confirm the type supports
    streaming.
@@ -273,39 +325,71 @@ connect to. `GET /api/connections/:id/stream?topics=foo,bar`:
 
 Heartbeat frames go out every 30 seconds so proxies don't close idle
 connections, and so the client's heartbeat watchdog can detect stalls.
+Both handlers share the same underlying `StreamManager` subscribe /
+ring-buffer machinery — the multiplex handler just tags each frame with
+its connection key and merges many channels onto one response.
+
+> **Aggregated streams are not multiplexed yet.** The aggregated path
+> (`POST /api/connections/:id/stream/aggregated`, see
+> [Aggregators](#aggregators)) is still a dedicated stream per
+> aggregated chart. Folding it into the multiplex pipe is stage 2 of
+> issue #187; see [`stream-multiplex-plan.md`](../design-notes/stream-multiplex-plan.md).
 
 ## Client-side connection manager
 
 `client/src/utils/streamConnectionManager.js` is a singleton on the
-frontend that manages one `EventSource` per datasource. Multiple
-components can subscribe to the same datasource at once — their
-topic filters are combined into a single SSE URL, and records are
-routed to subscribers by client-side topic matching.
+frontend. It owns **one** multiplexed `EventSource`
+(`GET /api/streams/multiplex`) for the whole tab and fans its tagged
+frames out to per-connection subscriber sets. Multiple components can
+subscribe to the same connection at once — their topic filters are
+combined, and records are routed to subscribers by client-side topic
+matching. The public API (`subscribe(connectionId, cb, {topics})`) is
+unchanged from the pre-multiplex era; only the transport moved.
 
 Key behaviors:
 
-- **Single EventSource per datasource.** A dashboard with five MQTT
-  panels all on the same broker shares one SSE connection.
-- **Topic-diff reconnect.** When the set of active subscribers
+- **One EventSource per tab (not per connection).** Every streaming
+  connection the tab needs rides the single multiplex pipe. A
+  dashboard spanning ten connections holds one streaming socket, not
+  ten — this is the client half of the issue #187 fix. Per-connection
+  subscriptions are added/removed over the pipe with debounced
+  `POST /api/streams/multiplex/:sid/subs` deltas (a mount wave produces
+  one POST), keyed by `connectionId` (the `streamKey`).
+- **Session-driven (re)subscribe.** The pipe's first `session` frame
+  supplies the `sid`; deltas queued before it arrives are flushed once
+  it does. On token rotation, heartbeat-timeout, or a `404` (server
+  session gone), the pipe reopens with a fresh `sid` and the **full
+  desired subscription set** is re-sent — so unrelated connections are
+  never dropped by one connection's change.
+- **Topic-diff re-subscribe.** When a connection's combined topic set
   changes (dashboard switch, component unmount), the manager
-  recalculates the combined topic set. If it changed, the SSE
-  connection is closed and reopened with the new topic list.
-- **30-second grace period.** When the last subscriber drops, the
-  manager waits 30 s before actually closing the SSE connection.
-  Arriving subscribers within that window reuse the existing
-  connection — the common case when the user flips between
-  dashboards.
-- **Client buffer.** A ring buffer per datasource on the client side
+  re-subscribes just that `streamKey` on the pipe (remove+add in one
+  POST) to change the broker-level filter. Other connections on the
+  pipe are untouched — no whole-pipe reconnect.
+- **30-second grace period.** When the last subscriber on a connection
+  drops, the manager waits 30 s before dropping that connection's pipe
+  subscription. Arriving subscribers within that window reuse it — the
+  common case when the user flips between dashboards. When the last
+  connection goes away entirely, the pipe itself is closed so no idle
+  SSE socket lingers.
+- **Client buffer.** A ring buffer per connection on the client side
   (capped at the `stream_buffer_size` admin setting, default 1000),
-  flushed to new subscribers on mount (the client-side analog of the
-  backend buffer flush). Panels that run a REST backfill opt out of
-  the replay (`skipBufferReplay`) — the backfill is the authoritative
-  history and replaying on top of it would duplicate records. Panels
-  under an active dashboard range raise their own in-hook cap to the
-  range point budget instead (see "Backfill & per-value history").
-- **Heartbeat watchdog.** If 60 s pass without any event (not even
-  a heartbeat), the manager tears the EventSource down and
-  reconnects with exponential backoff.
+  filled from tagged `record` frames and flushed to new subscribers on
+  mount (the client-side analog of the backend buffer flush). Panels
+  that run a REST backfill opt out of the replay (`skipBufferReplay`) —
+  the backfill is the authoritative history and replaying on top of it
+  would duplicate records. Panels under an active dashboard range raise
+  their own in-hook cap to the range point budget instead (see
+  "Backfill & per-value history").
+- **Pipe-level heartbeat watchdog + backoff.** If 60 s pass without any
+  frame (not even a heartbeat), the manager tears the one EventSource
+  down and reopens with exponential backoff — one reconnect covers
+  every subscribed connection. Subscribers see `onDisconnect` /
+  `onReconnecting` during the gap.
+
+> The **aggregated** stream path (`useData` charts with a `timeBucket`)
+> still opens its own `POST …/stream/aggregated` fetch-stream and is
+> **not** on the multiplex pipe yet — stage 2 of issue #187.
 
 ## Related docs
 

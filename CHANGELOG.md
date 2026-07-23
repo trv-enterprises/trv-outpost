@@ -6,6 +6,37 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Large streaming dashboards no longer deadlock on plain HTTP.**
+  Dashboards streaming from more than ~5 connections at once could
+  leave many panels stuck on "Loading…" forever when viewed over
+  `http://` — the browser's 6-per-origin HTTP/1.1 connection limit was
+  exhausted by one SSE connection per data connection, starving every
+  remaining request (tile queries, chart backfills). All of a browser
+  tab's live streams now share a **single multiplexed SSE connection**
+  (`GET /api/streams/multiplex`, with subscriptions mutated over a
+  companion `POST /streams/multiplex/:sid/subs`), so the number of held
+  connections no longer scales with the number of streaming panels. The
+  per-connection `GET /api/connections/:id/stream` endpoint is retained
+  as a fallback. (Issue #187, stage 1 — raw streams; aggregated-chart
+  streams fold in as stage 2.)
+
+### Changed
+
+- **CI moved to a feature-branch + pull-request flow.** `main` is
+  branch-protected; every PR runs client lint + chart-spec + build,
+  Go build + vet, Go tests, and an API-docs-in-sync check before it can
+  merge. The container-publish release workflow is unchanged.
+
+### Internal
+
+- `go vet` (now a required CI gate) surfaced a pre-existing lock-copy in
+  the bidirectional WebSocket adapter; the base adapter is now embedded
+  by pointer so its mutex is never copied.
+
 ## [0.43.1] — 2026-07-23
 
 ### Fixed
