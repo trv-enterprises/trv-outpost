@@ -68,7 +68,7 @@
               "options": [
                 { "value": "auto", "label": "Auto (source precision)" },
                 { "value": "plain", "label": "Plain number (1,234.5)" },
-                { "value": "compact", "label": "Compact (1.2M, 3.4K)" },
+                { "value": "compact", "label": "Compact SI (1.2M, 3.4G)" },
                 { "value": "duration", "label": "Duration from seconds (2d 3h 4m)" },
                 { "value": "duration_clock", "label": "Duration clock (HH:MM:SS)" },
                 { "value": "datetime", "label": "Date / time (value is a timestamp)" }
