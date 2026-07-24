@@ -25,11 +25,23 @@ For everything else — `$set`, `$unset`, `$rename`, simple aggregation rewrites
 
 ## Development Rules
 
-### 1. Build Number Increment
-- **CRITICAL**: After every code change that affects functionality, increment the build number in `/client/build.json`
-- Report the new build number to the user after incrementing
-- Build number helps track changes and ensures proper cache busting
-- Format: `{ "buildNumber": N }` where N is an integer
+### 1. Build Number
+- The build number lives in `/client/build.json` (`{ "buildNumber": N }`)
+  and is stamped into the About dialog + used for cache busting. It is
+  **independent of the version** — the version comes from the git tag at
+  release (`publish-containers.yml`); build.json never affects it.
+- **Do NOT bump build.json in feature PRs.** Every PR touching it created
+  a guaranteed merge conflict once PRs stack. The bump belongs to
+  **release time only**: the pre-release `npm run build` runs
+  `increment-build.js`, bumping it once per release (committed as
+  `chore: build N from vX release build`). So the build number counts
+  *releases*, not PRs — monotonic, conflict-free.
+- Practical effect: during development the About-dialog build number
+  won't advance until the next release. That's fine — it's a
+  release-artifact id, not a per-change dev counter.
+- If a PR genuinely needs the running build number changed before a
+  release (rare — e.g. a hotfix that must be identifiable), bump it
+  deliberately and say so; otherwise leave build.json alone.
 
 ### 2. Terminology
 - Use "connection" (not "data source" or "datasource") for external data connections in UI text and code. The `datasource` nomenclature has been fully retired — collection is `connections`, BSON field is `connection_id`, Go types are `Connection` / `ConnectionRepository` / `ConnectionService` / `ConnectionAdapter` (the runtime interface), API route is `/api/connections`. The legacy `datasource_id` field name and `/api/datasources` alias were removed in v0.11.x.
