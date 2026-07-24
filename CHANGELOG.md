@@ -18,6 +18,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   accounts for the scale factor and shrinks to fit at any scale. No
   change for normal (100%) dashboards.
 
+- **Dataview column editor no longer "steals" clicks.** In the Chart
+  Editor's Columns list, unchecking a column instantly moved its row to
+  the bottom (hidden columns rendered last), so the rows below shifted up
+  under the cursor and the next click landed on the wrong column. The
+  editor list now renders in a fixed order and a checkbox toggles in
+  place — rows never relocate on a visibility change. (The reorder arrows
+  still set the table's column order.)
+
 ## [0.44.0] — 2026-07-24
 
 ### Fixed
