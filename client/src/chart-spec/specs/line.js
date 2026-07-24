@@ -282,23 +282,31 @@ function buildTooltip(tt, si) {
 // The upper cap keeps one long label from eating the plot — anything wider
 // wraps (AUTO) or wraps/truncates per the Manual overflow choice. Panel
 // width isn't available in buildOption (a static option builder), so the
-// cap is a fixed px, not a percentage. ~7px/char + marker + padding mirrors
+// cap is a fixed px, not a percentage. ~7.2px/char + marker + padding mirrors
 // the labelGutter estimate used for threshold labels in this file.
 const LEGEND_MIN_WIDTH = 60;
-const LEGEND_AUTO_MAX_WIDTH = 220;
-const LEGEND_CHAR_PX = 7;      // approx width of one label char at legend font size
-const LEGEND_MARKER_PAD = 26;  // color marker + gaps + inner padding
+// Wide enough to fit typical container/series names (e.g.
+// "services-zigbee2mqtt-1", ~22 chars) on ONE line — the earlier 220 cap
+// wrapped those unnecessarily. Genuinely long labels still wrap past this.
+const LEGEND_AUTO_MAX_WIDTH = 300;
+const LEGEND_CHAR_PX = 7.6;    // approx width of one label char at legend font size (slightly generous to avoid marginal wrapping)
+const LEGEND_MARKER_PAD = 30;  // color marker + line + gaps + inner padding
+const LEGEND_TEXT_SLACK = 6;   // a little extra text width so a label sized exactly to the estimate doesn't wrap on the last glyph
+// Gutter between the legend column and the plot so labels/markers never butt
+// against the axis or the data. Applied on top of the legend's own width.
+const LEGEND_PLOT_GAP = 16;
 
-// Compute the reserved width (px) of a vertical legend column. AUTO fits
-// the longest series label (clamped to [MIN, AUTO_MAX]); MANUAL uses the
-// author's width (clamped to [MIN, 600]).
+// Compute the label-column width (px) of a vertical legend — the space the
+// legend text + marker occupy (NOT including the plot gap). AUTO fits the
+// longest series label (clamped to [MIN, AUTO_MAX]); MANUAL uses the author's
+// width (clamped to [MIN, 600]).
 function computeLegendWidth(legend, seriesNames) {
   if ((legend?.widthMode || 'auto') === 'manual') {
     const w = Number(legend?.width);
     return Number.isFinite(w) && w > 0 ? Math.min(600, Math.max(LEGEND_MIN_WIDTH, w)) : 135;
   }
   const longest = (seriesNames || []).reduce((m, n) => Math.max(m, String(n ?? '').length), 0);
-  const fit = longest * LEGEND_CHAR_PX + LEGEND_MARKER_PAD;
+  const fit = Math.ceil(longest * LEGEND_CHAR_PX) + LEGEND_MARKER_PAD;
   return Math.min(LEGEND_AUTO_MAX_WIDTH, Math.max(LEGEND_MIN_WIDTH, fit));
 }
 
@@ -319,9 +327,17 @@ function buildLegend(legend, dualAxis, multipleSeries, seriesNames) {
     case 'bottom': block.bottom = 0; break;
     case 'left':
     case 'right': {
-      block[pos] = 0;
       block.orient = 'vertical';
-      reservedWidth = computeLegendWidth(legend, seriesNames);
+      const legendWidth = computeLegendWidth(legend, seriesNames);
+      // Pin the legend a small inset from the panel edge, and reserve the
+      // legend width PLUS a gap so the plot never butts against the legend.
+      // The grid uses `reservedWidth` for its margin on this side (the caller
+      // adds y-axis-label room for a LEFT legend — the axis lives in the same
+      // margin). Positioning the block at `gap` from the edge (not 0) keeps a
+      // consistent inset even before the plot gap.
+      const edgeInset = 4;
+      block[pos] = edgeInset;
+      reservedWidth = legendWidth + LEGEND_PLOT_GAP + edgeInset;
       // Let the label text wrap/truncate WITHIN the reserved column so a
       // long name never bleeds past it. AUTO always wraps (it already
       // sized to fit up to the cap); MANUAL honors the overflow choice.
@@ -329,8 +345,9 @@ function buildLegend(legend, dualAxis, multipleSeries, seriesNames) {
         ? (legend?.overflow === 'truncate' ? 'truncate' : 'break')
         : 'break';
       // Reserve the marker/padding out of the text width so wrapping
-      // measures the actual label area, not the whole column.
-      block.textStyle.width = Math.max(20, reservedWidth - LEGEND_MARKER_PAD);
+      // measures the actual label area, not the whole column. A little slack
+      // so a label sized right at the estimate doesn't wrap its last glyph.
+      block.textStyle.width = Math.max(20, legendWidth - LEGEND_MARKER_PAD + LEGEND_TEXT_SLACK);
       block.textStyle.overflow = overflow;
       break;
     }
@@ -753,15 +770,19 @@ export function buildOption(values, data, helpers = {}) {
   // slider top (a little breathing room). 50 left an ~18px dead band.
   const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
+  // Base left margin (no left legend) = room for the y-axis tick labels.
+  const yAxisLabelRoom = 50;
   // Reserve the legend column's computed width (auto-fit to labels or the
-  // author's manual width) when the legend sits on that side; otherwise the
-  // usual small gap. Replaces the old flat 135px reservation.
-  const gridLeft = legendPos === 'left' ? legendReservedWidth : 50;
-  // Right edge: the legend column's width when the legend sits on the right,
-  // else a small 20px flush gap. When threshold labels render at the line's
-  // end (right edge), widen the gutter to fit the widest label so it isn't
-  // clipped by the panel. A right-side legend already provides ample room, so
-  // only bump the non-legend case (and never shrink below the existing budget).
+  // author's manual width, INCLUDING the legend↔plot gap) when the legend sits
+  // on the left — PLUS the y-axis-label room, because the y-axis is drawn
+  // inside grid.left too. Without adding it, the axis numbers (1.2/0.8/…)
+  // overlapped the legend. Replaces the old flat 135px reservation.
+  const gridLeft = legendPos === 'left' ? legendReservedWidth + yAxisLabelRoom : yAxisLabelRoom;
+  // Right edge: the legend column's width (incl. gap) when the legend sits on
+  // the right, else a small 20px flush gap. When threshold labels render at the
+  // line's end (right edge), widen the gutter to fit the widest label so it
+  // isn't clipped. A right-side legend already provides ample room, so only
+  // bump the non-legend case (and never shrink below the existing budget).
   const baseGridRight = legendPos === 'right' ? legendReservedWidth : 20;
   const gridRight = Math.max(baseGridRight, (labelGutter || 0) + 12);
   const option = {
