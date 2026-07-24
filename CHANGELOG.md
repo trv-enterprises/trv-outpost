@@ -6,6 +6,20 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **API charts with a series column no longer 400 against strict
+  upstreams** (#208). The v0.45.0 per-series downsampling change made
+  the server derive a `group_by` param from `data_mapping.series` for
+  every component; the API adapter forwarded it (and other
+  dashboard-internal params like `range` / `dashboard_variable`) onto
+  the upstream URL, and strict APIs — Proxmox's
+  `400 Parameter verification failed.` — rejected the request. Reserved
+  runtime params are now stripped before the URL is built;
+  author-supplied params still pass through.
+
 ## [0.45.0] — 2026-07-24
 
 ### Added
