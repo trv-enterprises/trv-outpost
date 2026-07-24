@@ -10,6 +10,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Editor zoom-to-fit works on dashboards scaled above 100%.** The
+  zoom-to-fit button measured the design canvas without the dashboard's
+  build/display scale, so on a dashboard with `scale_percent > 100` (the
+  "everything bigger" zoom) it under-measured the actually-rendered
+  canvas and left it overflowing the editor viewport. Zoom-to-fit now
+  accounts for the scale factor and shrinks to fit at any scale. No
+  change for normal (100%) dashboards.
+
 - **Dataview column editor no longer "steals" clicks.** In the Chart
   Editor's Columns list, unchecking a column instantly moved its row to
   the bottom (hidden columns rendered last), so the rows below shifted up
