@@ -8,6 +8,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Duplicate a dashboard from the list.** Design Mode → Dashboards now
+  has a **Duplicate** action (in both the tile and list views) that
+  deep-copies a dashboard under a `<name> (copy)` name in the same
+  namespace — panels, settings, and tags carried over, components shared
+  (not cloned). Duplicating again auto-increments the name (`(copy 2)`,
+  `(copy 3)`, …) so it never collides.
+
+### Changed
+
+- The application header now reads **Outpost** (was "TRV Outpost").
+
 ### Fixed
 
 - **Editor zoom-to-fit works on dashboards scaled above 100%.** The
