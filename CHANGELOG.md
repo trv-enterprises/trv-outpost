@@ -10,6 +10,15 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Left/right legend no longer touches the plot (or the y-axis).** The
+  new side-legend width control reserved exactly the legend's width, so
+  the legend butted straight against the plot — and on a *left* legend
+  the wrapped label text overlapped the y-axis tick numbers. There's now
+  a gutter between the legend column and the plot, and a left legend
+  additionally reserves room for the y-axis labels (which live in the
+  same margin). Also raised the auto-fit cap so common series names
+  (e.g. `services-zigbee2mqtt-1`) sit on one line instead of wrapping.
+
 - **Pivoted ts-store charts keep all their series under a time-range
   step.** A line chart pivoted by a series column (e.g. one line per
   `container`) collapsed to a **single line** whenever the dashboard
