@@ -10,3 +10,90 @@
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.8125rem;
 }
+
+// --- attribution ---
+// Scoped under the attribution wrappers so these win over Carbon's modal
+// element styles (e.g. `.cds--modal h3`) without needing !important.
+.about-dialog__attribution {
+  margin-top: 0.25rem;
+}
+
+.about-dialog__tagline {
+  margin: 0 0 1rem;
+  color: var(--cds-text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.about-dialog__meta {
+  margin: 0;
+  display: grid;
+  gap: 0.375rem;
+}
+
+.about-dialog__meta-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+
+  dt {
+    color: var(--cds-text-secondary);
+    font-size: 0.8125rem;
+  }
+
+  dd {
+    margin: 0;
+    color: var(--cds-text-primary);
+    font-size: 0.8125rem;
+    word-break: break-word;
+  }
+}
+
+// --- third-party ---
+.about-dialog__thirdparty {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cds-border-subtle-01);
+}
+
+// Beat Carbon's default heading sizing inside the modal.
+.about-dialog__thirdparty .about-dialog__subhead {
+  margin: 0 0 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cds-text-secondary);
+  line-height: 1.2;
+}
+
+.about-dialog__tp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.375rem;
+
+  li {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+}
+
+.about-dialog__tp-meta {
+  color: var(--cds-text-secondary);
+}
+
+.about-dialog__tp-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+}
+
+// --- more info toggle ---
+.about-dialog__more {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--cds-border-subtle-01);
+}

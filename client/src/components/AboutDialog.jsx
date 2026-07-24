@@ -11,14 +11,16 @@ import {
   StructuredListRow,
   StructuredListCell,
   Button,
+  Link,
   InlineNotification,
 } from '@carbon/react';
-import { Copy } from '@carbon/icons-react';
+import { Copy, ChevronDown, ChevronUp } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import { isElectron, getAppVersion, getElectronVersion, getPlatform } from '../utils/electron';
 import { copyTextToClipboard } from '../utils/clipboard';
 import buildInfo from '../../build.json';
 import packageInfo from '../../package.json';
+import './AboutDialog.scss';
 
 /**
  * AboutDialog — diagnostic information about the running dashboard
@@ -40,10 +42,27 @@ import packageInfo from '../../package.json';
  * account actions. Support traffic discovers it; everyone else
  * ignores it.
  */
+// Product attribution. Copyright is reproduced VERBATIM from the repo's
+// LICENSE appendix — do not paraphrase it. License + repo links point at
+// the canonical sources so a distributed copy carries provenance in-app.
+const REPO_URL = 'https://github.com/trv-enterprises/trv-outpost';
+const LICENSE_NAME = 'Apache License 2.0';
+const LICENSE_URL = 'https://www.apache.org/licenses/LICENSE-2.0';
+const COPYRIGHT = 'Copyright 2026 TRV Enterprises LLC'; // verbatim from LICENSE
+
+// Bundled third-party components — mirrors THIRD_PARTY_LICENSES.md. Kept
+// here so the in-app About box carries the same attribution the repo does.
+const THIRD_PARTY = [
+  { name: 'Carbon Design System', author: 'IBM Corporation', license: 'Apache-2.0', url: 'https://github.com/carbon-design-system/carbon' },
+  { name: 'AG Grid', author: 'AG Grid Ltd.', license: 'MIT', url: 'https://github.com/ag-grid/ag-grid' },
+  { name: 'Meteocons (weather icons)', author: 'Bas Milius', license: 'MIT', url: 'https://github.com/basmilius/meteocons' },
+];
+
 function AboutDialog({ open, onClose, currentUser, clerkActive }) {
   const [serverVersion, setServerVersion] = useState(null);
   const [serverFetchError, setServerFetchError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   // Pull server /health once when the dialog opens so the version is
   // fresh per-open. The endpoint is unauthenticated and cheap, so
@@ -54,6 +73,7 @@ function AboutDialog({ open, onClose, currentUser, clerkActive }) {
     setServerVersion(null);
     setServerFetchError(null);
     setCopied(false);
+    setShowDetails(false);
 
     let cancelled = false;
     (async () => {
@@ -111,60 +131,121 @@ function AboutDialog({ open, onClose, currentUser, clerkActive }) {
     <Modal
       open={open}
       onRequestClose={onClose}
-      modalHeading="About TRV Outpost"
-      modalLabel="Diagnostic information"
+      modalHeading="About Outpost"
+      modalLabel="Attribution & version"
       primaryButtonText="Close"
       onRequestSubmit={onClose}
       passiveModal={false}
       size="sm"
     >
-      <StructuredListWrapper className="about-dialog__list">
-        <StructuredListHead>
-          <StructuredListRow head>
-            <StructuredListCell head>Field</StructuredListCell>
-            <StructuredListCell head>Value</StructuredListCell>
-          </StructuredListRow>
-        </StructuredListHead>
-        <StructuredListBody>
-          {rows.map((row) => (
-            <StructuredListRow key={row.label}>
-              <StructuredListCell>{row.label}</StructuredListCell>
-              <StructuredListCell
-                className={row.mono ? 'about-dialog__mono' : undefined}
-                style={{ wordBreak: 'break-all' }}
-              >
-                {row.value}
-              </StructuredListCell>
-            </StructuredListRow>
-          ))}
-        </StructuredListBody>
-      </StructuredListWrapper>
-
-      <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <Button
-          kind="tertiary"
-          size="sm"
-          renderIcon={Copy}
-          onClick={copyAll}
-        >
-          Copy all
-        </Button>
-        {copied && (
-          <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.8125rem' }}>
-            Copied to clipboard
-          </span>
-        )}
+      {/* --- Attribution (primary) --- */}
+      <div className="about-dialog__attribution">
+        <p className="about-dialog__tagline">
+          Outpost — a dashboard for real-time data visualization and device control.
+        </p>
+        <dl className="about-dialog__meta">
+          <div className="about-dialog__meta-row">
+            <dt>Project</dt>
+            <dd><Link href={REPO_URL} target="_blank" rel="noopener noreferrer">{REPO_URL.replace('https://', '')}</Link></dd>
+          </div>
+          <div className="about-dialog__meta-row">
+            <dt>Version</dt>
+            <dd className="about-dialog__mono">{packageInfo.version} · build {String(buildInfo.buildNumber)}</dd>
+          </div>
+          <div className="about-dialog__meta-row">
+            <dt>Copyright</dt>
+            <dd>{COPYRIGHT}</dd>
+          </div>
+          <div className="about-dialog__meta-row">
+            <dt>License</dt>
+            <dd><Link href={LICENSE_URL} target="_blank" rel="noopener noreferrer">{LICENSE_NAME}</Link></dd>
+          </div>
+        </dl>
       </div>
 
-      {serverFetchError && (
-        <InlineNotification
-          kind="warning"
-          title="Server version unavailable"
-          subtitle={`Couldn't reach ${apiClient.baseURL}/health: ${serverFetchError}`}
-          hideCloseButton
-          lowContrast
-          style={{ marginTop: '1rem' }}
-        />
+      {/* --- Third-party attribution --- */}
+      <div className="about-dialog__thirdparty">
+        <h3 className="about-dialog__subhead">Third-party components</h3>
+        <ul className="about-dialog__tp-list">
+          {THIRD_PARTY.map((tp) => (
+            <li key={tp.name}>
+              <Link href={tp.url} target="_blank" rel="noopener noreferrer">{tp.name}</Link>
+              <span className="about-dialog__tp-meta"> — {tp.author} · {tp.license}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="about-dialog__tp-note">
+          Attribution &amp; license terms:{' '}
+          <Link href={`${REPO_URL}/blob/main/NOTICE`} target="_blank" rel="noopener noreferrer">NOTICE</Link>
+          {' · '}
+          <Link href={`${REPO_URL}/blob/main/THIRD_PARTY_LICENSES.md`} target="_blank" rel="noopener noreferrer">THIRD_PARTY_LICENSES</Link>.
+          Redistributions must reproduce the notices in <span className="about-dialog__mono">NOTICE</span>.
+        </p>
+      </div>
+
+      {/* --- More info: diagnostics, collapsed by default --- */}
+      <div className="about-dialog__more">
+        <Button
+          kind="ghost"
+          size="sm"
+          renderIcon={showDetails ? ChevronUp : ChevronDown}
+          onClick={() => setShowDetails((v) => !v)}
+        >
+          {showDetails ? 'Hide details' : 'More info'}
+        </Button>
+      </div>
+
+      {showDetails && (
+        <>
+          <StructuredListWrapper className="about-dialog__list">
+            <StructuredListHead>
+              <StructuredListRow head>
+                <StructuredListCell head>Field</StructuredListCell>
+                <StructuredListCell head>Value</StructuredListCell>
+              </StructuredListRow>
+            </StructuredListHead>
+            <StructuredListBody>
+              {rows.map((row) => (
+                <StructuredListRow key={row.label}>
+                  <StructuredListCell>{row.label}</StructuredListCell>
+                  <StructuredListCell
+                    className={row.mono ? 'about-dialog__mono' : undefined}
+                    style={{ wordBreak: 'break-all' }}
+                  >
+                    {row.value}
+                  </StructuredListCell>
+                </StructuredListRow>
+              ))}
+            </StructuredListBody>
+          </StructuredListWrapper>
+
+          <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Button
+              kind="tertiary"
+              size="sm"
+              renderIcon={Copy}
+              onClick={copyAll}
+            >
+              Copy all
+            </Button>
+            {copied && (
+              <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.8125rem' }}>
+                Copied to clipboard
+              </span>
+            )}
+          </div>
+
+          {serverFetchError && (
+            <InlineNotification
+              kind="warning"
+              title="Server version unavailable"
+              subtitle={`Couldn't reach ${apiClient.baseURL}/health: ${serverFetchError}`}
+              hideCloseButton
+              lowContrast
+              style={{ marginTop: '1rem' }}
+            />
+          )}
+        </>
       )}
     </Modal>
   );
