@@ -818,7 +818,7 @@ function AppContent({ onDisconnect }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
                 <ChartMultitype size={20} />
-                <span>TRV Outpost</span>
+                <span>Outpost</span>
               </div>
             </HeaderName>
             {/* Mode toggle is authoring/admin navigation — hidden on mobile,

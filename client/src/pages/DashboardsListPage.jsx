@@ -28,9 +28,10 @@ import {
   OverflowMenu,
   OverflowMenuItem,
   Dropdown,
-  Pagination
+  Pagination,
+  InlineNotification
 } from '@carbon/react';
-import { TrashCan, Dashboard, List, Grid, Edit, Download, Close, View, Reset, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
+import { TrashCan, Dashboard, List, Grid, Edit, Download, Close, View, Reset, OverflowMenuVertical, Checkmark, Copy } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import usePaginatedList from '../hooks/usePaginatedList';
 import TagFilter from '../components/shared/TagFilter';
@@ -70,6 +71,7 @@ function DashboardsListPage() {
   // Delete confirmation — DashboardDeleteModal (Carbon danger modal + orphaned-
   // component cascade). Replaces the old window.confirm (#64) and adds #65.
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [duplicateError, setDuplicateError] = useState(null); // surfaced when a duplicate fails
   const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete/import
   const [searchTerm, setSearchTerm] = useState(savedFilters.search || '');
   // Sort state. Authoritative storage is per-user server config
@@ -318,6 +320,44 @@ function DashboardsListPage() {
     setDeleteTarget(dashboard);
   };
 
+  // Duplicate a dashboard: deep-copy its config under a "(copy)" name in the
+  // same namespace. Panels keep their component_id references (components are
+  // shared entities — a dashboard copy points at the same components, it
+  // doesn't clone them). Name uniqueness is per (namespace, name), so if
+  // "<name> (copy)" is taken, bump to "(copy 2)", "(copy 3)", … against the
+  // names already loaded on this page.
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const handleDuplicate = async (e, dashboard) => {
+    e.stopPropagation();
+    if (duplicatingId) return; // guard double-click
+    setDuplicatingId(dashboard.id);
+    try {
+      // The list row is a lightweight summary; fetch the full dashboard so the
+      // copy carries panels + settings, not just the summary fields.
+      const full = await apiClient.getDashboard(dashboard.id);
+      const existingNames = new Set((dashboards || []).map((d) => d?.name).filter(Boolean));
+      const base = full.name || dashboard.name || 'Dashboard';
+      let copyName = `${base} (copy)`;
+      for (let n = 2; existingNames.has(copyName); n += 1) copyName = `${base} (copy ${n})`;
+      await apiClient.createDashboard({
+        namespace: full.namespace,
+        name: copyName,
+        description: full.description || '',
+        panels: full.panels || [],
+        settings: full.settings || {},
+        tags: full.tags || [],
+        metadata: full.metadata || {},
+      });
+      refetch();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[DashboardsListPage] Duplicate failed:', err);
+      setDuplicateError(err.message || 'Failed to duplicate dashboard');
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -436,6 +476,16 @@ function DashboardsListPage() {
 
   return (
     <div className="dashboards-list-page">
+      {duplicateError && (
+        <InlineNotification
+          kind="error"
+          title="Duplicate failed"
+          subtitle={duplicateError}
+          onCloseButtonClick={() => setDuplicateError(null)}
+          lowContrast
+          style={{ maxWidth: '100%', marginBottom: '0.75rem' }}
+        />
+      )}
       {/* Page Header */}
       <div className="page-header">
         <h1>Dashboards</h1>
@@ -730,6 +780,15 @@ function DashboardsListPage() {
                       </IconButton>
                       <IconButton
                         kind="ghost"
+                        label="Duplicate"
+                        onClick={(e) => handleDuplicate(e, dashboard)}
+                        size="sm"
+                        disabled={duplicatingId === dashboard.id}
+                      >
+                        <Copy size={16} />
+                      </IconButton>
+                      <IconButton
+                        kind="ghost"
                         label="Delete"
                         onClick={(e) => handleDelete(e, dashboard)}
                         size="sm"
@@ -864,6 +923,15 @@ function DashboardsListPage() {
                                       size="sm"
                                     >
                                       <View size={16} />
+                                    </IconButton>
+                                    <IconButton
+                                      kind="ghost"
+                                      label="Duplicate"
+                                      onClick={(e) => handleDuplicate(e, dashboard)}
+                                      size="sm"
+                                      disabled={duplicatingId === dashboard.id}
+                                    >
+                                      <Copy size={16} />
                                     </IconButton>
                                     <IconButton
                                       kind="ghost"
