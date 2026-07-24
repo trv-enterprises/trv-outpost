@@ -64,12 +64,21 @@ export default function ColumnManager() {
 
   const allVisible = availableColumns.every(isVisible);
 
-  // Visible columns render in their saved order, then hidden columns at
-  // the bottom. Reorder buttons only act inside the visible group.
+  // Stable editor order: ALWAYS availableColumns order, INDEPENDENT of
+  // visibility. Toggling a checkbox never moves a row — it just flips in
+  // place. Previously the list was recomputed each render as
+  // visible-then-hidden, so unchecking a column instantly yanked its row to
+  // the bottom; the rows below shifted up under the cursor and the next click
+  // landed on the wrong column (the reported click-stealing). The reorder
+  // arrows still drive the TABLE column order (visible_columns); the editor
+  // list intentionally does not re-sort to mirror it, so rows stay put.
   const visibleList = effectiveVisible.filter((c) => availableColumns.includes(c));
-  const hiddenList = availableColumns.filter((c) => !visibleList.includes(c));
+  const displayOrder = availableColumns;
 
   const moveColumn = (col, delta) => {
+    // Reorder only acts within the visible group (hidden columns have no
+    // table position). Moves the column in visible_columns → table order,
+    // and its slot among the visible rows in this editor list.
     const idx = visibleList.indexOf(col);
     const target = idx + delta;
     if (idx < 0 || target < 0 || target >= visibleList.length) return;
@@ -179,12 +188,19 @@ export default function ColumnManager() {
           <span>Display name</span>
           <span>Width (px)</span>
         </div>
-        {visibleList.map((col, i) => renderRow(col, {
-          canReorder: true,
-          canMoveUp: i > 0,
-          canMoveDown: i < visibleList.length - 1,
-        }))}
-        {hiddenList.map((col) => renderRow(col, { canReorder: false, canMoveUp: false, canMoveDown: false }))}
+        {/* One stable list — rows never relocate on a visibility toggle. A
+            column's reorder arrows are active only while it's visible (hidden
+            columns have no table position); position is its index within the
+            visible group. */}
+        {displayOrder.map((col) => {
+          const vIdx = visibleList.indexOf(col);
+          const isVis = vIdx >= 0;
+          return renderRow(col, {
+            canReorder: isVis,
+            canMoveUp: isVis && vIdx > 0,
+            canMoveDown: isVis && vIdx < visibleList.length - 1,
+          });
+        })}
       </div>
     </div>
   );
