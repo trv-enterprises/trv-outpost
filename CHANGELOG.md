@@ -6,6 +6,18 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Editor zoom-to-fit works on dashboards scaled above 100%.** The
+  zoom-to-fit button measured the design canvas without the dashboard's
+  build/display scale, so on a dashboard with `scale_percent > 100` (the
+  "everything bigger" zoom) it under-measured the actually-rendered
+  canvas and left it overflowing the editor viewport. Zoom-to-fit now
+  accounts for the scale factor and shrinks to fit at any scale. No
+  change for normal (100%) dashboards.
+
 ## [0.44.0] — 2026-07-24
 
 ### Fixed

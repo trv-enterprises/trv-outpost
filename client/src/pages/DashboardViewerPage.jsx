@@ -888,8 +888,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     // 84%). Fall back to maxGrid* when the dimension isn't known (no preset).
     const cols = gridCols || maxGridCol;
     const rows = gridRows || maxGridRow;
-    const canvasW = cols * CELL_WIDTH + (cols - 1) * GAP;
-    const canvasH = rows * CELL_HEIGHT + (rows - 1) * GAP;
+    // The editor renders the grid at the design-canvas size TIMES the
+    // build/display scaleFactor (DashboardGrid applies scale(editScaleFactor)
+    // on the grid, then scale(editZoom/100) on the wrapper). So the on-screen
+    // canvas we're fitting is scaleFactor× the design px — include it here, or a
+    // dashboard with scale_percent > 100 under-measures and zoom-to-fit leaves
+    // the canvas overflowing (the reported regression: fit stops working past
+    // 100%). scaleFactor is 1 at 100%, so this is a no-op for normal dashboards.
+    const canvasW = (cols * CELL_WIDTH + (cols - 1) * GAP) * scaleFactor;
+    const canvasH = (rows * CELL_HEIGHT + (rows - 1) * GAP) * scaleFactor;
     if (!canvasW || !canvasH) return;
     // Measure the container LIVE at click time, not from the containerSize
     // state — that's only refreshed by the ResizeObserver/resize effect, so a
@@ -908,7 +915,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const ratio = Math.min(availW / canvasW, availH / canvasH);
     const fitPct = Math.max(10, Math.min(100, Math.floor(ratio * 100)));
     setZoom(fitPct);
-  }, [containerSize.width, containerSize.height, gridCols, gridRows, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, GAP, CONTAINER_PADDING]);
+  }, [containerSize.width, containerSize.height, gridCols, gridRows, maxGridCol, maxGridRow, CELL_WIDTH, CELL_HEIGHT, GAP, CONTAINER_PADDING, scaleFactor]);
 
   // Fetch dashboard data and referenced charts
   const fetchDashboard = useCallback(async () => {
