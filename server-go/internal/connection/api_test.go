@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
 // TestAPIBuildRequestURL covers how query.Raw combines with the connection's
@@ -43,4 +44,53 @@ func TestAPIBuildRequestURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAPIBuildRequestSkipsReservedParams locks the fix for the Proxmox 400
+// ("Parameter verification failed"): dashboard-internal reserved keys —
+// group_by (derived server-side from data_mapping.series for EVERY component),
+// range, dashboard_variable — must never reach the upstream URL. Strict APIs
+// reject unknown params; only author-supplied params belong on the wire.
+// Covers both adapter copies.
+func TestAPIBuildRequestSkipsReservedParams(t *testing.T) {
+	params := map[string]interface{}{
+		"group_by":           "name",
+		"range":              map[string]interface{}{"type": "relative", "token": "1h"},
+		"dashboard_variable": "web-01",
+		"limit":              1000, // author-supplied — must survive
+	}
+
+	t.Run("legacy APIDataSource", func(t *testing.T) {
+		a := &APIDataSource{config: &models.APIConfig{URL: "http://host/api", Method: "GET"}}
+		req, err := a.buildRequest(context.Background(), models.Query{Raw: "/", Params: params})
+		if err != nil {
+			t.Fatalf("buildRequest error: %v", err)
+		}
+		q := req.URL.Query()
+		for _, reserved := range []string{"group_by", "range", "dashboard_variable"} {
+			if _, present := q[reserved]; present {
+				t.Errorf("reserved param %q leaked onto the URL: %s", reserved, req.URL)
+			}
+		}
+		if q.Get("limit") != "1000" {
+			t.Errorf("author param limit missing: %s", req.URL)
+		}
+	})
+
+	t.Run("registry APIAdapter", func(t *testing.T) {
+		a := &APIAdapter{config: &models.APIConfig{URL: "http://host/api", Method: "GET"}}
+		req, err := a.buildRequest(context.Background(), registry.Query{Raw: "/", Params: params})
+		if err != nil {
+			t.Fatalf("buildRequest error: %v", err)
+		}
+		q := req.URL.Query()
+		for _, reserved := range []string{"group_by", "range", "dashboard_variable"} {
+			if _, present := q[reserved]; present {
+				t.Errorf("reserved param %q leaked onto the URL: %s", reserved, req.URL)
+			}
+		}
+		if q.Get("limit") != "1000" {
+			t.Errorf("author param limit missing: %s", req.URL)
+		}
+	})
 }

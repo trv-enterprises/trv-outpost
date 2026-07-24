@@ -383,6 +383,14 @@ func (a *APIAdapter) buildRequest(ctx context.Context, query registry.Query) (*h
 	if len(query.Params) > 0 {
 		q := req.URL.Query()
 		for key, value := range query.Params {
+			// Reserved runtime keys (group_by, range, dashboard_variable, …)
+			// are dashboard-internal — group_by is derived server-side from
+			// data_mapping.series for every component, and a strict upstream
+			// (e.g. Proxmox) 400s on unknown params ("Parameter verification
+			// failed"). Only author-supplied params belong on the URL.
+			if reservedQueryParams[key] {
+				continue
+			}
 			q.Add(key, fmt.Sprintf("%v", value))
 		}
 		req.URL.RawQuery = q.Encode()
@@ -686,6 +694,11 @@ func (a *APIDataSource) buildRequest(ctx context.Context, query models.Query) (*
 	if len(query.Params) > 0 {
 		q := req.URL.Query()
 		for key, value := range query.Params {
+			// Skip dashboard-internal reserved keys — see the
+			// APIAdapter.buildRequest note (strict upstreams 400 on them).
+			if reservedQueryParams[key] {
+				continue
+			}
 			q.Add(key, fmt.Sprintf("%v", value))
 		}
 		req.URL.RawQuery = q.Encode()
