@@ -10,6 +10,18 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **About box reworked for attribution.** The About dialog now leads
+  with project attribution — name, repo link, version (`x.y.z · build
+  N`), the verbatim copyright, and the Apache-2.0 license link — plus a
+  Third-party components list (Carbon, AG Grid, Meteocons) and links to
+  `NOTICE` / `THIRD_PARTY_LICENSES`. The diagnostic table (server/client
+  version, auth, user, Electron, Copy-all) moved behind a **More info**
+  toggle.
+- **`NOTICE` file** (Apache-2.0 §4(d)). Names the project + copyright and
+  requires redistributions/derivatives to reproduce the attribution
+  notices — in source, docs, or an About-style display — so a fork
+  carries the attribution forward.
+
 - **Duplicate a dashboard from the list.** Design Mode → Dashboards now
   has a **Duplicate** action (in both the tile and list views) that
   deep-copies a dashboard under a `<name> (copy)` name in the same
