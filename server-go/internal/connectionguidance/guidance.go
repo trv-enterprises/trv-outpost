@@ -293,6 +293,26 @@ query_config shapes:
     // Records in an absolute unix-second range (default cap = 100000)
     { "raw": "range:1779900000:1779903600", "type": "api", "params": {} }
 
+    // CURRENT STATE PER SERIES (latest_by, ts-store v0.19.0): the single
+    // NEWEST record for each distinct value of a field — e.g. one row per
+    // container, each with its latest reading. The right shape for
+    // "current value per X" tables (dataview) and status tiles. No window
+    // and no aggregation involved; a series is never dropped just because
+    // it hasn't reported recently.
+    { "raw": "newest", "type": "api", "params": { "latest_by": "container" } }
+
+latest_by notes:
+  - params.limit caps DISTINCT SERIES here (unset → up to 1000), not
+    rows. Leave it unset unless you want fewer series.
+  - Composes with params.filter (narrows the record set first). Raw
+    "since:<dur>" bounds the scan — only series that reported inside
+    the window come back.
+  - Mutually exclusive with aggregation: the adapter automatically
+    drops any step/group_by (e.g. from the viewer range picker) when
+    latest_by is set, so never combine them yourself.
+  - The editor's "Current State (latest per series)" query type writes
+    exactly this shape.
+
   IMPORTANT: since: accepts EITHER a Go duration ("240h", "30m") for a
   relative window OR a unix-SECOND integer for an absolute start. It does NOT
   accept anything else — passing a date string, milliseconds, or a converted
@@ -330,9 +350,14 @@ dashboard variable — the server substitutes the chosen value at query
 time. Prefer this over a client-side variable filter for ts-store so
 filtered panels get complete per-value history (incl. backfill).
 
-Anything richer (per-column predicates, math, GROUP BY) must be
-done client-side via data_mapping.filters or by pulling a wider
-window with since/range and aggregating in the component.
+Server-side aggregation you get WITHOUT asking: when the viewer's
+range picker is active, the connector forwards a downsampling step
+(and partitions it per series via group_by = data_mapping.series on
+pivoted charts) to ts-store automatically. Do not try to replicate
+downsampling in the query or in component code. What ts-store canNOT
+do server-side is per-column predicates or computed math — those stay
+client-side via data_mapping.filters, or by pulling a wider
+since/range window and aggregating in the component.
 
 # Streaming mode (transport: streaming)
 
@@ -356,6 +381,10 @@ stream_filter + an aggregation of "last":
 
     "query_config": { "raw": "<series or empty>", "type": "stream_filter" },
     "data_mapping": { "y_axis": ["cpu.pct"], "aggregation": { "type": "last" } }
+
+(REST-mode equivalent: latest_by, above — one request returns each
+series' newest record; the right choice for a whole current-state
+table rather than a single tile.)
 
 ## Trend charts (line / area) — use a sliding_window
 

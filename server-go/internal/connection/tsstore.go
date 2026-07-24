@@ -187,6 +187,36 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 	var objects []dataResponse
 	var err error
 
+	// latest_by (ts-store v0.19.0): newest record per distinct value of a
+	// field — "current state per series", one request. It lives on
+	// /data/newest ONLY and is mutually exclusive with step/agg_window
+	// (ts-store 400s on the combination), so it overrides the normal
+	// dispatch: any step (range-picker or raw param) and group_by are
+	// dropped — a now-lookup has no window to downsample. A RELATIVE window
+	// (structured range or since: DSL) still bounds the scan via `since`
+	// (only series that reported within it); an absolute range can't be
+	// expressed on /data/newest and is ignored. limit caps DISTINCT GROUPS
+	// (unset → ts-store's default of up to 1000 groups, not the newest
+	// default of 10 — hence limit 0 to omit the param).
+	if latestBy := resolveLatestByParam(query.Params); latestBy != "" {
+		since := ""
+		if spec, ok := resolveRange(query.Params); ok {
+			if tr, valid := tsstoreRangeFromSpec(spec); valid && tr.Relative {
+				since = tr.Since
+			}
+		} else if strings.HasPrefix(query.Raw, "since:") {
+			since = query.Raw[len("since:"):]
+		}
+		if !hasExplicitLimit {
+			limit = 0
+		}
+		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, "", "", latestBy)
+		if err != nil {
+			return nil, err
+		}
+		return a.toRegistryResultSet(ctx, objects)
+	}
+
 	// Range variable (structured path, auto-apply): consume the active range
 	// directly (no token in query.Raw). Relative → native since:<token>;
 	// absolute → a [from,to] range fetch.
@@ -201,7 +231,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 			// the real point count well under it, so this is a cap, not a target.
 			limit = tsstoreRangeRowCap
 			if tr.Relative {
-				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step, groupBy)
+				objects, err = a.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step, groupBy, "")
 			} else {
 				objects, err = a.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step, groupBy)
 			}
@@ -222,7 +252,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
+		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy, "")
 	case queryType == "oldest":
 		if !hasExplicitLimit {
 			limit = 10
@@ -233,7 +263,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 			limit = 100000
 		}
 		since := queryType[6:]
-		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, rawStep, groupBy)
+		objects, err = a.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, rawStep, groupBy, "")
 	case len(queryType) > 6 && queryType[:6] == "range:":
 		if !hasExplicitLimit {
 			limit = 100000
@@ -248,7 +278,7 @@ func (a *TSStoreAdapter) Query(ctx context.Context, query registry.Query) (*regi
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
+		objects, err = a.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy, "")
 	}
 
 	if err != nil {
@@ -526,11 +556,33 @@ func setGroupByParam(params url.Values, groupBy string) {
 	params.Set("group_by", groupBy)
 }
 
+// setLatestByParam applies a newest-per-group lookup (ts-store v0.19.0
+// latest_by) to a /data/newest request: the single newest record for each
+// distinct value of the named field ("current state per series"). ts-store
+// REJECTS latest_by combined with step/agg_window (HTTP 400) — the Query
+// dispatch guarantees the conflict can't arise by suppressing step/group_by
+// whenever latest_by is set; the guard here is defensive backstop only.
+// Empty field → no-op.
+func setLatestByParam(params url.Values, latestBy string) {
+	if strings.TrimSpace(latestBy) == "" {
+		return
+	}
+	if params.Get("step") != "" || params.Get("agg_window") != "" {
+		// Defensive: ts-store would 400 on the combination.
+		return
+	}
+	params.Set("latest_by", latestBy)
+}
+
 // fetchNewest retrieves newest objects. step (optional) downsamples server-side
-// — see setStepParam.
-func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string, groupBy string) ([]dataResponse, error) {
+// — see setStepParam. latestBy (optional) switches to a newest-per-group
+// lookup — see setLatestByParam. limit <= 0 omits the param so ts-store
+// applies its own default (10 records; up to 1000 groups under latest_by).
+func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string, groupBy string, latestBy string) ([]dataResponse, error) {
 	params := url.Values{}
-	params.Set("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		params.Set("limit", strconv.Itoa(limit))
+	}
 	if since != "" {
 		params.Set("since", since)
 	}
@@ -545,6 +597,7 @@ func (a *TSStoreAdapter) fetchNewest(ctx context.Context, limit int, since strin
 	}
 	setStepParam(params, step)
 	setGroupByParam(params, groupBy)
+	setLatestByParam(params, latestBy)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/newest?%s", a.config.StoreName, params.Encode())
 	return a.fetchList(ctx, endpoint)
@@ -723,6 +776,8 @@ func NewTSStoreDataSource(config *models.TSStoreConfig) (*TSStoreDataSource, err
 // - "limit": number of records to fetch
 // - "filter": substring filter
 // - "filter_ignore_case": true/false for case-insensitive filtering
+// - "latest_by": field name — newest record per distinct value ("current
+//   state per series"); overrides the raw dispatch, suppresses step/group_by
 func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*models.ResultSet, error) {
 	// Get limit from params, default depends on query type
 	var limit int
@@ -746,6 +801,29 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 	var objects []dataResponse
 	var err error
 
+	// latest_by (ts-store v0.19.0): newest record per distinct value of a
+	// field. Overrides the normal dispatch — see the TSStoreAdapter.Query
+	// note for the full semantics (newest-only, step/group_by suppressed,
+	// relative window → since, absolute range ignored, limit caps groups).
+	if latestBy := resolveLatestByParam(query.Params); latestBy != "" {
+		since := ""
+		if spec, ok := resolveRange(query.Params); ok {
+			if tr, valid := tsstoreRangeFromSpec(spec); valid && tr.Relative {
+				since = tr.Since
+			}
+		} else if strings.HasPrefix(query.Raw, "since:") {
+			since = query.Raw[len("since:"):]
+		}
+		if !hasExplicitLimit {
+			limit = 0
+		}
+		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, "", "", latestBy)
+		if err != nil {
+			return nil, err
+		}
+		return t.toResultSet(ctx, objects)
+	}
+
 	// Range variable (structured path, auto-apply): the active range takes
 	// precedence over the raw newest/since:/range: dispatch. Relative → native
 	// since:<token>; absolute → a [from,to] range fetch (epoch seconds). This is
@@ -757,7 +835,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 			// window to the most-recent N. See the TSStoreAdapter.Query note.
 			limit = tsstoreRangeRowCap
 			if tr.Relative {
-				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step, groupBy)
+				objects, err = t.fetchNewest(ctx, limit, tr.Since, filter, filterIgnoreCase, tr.Step, groupBy, "")
 			} else {
 				objects, err = t.fetchRange(ctx, tr.FromEpoch, tr.ToEpoch, limit, filter, filterIgnoreCase, tr.Step, groupBy)
 			}
@@ -778,7 +856,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
+		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy, "")
 	case queryType == "oldest":
 		if !hasExplicitLimit {
 			limit = 10
@@ -790,7 +868,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 			limit = 100000 // High default for time-range queries
 		}
 		since := queryType[6:]
-		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, rawStep, groupBy)
+		objects, err = t.fetchNewest(ctx, limit, since, filter, filterIgnoreCase, rawStep, groupBy, "")
 	case len(queryType) > 6 && queryType[:6] == "range:":
 		// Absolute time range: "range:START:END"
 		if !hasExplicitLimit {
@@ -807,7 +885,7 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 		if !hasExplicitLimit {
 			limit = 10
 		}
-		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy)
+		objects, err = t.fetchNewest(ctx, limit, "", filter, filterIgnoreCase, rawStep, groupBy, "")
 	}
 
 	if err != nil {
@@ -819,10 +897,15 @@ func (t *TSStoreDataSource) Query(ctx context.Context, query models.Query) (*mod
 }
 
 // fetchNewest retrieves the N newest objects. step (optional) downsamples
-// server-side — see setStepParam.
-func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string, groupBy string) ([]dataResponse, error) {
+// server-side — see setStepParam. latestBy (optional) switches to a
+// newest-per-group lookup — see setLatestByParam. limit <= 0 omits the param
+// so ts-store applies its own default (10 records; up to 1000 groups under
+// latest_by).
+func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since string, filter string, filterIgnoreCase bool, step string, groupBy string, latestBy string) ([]dataResponse, error) {
 	params := url.Values{}
-	params.Set("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		params.Set("limit", strconv.Itoa(limit))
+	}
 	if since != "" {
 		params.Set("since", since)
 	}
@@ -838,6 +921,7 @@ func (t *TSStoreDataSource) fetchNewest(ctx context.Context, limit int, since st
 	}
 	setStepParam(params, step)
 	setGroupByParam(params, groupBy)
+	setLatestByParam(params, latestBy)
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/newest?%s", t.config.StoreName, params.Encode())
 	return t.fetchList(ctx, endpoint)
