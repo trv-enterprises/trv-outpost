@@ -259,6 +259,12 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     // and needs the range to window it (the polling path already gets range via
     // effectiveQuery.params.range). Harmless for non-streaming types.
     rangeValue,
+    // Pivot column (data_mapping.series): the streaming backfill must forward
+    // it as group_by so ts-store partitions a stepped downsample PER SERIES
+    // (v0.18.0). Without it a ranged+stepped pivot chart's backfill blends
+    // every series into one line. The polling /components/:id/data path derives
+    // group_by server-side; this is the streaming twin.
+    seriesCol: dataMapping?.series || '',
   });
 
   // Apply transforms to fetched data
