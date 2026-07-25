@@ -4017,6 +4017,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       chart_show_zoom_slider: Boolean(chartOptions.chartShowZoomSlider),
                       x_axis_label_rotate: chartOptions.xAxisLabelRotate ?? 0,
                       show_symbol: chartOptions.showSymbol !== false,
+                      // bar
+                      bar_orientation: chartOptions.barOrientation || 'vertical',
+                      bar_width_pct: chartOptions.barWidthPct ?? null,
                       // perf
                       sampling: chartOptions.sampling || 'off',
                       // y range
@@ -4168,6 +4171,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'x_axis_label_rotate': updateChartOption('xAxisLabelRotate', Number(value) || 0); break;
                         case 'show_symbol': updateChartOption('showSymbol', value); break;
                         case 'sampling': updateChartOption('sampling', value); break;
+                        case 'bar_orientation': updateChartOption('barOrientation', value); break;
+                        case 'bar_width_pct': updateChartOption('barWidthPct', value); break;
                         case 'y_left_min':
                           updateChartOption('yAxisRange', { ...(chartOptions.yAxisRange || {}), left: { ...(chartOptions.yAxisRange?.left || {}), min: value } });
                           break;

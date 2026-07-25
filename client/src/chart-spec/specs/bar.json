@@ -146,7 +146,7 @@
               "binds": "options.barWidthPct",
               "type": "nullable_number",
               "label": "Bar width (%)",
-              "default": null,
+              "default": 60,
               "min": 5,
               "max": 100,
               "step": 5,
