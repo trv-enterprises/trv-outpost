@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useRef, useState, useLayoutEffect } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import ReactECharts from 'echarts-for-react';
 import ChartTitleBand from './ChartTitleBand';
 import { horizontalBarCategoryCount, fitLabelFont } from './label-fit';
@@ -43,17 +43,25 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
 
   // Measured height of the chart body (the flex child ECharts fills), for
   // fitting horizontal-bar category-label fonts to the real panel height.
-  const bodyRef = useRef(null);
+  // A CALLBACK ref (not useRef + effect) because the body div mounts only
+  // AFTER the loading/no-data early returns clear — a []-dep effect would
+  // run once on the FIRST commit (often the "Loading..." branch, where the
+  // body div doesn't exist) and never re-attach. The callback ref fires
+  // exactly when the real node attaches, whenever that happens.
   const [bodyHeight, setBodyHeight] = useState(0);
-  useLayoutEffect(() => {
-    const el = bodyRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+  const roRef = useRef(null);
+  const bodyRef = useCallback((el) => {
+    if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
+    if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
       const h = entries[0]?.contentRect?.height;
       if (h) setBodyHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    roRef.current = ro;
+    // Seed immediately so the first paint doesn't wait for the observer.
+    const h = el.getBoundingClientRect?.().height;
+    if (h) setBodyHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
   }, []);
 
   if (dataCtx?.loading) {
