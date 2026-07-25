@@ -10,6 +10,16 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Bar chart orientation + bar width.** Two new bar Chart Options:
+  **Orientation** (vertical / horizontal — horizontal swaps the axes so
+  bars run left-to-right, with threshold lines, color segments, and the
+  zoom slider following their axes; dual-Y-axis bars stay vertical) and
+  **Bar width (%)** (each bar's width as a percent of its category
+  slot; blank keeps automatic sizing, which could read as very thin
+  bars in wide panels with few categories). Exposed to both AI agents
+  via the shared chart-options schema (`barOrientation`,
+  `barWidthPct`).
+
 - **Per-column value formats in Data Table.** The Data Table Columns
   editor gains a per-column **Format** select — Compact (SI: 127.0G,
   same abbreviation as number tiles and chart axes), Duration (2d 3h),

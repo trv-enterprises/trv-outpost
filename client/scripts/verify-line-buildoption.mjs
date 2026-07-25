@@ -600,6 +600,64 @@ const data = {
   check('case 21: dual right axis has no name', dual.yAxis?.[1]?.name === undefined);
 }
 
+// --- Case 22: bar orientation + bar width (bar shares this buildOption) ---
+{
+  const barData = { columns: ['region', 'sales'], rows: [['NA', 10], ['EU', 20]] };
+  const dm = { x_axis: 'region', y_axis: [{ column: 'sales' }] };
+
+  const vertical = buildOption({ data_mapping: dm, options: {} }, barData, { formatCellValue, chartType: 'bar' });
+  check('case 22: vertical bar keeps category x-axis', vertical.xAxis?.type === 'category');
+  check('case 22: no barWidth without barWidthPct', vertical.series?.[0]?.barWidth === undefined);
+
+  const horizontal = buildOption(
+    { data_mapping: dm, options: { barOrientation: 'horizontal', barWidthPct: 60 } },
+    barData,
+    { formatCellValue, chartType: 'bar' },
+  );
+  check('case 22: horizontal swaps category axis to y', horizontal.yAxis?.type === 'category');
+  check('case 22: horizontal value axis on x', horizontal.xAxis?.type !== 'category');
+  check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
+
+  // Thresholds ride the value axis: markLine yAxis→xAxis under horizontal.
+  const thresholds = buildOption(
+    { data_mapping: dm, options: { barOrientation: 'horizontal', yThresholds: [{ value: 15, color: '#f00' }] } },
+    barData,
+    { formatCellValue, chartType: 'bar' },
+  );
+  const ml = thresholds.series?.[0]?.markLine?.data?.[0];
+  check('case 22: horizontal threshold markLine keys on xAxis', ml?.xAxis === 15 && ml?.yAxis === undefined);
+
+  // Zoom slider pans categories — vertical strip on the right.
+  const zoomed = buildOption(
+    { data_mapping: dm, options: { barOrientation: 'horizontal', chartShowZoomSlider: true } },
+    barData,
+    { formatCellValue, chartType: 'bar' },
+  );
+  const slider = (zoomed.dataZoom || []).find((z) => z.type === 'slider');
+  check('case 22: horizontal slider keys on yAxisIndex', Array.isArray(slider?.yAxisIndex));
+  check('case 22: horizontal slider stands on the right', slider?.right === 8 && slider?.xAxisIndex === undefined);
+
+  // Dual-axis bars ignore the horizontal request (no horizontal analog).
+  const dualBar = buildOption(
+    {
+      data_mapping: { x_axis: 'region', multiple_y_axis: true, y_axis: [{ column: 'sales', axis: 'left' }, { column: 'sales', axis: 'right' }] },
+      options: { barOrientation: 'horizontal' },
+    },
+    barData,
+    { formatCellValue, chartType: 'bar' },
+  );
+  check('case 22: dual-axis bar stays vertical', dualBar.xAxis?.type === 'category');
+
+  // Line charts never react to the bar-only options.
+  const lineChart = buildOption(
+    { data_mapping: dm, options: { barOrientation: 'horizontal', barWidthPct: 60 } },
+    barData,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 22: line ignores bar orientation', lineChart.xAxis?.type === 'category');
+  check('case 22: line ignores barWidthPct', lineChart.series?.[0]?.barWidth === undefined);
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

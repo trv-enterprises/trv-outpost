@@ -130,6 +130,29 @@
           "layout": "row-4",
           "fields": [
             {
+              "id": "bar_orientation",
+              "binds": "options.barOrientation",
+              "type": "enum",
+              "label": "Orientation",
+              "default": "vertical",
+              "helperText": "Horizontal runs the bars left-to-right (categories on the side axis) — best for long category names. Dual Y-axis charts stay vertical.",
+              "options": [
+                { "value": "vertical", "label": "Vertical (columns)" },
+                { "value": "horizontal", "label": "Horizontal (bars)" }
+              ]
+            },
+            {
+              "id": "bar_width_pct",
+              "binds": "options.barWidthPct",
+              "type": "nullable_number",
+              "label": "Bar width (%)",
+              "default": null,
+              "min": 5,
+              "max": 100,
+              "step": 5,
+              "helperText": "Each bar's width as a percent of its category slot. Blank = automatic sizing (which can look thin when a wide panel holds few categories). With several series side by side, lower values keep them from overlapping."
+            },
+            {
               "id": "chart_show_data_labels",
               "binds": "options.chartShowDataLabels",
               "type": "boolean",

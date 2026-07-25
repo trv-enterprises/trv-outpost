@@ -819,6 +819,63 @@ export function buildOption(values, data, helpers = {}) {
     ];
   }
 
+  // Bar-only presentation options (bar.json Chart Options):
+  //  - barWidthPct: each bar series' width as a % of its category slot.
+  //    Unset = ECharts adaptive sizing, which reads as skinny bars when a
+  //    wide panel holds few categories.
+  //  - barOrientation 'horizontal': swap the category/value axes so bars
+  //    run left→right. Value-axis config (range/scale/SI formatter) rides
+  //    the swapped def unchanged; threshold marks, color segments, and
+  //    the zoom slider are re-pointed to their new axes below. Dual-axis
+  //    bars keep the vertical layout — left/right value axes have no
+  //    horizontal analog.
+  if (chartType === 'bar') {
+    const pct = Number(opts.barWidthPct);
+    if (Number.isFinite(pct) && pct > 0) {
+      const width = `${Math.min(pct, 100)}%`;
+      option.series = option.series.map((s) => (s.type === 'bar' ? { ...s, barWidth: width } : s));
+    }
+    if (opts.barOrientation === 'horizontal' && !dualAxis) {
+      const catAxis = option.xAxis;
+      option.xAxis = option.yAxis;
+      option.yAxis = catAxis;
+      // Threshold reference lines are authored against the VALUE axis
+      // (yAxis: v) — after the swap the value axis is X.
+      option.series = option.series.map((s) => {
+        if (!s.markLine?.data) return s;
+        return {
+          ...s,
+          markLine: {
+            ...s.markLine,
+            data: s.markLine.data.map(({ yAxis: v, ...rest }) => ({ xAxis: v, ...rest })),
+          },
+        };
+      });
+      // Color-by-value segments key on the value dimension — now x (0).
+      if (option.visualMap) option.visualMap = { ...option.visualMap, dimension: 0 };
+      // The zoom slider pans categories — now the Y axis. Stand the
+      // slider up along the right edge.
+      if (option.dataZoom) {
+        option.dataZoom = option.dataZoom.map((z) => {
+          const { xAxisIndex: _x, bottom: _b, height: _h, ...rest } = z;
+          const out = { ...rest, yAxisIndex: [0] };
+          if (z.type === 'slider') {
+            out.right = 8;
+            out.width = 24;
+          }
+          return out;
+        });
+        // Reclaim the bottom band the horizontal slider reserved and
+        // budget the right edge for the vertical one instead.
+        option.grid = {
+          ...option.grid,
+          bottom: legendPos === 'bottom' ? 34 : 8,
+          right: Math.max(Number(option.grid.right) || 0, 44),
+        };
+      }
+    }
+  }
+
   // Title is rendered OUTSIDE ECharts (HTML div in SpecDrivenChart)
   // — same convention legacy line/area/bar codegen uses. Putting it
   // inside `option.title` collides with the top-positioned legend

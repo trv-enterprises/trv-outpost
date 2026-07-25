@@ -76,6 +76,15 @@ func ChartOptionsSchema() map[string]interface{} {
 				"description": "Rotation angle (degrees) for x-axis CATEGORY labels. 0 = horizontal (default); with horizontal labels ECharts hides some when long names overlap. Set 30/45/90 when category names are long and the chart has a SMALL, fixed set of categories (e.g. a handful of named bars) so they fit without overlap. ECharts still thins labels when there are many categories, so this does NOT help dense/streaming/timestamp x-axes. line/area/bar only.",
 			},
 			"chartStacked": map[string]interface{}{"type": "boolean", "description": "Stack series on top of each other (bar/area). Per-column stacking can also be set on each data_mapping.y_axis entry."},
+			"barOrientation": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"vertical", "horizontal"},
+				"description": "bar chart only: bar direction. \"horizontal\" swaps the axes (categories run down the side axis, bars grow left→right) — best for long category names. Default \"vertical\". Dual-axis bars stay vertical.",
+			},
+			"barWidthPct": map[string]interface{}{
+				"type":        "number",
+				"description": "bar chart only: each bar's width as a PERCENT (5–100) of its category slot. Unset = automatic sizing, which can read as thin bars when a wide panel holds few categories. With several side-by-side series, lower values keep them from overlapping.",
+			},
 			"bandedBarStyle": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
@@ -123,7 +132,7 @@ var ChartOptionKeys = map[string]struct{}{
 	"yAxisRange": {}, "tooltip": {}, "yThresholds": {}, "yThresholdRenderMode": {},
 	"sampling": {}, "legend": {}, "chartSmooth": {}, "showSymbol": {},
 	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
-	"xAxisLabelRotate": {},
+	"xAxisLabelRotate": {}, "barOrientation": {}, "barWidthPct": {},
 	"bandedBarStyle":   {}, "numberFormat": {}, "numberDateFormat": {},
 	"numberDecimals": {}, "numberUnit": {}, "numberSize": {}, "title": {},
 }

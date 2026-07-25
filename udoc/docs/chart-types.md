@@ -50,6 +50,8 @@ Map query result fields to chart axes and series:
 | **Number value size** | Number — value font size in px; defaults to the admin setting [Default Number Chart Value Size](system-settings.md) (56 px out of the box) |
 | **Smooth curves** | Line, Area |
 | **Stacked series** | Bar, Line, Area |
+| **Orientation** (vertical / horizontal) | Bar — horizontal runs the bars left-to-right with categories down the side axis; best for long category names. Dual-Y-axis bars stay vertical |
+| **Bar width (%)** | Bar — each bar's width as a percent of its category slot; blank = automatic sizing |
 | **Show data labels** | All chart types |
 | **Gauge min/max** | Gauge |
 | **Gauge thresholds** | Gauge (warning at 70, danger at 90 by default) |
