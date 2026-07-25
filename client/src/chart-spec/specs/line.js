@@ -836,7 +836,18 @@ export function buildOption(values, data, helpers = {}) {
       option.series = option.series.map((s) => (s.type === 'bar' ? { ...s, barWidth: width } : s));
     }
     if (opts.barOrientation === 'horizontal' && !dualAxis) {
-      const catAxis = option.xAxis;
+      const catAxis = { ...option.xAxis };
+      // The category axis now runs down the SIDE: drop any authored
+      // x-label rotation — it exists to fit cramped bottom labels, but
+      // rotated side labels overlap each other, which makes ECharts thin
+      // most of them away (side labels read fine horizontal). And put
+      // index 0 at the TOP (inverse) so the categories read in data
+      // order, matching the vertical chart's left→right.
+      if (catAxis.axisLabel?.rotate) {
+        const { rotate: _rot, ...restLabel } = catAxis.axisLabel;
+        catAxis.axisLabel = restLabel;
+      }
+      catAxis.inverse = true;
       option.xAxis = option.yAxis;
       option.yAxis = catAxis;
       // Threshold reference lines are authored against the VALUE axis

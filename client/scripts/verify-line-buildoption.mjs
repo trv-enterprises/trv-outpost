@@ -617,6 +617,16 @@ const data = {
   check('case 22: horizontal swaps category axis to y', horizontal.yAxis?.type === 'category');
   check('case 22: horizontal value axis on x', horizontal.xAxis?.type !== 'category');
   check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
+  check('case 22: horizontal categories read top-down', horizontal.yAxis?.inverse === true);
+
+  // An authored x-label rotation must NOT ride to the side axis — rotated
+  // side labels overlap and get thinned away.
+  const rotated = buildOption(
+    { data_mapping: dm, options: { barOrientation: 'horizontal', xAxisLabelRotate: 45 } },
+    barData,
+    { formatCellValue, chartType: 'bar' },
+  );
+  check('case 22: horizontal drops x-label rotation on side axis', rotated.yAxis?.axisLabel?.rotate === undefined);
 
   // Thresholds ride the value axis: markLine yAxis→xAxis under horizontal.
   const thresholds = buildOption(
