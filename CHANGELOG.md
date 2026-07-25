@@ -6,19 +6,25 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.46.0] — 2026-07-24
 
 ### Added
 
+- **Per-edge panel resize.** Design-mode panels gain single-axis edge
+  grips (top / bottom change height, left / right change width) beside
+  the existing bottom-right corner grip. The near edge moves with the
+  opposite edge anchored, and the resize cursor is held for the whole
+  drag so it doesn't flip to the move cursor mid-resize.
 - **Bar chart orientation + bar width.** Two new bar Chart Options:
   **Orientation** (vertical / horizontal — horizontal swaps the axes so
   bars run left-to-right, with threshold lines, color segments, and the
   zoom slider following their axes; dual-Y-axis bars stay vertical) and
   **Bar width (%)** (each bar's width as a percent of its category
   slot; blank keeps automatic sizing, which could read as very thin
-  bars in wide panels with few categories). Exposed to both AI agents
-  via the shared chart-options schema (`barOrientation`,
-  `barWidthPct`).
+  bars in wide panels with few categories). Horizontal bars force every
+  category label (no silent thinning) and coalesce blank-category rows
+  into one `BLANK` slot. Exposed to both AI agents via the shared
+  chart-options schema (`barOrientation`, `barWidthPct`).
 
 - **Per-column value formats in Data Table.** The Data Table Columns
   editor gains a per-column **Format** select — Compact (SI: 127.0G,
