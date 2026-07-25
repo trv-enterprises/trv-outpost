@@ -884,27 +884,15 @@ export function buildOption(values, data, helpers = {}) {
       // horizontal ones. inverse:true puts index 0 at the TOP so
       // categories read in data order, matching the vertical chart's
       // left→right.
+      //
+      // Category-label FONT sizing (fit every label to the panel height so
+      // ECharts neither thins nor packs) is applied at RENDER time in
+      // ChartShell, which is the only layer that knows the actual plot
+      // height — a category-count-only guess here was always wrong for some
+      // height. buildOption deliberately leaves fontSize/interval unset.
       catAxis.axisLabel = { ...(catAxis.axisLabel || {}) };
       delete catAxis.axisLabel.rotate;
       catAxis.inverse = true;
-      // Category-label sizing, verified against ECharts 6 renders:
-      //  - DON'T force interval:0. In a short panel that packs every label
-      //    at the axis start while bars stay evenly distributed — labels
-      //    drift off their bars.
-      //  - DON'T set lineHeight. ECharts centers a label in a box of that
-      //    height on its tick; a box smaller than the real slot mis-centers
-      //    each one and the error accumulates down the axis.
-      //  - DO shrink the FONT as categories grow. Smaller labels FIT
-      //    without overlapping, so ECharts stops thinning them (which would
-      //    drop half the names) AND keeps every one centered on its bar.
-      //    Calibrated against ECharts 6 renders at a typical short panel:
-      //    at 9 categories all labels fit at ~9px (12px thinned to every
-      //    other). ~9 rows → 9px, ~15 → 8px, floored at 8px. A tall panel
-      //    just gets a slightly smaller-than-default label, which is fine.
-      const catCount = categories.length;
-      if (catCount > 6) {
-        catAxis.axisLabel.fontSize = Math.max(8, 12 - Math.ceil((catCount - 6) / 2));
-      }
       option.xAxis = option.yAxis;
       option.yAxis = catAxis;
       // Threshold reference lines are authored against the VALUE axis

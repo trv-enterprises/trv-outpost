@@ -619,13 +619,10 @@ const data = {
   check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
   check('case 22: horizontal categories read top-down', horizontal.yAxis?.inverse === true);
 
-  // Sparse (≤6) → default font, no overrides at all.
-  check('case 22: sparse horizontal keeps default label font', horizontal.yAxis?.axisLabel?.fontSize === undefined);
-
-  // Dense → shrink the FONT so every label fits and ECharts stops thinning
-  // (verified against ECharts 6 renders). But NEVER force interval:0 (packs
-  // labels at the top of a short panel) or set lineHeight (mis-centers each
-  // label so the error walks down the axis). Both broke label↔bar alignment.
+  // buildOption must NOT set fontSize / interval / lineHeight on the
+  // category axis — label-font fitting is height-aware and lives in
+  // ChartShell (it's the only layer that knows the real plot height). A
+  // category-count guess here was always wrong for some panel height.
   const dense = buildOption(
     {
       data_mapping: { x_axis: 'name', y_axis: [{ column: 'v' }] },
@@ -634,16 +631,9 @@ const data = {
     { columns: ['name', 'v'], rows: Array.from({ length: 9 }, (_, i) => [`container-${i}`, i]) },
     { formatCellValue, chartType: 'bar' },
   );
-  check('case 22: dense horizontal shrinks label font', dense.yAxis?.axisLabel?.fontSize === 10);
-  check('case 22: dense horizontal never forces interval', dense.yAxis?.axisLabel?.interval === undefined);
-  check('case 22: dense horizontal never pins lineHeight', dense.yAxis?.axisLabel?.lineHeight === undefined);
-  // Font floors at 8 for very many categories.
-  const veryDense = buildOption(
-    { data_mapping: { x_axis: 'name', y_axis: [{ column: 'v' }] }, options: { barOrientation: 'horizontal' } },
-    { columns: ['name', 'v'], rows: Array.from({ length: 30 }, (_, i) => [`c${i}`, i]) },
-    { formatCellValue, chartType: 'bar' },
-  );
-  check('case 22: very dense horizontal floors font at 8', veryDense.yAxis?.axisLabel?.fontSize === 8);
+  check('case 22: buildOption leaves label fontSize unset', dense.yAxis?.axisLabel?.fontSize === undefined);
+  check('case 22: buildOption never forces interval', dense.yAxis?.axisLabel?.interval === undefined);
+  check('case 22: buildOption never pins lineHeight', dense.yAxis?.axisLabel?.lineHeight === undefined);
 
   // An authored x-label rotation must NOT ride to the side axis — rotated
   // side labels overlap and read worse than plain horizontal ones.
