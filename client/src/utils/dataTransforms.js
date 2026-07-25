@@ -582,10 +582,22 @@ function formatRelativeTime(date) {
 export function formatCellValue(value, columnName = '', options = {}) {
   if (value === null || value === undefined) return '';
 
-  // Check if value looks like a timestamp
   const timestampType = detectTimestampType(value);
+  // options.strictTimestampNames: gate timestamp rendering on the column
+  // NAME (or an unambiguous ISO date string) — bare numbers never qualify
+  // on magnitude alone. The epoch windows overlap real-world quantities: a
+  // 2 GiB byte count (2147483648) sits inside the unix-seconds range and
+  // rendered as a 2038 date in the data table (mem.limit bug). Tabular
+  // renderers set this because they format EVERY column; chart x-axis
+  // paths keep the permissive default because the author explicitly chose
+  // that one column as the axis (and names like `datetime` don't match the
+  // name heuristic).
+  const isoString = typeof value === 'string' && timestampType === 'iso';
+  const treatAsTimestamp = options.strictTimestampNames
+    ? (isTimestampColumn(columnName) || isoString)
+    : (isTimestampColumn(columnName) || timestampType !== null);
 
-  if (isTimestampColumn(columnName) || timestampType) {
+  if (treatAsTimestamp) {
     const format = options.timestampFormat || 'short';
     return formatTimestamp(value, format, options);
   }

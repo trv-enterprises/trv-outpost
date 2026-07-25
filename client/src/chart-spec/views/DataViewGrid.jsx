@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { useDataviewLayout } from '../../hooks/useDataviewLayout';
 import { formatCellValue } from '../../utils/dataTransforms';
+import { formatNumberValue } from '../specs/number-formats';
 
 /**
  * DataViewGrid — the non-ECharts render for the `dataview` chart type.
@@ -27,6 +28,8 @@ import { formatCellValue } from '../../utils/dataTransforms';
  * @param {object}        props
  * @param {object}        props.columnAliases       { col → display name }
  * @param {object}        props.columnWidths        { col → px } author-set default widths
+ * @param {object}        props.columnFormats       { col → value format } — 'compact' (SI, 127G),
+ *                                                  'duration', 'duration_clock', 'plain'; missing/'auto' = default
  * @param {string[]|null} props.visibleColumnsConfig ordered whitelist, or null = show all
  * @param {string}        props.xAxisFormat         timestamp format for time columns
  * @param {object}        props.config              saved config (id, title)
@@ -35,6 +38,7 @@ import { formatCellValue } from '../../utils/dataTransforms';
 export default function DataViewGrid({
   columnAliases = {},
   columnWidths = {},
+  columnFormats = {},
   visibleColumnsConfig = null,
   xAxisFormat = 'short',
   config,
@@ -74,6 +78,11 @@ export default function DataViewGrid({
   // editor changes a width (object identity alone wouldn't be a safe dep).
   const columnWidthsKey = Object.entries(columnWidths || {})
     .map(([c, w]) => `${c}:${w}`)
+    .sort()
+    .join('|');
+  // Same stable-signature treatment for the author format map.
+  const columnFormatsKey = Object.entries(columnFormats || {})
+    .map(([c, f]) => `${c}:${f}`)
     .sort()
     .join('|');
   // Row objects derived from the latest snapshot. Stable __id (content
@@ -167,7 +176,16 @@ export default function DataViewGrid({
         valueFormatter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col, { timestampFormat: xAxisFormat });
+          // Author-set per-column format (compact SI / duration / plain)
+          // wins over the default cell formatter. Same vocabulary as the
+          // number tile — formatNumberValue handles the non-numeric
+          // fallback itself.
+          const colFmt = columnFormats[col];
+          if (colFmt && colFmt !== 'auto') {
+            const f = formatNumberValue(v, col, { numberFormat: colFmt, numberDecimals: 'auto' }, formatCellValue);
+            return f == null ? '' : String(f);
+          }
+          const f = formatCellValue(v, col, { timestampFormat: xAxisFormat, strictTimestampNames: true });
           return f == null ? '' : String(f);
         },
         minWidth: resolvedWidth > 0 ? Math.min(defaultFloor, resolvedWidth) : defaultFloor,
@@ -180,7 +198,7 @@ export default function DataViewGrid({
       return def;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout, columnWidthsKey]);
+  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey]);
 
   // Columns WITHOUT an explicit width — the only ones fitCellContents should
   // auto-size. A column with an author/user width must keep its def.width, but

@@ -28,6 +28,9 @@ export function buildOption(values, _data, helpers = {}) {
   // as the default column width; a viewer's drag-resize (useDataviewLayout)
   // still overrides per-user.
   const columnWidths = dm.column_widths && typeof dm.column_widths === 'object' ? dm.column_widths : {};
+  // Author-set per-column value formats ({ col → 'compact'|'duration'|
+  // 'duration_clock'|'plain' }); missing/'auto' = default cell formatting.
+  const columnFormats = dm.column_formats && typeof dm.column_formats === 'object' ? dm.column_formats : {};
   const xAxisFormat = dm.x_axis_format || helpers.xAxisFormat || 'short';
 
   return {
@@ -35,6 +38,7 @@ export function buildOption(values, _data, helpers = {}) {
     props: {
       columnAliases,
       columnWidths,
+      columnFormats,
       visibleColumnsConfig,
       xAxisFormat,
     },
