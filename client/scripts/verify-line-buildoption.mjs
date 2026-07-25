@@ -619,10 +619,11 @@ const data = {
   check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
   check('case 22: horizontal categories read top-down', horizontal.yAxis?.inverse === true);
 
-  // buildOption must NOT set fontSize / interval / lineHeight on the
-  // category axis — label-font fitting is height-aware and lives in
-  // ChartShell (it's the only layer that knows the real plot height). A
-  // category-count guess here was always wrong for some panel height.
+  // Force EVERY category label (interval:0) so no container name is ever
+  // silently dropped — ECharts' default thins category labels it predicts
+  // would collide. Fixed font (ECharts default); a too-short panel crowds,
+  // the user makes it taller. Must NOT pin lineHeight (mis-centers labels,
+  // drift walks down the axis).
   const dense = buildOption(
     {
       data_mapping: { x_axis: 'name', y_axis: [{ column: 'v' }] },
@@ -631,9 +632,9 @@ const data = {
     { columns: ['name', 'v'], rows: Array.from({ length: 9 }, (_, i) => [`container-${i}`, i]) },
     { formatCellValue, chartType: 'bar' },
   );
-  check('case 22: buildOption leaves label fontSize unset', dense.yAxis?.axisLabel?.fontSize === undefined);
-  check('case 22: buildOption never forces interval', dense.yAxis?.axisLabel?.interval === undefined);
-  check('case 22: buildOption never pins lineHeight', dense.yAxis?.axisLabel?.lineHeight === undefined);
+  check('case 22: horizontal forces every label (interval:0)', dense.yAxis?.axisLabel?.interval === 0);
+  check('case 22: horizontal uses default label font (no override)', dense.yAxis?.axisLabel?.fontSize === undefined);
+  check('case 22: horizontal never pins lineHeight', dense.yAxis?.axisLabel?.lineHeight === undefined);
 
   // An authored x-label rotation must NOT ride to the side axis — rotated
   // side labels overlap and read worse than plain horizontal ones.

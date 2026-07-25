@@ -885,12 +885,15 @@ export function buildOption(values, data, helpers = {}) {
       // categories read in data order, matching the vertical chart's
       // left→right.
       //
-      // Category-label FONT sizing (fit every label to the panel height so
-      // ECharts neither thins nor packs) is applied at RENDER time in
-      // ChartShell, which is the only layer that knows the actual plot
-      // height — a category-count-only guess here was always wrong for some
-      // height. buildOption deliberately leaves fontSize/interval unset.
-      catAxis.axisLabel = { ...(catAxis.axisLabel || {}) };
+      // interval:0 forces EVERY category label to show — never silently
+      // drop a container name. (ECharts' default thins category labels it
+      // predicts would collide, which hid half the names.) If a panel is
+      // too short to fit them all, they crowd and the user makes the panel
+      // taller — a hand-written bar chart does exactly this. Do NOT set
+      // lineHeight: ECharts centers each label in a box of that height on
+      // its tick, so a box smaller than the real slot mis-centers every
+      // label and the error walks down the axis.
+      catAxis.axisLabel = { ...(catAxis.axisLabel || {}), interval: 0 };
       delete catAxis.axisLabel.rotate;
       catAxis.inverse = true;
       option.xAxis = option.yAxis;
