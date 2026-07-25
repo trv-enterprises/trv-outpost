@@ -57,6 +57,22 @@ Map query result fields to chart axes and series:
 | **Pie inner radius** | Pie (0 for pie, >0 for donut) |
 | **Pie show labels** | Pie |
 
+### Data Table Columns
+
+The Data Table type has a per-column **Columns** editor: check a column to
+include it, reorder with the ↕ arrows (rows move as you click — the table
+matches what you see), and optionally set a **display name**, a fixed
+**width** in pixels (blank = auto-size; viewers can still drag headers to
+override for their own session), and a **value format**:
+
+| Format | Renders |
+|--------|---------|
+| **Auto** (default) | Locale number / timestamp detection |
+| **Compact (SI)** | `136365211648` → `127.0G` (same abbreviation as number tiles and chart axes) |
+| **Duration** | Seconds → `2d 3h 4m` |
+| **Duration (HH:MM:SS)** | Seconds → clock form |
+| **Plain number** | Locale number, never abbreviated |
+
 ## Auto-Refresh
 
 When placed in a dashboard with auto-refresh enabled, charts automatically re-query their data source at the configured interval. Streaming connections (WebSocket, MQTT, streaming ts-store) update in real-time without polling.

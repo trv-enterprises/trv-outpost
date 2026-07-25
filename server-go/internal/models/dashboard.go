@@ -127,6 +127,7 @@ type ChartDataMapping struct {
 	ColumnAliases  map[string]string   `json:"column_aliases" bson:"column_aliases"`                       // Display names for columns (column name -> display name), primarily for dataview
 	VisibleColumns []string            `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
 	ColumnWidths   map[string]int      `json:"column_widths,omitempty" bson:"column_widths,omitempty"`     // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
+	ColumnFormats  map[string]string   `json:"column_formats,omitempty" bson:"column_formats,omitempty"`   // For dataview only: column name -> value format ("compact" SI 127G, "duration", "duration_clock", "plain"). Missing/"auto" = default cell formatting. Same format vocabulary as the number tile (number-formats.js).
 	Parser         *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"`                   // Per-component data extraction for streaming (MQTT, ts-store MQTT)
 	BandColumns    *BandColumns        `json:"band_columns,omitempty" bson:"band_columns,omitempty"`       // Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.
 

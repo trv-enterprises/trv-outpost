@@ -8,6 +8,7 @@ import { Modal, Loading, InlineNotification } from '@carbon/react';
 import { AgGridReact } from 'ag-grid-react';
 import { DataContext } from './DynamicComponentLoader';
 import { formatCellValue, parseTimestamp } from '../utils/dataTransforms';
+import { formatNumberValue } from '../chart-spec/specs/number-formats';
 
 /**
  * ComponentDataGridModal
@@ -37,6 +38,9 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
 
   const columnAliases = chart?.data_mapping?.column_aliases || {};
   const visibleColumnsConfig = chart?.data_mapping?.visible_columns || null;
+  // Author-set per-column value formats — same application as DataViewGrid
+  // so the fullscreen table matches the panel.
+  const columnFormats = chart?.data_mapping?.column_formats || {};
   // Honor the chart's x-axis time format for any timestamp column in
   // the table — without this, formatCellValue defaults to 'short'
   // (no seconds), which mismatches charts saved with chart_time_seconds
@@ -231,7 +235,10 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
         valueFormatter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col, { timestampFormat: effectiveTimestampFormat });
+          const colFmt = columnFormats[col];
+          const f = (colFmt && colFmt !== 'auto')
+            ? formatNumberValue(v, col, { numberFormat: colFmt, numberDecimals: 'auto' }, formatCellValue)
+            : formatCellValue(v, col, { timestampFormat: effectiveTimestampFormat, strictTimestampNames: true });
           return f == null ? '' : String(f);
         },
         // Cell tooltip — uses the formatted display value so the tooltip
@@ -239,7 +246,10 @@ export default function ComponentDataGridModal({ open, chart, onClose, data: dat
         tooltipValueGetter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          const f = formatCellValue(v, col, { timestampFormat: effectiveTimestampFormat });
+          const colFmt = columnFormats[col];
+          const f = (colFmt && colFmt !== 'auto')
+            ? formatNumberValue(v, col, { numberFormat: colFmt, numberDecimals: 'auto' }, formatCellValue)
+            : formatCellValue(v, col, { timestampFormat: effectiveTimestampFormat, strictTimestampNames: true });
           return f == null ? '' : String(f);
         },
         minWidth: isNumCol ? 100 : isTimeCol ? 170 : 120,

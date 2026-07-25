@@ -657,6 +657,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Absent/0 = auto-size to content. These are the chart DEFAULT; a user's
   // live drag-resize (per-user, useDataviewLayout) still overrides them.
   const [columnWidths, setColumnWidths] = useState({});
+  // For dataview: author-set per-column value formats (column name ->
+  // 'compact' | 'duration' | 'duration_clock' | 'plain'). Absent = auto.
+  const [columnFormats, setColumnFormats] = useState({});
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -1072,6 +1075,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setLimitRows(chart.data_mapping?.limit || 0);
       setColumnAliases(chart.data_mapping?.column_aliases || {});
       setColumnWidths(chart.data_mapping?.column_widths || {});
+      setColumnFormats(chart.data_mapping?.column_formats || {});
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
@@ -1381,6 +1385,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         limitRows: chart.data_mapping?.limit || 0,
         columnAliases: chart.data_mapping?.column_aliases || {},
         columnWidths: chart.data_mapping?.column_widths || {},
+        columnFormats: chart.data_mapping?.column_formats || {},
         visibleColumns: Array.isArray(loadedVisibleSnap) && loadedVisibleSnap.length > 0 ? loadedVisibleSnap : null,
         parserPreset: loadedParserPreset,
         parserDataPath: loadedParser?.data_path || '',
@@ -1456,6 +1461,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         limitRows: 0,
         columnAliases: {},
         columnWidths: {},
+        columnFormats: {},
         visibleColumns: null,
         parserPreset: 'none',
         parserDataPath: '',
@@ -1538,6 +1544,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       limitRows,
       columnAliases,
       columnWidths,
+      columnFormats,
       visibleColumns,
       parserPreset,
       parserDataPath,
@@ -1561,7 +1568,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
-    sortBy, sortOrder, limitRows, columnAliases, columnWidths, visibleColumns,
+    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
     bandColumns, bandedBarStyle, chartOptions,
     componentCode, showCustomCode, usesDashboardVariable, initialState, onDirtyChange,
@@ -1940,6 +1947,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setLimitRows(0);
     setColumnAliases({});
     setColumnWidths({});
+    setColumnFormats({});
     setVisibleColumns(null);
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
@@ -2570,6 +2578,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         limit: limitRows || 0,
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
         column_widths: pruneColumnWidths(columnWidths),
+        column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -4062,6 +4071,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       visible_columns: visibleColumns,
                       column_aliases: columnAliases,
                       column_widths: columnWidths,
+                      column_formats: columnFormats,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -4250,6 +4260,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'column_widths':
                           setColumnWidths(value);
+                          break;
+                        case 'column_formats':
+                          setColumnFormats(value);
                           break;
                         default: break;
                       }
@@ -4920,7 +4933,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           {filteredPreviewData.rows?.slice(0, 10).map((row, i) => (
                             <tr key={i}>
                               {row.map((cell, j) => (
-                                <td key={j}>{formatCellValue(cell, filteredPreviewData.columns?.[j], { timestampFormat: xAxisFormat || 'short' })}</td>
+                                <td key={j}>{formatCellValue(cell, filteredPreviewData.columns?.[j], { timestampFormat: xAxisFormat || 'short', strictTimestampNames: true })}</td>
                               ))}
                             </tr>
                           ))}
@@ -5026,6 +5039,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           visible_columns: Array.isArray(visibleColumns) ? visibleColumns : undefined,
                           column_aliases: columnAliases,
                           column_widths: pruneColumnWidths(columnWidths),
+                          column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
                         } : undefined,
                         // bandedBarStyle is a sibling state var (not inside
                         // chartOptions); merge it into options for the
@@ -5070,6 +5084,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         limit: limitRows || 0,
                         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
                         column_widths: pruneColumnWidths(columnWidths),
+                        column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
                         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
                         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
                           data_path: parserDataPath || undefined,

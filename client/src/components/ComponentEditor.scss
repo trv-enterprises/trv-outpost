@@ -978,7 +978,7 @@
             // so the header labels line up with the fields — an `auto` controls
             // column would size to the checkbox+arrows and diverge from an
             // empty header spacer.
-            grid-template-columns: 4.5rem minmax(0, 12rem) minmax(0, 12rem) 5rem;
+            grid-template-columns: 4.5rem minmax(0, 12rem) minmax(0, 12rem) 5rem 10rem; // + Format select
             justify-content: start;
             gap: spacing.$spacing-03;
             padding: 0 spacing.$spacing-03;
@@ -1032,7 +1032,7 @@
             // fixed. Controls width is fixed (not auto) so the header labels
             // above line up with the name/rename/width fields.
             display: grid;
-            grid-template-columns: 4.5rem minmax(0, 12rem) minmax(0, 12rem) 5rem;
+            grid-template-columns: 4.5rem minmax(0, 12rem) minmax(0, 12rem) 5rem 10rem; // + Format select
             justify-content: start;
             align-items: center;
             gap: spacing.$spacing-03;

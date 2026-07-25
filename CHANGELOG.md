@@ -10,6 +10,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Per-column value formats in Data Table.** The Data Table Columns
+  editor gains a per-column **Format** select — Compact (SI: 127.0G,
+  same abbreviation as number tiles and chart axes), Duration (2d 3h),
+  Duration clock (HH:MM:SS), Plain — persisted as
+  `data_mapping.column_formats` and applied in both the panel grid and
+  the fullscreen data grid.
+
 - **ts-store "Current State (latest per series)" query type** (#202,
   first slice). The component editor's ts-store query section gains a
   **Current State (latest per series)** query type backed by ts-store
@@ -25,6 +32,21 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Data Table cells no longer misread large numbers as dates.** Cell
+  formatting flipped any number inside the epoch window into a
+  timestamp — a 2 GiB `mem.limit` byte count rendered as a 2038 date.
+  Tabular renderers (Data Table, fullscreen grid, editor preview,
+  number-tile auto format) now render a number as time only when the
+  column NAME is time-ish (or the value is an ISO date string); chart
+  x-axes keep the permissive detection since the author explicitly
+  picked the axis column.
+- **Data Table column reorder is visible again.** The Columns editor's
+  ↕ arrows changed the real table order but the editor rows never
+  moved (a leftover of the v0.44 click-stealing fix), so the arrows'
+  disabled states appeared wrong and moves felt lost. Rows now swap on
+  screen exactly as the order changes; visibility toggles still never
+  move rows, re-checking a hidden column no longer resets the custom
+  order, and Show all adopts the on-screen order.
 - **API charts with a series column no longer 400 against strict
   upstreams** (#208). The v0.45.0 per-series downsampling change made
   the server derive a `group_by` param from `data_mapping.series` for

@@ -107,9 +107,11 @@ export function formatNumberValue(raw, valueColumn, opts = {}, formatCellValue) 
 
   const n = toNum(raw);
   // Non-numeric value with a numeric format → fall back to auto so we
-  // never render "NaN".
+  // never render "NaN". strictTimestampNames: a tile's value column is a
+  // measurement — never flip a byte-count magnitude into a date; only a
+  // time-NAMED column (or ISO string) renders as time.
   if (n == null) {
-    return formatCellValue ? formatCellValue(raw, valueColumn) : String(raw);
+    return formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : String(raw);
   }
 
   switch (format) {
@@ -125,7 +127,8 @@ export function formatNumberValue(raw, valueColumn, opts = {}, formatCellValue) 
     default:
       // Explicit decimals → fixed; else defer to the viewer's auto
       // formatter (handles its own locale/precision rules).
+      // strictTimestampNames — see the non-numeric fallback above.
       if (decimals != null && decimals !== 'auto') return formatPlain(n, decimals);
-      return formatCellValue ? formatCellValue(raw, valueColumn) : formatPlain(n, 'auto');
+      return formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : formatPlain(n, 'auto');
   }
 }
