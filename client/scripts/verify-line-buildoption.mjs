@@ -673,6 +673,39 @@ const data = {
   );
   check('case 22: dual-axis bar stays vertical', dualBar.xAxis?.type === 'category');
 
+  // Blank/null category rows on a non-pivot bar chart coalesce into ONE
+  // "BLANK" category (values summed) rather than leaving empty axis slots
+  // (the "dead space at the bottom" bug). Real categories are untouched.
+  const withBlanks = {
+    columns: ['name', 'cpu'],
+    rows: [['a', 1], ['b', 2], [null, 3], ['', 4], ['c', 5]],
+  };
+  const barBlanks = buildOption(
+    { data_mapping: { x_axis: 'name', y_axis: [{ column: 'cpu' }] }, options: {} },
+    withBlanks,
+    { formatCellValue, chartType: 'bar' },
+  );
+  check('case 22: bar coalesces blanks to one BLANK slot', barBlanks.xAxis?.data?.length === 4);
+  check('case 22: bar BLANK category labeled', JSON.stringify(barBlanks.xAxis?.data) === JSON.stringify(['a', 'b', 'BLANK', 'c']));
+  check('case 22: bar sums BLANK values, keeps reals', JSON.stringify(barBlanks.series?.[0]?.data) === JSON.stringify([1, 2, 7, 5]));
+
+  // Duplicate real categories collapse and sum too.
+  const dupCats = buildOption(
+    { data_mapping: { x_axis: 'name', y_axis: [{ column: 'cpu' }] }, options: {} },
+    { columns: ['name', 'cpu'], rows: [['a', 1], ['a', 4], ['b', 2]] },
+    { formatCellValue, chartType: 'bar' },
+  );
+  check('case 22: bar collapses duplicate categories', JSON.stringify(dupCats.xAxis?.data) === JSON.stringify(['a', 'b']));
+  check('case 22: bar sums duplicate category values', JSON.stringify(dupCats.series?.[0]?.data) === JSON.stringify([5, 2]));
+
+  // A line chart is untouched (its x is a continuum; a gap is meaningful).
+  const lineBlanks = buildOption(
+    { data_mapping: { x_axis: 'name', y_axis: [{ column: 'cpu' }] }, options: {} },
+    withBlanks,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 22: line keeps blank-category rows', lineBlanks.xAxis?.data?.length === 5);
+
   // Line charts never react to the bar-only options.
   const lineChart = buildOption(
     { data_mapping: dm, options: { barOrientation: 'horizontal', barWidthPct: 60 } },

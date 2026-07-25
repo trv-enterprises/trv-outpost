@@ -517,8 +517,49 @@ export function buildOption(values, data, helpers = {}) {
   const seriesCol = values?.data_mapping?.series || '';
 
   const columns = data?.columns || [];
-  const rows = data?.rows || [];
   const columnIndex = (name) => columns.indexOf(name);
+
+  // Bar charts plot one CATEGORY per x-value, so rows with a null/blank
+  // x-value would each become their own empty axis slot (dead space, and a
+  // stray bar if the row carries a y-value). Coalesce them into ONE
+  // "BLANK" category instead of dropping them, so the values still show:
+  // relabel each blank x to "BLANK", then collapse rows that share an
+  // x-value into one (summing numeric y-columns) so the several BLANK rows
+  // become a single slot — and any genuine duplicate category does too.
+  // Scoped to bar: a line/area chart's x is a continuum where a gap is
+  // meaningful, and other types don't hit this path. Skip when pivoting (a
+  // blank there is a distinct SERIES, handled on that branch).
+  const BLANK_CATEGORY = 'BLANK';
+  const xColIdxRaw = columnIndex(xAxisCol);
+  const rowsRaw = data?.rows || [];
+  const isBlankCat = (v) => v == null || (typeof v === 'string' && v.trim() === '');
+  let rows = rowsRaw;
+  if (chartType === 'bar' && !seriesCol && xColIdxRaw >= 0) {
+    const byCat = new Map();
+    for (const r of rowsRaw) {
+      const key = isBlankCat(r[xColIdxRaw]) ? BLANK_CATEGORY : r[xColIdxRaw];
+      const existing = byCat.get(key);
+      if (!existing) {
+        // Clone so the merge doesn't mutate the caller's rows; stamp the
+        // normalized category into the x-cell.
+        const clone = r.slice();
+        clone[xColIdxRaw] = key;
+        byCat.set(key, clone);
+      } else {
+        // Merge a duplicate category: sum numeric cells column-wise (bar
+        // values add), leave the x-cell (already the key), keep the first
+        // non-numeric value otherwise.
+        for (let i = 0; i < r.length; i++) {
+          if (i === xColIdxRaw) continue;
+          const a = existing[i];
+          const b = r[i];
+          if (typeof a === 'number' && typeof b === 'number') existing[i] = a + b;
+          else if (a == null && b != null) existing[i] = b;
+        }
+      }
+    }
+    rows = [...byCat.values()];
+  }
 
   // Build categories from the x-axis column. The 'auto' format resolves
   // to a concrete preset from the data (span → time-only/date+time,
