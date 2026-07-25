@@ -785,6 +785,13 @@ definitions:
         description: Display names for columns (column name -> display name), primarily
           for dataview
         type: object
+      column_formats:
+        additionalProperties:
+          type: string
+        description: 'For dataview only: column name -> value format ("compact" SI
+          127G, "duration", "duration_clock", "plain"). Missing/"auto" = default cell
+          formatting. Same format vocabulary as the number tile (number-formats.js).'
+        type: object
       column_widths:
         additionalProperties:
           type: integer
