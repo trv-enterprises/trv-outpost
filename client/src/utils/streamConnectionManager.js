@@ -625,10 +625,26 @@ class StreamConnectionManager {
 
   /**
    * Internal: Queue an add/remove subscription delta for the shared pipe,
-   * coalescing per connectionId (a later delta supersedes an earlier one
-   * for the same key), and schedule a debounced flush.
+   * coalescing per connectionId, and schedule a debounced flush.
+   *
+   * Coalescing must NOT let an 'add' swallow a queued 'remove' for the
+   * same key: a topic-set change (_reconnectWithTopics) queues exactly
+   * remove-then-add, and the server changes a key's broker topic filter
+   * ONLY via remove+add in one delta — a duplicate-key add alone is an
+   * idempotent no-op there. Collapsing the pair to a bare add is how the
+   * weather panel starved: the pipe stayed on the first subscriber's
+   * topics forever ("connected" but no matching messages). The pair
+   * coalesces to 'readd', which flushes the key into BOTH the remove and
+   * add arrays of the one POST (the server processes removes first).
    */
   _queueMuxDelta(connectionId, action) {
+    const prev = this.muxPending.get(connectionId);
+    if (action === 'add' && (prev === 'remove' || prev === 'readd')) {
+      action = 'readd';
+    }
+    // 'remove' supersedes anything queued: even a pending un-flushed
+    // 'add'/'readd' nets out to "not subscribed" (removing a key the
+    // server never saw is a no-op there).
     this.muxPending.set(connectionId, action);
     if (this.muxFlushTimeout) return;
     this.muxFlushTimeout = setTimeout(() => {
@@ -662,6 +678,12 @@ class StreamConnectionManager {
       } else {
         const desired = this.muxDesired.get(streamKey);
         if (!desired) continue; // dropped before flush
+        // 'readd' = topic change: the key must ride in BOTH arrays so the
+        // server drops the old broker filter and opens the new one (a
+        // duplicate-key add alone is a server-side no-op).
+        if (action === 'readd') {
+          remove.push(streamKey);
+        }
         // connId falls back to the streamKey for raw subs (where the key
         // IS the connectionId); aggregated subs carry a distinct synthetic
         // key plus the real connId and an `agg` config.

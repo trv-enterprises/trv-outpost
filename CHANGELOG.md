@@ -32,6 +32,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Weather (and other topic-scoped MQTT panels) starved on the
+  multiplex pipe.** A topic-set change on a shared connection is sent
+  to the multiplex server as remove+add of the same key in one delta —
+  but the client's delta queue let the add supersede the queued remove,
+  and the server treats a duplicate-key add as an idempotent no-op, so
+  the broker filter froze on the FIRST subscriber's topics. A weather
+  panel joining after the viewer's `dashboard/cmd` listener stayed
+  "Waiting for weather data..." forever (connected pipe, no matching
+  topics). The queue now coalesces remove-then-add into a re-add that
+  rides in both arrays of the one POST. Affected any panel sharing a
+  connection with topic-scoped subscribers (weather, frigate alerts,
+  tile controls); regression from the v0.45.0 stream multiplex (#187).
+
 - **Data Table cells no longer misread large numbers as dates.** Cell
   formatting flipped any number inside the epoch window into a
   timestamp — a 2 GiB `mem.limit` byte count rendered as a 2038 date.
