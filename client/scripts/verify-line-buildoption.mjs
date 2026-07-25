@@ -619,6 +619,20 @@ const data = {
   check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
   check('case 22: horizontal categories read top-down', horizontal.yAxis?.inverse === true);
   check('case 22: horizontal forces every category label', horizontal.yAxis?.axisLabel?.interval === 0);
+  // Few categories → default font (no shrink key).
+  check('case 22: sparse horizontal keeps default label font', horizontal.yAxis?.axisLabel?.fontSize === undefined);
+
+  // Many categories → shrink the label font so they don't collide.
+  const manyCats = {
+    columns: ['name', 'v'],
+    rows: Array.from({ length: 14 }, (_, i) => [`container-${i}`, i]),
+  };
+  const dense = buildOption(
+    { data_mapping: { x_axis: 'name', y_axis: [{ column: 'v' }] }, options: { barOrientation: 'horizontal' } },
+    manyCats,
+    { formatCellValue, chartType: 'bar' },
+  );
+  check('case 22: dense horizontal shrinks label font', dense.yAxis?.axisLabel?.fontSize < 12 && dense.yAxis?.axisLabel?.fontSize >= 8);
 
   // An authored x-label rotation must NOT ride to the side axis — rotated
   // side labels overlap and get thinned away.
