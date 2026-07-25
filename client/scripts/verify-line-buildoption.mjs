@@ -618,6 +618,7 @@ const data = {
   check('case 22: horizontal value axis on x', horizontal.xAxis?.type !== 'category');
   check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
   check('case 22: horizontal categories read top-down', horizontal.yAxis?.inverse === true);
+  check('case 22: horizontal forces every category label', horizontal.yAxis?.axisLabel?.interval === 0);
 
   // An authored x-label rotation must NOT ride to the side axis — rotated
   // side labels overlap and get thinned away.

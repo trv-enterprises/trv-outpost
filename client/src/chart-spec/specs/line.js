@@ -837,16 +837,18 @@ export function buildOption(values, data, helpers = {}) {
     }
     if (opts.barOrientation === 'horizontal' && !dualAxis) {
       const catAxis = { ...option.xAxis };
-      // The category axis now runs down the SIDE: drop any authored
+      // The category axis now runs down the SIDE. Drop any authored
       // x-label rotation — it exists to fit cramped bottom labels, but
-      // rotated side labels overlap each other, which makes ECharts thin
-      // most of them away (side labels read fine horizontal). And put
-      // index 0 at the TOP (inverse) so the categories read in data
-      // order, matching the vertical chart's left→right.
-      if (catAxis.axisLabel?.rotate) {
-        const { rotate: _rot, ...restLabel } = catAxis.axisLabel;
-        catAxis.axisLabel = restLabel;
-      }
+      // rotated side labels overlap each other. Then FORCE every category
+      // label to render (interval:0): stacked vertically, each label owns
+      // one bar's row, so ECharts' default label-thinning (which drops
+      // "every other" to avoid horizontal-axis crowding) is wrong here —
+      // it left bars without labels and made the visible ones read as
+      // misaligned. inverse:true puts index 0 at the TOP so categories
+      // read in data order, matching the vertical chart's left→right.
+      catAxis.axisLabel = { ...(catAxis.axisLabel || {}) };
+      delete catAxis.axisLabel.rotate;
+      catAxis.axisLabel.interval = 0;
       catAxis.inverse = true;
       option.xAxis = option.yAxis;
       option.yAxis = catAxis;
