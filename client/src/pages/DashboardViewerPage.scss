@@ -4,6 +4,21 @@
 
 @use '@carbon/react/scss/spacing' as spacing;
 
+// While a panel edge/corner is being resized, force the resize cursor on
+// EVERY element so it can't flip to the inner `cursor: move` when the pointer
+// crosses into the panel body mid-drag. Top-level (on body) + `* !important`
+// so it beats all descendant cursor rules. userSelect:none stops text
+// selecting during the drag. Cleared when the resize ends (class removed).
+body.dash-resizing,
+body.dash-resizing * {
+  user-select: none !important;
+}
+body.dash-resizing--left *,
+body.dash-resizing--right * { cursor: ew-resize !important; }
+body.dash-resizing--top *,
+body.dash-resizing--bottom * { cursor: ns-resize !important; }
+body.dash-resizing--corner * { cursor: nwse-resize !important; }
+
 .dashboard-viewer-page {
   background-color: #161616;
   height: 100%;
@@ -844,7 +859,7 @@
     // Hover header overlay — shown on mouse enter, overlays content
     .edit-hover-header {
       position: absolute;
-      top: 0;
+      top: 6px; // clear the top-edge resize grip (which owns the top 6px)
       left: 0;
       right: 16px; // Leave space for resize handle
       height: 28px;
@@ -987,6 +1002,66 @@
       &:hover {
         background: linear-gradient(135deg, transparent 40%, #4589ff 40%);
       }
+    }
+
+    // Single-axis edge grips: thin hit-strips along the left/right/bottom
+    // edges. Subtle by default, brightening on hover so they read as
+    // draggable. The corner grip (above) still handles both axes at once.
+    .edit-resize-edge {
+      position: absolute;
+      z-index: 3; // below the corner grip so the corner wins in the overlap
+      background: transparent;
+
+      &::after {
+        content: '';
+        position: absolute;
+        background: #0f62fe;
+        opacity: 0;
+        transition: opacity 0.1s ease;
+        border-radius: 2px;
+      }
+
+      &:hover::after { opacity: 0.85; }
+      &:hover { background: rgba(15, 98, 254, 0.08); }
+    }
+
+    // vertical edges (left/right): full-height strip, ew-resize cursor.
+    .edit-resize-edge--left,
+    .edit-resize-edge--right {
+      top: 8px;              // clear the corner + header hit areas
+      bottom: 16px;         // clear the bottom edge grip + corner
+      width: 8px;
+      cursor: ew-resize;
+
+      &::after { top: 0; bottom: 0; width: 3px; }
+    }
+    .edit-resize-edge--left  { left: 0;  &::after { left: 0; } }
+    .edit-resize-edge--right { right: 0; &::after { right: 0; } }
+
+    // bottom edge: full-width strip (minus the corner), ns-resize cursor.
+    .edit-resize-edge--bottom {
+      left: 8px;
+      right: 16px;          // leave the bottom-right corner grip its space
+      bottom: 0;
+      height: 8px;
+      cursor: ns-resize;
+
+      &::after { left: 0; right: 0; height: 3px; bottom: 0; }
+    }
+
+    // top edge: the hover HEADER already owns the top band as the move-drag
+    // handle, so the top resize grip is a thin strip ABOVE it (higher z, top
+    // 6px) and the header is nudged down 6px in edit mode (below) so the two
+    // don't fight. Inset from the sides to clear the left/right edge grips.
+    .edit-resize-edge--top {
+      top: 0;
+      left: 8px;
+      right: 8px;
+      height: 6px;
+      z-index: 6;           // above the hover header (drag) + corner grip
+      cursor: ns-resize;
+
+      &::after { left: 0; right: 0; height: 3px; top: 0; }
     }
 
     .edit-panel-menu-anchor {

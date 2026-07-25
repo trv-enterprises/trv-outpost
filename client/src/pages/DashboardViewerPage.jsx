@@ -500,6 +500,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return () => StreamConnectionManager.getInstance().closeAll();
   }, []);
 
+  // Lock the cursor for the WHOLE resize drag. Without this the cursor is
+  // driven by whatever element the pointer happens to be over, so mid-drag —
+  // when the pointer moves off the thin edge grip and into the panel body (the
+  // move-cursor area) — it flips to the move cursor even though we're still
+  // resizing. A plain body-cursor doesn't help: descendant elements set their
+  // own `cursor: move` which wins. So toggle a body class per edge; the SCSS
+  // forces the resize cursor with `!important` on EVERY element under it, which
+  // beats the inner move/pointer cursors until mouseup.
+  useEffect(() => {
+    if (!resizingPanel) return undefined;
+    const cls = `dash-resizing dash-resizing--${resizingPanel.edge || 'corner'}`.split(' ');
+    document.body.classList.add(...cls);
+    return () => document.body.classList.remove(...cls);
+  }, [resizingPanel]);
+
   // Grid configuration - 32x32px cells
   const CELL_WIDTH = 32;
   const CELL_HEIGHT = 32;
@@ -1521,7 +1536,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           if (clonedGrid) {
             // Remove all edit mode classes and elements
             clonedGrid.classList.remove('edit-active');
-            clonedGrid.querySelectorAll('.edit-hover-header, .edit-drag-overlay, .edit-resize-handle, .edit-panel-menu-anchor').forEach(el => el.remove());
+            clonedGrid.querySelectorAll('.edit-hover-header, .edit-drag-overlay, .edit-resize-handle, .edit-resize-edge, .edit-panel-menu-anchor').forEach(el => el.remove());
             clonedGrid.querySelectorAll('.panel-container.edit-mode').forEach(el => {
               el.classList.remove('edit-mode', 'dragging', 'resizing');
             });
@@ -1853,8 +1868,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         </div>
       )}
 
-      {/* Resize handle */}
-      <div className="edit-resize-handle" onMouseDown={(e) => startResizing(e, panel)} />
+      {/* Resize grips: bottom-right corner (both axes) + top/left/right/bottom
+          edges (single axis). Left/top move the near edge with the opposite
+          edge anchored; right/bottom grow from a fixed top-left. */}
+      <div className="edit-resize-handle" onMouseDown={(e) => startResizing(e, panel, 'corner')} />
+      <div className="edit-resize-edge edit-resize-edge--top" onMouseDown={(e) => startResizing(e, panel, 'top')} />
+      <div className="edit-resize-edge edit-resize-edge--left" onMouseDown={(e) => startResizing(e, panel, 'left')} />
+      <div className="edit-resize-edge edit-resize-edge--right" onMouseDown={(e) => startResizing(e, panel, 'right')} />
+      <div className="edit-resize-edge edit-resize-edge--bottom" onMouseDown={(e) => startResizing(e, panel, 'bottom')} />
     </>
   );
 
@@ -2280,23 +2301,29 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
   };
 
-  const startResizing = (e, panel) => {
+  // edge: which grip is being dragged — 'corner' (bottom-right, resizes both
+  // axes), 'right' (w only), 'bottom' (h only), 'left' (moves x, right edge
+  // anchored → x+w changes). Offset is captured against the edge that MOVES so
+  // the first mouse movement doesn't snap a cell: right/corner anchor the right
+  // edge, bottom/corner anchor the bottom edge, left anchors the left edge.
+  const startResizing = (e, panel, edge = 'corner') => {
     e.stopPropagation();
     e.preventDefault();
-    // Capture offset from the panel's bottom-right corner so the first
-    // mouse movement doesn't immediately snap to the next grid cell.
     if (gridRef.current) {
       const rect = gridRef.current.getBoundingClientRect();
       const cellW = rect.width / maxGridCol;
       const cellH = rect.height / maxGridRow;
-      const edgePixelX = rect.left + (panel.x + panel.w) * cellW;
-      const edgePixelY = rect.top + (panel.y + panel.h) * cellH;
-      // How far inside the current cell the mouse started
+      // The moving edge's current pixel position, per grip. Left/top move the
+      // near edge (x / y); right/bottom/corner move the far edge (x+w / y+h).
+      const movingLeft = edge === 'left';
+      const movingTop = edge === 'top';
+      const edgePixelX = rect.left + (movingLeft ? panel.x : panel.x + panel.w) * cellW;
+      const edgePixelY = rect.top + (movingTop ? panel.y : panel.y + panel.h) * cellH;
       const offsetX = e.clientX - edgePixelX;
       const offsetY = e.clientY - edgePixelY;
-      setResizingPanel({ id: panel.id, offsetX, offsetY });
+      setResizingPanel({ id: panel.id, edge, offsetX, offsetY });
     } else {
-      setResizingPanel({ id: panel.id, offsetX: 0, offsetY: 0 });
+      setResizingPanel({ id: panel.id, edge, offsetX: 0, offsetY: 0 });
     }
   };
 
@@ -2363,7 +2390,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         const panel = editablePanels.find(p => p.id === resizingPanel.id);
         if (panel && gridRef.current) {
           const minSize = getMinSizeForPanel(resizingPanel.id);
-          // Use raw pixel position adjusted by initial offset for smooth resizing
+          // Raw pixel position adjusted by the initial offset for smooth resizing.
           const rect = gridRef.current.getBoundingClientRect();
           const adjustedX = e.clientX - (resizingPanel.offsetX || 0);
           const adjustedY = e.clientY - (resizingPanel.offsetY || 0);
@@ -2371,10 +2398,35 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           const cellH = rect.height / maxGridRow;
           const gridX = Math.floor((adjustedX - rect.left) / cellW);
           const gridY = Math.floor((adjustedY - rect.top) / cellH);
-          const newW = Math.max(minSize.w, Math.min(gridX - panel.x + 1, boundCols - panel.x));
-          const newH = Math.max(minSize.h, Math.min(gridY - panel.y + 1, boundRows - panel.y));
-          if (newW !== panel.w || newH !== panel.h) {
-            updateEditablePanel(resizingPanel.id, { w: newW, h: newH });
+          const edge = resizingPanel.edge || 'corner';
+
+          // Start from the panel's current geometry; each grip mutates only
+          // the axis/edge it owns. Right edge (x+w) grows via w; bottom edge
+          // (y+h) grows via h; left edge moves x while keeping the RIGHT edge
+          // anchored (so x and w both change, x+w constant).
+          let next = { x: panel.x, y: panel.y, w: panel.w, h: panel.h };
+          if (edge === 'right' || edge === 'corner') {
+            next.w = Math.max(minSize.w, Math.min(gridX - panel.x + 1, boundCols - panel.x));
+          }
+          if (edge === 'bottom' || edge === 'corner') {
+            next.h = Math.max(minSize.h, Math.min(gridY - panel.y + 1, boundRows - panel.y));
+          }
+          if (edge === 'left') {
+            const rightEdge = panel.x + panel.w; // anchored
+            // Proposed new left column from the mouse, clamped to [0, rightEdge - minW].
+            const newX = Math.max(0, Math.min(gridX, rightEdge - minSize.w));
+            next.x = newX;
+            next.w = rightEdge - newX;
+          }
+          if (edge === 'top') {
+            const bottomEdge = panel.y + panel.h; // anchored (mirror of 'left')
+            const newY = Math.max(0, Math.min(gridY, bottomEdge - minSize.h));
+            next.y = newY;
+            next.h = bottomEdge - newY;
+          }
+
+          if (next.x !== panel.x || next.y !== panel.y || next.w !== panel.w || next.h !== panel.h) {
+            updateEditablePanel(resizingPanel.id, next);
           }
         }
       }
