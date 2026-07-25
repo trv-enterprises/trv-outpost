@@ -115,10 +115,13 @@ const buildTsstoreRangeRaw = (fromDtLocal, toDtLocal) => {
 // Assemble the tsstore `raw` DSL string for any query type. Centralizes the
 // since / range / newest|oldest shapes so the save + preview sites agree.
 // 'range' falls back to 'newest' when either bound is missing (never emit a
-// malformed range: — the adapter rejects it).
+// malformed range: — the adapter rejects it). 'latest' (current state per
+// series, ts-store v0.19.0 latest_by) is carried in params.latest_by, not the
+// raw DSL — its raw is plain 'newest' (latest_by lives on /data/newest).
 const buildTsstoreRaw = (queryType, sinceDuration, rangeFrom, rangeTo) => {
   if (queryType === 'since') return `since:${sinceDuration}`;
   if (queryType === 'range') return buildTsstoreRangeRaw(rangeFrom, rangeTo) || 'newest';
+  if (queryType === 'latest') return 'newest';
   return queryType; // 'newest' | 'oldest'
 };
 
@@ -689,8 +692,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [timeBucketTimestampCol, setTimeBucketTimestampCol] = useState('');
 
   // TSStore query configuration
-  const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest, range
+  const [tsstoreQueryType, setTsstoreQueryType] = useState('since'); // since, newest, oldest, range, latest
   const [tsstoreLimit, setTsstoreLimit] = useState(defaultTsstoreLimit('line'));
+  // 'latest' query type (ts-store v0.19.0 latest_by): the field whose distinct
+  // values define the series — one row per value, each its newest record.
+  const [tsstoreLatestBy, setTsstoreLatestBy] = useState('');
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
   // Absolute from→to window for tsstoreQueryType==='range'. Stored as
   // datetime-local strings ("YYYY-MM-DDTHH:MM", local time); converted to epoch
@@ -737,6 +743,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // True when the tsstore filter is bound to the dashboard variable — used to
   // mark uses_dashboard_variable and to gate the #18 backfill substitution.
   const tsstoreFilterUsesVariable = tsstoreFilterSource === 'variable';
+
+  // Params for the 'latest' query type (ts-store v0.19.0 latest_by): the
+  // newest record per distinct value of a field — "current state per series".
+  // {} when the type isn't 'latest' or the field is blank (the query then
+  // degrades to a plain newest, mirroring the half-filled-range fallback).
+  // Single source of truth for the sites that assemble tsstore params.
+  const buildTsstoreLatestByParams = useCallback(() => {
+    const field = (tsstoreLatestBy || '').trim();
+    return tsstoreQueryType === 'latest' && field ? { latest_by: field } : {};
+  }, [tsstoreQueryType, tsstoreLatestBy]);
 
   // Assemble query_config.params for a Prometheus component. 'instant' carries
   // only query_type (start/end/step are meaningless for a snapshot); 'range'
@@ -1150,7 +1166,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // chart-type-aware (1 for single-value gauge/number, #169), so an
       // untouched useState default would read as a phantom change.
       setTsstoreLimit(chart.query_config?.params?.limit || defaultTsstoreLimit(chart.chart_type));
-      if (rawQuery.startsWith('since:')) {
+      // A latest_by param marks the 'latest' query type (current state per
+      // series) regardless of raw shape — its raw is a documentary 'newest'.
+      const savedLatestBy = chart.query_config?.params?.latest_by;
+      if (typeof savedLatestBy === 'string' && savedLatestBy.trim() !== '') {
+        setTsstoreQueryType('latest');
+        setTsstoreLatestBy(savedLatestBy);
+      } else if (rawQuery.startsWith('since:')) {
         setTsstoreQueryType('since');
         setTsstoreSinceDuration(rawQuery.substring(6));
       } else if (rawQuery.startsWith('range:')) {
@@ -1277,9 +1299,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedQueryType = chart.query_config?.type || 'sql';
       const loadedTsRaw = loadedQueryType === 'tsstore' ? (chart.query_config?.raw || 'newest') : '';
       const loadedTsRangeMatch = loadedTsRaw.match(/^range:(\d+):(\d+)$/);
-      const loadedTsstoreQueryType = loadedTsRaw.startsWith('since:')
-        ? 'since'
-        : (loadedTsRangeMatch ? 'range' : (loadedTsRaw || 'since'));
+      // Mirror the setTsstore* restore above EXACTLY (no query-type gate —
+      // the type field is documentary): latest_by param wins over the raw
+      // shape (raw is a documentary 'newest' for the 'latest' type).
+      const loadedTsLatestByParam = chart.query_config?.params?.latest_by;
+      const loadedTsstoreLatestBy = (typeof loadedTsLatestByParam === 'string' && loadedTsLatestByParam.trim() !== '') ? loadedTsLatestByParam : '';
+      const loadedTsstoreQueryType = loadedTsstoreLatestBy
+        ? 'latest'
+        : (loadedTsRaw.startsWith('since:')
+          ? 'since'
+          : (loadedTsRangeMatch ? 'range' : (loadedTsRaw || 'since')));
       const loadedTsstoreSinceDuration = loadedTsRaw.startsWith('since:') ? loadedTsRaw.substring(6) : '1h';
       const loadedTsstoreRangeFrom = loadedTsRangeMatch ? epochSecondsToDtLocal(loadedTsRangeMatch[1]) : '';
       const loadedTsstoreRangeTo = loadedTsRangeMatch ? epochSecondsToDtLocal(loadedTsRangeMatch[2]) : '';
@@ -1325,6 +1354,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         promTimeRange: loadedPromTimeRange,
         promStep: loadedPromStep,
         tsstoreLimit: loadedTsstoreLimit,
+        tsstoreLatestBy: loadedTsstoreLatestBy,
         tsstoreFilter: loadedTsstoreFilter,
         tsstoreFilterSource: loadedTsstoreFilterSource,
         tsstoreFilterIgnoreCase: loadedTsstoreFilterIgnoreCase,
@@ -1402,6 +1432,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         promTimeRange: '1h',
         promStep: '1m',
         tsstoreLimit: defaultTsstoreLimit('line'),
+        tsstoreLatestBy: '',
         tsstoreFilter: '',
         tsstoreFilterSource: 'literal',
         tsstoreFilterIgnoreCase: false,
@@ -1481,6 +1512,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       tsstoreRangeFrom,
       tsstoreRangeTo,
       tsstoreLimit,
+      tsstoreLatestBy,
       promQueryType,
       promTimeRange,
       promStep,
@@ -1531,7 +1563,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -1744,6 +1776,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               setQueryRaw('newest');
               setTsstoreQueryType('newest');
               setTsstoreLimit(defaultTsstoreLimit(chartType));
+              setTsstoreLatestBy('');
               setTsstoreSinceDuration('1h');
               setPromQueryType('range');
               setPromTimeRange('1h');
@@ -1928,6 +1961,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTimeBucketTimestampCol('');
     setTsstoreQueryType('newest');
     setTsstoreLimit(defaultTsstoreLimit('line'));
+    setTsstoreLatestBy('');
     setTsstoreSinceDuration('1h');
     setPromQueryType('range');
     setPromTimeRange('1h');
@@ -2156,6 +2190,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           // unset/invalid so we never emit a malformed range: the adapter rejects.
           rawQuery = buildTsstoreRangeRaw(tsstoreRangeFrom, tsstoreRangeTo) || 'newest';
           queryParams = {};
+        } else if (tsstoreQueryType === 'latest') {
+          // Current state per series — latest_by rides in params, raw is 'newest'.
+          // No limit: it would cap distinct series (ts-store defaults to 1000).
+          rawQuery = 'newest';
+          queryParams = { ...buildTsstoreLatestByParams() };
         } else {
           // For 'newest' or 'oldest', use the configured limit
           rawQuery = tsstoreQueryType;
@@ -2284,6 +2323,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // bound is missing so a half-filled form never emits a bad range:.
         rawQuery = buildTsstoreRangeRaw(tsstoreRangeFrom, tsstoreRangeTo) || 'newest';
         queryParams = { ...tsstoreFilterParams };
+      } else if (tsstoreQueryType === 'latest') {
+        // Current state per series — latest_by rides in params, raw is 'newest'.
+        rawQuery = 'newest';
+        queryParams = { ...buildTsstoreLatestByParams(), ...tsstoreFilterParams };
       } else {
         // For 'newest' or 'oldest', use the configured limit
         rawQuery = tsstoreQueryType;
@@ -2330,7 +2373,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildPrometheusParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2445,8 +2488,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           : queryRaw,
         type: queryType,
         params: selectedDatasource?.type === 'tsstore'
-          // 'since' and 'range' are time-windowed (no limit); 'newest'/'oldest' use the limit.
-          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' ? {} : { limit: tsstoreLimit }), ...buildTsstoreFilterParams() }
+          // 'since' and 'range' are time-windowed (no limit); 'newest'/'oldest'
+          // use the limit. 'latest' omits it too — there the limit would cap
+          // DISTINCT SERIES, and ts-store's own default (up to 1000 groups) is
+          // the right ceiling.
+          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreFilterParams() }
           : selectedDatasource?.type === 'prometheus'
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
@@ -3408,9 +3454,23 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             <SelectItem value="oldest" text="Oldest Records" />
                             <SelectItem value="since" text="Time Range (Last...)" />
                             <SelectItem value="range" text="Time range (from–to)" />
+                            <SelectItem value="latest" text="Current State (latest per series)" />
                           </Select>
                         </div>
-                        {tsstoreQueryType === 'since' ? (
+                        {tsstoreQueryType === 'latest' ? (
+                          // ts-store v0.19.0 latest_by: one row per distinct
+                          // value of this field — each its newest record.
+                          <div className="tsstore-query-row__col">
+                            <TextInput
+                              id="tsstore-latest-by"
+                              labelText="Series field"
+                              placeholder="e.g. container"
+                              value={tsstoreLatestBy}
+                              onChange={(e) => setTsstoreLatestBy(e.target.value)}
+                              helperText="One row per distinct value — its newest record"
+                            />
+                          </div>
+                        ) : tsstoreQueryType === 'since' ? (
                           <div className="tsstore-query-row__col">
                             <Select
                               id="tsstore-since-duration"
@@ -4995,7 +5055,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         type: queryType,
                         params: selectedDatasource?.type === 'tsstore'
                           ? {
-                              ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' ? {} : { limit: tsstoreLimit }),
+                              ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }),
+                              ...buildTsstoreLatestByParams(),
                               ...buildTsstoreFilterParams(),
                               // Resolve the filter token for the custom-code preview.
                               ...(tsstoreFilterUsesVariable ? { dashboard_variable: previewVariableValue } : {}),

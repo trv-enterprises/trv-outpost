@@ -229,6 +229,6 @@ for the user-facing contract.
 - [API reference](api-reference.md) — full endpoint tables
 - [AI component editor architecture](AI_COMPONENT_EDITOR_ARCHITECTURE.md) —
   AI Builder internals (separate doc)
-- [Datasource processing](../datasources/DATASOURCE_PROCESSING.md) —
-  deep dive on how raw connection results flow through filters,
-  aggregation, and column mapping before reaching the frontend
+- [Aggregation and filtering](aggregation-and-filtering.md) —
+  how raw connection results flow through filtering and
+  aggregation (source vs server vs client) before the frontend

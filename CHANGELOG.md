@@ -17,6 +17,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   `data_mapping.column_formats` and applied in both the panel grid and
   the fullscreen data grid.
 
+- **ts-store "Current State (latest per series)" query type** (#202,
+  first slice). The component editor's ts-store query section gains a
+  **Current State (latest per series)** query type backed by ts-store
+  v0.19.0 `latest_by`: one request returns the single newest record for
+  each distinct value of a field (e.g. every container's latest CPU/mem
+  row) — the clean replacement for step+group_by workarounds, and a
+  natural fit for Data View "current status" tables. The adapter routes
+  it to `/data/newest`, suppresses `step`/`group_by` (ts-store rejects
+  the combination), carries a relative time-range as a `since` scan
+  bound, and leaves `limit` to ts-store's 1000-group default unless set.
+  AI guidance (Assistant + MCP, via the shared connection guidance)
+  documents the new shape.
+
 ### Fixed
 
 - **Data Table cells no longer misread large numbers as dates.** Cell
@@ -43,6 +56,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   `400 Parameter verification failed.` — rejected the request. Reserved
   runtime params are now stripped before the URL is built;
   author-supplied params still pass through.
+- **Stale AI guidance claimed ts-store aggregation "must be
+  client-side."** The shared ts-store connection guidance now explains
+  that the connector forwards server-side `step` downsampling (per-series
+  via `group_by` from `data_mapping.series`) automatically under the
+  viewer range picker — the agent no longer steers users toward
+  client-side re-aggregation, and the previously undocumented `group_by`
+  forwarding is described.
 
 ## [0.45.0] — 2026-07-24
 

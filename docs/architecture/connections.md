@@ -186,7 +186,14 @@ repo for local testing).
 - **Schema**: discovered at runtime by sampling recent objects and
   probing JSON structure
 - **Query types**: `newest`, `oldest`, `since:DURATION`,
-  `range:START:END` (epoch-nanosecond range)
+  `range:START:END` (epoch-nanosecond range). A `latest_by` param
+  (ts-store v0.19.0) turns a `newest` query into a newest-record-
+  per-distinct-value lookup — "current state per series" in one
+  request. It is mutually exclusive with `step`/`agg_window` server-
+  side, so the adapter suppresses any range-picker step (and
+  `group_by`) when it is set; a relative range still bounds the scan
+  via `since`, and `limit` caps distinct series (unset → ts-store's
+  1000-group default).
 - **Streaming**: `streaming/tsstore_stream.go`, described in
   [streaming.md](streaming.md)
 - **Push direction**: ts-store can also push data into the dashboard
@@ -281,7 +288,5 @@ current for the list page's status indicators.
   are persisted
 - [Streaming](streaming.md) — how read-streams become SSE frames
 - [API reference](api-reference.md) — full endpoint tables
-- [Datasource processing](../datasources/DATASOURCE_PROCESSING.md) —
-  post-query filtering, aggregation, and column-mapping pipeline
-- [ts-store architecture](../datasources/TSSTORE_ARCHITECTURE.md) —
-  deep dive on the ts-store circular-buffer adapter
+- [Aggregation and filtering](aggregation-and-filtering.md) —
+  where filtering/aggregation runs (source vs server vs client)

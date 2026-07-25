@@ -56,6 +56,16 @@ const RangeParam = "range"
 // Non-ts-store adapters ignore it.
 const GroupByParam = "group_by"
 
+// LatestByParam is the key under which a "current state per series" query
+// stores its group field (ts-store v0.19.0 latest_by): the single NEWEST
+// record for each distinct value of the named field, e.g. one row per
+// `container` with its latest reading. Unlike group_by it needs no
+// aggregation window — in fact ts-store rejects latest_by combined with
+// step/agg_window (HTTP 400), so the adapter suppresses any step when this
+// is set. Authored in the component's query_config.params by the editor's
+// "Current State" query type. Non-ts-store adapters ignore it.
+const LatestByParam = "latest_by"
+
 // reservedQueryParams are param keys consumed by token substitution / structured
 // range handling — they must NOT be appended as stray positional bind args by
 // the SQL adapters.
@@ -63,6 +73,7 @@ var reservedQueryParams = map[string]bool{
 	DashboardVariableParam: true,
 	RangeParam:             true,
 	GroupByParam:           true,
+	LatestByParam:          true,
 }
 
 // ErrDashboardVariableNotSet is returned when a query contains the
@@ -109,6 +120,14 @@ func resolveFilterParam(params map[string]interface{}) string {
 func resolveGroupByParam(params map[string]interface{}) string {
 	s, _ := params[GroupByParam].(string)
 	return s
+}
+
+// resolveLatestByParam reads the latest_by field name from Query.Params
+// (authored in query_config.params by the editor's "Current State" query
+// type). Empty when absent.
+func resolveLatestByParam(params map[string]interface{}) string {
+	s, _ := params[LatestByParam].(string)
+	return strings.TrimSpace(s)
 }
 
 // resolveStepParam reads a downsampling step from Query.Params flat keys.

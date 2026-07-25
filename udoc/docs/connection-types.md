@@ -97,6 +97,16 @@ ts-store charts get a **step** dropdown (both rest and streaming
 transports), and the server clamps the step to a point budget so a wide
 window at a fine step can't overload the store.
 
+The component editor's query type **Current State (latest per series)**
+(rest transport, ts-store v0.19.0+) returns the single newest record for
+each distinct value of a field — e.g. one row per container with its
+latest CPU and memory. Ideal for a Data View "current status" table or
+status tiles: enter the field that identifies the series (like
+`container` or `host`) and every series comes back in one request, even
+ones that haven't reported recently. The optional substring filter still
+applies, and a time-range variable narrows results to series that
+reported within the window.
+
 ## Prometheus
 
 Connect to a Prometheus metrics server.
