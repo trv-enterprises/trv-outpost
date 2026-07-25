@@ -895,13 +895,16 @@ export function buildOption(values, data, helpers = {}) {
       // has no panel height, but category COUNT is the driver — step the
       // label font down as categories grow so they fit without collision.
       // ECharts' default is 12px; drop 1px per 2 categories past 8, floored
-      // at 8px (still legible). ~13 rows → 9px, ~20 → 8px. Tighten the line
-      // height too so shrunk labels pack rather than keeping the 12px slot.
+      // at 8px (still legible). ~13 rows → 9px, ~20 → 8px.
+      //
+      // Do NOT set lineHeight: ECharts centers each label in a box of that
+      // height on its tick, so a lineHeight smaller than the real (much
+      // taller) category slot mis-centers every label and the error walks
+      // down the axis — labels drift out of line with their bars. Leaving
+      // lineHeight unset lets ECharts center each label in its actual slot.
       const catCount = categories.length;
       if (catCount > 8) {
-        const fs = Math.max(8, 12 - Math.floor((catCount - 8) / 2));
-        catAxis.axisLabel.fontSize = fs;
-        catAxis.axisLabel.lineHeight = fs + 1;
+        catAxis.axisLabel.fontSize = Math.max(8, 12 - Math.floor((catCount - 8) / 2));
       }
       catAxis.inverse = true;
       option.xAxis = option.yAxis;

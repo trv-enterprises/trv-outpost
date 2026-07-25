@@ -633,6 +633,10 @@ const data = {
     { formatCellValue, chartType: 'bar' },
   );
   check('case 22: dense horizontal shrinks label font', dense.yAxis?.axisLabel?.fontSize < 12 && dense.yAxis?.axisLabel?.fontSize >= 8);
+  // Must NOT pin lineHeight — a lineHeight smaller than the real category
+  // slot mis-centers each label and the error walks down the axis (labels
+  // drift off their bars). ECharts centers in the actual slot when unset.
+  check('case 22: dense horizontal leaves lineHeight unset', dense.yAxis?.axisLabel?.lineHeight === undefined);
 
   // An authored x-label rotation must NOT ride to the side axis — rotated
   // side labels overlap and get thinned away.
