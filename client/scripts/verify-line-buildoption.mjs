@@ -618,28 +618,26 @@ const data = {
   check('case 22: horizontal value axis on x', horizontal.xAxis?.type !== 'category');
   check('case 22: barWidthPct → series barWidth percent', horizontal.series?.[0]?.barWidth === '60%');
   check('case 22: horizontal categories read top-down', horizontal.yAxis?.inverse === true);
-  check('case 22: horizontal forces every category label', horizontal.yAxis?.axisLabel?.interval === 0);
-  // Few categories → default font (no shrink key).
-  check('case 22: sparse horizontal keeps default label font', horizontal.yAxis?.axisLabel?.fontSize === undefined);
 
-  // Many categories → shrink the label font so they don't collide.
-  const manyCats = {
-    columns: ['name', 'v'],
-    rows: Array.from({ length: 14 }, (_, i) => [`container-${i}`, i]),
-  };
+  // Must NOT force interval:0 / fontSize / lineHeight on the category axis.
+  // ECharts' default label layout centers each label in its slot and thins
+  // labels when a short panel can't show them all — keeping visible labels
+  // aligned with their bars at every height. Forcing every label packed
+  // them at the top of a short panel, off the evenly-spaced bars.
   const dense = buildOption(
-    { data_mapping: { x_axis: 'name', y_axis: [{ column: 'v' }] }, options: { barOrientation: 'horizontal' } },
-    manyCats,
+    {
+      data_mapping: { x_axis: 'name', y_axis: [{ column: 'v' }] },
+      options: { barOrientation: 'horizontal' },
+    },
+    { columns: ['name', 'v'], rows: Array.from({ length: 14 }, (_, i) => [`container-${i}`, i]) },
     { formatCellValue, chartType: 'bar' },
   );
-  check('case 22: dense horizontal shrinks label font', dense.yAxis?.axisLabel?.fontSize < 12 && dense.yAxis?.axisLabel?.fontSize >= 8);
-  // Must NOT pin lineHeight — a lineHeight smaller than the real category
-  // slot mis-centers each label and the error walks down the axis (labels
-  // drift off their bars). ECharts centers in the actual slot when unset.
-  check('case 22: dense horizontal leaves lineHeight unset', dense.yAxis?.axisLabel?.lineHeight === undefined);
+  check('case 22: horizontal does not force interval', dense.yAxis?.axisLabel?.interval === undefined);
+  check('case 22: horizontal does not pin fontSize', dense.yAxis?.axisLabel?.fontSize === undefined);
+  check('case 22: horizontal does not pin lineHeight', dense.yAxis?.axisLabel?.lineHeight === undefined);
 
   // An authored x-label rotation must NOT ride to the side axis — rotated
-  // side labels overlap and get thinned away.
+  // side labels overlap and read worse than plain horizontal ones.
   const rotated = buildOption(
     { data_mapping: dm, options: { barOrientation: 'horizontal', xAxisLabelRotate: 45 } },
     barData,
