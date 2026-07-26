@@ -96,6 +96,24 @@ function CurrentConditions({ data }) {
   );
 }
 
+// Small variant: one row — icon, temperature, then conditions and location
+// on a single subtitle line. Sized to fit a short, wide tile.
+function CurrentCompact({ data, location }) {
+  if (!data) return null;
+  const subtitle = [data.conditions, location].filter(Boolean).join(' · ');
+  return (
+    <div className="weather-compact">
+      <div className="weather-compact__icon">
+        {weatherIcon(data.icon, 72)}
+      </div>
+      <div className="weather-compact__text">
+        <span className="compact-temp">{Math.round(data.temp)}°F</span>
+        {subtitle && <span className="compact-subtitle">{subtitle}</span>}
+      </div>
+    </div>
+  );
+}
+
 function DetailItem({ label, value }) {
   return (
     <div className="detail-item">
@@ -201,6 +219,7 @@ function WeatherDisplay({ config }) {
   const connectionId = config?.mqtt_connection_id;
   const topicPrefix = config?.weather_topic_prefix || 'weather';
   const location = config?.weather_location || '';
+  const size = config?.weather_size || 'large';
 
   const handleRecord = useCallback((record) => {
     const topic = record.topic;
@@ -256,18 +275,32 @@ function WeatherDisplay({ config }) {
     );
   }
 
+  // Small folds the location into the subtitle line and drops the alert
+  // banner — there's no room for it, and the banner would dominate the tile.
+  if (size === 'small') {
+    return (
+      <div className="weather-display weather-display--small">
+        <CurrentCompact data={current} location={location} />
+      </div>
+    );
+  }
+
   return (
-    <div className="weather-display">
+    <div className={`weather-display weather-display--${size}`}>
       <AlertBanner alerts={alerts} />
       {location && <div className="weather-location">{location}</div>}
       <CurrentConditions data={current} />
       <SunBar data={current} />
-      <div className="weather-divider" />
-      <div className="weather-forecasts">
-        <HourlyForecast data={hourly} />
-        <div className="weather-divider--vertical" />
-        <DailyForecast data={daily} />
-      </div>
+      {size === 'large' && (
+        <>
+          <div className="weather-divider" />
+          <div className="weather-forecasts">
+            <HourlyForecast data={hourly} />
+            <div className="weather-divider--vertical" />
+            <DailyForecast data={daily} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -275,7 +308,9 @@ function WeatherDisplay({ config }) {
 WeatherDisplay.propTypes = {
   config: PropTypes.shape({
     mqtt_connection_id: PropTypes.string,
-    weather_topic_prefix: PropTypes.string
+    weather_topic_prefix: PropTypes.string,
+    weather_location: PropTypes.string,
+    weather_size: PropTypes.oneOf(['small', 'medium', 'large'])
   })
 };
 

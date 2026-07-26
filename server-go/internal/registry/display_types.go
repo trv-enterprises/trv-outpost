@@ -97,6 +97,7 @@ func init() {
 			{Name: "mqtt_connection_id", Type: "string", Required: true, Description: "MQTT connection for the weather feed"},
 			{Name: "weather_topic_prefix", Type: "string", Required: false, Default: "weather", Description: "MQTT topic prefix"},
 			{Name: "weather_location", Type: "string", Required: false, Description: "Display label (e.g. 'Spring, TX')"},
+			{Name: "weather_size", Type: "string", Required: false, Default: "large", Description: "Layout variant: 'small' (icon + temp + conditions), 'medium' (current conditions + details + sun bar), or 'large' (adds hourly and 5-day forecasts)"},
 		},
 	})
 }

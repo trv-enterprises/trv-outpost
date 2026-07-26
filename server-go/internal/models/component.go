@@ -88,6 +88,7 @@ type DisplayConfig struct {
 	// Weather-specific fields (only used when display_type = "weather")
 	WeatherTopicPrefix string `json:"weather_topic_prefix,omitempty" bson:"weather_topic_prefix,omitempty"` // MQTT topic prefix (default: "weather")
 	WeatherLocation    string `json:"weather_location,omitempty" bson:"weather_location,omitempty"`         // Display label (e.g., "Spring, TX")
+	WeatherSize        string `json:"weather_size,omitempty" bson:"weather_size,omitempty"`                 // Layout variant: "small" | "medium" | "large" (default: "large")
 }
 
 // Component represents a chart, control, or display configuration.

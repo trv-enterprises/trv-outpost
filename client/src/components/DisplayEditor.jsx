@@ -27,6 +27,14 @@ const DISPLAY_TYPES = [
   { id: 'weather', label: 'Weather', description: 'Weather conditions from MQTT data', icon: PartlyCloudy }
 ];
 
+// Weather layout variants. Each drops progressively more detail so the widget
+// can fit a small tile as well as a full-width panel.
+const WEATHER_SIZES = [
+  { id: 'small', label: 'Small — icon, temperature, conditions' },
+  { id: 'medium', label: 'Medium — current conditions and details' },
+  { id: 'large', label: 'Large — adds hourly and 5-day forecasts' }
+];
+
 /**
  * DisplayEditor Component
  *
@@ -198,6 +206,19 @@ function DisplayEditor({ displayConfig, onDisplayConfigChange }) {
             helperText="MQTT topic prefix (subscribes to prefix/#). Default: weather"
             size="md"
           />
+
+          <Select
+            id="weather-size"
+            labelText="Size"
+            value={config.weather_size || 'large'}
+            onChange={(e) => updateConfig({ weather_size: e.target.value })}
+            helperText="Small: icon, temperature, conditions. Medium: adds detail grid and sun times. Large: adds hourly and 5-day forecasts."
+            size="md"
+          >
+            {WEATHER_SIZES.map(({ id, label }) => (
+              <SelectItem key={id} value={id} text={label} />
+            ))}
+          </Select>
         </div>
       )}
 
