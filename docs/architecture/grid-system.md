@@ -127,6 +127,67 @@ It's implemented as a CSS custom property (`--title-scale`) on the
 grid root, multiplied into the chart-header font size via
 `calc(0.875rem * var(--title-scale, 1))`.
 
+## Adornments (decorations in the gutter)
+
+Adornments are purely visual decorations drawn *over* the panel grid.
+Today there is one kind, `border` — a rectangle that draws its line
+centered in the 4 px gutter between panels. They are stored in their
+own `adornments` array on the dashboard record, **not** in `panels`:
+they reference no component, render no data, and must never appear in
+panel counts, component-usage lookups, or export dependency walks.
+
+Geometry is a cell rect `{x, y, w, h}` in the same units as a panel.
+The renderer (`AdornmentLayer.jsx`) anchors the line to the panels'
+own edge and grows it **outward** into the gutter.
+
+The cell rect's content box — the panels' footprint — is
+`[x * stride, x * stride + w * stride - GAP]`, where
+`stride = CELL + GAP`. Since `box-sizing: border-box` draws the border
+*inward* from the element's edge, the element is that content box
+expanded by the line width on every side:
+
+```
+left  = x * stride - lineWidth    width  = w * stride - GAP + 2 * lineWidth
+top   = y * stride - lineWidth    height = h * stride - GAP + 2 * lineWidth
+```
+
+The line then occupies `[x*stride - lineWidth, x*stride]` — flush
+against the panel edge, extending away from it.
+
+**Why outward rather than centered on the gutter:** the gutter is 4 px,
+so growing outward lets two *adjacent* boxes each take half of the same
+gutter without colliding. Box A's right border occupies the inner 2 px,
+box B's left border the outer 2 px — they meet exactly and never
+overlap. A gutter-centered line would put both on the same centerline.
+
+Because nothing is being centered, there is **no parity constraint** —
+odd widths are fine. Widths above 2 px consume more than half the
+gutter, so adjacent boxes at 3–4 px overlap each other; that is the
+author's call, not something the geometry forbids. The allowed set is
+duplicated in `models.AdornmentWidths` (Go) and `ADORNMENT_WIDTHS`
+(`DashboardViewerPage.jsx`) — keep them in lockstep.
+
+Two properties fall out of the layer being an absolutely-positioned
+**sibling** of the panels inside `.dashboard-grid`:
+
+- The fit-mode transform is applied to `.dashboard-grid` itself, so
+  adornments scale with the panels automatically in every fit mode and
+  at any edit zoom. No transform math lives in the adornment code.
+- `.panel-container` sets `overflow: hidden`, which would clip a border
+  drawn inside a panel. As a sibling it is never clipped.
+
+Adornments render **above** panel bodies (z-index 8, between the panel
+layer at 1 and a dragged panel at 10). That is deliberate: a panel moved
+onto a border then visibly crosses the line. Drawing *below* panels
+would let the panel's opaque background silently swallow that segment,
+so the box would render with a gap in it and read as a rendering bug
+rather than a layout mistake. There is no stored relationship between a
+panel and an adornment, so an overlap is fixed by moving either one.
+
+View-mode grid extent folds in adornment extent as well as panel
+extent — otherwise a border drawn past the rightmost or bottom panel
+would fall outside the fit-tight box and be clipped.
+
 ## Related docs
 
 - [Frontend architecture](frontend.md) — `DashboardViewerPage` is the

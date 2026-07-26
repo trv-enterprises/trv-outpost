@@ -93,6 +93,44 @@
     position: relative;
     width: fit-content;
 
+    // Adornment mode. Panels recede but stay CLICKABLE — clicking one
+    // attaches a border to it. Their contents, however, are click-through
+    // (see .panel-content below), so a drag that starts over a panel still
+    // reaches .dashboard-grid and draws a free box. Panel edit chrome is
+    // suppressed: you cannot drag a panel and a border in the same mode.
+    &.adornment-active {
+      .panel-container {
+        opacity: 0.55;
+        cursor: pointer;
+
+        &:hover {
+          opacity: 0.8;
+          outline: 1px dashed var(--cds-focus);
+          outline-offset: -1px;
+        }
+      }
+
+      // Chart/control internals must never swallow the click — the panel
+      // container itself is the hit target for attaching a border.
+      .panel-content,
+      .chart-wrapper {
+        pointer-events: none;
+      }
+
+      // The selected panel border gets the same dashed selection ring the
+      // rect adornments use.
+      .panel-container.panel-border-selected {
+        outline: 1px dashed var(--cds-focus);
+        outline-offset: 2px;
+      }
+
+      // NOTE: the actual suppression lives in DashboardViewerPage.scss,
+      // scoped under `.panel-container.edit-mode` so it can out-specify that
+      // file's `&:hover .edit-hover-header` reveal rule. A plain
+      // `.adornment-active .edit-hover-header` here loses the specificity
+      // race (and fights on `display` while the reveal sets `opacity`).
+    }
+
     .panel-container {
       background-color: #262626;
       border: 1px solid #393939;

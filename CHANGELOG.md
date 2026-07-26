@@ -10,6 +10,27 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Dashboard borders — draw grouping boxes around related panels.** A new
+  **Borders** button in the edit toolbar enters *adornment mode*: panels
+  dim and every click draws, selects, moves, or resizes a border. Drag out
+  a rectangle the same way you draw a panel; with one selected, a style bar
+  appears in the toolbar for color (the same swatch picker the value
+  chart's color rules use), line width, and solid / dashed / dotted.
+  <kbd>Delete</kbd> removes the selected border, <kbd>Esc</kbd> deselects.
+
+  Borders hug the panels they surround and draw *outward* into the 4 px
+  gap between panels, so a box never covers any content. Widths are 1–4 px;
+  because the line grows outward rather than centering on the gutter, **two
+  adjacent boxes can each use 2 px and meet exactly without overlapping**.
+  A newly drawn border reuses the last style picked, so a set of matching
+  boxes takes one style choice, not one per box.
+
+  Borders are stored in their own `adornments` array on the dashboard —
+  not as panels — so they carry no component, no data, and never affect
+  panel counts, component-usage lookups, or export dependency walks. They
+  render above panel bodies deliberately: a panel moved onto a border
+  visibly crosses the line rather than silently hiding a segment of it.
+
 - **`value` chart type — single-value tiles now display text as well as
   numbers.** The chart type formerly called **Number** is now **Value**,
   and its value may be a string: a status readout (`ONLINE`, `degraded`),

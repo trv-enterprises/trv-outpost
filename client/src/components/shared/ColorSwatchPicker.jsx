@@ -21,8 +21,22 @@ import './ColorSwatchPicker.scss';
  * @param {string}   value    current hex ('' = Auto)
  * @param {Function} onChange (hex|'') => void
  * @param {string}   label    accessible label for the trigger
+ * @param {Array<{hex: string, name?: string, number?: number}>} [palette]
+ *        swatches to offer; defaults to the Carbon series palette
+ * @param {boolean}  [allowAuto]   show the "Auto" (no explicit color) swatch.
+ *        Off for callers where a color is always required — a border has to
+ *        be SOME color, so there is nothing for Auto to mean.
+ * @param {boolean}  [allowCustom] append a native color input for hexes the
+ *        palette doesn't cover
  */
-export default function ColorSwatchPicker({ value = '', onChange, label = 'Series color' }) {
+export default function ColorSwatchPicker({
+  value = '',
+  onChange,
+  label = 'Series color',
+  palette = SERIES_COLOR_PALETTE,
+  allowAuto = true,
+  allowCustom = false,
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -60,25 +74,42 @@ export default function ColorSwatchPicker({ value = '', onChange, label = 'Serie
         />
         <PopoverContent className="color-swatch-picker__content">
           <div className="color-swatch-picker__grid">
-            <button
-              type="button"
-              className={`color-swatch-picker__swatch color-swatch-picker__swatch--auto ${isAuto ? 'is-selected' : ''}`}
-              onClick={(e) => { e.stopPropagation(); pick(''); }}
-              title="Auto — default palette"
-              aria-label="Auto"
-            />
-            {SERIES_COLOR_PALETTE.map((c) => (
+            {allowAuto && (
+              <button
+                type="button"
+                className={`color-swatch-picker__swatch color-swatch-picker__swatch--auto ${isAuto ? 'is-selected' : ''}`}
+                onClick={(e) => { e.stopPropagation(); pick(''); }}
+                title="Auto — default palette"
+                aria-label="Auto"
+              />
+            )}
+            {palette.map((c) => (
               <button
                 key={c.hex}
                 type="button"
                 className={`color-swatch-picker__swatch ${value.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}`}
                 style={{ backgroundColor: c.hex }}
                 onClick={(e) => { e.stopPropagation(); pick(c.hex); }}
-                title={`${c.number} · ${c.name}`}
-                aria-label={`Color ${c.number} ${c.name}`}
+                title={c.number ? `${c.number} · ${c.name}` : (c.name || c.hex)}
+                aria-label={c.number ? `Color ${c.number} ${c.name}` : (c.name || c.hex)}
               />
             ))}
           </div>
+          {allowCustom && (
+            // Secondary affordance for hexes the palette doesn't cover.
+            // Sized in the SCSS — left unconstrained, a native color input
+            // stretches to fill its container.
+            <label className="color-swatch-picker__custom-row">
+              <span>Custom</span>
+              <input
+                type="color"
+                className="color-swatch-picker__custom"
+                value={value || '#000000'}
+                onChange={(e) => onChange?.(e.target.value)}
+                aria-label={`${label} — custom`}
+              />
+            </label>
+          )}
         </PopoverContent>
       </Popover>
     </span>
@@ -89,4 +120,11 @@ ColorSwatchPicker.propTypes = {
   value: PropTypes.string,
   onChange: PropTypes.func,
   label: PropTypes.string,
+  palette: PropTypes.arrayOf(PropTypes.shape({
+    hex: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    number: PropTypes.number,
+  })),
+  allowAuto: PropTypes.bool,
+  allowCustom: PropTypes.bool,
 };

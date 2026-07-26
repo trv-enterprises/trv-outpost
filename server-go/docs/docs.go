@@ -9035,6 +9035,13 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "adornments": {
+                    "description": "Visual decorations drawn over the grid",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DashboardAdornment"
+                    }
+                },
                 "description": {
                     "type": "string"
                 },
@@ -9253,6 +9260,13 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "adornments": {
+                    "description": "Visual decorations drawn over the grid",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DashboardAdornment"
+                    }
+                },
                 "created": {
                     "type": "string"
                 },
@@ -9292,6 +9306,48 @@ const docTemplate = `{
                 },
                 "updated": {
                     "type": "string"
+                }
+            }
+        },
+        "models.DashboardAdornment": {
+            "description": "A visual decoration (a free-drawn box, or a border bound to a panel) drawn over the dashboard grid",
+            "type": "object",
+            "properties": {
+                "color": {
+                    "description": "Color is a hex string (\"#0f62fe\") chosen from the same swatch palette the\nvalue-chart text rules use.",
+                    "type": "string"
+                },
+                "h": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "\"border\" | \"panel_border\"",
+                    "type": "string"
+                },
+                "line_style": {
+                    "description": "LineStyle is \"solid\", \"dashed\", or \"dotted\".",
+                    "type": "string"
+                },
+                "panel_id": {
+                    "description": "PanelID binds a \"panel_border\" to its panel. Required for that kind;\nempty for \"border\". An adornment whose panel no longer exists is\ndropped on save (see sanitizeAdornments) so deleting a panel cannot\nleave an orphan behind.",
+                    "type": "string"
+                },
+                "w": {
+                    "type": "integer"
+                },
+                "width": {
+                    "description": "Width is the line width in px — must be one of the values returned by\nWidthsForAdornmentKind for this adornment's Kind.",
+                    "type": "integer"
+                },
+                "x": {
+                    "description": "X/Y/W/H position a \"border\". Unused (and omitted) for \"panel_border\",\nwhich derives its geometry from the panel it is bound to.",
+                    "type": "integer"
+                },
+                "y": {
+                    "type": "integer"
                 }
             }
         },
@@ -9887,6 +9943,10 @@ const docTemplate = `{
                 },
                 "weather_location": {
                     "description": "Display label (e.g., \"Spring, TX\")",
+                    "type": "string"
+                },
+                "weather_size": {
+                    "description": "Layout variant: \"small\" | \"medium\" | \"large\" (default: \"large\")",
                     "type": "string"
                 },
                 "weather_topic_prefix": {
@@ -11625,6 +11685,13 @@ const docTemplate = `{
             "description": "Request body for updating an existing dashboard",
             "type": "object",
             "properties": {
+                "adornments": {
+                    "description": "Nil = leave adornments unchanged",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DashboardAdornment"
+                    }
+                },
                 "description": {
                     "type": "string"
                 },

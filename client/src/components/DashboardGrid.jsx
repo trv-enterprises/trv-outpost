@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import PanelContent from './PanelContent';
+import AdornmentLayer from './AdornmentLayer';
 import { derivePanelProps } from '../utils/derivePanelProps';
 import './DashboardGrid.scss';
 
@@ -51,6 +52,9 @@ const CONTAINER_PADDING = 4;
  */
 function DashboardGrid({
   panels,
+  // Visual decorations drawn over the grid (border boxes). Separate from
+  // panels: they reference no component and render no data.
+  adornments = null,
   chartsMap,
   dashboard,
   resolveConnectionId,
@@ -89,6 +93,13 @@ function DashboardGrid({
   // Extra edit-only grid children rendered after the panels (drawing
   // preview + canvas boundary lines).
   gridExtras = null,
+  // --- adornment-mode props (editor only) ---
+  // When true the adornment layer takes mouse events and panels are inert,
+  // so clicks select/drag borders instead of panels.
+  adornmentMode = false,
+  selectedAdornmentId = null,
+  onAdornmentMouseDown = null,
+  renderAdornmentChrome = null,
   // Optional external refs so the editor can attach its drag/resize and
   // measurement logic to this component's container + grid DOM nodes. When
   // omitted, the grid uses its own internal refs (view/kiosk).
@@ -109,16 +120,43 @@ function DashboardGrid({
   // Grid bounds. Edit mode uses the dimension budget (editGridCols/Rows) so
   // the canvas extends to the dashboard edge; view mode fits tight around
   // the panel extent (fall back to 60 when empty, matching the viewer).
+  // panel_border adornments render INSIDE their panel (as that panel's own
+  // border), not in the overlay layer — that's what keeps two bordered
+  // neighbours visually separate instead of merging across the gutter.
+  // Index them by panel id so the panel loop is a lookup, not a scan.
+  const panelBordersById = useMemo(() => {
+    const map = {};
+    for (const a of adornments || []) {
+      if (a.kind === 'panel_border' && a.panel_id) map[a.panel_id] = a;
+    }
+    return map;
+  }, [adornments]);
+
+  // Only rect-positioned adornments belong in the overlay layer.
+  const rectAdornments = useMemo(
+    () => (adornments || []).filter((a) => a.kind !== 'panel_border'),
+    [adornments]
+  );
+
+  // View-mode extent must cover ADORNMENTS too, not just panels. A border
+  // drawn past the rightmost/bottom panel would otherwise fall outside the
+  // grid's fit-tight box and get clipped (and, in the scaled fit modes,
+  // shift the scale factor it was authored against). panel_border kinds are
+  // excluded — they live inside a panel, so they can never extend the grid.
   const maxGridCol = useMemo(() => {
     if (editMode && editGridCols) return editGridCols;
     if (!hasPanels) return 60;
-    return panels.reduce((max, p) => Math.max(max, p.x + p.w), 0) || 60;
-  }, [editMode, editGridCols, panels, hasPanels]);
+    const panelExtent = panels.reduce((max, p) => Math.max(max, p.x + p.w), 0);
+    const adornExtent = rectAdornments.reduce((max, a) => Math.max(max, a.x + a.w), 0);
+    return Math.max(panelExtent, adornExtent) || 60;
+  }, [editMode, editGridCols, panels, rectAdornments, hasPanels]);
   const maxGridRow = useMemo(() => {
     if (editMode && editGridRows) return editGridRows;
     if (!hasPanels) return 60;
-    return panels.reduce((max, p) => Math.max(max, p.y + p.h), 0) || 60;
-  }, [editMode, editGridRows, panels, hasPanels]);
+    const panelExtent = panels.reduce((max, p) => Math.max(max, p.y + p.h), 0);
+    const adornExtent = rectAdornments.reduce((max, a) => Math.max(max, a.y + a.h), 0);
+    return Math.max(panelExtent, adornExtent) || 60;
+  }, [editMode, editGridRows, panels, rectAdornments, hasPanels]);
 
   // Measure the container so fit-mode can scale to it. Double-rAF lets CSS class
   // changes (overflow) paint before measuring; ResizeObserver catches
@@ -229,7 +267,7 @@ function DashboardGrid({
       >
         <div
           ref={gridRef}
-          className={`dashboard-grid ${editMode ? 'edit-active' : ''}`}
+          className={`dashboard-grid ${editMode ? 'edit-active' : ''} ${adornmentMode ? 'adornment-active' : ''}`}
           onMouseDown={editMode ? onGridMouseDown : undefined}
           style={{
             gridTemplateColumns: `repeat(${maxGridCol}, ${CELL_WIDTH}px)`,
@@ -293,11 +331,20 @@ function DashboardGrid({
                 // panels have no component, so no tooltip. Suppressed in edit
                 // mode (the edit hover header surfaces this instead).
                 title={!editMode && hasChart ? (chart?.name || undefined) : undefined}
-                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''}`}
+                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''}`}
                 style={{
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
                   cursor: editMode ? 'default' : (hasChart && onExpandPanel ? 'pointer' : 'default'),
+                  // A panel_border replaces the panel's own 1px border, so the
+                  // line grows INWARD from the panel edge (border-box) and two
+                  // bordered neighbours stay separated by the gutter. Only
+                  // widths 1–3 are offered, so it never reaches the content.
+                  ...(panelBordersById[panel.id] ? {
+                    borderColor: panelBordersById[panel.id].color || '#0f62fe',
+                    borderWidth: `${panelBordersById[panel.id].width || 1}px`,
+                    borderStyle: panelBordersById[panel.id].line_style || 'solid',
+                  } : {}),
                 }}
                 onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
               >
@@ -340,6 +387,17 @@ function DashboardGrid({
               </div>
             );
           })}
+          {/* Decorations, above panel bodies. Rendered after the panels so
+              an overlapping panel visibly crosses the line rather than
+              silently hiding a segment of it. Inert unless the editor is
+              in adornment mode. */}
+          <AdornmentLayer
+            adornments={rectAdornments}
+            interactive={adornmentMode}
+            selectedId={selectedAdornmentId}
+            onSelect={onAdornmentMouseDown}
+            renderChrome={renderAdornmentChrome}
+          />
           {/* Edit-only extras (drawing preview, canvas boundary). */}
           {editMode ? gridExtras : null}
         </div>
@@ -350,6 +408,11 @@ function DashboardGrid({
 
 DashboardGrid.propTypes = {
   panels: PropTypes.array,
+  adornments: PropTypes.array,
+  adornmentMode: PropTypes.bool,
+  selectedAdornmentId: PropTypes.string,
+  onAdornmentMouseDown: PropTypes.func,
+  renderAdornmentChrome: PropTypes.func,
   chartsMap: PropTypes.object,
   dashboard: PropTypes.object,
   resolveConnectionId: PropTypes.func,

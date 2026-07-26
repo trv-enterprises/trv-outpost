@@ -195,6 +195,7 @@ function KioskPage() {
             // that timed out against slow backends.
             key={activeId || 'none'}
             panels={dashboard?.panels || []}
+            adornments={dashboard?.adornments || []}
             chartsMap={chartsMap}
             dashboard={dashboard}
             resolveConnectionId={resolveConnectionId}

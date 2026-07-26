@@ -1,0 +1,85 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Adornment overlay — visual decorations (border boxes) drawn over the
+// panel grid. Lives with <AdornmentLayer> so the viewer, the editor, and
+// the kiosk surface all pick it up from the same place.
+
+.adornment-layer {
+  // Fills the grid's padding box. `.dashboard-grid` is position:relative,
+  // so this anchors to the grid itself — and because the fit transform is
+  // applied to `.dashboard-grid`, the whole layer scales with the panels
+  // automatically in every fit mode.
+  position: absolute;
+  inset: 0;
+
+  // Above panel bodies (z-index 1 in edit mode), below a panel actively
+  // being dragged (10) and below the canvas boundary lines (20). Drawing
+  // ABOVE panels is deliberate: an overlapping panel then visibly crosses
+  // the line instead of silently hiding a segment of it behind its own
+  // opaque background.
+  z-index: 8;
+
+  // Inert by default so a border can never eat a click meant for a chart.
+  // The editor re-enables hits only while adornment mode is active.
+  pointer-events: none;
+
+  // In adornment mode the border element itself stays transparent to the
+  // mouse — only its edge strips and grips take hits. A solid rect would
+  // swallow every click inside it, making it impossible to draw a nested
+  // box or reach whatever the border surrounds.
+  &.is-interactive .adornment {
+    pointer-events: none;
+  }
+
+  &.is-interactive .adornment-hit,
+  &.is-interactive .adornment-grip {
+    pointer-events: auto;
+  }
+
+  // Edge hit strips. Straddle the line so it stays easy to grab even at
+  // 2px, without extending far enough inward to steal clicks meant for the
+  // interior. Kept slimmer than the gutter-plus-line so two nested borders
+  // one cell apart don't overlap grab areas.
+  .adornment-hit {
+    position: absolute;
+    cursor: move;
+    z-index: 1; // below .adornment-grip (4) so grips win where they overlap
+
+    &--top,
+    &--bottom {
+      left: 0;
+      right: 0;
+      height: 9px;
+    }
+    &--left,
+    &--right {
+      top: 0;
+      bottom: 0;
+      width: 9px;
+    }
+    &--top    { top: -4px; }
+    &--bottom { bottom: -4px; }
+    &--left   { left: -4px; }
+    &--right  { right: -4px; }
+  }
+
+  .adornment {
+    position: absolute;
+    // The rect from adornmentRect() is the LINE's centerline box, so the
+    // border must be drawn inside it rather than outside.
+    box-sizing: border-box;
+    // Matches .panel-container's radius so a border hugging a panel
+    // follows the same corner curve.
+    border-radius: 4px;
+  }
+
+  // Selection affordance in adornment mode. An outline (not a border)
+  // because the border IS the content here — changing it would misrepresent
+  // the width the user picked.
+  .adornment.is-selected {
+    outline: 1px dashed var(--cds-focus);
+    outline-offset: 2px;
+  }
+}

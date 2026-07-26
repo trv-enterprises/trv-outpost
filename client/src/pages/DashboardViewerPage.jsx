@@ -50,7 +50,9 @@ import {
   Home,
   Download,
   Notification,
-  Code
+  Code,
+  BorderFull,
+  Draw
 } from '@carbon/icons-react';
 import html2canvas from 'html2canvas';
 import DynamicComponentLoader from '../components/DynamicComponentLoader';
@@ -66,6 +68,9 @@ import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import ComponentSwapRulesModal from '../components/ComponentSwapRulesModal';
 import AIPreflightModal from '../components/AIPreflightModal';
+import ColorSwatchPicker from '../components/shared/ColorSwatchPicker';
+import { TEXT_THRESHOLD_COLOR_PALETTE } from '../chart-spec/option-helpers';
+import { adornmentRect } from '../components/AdornmentLayer';
 import apiClient from '../api/client';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import { useSwapCompatibility } from '../hooks/useSwapCompatibility';
@@ -97,6 +102,29 @@ function formatTime(date) {
 // enough for a tooltip; we're not gating behavior on it.
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 const ALT_KEY_LABEL = IS_MAC ? '⌥' : 'Alt';
+
+// Adornment border widths — EVEN ONLY, and deliberately so. The grid gutter
+// is 4px (even) and the line renders centered in it, so an odd width lands on
+// a half-pixel and blurs. 2 sits inside the void, 4 fills it exactly, 6
+// overlaps 1px into each neighbouring panel. Mirrors models.AdornmentWidths
+// in server-go/internal/models/dashboard.go — keep the two in lockstep.
+// Gutter borders hug the panel edge and grow OUTWARD, so nothing is being
+// centered and odd widths are fine. The 4px gutter fits two adjacent 2px
+// borders exactly; 3px+ neighbours overlap each other, which is the author's
+// call rather than something the geometry forbids.
+const ADORNMENT_WIDTHS = [1, 2, 3, 4];
+// Panel borders grow INWARD from the panel's own edge, so there is no gutter
+// to center in and no parity constraint — odd widths are fine. Mirrors
+// models.PanelBorderWidths in server-go.
+const PANEL_BORDER_WIDTHS = [1, 2, 3];
+const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted'];
+const ADORNMENT_DEFAULT_COLOR = '#0f62fe';
+// Smallest border a resize may shrink to.
+const ADORNMENT_MIN_CELLS = 1;
+// A DRAWN box must span more than a single cell to commit. Drawing starts at
+// 1x1, so without a threshold above that a bare click (no drag) would litter
+// the dashboard with 1-cell borders. Panels use the same guard (w >= 2).
+const ADORNMENT_MIN_DRAW_CELLS = 2;
 import { useNotifications } from '../context/NotificationContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import { getComponentMinSize, MODES } from '../config/layoutConfig';
@@ -291,9 +319,33 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // ── Edit mode state ──────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
+  // Mirror of isEditMode for callbacks that must read it WITHOUT taking it as
+  // a dependency (fetchDashboard is a useCallback consumed by effects — a
+  // state dep there would re-trigger those effects on every mode flip).
+  const isEditModeRef = useRef(false);
+  useEffect(() => { isEditModeRef.current = isEditMode; }, [isEditMode]);
   const [editablePanels, setEditablePanels] = useState([]);
   const [, setOriginalPanels] = useState([]);
   const [editHasChanges, setEditHasChanges] = useState(false);
+
+  // ── Adornment (decoration) edit state ────────────────────────────
+  // Adornments are visual only — border boxes drawn in the panel gutter.
+  // They live in their own dashboard array, so none of the panel state
+  // above is involved. Adornment mode makes panels inert and routes all
+  // grid mouse events to the adornment layer.
+  const [editableAdornments, setEditableAdornments] = useState([]);
+  const [adornmentMode, setAdornmentMode] = useState(false);
+  const [selectedAdornmentId, setSelectedAdornmentId] = useState(null);
+  const [draggingAdornment, setDraggingAdornment] = useState(null);
+  const [resizingAdornment, setResizingAdornment] = useState(null);
+  const [drawingAdornment, setDrawingAdornment] = useState(null);
+  // Last style the user picked, so a newly drawn border matches the one
+  // before it instead of resetting to the default every time.
+  const [lastAdornmentStyle, setLastAdornmentStyle] = useState({
+    color: ADORNMENT_DEFAULT_COLOR,
+    width: ADORNMENT_WIDTHS[0],
+    line_style: 'solid',
+  });
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   // Mode-switch intercept when the user has dirty edits. The pendingResolve
   // ref carries the guard's promise resolver so each button in the modal
@@ -683,6 +735,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // In edit mode: use layout dimension preset for bounds (allows dragging into empty space)
   // In view mode: use panel extent (tight fit)
   const panels = isEditMode ? editablePanels : (dashboard?.panels || []);
+  const adornments = isEditMode ? editableAdornments : (dashboard?.adornments || []);
+  const selectedAdornment = useMemo(
+    () => editableAdornments.find(a => a.id === selectedAdornmentId) || null,
+    [editableAdornments, selectedAdornmentId]
+  );
+  // Legal widths depend on the kind — see PANEL_BORDER_WIDTHS.
+  const selectedAdornmentWidths = selectedAdornment?.kind === 'panel_border'
+    ? PANEL_BORDER_WIDTHS
+    : ADORNMENT_WIDTHS;
 
   // Connection-swap column compatibility (detection only). For each panel,
   // resolve its EFFECTIVE component (post component-override) so a panel the
@@ -936,7 +997,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const fetchDashboard = useCallback(async () => {
     try {
       const data = await apiClient.getDashboard(id);
-      setDashboard(data);
+      // While editing, NEVER let a refetch clobber the authoring state. The
+      // editor's unsaved panels/adornments live in editable* state, but a
+      // save spreads `...dashboard` under its payload and enterEditMode
+      // re-seeds FROM `dashboard` — so replacing it mid-edit with the
+      // server's (pre-edit) copy silently reverted in-flight adornments.
+      // Keep the server's data for everything else; preserve the authoring
+      // arrays until the save that persists them.
+      setDashboard((prev) => (
+        isEditModeRef.current && prev
+          ? { ...data, panels: prev.panels, adornments: prev.adornments }
+          : data
+      ));
 
       if (data.panels && data.panels.length > 0) {
         // Batch-fetch every component the panels reference (defaults + every
@@ -1649,6 +1721,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const panelsCopy = (dashboard?.panels || []).map(p => ({ ...p }));
     setEditablePanels(panelsCopy);
     setOriginalPanels(panelsCopy.map(p => ({ ...p })));
+    setEditableAdornments((dashboard?.adornments || []).map(a => ({ ...a })));
+    // Always start in panel mode — adornment mode is an explicit opt-in.
+    setAdornmentMode(false);
+    setSelectedAdornmentId(null);
     setEditableName(dashboard?.name || '');
     // On a new dashboard the dashboard stub has no namespace yet; fall
     // back to the header's active namespace so newly-created dashboards
@@ -1895,6 +1971,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           <span>{drawingPanel.w}×{drawingPanel.h}</span>
         </div>
       )}
+      {drawingAdornment && (
+        <div
+          className="drawing-adornment-preview"
+          style={{
+            // Native px via the SAME helper the committed border uses, so
+            // the preview lands exactly where the border will.
+            ...(() => {
+              const r = adornmentRect({ ...drawingAdornment, width: lastAdornmentStyle.width });
+              return { left: r.left, top: r.top, width: r.width, height: r.height };
+            })(),
+            borderColor: lastAdornmentStyle.color,
+            borderWidth: `${lastAdornmentStyle.width}px`,
+            borderStyle: lastAdornmentStyle.line_style,
+          }}
+        />
+      )}
       {gridCols && (
         <>
           <div
@@ -2012,6 +2104,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         description: editableDescription,
         tags: editableTags,
         panels: editablePanels,
+        adornments: editableAdornments,
         settings: updatedSettings
       };
 
@@ -2052,6 +2145,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         }
         return created.id;
       } else {
+        // `payload` is spread LAST and carries both authoring arrays, so the
+        // stale-`dashboard` spread underneath can never win over them.
         await apiClient.updateDashboard(id, { ...dashboard, ...payload });
         invalidateTagsCache();
         setEditHasChanges(false);
@@ -2260,6 +2355,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Delete a panel
   const deletePanel = (panelId) => {
     setEditablePanels(prev => prev.filter(p => p.id !== panelId));
+    // Drop any panel_border bound to it. The server prunes orphans on save
+    // too, but doing it here keeps the in-editor state honest — otherwise a
+    // border would linger invisibly until the round trip.
+    setEditableAdornments(prev => prev.filter(
+      a => !(a.kind === 'panel_border' && a.panel_id === panelId)
+    ));
     setEditHasChanges(true);
   };
 
@@ -2454,6 +2555,308 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
   }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition]);
 
+  // ── Adornment (decoration) editing ───────────────────────────────
+
+  const updateAdornment = useCallback((adornmentId, updates) => {
+    setEditableAdornments(prev =>
+      prev.map(a => (a.id === adornmentId ? { ...a, ...updates } : a))
+    );
+    setEditHasChanges(true);
+  }, []);
+
+  const deleteAdornment = useCallback((adornmentId) => {
+    setEditableAdornments(prev => prev.filter(a => a.id !== adornmentId));
+    setSelectedAdornmentId(prev => (prev === adornmentId ? null : prev));
+    setEditHasChanges(true);
+  }, []);
+
+  // Apply a style change to the selected border AND remember it, so the next
+  // border drawn matches rather than reverting to the default.
+  const applyAdornmentStyle = useCallback((updates) => {
+    // Remember color/style for the next border drawn, but NOT width — the two
+    // kinds use different width scales (2/4/6 vs 1/2/3), so carrying a panel
+    // border's 1px over to a gutter border would be an illegal value.
+    const { width: _w, ...remembered } = updates;
+    if (Object.keys(remembered).length) {
+      setLastAdornmentStyle(prev => ({ ...prev, ...remembered }));
+    }
+    if (selectedAdornmentId) updateAdornment(selectedAdornmentId, updates);
+  }, [selectedAdornmentId, updateAdornment]);
+
+  // Entering adornment mode cancels any in-flight panel gesture — the two
+  // modes must never be mid-drag at the same time.
+  const toggleAdornmentMode = useCallback(() => {
+    setAdornmentMode(prev => {
+      const next = !prev;
+      if (next) {
+        setDraggingPanel(null);
+        setResizingPanel(null);
+        setDrawingPanel(null);
+      } else {
+        setSelectedAdornmentId(null);
+        setDraggingAdornment(null);
+        setResizingAdornment(null);
+        setDrawingAdornment(null);
+      }
+      return next;
+    });
+  }, []);
+
+  // Mouse-down on an existing border: select it, and start a move or a
+  // resize depending on which grip was hit.
+  const handleAdornmentMouseDown = useCallback((adornment, e) => {
+    e.preventDefault();
+    setSelectedAdornmentId(adornment.id);
+
+    const edge = e.target?.dataset?.adornmentGrip || null;
+    const pos = getGridPosition(e);
+    if (!pos) return;
+
+    if (edge) {
+      // Capture the grab point's pixel offset from the edge being moved, the
+      // same way startResizing does for panels. Without it, a grip click that
+      // lands past the edge's cell midpoint floors to the NEXT cell and the
+      // border jumps a full cell before the mouse has moved at all — about
+      // half the grip band's grab area.
+      let offsetX = 0;
+      let offsetY = 0;
+      if (gridRef.current) {
+        const rect = gridRef.current.getBoundingClientRect();
+        const cellW = rect.width / maxGridCol;
+        const cellH = rect.height / maxGridRow;
+        const movingLeft = edge === 'left';
+        const movingTop = edge === 'top';
+        const edgePixelX = rect.left + (movingLeft ? adornment.x : adornment.x + adornment.w) * cellW;
+        const edgePixelY = rect.top + (movingTop ? adornment.y : adornment.y + adornment.h) * cellH;
+        offsetX = e.clientX - edgePixelX;
+        offsetY = e.clientY - edgePixelY;
+      }
+      setResizingAdornment({ id: adornment.id, edge, offsetX, offsetY });
+    } else {
+      setDraggingAdornment({
+        id: adornment.id,
+        offsetX: pos.x - adornment.x,
+        offsetY: pos.y - adornment.y,
+      });
+    }
+  }, [getGridPosition, maxGridCol, maxGridRow]);
+
+  // Mouse-down anywhere in the grid while in adornment mode: deselect and
+  // start drawing a new border.
+  //
+  // Note this does NOT require `e.target === gridRef.current` the way the
+  // panel draw-out does. In adornment mode panels are inert and a border's
+  // interior is click-through, so the target is whatever happens to sit
+  // under the cursor — a panel, a chart, the grid itself. Requiring bare
+  // grid would make it impossible to draw a box over existing panels, or to
+  // nest a box inside another border. Anything that should NOT start a draw
+  // (edge strips, resize grips) stops propagation before reaching here.
+  const handleAdornmentGridMouseDown = useCallback((e) => {
+    setSelectedAdornmentId(null);
+    const pos = getGridPosition(e);
+    if (!pos) return;
+    // Record the panel under the press (if any). If the gesture turns out to
+    // be a click rather than a drag, mouseup attaches a border to it instead
+    // of committing a 1x1 box.
+    const panelEl = e.target?.closest?.('[data-panel-id]');
+    setDrawingAdornment({
+      startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, w: 1, h: 1,
+      panelId: panelEl?.dataset?.panelId || null,
+    });
+  }, [getGridPosition]);
+
+  // Attach a border to a panel, or select the one it already has. Clicking a
+  // bordered panel never removes the border — removal is explicit (Delete or
+  // the trash button), so an accidental click can't lose a styled border.
+  const attachPanelBorder = useCallback((panelId) => {
+    const existing = editableAdornments.find(
+      a => a.kind === 'panel_border' && a.panel_id === panelId
+    );
+    if (existing) {
+      setSelectedAdornmentId(existing.id);
+      return;
+    }
+    const created = {
+      id: `adorn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      kind: 'panel_border',
+      panel_id: panelId,
+      color: lastAdornmentStyle.color,
+      // Panel borders use their own width scale (1–3, inward from the panel
+      // edge), so the gutter-border width can't carry over.
+      width: PANEL_BORDER_WIDTHS[0],
+      line_style: lastAdornmentStyle.line_style,
+    };
+    setEditableAdornments(prev => [...prev, created]);
+    setSelectedAdornmentId(created.id);
+    setEditHasChanges(true);
+  }, [editableAdornments, lastAdornmentStyle]);
+
+  // Adornment drag/resize/draw. Deliberately a SEPARATE effect from the panel
+  // gesture handler: adornment mode makes panels inert, so the two can never
+  // run at once, and keeping them apart avoids threading another set of
+  // branches through an already-dense handler.
+  useEffect(() => {
+    if (!isEditMode || !adornmentMode) return undefined;
+    if (!draggingAdornment && !resizingAdornment && !drawingAdornment) return undefined;
+
+    // Same rule as panels: clamp to the STABLE budget, never maxGridCol,
+    // which grows with content and would feed a reflow loop.
+    const boundCols = editBudgetCols;
+    const boundRows = editBudgetRows;
+
+    const handleMouseMove = (e) => {
+      const pos = getGridPosition(e);
+      if (!pos) return;
+
+      if (drawingAdornment) {
+        const x = Math.min(drawingAdornment.startX, pos.x);
+        const y = Math.min(drawingAdornment.startY, pos.y);
+        const w = Math.abs(pos.x - drawingAdornment.startX) + 1;
+        const h = Math.abs(pos.y - drawingAdornment.startY) + 1;
+        setDrawingAdornment(prev => ({
+          ...prev, x, y,
+          w: Math.min(w, boundCols - x),
+          h: Math.min(h, boundRows - y),
+        }));
+        return;
+      }
+
+      if (draggingAdornment) {
+        const a = editableAdornments.find(v => v.id === draggingAdornment.id);
+        if (!a) return;
+        const newX = Math.max(0, Math.min(pos.x - draggingAdornment.offsetX, boundCols - a.w));
+        const newY = Math.max(0, Math.min(pos.y - draggingAdornment.offsetY, boundRows - a.h));
+        if (newX !== a.x || newY !== a.y) updateAdornment(a.id, { x: newX, y: newY });
+        return;
+      }
+
+      if (resizingAdornment) {
+        const a = editableAdornments.find(v => v.id === resizingAdornment.id);
+        if (!a || !gridRef.current) return;
+        const edge = resizingAdornment.edge;
+
+        // Subtract the grab offset before flooring to a cell, so the edge
+        // tracks the pointer smoothly instead of snapping on mousedown.
+        const rect = gridRef.current.getBoundingClientRect();
+        const cellW = rect.width / maxGridCol;
+        const cellH = rect.height / maxGridRow;
+        const gridX = Math.floor((e.clientX - (resizingAdornment.offsetX || 0) - rect.left) / cellW);
+        const gridY = Math.floor((e.clientY - (resizingAdornment.offsetY || 0) - rect.top) / cellH);
+
+        const next = { x: a.x, y: a.y, w: a.w, h: a.h };
+
+        // Each grip owns one edge. Left/top move the near edge while the far
+        // edge stays anchored (x and w both change, x+w constant) — the same
+        // model the panel resize uses.
+        if (edge === 'right' || edge === 'corner') {
+          next.w = Math.max(ADORNMENT_MIN_CELLS, Math.min(gridX - a.x + 1, boundCols - a.x));
+        }
+        if (edge === 'bottom' || edge === 'corner') {
+          next.h = Math.max(ADORNMENT_MIN_CELLS, Math.min(gridY - a.y + 1, boundRows - a.y));
+        }
+        if (edge === 'left') {
+          const rightEdge = a.x + a.w;
+          const newX = Math.max(0, Math.min(gridX, rightEdge - ADORNMENT_MIN_CELLS));
+          next.x = newX;
+          next.w = rightEdge - newX;
+        }
+        if (edge === 'top') {
+          const bottomEdge = a.y + a.h;
+          const newY = Math.max(0, Math.min(gridY, bottomEdge - ADORNMENT_MIN_CELLS));
+          next.y = newY;
+          next.h = bottomEdge - newY;
+        }
+
+        if (next.x !== a.x || next.y !== a.y || next.w !== a.w || next.h !== a.h) {
+          updateAdornment(a.id, next);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      // A press that never grew past 1x1 is a CLICK, not a draw. If it landed
+      // on a panel, attach a border to that panel instead of committing a
+      // useless 1-cell box.
+      const isClick = drawingAdornment
+        && drawingAdornment.w < ADORNMENT_MIN_DRAW_CELLS
+        && drawingAdornment.h < ADORNMENT_MIN_DRAW_CELLS;
+      if (isClick && drawingAdornment.panelId) {
+        attachPanelBorder(drawingAdornment.panelId);
+        setDrawingAdornment(null);
+        setDraggingAdornment(null);
+        setResizingAdornment(null);
+        return;
+      }
+      // Require a real drag in at least one axis — a click that never moved
+      // stays 1x1 and is discarded.
+      if (drawingAdornment
+          && (drawingAdornment.w >= ADORNMENT_MIN_DRAW_CELLS
+              || drawingAdornment.h >= ADORNMENT_MIN_DRAW_CELLS)) {
+        const created = {
+          // Random suffix, not a bare timestamp: two borders drawn in the
+          // same millisecond would otherwise share an id, and selection +
+          // updateAdornment both resolve by find() → first match wins.
+          id: `adorn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          kind: 'border',
+          x: drawingAdornment.x,
+          y: drawingAdornment.y,
+          w: drawingAdornment.w,
+          h: drawingAdornment.h,
+          ...lastAdornmentStyle,
+        };
+        setEditableAdornments(prev => [...prev, created]);
+        setSelectedAdornmentId(created.id);
+        setEditHasChanges(true);
+      }
+      setDrawingAdornment(null);
+      setDraggingAdornment(null);
+      setResizingAdornment(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [
+    isEditMode, adornmentMode, draggingAdornment, resizingAdornment, drawingAdornment,
+    editableAdornments, editBudgetCols, editBudgetRows, getGridPosition,
+    updateAdornment, lastAdornmentStyle, maxGridCol, maxGridRow,
+    attachPanelBorder,
+  ]);
+
+  // Delete / Escape on the selected border. Ignored while typing in a field
+  // so it can never eat a Backspace meant for a text input.
+  useEffect(() => {
+    if (!isEditMode || !adornmentMode || !selectedAdornmentId) return undefined;
+    const onKeyDown = (e) => {
+      const t = e.target;
+      const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (typing) return;
+      if (e.key === 'Escape') {
+        setSelectedAdornmentId(null);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteAdornment(selectedAdornmentId);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isEditMode, adornmentMode, selectedAdornmentId, deleteAdornment]);
+
+  // Resize grips on the selected border. The grip identity travels via a data
+  // attribute so the single mousedown handler can tell move from resize.
+  const renderAdornmentChrome = useCallback(() => (
+    <>
+      <div className="adornment-grip adornment-grip--top" data-adornment-grip="top" />
+      <div className="adornment-grip adornment-grip--left" data-adornment-grip="left" />
+      <div className="adornment-grip adornment-grip--right" data-adornment-grip="right" />
+      <div className="adornment-grip adornment-grip--bottom" data-adornment-grip="bottom" />
+      <div className="adornment-grip adornment-grip--corner" data-adornment-grip="corner" />
+    </>
+  ), []);
+
   // ── Chart editor / component picker / AI preflight ───────────────
 
   const openComponentEditor = (panelId, chart = undefined) => {
@@ -2603,7 +3006,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
     // Save dashboard first so panel persists, then navigate to AI builder
     try {
-      await apiClient.updateDashboard(id, { ...dashboard, panels: editablePanels });
+      // Carry adornments too — this save is a checkpoint before navigating
+      // away, so omitting them would discard in-flight border edits.
+      await apiClient.updateDashboard(id, { ...dashboard, panels: editablePanels, adornments: editableAdornments });
     } catch (err) {
       console.error('Failed to save before AI navigation:', err);
     }
@@ -2868,6 +3273,76 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   either case it lands on the viewer of the dashboard you're
                   editing. Hidden only for new dashboards, which have no
                   saved record to view yet. */}
+              {/* Adornment mode. While active, panels go inert and every
+                  grid click draws or selects a border. The style controls
+                  appear only once a border is selected, so the toolbar
+                  doesn't carry dead widgets in the common case. */}
+              {adornmentMode && selectedAdornment && (
+                <div className="adornment-style-bar">
+                  {/* Popover picker, not an inline swatch row — the toolbar
+                      has no room for the full palette laid out flat. */}
+                  <ColorSwatchPicker
+                    value={selectedAdornment.color || lastAdornmentStyle.color}
+                    onChange={(hex) => applyAdornmentStyle({ color: hex })}
+                    palette={TEXT_THRESHOLD_COLOR_PALETTE}
+                    // A border must have a color, so "Auto" has no meaning here.
+                    allowAuto={false}
+                    allowCustom
+                    label="Border color"
+                  />
+                  <Select
+                    id="adornment-width"
+                    labelText=""
+                    hideLabel
+                    size="sm"
+                    className="adornment-style-select"
+                    value={selectedAdornment.width || selectedAdornmentWidths[0]}
+                    onChange={(e) => applyAdornmentStyle({ width: Number(e.target.value) })}
+                  >
+                    {/* Width set depends on the kind: a gutter border is
+                        centered in the 4px gap (even only), a panel border
+                        grows inward from a real edge (1–3 all fine). */}
+                    {selectedAdornmentWidths.map(w => (
+                      <SelectItem key={w} value={w} text={`${w} px`} />
+                    ))}
+                  </Select>
+                  <Select
+                    id="adornment-line-style"
+                    labelText=""
+                    hideLabel
+                    size="sm"
+                    className="adornment-style-select"
+                    value={selectedAdornment.line_style || lastAdornmentStyle.line_style}
+                    onChange={(e) => applyAdornmentStyle({ line_style: e.target.value })}
+                  >
+                    {ADORNMENT_LINE_STYLES.map(s => (
+                      <SelectItem key={s} value={s} text={s[0].toUpperCase() + s.slice(1)} />
+                    ))}
+                  </Select>
+                  <IconButton
+                    kind="ghost"
+                    size="sm"
+                    label="Delete border"
+                    onClick={() => deleteAdornment(selectedAdornmentId)}
+                  >
+                    <TrashCan size={16} />
+                  </IconButton>
+                  <span className="edit-toolbar-divider" aria-hidden="true" />
+                </div>
+              )}
+              <Button
+                kind={adornmentMode ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={toggleAdornmentMode}
+                renderIcon={adornmentMode ? Draw : BorderFull}
+                title={
+                  adornmentMode
+                    ? 'Exit adornment mode (drag on the grid to draw a border)'
+                    : 'Adornment mode — draw borders around panels'
+                }
+              >
+                {adornmentMode ? 'Done' : 'Borders'}
+              </Button>
               {!isNewDashboard && (
                 <Button
                   kind="ghost"
@@ -3200,9 +3675,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           editGridRows={gridRows}
           editZoom={zoom}
           editScaleFactor={scaleFactor}
-          onGridMouseDown={handleGridMouseDown}
+          onGridMouseDown={adornmentMode ? handleAdornmentGridMouseDown : handleGridMouseDown}
           renderPanelChrome={renderEditPanelChrome}
           gridExtras={editGridExtras}
+          // Decorations: editable copy while editing, saved record in view.
+          adornments={adornments}
+          adornmentMode={isEditMode && adornmentMode}
+          selectedAdornmentId={selectedAdornmentId}
+          onAdornmentMouseDown={handleAdornmentMouseDown}
+          renderAdornmentChrome={renderAdornmentChrome}
           containerRef={containerRef}
           gridRef={gridRef}
         />

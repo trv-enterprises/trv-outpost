@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -149,6 +150,8 @@ func (s *DashboardService) CreateDashboard(ctx context.Context, req *models.Crea
 	// editing one changed all, saves landed on the wrong panel, delete went
 	// flaky. Backfill server-side so all surfaces get unique panel ids.
 	ensurePanelIDs(req.Panels)
+	sanitizeAdornments(req.Adornments)
+	req.Adornments = pruneOrphanAdornments(req.Adornments, req.Panels)
 
 	// Seed scale_percent from the chosen dimension's default scale when
 	// the caller didn't set one (designer/AI override wins). Seeded once
@@ -431,6 +434,16 @@ func (s *DashboardService) UpdateDashboard(ctx context.Context, id string, req *
 	// AI surfaces send id:"" panels and empty ids collide in the editor.
 	if req.Panels != nil {
 		ensurePanelIDs(*req.Panels)
+	}
+	if req.Adornments != nil {
+		sanitizeAdornments(*req.Adornments)
+		// Prune orphans only when the caller also sent panels — otherwise we
+		// have no authoritative panel list to check against, and a partial
+		// update (adornments only) would delete every panel_border.
+		if req.Panels != nil {
+			pruned := pruneOrphanAdornments(*req.Adornments, *req.Panels)
+			req.Adornments = &pruned
+		}
 	}
 
 	dashboard, err := s.repo.Update(ctx, id, req)
@@ -996,4 +1009,90 @@ func ensurePanelIDs(panels []models.DashboardPanel) {
 		}
 		seen[id] = true
 	}
+}
+
+// sanitizeAdornments backfills ids (same collision reasoning as
+// ensurePanelIDs) and clamps the style fields to the supported set.
+// Adornments are decoration, so an out-of-range value is coerced to a sane
+// default rather than failing the whole dashboard save — a bad color must
+// never cost the user their panel edits. Geometry is clamped to non-negative
+// with a minimum 1x1 extent; the client clamps to the grid budget, and the
+// grid itself tolerates an over-wide rect by extending its extent.
+// Mutates the slice in place.
+func sanitizeAdornments(adornments []models.DashboardAdornment) {
+	seen := make(map[string]bool, len(adornments))
+	for i := range adornments {
+		a := &adornments[i]
+
+		if a.ID == "" || seen[a.ID] {
+			a.ID = uuid.New().String()
+		}
+		seen[a.ID] = true
+
+		if a.Kind == "" {
+			a.Kind = models.AdornmentKindBorder
+		}
+
+		if a.Kind == models.AdornmentKindPanelBorder {
+			// Geometry comes from the bound panel, so any rect that rode along
+			// is meaningless — clear it rather than persist a stale copy that
+			// a future reader might trust.
+			a.X, a.Y, a.W, a.H = 0, 0, 0, 0
+		} else {
+			if a.X < 0 {
+				a.X = 0
+			}
+			if a.Y < 0 {
+				a.Y = 0
+			}
+			if a.W < 1 {
+				a.W = 1
+			}
+			if a.H < 1 {
+				a.H = 1
+			}
+			// A rect-positioned border has no panel to bind to.
+			a.PanelID = ""
+		}
+
+		// Legal widths differ by kind: a gutter border is centered in the 4px
+		// gap so it must be even, while a panel border grows inward from a
+		// real edge and may be odd. See models.WidthsForAdornmentKind.
+		legal := models.WidthsForAdornmentKind(a.Kind)
+		if !slices.Contains(legal, a.Width) {
+			a.Width = legal[0]
+		}
+
+		switch a.LineStyle {
+		case models.AdornmentLineSolid, models.AdornmentLineDashed, models.AdornmentLineDotted:
+			// ok
+		default:
+			a.LineStyle = models.AdornmentLineSolid
+		}
+	}
+}
+
+// pruneOrphanAdornments drops panel_border adornments whose panel no longer
+// exists. Without this, deleting a panel would leave a border bound to a
+// missing id — invisible in the UI but still in the record, and liable to
+// resurrect if a future panel reused the id. Returns the filtered slice.
+//
+// Only called when the caller supplies BOTH panels and adornments, so a
+// partial update that omits panels can never prune against an empty set.
+func pruneOrphanAdornments(adornments []models.DashboardAdornment, panels []models.DashboardPanel) []models.DashboardAdornment {
+	if len(adornments) == 0 {
+		return adornments
+	}
+	live := make(map[string]bool, len(panels))
+	for _, p := range panels {
+		live[p.ID] = true
+	}
+	kept := adornments[:0]
+	for _, a := range adornments {
+		if a.Kind == models.AdornmentKindPanelBorder && !live[a.PanelID] {
+			continue
+		}
+		kept = append(kept, a)
+	}
+	return kept
 }
