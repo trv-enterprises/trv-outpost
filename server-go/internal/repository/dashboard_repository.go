@@ -67,6 +67,7 @@ func (r *DashboardRepository) Create(ctx context.Context, req *models.CreateDash
 		Name:        req.Name,
 		Description: req.Description,
 		Panels:      panels,
+		Adornments:  req.Adornments, // omitempty — nil/empty simply isn't stored
 		Settings:    req.Settings,
 		Tags:        req.Tags,
 		Metadata:    req.Metadata,
@@ -303,6 +304,12 @@ func (r *DashboardRepository) Update(ctx context.Context, id string, req *models
 	}
 	if req.Panels != nil {
 		setFields["panels"] = *req.Panels
+	}
+	// Non-nil-but-empty is meaningful here: it's how the editor deletes the
+	// last adornment. Writing the empty array (rather than skipping the $set)
+	// is what makes that delete stick.
+	if req.Adornments != nil {
+		setFields["adornments"] = *req.Adornments
 	}
 	if req.Settings != nil {
 		if len(req.SettingsFields) > 0 {

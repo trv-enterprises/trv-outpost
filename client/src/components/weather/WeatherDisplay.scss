@@ -21,6 +21,55 @@
     font-size: 0.875rem;
     color: var(--cds-text-secondary);
   }
+
+  // Small and medium have no forecast block to absorb leftover height, so
+  // center their content in whatever panel they're given instead of letting
+  // it sit flush against the top edge.
+  &--small,
+  &--medium {
+    justify-content: center;
+  }
+}
+
+// Small variant — icon beside temperature, conditions and location beneath
+.weather-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: spacing.$spacing-05;
+  padding: spacing.$spacing-03 spacing.$spacing-05;
+  min-width: 0;
+
+  &__icon {
+    flex-shrink: 0;
+    display: flex;
+  }
+
+  &__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .compact-temp {
+    font-size: 2.75rem;
+    font-weight: 400;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .compact-subtitle {
+    font-size: 1.125rem;
+    opacity: 0.6;
+    white-space: nowrap;
+    // `overflow: hidden` (required for the ellipsis) clips to the content
+    // box, whose height comes from line-height. IBM Plex Sans has deep
+    // descenders, so a tight line-height cuts the tail off g/p/y —
+    // "Spring, TX" lost the g's descender. 1.4 leaves room for them.
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 // Location header

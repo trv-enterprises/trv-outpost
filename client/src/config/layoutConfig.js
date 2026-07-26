@@ -112,7 +112,11 @@ export const COMPONENT_MIN_SIZES = {
 
   // Displays (component_type='display')
   frigate_camera: { w: 8, h: 6 },
-  weather:        { w: 14, h: 12 },
+  // 7x3 is the floor for the "small" weather variant (icon + temperature +
+  // conditions). The medium and large variants need more room, but minimums
+  // are keyed by subtype only — not by weather_size — so this is the smallest
+  // that any variant can use. Authors size up for medium/large.
+  weather:        { w: 7, h: 3 },
 };
 
 // Get minimum size for a component subtype

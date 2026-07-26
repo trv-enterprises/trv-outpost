@@ -631,6 +631,28 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
         flex-shrink: 0;
       }
 
+      // Border style controls — visible only while a border is selected in
+      // adornment mode. Stays inside the right-hand action cluster so the
+      // toolbar keeps its grouped, right-justified wrap behavior.
+      .adornment-style-bar {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-02;
+        flex-shrink: 0;
+
+        // Carbon Selects default to a full-width field; these are compact
+        // inline controls, so constrain them.
+        .adornment-style-select {
+          width: auto;
+          min-width: 5.5rem;
+
+          .cds--select-input {
+            padding-right: spacing.$spacing-06;
+          }
+        }
+
+      }
+
       .edit-toolbar-settings {
         // Match the bordered look + height of the secondary Cancel button.
         border: 1px solid var(--cds-border-subtle-01);
@@ -811,6 +833,57 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     }
   }
 
+  // Live preview while dragging out a new border. Positioned in native px
+  // with the same gutter outset AdornmentLayer uses, so what you see during
+  // the drag is exactly where the committed border lands.
+  .drawing-adornment-preview {
+    position: absolute;
+    box-sizing: border-box;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0.7;
+    z-index: 9; // just above the adornment layer (8)
+  }
+
+  // Resize grips on the selected border. They straddle the line itself
+  // rather than sitting inside the box, so grabbing an edge doesn't mean
+  // clicking into the panel area the border surrounds.
+  .adornment-grip {
+    position: absolute;
+    // Above the always-present edge hit strips (which own "move"), so on a
+    // SELECTED border the overlapping grip claims the hit and resizes.
+    z-index: 4;
+
+    &--top,
+    &--bottom {
+      left: 8px;
+      right: 8px;
+      height: 10px;
+      cursor: ns-resize;
+    }
+    &--left,
+    &--right {
+      top: 8px;
+      bottom: 8px;
+      width: 10px;
+      cursor: ew-resize;
+    }
+    &--top    { top: -5px; }
+    &--bottom { bottom: -5px; }
+    &--left   { left: -5px; }
+    &--right  { right: -5px; }
+
+    // Corner wins over the two edges it overlaps.
+    &--corner {
+      right: -6px;
+      bottom: -6px;
+      width: 14px;
+      height: 14px;
+      cursor: nwse-resize;
+      z-index: 3;
+    }
+  }
+
   // Layout dimension boundary lines (red dashed) — real elements to paint above grid items
   .grid-boundary-right,
   .grid-boundary-bottom {
@@ -975,6 +1048,28 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       opacity: 1;
       pointer-events: auto;
       cursor: move;
+    }
+
+    // ...but NOT in adornment mode, where hovering a panel means "click to
+    // border this panel", not "drag me".
+    //
+    // `.adornment-active` sits on .dashboard-grid, which is a DESCENDANT of
+    // .dashboard-viewer-page — so `&` can't be used here (it would expand to
+    // `.dashboard-grid.adornment-active .dashboard-viewer-page …`, requiring
+    // the page inside the grid, which never matches). Write the full chain
+    // explicitly. It must also out-specify the `:hover` reveal above AND
+    // neutralize `opacity`, which is the property that rule actually sets.
+    @at-root .dashboard-viewer-page .dashboard-grid.adornment-active
+      .panel-container.edit-mode {
+      .edit-hover-header,
+      .edit-drag-overlay,
+      .edit-resize-handle,
+      .edit-resize-edge,
+      .edit-panel-menu-anchor {
+        display: none !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
     }
 
     // Full-panel drag overlay

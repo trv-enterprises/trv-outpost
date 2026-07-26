@@ -384,7 +384,7 @@ func displayProse(cat *registry.Catalog) string {
 - Call update_component_type("display") first
 - **frigate_camera**: Frigate NVR camera viewer with live stream, snapshots, and MQTT alerts
 - **frigate_alerts**: Responsive thumbnail grid of unreviewed Frigate alerts. Polls Frigate's /api/review endpoint with reviewed=0. Click a thumbnail to open the review clip in a modal. Configuration: { display_type: "frigate_alerts", frigate_connection_id, default_camera (optional camera filter, empty = all cameras), alert_severity ("alert" | "detection" | ""), max_thumbnails (default 8, 1–50), snapshot_interval (polling ms, default 10000) }
-- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to "weather"). Configuration: { display_type: "weather", mqtt_connection_id, weather_topic_prefix }
+- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to "weather"). Configuration: { display_type: "weather", mqtt_connection_id, weather_topic_prefix, weather_location (display label), weather_size ("small" = icon + temperature + conditions, fits a short wide tile; "medium" = current conditions with detail grid and sun times; "large" (default) = adds hourly and 5-day forecasts) }
 `
 	}
 
@@ -424,7 +424,7 @@ func displayProse(cat *registry.Catalog) string {
 		sb.WriteString("- **frigate_alerts**: Responsive thumbnail grid of unreviewed Frigate alerts. Polls Frigate's /api/review endpoint with reviewed=0. Click a thumbnail to open the review clip in a modal. Configuration: { display_type: \"frigate_alerts\", frigate_connection_id, default_camera (optional camera filter, empty = all cameras), alert_severity (\"alert\" | \"detection\" | \"\"), max_thumbnails (default 8, 1–50), snapshot_interval (polling ms, default 10000) }\n")
 	}
 	if hasWeather {
-		sb.WriteString("- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to \"weather\"). Configuration: { display_type: \"weather\", mqtt_connection_id, weather_topic_prefix }\n")
+		sb.WriteString("- **weather**: Weather dashboard showing current conditions, hourly/daily forecast, and alerts. Requires MQTT connection with weather/# topics (weather_topic_prefix defaults to \"weather\"). Configuration: { display_type: \"weather\", mqtt_connection_id, weather_topic_prefix, weather_location (display label), weather_size (\"small\" = icon + temperature + conditions, fits a short wide tile; \"medium\" = current conditions with detail grid and sun times; \"large\" (default) = adds hourly and 5-day forecasts) }\n")
 	}
 	return sb.String()
 }

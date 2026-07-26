@@ -25,6 +25,7 @@ When in edit mode, the toolbar changes to show editing controls:
 | **Zoom controls** | `-` / `100%` / `+` buttons to zoom the canvas (10%-100%) |
 | **Unsaved changes tag** | Blue tag appears when edits have been made |
 | **Sub-mode toggle** | Switch between Standard and Compact editing modes |
+| **Borders** | Enter adornment mode to draw grouping boxes around panels |
 | **Settings gear** | Open the [Dashboard Settings](dashboard-settings.md) modal |
 | **Cancel** | Discard changes (prompts confirmation if unsaved) |
 | **Save** | Persist all changes to the server |
@@ -51,6 +52,44 @@ No header bar — components render at full size. The entire panel is a drag tar
 - Empty panels show an "Add" button for assigning components
 
 Toggle between modes using the icon button in the toolbar.
+
+## Borders (Adornments)
+
+Borders are grouping boxes you draw around related panels — a visual way
+to say "these four charts belong together." They are decoration only:
+they hold no data, and they never change how a panel behaves.
+
+Click **Borders** in the toolbar to enter adornment mode. Panels dim and
+stop responding to clicks, so every mouse action applies to borders.
+
+| Action | How |
+|--------|-----|
+| **Draw a border** | Drag out a rectangle on the grid, exactly like drawing a panel |
+| **Select** | Click an existing border |
+| **Move** | Drag a selected border |
+| **Resize** | Drag any edge or the bottom-right corner |
+| **Restyle** | With a border selected, use the color / width / line-style controls that appear in the toolbar |
+| **Delete** | Press <kbd>Delete</kbd>, or click the trash icon in the style controls |
+| **Deselect** | Press <kbd>Esc</kbd> or click empty grid space |
+
+Click **Done** to leave adornment mode and return to editing panels.
+Borders save with the rest of the dashboard when you click **Save**.
+
+### How borders line up
+
+A border hugs the panels it surrounds and draws outward into the gap
+*between* panels, so it never covers any content. A new border reuses the
+last style you picked, so a set of matching boxes takes one style choice,
+not one per box.
+
+Line widths are 1–4 px. The gap between panels is 4 px, so **two boxes
+sitting side by side can each use 2 px and meet exactly without
+overlapping** — useful when you want to outline two adjacent groups.
+At 3 px or 4 px, two adjacent boxes will overlap each other; that's
+allowed, just something to expect.
+
+If you move a panel on top of a border, the line simply draws across the
+panel. Nothing breaks — move either the panel or the border to fix it.
 
 ## Dashboard Variables
 

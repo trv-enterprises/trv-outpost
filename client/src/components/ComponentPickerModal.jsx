@@ -432,7 +432,11 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                     <CustomCodeIndicator active={!!item.use_custom_code} />
                   </div>
                   <div className="picker-tile-content">
-                    <h4>{item.title || item.name}</h4>
+                    {/* Name, not title: the picker selects by identity, and
+                        name is the unique (namespace, name) identifier.
+                        Titles are display labels for the rendered panel and
+                        are often duplicated across components. */}
+                    <h4>{item.name}</h4>
                     {item.description && <p>{item.description}</p>}
                     {itemTags.length > 0 && (
                       <div className="picker-tile-tags">

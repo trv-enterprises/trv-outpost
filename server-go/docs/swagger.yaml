@@ -1437,6 +1437,11 @@ definitions:
   models.CreateDashboardRequest:
     description: Request body for creating a new dashboard
     properties:
+      adornments:
+        description: Visual decorations drawn over the grid
+        items:
+          $ref: '#/definitions/models.DashboardAdornment'
+        type: array
       description:
         type: string
       metadata:
@@ -1587,6 +1592,11 @@ definitions:
   models.Dashboard:
     description: Dashboard with panels that reference standalone charts
     properties:
+      adornments:
+        description: Visual decorations drawn over the grid
+        items:
+          $ref: '#/definitions/models.DashboardAdornment'
+        type: array
       created:
         type: string
       description:
@@ -1617,6 +1627,47 @@ definitions:
         type: string
     required:
     - name
+    type: object
+  models.DashboardAdornment:
+    description: A visual decoration (a free-drawn box, or a border bound to a panel)
+      drawn over the dashboard grid
+    properties:
+      color:
+        description: |-
+          Color is a hex string ("#0f62fe") chosen from the same swatch palette the
+          value-chart text rules use.
+        type: string
+      h:
+        type: integer
+      id:
+        type: string
+      kind:
+        description: '"border" | "panel_border"'
+        type: string
+      line_style:
+        description: LineStyle is "solid", "dashed", or "dotted".
+        type: string
+      panel_id:
+        description: |-
+          PanelID binds a "panel_border" to its panel. Required for that kind;
+          empty for "border". An adornment whose panel no longer exists is
+          dropped on save (see sanitizeAdornments) so deleting a panel cannot
+          leave an orphan behind.
+        type: string
+      w:
+        type: integer
+      width:
+        description: |-
+          Width is the line width in px — must be one of the values returned by
+          WidthsForAdornmentKind for this adornment's Kind.
+        type: integer
+      x:
+        description: |-
+          X/Y/W/H position a "border". Unused (and omitted) for "panel_border",
+          which derives its geometry from the panel it is bound to.
+        type: integer
+      "y":
+        type: integer
     type: object
   models.DashboardListResponse:
     description: Response containing a list of dashboards with pagination
@@ -2069,6 +2120,9 @@ definitions:
         type: integer
       weather_location:
         description: Display label (e.g., "Spring, TX")
+        type: string
+      weather_size:
+        description: 'Layout variant: "small" | "medium" | "large" (default: "large")'
         type: string
       weather_topic_prefix:
         description: Weather-specific fields (only used when display_type = "weather")
@@ -3350,6 +3404,11 @@ definitions:
   models.UpdateDashboardRequest:
     description: Request body for updating an existing dashboard
     properties:
+      adornments:
+        description: Nil = leave adornments unchanged
+        items:
+          $ref: '#/definitions/models.DashboardAdornment'
+        type: array
       description:
         type: string
       metadata:

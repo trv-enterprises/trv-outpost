@@ -51,6 +51,41 @@
     gap: spacing.$spacing-02;
   }
 
+  // Optional custom-color row. The native `<input type="color">` has no
+  // intrinsic size and stretches to fill whatever box it's given, so it
+  // MUST be constrained explicitly — unbounded, it fills the popover (and
+  // in a flex parent, the screen).
+  &__custom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: spacing.$spacing-03;
+    margin-top: spacing.$spacing-03;
+    padding-top: spacing.$spacing-03;
+    border-top: 1px solid var(--cds-border-subtle-01);
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+    cursor: pointer;
+  }
+
+  &__custom {
+    flex: 0 0 auto;
+    width: 2.5rem;
+    height: 1.5rem;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--cds-border-strong-01);
+    border-radius: 0.25rem;
+    background: transparent;
+    cursor: pointer;
+
+    // WebKit renders the well through these pseudo-elements; without them
+    // the swatch keeps a thick default inset border.
+    &::-webkit-color-swatch-wrapper { padding: 2px; }
+    &::-webkit-color-swatch { border: none; border-radius: 2px; }
+    &::-moz-color-swatch { border: none; border-radius: 2px; }
+  }
+
   &__swatch {
     width: 1.5rem;
     height: 1.5rem;

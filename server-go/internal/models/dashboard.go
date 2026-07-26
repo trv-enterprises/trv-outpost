@@ -63,6 +63,91 @@ type ComponentOverride struct {
 	ComponentID string `json:"component_id" bson:"component_id"`
 }
 
+// Adornment kinds. The Kind field discriminates the adornment sub-type so
+// future decorations (labels, dividers, fills) slot in without a schema change.
+const (
+	// AdornmentKindBorder is a free-drawn box positioned by cell rect, whose
+	// line draws centered in the gutter BETWEEN panels.
+	AdornmentKindBorder = "border"
+	// AdornmentKindPanelBorder is a border bound to one panel by ID, drawn
+	// INSIDE that panel's own footprint. It has no rect of its own — it
+	// follows the panel as the panel moves and resizes.
+	AdornmentKindPanelBorder = "panel_border"
+)
+
+// Adornment line styles.
+const (
+	AdornmentLineSolid  = "solid"
+	AdornmentLineDashed = "dashed"
+	AdornmentLineDotted = "dotted"
+)
+
+// AdornmentWidths are the accepted widths for a gutter `border`. The line
+// hugs the panel edge and grows OUTWARD into the 4px gutter, so nothing is
+// centered and odd widths are fine. At 2px two adjacent boxes each take half
+// the gutter and meet exactly without overlapping; wider neighbours overlap
+// each other, which is the author's choice rather than a geometry error.
+var AdornmentWidths = []int{1, 2, 3, 4}
+
+// PanelBorderWidths are the accepted widths for a `panel_border`. Odd values
+// are fine here — unlike a gutter border there is nothing to center: the line
+// grows INWARD from the panel's own edge, so no half-pixel arises.
+var PanelBorderWidths = []int{1, 2, 3}
+
+// WidthsForAdornmentKind returns the legal width set for a given kind.
+func WidthsForAdornmentKind(kind string) []int {
+	if kind == AdornmentKindPanelBorder {
+		return PanelBorderWidths
+	}
+	return AdornmentWidths
+}
+
+// DashboardAdornment is a purely visual decoration drawn over the panel grid.
+//
+// Adornments are stored SEPARATELY from panels because they are not panels:
+// they reference no component, render no data, and must not appear in panel
+// counts, component-usage lookups, export dependency walks, or the AI panel
+// schemas. Keeping them in their own array means every existing panel consumer
+// stays untouched.
+//
+// The two kinds are positioned in fundamentally different ways:
+//
+//   - "border" carries a cell rect in the SAME units as DashboardPanel
+//     {x,y,w,h}. The renderer pushes that rect outward so the line draws
+//     centered in the gap BETWEEN panels rather than over panel content. A
+//     panel moved onto one simply overlaps it — there is no stored
+//     relationship to repair.
+//   - "panel_border" carries a PanelID and no rect. It renders inside that
+//     panel's own footprint and therefore follows the panel automatically as
+//     it moves or resizes. Because the line sits within the panel edge, two
+//     bordered neighbours show two distinct lines separated by the gutter
+//     instead of merging into one.
+//
+// @Description A visual decoration (a free-drawn box, or a border bound to a panel) drawn over the dashboard grid
+type DashboardAdornment struct {
+	ID   string `json:"id" bson:"id"`
+	Kind string `json:"kind" bson:"kind"` // "border" | "panel_border"
+	// X/Y/W/H position a "border". Unused (and omitted) for "panel_border",
+	// which derives its geometry from the panel it is bound to.
+	X int `json:"x,omitempty" bson:"x,omitempty"`
+	Y int `json:"y,omitempty" bson:"y,omitempty"`
+	W int `json:"w,omitempty" bson:"w,omitempty"`
+	H int `json:"h,omitempty" bson:"h,omitempty"`
+	// PanelID binds a "panel_border" to its panel. Required for that kind;
+	// empty for "border". An adornment whose panel no longer exists is
+	// dropped on save (see sanitizeAdornments) so deleting a panel cannot
+	// leave an orphan behind.
+	PanelID string `json:"panel_id,omitempty" bson:"panel_id,omitempty"`
+	// Color is a hex string ("#0f62fe") chosen from the same swatch palette the
+	// value-chart text rules use.
+	Color string `json:"color,omitempty" bson:"color,omitempty"`
+	// Width is the line width in px — must be one of the values returned by
+	// WidthsForAdornmentKind for this adornment's Kind.
+	Width int `json:"width,omitempty" bson:"width,omitempty"`
+	// LineStyle is "solid", "dashed", or "dotted".
+	LineStyle string `json:"line_style,omitempty" bson:"line_style,omitempty"`
+}
+
 // ChartQueryConfig defines how to query data for a chart
 // @Description Query configuration for fetching chart data
 type ChartQueryConfig struct {
@@ -315,7 +400,8 @@ type Dashboard struct {
 	Namespace   string                 `json:"namespace" bson:"namespace"` // Conflict-domain; uniqueness is (namespace, name). See models.Namespace.
 	Name        string                 `json:"name" bson:"name" binding:"required"`
 	Description string                 `json:"description" bson:"description"`
-	Panels      []DashboardPanel       `json:"panels" bson:"panels"` // Panels with component_id references
+	Panels      []DashboardPanel       `json:"panels" bson:"panels"`                             // Panels with component_id references
+	Adornments  []DashboardAdornment   `json:"adornments,omitempty" bson:"adornments,omitempty"` // Visual decorations drawn over the grid
 	Settings    DashboardSettings      `json:"settings" bson:"settings"`
 	Tags        []string               `json:"tags,omitempty" bson:"tags,omitempty"` // User-defined tags for filtering/grouping
 	Metadata    map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
@@ -530,7 +616,8 @@ type CreateDashboardRequest struct {
 	Namespace   string                 `json:"namespace,omitempty"` // Empty defaults to "default" in the handler.
 	Name        string                 `json:"name" binding:"required"`
 	Description string                 `json:"description"`
-	Panels      []DashboardPanel       `json:"panels"` // Panels with optional component_id
+	Panels      []DashboardPanel       `json:"panels"`               // Panels with optional component_id
+	Adornments  []DashboardAdornment   `json:"adornments,omitempty"` // Visual decorations drawn over the grid
 	Settings    DashboardSettings      `json:"settings"`
 	Tags        []string               `json:"tags,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
@@ -542,7 +629,8 @@ type UpdateDashboardRequest struct {
 	Namespace   *string                 `json:"namespace,omitempty"` // Omitted = leave current namespace unchanged.
 	Name        *string                 `json:"name,omitempty"`
 	Description *string                 `json:"description,omitempty"`
-	Panels      *[]DashboardPanel       `json:"panels,omitempty"` // Panels with optional component_id
+	Panels      *[]DashboardPanel       `json:"panels,omitempty"`     // Panels with optional component_id
+	Adornments  *[]DashboardAdornment   `json:"adornments,omitempty"` // Nil = leave adornments unchanged
 	Settings    *DashboardSettings      `json:"settings,omitempty"`
 	Tags        *[]string               `json:"tags,omitempty"`
 	Metadata    *map[string]interface{} `json:"metadata,omitempty"`
@@ -672,6 +760,7 @@ type DashboardWithComponents struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
 	Panels      []DashboardPanel       `json:"panels"`
+	Adornments  []DashboardAdornment   `json:"adornments,omitempty"`
 	Components  map[string]*Component  `json:"components"` // panel_id -> Component mapping
 	Settings    DashboardSettings      `json:"settings"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
