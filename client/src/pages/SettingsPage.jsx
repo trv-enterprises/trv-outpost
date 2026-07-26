@@ -30,7 +30,7 @@ import TileFontSizeEditorModal from '../components/TileFontSizeEditorModal';
 import DefaultDashboardFitModeEditorModal from '../components/DefaultDashboardFitModeEditorModal';
 import DashboardConfigRefreshIntervalEditorModal, { DEFAULT_DASHBOARD_CONFIG_REFRESH_INTERVAL } from '../components/DashboardConfigRefreshIntervalEditorModal';
 import DefaultBrowserUserEditorModal from '../components/DefaultBrowserUserEditorModal';
-import NumericChartNumberSizeEditorModal, { DEFAULT_NUMBER_CHART_SIZE } from '../components/NumericChartNumberSizeEditorModal';
+import ValueChartSizeEditorModal, { DEFAULT_VALUE_CHART_SIZE } from '../components/ValueChartSizeEditorModal';
 import ChartColorOptionsEditorModal from '../components/ChartColorOptionsEditorModal';
 import EnabledTypesEditorModal from '../components/EnabledTypesEditorModal';
 import PrimitiveSettingEditorModal from '../components/PrimitiveSettingEditorModal';
@@ -57,7 +57,7 @@ function SettingsPage() {
   const [defaultFitModeModalOpen, setDefaultFitModeModalOpen] = useState(false);
   const [dashboardConfigRefreshModalOpen, setDashboardConfigRefreshModalOpen] = useState(false);
   const [defaultBrowserUserModalOpen, setDefaultBrowserUserModalOpen] = useState(false);
-  const [numericChartSizeModalOpen, setNumericChartSizeModalOpen] = useState(false);
+  const [valueChartSizeModalOpen, setValueChartSizeModalOpen] = useState(false);
   const [chartColorOptionsModalOpen, setChartColorOptionsModalOpen] = useState(false);
   const [dashboardCommandModalOpen, setDashboardCommandModalOpen] = useState(false);
   const [enabledTypesModalOpen, setEnabledTypesModalOpen] = useState(false);
@@ -105,8 +105,8 @@ function SettingsPage() {
       case 'default_browser_user_guid':
         setDefaultBrowserUserModalOpen(true);
         break;
-      case 'default_numeric_chart_number_size':
-        setNumericChartSizeModalOpen(true);
+      case 'default_value_chart_size':
+        setValueChartSizeModalOpen(true);
         break;
       case 'chart_preferred_color_options':
         setChartColorOptionsModalOpen(true);
@@ -397,14 +397,14 @@ function SettingsPage() {
         }}
       />
 
-      {/* Default Number Chart Value Size Editor Modal */}
-      <NumericChartNumberSizeEditorModal
-        open={numericChartSizeModalOpen}
-        onClose={() => { setNumericChartSizeModalOpen(false); setEditingSetting(null); }}
-        currentValue={editingSetting?.key === 'default_numeric_chart_number_size' ? editingSetting.value : DEFAULT_NUMBER_CHART_SIZE}
+      {/* Default Value Chart Size Editor Modal */}
+      <ValueChartSizeEditorModal
+        open={valueChartSizeModalOpen}
+        onClose={() => { setValueChartSizeModalOpen(false); setEditingSetting(null); }}
+        currentValue={editingSetting?.key === 'default_value_chart_size' ? editingSetting.value : DEFAULT_VALUE_CHART_SIZE}
         onSave={(value) => {
-          handleSave('default_numeric_chart_number_size', value);
-          setNumericChartSizeModalOpen(false);
+          handleSave('default_value_chart_size', value);
+          setValueChartSizeModalOpen(false);
           setEditingSetting(null);
         }}
       />

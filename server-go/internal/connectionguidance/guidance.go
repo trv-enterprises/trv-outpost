@@ -104,7 +104,7 @@ query_config shape for Prometheus:
 Choose query_type by the chart's X-AXIS, not its chart type:
   - "instant" → ONE snapshot. Use whenever the x-axis is a LABEL/category
     (deployment, pod, instance, mode) or there is no x-axis at all
-    (gauge, number/stat, pie). A BAR chart of "current value per
+    (gauge, value/stat, pie). A BAR chart of "current value per
     deployment" is INSTANT — its x-axis is the deployment label, not
     time. Returns one row per series.
   - "range" → a TIME SERIES. Use only when the x-axis is TIME (a
@@ -374,7 +374,7 @@ A given ts-store connection is either REST or streaming based on
 its config.transport — they are not interchangeable. To convert,
 edit the connection.
 
-## Latest-value tiles (number / gauge)
+## Latest-value tiles (value / gauge)
 
 A KPI tile shows the most recent value off the push stream. Use
 stream_filter + an aggregation of "last":
@@ -409,8 +409,8 @@ of just the newest point:
     more). Match the since: span to the window duration.
   - Map y_axis to RAW streamed columns (the dotted field names from the
     schema, e.g. cpu.pct, memory.pct) — never compute in the query, there
-    is no SQL here. For unit/time DISPLAY on a number tile, map the raw
-    column and pick a numberFormat instead of writing custom code:
+    is no SQL here. For unit/time DISPLAY on a value tile, map the raw
+    column and pick a valueFormat instead of writing custom code:
     "duration" (raw SECONDS → "2d 3h 4m", e.g. uptime.sec), "duration_clock"
     (seconds → HH:MM:SS), or "compact" (large values → 1.2M / 3.4K). Only
     drop to a custom-code component for a conversion none of those cover

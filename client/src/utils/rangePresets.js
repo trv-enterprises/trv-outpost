@@ -20,7 +20,9 @@ export const DEFAULT_RANGE_PRESETS = ['1h', '6h', '24h', '7d', '30d'];
 // these, so they neither receive it (PanelContent withholds it) nor count as a
 // range consumer when deciding whether to show the picker. Shared so those two
 // decisions can't drift.
-export const RANGE_EXEMPT_CHART_TYPES = new Set(['gauge', 'number', 'pie']);
+// ('number' is the retired name of 'value' — kept so a record that
+// escaped the boot migration behaves the same.)
+export const RANGE_EXEMPT_CHART_TYPES = new Set(['gauge', 'value', 'number', 'pie']);
 
 // Does a chart type render a time series that a range window can scope?
 // (The inverse of range-exempt, for non-exempt chart types.)

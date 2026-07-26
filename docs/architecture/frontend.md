@@ -320,11 +320,11 @@ vertically-stacked** surface.
   use `min(<vw>, <vh>)` as the preferred clamp term so a **short
   landscape** viewport clamps the row down instead of overflowing (a
   plain `vw` box made a gauge taller than the whole landscape screen).
-  The one component that needed a code fix is the number tile:
-  `NumberView` renders its value at a fixed inline `px` size that only
+  The one component that needed a code fix is the value tile:
+  `ValueView` renders its value at a fixed inline `px` size that only
   reads correctly when the grid is transform-scaled, so the mobile row
   (a CSS *size container*) caps it container-relative via the
-  `.number-view__value` hook — desktop rendering is unchanged.
+  `.value-view__value` hook — desktop rendering is unchanged.
 - **Per-panel fullscreen.** Each chart/display row carries an expand
   button; tapping it opens an **edge-to-edge overlay** (`position:
   fixed; inset: 0`, above the header) showing that one panel. There is
@@ -360,8 +360,8 @@ being explicit.
 
 **1. The component title band — HTML, scalable.** Every spec-driven
 component renders its title in an HTML band *outside* the ECharts canvas:
-`ChartShell.jsx` (line/bar/area/pie/gauge/scatter), `NumberView.jsx`
-(number tiles), `DataViewGrid.jsx` (data views), and the
+`ChartShell.jsx` (line/bar/area/pie/gauge/scatter), `ValueView.jsx`
+(value tiles), `DataViewGrid.jsx` (data views), and the
 `.chart-name`/`.chart-header` path in `DashboardViewerPage.scss`
 (datatable). The font size is:
 

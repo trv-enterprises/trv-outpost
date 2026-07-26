@@ -21,7 +21,7 @@ export const COMPONENT_TYPE_HIERARCHY = {
       { id: 'scatter', label: 'Scatter Plot' },
       { id: 'gauge', label: 'Gauge' },
       { id: 'dataview', label: 'Data Table' },
-      { id: 'number', label: 'Number' },
+      { id: 'value', label: 'Value' },
       { id: 'banded_bar', label: 'Banded Bar (Levey-Jennings)' },
       { id: 'custom', label: 'Custom' }
     ]

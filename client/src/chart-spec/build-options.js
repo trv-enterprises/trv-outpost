@@ -17,7 +17,7 @@ import { buildOption as buildGaugeOption } from './specs/gauge';
 import { buildOption as buildPieOption } from './specs/pie';
 import { buildOption as buildScatterOption } from './specs/scatter';
 import { buildOption as buildBandedBarOption } from './specs/banded_bar';
-import { buildOption as buildNumberOption } from './specs/number';
+import { buildOption as buildValueOption } from './specs/value';
 import { buildOption as buildDataViewOption } from './specs/dataview';
 
 const BUILD_OPTIONS = {
@@ -45,10 +45,14 @@ const BUILD_OPTIONS = {
   // banded_bar has its own module — Levey-Jennings per-row mean + SD
   // envelope across four visual styles. Doesn't share line.
   banded_bar: buildBandedBarOption,
-  // number is non-ECharts: its buildOption returns a { render: 'number' }
+  // value is non-ECharts: its buildOption returns a { render: 'value' }
   // descriptor that SpecDrivenChart renders via the view registry (not
   // ChartShell/ReactECharts). See docs/design-notes/spec-driven-non-echarts-views.md.
-  number: buildNumberOption,
+  value: buildValueOption,
+  // `number` is the retired name of the value type. Aliased to the same
+  // builder so an un-migrated record still renders. value.js also reads
+  // the old options.number* keys as a fallback.
+  number: buildValueOption,
   // dataview is non-ECharts: returns a { render: 'dataview' } descriptor
   // rendered by <DataViewGrid> (AG Grid) via the view registry.
   dataview: buildDataViewOption,

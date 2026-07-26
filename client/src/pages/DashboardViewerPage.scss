@@ -1107,27 +1107,10 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     }
   }
 
-  // Panel text rendering (native text panels)
-  .panel-text {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-
-    &--left { align-items: flex-start; text-align: left; }
-    &--center { align-items: center; text-align: center; }
-    &--right { align-items: flex-end; text-align: right; }
-
-    .panel-text-content {
-      color: var(--cds-text-primary);
-      font-weight: 600;
-      line-height: 1.2;
-      margin: 0;
-      padding: 0;
-      word-break: break-word;
-    }
-  }
+  // Panel text rendering (native text panels) is styled in the co-located
+  // PanelText.scss so it applies to every surface (viewer + kiosk). Do not
+  // re-declare .panel-text here — a nested copy outspecifies the co-located
+  // rules and silently overrides them.
 
   // Dashboard settings modal form
   .dashboard-settings-form {

@@ -49,21 +49,23 @@ create a dashboard whose panels reference those components.
   The ` + "`" + `name` + "`" + ` param is the INTERNAL identifier, not the label — do NOT
   bury the display label in ` + "`" + `name` + "`" + ` or rename a component to relabel it;
   the renderer shows ` + "`" + `title` + "`" + ` when set.
-- **Number tiles — format, don't compute.** A ` + "`" + `number` + "`" + ` chart formats its
-  value via ` + "`" + `options.numberFormat` + "`" + ` — map the RAW column and pick a
+- **Value tiles — format, don't compute.** A ` + "`" + `value` + "`" + ` chart formats its
+  value via ` + "`" + `options.valueFormat` + "`" + ` — map the RAW column and pick a
   format instead of writing custom code to convert units: ` + "`" + `duration` + "`" + `
   (raw SECONDS → "2d 3h 4m", e.g. uptime.sec), ` + "`" + `duration_clock` + "`" + `
   (seconds → HH:MM:SS), ` + "`" + `compact` + "`" + ` (large values → 1.2M/3.4K),
   ` + "`" + `datetime` + "`" + ` (raw timestamp → date/time). Do NOT use_custom_code to
-  divide seconds by 86400 — that's what ` + "`" + `duration` + "`" + ` is for. ` + "`" + `numberUnit` + "`" + `
-  adds a cosmetic suffix ("%", "°C"). (See get_type_catalog for the full
-  option list.) When a single-value tile GENUINELY needs custom code (a
-  distinct count, a derived stat the ` + "`" + `number` + "`" + ` chart can't express),
-  render ` + "`" + `<NumberTile value={n} unit=\"%\" />` + "`" + ` — a helper injected into the
-  custom-code scope that reuses the same view as the structured ` + "`" + `number` + "`" + `
+  divide seconds by 86400 — that's what ` + "`" + `duration` + "`" + ` is for. ` + "`" + `valueUnit` + "`" + `
+  adds a cosmetic suffix ("%", "°C"). A TEXT value renders as its own
+  string, so a status/state string needs no format and no custom code.
+  (See get_type_catalog for the full option list.) When a single-value
+  tile GENUINELY needs custom code (a distinct count, a derived stat the
+  ` + "`" + `value` + "`" + ` chart can't express), render
+  ` + "`" + `<ValueTile value={n} unit=\"%\" />` + "`" + ` — a helper injected into the
+  custom-code scope that reuses the same view as the structured ` + "`" + `value` + "`" + `
   chart, so alignment/title-band/formatting match. Do NOT hand-roll a
   centered ` + "`" + `<div>` + "`" + ` around a big ` + "`" + `<span>` + "`" + ` — it centers on the full panel
-  and sits misaligned next to real number tiles.
+  and sits misaligned next to real value tiles.
 - **Time-series charts — plot raw values, let the renderer scale + label.**
   A native ` + "`" + `line` + "`" + `/` + "`" + `area` + "`" + ` chart auto-formats large Y values with a single
   shared SI prefix (K/M/G/B) across the whole axis AND the tooltip — pick
@@ -170,7 +172,7 @@ const dashboardBuilderFlow = `# Build flow
    **Panel sizing — editor-enforced minimums are a HARD FLOOR (author
    AT or ABOVE these; the panel literally cannot render smaller, and
    filling the budget NEVER justifies going below):** gauge 4x3,
-   number 4x2, bar/line/area/scatter 6x4, pie 12x7, dataview 8x8.
+   value 4x2, bar/line/area/scatter 6x4, pie 12x7, dataview 8x8.
    Pie and dataview need real height (7 and 8 cells) — a pie or data
    table jammed into a 3-4 cell row renders squashed and unreadable.
    Grow panels UP from these floors to fill the canvas; if filling
@@ -233,7 +235,7 @@ const dashboardBuilderFlow = `# Build flow
 # About templates
 
 - The canonical chart_type values are: line, area, bar, pie, scatter,
-  gauge, number, dataview (table), banded_bar, and custom. These have
+  gauge, value, dataview (table), banded_bar, and custom. These have
   prebuilt templates — fetch with ` + "`" + `get_component_template` + "`" + ` and modify
   only the parts that need real column names. Don't rewrite from
   scratch. Before assuming a type doesn't exist and going custom, read

@@ -279,12 +279,12 @@
 // behaviorally in ComponentPanelWithActions — it drops the `flipped` prop on
 // mobile so the menu opens rightward — not via CSS here.)
 
-// NumberView renders its value at a fixed inline `${size}px` (default 120px),
+// ValueView renders its value at a fixed inline `${size}px` (default 120px),
 // which only looks right because the desktop grid is transform-scaled to fit.
-// In the mobile stack there is no such transform, so a 120px number would
+// In the mobile stack there is no such transform, so a 120px value would
 // overflow a full-width row. Cap it relative to the row box (which is a size
 // container above). `!important` is required to beat the inline style; scoping
 // to .mobile-panel keeps every other surface on the original inline px.
-.mobile-panel .number-view__value {
+.mobile-panel .value-view__value {
   font-size: clamp(2rem, 22cqmin, 5rem) !important;
 }

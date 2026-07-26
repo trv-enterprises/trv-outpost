@@ -11,6 +11,7 @@ import SliderField from './SliderField';
 import NullableNumberField from './NullableNumber';
 import YAxisColumnsListField from './YAxisColumnsList';
 import ThresholdListField from './ThresholdList';
+import TextThresholdListField from './TextThresholdList';
 import ColumnManagerField from './ColumnManager';
 import BandSchemeField from './BandScheme';
 
@@ -26,6 +27,7 @@ const FIELD_RENDERERS = {
   nullable_number: NullableNumberField,
   y_axis_columns_list: YAxisColumnsListField,
   threshold_list: ThresholdListField,
+  text_threshold_list: TextThresholdListField,
   column_manager: ColumnManagerField,
   band_scheme: BandSchemeField,
   // column_multi_select + code stay deferred — no current spec uses

@@ -447,7 +447,7 @@ func writeComponentTypes(sb *strings.Builder, types []ComponentTypeInfo) {
 		}
 		// Config fields (the component's `options`). Rendered with
 		// descriptions because the values matter to the agent (e.g. the
-		// number tile's numberFormat modes) — a bare field list isn't
+		// value tile's valueFormat modes) — a bare field list isn't
 		// enough to pick the right one without dropping to custom code.
 		if len(t.ConfigSchema) > 0 {
 			sb.WriteString("  Options:\n")

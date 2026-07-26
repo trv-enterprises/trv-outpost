@@ -4,6 +4,8 @@
 
 package toolops
 
+import "github.com/trv-enterprises/trve-dashboard/internal/registry"
+
 // Shared chart-`options.*` overlay schema + apply, consumed by BOTH AI
 // agent surfaces:
 //   - the Dashboard Assistant (internal/ai/chat) — via create_component /
@@ -90,32 +92,54 @@ func ChartOptionsSchema() map[string]interface{} {
 				"enum":        []string{"time_series", "column_filled", "column_outlined", "column_box"},
 				"description": "Visual style for chart_type='banded_bar'. Ignored for other types. 'time_series' = horizontal time x-axis, line + dots, full-width horizontal reference bands (default). 'column_filled' = single vertical column per timestamp, filled bands. 'column_outlined' = same with band borders. 'column_box' = only inner band, vertical line with tick at value (box-plot style).",
 			},
-			// number chart (chart_type="number") options.
-			"numberFormat": map[string]interface{}{
+			// value chart (chart_type="value") options. This type supersedes
+			// the retired "number" type; the option keys renamed number* →
+			// value* with it.
+			"valueFormat": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"},
-				"description": "number chart value format. The format IMPLIES the raw value's unit, so map a raw column and pick the format — do NOT do unit math in the query. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K), \"duration\" (value is SECONDS → \"2d 3h 4m\" — e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (value is a timestamp → date/time via numberDateFormat). For bytes→GB there's no built-in scale yet; use compact or a custom-code number.",
+				"description": "value chart format. The format IMPLIES the raw value's unit, so map a raw column and pick the format — do NOT do unit math in the query. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K), \"duration\" (value is SECONDS → \"2d 3h 4m\" — e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (value is a timestamp → date/time via valueDateFormat). For bytes→GB there's no built-in scale yet; use compact or a custom-code value tile. A TEXT value renders as its own string and ignores this setting — no format or custom code is needed to show a status string.",
 			},
-			"numberDateFormat": map[string]interface{}{
+			"valueDateFormat": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"},
-				"description": "Date/time style when numberFormat=\"datetime\". Ignored otherwise.",
+				"description": "Date/time style when valueFormat=\"datetime\". Ignored otherwise.",
 			},
-			"numberDecimals": map[string]interface{}{
+			"valueDecimals": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"auto", "0", "1", "2", "3", "4"},
-				"description": "number chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats.",
+				"description": "value chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats; ignored for text values.",
 			},
-			"numberUnit": map[string]interface{}{"type": "string", "description": "number chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\")."},
-			"numberSize": map[string]interface{}{
+			"valueType": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"auto", "number", "text"},
+				"description": "value chart: which family of options applies. Leave unset/\"auto\" — the renderer detects it from the data and is almost always right. Set \"text\" or \"number\" ONLY to override a bad detection (empty sample, mixed column, a stream that hasn't produced a record yet). \"text\" ignores valueFormat/valueDecimals/valueUnit.",
+			},
+			"valueTextCase": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"none", "upper", "lower", "capitalize", "title"},
+				"description": "value chart, TEXT values only: re-case the rendered string. \"none\" (default) leaves it as the source has it — prefer that unless the user asks for a specific case. \"upper\" = ALL CAPS, \"lower\" = lowercase, \"capitalize\" = first letter of the string, \"title\" = First Letter Of Each Word. Display-only; the underlying data is unchanged. Ignored for numeric values.",
+			},
+			"valueUnit": map[string]interface{}{"type": "string", "description": "value chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\"). Numeric values only — a text value renders no unit."},
+			"valueThresholds": map[string]interface{}{
+				"type":        "array",
+				"description": "value chart, NUMERIC values: color the value by magnitude. Array of {value, color, label?}. Each color applies from its value UPWARD, so the highest threshold reached wins — e.g. [{value:0,color:\"#24a148\"},{value:80,color:\"#f1c21b\"},{value:90,color:\"#da1e28\"}] renders green under 80, yellow 80-89, red at 90+. Use the standard alert colors unless the user asks otherwise: #da1e28 danger, #ff832b caution, #f1c21b warning, #24a148 ok, #0f62fe info. Omit for the default text color.",
+				"items":       map[string]interface{}{"type": "object"},
+			},
+			"valueTextThresholds": map[string]interface{}{
+				"type":        "array",
+				"description": "value chart, TEXT values: color the value by what it says. Array of {operator, match, color} where operator is \"eq\" (whole string) or \"contains\" (substring). Matching is CASE-INSENSITIVE, so match \"online\" catches \"ONLINE\". Rules are evaluated IN ORDER and the FIRST match wins — put specific rules above broad catch-alls. There is no limit on rule count; add one per state that matters. Example: [{operator:\"eq\",match:\"ONLINE\",color:\"#24a148\"},{operator:\"contains\",match:\"fail\",color:\"#da1e28\"}]. Omit for the default text color.",
+				"items":       map[string]interface{}{"type": "object"},
+			},
+			"valueSize": map[string]interface{}{
 				"type": "integer",
 				// Constrain to the same discrete size ladder the editor's
-				// dropdown offers (NUMBER_CHART_SIZES in the client). The model
+				// dropdown offers (VALUE_CHART_SIZES in the client). The model
 				// must pick ONE of these, not an arbitrary integer — off-grid
 				// values like 50/105/130 used to leak in from the "≈13px/cell"
 				// math below and then mismatch the dropdown in the editor.
 				"enum":        []int{12, 14, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400},
-				"description": "number chart: value font size in px. **Pick one of the allowed sizes (the enum) — do NOT invent an off-grid value.** Size it to the tile HEIGHT, not the default: estimate ≈ 13px per cell of the panel's height (a 6-cell-tall tile → ~80px; an 8-cell → ~105px; 10-cell → ~130px), then **round to the NEAREST allowed size** (e.g. 105 → 96, 130 → 120). The default of 56 suits a ~4-5-cell tile but under-uses a taller one — always size from the actual height. Also check WIDTH: the value must fit the tile at this size — size for the WIDEST value the tile will show (a percentage ≈ 6 chars \"100.0 %\"; a duration ≈ 11 chars \"000D 00H 00M\"); narrow tiles need a smaller size. **Give every number tile the SAME tile height and ONE shared numberSize across the dashboard** so they read uniformly — uniform heights let a single font size fit them all; pick the size for that height and the narrowest value, then apply it to every number component in the build. Decimals: use engineering judgment — decimals on a value >99 are usually noise (\"100 %\", not \"100.0 %\") and also widen the value; set numberDecimals accordingly.",
+				"description": "value chart: value font size in px. **Pick one of the allowed sizes (the enum) — do NOT invent an off-grid value.** Size it to the tile HEIGHT, not the default: estimate ≈ 13px per cell of the panel's height (a 6-cell-tall tile → ~80px; an 8-cell → ~105px; 10-cell → ~130px), then **round to the NEAREST allowed size** (e.g. 105 → 96, 130 → 120). The default of 56 suits a ~4-5-cell tile but under-uses a taller one — always size from the actual height. Also check WIDTH: the value must fit the tile at this size — size for the WIDEST value the tile will show (a percentage ≈ 6 chars \"100.0 %\"; a duration ≈ 11 chars \"000D 00H 00M\"; a text value can be far wider); narrow tiles need a smaller size. **Give every value tile the SAME tile height and ONE shared valueSize across the dashboard** so they read uniformly — uniform heights let a single font size fit them all; pick the size for that height and the narrowest value, then apply it to every value component in the build. Decimals: use engineering judgment — decimals on a value >99 are usually noise (\"100 %\", not \"100.0 %\") and also widen the value; set valueDecimals accordingly.",
 			},
 			// title is a real spec key (rendered inside the canvas for some
 			// chart types). Kept here so the Component agent's old `title`
@@ -133,9 +157,19 @@ var ChartOptionKeys = map[string]struct{}{
 	"sampling": {}, "legend": {}, "chartSmooth": {}, "showSymbol": {},
 	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
 	"xAxisLabelRotate": {}, "barOrientation": {}, "barWidthPct": {},
-	"bandedBarStyle":   {}, "numberFormat": {}, "numberDateFormat": {},
-	"numberDecimals": {}, "numberUnit": {}, "numberSize": {}, "title": {},
+	"bandedBarStyle":   {}, "valueFormat": {}, "valueDateFormat": {},
+	"valueDecimals": {}, "valueUnit": {}, "valueSize": {},
+	"valueType": {}, "valueTextCase": {},
+	"valueThresholds": {}, "valueTextThresholds": {}, "title": {},
 }
+
+// Retired option-key spellings translate to their current names via
+// registry.RetiredChartOptionKeys — the same mapping the boot migration
+// and the import normalizer use. The value chart's keys renamed
+// number* → value* when the "number" chart type was retired; a caller
+// still sending the old spelling gets it translated rather than silently
+// dropped by the known-key guard in ApplyChartOptions. Not advertised in
+// the schema — the model is only ever told the current names.
 
 // ApplyChartOptions merges a camelCase options `patch` onto a
 // component's existing `dst` options map, in place. Only keys in
@@ -154,6 +188,11 @@ func ApplyChartOptions(dst map[string]interface{}, patch map[string]interface{})
 	}
 	applied := 0
 	for k, v := range patch {
+		// Translate a retired key spelling to its current name first, so
+		// an old caller's value lands on the key the renderer reads.
+		if current, legacy := registry.RetiredChartOptionKeys[k]; legacy {
+			k = current
+		}
 		if _, ok := ChartOptionKeys[k]; !ok {
 			continue
 		}

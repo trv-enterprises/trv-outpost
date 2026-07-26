@@ -2,14 +2,21 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-// Value formatters for the spec-driven number chart. The format choice
-// (options.numberFormat) IMPLIES the raw value's unit — e.g. "duration"
-// means the value is seconds, "bytes" means the value is bytes — so the
-// agent/user just maps a raw column and picks the matching format instead
-// of doing unit math in the query or dropping to custom code.
+// Value formatters for the spec-driven value chart (and the data grids).
+// The format choice IMPLIES the raw value's unit — e.g. "duration" means
+// the value is seconds — so the agent/user just maps a raw column and
+// picks the matching format instead of doing unit math in the query or
+// dropping to custom code.
 //
-// Pure functions, no React/DOM — unit-testable. number.js calls
+// Pure functions, no React/DOM — unit-testable. value.js calls
 // formatNumberValue() with the chosen format + the decimals setting.
+//
+// NOTE on parameter names: the opts keys here stay `numberFormat` /
+// `numberDecimals` / `numberDateFormat` even though the value chart's
+// STORED option keys renamed to value*. This is a shared cell formatter
+// (DataViewGrid and ComponentDataGridModal call it too), so its param
+// API is deliberately independent of the value chart's stored keys —
+// value.js maps value* → these names at the call site.
 
 import { formatTimestamp } from '../../utils/dataTransforms.js';
 
@@ -17,6 +24,60 @@ const toNum = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
+
+/**
+ * True when a raw cell value is usable as a number.
+ *
+ * Deliberately treats a numeric STRING ("42", "3.14") as numeric —
+ * JSON/MQTT/CSV sources routinely deliver numbers as strings, and a
+ * value tile pointed at one should still format it as a number. An
+ * empty/whitespace string is NOT numeric (Number('') === 0 would
+ * otherwise make a blank cell look like a legitimate zero).
+ *
+ * Used by value.js to decide the text-vs-number path when the author
+ * left `valueType` on 'auto'.
+ *
+ * @param {*} raw
+ * @returns {boolean}
+ */
+export function isNumericValue(raw) {
+  if (raw == null || typeof raw === 'boolean') return false;
+  if (typeof raw === 'string' && raw.trim() === '') return false;
+  return toNum(raw) != null;
+}
+
+/**
+ * Apply a text-case transform to an already-stringified value.
+ *
+ * Only used on the value chart's TEXT path — it never touches a numeric
+ * render (re-casing "1.2M" would be meaningless at best). 'none' and any
+ * unrecognized mode return the string untouched.
+ *
+ * `capitalize` uppercases the first letter of the whole string and
+ * leaves the rest alone (so "device offline" → "Device offline", and an
+ * acronym like "OK" survives). `title` uppercases the first letter of
+ * each whitespace-separated word and lowercases the remainder of each,
+ * which is the conventional title-case behavior for labels.
+ *
+ * @param {string} s
+ * @param {string} [mode]  none | upper | lower | capitalize | title
+ * @returns {string}
+ */
+export function applyTextCase(s, mode) {
+  if (!s || !mode || mode === 'none') return s;
+  switch (mode) {
+    case 'upper':
+      return s.toUpperCase();
+    case 'lower':
+      return s.toLowerCase();
+    case 'capitalize':
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    case 'title':
+      return s.replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    default:
+      return s;
+  }
+}
 
 // Plain locale number with an optional fixed decimal count ('auto' = up
 // to 2). Shared by the default + as a fallback.
@@ -86,9 +147,14 @@ const DATE_PRESETS = {
 };
 
 /**
- * Format a number-chart value according to options.numberFormat.
+ * Format a value according to the chosen format.
  *
- * @param {*} raw            the cell value (null/number/string)
+ * Numeric values honor the format/decimals settings. A NON-NUMERIC value
+ * renders as its own string — the value chart supports text values, and
+ * the numeric-only formats (plain/compact/duration/duration_clock and the
+ * decimals setting) simply do not apply to it.
+ *
+ * @param {*} raw            the cell value (null/number/string/bool)
  * @param {string} valueColumn  column name (for the auto fallback)
  * @param {object} opts      { numberFormat, numberDecimals, numberDateFormat }
  * @param {Function} formatCellValue  the viewer's auto-formatter (fallback)
@@ -106,12 +172,18 @@ export function formatNumberValue(raw, valueColumn, opts = {}, formatCellValue) 
   }
 
   const n = toNum(raw);
-  // Non-numeric value with a numeric format → fall back to auto so we
-  // never render "NaN". strictTimestampNames: a tile's value column is a
+  // Non-numeric value → render it as text. A numeric format can't apply,
+  // and we must never show "NaN". The viewer's auto-formatter still gets
+  // first refusal so an ISO timestamp string or a boolean renders the way
+  // it does everywhere else in the app; a plain string falls through it
+  // unchanged. strictTimestampNames: a tile's value column is a
   // measurement — never flip a byte-count magnitude into a date; only a
   // time-NAMED column (or ISO string) renders as time.
   if (n == null) {
-    return formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : String(raw);
+    const auto = formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : null;
+    // formatCellValue may return null/undefined for a type it doesn't
+    // handle — fall back to the raw string so text always renders.
+    return auto == null || auto === '' ? String(raw) : String(auto);
   }
 
   switch (format) {

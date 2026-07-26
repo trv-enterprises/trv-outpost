@@ -22,7 +22,10 @@
     font-weight: 600;
     line-height: 1.2;
     margin: 0;
-    padding: 0;
+    // Horizontal inset so left/right-aligned text doesn't hug the panel edge.
+    // Applied on all alignments (harmless for centered) — a single declaration
+    // avoids the specificity/shorthand clash a per-alignment override would hit.
+    padding: 0 0.5rem;
     word-break: break-word;
   }
 }

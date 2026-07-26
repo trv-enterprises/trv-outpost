@@ -22,7 +22,84 @@ export const COLOR_PRIMARY = '#0f62fe'; // blue60  — left axis / default serie
 export const COLOR_SECONDARY = '#8a3ffc'; // purple — right axis
 export const COLOR_OK = '#24a148'; // green50
 export const COLOR_WARN = '#f1c21b'; // yellow30
+export const COLOR_CAUTION = '#ff832b'; // orange40 — between warn and danger
 export const COLOR_DANGER = '#da1e28'; // red60
+
+// The status/alert ramp, worst → best, plus informational blue. This is
+// the swatch set offered by the threshold color picker. Four severity
+// steps are what a status readout needs (danger / caution / warning /
+// ok); Info covers the neutral "no judgement" state that isn't a
+// severity at all. All are Carbon tokens, so they track a theme change
+// and match the gauge's existing threshold colors.
+//
+// Info reuses COLOR_PRIMARY (blue60) rather than defining a second blue —
+// it is the same token Carbon uses for informational notifications, and
+// duplicating it would let the two drift.
+export const ALERT_COLOR_PALETTE = [
+  { name: 'Danger', hex: COLOR_DANGER },
+  { name: 'Caution', hex: COLOR_CAUTION },
+  { name: 'Warning', hex: COLOR_WARN },
+  { name: 'OK', hex: COLOR_OK },
+  { name: 'Info', hex: COLOR_PRIMARY },
+];
+
+// Match operators for TEXT thresholds. Both are case-INSENSITIVE: the
+// same logical state arrives as "ONLINE", "online", or "Online"
+// depending on the source, and an author shouldn't have to guess which
+// casing a device emits for a rule to fire.
+export const TEXT_THRESHOLD_OPERATORS = [
+  { value: 'eq', label: 'equals' },
+  { value: 'contains', label: 'contains' },
+];
+
+/**
+ * Resolve a text value to a threshold color, or null when no rule hits.
+ *
+ * Rules are evaluated in order and the FIRST match wins — that is what
+ * lets a specific `equals` rule sit above a broad `contains` catch-all
+ * ("equals OK" → green, then "contains fail" → red). Order is the
+ * author's logic, so this must not sort.
+ *
+ * A rule with an empty `match` is skipped rather than treated as a
+ * match-everything: a half-typed row would otherwise instantly capture
+ * every value and make the tile look broken while the author types.
+ *
+ * @param {*} raw            the cell value
+ * @param {Array} rules      [{ operator, match, color }]
+ * @returns {string|null}    hex, or null for "no rule matched"
+ */
+export function resolveTextThresholdColor(raw, rules) {
+  if (raw == null || !Array.isArray(rules) || rules.length === 0) return null;
+  const s = String(raw).toLowerCase();
+  for (const rule of rules) {
+    const match = typeof rule?.match === 'string' ? rule.match.trim().toLowerCase() : '';
+    if (!match || !rule?.color) continue;
+    const hit = rule.operator === 'contains' ? s.includes(match) : s === match;
+    if (hit) return rule.color;
+  }
+  return null;
+}
+
+/**
+ * Resolve a numeric value to a threshold color, or null when none apply.
+ *
+ * Semantics match the gauge/line convention: a threshold's color applies
+ * from its `value` UPWARD, so the winner is the highest threshold the
+ * value has reached. Evaluating by descending value (rather than by list
+ * order) means the author can add thresholds in any order and still get
+ * the expected banding.
+ *
+ * @param {number} n         the numeric value
+ * @param {Array} thresholds [{ value, color }]
+ * @returns {string|null}
+ */
+export function resolveNumericThresholdColor(n, thresholds) {
+  if (!Number.isFinite(n) || !Array.isArray(thresholds) || thresholds.length === 0) return null;
+  const applicable = thresholds
+    .filter((t) => t && t.color && Number.isFinite(Number(t.value)) && n >= Number(t.value))
+    .sort((a, b) => Number(b.value) - Number(a.value));
+  return applicable.length > 0 ? applicable[0].color : null;
+}
 export const COLOR_TEXT = '#f4f4f4';
 export const COLOR_TEXT_SECONDARY = '#c6c6c6';
 
@@ -93,6 +170,22 @@ export const SERIES_COLOR_PALETTE = CATEGORICAL_PALETTE.map((hex, i) => ({
   name: CATEGORICAL_NAMES[i],
   hex,
 }));
+
+// Swatches offered by the TEXT threshold color picker: the alert ramp
+// first (a text state is often still a severity — "FAILED" is red), then
+// the chart line colors for states that carry no judgement at all
+// ("Cooling", "Standby") and just need to be distinguishable.
+//
+// De-duped by hex: the alert ramp and the categorical palette overlap
+// (both carry a blue), and a picker showing the same color twice looks
+// like a bug. Alert entries win, so the ramp keeps its severity names.
+export const TEXT_THRESHOLD_COLOR_PALETTE = (() => {
+  const seen = new Set(ALERT_COLOR_PALETTE.map((c) => c.hex.toLowerCase()));
+  const extras = SERIES_COLOR_PALETTE
+    .filter((c) => !seen.has(c.hex.toLowerCase()))
+    .map((c) => ({ name: c.name, hex: c.hex }));
+  return [...ALERT_COLOR_PALETTE, ...extras];
+})();
 
 /**
  * Resolve a series-color token to a canonical hex from SERIES_COLOR_PALETTE.

@@ -29,12 +29,12 @@ settings:
 
   - key: title_font_size
     category: appearance
-    description: "Component title size as a percentage of the 1rem base (50–200). Scales BOTH the title font and the title band's height across charts, number tiles, data views, and data tables, so the band always fits the text. 100 = default. Applies on next page load."
+    description: "Component title size as a percentage of the 1rem base (50–200). Scales BOTH the title font and the title band's height across charts, value tiles, data views, and data tables, so the band always fits the text. 100 = default. Applies on next page load."
     value: 100
 
-  - key: default_numeric_chart_number_size
+  - key: default_value_chart_size
     category: appearance
-    description: "Default font size (px) for the value in new Number charts"
+    description: "Default font size (px) for the value on newly created Value charts. Individual charts override this in the chart editor."
     value: 56
 
   - key: chart_preferred_color_options

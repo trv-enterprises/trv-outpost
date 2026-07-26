@@ -1190,7 +1190,7 @@ Only set use_custom_code=true when (a) the user explicitly asks for custom code 
 	r.registerTool(
 		Tool{
 			Name:        "get_component_template",
-			Description: "Return the custom-code starting template — a freeform React/ECharts skeleton with Carbon g100 styling, the CARBON_COLORS palette, and the viewer's data helpers (toObjects, getValue, formatTimestamp, formatCellValue — do not import them) already wired. ONLY for hand-written custom code: set use_custom_code=true and pass the filled-in code in update_component's `component_code` field. The canonical chart types (line, bar, area, pie, scatter, gauge, number, dataview, banded_bar) are spec-driven — configure them via create_component / update_component structured fields (chart_type + data_mapping + options); do NOT fetch a template and hand-write code for them. There is exactly one template, 'custom'.",
+			Description: "Return the custom-code starting template — a freeform React/ECharts skeleton with Carbon g100 styling, the CARBON_COLORS palette, and the viewer's data helpers (toObjects, getValue, formatTimestamp, formatCellValue — do not import them) already wired. ONLY for hand-written custom code: set use_custom_code=true and pass the filled-in code in update_component's `component_code` field. The canonical chart types (line, bar, area, pie, scatter, gauge, value, dataview, banded_bar) are spec-driven — configure them via create_component / update_component structured fields (chart_type + data_mapping + options); do NOT fetch a template and hand-write code for them. There is exactly one template, 'custom'.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]PropertySchema{

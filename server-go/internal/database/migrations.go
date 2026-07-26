@@ -51,6 +51,9 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"refresh_interval_ms_to_seconds_v1", migrateRefreshIntervalMsToSeconds},
 		{"gauge_number_limit_one_v1", migrateGaugeNumberLimitOne},
 		{"strip_y_axis_label_mirror_v1", migrateStripYAxisLabelMirror},
+		{"number_chart_to_value_v1", migrateNumberChartToValue},
+		{"value_chart_size_setting_v1", migrateValueChartSizeSetting},
+		{"value_type_availability_v1", migrateValueTypeAvailability},
 	}
 
 	coll := db.Collection("migrations")
@@ -824,6 +827,198 @@ func migrateGaugeNumberLimitOne(ctx context.Context, db *mongo.Database) error {
 		return fmt.Errorf("gauge/number limit to 1: %w", err)
 	}
 	log.Printf("  components: capped query limit to 1 on %d gauge/number documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateValueTypeAvailability renames the retired `number` chart subtype
+// to `value` inside the two type-availability settings.
+//
+// This is NOT cosmetic. `enabled_types` is the allowlist the registry
+// catalog filters against, so a deployment whose stored list still says
+// "number" would filter the newly-registered `value` type OUT — the Value
+// entry would silently vanish from the component-type picker and from the
+// AI's buildable-type catalog until an admin re-enabled it by hand.
+//
+// `known_types` needs the same rename for a subtler reason: it is the
+// ledger the registry seed uses to decide what is NEW on upgrade
+// (registry/seed.go adds anything absent from it to BOTH lists). Renaming
+// the entry keeps the ledger honest — leaving a dead "number" in it would
+// also make the seed treat `value` as brand new and force-enable it even
+// on a deployment where an admin had deliberately disabled the old type.
+//
+// Renaming (rather than appending) is what preserves an existing admin
+// choice: if "number" was absent because it was disabled on purpose,
+// "value" stays absent too.
+//
+// Idempotent: keyed on the presence of the retired name.
+func migrateValueTypeAvailability(ctx context.Context, db *mongo.Database) error {
+	settings := db.Collection("settings")
+	for _, key := range []string{"enabled_types", "known_types"} {
+		var doc struct {
+			Value struct {
+				Charts []string `bson:"charts"`
+			} `bson:"value"`
+		}
+		err := settings.FindOne(ctx, bson.M{"_id": key}).Decode(&doc)
+		if err == mongo.ErrNoDocuments {
+			continue // fresh DB — the seed writes the current names.
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", key, err)
+		}
+
+		renamed := false
+		charts := make([]string, 0, len(doc.Value.Charts))
+		for _, c := range doc.Value.Charts {
+			canonical := registry.CanonicalChartType(c)
+			if canonical != c {
+				renamed = true
+			}
+			// Guard against ending up with both spellings (or a duplicate
+			// `value`) if a list somehow carries each of them already.
+			dup := false
+			for _, existing := range charts {
+				if existing == canonical {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				charts = append(charts, canonical)
+			}
+		}
+		if !renamed {
+			continue
+		}
+		if _, err := settings.UpdateByID(ctx, key, bson.M{"$set": bson.M{
+			"value.charts": charts,
+			"updated":      time.Now(),
+		}}); err != nil {
+			return fmt.Errorf("update %s.charts: %w", key, err)
+		}
+		log.Printf("  settings: %s.charts number → value", key)
+	}
+	return nil
+}
+
+// migrateNumberChartToValue renames the retired `number` chart type to
+// `value` and its five `options.number*` keys to `options.value*`.
+//
+// The rename is done as ONE $exists-scoped UpdateMany PER KEY rather than
+// a single pipeline that copies all five at once. That matters: a
+// pipeline `$set {"options.valueFormat": "$options.numberFormat"}` run
+// against a document that never had `numberFormat` (most value tiles only
+// ever set one or two of the five) writes an explicit null for the new
+// key. Those spurious nulls then defeat the renderer's `?? default`
+// fallbacks — a null reads as "set to nothing", not "absent". Scoping
+// each update to documents where the OLD key actually exists means a doc
+// only ever gains keys it genuinely had.
+//
+// Scope is the whole `components` collection, which also holds saved
+// component VERSIONS — so version history renames alongside the current
+// record and an old version stays loadable.
+//
+// Idempotent: every stage is `$exists`-guarded, so a re-run matches
+// nothing. Docs that escape it entirely still render — the frontend
+// buildOption/view registries alias `number` → `value`, and the renderer
+// reads `opts.valueX ?? opts.numberX`.
+func migrateNumberChartToValue(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection("components")
+
+	// 1. Rename each option key on its own, guarded by the old key's
+	//    existence so we never write a null for a key the doc lacked.
+	//    The mapping is the registry's (registry.RetiredChartOptionKeys),
+	//    shared with the import normalizer and the AI options path so the
+	//    database and an imported bundle can't disagree.
+	for oldKey, newKey := range registry.RetiredChartOptionKeys {
+		oldPath := "options." + oldKey
+		newPath := "options." + newKey
+		res, err := coll.UpdateMany(
+			ctx,
+			bson.M{oldPath: bson.M{"$exists": true}},
+			bson.M{"$rename": bson.M{oldPath: newPath}},
+		)
+		if err != nil {
+			return fmt.Errorf("rename %s → %s: %w", oldPath, newPath, err)
+		}
+		if res.ModifiedCount > 0 {
+			log.Printf("  components: renamed %s → %s on %d documents", oldPath, newPath, res.ModifiedCount)
+		}
+	}
+
+	// 2. Rename the chart type itself. Done last so a failure partway
+	//    through step 1 leaves docs still typed `number` — which the
+	//    frontend alias renders correctly — rather than typed `value`
+	//    with half-renamed options.
+	res, err := coll.UpdateMany(
+		ctx,
+		bson.M{"chart_type": "number"},
+		bson.M{"$set": bson.M{"chart_type": "value"}},
+	)
+	if err != nil {
+		return fmt.Errorf("rename chart_type number → value: %w", err)
+	}
+	log.Printf("  components: chart_type number → value on %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateValueChartSizeSetting renames the admin setting
+// `default_numeric_chart_number_size` to `default_value_chart_size`,
+// carrying the deployment's configured value across so an admin who
+// picked a non-default size keeps it.
+//
+// Runs BEFORE the settings seed (migrations are applied at boot ahead of
+// SyncSettingsFromConfig), mirroring migrateAssistantEnabledToAIEnabled:
+//   - If the new key already exists → leave it (idempotent).
+//   - Else if the old key exists → create the new key with its value.
+//   - Else (fresh DB) → do nothing; the seed creates the default.
+//
+// The orphaned old key is removed either way.
+func migrateValueChartSizeSetting(ctx context.Context, db *mongo.Database) error {
+	const oldKey = "default_numeric_chart_number_size"
+	const newKey = "default_value_chart_size"
+	settings := db.Collection("settings")
+
+	existsNew, err := settings.CountDocuments(ctx, bson.M{"_id": newKey})
+	if err != nil {
+		return fmt.Errorf("check %s: %w", newKey, err)
+	}
+	if existsNew == 0 {
+		var old struct {
+			Value interface{} `bson:"value"`
+		}
+		err := settings.FindOne(ctx, bson.M{"_id": oldKey}).Decode(&old)
+		if err == nil {
+			now := time.Now()
+			_, err = settings.UpdateByID(
+				ctx,
+				newKey,
+				bson.M{"$set": bson.M{
+					"key":         newKey,
+					"value":       old.Value,
+					"category":    "appearance",
+					"description": "Default font size (px) for the value on newly created Value charts. Individual charts override this in the chart editor.",
+					"updated":     now,
+				}, "$setOnInsert": bson.M{"created": now}},
+				options.Update().SetUpsert(true),
+			)
+			if err != nil {
+				return fmt.Errorf("create %s from %s: %w", newKey, oldKey, err)
+			}
+			log.Printf("  settings: migrated %s (value=%v) → %s", oldKey, old.Value, newKey)
+		} else if err != mongo.ErrNoDocuments {
+			return fmt.Errorf("read %s: %w", oldKey, err)
+		}
+		// err == ErrNoDocuments → fresh DB, leave the new key for the seed.
+	}
+
+	res, err := settings.DeleteOne(ctx, bson.M{"_id": oldKey})
+	if err != nil {
+		return fmt.Errorf("delete %s: %w", oldKey, err)
+	}
+	if res.DeletedCount > 0 {
+		log.Printf("  settings: removed orphaned %s", oldKey)
+	}
 	return nil
 }
 

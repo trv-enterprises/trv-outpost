@@ -132,9 +132,68 @@ func GetComponentType(typeID string) (ComponentTypeInfo, bool) {
 // (component_service create path, the spec-code migration) use this to
 // decide whether to write the <SpecDrivenChart> one-liner.
 func IsSpecDrivenChart(subtype string) bool {
+	subtype = CanonicalChartType(subtype)
 	if subtype == "" || subtype == "custom" {
 		return false
 	}
 	info, ok := GetComponentType("chart." + subtype)
 	return ok && info.Category == CategoryChart
+}
+
+// retiredChartTypes maps a retired chart-type name to the type that
+// replaced it. Retired names are deliberately NOT registered (the
+// registry drives the picker and the AI's buildable-type list, so a dead
+// name must never be offered) — but they still arrive from old export
+// bundles, older API callers, and records that predate a migration, so
+// every entry point resolves them through CanonicalChartType.
+var retiredChartTypes = map[string]string{
+	"number": "value",
+}
+
+// CanonicalChartType resolves a possibly-retired chart subtype to the
+// name in use today, and returns anything else unchanged. Apply it where
+// a chart_type enters the server (component create/update) so a retired
+// name is normalized once, at the boundary, rather than being pattern-
+// matched at each of the places that switch on the type.
+func CanonicalChartType(subtype string) string {
+	if current, retired := retiredChartTypes[subtype]; retired {
+		return current
+	}
+	return subtype
+}
+
+// RetiredChartOptionKeys maps retired chart-option keys to their current
+// names. When the `number` chart type was retired in favor of `value`,
+// its five stored option keys were renamed alongside it.
+//
+// One definition, several consumers — the boot migration
+// (database/migrations.go), the import normalizer
+// (service/dashboard_import.go), the AI options apply path
+// (ai/toolops/chart_options.go), and component create/update all need
+// the SAME mapping. If they disagree, a record can end up half-renamed.
+var RetiredChartOptionKeys = map[string]string{
+	"numberFormat":     "valueFormat",
+	"numberDateFormat": "valueDateFormat",
+	"numberDecimals":   "valueDecimals",
+	"numberUnit":       "valueUnit",
+	"numberSize":       "valueSize",
+}
+
+// CanonicalizeChartOptions renames any retired option keys in `opts` in
+// place. A retired key is only moved when present, and never clobbers a
+// current-name key the caller already supplied (a caller sending both
+// spellings is already current-shaped — the new key wins). Safe on a nil
+// map. Returns the same map for convenient chaining.
+func CanonicalizeChartOptions(opts map[string]interface{}) map[string]interface{} {
+	for old, current := range RetiredChartOptionKeys {
+		v, ok := opts[old]
+		if !ok {
+			continue
+		}
+		delete(opts, old)
+		if _, exists := opts[current]; !exists {
+			opts[current] = v
+		}
+	}
+	return opts
 }

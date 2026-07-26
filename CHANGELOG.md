@@ -6,6 +6,86 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`value` chart type — single-value tiles now display text as well as
+  numbers.** The chart type formerly called **Number** is now **Value**,
+  and its value may be a string: a status readout (`ONLINE`, `degraded`),
+  a device state, or a name renders as-is at the tile's font size. No
+  custom code is needed for text. Numeric values behave exactly as
+  before.
+
+- **Value chart: type-aware options + text case.** A **Value type**
+  control (Auto / Number / Text) sits above the Value options and
+  decides which of them apply. **Auto** detects the type from the data
+  and is correct nearly always; the explicit settings are the override
+  for when detection can't work — an empty sample, a mixed column, or a
+  live stream that hasn't produced a record yet — so an author is never
+  locked out of a setting by a bad or missing sample.
+
+  Numeric values keep the full row (Format, Value size, Decimal places,
+  Unit suffix). Text values get **Text case** — As-is, ALL CAPS,
+  lowercase, Capitalize First Letter, or Title Case — plus Value size.
+  Decimal places and Unit suffix are not shown for text, because
+  neither applies to a string. Text case is display-only; the source
+  data is unchanged. Both new options (`valueType`, `valueTextCase`)
+  are exposed to the AI surfaces alongside the rest of the chart
+  options.
+
+  Note that Auto treats a numeric *string* (`"42"`) as a number, since
+  JSON/MQTT/CSV sources routinely quote numbers; set Value type to
+  **Text** when such a value should render verbatim.
+
+- **Value chart: threshold coloring for numbers AND text** (closes #36).
+  Numeric tiles get the familiar banded thresholds — each color applies
+  from its value upward, so the highest one reached wins, and they can
+  be entered in any order.
+
+  Text tiles get **color rules**: an operator (`equals` / `contains`), a
+  match string, and a color, with no cap on how many you add. Matching
+  ignores case, and rules are evaluated top-down so the first match
+  wins — which lets a specific `equals` rule sit above a broad
+  `contains` catch-all. Rows can be reordered, since the order is the
+  logic. Both are exposed to the AI surfaces (`valueThresholds`,
+  `valueTextThresholds`).
+
+### Fixed
+
+- **Threshold color picker no longer opens the OS color wheel.** The
+  bare `<input type="color">` offered every color in the spectrum and
+  suggested none, so picking "danger" meant knowing the brand hex, and
+  two charts rarely ended up the same red. Threshold rows now show a
+  palette of Carbon tokens — the alert ramp (danger / caution / warning
+  / ok / info) for numeric, that ramp plus the chart line colors for
+  text states that aren't severities. The native picker remains as a
+  secondary well for cases a palette can't cover. Adds Carbon
+  `orange40` as the caution step.
+
+### Changed
+
+- **The `number` chart type is retired and replaced by `value`.** The
+  picker offers **Value** in its place, and the stored chart option keys
+  were renamed to match (`numberFormat` → `valueFormat`,
+  `numberDateFormat` → `valueDateFormat`, `numberDecimals` →
+  `valueDecimals`, `numberUnit` → `valueUnit`, `numberSize` →
+  `valueSize`), as was the admin setting **Default Number Chart Value
+  Size** → **Default Value Chart Size** (`default_numeric_chart_number_size`
+  → `default_value_chart_size`).
+
+  **Existing components migrate automatically on server start**, saved
+  component versions included, and the admin setting carries its
+  configured value across. Nothing to do on upgrade. Old dashboard
+  export bundles are normalized to the new shape when imported, and both
+  AI surfaces still accept the retired `number` type and `number*` option
+  keys from an older caller, translating them to the current names rather
+  than dropping them.
+
+  Custom-code components are unaffected: `NumberTile` remains available
+  in the custom-code scope as a permanent alias of the new `ValueTile`,
+  so components written against it keep working.
+
 ## [0.46.0] — 2026-07-24
 
 ### Added

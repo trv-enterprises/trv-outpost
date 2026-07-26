@@ -18,7 +18,7 @@ This note proposes the cleanup and split as three sequenced PRs.
 
 For each chart type, this is what the editor shows, what codegen consumes, and what gets persisted-but-ignored:
 
-| Field | bar / line / area | pie | scatter | gauge | number | dataview | banded_bar |
+| Field | bar / line / area | pie | scatter | gauge | value | dataview | banded_bar |
 |---|---|---|---|---|---|---|---|
 | `x_axis` | shown + used | shown + used | shown + used | hidden | hidden | hidden | shown + used |
 | `y_axis` (multi up to 2) | shown + used | single only | single only | single only | single only | hidden | hidden (uses `band_columns`) |
@@ -34,7 +34,7 @@ For each chart type, this is what the editor shows, what codegen consumes, and w
 | `chart_show_data_labels` | shown + used | shown + used | hidden | hidden | hidden | hidden | hidden |
 | `pie_inner_radius` / `pie_show_labels` | stored, ignored | shown + used | stored, ignored | stored, ignored | stored, ignored | hidden | stored, ignored |
 | `gauge_min` / `gauge_max` / `gauge_*_threshold` / `gauge_unit` / `gauge_line_thickness` | stored, ignored | stored, ignored | stored, ignored | shown + used | stored, ignored | hidden | stored, ignored |
-| `number_size` / `number_unit` | stored, ignored | stored, ignored | stored, ignored | stored, ignored | shown + used | hidden | stored, ignored |
+| `value_size` / `value_unit` | stored, ignored | stored, ignored | stored, ignored | stored, ignored | shown + used | hidden | stored, ignored |
 | `visible_columns` / `column_aliases` | hidden | hidden | hidden | hidden | hidden | shown + used | hidden |
 | `band_columns` / `banded_bar_style` | hidden | hidden | hidden | hidden | hidden | hidden | shown + used |
 

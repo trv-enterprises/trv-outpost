@@ -13,8 +13,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/authz"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+// normalizeRetiredChartTypes rewrites objects in a bundle that still use
+// retired names, so nothing old-shaped ever gets persisted by an import.
+//
+// Today that means the `number` chart type, superseded by `value`: the
+// type string is rewritten and the five `options.number*` keys are
+// renamed to `options.value*`. Both mappings come from the registry, the
+// same source the boot migration and the AI options path use — an
+// imported bundle and a migrated database must land on identical shapes,
+// or a re-export would diff against its own source.
+//
+// Called at the top of PreflightImport, which ApplyImport re-runs, so
+// classification and apply both see the normalized shape. That ordering
+// matters for correctness, not just tidiness: an old bundle would
+// otherwise be classified against migrated records, and every value tile
+// would read as a conflict purely because of the renamed keys.
+func normalizeRetiredChartTypes(bundle *models.ExportBundle) {
+	for i := range bundle.Objects.Components {
+		c := &bundle.Objects.Components[i]
+		c.ChartType = registry.CanonicalChartType(c.ChartType)
+		registry.CanonicalizeChartOptions(c.Options)
+	}
+}
 
 // PreflightImport classifies every object in the incoming bundle into
 // identical / conflicts / new / blocked. Reads only — safe to call as
@@ -26,6 +50,11 @@ func (s *DashboardService) PreflightImport(ctx context.Context, req *models.Impo
 	if req.Bundle.FormatVersion != models.ExportFormatVersion {
 		return nil, fmt.Errorf("unsupported bundle format_version %d (this build expects %d)", req.Bundle.FormatVersion, models.ExportFormatVersion)
 	}
+
+	// Bring retired type/option names up to current shape BEFORE anything
+	// compares or persists them. ApplyImport re-runs this function, so
+	// both paths normalize.
+	normalizeRetiredChartTypes(&req.Bundle)
 
 	targetNs, err := s.resolveTargetNamespace(ctx, req.TargetNamespace, req.Bundle.SourceNamespace)
 	if err != nil {
@@ -65,6 +94,13 @@ func (s *DashboardService) ApplyImport(ctx context.Context, req *models.ImportAp
 	if err := s.requireImportRepos(); err != nil {
 		return nil, err
 	}
+
+	// Normalize retired type/option names before anything reads the
+	// bundle. PreflightImport does this too, but it receives a COPY of
+	// the bundle struct — normalizing here is what guarantees the objects
+	// this function goes on to persist are current-shaped, rather than
+	// relying on the copied slice aliasing the same backing array.
+	normalizeRetiredChartTypes(&req.Bundle)
 
 	// Rerun preflight so we can't be tricked into applying something
 	// the client claimed was safe. Also gives us the categorization

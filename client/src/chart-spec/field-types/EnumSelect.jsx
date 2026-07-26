@@ -11,7 +11,7 @@ export default function EnumSelectField({ field }) {
 
   // A Carbon <Select> with a value that matches no <SelectItem> silently
   // displays the FIRST option instead — so a record saved with an
-  // off-grid value (e.g. a number-chart numberSize of 50, which isn't one
+  // off-grid value (e.g. a value-chart valueSize of 50, which isn't one
   // of the discrete size presets) would render as "10 px" in the editor
   // while the viewer still draws the true 50px. That divergence reads as
   // "the editor shows the wrong size." Guard it generically: if the

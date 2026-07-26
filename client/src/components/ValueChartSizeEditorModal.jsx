@@ -5,24 +5,25 @@
 import { useState, useEffect } from 'react';
 import { Modal, Select, SelectItem } from '@carbon/react';
 
-// Shared across the number-chart editor and admin settings. Covers roughly
+// Shared across the value-chart editor and admin settings. Covers roughly
 // "small label" to "presentation wall" sizes. The 12–20 range suits tiny
 // 1×1 / 2×1 tiles where a 24px value still overflowed (12px is the floor —
 // smaller is unreadable on a panel); large steps near the bottom because
 // you pick those for specific panel dimensions, not for fine-tuning. Keep
-// in sync with the number_size enum in specs/number.json and the numberSize
-// enum in server-go/internal/ai/toolops/chart_options.go.
-export const NUMBER_CHART_SIZES = [12, 14, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400];
+// in sync with the value_size enum in specs/value.json, the valueSize enum
+// in server-go/internal/ai/toolops/chart_options.go, and the valueSize
+// range note in server-go/internal/registry/chart_types.go.
+export const VALUE_CHART_SIZES = [12, 14, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 120, 160, 200, 240, 300, 400];
 
-export const DEFAULT_NUMBER_CHART_SIZE = 120;
+export const DEFAULT_VALUE_CHART_SIZE = 120;
 
-function NumericChartNumberSizeEditorModal({ open, onClose, currentValue, onSave }) {
-  const [selected, setSelected] = useState(DEFAULT_NUMBER_CHART_SIZE);
+function ValueChartSizeEditorModal({ open, onClose, currentValue, onSave }) {
+  const [selected, setSelected] = useState(DEFAULT_VALUE_CHART_SIZE);
 
   useEffect(() => {
     if (open) {
       const n = Number(currentValue);
-      setSelected(Number.isFinite(n) && n > 0 ? n : DEFAULT_NUMBER_CHART_SIZE);
+      setSelected(Number.isFinite(n) && n > 0 ? n : DEFAULT_VALUE_CHART_SIZE);
     }
   }, [open, currentValue]);
 
@@ -30,7 +31,7 @@ function NumericChartNumberSizeEditorModal({ open, onClose, currentValue, onSave
     <Modal
       open={open}
       onRequestClose={onClose}
-      modalHeading="Default Number Chart Value Size"
+      modalHeading="Default Value Chart Size"
       primaryButtonText="Save"
       secondaryButtonText="Cancel"
       onRequestSubmit={() => onSave(selected)}
@@ -38,16 +39,16 @@ function NumericChartNumberSizeEditorModal({ open, onClose, currentValue, onSave
     >
       <div style={{ padding: '0 0 1rem' }}>
         <p style={{ color: 'var(--cds-text-secondary)', marginBottom: '1rem' }}>
-          Default font size (in pixels) for the numeric value on newly created Number charts.
+          Default font size (in pixels) for the value on newly created Value charts.
           Individual charts can still override this in the chart editor.
         </p>
         <Select
-          id="default-number-chart-size"
+          id="default-value-chart-size"
           labelText="Default Size (px)"
           value={String(selected)}
           onChange={(e) => setSelected(Number(e.target.value))}
         >
-          {NUMBER_CHART_SIZES.map((s) => (
+          {VALUE_CHART_SIZES.map((s) => (
             <SelectItem key={s} value={String(s)} text={`${s} px`} />
           ))}
         </Select>
@@ -61,4 +62,4 @@ function NumericChartNumberSizeEditorModal({ open, onClose, currentValue, onSave
   );
 }
 
-export default NumericChartNumberSizeEditorModal;
+export default ValueChartSizeEditorModal;
