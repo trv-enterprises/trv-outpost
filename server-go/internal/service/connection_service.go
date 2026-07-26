@@ -553,6 +553,13 @@ func preserveSecrets(newConfig, existingConfig *models.ConnectionConfig) {
 			newConfig.Frigate.Password = existingConfig.Frigate.Password
 		}
 	}
+
+	// Preserve Synology secrets
+	if newConfig.Synology != nil && existingConfig.Synology != nil {
+		if newConfig.Synology.Password == models.SecretMaskedValue {
+			newConfig.Synology.Password = existingConfig.Synology.Password
+		}
+	}
 }
 
 // preserveAllSecretsFromExisting overwrites every secret field on
@@ -597,6 +604,10 @@ func preserveAllSecretsFromExisting(newConfig, existingConfig *models.Connection
 	}
 	if newConfig.Frigate != nil && existingConfig.Frigate != nil {
 		newConfig.Frigate.Password = existingConfig.Frigate.Password
+	}
+	if newConfig.Synology != nil && existingConfig.Synology != nil {
+		newConfig.Synology.URL = existingConfig.Synology.URL
+		newConfig.Synology.Password = existingConfig.Synology.Password
 	}
 }
 
@@ -667,6 +678,11 @@ func stripPlaceholderSecrets(cfg *models.ConnectionConfig) {
 	if cfg.MQTT != nil {
 		if cfg.MQTT.Password == models.SecretMaskedValue {
 			cfg.MQTT.Password = ""
+		}
+	}
+	if cfg.Synology != nil {
+		if cfg.Synology.Password == models.SecretMaskedValue {
+			cfg.Synology.Password = ""
 		}
 	}
 	if cfg.Frigate != nil {
@@ -790,6 +806,8 @@ func (s *ConnectionService) TestConnection(ctx context.Context, req *models.Test
 		response = s.testTSStoreConnection(ctx, req.Config.TSStore)
 	case models.ConnectionTypePrometheus:
 		response = s.testPrometheusConnection(ctx, req.Config.Prometheus)
+	case models.ConnectionTypeSynology:
+		response = s.testSynologyConnection(ctx, req.Config.Synology)
 	case models.ConnectionTypeEdgeLake:
 		response = s.testEdgeLakeConnection(ctx, req.Config.EdgeLake)
 	case models.ConnectionTypeMQTT:
@@ -839,6 +857,8 @@ func (s *ConnectionService) CheckHealth(ctx context.Context, id string) (*models
 		testResponse = s.testTSStoreConnection(ctx, connection.Config.TSStore)
 	case models.ConnectionTypePrometheus:
 		testResponse = s.testPrometheusConnection(ctx, connection.Config.Prometheus)
+	case models.ConnectionTypeSynology:
+		testResponse = s.testSynologyConnection(ctx, connection.Config.Synology)
 	case models.ConnectionTypeEdgeLake:
 		testResponse = s.testEdgeLakeConnection(ctx, connection.Config.EdgeLake)
 	case models.ConnectionTypeMQTT:
@@ -903,6 +923,12 @@ func (s *ConnectionService) validateConfig(dsType models.ConnectionType, config 
 			return fmt.Errorf("Prometheus configuration is required for Prometheus connection")
 		}
 		return s.validatePrometheusConfig(config.Prometheus)
+
+	case models.ConnectionTypeSynology:
+		if config.Synology == nil {
+			return fmt.Errorf("Synology configuration is required for Synology connection")
+		}
+		return s.validateSynologyConfig(config.Synology)
 
 	case models.ConnectionTypeEdgeLake:
 		if config.EdgeLake == nil {
@@ -1044,6 +1070,21 @@ func (s *ConnectionService) validateTSStoreConfig(config *models.TSStoreConfig) 
 func (s *ConnectionService) validatePrometheusConfig(config *models.PrometheusConfig) error {
 	if config.URL == "" {
 		return fmt.Errorf("Prometheus URL is required")
+	}
+	return nil
+}
+
+// validateSynologyConfig validates Synology DSM configuration. Unlike
+// Prometheus, credentials are mandatory — DSM has no anonymous read surface.
+func (s *ConnectionService) validateSynologyConfig(config *models.SynologyDSMConfig) error {
+	if config.URL == "" {
+		return fmt.Errorf("DSM URL is required")
+	}
+	if config.Username == "" {
+		return fmt.Errorf("DSM username is required")
+	}
+	if config.Password == "" {
+		return fmt.Errorf("DSM password is required")
 	}
 	return nil
 }
@@ -1327,6 +1368,49 @@ func (s *ConnectionService) testPrometheusConnection(ctx context.Context, config
 
 	// Test the connection
 	if err := promDS.TestConnection(ctx); err != nil {
+		return &models.TestConnectionResponse{
+			Success: false,
+			Status:  models.HealthStatusUnhealthy,
+			Message: fmt.Sprintf("Connection failed: %v", err),
+		}
+	}
+
+	return &models.TestConnectionResponse{
+		Success: true,
+		Status:  models.HealthStatusHealthy,
+		Message: fmt.Sprintf("Connection successful (%s)", config.URL),
+	}
+}
+
+// testSynologyConnection logs in to DSM and reads system info. Synology is
+// registry-only (no legacy DataSource type), so this builds the adapter through
+// the registry rather than a New*DataSource constructor.
+func (s *ConnectionService) testSynologyConnection(ctx context.Context, config *models.SynologyDSMConfig) *models.TestConnectionResponse {
+	if config == nil {
+		return &models.TestConnectionResponse{
+			Success: false,
+			Status:  models.HealthStatusUnhealthy,
+			Message: "Synology configuration is required",
+		}
+	}
+
+	adapter, err := registry.CreateAdapter("api.synology", map[string]interface{}{
+		"url":                  config.URL,
+		"username":             config.Username,
+		"password":             config.Password,
+		"timeout":              config.Timeout,
+		"insecure_skip_verify": config.InsecureSkipVerify,
+	})
+	if err != nil {
+		return &models.TestConnectionResponse{
+			Success: false,
+			Status:  models.HealthStatusUnhealthy,
+			Message: fmt.Sprintf("Failed to create Synology connection: %v", err),
+		}
+	}
+	defer adapter.Close()
+
+	if err := adapter.TestConnection(ctx); err != nil {
 		return &models.TestConnectionResponse{
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,

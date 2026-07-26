@@ -13,6 +13,7 @@ import {
   Db2Database,
   Video,
   DataBase,
+  Datastore,
 } from '@carbon/icons-react';
 
 /**
@@ -32,6 +33,7 @@ export const CONNECTION_TYPE_META = [
   { id: 'prometheus', label: 'Prometheus',   icon: Meter,           color: 'red' },
   { id: 'edgelake',   label: 'EdgeLake',     icon: Db2Database,     color: 'blue' },
   { id: 'frigate',    label: 'Frigate',      icon: Video,           color: 'warm-gray' },
+  { id: 'synology',   label: 'Synology DSM', icon: Datastore,       color: 'cool-gray' },
 ];
 
 const BY_ID = CONNECTION_TYPE_META.reduce((m, t) => { m[t.id] = t; return m; }, {});

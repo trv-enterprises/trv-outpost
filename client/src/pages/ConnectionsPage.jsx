@@ -147,6 +147,7 @@ function ConnectionsPage() {
     { id: 'mqtt', text: 'MQTT' },
     { id: 'tsstore', text: 'TS-Store' },
     { id: 'prometheus', text: 'Prometheus' },
+    { id: 'synology', text: 'Synology DSM' },
     { id: 'edgelake', text: 'EdgeLake' },
     { id: 'frigate', text: 'Frigate' }
   ];
