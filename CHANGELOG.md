@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-07-26
+
 ### Added
 
 - **Dashboard borders — draw grouping boxes around related panels.** A new
@@ -30,6 +32,15 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   panel counts, component-usage lookups, or export dependency walks. They
   render above panel bodies deliberately: a panel moved onto a border
   visibly crosses the line rather than silently hiding a segment of it.
+
+- **Weather display — small / medium / large layout variants.** A new
+  **Size** option lets the weather display fit a short wide tile instead
+  of only a full forecast panel. **Small** shows the icon, temperature,
+  and conditions; **medium** adds a detail grid and sun times; **large**
+  (the default, and the existing behavior) adds hourly and 5-day
+  forecasts. The minimum panel size for weather drops from 14×12 to 7×3
+  so the small variant can actually be placed — minimums are keyed by
+  subtype, so size up by hand for medium and large.
 
 - **`value` chart type — single-value tiles now display text as well as
   numbers.** The chart type formerly called **Number** is now **Value**,
@@ -83,6 +94,12 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   text states that aren't severities. The native picker remains as a
   secondary well for cases a palette can't cover. Adds Carbon
   `orange40` as the caution step.
+
+- **The component picker shows each component's name, not its title.**
+  The picker selects by identity, and `name` is the unique
+  `(namespace, name)` identifier — titles are display labels for the
+  rendered panel and are frequently duplicated across components, so
+  two different components could appear identical in the list.
 
 ### Changed
 
