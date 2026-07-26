@@ -16,7 +16,12 @@
 // reads below are the accept-old fallback for any record that escaped
 // the migrateNumberChartToValue boot migration.
 
-import { columnIndex, toNumber } from '../option-helpers.js';
+import {
+  columnIndex,
+  toNumber,
+  resolveTextThresholdColor,
+  resolveNumericThresholdColor,
+} from '../option-helpers.js';
 import { formatNumberValue, applyTextCase, isNumericValue } from './number-formats.js';
 
 /**
@@ -88,12 +93,22 @@ export function buildOption(values, data, helpers = {}) {
   // text value never renders one even if an old record still carries it.
   const unit = isText ? '' : (opts.valueUnit ?? opts.numberUnit ?? '');
 
+  // Threshold coloring (#36). Text and numeric use different rule
+  // shapes, matching the two option families: text matches on the string
+  // (first rule wins), numeric bands by magnitude (highest reached
+  // wins). null = no rule matched → the view keeps the default text
+  // color, which is why "no thresholds configured" costs nothing.
+  const color = isText
+    ? resolveTextThresholdColor(raw, opts.valueTextThresholds)
+    : resolveNumericThresholdColor(toNumber(raw, NaN), opts.valueThresholds);
+
   return {
     render: 'value',
     props: {
       formatted,
       unit,
       size,
+      color,
       title: chartName || '',
     },
   };

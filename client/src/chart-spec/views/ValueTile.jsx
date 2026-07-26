@@ -45,6 +45,7 @@ export default function ValueTile({
   value,
   unit = '',
   size = 64,
+  color = null,
   options = null,
   valueName = '',
   dataCtx = null,
@@ -76,6 +77,7 @@ export default function ValueTile({
       formatted={formatted}
       unit={unit}
       size={size}
+      color={color}
       title=""
       config={{ options: { showTitle: true } }}
       dataCtx={dataCtx}

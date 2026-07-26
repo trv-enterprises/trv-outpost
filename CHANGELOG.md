@@ -38,6 +38,31 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   JSON/MQTT/CSV sources routinely quote numbers; set Value type to
   **Text** when such a value should render verbatim.
 
+- **Value chart: threshold coloring for numbers AND text** (closes #36).
+  Numeric tiles get the familiar banded thresholds — each color applies
+  from its value upward, so the highest one reached wins, and they can
+  be entered in any order.
+
+  Text tiles get **color rules**: an operator (`equals` / `contains`), a
+  match string, and a color, with no cap on how many you add. Matching
+  ignores case, and rules are evaluated top-down so the first match
+  wins — which lets a specific `equals` rule sit above a broad
+  `contains` catch-all. Rows can be reordered, since the order is the
+  logic. Both are exposed to the AI surfaces (`valueThresholds`,
+  `valueTextThresholds`).
+
+### Fixed
+
+- **Threshold color picker no longer opens the OS color wheel.** The
+  bare `<input type="color">` offered every color in the spectrum and
+  suggested none, so picking "danger" meant knowing the brand hex, and
+  two charts rarely ended up the same red. Threshold rows now show a
+  palette of Carbon tokens — the alert ramp (danger / caution / warning
+  / ok / info) for numeric, that ramp plus the chart line colors for
+  text states that aren't severities. The native picker remains as a
+  secondary well for cases a palette can't cover. Adds Carbon
+  `orange40` as the caution step.
+
 ### Changed
 
 - **The `number` chart type is retired and replaced by `value`.** The

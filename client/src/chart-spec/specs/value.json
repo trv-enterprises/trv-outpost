@@ -57,7 +57,7 @@
           "id": "value_type_group",
           "label": "Value type",
           "helperText": "Auto reads the type from the sampled data and is right nearly always. Set it explicitly when the sample is empty, mixed, or a live stream hasn't produced a record yet — the options below follow this choice.",
-          "layout": "single-column",
+          "layout": "row-4",
           "fields": [
             {
               "id": "value_type",
@@ -173,6 +173,21 @@
           ]
         },
         {
+          "id": "value_thresholds_numeric",
+          "label": "Color thresholds",
+          "helperText": "Color the value by how large it is. Each threshold's color applies from its value upward, so the highest one the value reaches wins. Leave empty for the default text color.",
+          "layout": "full-width",
+          "visibleWhen": { "field": "value_type", "operator": "not_in", "value": ["text"] },
+          "fields": [
+            {
+              "id": "value_thresholds",
+              "binds": "options.valueThresholds",
+              "type": "threshold_list",
+              "label": "Thresholds"
+            }
+          ]
+        },
+        {
           "id": "value_style_text",
           "label": "Display",
           "helperText": "Text values render as-is. Decimal places and unit suffix don't apply to text, so they aren't shown here.",
@@ -220,6 +235,21 @@
                 { "value": "300", "label": "300 px" },
                 { "value": "400", "label": "400 px" }
               ]
+            }
+          ]
+        },
+        {
+          "id": "value_thresholds_text_group",
+          "label": "Color rules",
+          "helperText": "Color the value by what it says. Add a rule per state you care about — there is no limit. Rules are checked top to bottom and the first match wins, so put specific rules above broad ones. Matching ignores case.",
+          "layout": "full-width",
+          "visibleWhen": { "field": "value_type", "operator": "eq", "value": "text" },
+          "fields": [
+            {
+              "id": "value_text_thresholds",
+              "binds": "options.valueTextThresholds",
+              "type": "text_threshold_list",
+              "label": "Color rules"
             }
           ]
         }

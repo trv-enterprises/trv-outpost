@@ -112,6 +112,55 @@ check('unit suppressed for a text value',
 check('unit still renders for a numeric value',
   buildOption(vals({ valueUnit: '°C' }), numeric).props.unit === '°C');
 
+// --- threshold coloring (#36) --------------------------------------------
+// Numeric: each color applies from its value UPWARD; highest reached wins.
+const NUM_T = [
+  { value: 0, color: '#24a148' },
+  { value: 80, color: '#f1c21b' },
+  { value: 90, color: '#da1e28' },
+];
+var numThreshCases = [[50,'#24a148'],[80,'#f1c21b'],[85,'#f1c21b'],[90,'#da1e28'],[999,'#da1e28']];
+numThreshCases.forEach(function ([v, want]) {
+  const got = buildOption(vals({ valueThresholds: NUM_T }, ['n']), data(['n'], [[v]])).props.color;
+  check('numeric threshold ' + v + ' → ' + want, got === want, String(got));
+});
+check('numeric below every threshold → null',
+  buildOption(vals({ valueThresholds: [{ value: 10, color: '#da1e28' }] }, ['n']), data(['n'], [[5]])).props.color === null);
+check('no thresholds → null color (theme default)',
+  buildOption(vals({}), numeric).props.color === null);
+check('thresholds added out of order still band correctly',
+  buildOption(vals({ valueThresholds: [{value:90,color:'#da1e28'},{value:0,color:'#24a148'},{value:80,color:'#f1c21b'}] }, ['n']),
+    data(['n'], [[85]])).props.color === '#f1c21b');
+
+// Text: first match wins, case-insensitive.
+const TXT_T = [
+  { operator: 'eq', match: 'ONLINE', color: '#24a148' },
+  { operator: 'contains', match: 'fail', color: '#da1e28' },
+  { operator: 'contains', match: 'warn', color: '#f1c21b' },
+];
+var txtCases = [['ONLINE','#24a148'],['online','#24a148'],['OFFLINE - FAILED','#da1e28'],
+                ['warning: disk','#f1c21b'],['Idle',null]];
+txtCases.forEach(function ([v, want]) {
+  const got = buildOption(vals({ valueTextThresholds: TXT_T }, ['s']), data(['s'], [[v]])).props.color;
+  check('text rule "' + v + '" → ' + want, got === want, String(got));
+});
+check('first matching rule wins over a later one',
+  buildOption(vals({ valueTextThresholds: [
+    { operator: 'contains', match: 'e', color: '#0f62fe' },
+    { operator: 'eq', match: 'ONLINE', color: '#24a148' }] }, ['s']),
+    data(['s'], [['ONLINE']])).props.color === '#0f62fe');
+check('empty match string is skipped, not match-all',
+  buildOption(vals({ valueTextThresholds: [{ operator: 'contains', match: '   ', color: '#da1e28' }] }, ['s']),
+    data(['s'], [['anything']])).props.color === null);
+check('text rules ignored on a numeric value',
+  buildOption(vals({ valueTextThresholds: TXT_T }, ['n']), data(['n'], [[42]])).props.color === null);
+check('text case + threshold compose',
+  (() => {
+    const p = buildOption(vals({ valueTextCase: 'upper', valueTextThresholds: TXT_T }, ['s']),
+      data(['s'], [['online']])).props;
+    return p.formatted === 'ONLINE' && p.color === '#24a148';
+  })());
+
 // --- edges ---------------------------------------------------------------
 check('no value column → null', buildOption({ data_mapping: {}, options: {} }, data([], [])) === null);
 check('object y_axis entry (editor preview shape)',

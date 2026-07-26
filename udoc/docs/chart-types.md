@@ -78,11 +78,46 @@ The options follow that choice:
 
 | Value type | Options shown |
 |---|---|
-| **Number** | Format, Value size, Decimal places, Unit suffix |
-| **Text** | Text case, Value size |
+| **Number** | Format, Value size, Decimal places, Unit suffix, Color thresholds |
+| **Text** | Text case, Value size, Color rules |
 
 Decimal places and Unit suffix aren't offered for text, because neither
 applies to a string.
+
+### Coloring the value
+
+Both types can color the value itself — useful for a status tile you want
+readable at a glance from across a room. Leave the list empty and the value
+uses the normal text color.
+
+**Numeric — Color thresholds.** Each threshold's color applies from its value
+*upward*, so the highest one the value has reached wins. You can add them in
+any order.
+
+| Thresholds | 50 renders | 85 renders | 95 renders |
+|---|---|---|---|
+| 0 green, 80 yellow, 90 red | green | yellow | red |
+
+**Text — Color rules.** Add a rule per state you care about; there's no limit.
+Each rule is an operator (**equals** or **contains**), the text to match, and a
+color. Matching **ignores case**, so a rule for `online` catches `ONLINE`.
+
+Rules are checked **top to bottom and the first match wins**, so put specific
+rules above broad ones — use the ↑ ↓ buttons to reorder:
+
+| Rule | |
+|---|---|
+| **equals** `ONLINE` → green | `ONLINE` matches here |
+| **contains** `fail` → red | `OFFLINE - FAILED` falls through to here |
+| **contains** `warn` → yellow | |
+
+Anything matching no rule keeps the default color.
+
+Colors come from a palette of Carbon tokens — the alert ramp (danger, caution,
+warning, ok, info) for numeric thresholds, and that same ramp plus the chart
+line colors for text rules, since a text state like `Cooling` often isn't a
+severity at all. Click a swatch to pick, or use the dashed well at the end of
+the row for a custom color.
 
 ### Text case
 

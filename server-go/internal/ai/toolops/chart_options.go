@@ -121,6 +121,16 @@ func ChartOptionsSchema() map[string]interface{} {
 				"description": "value chart, TEXT values only: re-case the rendered string. \"none\" (default) leaves it as the source has it — prefer that unless the user asks for a specific case. \"upper\" = ALL CAPS, \"lower\" = lowercase, \"capitalize\" = first letter of the string, \"title\" = First Letter Of Each Word. Display-only; the underlying data is unchanged. Ignored for numeric values.",
 			},
 			"valueUnit": map[string]interface{}{"type": "string", "description": "value chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\"). Numeric values only — a text value renders no unit."},
+			"valueThresholds": map[string]interface{}{
+				"type":        "array",
+				"description": "value chart, NUMERIC values: color the value by magnitude. Array of {value, color, label?}. Each color applies from its value UPWARD, so the highest threshold reached wins — e.g. [{value:0,color:\"#24a148\"},{value:80,color:\"#f1c21b\"},{value:90,color:\"#da1e28\"}] renders green under 80, yellow 80-89, red at 90+. Use the standard alert colors unless the user asks otherwise: #da1e28 danger, #ff832b caution, #f1c21b warning, #24a148 ok, #0f62fe info. Omit for the default text color.",
+				"items":       map[string]interface{}{"type": "object"},
+			},
+			"valueTextThresholds": map[string]interface{}{
+				"type":        "array",
+				"description": "value chart, TEXT values: color the value by what it says. Array of {operator, match, color} where operator is \"eq\" (whole string) or \"contains\" (substring). Matching is CASE-INSENSITIVE, so match \"online\" catches \"ONLINE\". Rules are evaluated IN ORDER and the FIRST match wins — put specific rules above broad catch-alls. There is no limit on rule count; add one per state that matters. Example: [{operator:\"eq\",match:\"ONLINE\",color:\"#24a148\"},{operator:\"contains\",match:\"fail\",color:\"#da1e28\"}]. Omit for the default text color.",
+				"items":       map[string]interface{}{"type": "object"},
+			},
 			"valueSize": map[string]interface{}{
 				"type": "integer",
 				// Constrain to the same discrete size ladder the editor's
@@ -149,7 +159,8 @@ var ChartOptionKeys = map[string]struct{}{
 	"xAxisLabelRotate": {}, "barOrientation": {}, "barWidthPct": {},
 	"bandedBarStyle":   {}, "valueFormat": {}, "valueDateFormat": {},
 	"valueDecimals": {}, "valueUnit": {}, "valueSize": {},
-	"valueType": {}, "valueTextCase": {}, "title": {},
+	"valueType": {}, "valueTextCase": {},
+	"valueThresholds": {}, "valueTextThresholds": {}, "title": {},
 }
 
 // Retired option-key spellings translate to their current names via

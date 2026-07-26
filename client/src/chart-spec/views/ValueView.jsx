@@ -20,6 +20,7 @@
  * @param {string} props.formatted   pre-formatted value string ('' when no data)
  * @param {string} props.unit        optional unit suffix
  * @param {number} props.size        value font size in px
+ * @param {string} [props.color]     threshold color; falsy = theme default
  * @param {string} props.title       centered title ('' to hide)
  * @param {object} config            saved config (options.showTitle gate)
  * @param {object} dataCtx           { loading, error } for placeholders
@@ -28,7 +29,7 @@
  *   tile (whose band was drawn by the loader above this view) aligns with
  *   a structured value tile. Used by ValueTile.
  */
-export default function ValueView({ formatted, unit, size, title, config, dataCtx, titleBottomOffset = false }) {
+export default function ValueView({ formatted, unit, size, color, title, config, dataCtx, titleBottomOffset = false }) {
   // Title is suppressible per-component via options.showTitle (default
   // on) — same uniform guard as ChartShell / DataViewGrid. Off →
   // reclaim the title's vertical space (the value centers in the full
@@ -105,7 +106,10 @@ export default function ValueView({ formatted, unit, size, title, config, dataCt
             fontSize: `${size}px`,
             fontWeight: 600,
             lineHeight: 1,
-            color: 'var(--cds-text-primary)',
+            // A threshold color overrides the default only when a rule
+            // actually matched; otherwise stay on the theme token so an
+            // un-thresholded tile still follows a theme switch.
+            color: color || 'var(--cds-text-primary)',
             fontVariantNumeric: 'tabular-nums',
             whiteSpace: 'nowrap',
           }}

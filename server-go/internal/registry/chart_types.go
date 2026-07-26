@@ -198,6 +198,8 @@ func init() {
 			{Name: "valueTextCase", Type: "select", Required: false, Default: "none", Options: []string{"none", "upper", "lower", "capitalize", "title"}, Description: "Text values only: re-case the rendered string. \"none\" = as-is, \"upper\" = ALL CAPS, \"lower\" = lowercase, \"capitalize\" = first letter of the string, \"title\" = First Letter Of Each Word. Display-only; the source data is unchanged. Ignored for numeric values."},
 			{Name: "valueUnit", Type: "string", Required: false, Description: "Unit suffix appended after the value (e.g. \"%\", \"°C\", \"GB\"). Cosmetic — does not scale the value. Numeric values only — a text value renders no unit."},
 			{Name: "valueSize", Type: "string", Required: false, Default: "56", Description: "Value font size in px (12–400). Size it to the panel height so the value doesn't overflow."},
+			{Name: "valueThresholds", Type: "array", Required: false, Description: "Numeric values only: color the value by magnitude. Array of {value, color, label?}; each color applies from its value UPWARD, so the highest threshold the value has reached wins. Colors are hex (e.g. \"#da1e28\" danger, \"#ff832b\" caution, \"#f1c21b\" warning, \"#24a148\" ok). Empty = default text color."},
+			{Name: "valueTextThresholds", Type: "array", Required: false, Description: "Text values only: color the value by what it says. Array of {operator, match, color} where operator is \"eq\" (whole string) or \"contains\" (substring); matching is case-insensitive. Rules are evaluated IN ORDER and the FIRST match wins, so put specific rules before broad ones. Unbounded — add one rule per state that matters. Empty = default text color."},
 		},
 	})
 

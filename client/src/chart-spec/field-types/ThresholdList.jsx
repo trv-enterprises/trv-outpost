@@ -5,6 +5,8 @@
 import { NumberInput, TextInput, IconButton, Button } from '@carbon/react';
 import { Add, Close } from '@carbon/icons-react';
 import { useSpecRenderContext } from '../SpecContext';
+import { ALERT_COLOR_PALETTE } from '../option-helpers';
+import ColorSwatchPicker from './ColorSwatchPicker';
 
 /**
  * Free list of threshold entries for the line chart's y_thresholds
@@ -20,7 +22,9 @@ import { useSpecRenderContext } from '../SpecContext';
  *     adds aren't all the same color
  *   - label: ''
  */
-const DEFAULT_COLORS = ['#24a148', '#f1c21b', '#da1e28', '#0f62fe', '#8a3ffc'];
+// Rotate new thresholds through the alert ramp best→worst, the order an
+// author almost always adds them in (ok, then warning, then danger).
+const DEFAULT_COLORS = [...ALERT_COLOR_PALETTE].reverse().map((c) => c.hex);
 
 function defaultColorForIndex(i) {
   return DEFAULT_COLORS[i % DEFAULT_COLORS.length];
@@ -72,13 +76,12 @@ export default function ThresholdListField({ field }) {
                 step={1}
                 hideSteppers
               />
-              <input
-                id={`spec-${field.id}-${i}-color`}
-                className="spec-threshold-list__swatch"
-                type="color"
+              <ColorSwatchPicker
+                idPrefix={`spec-${field.id}-${i}-color`}
                 value={entry.color}
-                onChange={(e) => updateEntry(i, { color: e.target.value })}
-                aria-label="Threshold color"
+                onChange={(hex) => updateEntry(i, { color: hex })}
+                palette={ALERT_COLOR_PALETTE}
+                ariaLabel="Threshold color"
               />
             </div>
             <div className="spec-threshold-list__label">

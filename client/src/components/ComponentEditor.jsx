@@ -386,6 +386,8 @@ const DEFAULT_CHART_OPTIONS = {
   valueDateFormat: 'datetime', // sub-option when valueFormat=datetime
   valueType: 'auto',         // auto (detect from data) | number | text
   valueTextCase: 'none',     // none | upper | lower | capitalize | title (text only)
+  valueThresholds: [],       // numeric: [{ value, color, label? }] — highest reached wins
+  valueTextThresholds: [],   // text: [{ operator, match, color }] — first match wins
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -4079,6 +4081,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // (numeric vs text). 'auto' = infer from the data.
                       value_type: chartOptions.valueType ?? 'auto',
                       value_text_case: chartOptions.valueTextCase ?? 'none',
+                      // Threshold coloring (#36) — numeric bands and
+                      // text match-rules are separate lists.
+                      value_thresholds: Array.isArray(chartOptions.valueThresholds) ? chartOptions.valueThresholds : [],
+                      value_text_thresholds: Array.isArray(chartOptions.valueTextThresholds) ? chartOptions.valueTextThresholds : [],
                       // Both size fields bind the SAME stored key — only
                       // one is ever visible, so the size survives a
                       // number↔text switch.
@@ -4262,6 +4268,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'value_text_case':
                           updateChartOption('valueTextCase', value);
+                          break;
+                        case 'value_thresholds':
+                          updateChartOption('valueThresholds', value);
+                          break;
+                        case 'value_text_thresholds':
+                          updateChartOption('valueTextThresholds', value);
                           break;
                         // Both size fields write the same stored key —
                         // the numeric and text Display rows each carry
