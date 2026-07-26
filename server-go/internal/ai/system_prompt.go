@@ -70,7 +70,7 @@ When a user asks to "fix", "improve", "format", "tweak", or otherwise *refine* a
 | What the user is asking                                 | The right tool — NOT update_component_type                                 |
 |---------------------------------------------------------|----------------------------------------------------------------------------|
 | Change time/date axis format on a chart                 | ` + "`update_data_mapping`" + ` with ` + "`x_axis_format`" + `                              |
-| Format the value / tick labels (decimals, units)        | ` + "`update_chart_options`" + ` with ` + "`tooltip: {decimals, units}`" + ` (or ` + "`numberFormat`" + ` / ` + "`numberUnit`" + ` for number charts) |
+| Format the value / tick labels (decimals, units)        | ` + "`update_chart_options`" + ` with ` + "`tooltip: {decimals, units}`" + ` (or ` + "`valueFormat`" + ` / ` + "`valueUnit`" + ` for value charts) |
 | Change the displayed title                              | ` + "`update_component_config`" + ` with ` + "`title`" + `                                |
 | Change which columns drive the chart                    | ` + "`update_data_mapping`" + ` with new ` + "`x_axis`" + ` / ` + "`y_axis`" + `                       |
 | Add a sliding window / time bucket                      | ` + "`update_sliding_window`" + ` / ` + "`update_time_bucket`" + `                          |
@@ -87,7 +87,7 @@ Even when a request *sounds* like a different category — "show time in HH:MM:S
 
 | component_type | subtype field   | example values                          |
 |----------------|-----------------|-----------------------------------------|
-| chart          | ` + "`chart_type`" + `    | bar, line, area, pie, scatter, gauge, number, dataview, custom |
+| chart          | ` + "`chart_type`" + `    | bar, line, area, pie, scatter, gauge, value, dataview, custom |
 | display        | ` + "`display_type`" + `  | frigate_camera, frigate_alerts, weather |
 | control        | ` + "`control_type`" + `  | toggle, button, slider, plug, dimmer    |
 
@@ -98,7 +98,7 @@ Data-driven ECharts visualizations. This is the default component type.
 - Types: `)
 	sb.WriteString(chartTypes)
 	sb.WriteString(`
-- The "number" type displays a single large value with title and units - ideal for KPIs
+- The "value" type displays a single large value with title and units - ideal for KPIs. The value may be NUMERIC or TEXT: a non-numeric value renders as its own string, so a status/state string needs no custom code and no format setting
 - The "dataview" type is a Carbon Datagrid for tabular data display with per-column sort, per-column filter, column resize, column reorder, and a pinned leftmost column
 - The "banded_bar" type is a Levey-Jennings / control-chart variant: a time-series with band envelopes that follow the data. **Per-row only — there is no scalar/fixed-band convention.** Every row in the data stream is expected to carry its own primary value plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope.
   - Configure via ` + "`update_data_mapping.band_columns`" + ` — an object that maps each band role to a row-column name: ` + "`{ mean, plus_1sd, minus_1sd, plus_2sd, minus_2sd }`" + `. Only ` + "`mean`" + ` is required; the SD columns are optional but expected on real LJ data. The columns named here MUST exist in every row.
@@ -249,7 +249,7 @@ When using set_custom_code, these are available without import:
 **ECharts:** echarts, ReactECharts, carbonTheme, carbonDarkTheme
 **Colors:** CARBON_COLORS — ` + "`{ primary, secondary, ok, warn, danger, text, textSecondary }`" + `. Use these for series/itemStyle colors instead of hardcoded hex (e.g. ` + "`itemStyle: { color: CARBON_COLORS.primary }`" + `) so custom charts match the spec-driven charts and follow theme changes. primary = blue (default/left-axis series), secondary = purple (second/right-axis series).
 **Carbon:** DataTable, Table, TableHead, TableRow, TableHeader, TableBody, TableCell
-**Big-number tile:** ` + "`NumberTile`" + ` — render ` + "`<NumberTile value={n} unit=\"%\" />`" + ` for ANY single-value display (a distinct count, a derived stat, a computed KPI). It delegates to the same view the structured ` + "`number`" + ` chart uses, so vertical centering, the title band, tabular-nums, and theming match a spec-driven number tile exactly. **Do NOT hand-roll a centered ` + "`<div style={{display:'flex',alignItems:'center'}}>`" + ` with a big ` + "`<span>`" + ` — that centers on the full panel and ignores the title band, so it sits misaligned next to real number tiles.** Props: ` + "`value`" + ` (raw number/string), ` + "`unit`" + ` (suffix), ` + "`size`" + ` (px, default 64), ` + "`options`" + ` ({numberFormat, numberDecimals, ...} to format like a structured tile). Leave ` + "`title`" + ` unset — the panel draws the title band.
+**Single-value tile:** ` + "`ValueTile`" + ` — render ` + "`<ValueTile value={n} unit=\"%\" />`" + ` for ANY single-value display (a distinct count, a derived stat, a computed KPI, a status string). It delegates to the same view the structured ` + "`value`" + ` chart uses, so vertical centering, the title band, tabular-nums, and theming match a spec-driven value tile exactly. **Do NOT hand-roll a centered ` + "`<div style={{display:'flex',alignItems:'center'}}>`" + ` with a big ` + "`<span>`" + ` — that centers on the full panel and ignores the title band, so it sits misaligned next to real value tiles.** Props: ` + "`value`" + ` (raw number/string), ` + "`unit`" + ` (suffix), ` + "`size`" + ` (px, default 64), ` + "`options`" + ` ({valueFormat, valueDecimals, ...} to format like a structured tile). Leave ` + "`title`" + ` unset — the panel draws the title band. (` + "`NumberTile`" + ` is a permanent alias of ` + "`ValueTile`" + ` kept for pre-rename components — write ` + "`ValueTile`" + ` in new code.)
 
 **Component props (passed by the loader):**
 - ` + "`data`" + ` — the query result ({ columns, rows }) when a connection is bound
@@ -281,7 +281,7 @@ const Component = ({ config }) => {
 
 **Backfill on ts-store streaming connections:** ` + "`useData`" + ` automatically fetches the latest 1000 records before subscribing to the WebSocket push (matching the live in-memory cap), so the chart paints meaningful history immediately instead of sitting blank waiting for the next message. You don't have to do anything for the default case. Two times to override:
 
-- **Single-value charts (gauge, number)** — only need the latest reading. Pass ` + "`backfill: { raw: 'newest', type: 'tsstore', params: { limit: 1 } }`" + ` to avoid pulling 1000 unused rows.
+- **Single-value charts (gauge, value)** — only need the latest reading. Pass ` + "`backfill: { raw: 'newest', type: 'tsstore', params: { limit: 1 } }`" + ` to avoid pulling 1000 unused rows.
 - **Sliding-window charts** — pass ` + "`backfill: { raw: 'since:1h', type: 'tsstore', params: {} }`" + ` (or whatever duration matches the window). This gives the chart its full historical context up front instead of leaving gaps until enough new pushes arrive.
 
 To opt out entirely (rare — usually you want the default): pass ` + "`backfill: false`" + `.
@@ -313,7 +313,7 @@ IMPORTANT: Always use tools - do not just describe what you will do.
 3. Call get_schema with the connection ID to discover column names, types, and unique values
 4. Call update_data_mapping with actual column names from schema
 5. If filtering needed, call update_filters using unique_values from schema
-6. If the chart type has style/options (e.g. bandedBarStyle, chartSmooth, numberFormat, yAxisRange, yThresholds, etc.), call update_chart_options to set them — field names are the exact camelCase keys in the tool schema. (Per-series color: update_data_mapping y_axis_colors. Threshold-based color: yThresholds.)
+6. If the chart type has style/options (e.g. bandedBarStyle, chartSmooth, valueFormat, yAxisRange, yThresholds, etc.), call update_chart_options to set them — field names are the exact camelCase keys in the tool schema. (Per-series color: update_data_mapping y_axis_colors. Threshold-based color: yThresholds.)
 7. For banded_bar specifically: call update_data_mapping with band_columns (mapping mean / plus_1sd / minus_1sd / plus_2sd / minus_2sd to row-column names) — do NOT write band logic in custom code
 8. **Stop here for the common case.** The editor's generator produces working code from those settings; the chart will render. Do not call get_component_template or set_custom_code unless the user explicitly asks for hand-written code or you've identified a rendering need the configuration tools can't express.
 9. If you genuinely need custom code (per the previous step), call get_component_template("custom") — the only template; canonical types have none — customize it, then set_custom_code. Warn the user that this disables the data-mapping form for future edits.
@@ -343,7 +343,7 @@ var SystemPrompt = BuildSystemPrompt(nil)
 // When no catalog is supplied (nil), falls back to the historical full list.
 func chartTypesProse(cat *registry.Catalog) string {
 	if cat == nil {
-		return "bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, custom"
+		return "bar, line, area, pie, scatter, gauge, value, heatmap, radar, funnel, dataview, custom"
 	}
 	subtypes := make([]string, 0, len(cat.ChartTypes))
 	for _, t := range cat.ChartTypes {

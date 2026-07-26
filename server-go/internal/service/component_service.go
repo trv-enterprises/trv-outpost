@@ -104,6 +104,10 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 		if req.ChartType == "" {
 			return nil, fmt.Errorf("chart component requires chart_type (e.g. line, bar, gauge, dataview, banded_bar; or custom with use_custom_code)")
 		}
+		// Resolve a retired type name (e.g. "number" → "value") once,
+		// here at the boundary, so we never store a dead name and the
+		// codegen/registry lookups below all see the current one.
+		req.ChartType = registry.CanonicalChartType(req.ChartType)
 	}
 
 	// Auto-codegen for structured charts: when the caller asks for a
@@ -144,7 +148,7 @@ func (s *ComponentService) CreateComponent(ctx context.Context, req *models.Crea
 		ComponentCode:         componentCode,
 		UseCustomCode:         req.UseCustomCode,
 		UsesDashboardVariable: req.UsesDashboardVariable,
-		Options:               req.Options,
+		Options:               registry.CanonicalizeChartOptions(req.Options),
 		Tags:                  models.NormalizeTags(req.Tags),
 	}
 
@@ -396,7 +400,10 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 		component.Description = *req.Description
 	}
 	if req.ChartType != nil {
-		component.ChartType = *req.ChartType
+		// Normalize a retired name (e.g. "number" → "value") so an older
+		// caller's update doesn't reintroduce a dead type on a record the
+		// boot migration already converted.
+		component.ChartType = registry.CanonicalChartType(*req.ChartType)
 	}
 	if req.ConnectionID != nil {
 		component.ConnectionID = *req.ConnectionID
@@ -423,7 +430,7 @@ func (s *ComponentService) UpdateComponent(ctx context.Context, id string, req *
 		component.UsesDashboardVariable = *req.UsesDashboardVariable
 	}
 	if req.Options != nil {
-		component.Options = *req.Options
+		component.Options = registry.CanonicalizeChartOptions(*req.Options)
 	}
 	if req.Tags != nil {
 		component.Tags = models.NormalizeTags(*req.Tags)

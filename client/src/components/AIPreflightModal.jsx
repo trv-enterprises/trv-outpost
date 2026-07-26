@@ -25,7 +25,7 @@ const CHART_TYPES = [
   { id: 'pie', label: 'Pie Chart' },
   { id: 'scatter', label: 'Scatter Plot' },
   { id: 'gauge', label: 'Gauge' },
-  { id: 'number', label: 'Number / KPI' },
+  { id: 'value', label: 'Value / KPI' },
   { id: 'dataview', label: 'Data Table' },
   { id: 'custom', label: 'Custom Component' }
 ];

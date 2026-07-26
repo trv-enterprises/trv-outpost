@@ -5,17 +5,25 @@
 package registry
 
 // Chart type registrations. These must stay in sync with the frontend
-// ChartEditor CHART_TYPES and CHART_TYPE_CONFIG arrays in
-// client/src/components/ChartEditor.jsx. When adding a new canonical chart
-// type:
+// CHART_TYPES and CHART_TYPE_CONFIG in
+// client/src/components/ComponentEditor.jsx. When adding a new canonical
+// chart type:
 //
 //   1. Add an entry here with its DataRequirements
-//   2. Add a matching entry to CHART_TYPES + CHART_TYPE_CONFIG in ChartEditor
+//   2. Add a matching entry to CHART_TYPES + CHART_TYPE_CONFIG in ComponentEditor
 //   3. Make sure the frontend can render it (DynamicComponentLoader + ECharts
 //      handles most types automatically, but some need library loads)
 //
 // Anything more exotic than this list can still be built by the AI agent
 // via the "custom" type, which maps to the React code path.
+//
+// RETIRED TYPES are not registered here: this registry drives the type
+// catalog, which drives the picker and the AI's list of buildable types,
+// so a dead name must not appear. "number" was retired in favor of
+// "value" — records migrate on boot (migrateNumberChartToValue), and the
+// accept-old aliases for anything that escapes live in the frontend
+// buildOption/view registries and in the AI validChartTypes allowlist,
+// not here.
 
 func init() {
 	RegisterComponentType(ComponentTypeInfo{
@@ -157,11 +165,11 @@ func init() {
 	})
 
 	RegisterComponentType(ComponentTypeInfo{
-		TypeID:      "chart.number",
+		TypeID:      "chart.value",
 		Category:    CategoryChart,
-		Subtype:     "number",
-		DisplayName: "Number",
-		Description: "Single value rendered as a large number with an optional unit suffix. Binds one numeric column, typically the latest reading.",
+		Subtype:     "value",
+		DisplayName: "Value",
+		Description: "Single value rendered large with an optional unit suffix. Binds one column, typically the latest reading. The value may be numeric OR text — a non-numeric value renders as its own string (the numeric formats simply don't apply to it).",
 		Capabilities: ComponentCapabilities{
 			CanRead:            true,
 			SupportsStreaming:  true,
@@ -176,12 +184,18 @@ func init() {
 		// Options (set via the component's `options` object). The format
 		// IMPLIES the raw value's unit — map a RAW column and pick a format
 		// rather than doing unit math in the query or writing custom code.
+		//
+		// This type supersedes the retired "number" chart type; the stored
+		// option keys renamed number* → value* alongside it (boot migration
+		// migrateNumberChartToValue). Keep the valueSize option list in sync
+		// with specs/value.json, ValueChartSizeEditorModal.jsx, and
+		// ai/toolops/chart_options.go.
 		ConfigSchema: []ConfigField{
-			{Name: "numberFormat", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"}, Description: "Value format. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K — use for large magnitudes), \"duration\" (raw value is SECONDS → \"2d 3h 4m\", e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (raw value is a timestamp → date/time via numberDateFormat). Pick the format instead of dividing in custom code."},
-			{Name: "numberDateFormat", Type: "select", Required: false, Default: "datetime", Options: []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"}, Description: "Date/time style when numberFormat=\"datetime\". Ignored otherwise."},
-			{Name: "numberDecimals", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "0", "1", "2", "3", "4"}, Description: "Decimal places, or \"auto\"."},
-			{Name: "numberUnit", Type: "string", Required: false, Description: "Unit suffix appended after the value (e.g. \"%\", \"°C\", \"GB\"). Cosmetic — does not scale the value."},
-			{Name: "numberSize", Type: "string", Required: false, Default: "56", Description: "Value font size in px (12–400). Size it to the panel height so the value doesn't overflow."},
+			{Name: "valueFormat", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"}, Description: "Value format. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K — use for large magnitudes), \"duration\" (raw value is SECONDS → \"2d 3h 4m\", e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (raw value is a timestamp → date/time via valueDateFormat). Pick the format instead of dividing in custom code. Ignored when the value is text."},
+			{Name: "valueDateFormat", Type: "select", Required: false, Default: "datetime", Options: []string{"date", "time", "time_seconds", "datetime", "datetime_seconds"}, Description: "Date/time style when valueFormat=\"datetime\". Ignored otherwise."},
+			{Name: "valueDecimals", Type: "select", Required: false, Default: "auto", Options: []string{"auto", "0", "1", "2", "3", "4"}, Description: "Decimal places, or \"auto\". Ignored when the value is text."},
+			{Name: "valueUnit", Type: "string", Required: false, Description: "Unit suffix appended after the value (e.g. \"%\", \"°C\", \"GB\"). Cosmetic — does not scale the value. Applies to text values too."},
+			{Name: "valueSize", Type: "string", Required: false, Default: "56", Description: "Value font size in px (12–400). Size it to the panel height so the value doesn't overflow."},
 		},
 	})
 

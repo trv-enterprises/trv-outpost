@@ -33,7 +33,7 @@ func TestSpecDrivenOneLiner(t *testing.T) {
 // specName must be the exact chart_type passed in, so a banded_bar gets
 // specName="banded_bar" (not a default).
 func TestSpecDrivenOneLinerUsesChartType(t *testing.T) {
-	for _, ct := range []string{"bar", "area", "pie", "scatter", "gauge", "number", "dataview", "banded_bar"} {
+	for _, ct := range []string{"bar", "area", "pie", "scatter", "gauge", "value", "dataview", "banded_bar"} {
 		got := SpecDrivenOneLiner(ct)
 		want := `specName="` + ct + `"`
 		if !strings.Contains(got, want) {

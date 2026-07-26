@@ -415,16 +415,25 @@ func (e *ToolExecutor) executeUpdateComponentConfig(ctx context.Context, chartID
 		if chart.ComponentType != "" && chart.ComponentType != "chart" {
 			return &ToolResult{Success: false, Error: fmt.Sprintf("chart_type can only be set on chart components; this component is %q. Use update_component_config to set a chart-subtype value, or pick a different tool for %s components.", chart.ComponentType, chart.ComponentType)}, nil
 		}
+		// "number" is the retired name of "value". It stays ACCEPTED (an
+		// older caller or bundle may still send it) but is deliberately
+		// absent from the error text below so the model is only ever
+		// told to use the current name.
 		validChartTypes := map[string]bool{
 			"bar": true, "line": true, "area": true, "pie": true,
-			"scatter": true, "gauge": true, "number": true,
+			"scatter": true, "gauge": true, "value": true, "number": true,
 			"heatmap": true, "radar": true, "funnel": true,
 			"dataview": true, "banded_bar": true, "custom": true,
 		}
 		if !validChartTypes[*params.ChartType] {
-			return &ToolResult{Success: false, Error: fmt.Sprintf("invalid chart_type %q. Valid chart subtypes: bar, line, area, pie, scatter, gauge, number, heatmap, radar, funnel, dataview, banded_bar, custom. Display types like 'frigate' / 'weather' are NOT chart_types — they go on a display component.", *params.ChartType)}, nil
+			return &ToolResult{Success: false, Error: fmt.Sprintf("invalid chart_type %q. Valid chart subtypes: bar, line, area, pie, scatter, gauge, value, heatmap, radar, funnel, dataview, banded_bar, custom. Display types like 'frigate' / 'weather' are NOT chart_types — they go on a display component.", *params.ChartType)}, nil
 		}
-		chart.ChartType = *params.ChartType
+		// Normalize the accepted alias so we never persist the dead name.
+		if *params.ChartType == "number" {
+			chart.ChartType = "value"
+		} else {
+			chart.ChartType = *params.ChartType
+		}
 		updates = append(updates, "chart_type")
 	}
 	if params.Tags != nil {
@@ -963,7 +972,7 @@ func (e *ToolExecutor) executeUpdateChartOptions(ctx context.Context, chartID st
 	// known keys are copied). Keys match exactly what the spec-driven
 	// renderer reads (client chart-spec/specs/*.{json,js}).
 	if applied := toolops.ApplyChartOptions(chart.Options, patch); applied == 0 {
-		return &ToolResult{Success: false, Error: "no recognized chart options in input — see the update_chart_options schema for valid keys (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, numberFormat, …)"}, nil
+		return &ToolResult{Success: false, Error: "no recognized chart options in input — see the update_chart_options schema for valid keys (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, valueFormat, …)"}, nil
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {

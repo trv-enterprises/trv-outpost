@@ -2,14 +2,21 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-// Value formatters for the spec-driven number chart. The format choice
-// (options.numberFormat) IMPLIES the raw value's unit — e.g. "duration"
-// means the value is seconds, "bytes" means the value is bytes — so the
-// agent/user just maps a raw column and picks the matching format instead
-// of doing unit math in the query or dropping to custom code.
+// Value formatters for the spec-driven value chart (and the data grids).
+// The format choice IMPLIES the raw value's unit — e.g. "duration" means
+// the value is seconds — so the agent/user just maps a raw column and
+// picks the matching format instead of doing unit math in the query or
+// dropping to custom code.
 //
-// Pure functions, no React/DOM — unit-testable. number.js calls
+// Pure functions, no React/DOM — unit-testable. value.js calls
 // formatNumberValue() with the chosen format + the decimals setting.
+//
+// NOTE on parameter names: the opts keys here stay `numberFormat` /
+// `numberDecimals` / `numberDateFormat` even though the value chart's
+// STORED option keys renamed to value*. This is a shared cell formatter
+// (DataViewGrid and ComponentDataGridModal call it too), so its param
+// API is deliberately independent of the value chart's stored keys —
+// value.js maps value* → these names at the call site.
 
 import { formatTimestamp } from '../../utils/dataTransforms.js';
 
@@ -86,9 +93,14 @@ const DATE_PRESETS = {
 };
 
 /**
- * Format a number-chart value according to options.numberFormat.
+ * Format a value according to the chosen format.
  *
- * @param {*} raw            the cell value (null/number/string)
+ * Numeric values honor the format/decimals settings. A NON-NUMERIC value
+ * renders as its own string — the value chart supports text values, and
+ * the numeric-only formats (plain/compact/duration/duration_clock and the
+ * decimals setting) simply do not apply to it.
+ *
+ * @param {*} raw            the cell value (null/number/string/bool)
  * @param {string} valueColumn  column name (for the auto fallback)
  * @param {object} opts      { numberFormat, numberDecimals, numberDateFormat }
  * @param {Function} formatCellValue  the viewer's auto-formatter (fallback)
@@ -106,12 +118,18 @@ export function formatNumberValue(raw, valueColumn, opts = {}, formatCellValue) 
   }
 
   const n = toNum(raw);
-  // Non-numeric value with a numeric format → fall back to auto so we
-  // never render "NaN". strictTimestampNames: a tile's value column is a
+  // Non-numeric value → render it as text. A numeric format can't apply,
+  // and we must never show "NaN". The viewer's auto-formatter still gets
+  // first refusal so an ISO timestamp string or a boolean renders the way
+  // it does everywhere else in the app; a plain string falls through it
+  // unchanged. strictTimestampNames: a tile's value column is a
   // measurement — never flip a byte-count magnitude into a date; only a
   // time-NAMED column (or ISO string) renders as time.
   if (n == null) {
-    return formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : String(raw);
+    const auto = formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : null;
+    // formatCellValue may return null/undefined for a type it doesn't
+    // handle — fall back to the raw string so text always renders.
+    return auto == null || auto === '' ? String(raw) : String(auto);
   }
 
   switch (format) {

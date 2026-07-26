@@ -21,12 +21,14 @@ import { parseTimestamp } from '../utils/dataTransforms';
  * live data instead of opening a second stream.
  */
 // Chart types where "view underlying data as a table" doesn't make sense.
-// Number tiles show a single aggregated value, dataview is already a
+// Value tiles show a single aggregated value, dataview is already a
 // table — no reason to open a modal of the same thing. Gauges DO benefit
 // (gauge value comes from a row, but the underlying stream is a series
 // the user often wants to inspect).
 // Doesn't affect the download menu — PNG/CSV/JSON stay available for these.
-const SKIP_TABLE_MODAL_CHART_TYPES = new Set(['dataview', 'number']);
+// ('number' is the retired name of 'value' — kept so a record that
+// escaped the boot migration behaves the same.)
+const SKIP_TABLE_MODAL_CHART_TYPES = new Set(['dataview', 'value', 'number']);
 
 // Slugify chart name/title for filenames: "M-WS-Temp Over Time" → "m_ws_temp_over_time"
 function filenameSlug(name) {

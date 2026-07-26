@@ -2,13 +2,19 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-// number "buildOption" — a non-ECharts spec-driven type. Instead of an
+// value "buildOption" — a non-ECharts spec-driven type. Instead of an
 // ECharts option it returns a tagged view descriptor; SpecDrivenChart
-// renders the registered <NumberView> from the view registry. See
+// renders the registered <ValueView> from the view registry. See
 // docs/design-notes/spec-driven-non-echarts-views.md.
 //
 // Same data contract as gauge: read the first y-axis column from the
-// first (post-aggregation) row.
+// first (post-aggregation) row. Unlike gauge the value may be a STRING —
+// a non-numeric cell renders as text (see number-formats.js).
+//
+// This type supersedes the retired `number` chart type. Stored option
+// keys were renamed number* → value*; the `opts.valueX ?? opts.numberX`
+// reads below are the accept-old fallback for any record that escaped
+// the migrateNumberChartToValue boot migration.
 
 import { columnIndex, toNumber } from '../option-helpers.js';
 import { formatNumberValue } from './number-formats.js';
@@ -17,7 +23,7 @@ import { formatNumberValue } from './number-formats.js';
  * @param {Object} values   { data_mapping, options }
  * @param {Object} data     { columns: string[], rows: any[][] }
  * @param {Object} helpers  { formatCellValue, chartName }
- * @returns {Object|null}   { render: 'number', props } descriptor, or
+ * @returns {Object|null}   { render: 'value', props } descriptor, or
  *                          null when no value column is configured
  */
 export function buildOption(values, data, helpers = {}) {
@@ -37,22 +43,32 @@ export function buildOption(values, data, helpers = {}) {
   const idx = columnIndex(data, valueColumn);
   const raw = idx >= 0 && rows.length > 0 ? rows[0][idx] : null;
 
-  // Value formatting: options.numberFormat picks how the raw value is
+  // Value formatting: options.valueFormat picks how the raw value is
   // rendered (auto / plain / compact / duration / duration_clock /
-  // datetime), with numberDecimals + numberDateFormat as sub-options. The
+  // datetime), with valueDecimals + valueDateFormat as sub-options. The
   // format implies the value's unit (duration→seconds, etc.), so no query
-  // math is needed. Defaults to 'auto' (the prior behavior). See
+  // math is needed. Defaults to 'auto'. A non-numeric raw value renders
+  // as its own string regardless of the numeric format. See
   // number-formats.js.
-  const formatted = formatNumberValue(raw, valueColumn, opts, formatCellValue);
+  //
+  // formatNumberValue keeps its numberX parameter names — it is the
+  // shared cell formatter used by the data grids too, so only the STORED
+  // option keys renamed. Map value* → the formatter's param names here.
+  const formatted = formatNumberValue(raw, valueColumn, {
+    numberFormat: opts.valueFormat ?? opts.numberFormat,
+    numberDecimals: opts.valueDecimals ?? opts.numberDecimals,
+    numberDateFormat: opts.valueDateFormat ?? opts.numberDateFormat,
+  }, formatCellValue);
 
-  // numberSize is stored as a number on the legacy path but the enum
+  // valueSize is stored as a number on the legacy path but the enum
   // field writes a string; coerce and floor at a sane minimum. >0 guard
   // mirrors the default of 56.
-  const size = toNumber(opts.numberSize, 56) > 0 ? toNumber(opts.numberSize, 56) : 56;
-  const unit = opts.numberUnit || '';
+  const rawSize = opts.valueSize ?? opts.numberSize;
+  const size = toNumber(rawSize, 56) > 0 ? toNumber(rawSize, 56) : 56;
+  const unit = opts.valueUnit ?? opts.numberUnit ?? '';
 
   return {
-    render: 'number',
+    render: 'value',
     props: {
       formatted,
       unit,

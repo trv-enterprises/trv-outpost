@@ -15,11 +15,15 @@
 //
 // See docs/design-notes/spec-driven-non-echarts-views.md.
 
-import NumberView from './NumberView';
+import ValueView from './ValueView';
 import DataViewGrid from './DataViewGrid';
 
 const VIEWS = {
-  number: NumberView,
+  value: ValueView,
+  // `number` is the retired name of the value type. Kept as an alias so a
+  // component record that escaped the migrateNumberChartToValue boot
+  // migration still resolves a view instead of rendering blank.
+  number: ValueView,
   dataview: DataViewGrid,
 };
 

@@ -29,7 +29,7 @@ import {
   OverflowMenuItem,
   Pagination
 } from '@carbon/react';
-import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, TableSplit, Code, List, Grid, Edit, DataBase, Dashboard, TouchInteraction, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
+import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, StringInteger, TableSplit, Code, List, Grid, Edit, DataBase, Dashboard, TouchInteraction, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
@@ -319,6 +319,9 @@ function ComponentsListPage() {
       'scatter': 'magenta',
       'gauge': 'cyan',
       'dataview': 'purple',
+      'value': 'teal',
+      // 'number' is the retired name of 'value' — kept so a row that
+      // escaped the boot migration still gets its tag color.
       'number': 'teal',
       'custom': 'gray'
     };
@@ -344,7 +347,9 @@ function ComponentsListPage() {
       'pie': ChartPie,
       'gauge': Meter,
       'dataview': TableSplit,
-      'number': Meter,
+      'value': StringInteger,
+      // 'number' is the retired name of 'value' — see getChartTypeColor.
+      'number': StringInteger,
       'custom': Code
     };
     return icons[chartType?.toLowerCase()] || ChartLineSmooth;

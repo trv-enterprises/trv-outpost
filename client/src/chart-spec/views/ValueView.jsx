@@ -3,14 +3,14 @@
 // See LICENSE file for details.
 
 /**
- * NumberView — the non-ECharts render for the `number` chart type.
+ * ValueView — the non-ECharts render for the `value` chart type.
  *
- * A single large numeric value + optional inline unit, with an optional
- * centered title. Deliberately plain DOM (not ECharts): crisp text,
- * tabular-nums, ellipsis, CSS-token theming. Ported from the legacy
- * string-codegen `chartType === 'number'` branch in ComponentEditor.
+ * A single large value (numeric or text) + optional inline unit, with an
+ * optional centered title. Deliberately plain DOM (not ECharts): crisp
+ * text, tabular-nums, ellipsis, CSS-token theming. Supersedes the
+ * retired `number` chart type's view.
  *
- * Receives the descriptor `props` from specs/number.js's buildOption,
+ * Receives the descriptor `props` from specs/value.js's buildOption,
  * plus the saved `config` (for the title) and `dataCtx` (loading/error/
  * no-data) so it owns its own chrome — the spec-driven shell does NOT
  * wrap non-ECharts views in ChartShell (their needs differ; see
@@ -26,9 +26,9 @@
  * @param {boolean} titleBottomOffset  when true AND no internal title is
  *   drawn, pulls the value up by the title band's dead space so a custom
  *   tile (whose band was drawn by the loader above this view) aligns with
- *   a structured number tile. Used by NumberTile.
+ *   a structured value tile. Used by ValueTile.
  */
-export default function NumberView({ formatted, unit, size, title, config, dataCtx, titleBottomOffset = false }) {
+export default function ValueView({ formatted, unit, size, title, config, dataCtx, titleBottomOffset = false }) {
   // Title is suppressible per-component via options.showTitle (default
   // on) — same uniform guard as ChartShell / DataViewGrid. Off →
   // reclaim the title's vertical space (the value centers in the full
@@ -62,9 +62,9 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
   const titleBand = 'calc(2.5rem * var(--title-scale, 1))';
   const titleTextBottom = 'calc(1.6875rem * var(--title-scale, 1))';
 
-  // titleBottomOffset: the caller (NumberTile via DynamicComponentLoader)
+  // titleBottomOffset: the caller (ValueTile via DynamicComponentLoader)
   // already rendered a full 2.5rem <ChartTitleBand> above this view and
-  // handed us only the body BELOW it. A structured number tile instead
+  // handed us only the body BELOW it. A structured value tile instead
   // centers its value below the title TEXT (1.6875rem). To land the value
   // at the same height as a spec-driven tile beside it, pull the value
   // container UP by the band's dead space (2.5 − 1.6875 = 0.8125rem) so
@@ -98,7 +98,9 @@ export default function NumberView({ formatted, unit, size, title, config, dataC
           // (the mobile viewer) can cap this otherwise-fixed px size with a
           // container-relative rule. The inline px below stays the default
           // everywhere else — desktop rendering is unchanged.
-          className="number-view__value"
+          // The legacy `number-view__value` class is kept alongside the new
+          // name so any user CSS written against it still matches.
+          className="value-view__value number-view__value"
           style={{
             fontSize: `${size}px`,
             fontWeight: 600,

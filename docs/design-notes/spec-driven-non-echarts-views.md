@@ -1,9 +1,18 @@
-# Spec-driven non-ECharts views (number, dataview, …)
+# Spec-driven non-ECharts views (value, dataview, …)
 
 **Status:** design — Stage 2 follow-on, branch `chart-spec-banded-bar`
 (continuing the spec-driven migration). Supersedes the "force everything
 through ECharts" assumption baked into the original `SpecDrivenChart` /
 `ChartShell` contract.
+
+> **Renamed since this was written.** The `number` chart type described
+> below shipped, and was later renamed to **`value`** when it gained
+> string-value support: `specs/number.{json,js}` → `specs/value.{json,js}`,
+> `NumberView` → `ValueView`, `NumberTile` → `ValueTile` (the old name is
+> kept as a permanent alias in the custom-code scope), the view tag
+> `render: 'number'` → `render: 'value'`, and the stored option keys
+> `options.number*` → `options.value*`. The architecture described here is
+> unchanged — only the names are. Read `number` as `value` throughout.
 
 ## Problem
 

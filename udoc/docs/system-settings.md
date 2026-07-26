@@ -13,7 +13,7 @@ Configure deployment-wide settings from **Manage Mode → Settings**. Requires t
 | **Layout Dimensions** | Layout | Available canvas presets for dashboards. Each preset defines a max width and height in pixels. |
 | **Default Layout Dimension** | Layout | The preset selected by default when creating new dashboards. |
 | **Tile Font Size** | Appearance | Font size for compact tile-control labels (xs / sm / md / lg). |
-| **Default Number Chart Value Size** | Appearance | Default font size (px) for the value in newly-created Number charts. Ships as 56 px; existing deployments keep their stored value. Authors can override per-chart. |
+| **Default Value Chart Size** | Appearance | Default font size (px) for the value on newly-created Value charts. Ships as 56 px; existing deployments keep their stored value. Authors can override per-chart. |
 | **Default Dashboard Fit Mode** | Dashboard | Fit mode applied to any dashboard a user has not explicitly set. One of `actual`, `window`, `width`, `stretch`. Per-user, per-dashboard preferences always override this default — no user's pick affects another user. |
 | **Dashboard Command Topic** | Dashboard | MQTT topic the dashboard subscribes to for voice/kiosk commands (default `dashboard/cmd`). |
 | **Dashboard Command Connection** | Dashboard | MQTT connection used for the dashboard command topic. Pick from configured MQTT connections. |

@@ -657,7 +657,7 @@ function AppContent({ onDisconnect }) {
   // Load the component title scale (admin setting title_font_size, a
   // percentage of the 1rem base) once identity resolves and set the
   // --title-scale CSS variable on :root. The spec title bands (ChartShell
-  // / NumberView / DataViewGrid) and the datatable header all multiply
+  // / ValueView / DataViewGrid) and the datatable header all multiply
   // their font + band height by var(--title-scale, 1), so one variable
   // scales every component title consistently. Clamped 50–200%. Read at
   // load only (applies on next page load), matching the setting's note.

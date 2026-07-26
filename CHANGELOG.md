@@ -6,6 +6,42 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`value` chart type — single-value tiles now display text as well as
+  numbers.** The chart type formerly called **Number** is now **Value**,
+  and its value may be a string: a status readout (`ONLINE`, `degraded`),
+  a device state, or a name renders as-is at the tile's font size. No
+  custom code and no format setting are needed for text — the numeric
+  formats (plain, compact SI, duration, duration clock, date/time) and
+  the decimal-places setting simply do not apply to it, while the unit
+  suffix still does. Numeric values behave exactly as before.
+
+### Changed
+
+- **The `number` chart type is retired and replaced by `value`.** The
+  picker offers **Value** in its place, and the stored chart option keys
+  were renamed to match (`numberFormat` → `valueFormat`,
+  `numberDateFormat` → `valueDateFormat`, `numberDecimals` →
+  `valueDecimals`, `numberUnit` → `valueUnit`, `numberSize` →
+  `valueSize`), as was the admin setting **Default Number Chart Value
+  Size** → **Default Value Chart Size** (`default_numeric_chart_number_size`
+  → `default_value_chart_size`).
+
+  **Existing components migrate automatically on server start**, saved
+  component versions included, and the admin setting carries its
+  configured value across. Nothing to do on upgrade. Old dashboard
+  export bundles are normalized to the new shape when imported, and both
+  AI surfaces still accept the retired `number` type and `number*` option
+  keys from an older caller, translating them to the current names rather
+  than dropping them.
+
+  Custom-code components are unaffected: `NumberTile` remains available
+  in the custom-code scope as a permanent alias of the new `ValueTile`,
+  so components written against it keep working.
+
 ## [0.46.0] — 2026-07-24
 
 ### Added

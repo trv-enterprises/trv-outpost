@@ -1,11 +1,11 @@
 {
   "schema_version": "1",
-  "chart_type": "number",
+  "chart_type": "value",
   "library": "react",
   "display": {
-    "label": "Number",
+    "label": "Value",
     "icon": "StringInteger",
-    "description": "A single value rendered as a large number with an optional unit"
+    "description": "A single value — number or text — rendered large with an optional unit"
   },
   "capabilities": {
     "requires_x_axis": false,
@@ -34,7 +34,7 @@
         {
           "id": "value_group",
           "label": "Value",
-          "helperText": "The number shows the first row's value for this column (after any aggregation).",
+          "helperText": "Shows the first row's value for this column (after any aggregation).",
           "layout": "row-4",
           "fields": [
             {
@@ -43,7 +43,7 @@
               "type": "column_select",
               "label": "Value column",
               "required": true,
-              "helperText": "Numeric column to display."
+              "helperText": "Column to display. Numeric or text."
             }
           ]
         }
@@ -51,17 +51,17 @@
     },
     {
       "id": "chart_options",
-      "label": "Number Options",
+      "label": "Value Options",
       "subsections": [
         {
-          "id": "number_value_format",
+          "id": "value_value_format",
           "label": "Value format",
-          "helperText": "How to render the value. The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed.",
+          "helperText": "How to render the value. The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed. Text values render as-is; the numeric formats do not apply to them.",
           "layout": "row-4",
           "fields": [
             {
-              "id": "number_format",
-              "binds": "options.numberFormat",
+              "id": "value_format",
+              "binds": "options.valueFormat",
               "type": "enum",
               "label": "Format",
               "default": "auto",
@@ -75,13 +75,13 @@
               ]
             },
             {
-              "id": "number_date_format",
-              "binds": "options.numberDateFormat",
+              "id": "value_date_format",
+              "binds": "options.valueDateFormat",
               "type": "enum",
               "label": "Date/time style",
               "default": "datetime",
               "helperText": "Only used when Format is Date / time.",
-              "visibleWhen": { "field": "number_format", "operator": "eq", "value": "datetime" },
+              "visibleWhen": { "field": "value_format", "operator": "eq", "value": "datetime" },
               "options": [
                 { "value": "date", "label": "Date (Jan 15)" },
                 { "value": "time", "label": "Time (10:30 AM)" },
@@ -93,13 +93,13 @@
           ]
         },
         {
-          "id": "number_style",
+          "id": "value_style",
           "label": "Display",
           "layout": "row-4",
           "fields": [
             {
-              "id": "number_size",
-              "binds": "options.numberSize",
+              "id": "value_size",
+              "binds": "options.valueSize",
               "type": "enum",
               "label": "Value size (px)",
               "default": "56",
@@ -125,12 +125,12 @@
               ]
             },
             {
-              "id": "number_decimals",
-              "binds": "options.numberDecimals",
+              "id": "value_decimals",
+              "binds": "options.valueDecimals",
               "type": "enum",
               "label": "Decimal places",
               "default": "auto",
-              "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals.",
+              "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals. Does not apply to text values.",
               "options": [
                 { "value": "auto", "label": "Auto" },
                 { "value": "0", "label": "0" },
@@ -141,8 +141,8 @@
               ]
             },
             {
-              "id": "number_unit",
-              "binds": "options.numberUnit",
+              "id": "value_unit",
+              "binds": "options.valueUnit",
               "type": "text",
               "label": "Unit suffix",
               "default": "",

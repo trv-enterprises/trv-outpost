@@ -98,12 +98,16 @@ const epochSecondsToDtLocal = (epochSec) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+// Single-value chart types: they render only row 0. `number` is the
+// retired name of `value` — kept in the set so an un-migrated record
+// behaves identically while it still carries the old type string.
+const SINGLE_VALUE_CHART_TYPES = new Set(['gauge', 'value', 'number']);
 // Default ts-store record limit when a saved component has none.
-// Single-value charts (gauge, number) render only row 0, so 1 record
-// is the right default (#169); everything else gets 1000 — matching the
+// Single-value charts render only row 0, so 1 record is the right
+// default (#169); everything else gets 1000 — matching the
 // stream_buffer_size default, and conservative next to the 5000-point
 // clamp (TSSTORE_MAX_POINTS) already allowed on time-ranged queries.
-const defaultTsstoreLimit = (type) => (type === 'gauge' || type === 'number' ? 1 : 1000);
+const defaultTsstoreLimit = (type) => (SINGLE_VALUE_CHART_TYPES.has(type) ? 1 : 1000);
 // Build the range: DSL string from the two datetime-local inputs, or '' if
 // either bound is missing/invalid (callers fall back to a safe default).
 const buildTsstoreRangeRaw = (fromDtLocal, toDtLocal) => {
@@ -129,7 +133,7 @@ import './ComponentEditor.scss';
 
 // Chart types available. Array order is the render order in the
 // picker modal — all types flow into one grid. Sequence:
-// line → area → bar → banded_bar → scatter → pie → gauge → number →
+// line → area → bar → banded_bar → scatter → pie → gauge → value →
 // dataview → custom.
 const CHART_TYPES = [
   { id: 'line', label: 'Line Chart', description: 'Show trends over time', icon: ChartLine },
@@ -139,7 +143,7 @@ const CHART_TYPES = [
   { id: 'scatter', label: 'Scatter Plot', description: 'Plot data points on two axes', icon: ChartScatter },
   { id: 'pie', label: 'Pie Chart', description: 'Show proportions of a whole', icon: ChartPie },
   { id: 'gauge', label: 'Gauge', description: 'Display a single value on a dial', icon: Meter },
-  { id: 'number', label: 'Number', description: 'Display a single value as a large number with optional unit', icon: StringInteger },
+  { id: 'value', label: 'Value', description: 'Display a single value — number or text — at a large size with optional unit', icon: StringInteger },
   { id: 'dataview', label: 'Data Table', description: 'Tabular view of raw data', icon: TableSplit },
   { id: 'custom', label: 'Custom Component', description: 'Write custom React/ECharts code', icon: Code },
 ];
@@ -289,11 +293,12 @@ const CHART_TYPE_CONFIG = {
     xAxisLabel: '',
     yAxisLabel: 'Value Column',
   },
-  // "Number" is gauge's visual twin: same data contract (single value from
+  // "Value" is gauge's visual twin: same data contract (single value from
   // one Y column on the first row), no axes, no X column. Differs only in
-  // presentation — a big typographic number instead of a dial — so everything
+  // presentation — a big typographic value instead of a dial — so everything
   // downstream (aggregation, time-bucket, filters) mirrors gauge exactly.
-  number: {
+  // Unlike gauge the value may be text rather than a number.
+  value: {
     hasXAxis: false,
     hasYAxis: true,
     multipleYAxis: false,
@@ -350,6 +355,11 @@ const CHART_TYPE_CONFIG = {
     yAxisLabel: 'Y-Axis',
   },
 };
+// `number` is the retired name of the value type. Records normally
+// migrate on server boot, but this lookup is keyed by the raw stored
+// chart_type — alias it so one that escaped still opens with the right
+// capabilities instead of falling through to CHART_TYPE_CONFIG.custom.
+CHART_TYPE_CONFIG.number = CHART_TYPE_CONFIG.value;
 
 // Canonical default chart-options. Single source of truth for the
 // chartOptions initial state, the new-chart reset (resetForm), and the
@@ -366,14 +376,14 @@ const DEFAULT_CHART_OPTIONS = {
   gaugeDangerThreshold: 90,   // Where red zone starts (%)
   gaugeUnit: '',              // Unit suffix (e.g., '°F', '%')
   gaugeDecimals: 'auto',      // Center-value decimal places ('auto' = up to 2)
-  // Number (single-value display) options. numberSize stays unset on
+  // Value (single-value display) options. valueSize stays unset on
   // create so the editor can lazy-populate it from the admin default;
   // once the user saves/edits it's always a concrete number.
-  numberSize: null,
-  numberUnit: '',
-  numberDecimals: 'auto',     // 'auto' (≤2 places) | '0'..'4' (forced)
-  numberFormat: 'auto',       // auto | plain | compact | duration | duration_clock | datetime
-  numberDateFormat: 'datetime', // sub-option when numberFormat=datetime
+  valueSize: null,
+  valueUnit: '',
+  valueDecimals: 'auto',     // 'auto' (≤2 places) | '0'..'4' (forced)
+  valueFormat: 'auto',       // auto | plain | compact | duration | duration_clock | datetime
+  valueDateFormat: 'datetime', // sub-option when valueFormat=datetime
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -936,13 +946,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setLimitRows(0);
     }
 
-    // Single-value charts (gauge, number) render only row 0, so a
+    // Single-value charts (gauge, value) render only row 0, so a
     // newest/oldest ts-store query needs just 1 record (#169). Swap the
     // record-limit default when the type crosses the single-value
     // boundary — but only when it still sits at the old type's default,
     // so an explicitly-entered limit survives the switch.
-    const isSingleValue = newType === 'gauge' || newType === 'number';
-    const wasSingleValue = chartType === 'gauge' || chartType === 'number';
+    const isSingleValue = SINGLE_VALUE_CHART_TYPES.has(newType);
+    const wasSingleValue = SINGLE_VALUE_CHART_TYPES.has(chartType);
     // 100 was the pre-#169 default — components saved back then carry it
     // explicitly, so treat it as "still at a default" too.
     const atDefault = tsstoreLimit === defaultTsstoreLimit(chartType) || (!wasSingleValue && tsstoreLimit === 100);
@@ -990,23 +1000,23 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     fetchDatasources();
   }, []);
 
-  // Pull the admin default for number-chart value size so new charts
+  // Pull the admin default for value-chart value size so new charts
   // render at the deployment's preferred size instead of a hard-coded
-  // constant. Only applies when numberSize is still null (i.e. unsaved).
+  // constant. Only applies when valueSize is still null (i.e. unsaved).
   useEffect(() => {
-    if (chartOptions.numberSize != null) return;
+    if (chartOptions.valueSize != null) return;
     let cancelled = false;
-    apiClient.getSetting('default_numeric_chart_number_size')
+    apiClient.getSetting('default_value_chart_size')
       .then((s) => {
         if (cancelled) return;
         const n = Number(s?.value);
         if (Number.isFinite(n) && n > 0) {
-          setChartOptions((prev) => prev.numberSize == null ? { ...prev, numberSize: n } : prev);
+          setChartOptions((prev) => prev.valueSize == null ? { ...prev, valueSize: n } : prev);
         }
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [chartOptions.numberSize]);
+  }, [chartOptions.valueSize]);
 
   // Initialize form when chart changes
   useEffect(() => {
@@ -1405,7 +1415,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       }));
     } else {
       // New chart - reset to defaults; snapshot mirrors them. chartOptions
-      // is intentionally NOT in the snapshot: numberSize lazy-loads from an
+      // is intentionally NOT in the snapshot: valueSize lazy-loads from an
       // admin setting after mount, which would otherwise dirty the form on
       // its own. Edits to chart options that come from user interaction
       // travel via setState calls that pair with another tracked field
@@ -1471,7 +1481,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         bandedBarStyle: 'time_series',
         // Snapshot current chartOptions state so the diff doesn't read
         // as dirty before the user touches anything. The lazy load of
-        // numberSize from admin settings may mutate this after mount,
+        // valueSize from admin settings may mutate this after mount,
         // causing a one-time false-dirty on new charts — acceptable
         // tradeoff for getting toggles to actually enable Save.
         chartOptions,
@@ -2790,7 +2800,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 it back on. Default ON (showTitle !== false). Stored on
                 options.showTitle so it persists / snapshots / dirty-
                 tracks with chartOptions. Honored uniformly by ChartShell
-                + the non-ECharts views (NumberView, DataViewGrid). */}
+                + the non-ECharts views (ValueView, DataViewGrid). */}
             <div className="title-with-toggle">
               {/* No heading label — the toggle's inline state text carries
                   the meaning AND clarifies the effect is on the rendered
@@ -3955,7 +3965,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     is suppressed for line in that case to avoid
                     rendering both. Bar and area continue to use the
                     legacy block until they migrate. */}
-                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'number', 'dataview'].includes(chartType) && getChartTypeSpec(chartType) && (
+                {!showCustomCode && ['line', 'bar', 'area', 'pie', 'scatter', 'banded_bar', 'value', 'number', 'dataview'].includes(chartType) && getChartTypeSpec(chartType) && (
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
@@ -4057,18 +4067,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // banded_bar's timestamp fields.)
                       band_scheme: bandColumns,
                       banded_bar_style: bandedBarStyle || 'time_series',
-                      // number field ids. value_column reuses the shared
+                      // value field ids. value_column reuses the shared
                       // case above (maps to yAxisColumns[0]). Size is an
                       // enum (string-valued options) so stringify the
-                      // stored number; unit is free text.
-                      number_size: String(chartOptions.numberSize ?? 56),
-                      number_unit: chartOptions.numberUnit || '',
+                      // stored number; unit is free text. The `?? number*`
+                      // reads are the accept-old fallback for a record
+                      // that escaped the boot migration.
+                      value_size: String(chartOptions.valueSize ?? chartOptions.numberSize ?? 56),
+                      value_unit: chartOptions.valueUnit ?? chartOptions.numberUnit ?? '',
                       // Decimal places enum. Stored as a string ('auto' |
                       // '0'..'4'); default 'auto' keeps the auto formatter.
-                      number_decimals: chartOptions.numberDecimals ?? 'auto',
+                      value_decimals: chartOptions.valueDecimals ?? chartOptions.numberDecimals ?? 'auto',
                       // Value-format enum + date sub-format (number-formats.js).
-                      number_format: chartOptions.numberFormat ?? 'auto',
-                      number_date_format: chartOptions.numberDateFormat ?? 'datetime',
+                      value_format: chartOptions.valueFormat ?? chartOptions.numberFormat ?? 'auto',
+                      value_date_format: chartOptions.valueDateFormat ?? chartOptions.numberDateFormat ?? 'datetime',
                       // dataview: the column_manager widget reads these
                       // keys directly (visible_columns null = show all).
                       visible_columns: visibleColumns,
@@ -4232,27 +4244,27 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'banded_bar_style':
                           setBandedBarStyle(value);
                           break;
-                        // number: size enum stores back as a Number (legacy
+                        // value: size enum stores back as a Number (legacy
                         // shape); unit is free text. (value_column is handled
                         // by the shared case above.)
-                        case 'number_size':
-                          updateChartOption('numberSize', Number(value));
+                        case 'value_size':
+                          updateChartOption('valueSize', Number(value));
                           break;
-                        case 'number_unit':
-                          updateChartOption('numberUnit', value);
+                        case 'value_unit':
+                          updateChartOption('valueUnit', value);
                           break;
                         // decimals enum stored as the raw string ('auto' |
-                        // '0'..'4'); number.js coerces. Keep it a string so
+                        // '0'..'4'); value.js coerces. Keep it a string so
                         // '0' round-trips (Number('0')→0 would be fine but the
                         // spec options are string-valued, so stay consistent).
-                        case 'number_decimals':
-                          updateChartOption('numberDecimals', value);
+                        case 'value_decimals':
+                          updateChartOption('valueDecimals', value);
                           break;
-                        case 'number_format':
-                          updateChartOption('numberFormat', value);
+                        case 'value_format':
+                          updateChartOption('valueFormat', value);
                           break;
-                        case 'number_date_format':
-                          updateChartOption('numberDateFormat', value);
+                        case 'value_date_format':
+                          updateChartOption('valueDateFormat', value);
                           break;
                         // dataview: the column_manager widget writes the
                         // visible-columns whitelist (null = show all) and
@@ -5461,11 +5473,11 @@ export function getDataDrivenChartCode(chartType, connectionId, queryRaw, queryT
     // No sliding window set, but ts-store can still serve a quick
     // "latest N" backfill so the chart paints immediately instead of
     // sitting empty until the next push arrives. Single-value charts
-    // (gauge, number) only need the latest record; everything else
+    // (gauge, value) only need the latest record; everything else
     // gets 100 for context. The hook (useData) supplies a 100-record
     // default if no backfill is emitted at all, so this generator path
-    // is mostly about the gauge/number override.
-    const limit = (chartType === 'gauge' || chartType === 'number') ? 1 : 100;
+    // is mostly about the gauge/value override.
+    const limit = SINGLE_VALUE_CHART_TYPES.has(chartType) ? 1 : 100;
     extraOptions.push(`backfill: { raw: 'newest', type: '${queryType}', params: { limit: ${limit}${filterFragment} } }`);
   }
   if (parserConfig && (parserConfig.dataPath || parserConfig.timestampField)) {

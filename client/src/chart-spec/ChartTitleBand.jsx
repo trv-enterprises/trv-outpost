@@ -14,7 +14,7 @@
  * collides with option.legend. Font AND height scale by --title-scale
  * (admin setting title_font_size, default 1) so the band always fits the
  * text. 2.5rem band base + 0.875rem (14px) font base, shared with
- * NumberView / DataViewGrid.
+ * ValueView / DataViewGrid.
  *
  * Title is suppressible per-component via options.showTitle (default on).
  * Callers resolve the label (title || name) and pass it as `text`; an

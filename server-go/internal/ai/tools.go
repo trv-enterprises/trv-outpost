@@ -231,7 +231,7 @@ Otherwise: configure via the structured tools and let the editor's generator pro
 		},
 		{
 			Name:        "update_chart_options",
-			Description: anthropic.String("Update spec-driven chart options for the chart. Field names are the exact camelCase keys the renderer reads (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, numberFormat, …) — the SAME set the Dashboard Assistant uses, so configure-first works identically on both surfaces. This covers threshold coloring (yThresholds + yThresholdRenderMode=\"color_segments\" → change line color above/below a value), axis ranges, log scale, downsampling, and the zoom slider.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
+			Description: anthropic.String("Update spec-driven chart options for the chart. Field names are the exact camelCase keys the renderer reads (yAxisRange, yThresholds, tooltip, legend, sampling, chartSmooth, valueFormat, …) — the SAME set the Dashboard Assistant uses, so configure-first works identically on both surfaces. This covers threshold coloring (yThresholds + yThresholdRenderMode=\"color_segments\" → change line color above/below a value), axis ranges, log scale, downsampling, and the zoom slider.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores options. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code (the options object lives inline in the component_code there)."),
 			// Shared schema with the Dashboard Assistant — see
 			// internal/ai/toolops/chart_options.go. Replaced the former
 			// hand-rolled snake_case set, several keys of which the
@@ -448,9 +448,9 @@ func chartTypeEnum(cat *registry.Catalog) []string {
 	if cat == nil {
 		// Fallback when no catalog is wired — the canonical spec-driven
 		// chart types + custom. (heatmap/radar/funnel are not real spec
-		// types; number was previously missing here, so a catalog-less
-		// agent couldn't create number charts.)
-		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "number", "banded_bar", "dataview", "custom"}
+		// types. "value" was formerly "number"; only the current name is
+		// offered so a catalog-less agent never creates a dead type.)
+		return []string{"bar", "line", "area", "pie", "scatter", "gauge", "value", "banded_bar", "dataview", "custom"}
 	}
 	out := make([]string, 0, len(cat.ChartTypes))
 	for _, t := range cat.ChartTypes {

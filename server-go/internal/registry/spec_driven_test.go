@@ -11,7 +11,7 @@ import "testing"
 // type is spec-driven; "custom", unknown types, and the empty string are
 // not. This guards the create/update/migration contract.
 func TestIsSpecDrivenChart(t *testing.T) {
-	specDriven := []string{"line", "bar", "area", "pie", "scatter", "gauge", "number", "dataview", "banded_bar"}
+	specDriven := []string{"line", "bar", "area", "pie", "scatter", "gauge", "value", "dataview", "banded_bar"}
 	for _, ct := range specDriven {
 		if !IsSpecDrivenChart(ct) {
 			t.Errorf("IsSpecDrivenChart(%q) = false, want true (canonical chart type)", ct)

@@ -46,7 +46,7 @@ For everything else — `$set`, `$unset`, `$rename`, simple aggregation rewrites
 ### 2. Terminology
 - Use "connection" (not "data source" or "datasource") for external data connections in UI text and code. The `datasource` nomenclature has been fully retired — collection is `connections`, BSON field is `connection_id`, Go types are `Connection` / `ConnectionRepository` / `ConnectionService` / `ConnectionAdapter` (the runtime interface), API route is `/api/connections`. The legacy `datasource_id` field name and `/api/datasources` alias were removed in v0.11.x.
 - **Component** is the umbrella entity. Three sub-types via `component_type`:
-  - `chart` — ECharts visualizations (bar/line/pie/scatter/gauge/number/dataview/custom). Discriminated further by `chart_type`.
+  - `chart` — ECharts visualizations (bar/line/pie/scatter/gauge/value/dataview/custom). Discriminated further by `chart_type`. (`value` — a single number-or-text tile — replaced the retired `number` type; existing records migrate on boot.)
   - `display` — non-chart visual components (frigate cameras, frigate alerts, weather). Discriminated by `display_type`.
   - `control` — interactive components (buttons, toggles, sliders, plugs, dimmers). Discriminated by `control_type`.
 - The word "chart" in UI/code refers strictly to `component_type=chart`. Don't use "chart" as a synonym for "component".
@@ -471,7 +471,8 @@ Global settings managed by administrators through the Settings page in Manage mo
 | `default_layout_dimension` | layout | Default dimension preset for new dashboards |
 | `layout_dimensions` | layout | Array of available dashboard dimension presets |
 | `tile_font_size` | appearance | Font size for compact tile control titles (xs/sm/md/lg). Applies to `tile_*` control components. |
-| `title_font_size` | appearance | Component title size as a percentage of the 1rem base (50–200). Scales BOTH the title font and the title-band height across charts, number tiles, data views, and data tables. 100 = default. Applies on next page load. |
+| `title_font_size` | appearance | Component title size as a percentage of the 1rem base (50–200). Scales BOTH the title font and the title-band height across charts, value tiles, data views, and data tables. 100 = default. Applies on next page load. |
+| `default_value_chart_size` | appearance | Default font size (px) for the value on newly created `value` charts. Seeded at 56; the editor lazy-reads it for new charts only, so authors can override per-chart. Renamed from `default_numeric_chart_number_size` alongside the `number`→`value` chart-type rename (boot migration carries the stored value across). |
 | `stream_buffer_size` | dashboard | Max data points a streaming chart keeps in client memory (the backfill/buffer depth). Higher = more history per live chart at the cost of browser memory. Default 1000. Applies on next page load. |
 | `chart_preferred_color_options` | appearance | Per-series-count map `{1..5: optionNumber}` choosing which curated Carbon color combination multi-series charts use when auto-coloring. Carbon defines several distinguishable combos ("options") per count; 6+ series fall back to the 14-color sequence. Per-series manual color overrides always win. Default option 2 for every count. Read client-side at bootstrap — applies on next page load. Source data: count-aware pairings in `client/src/config/theme.js` (extracted from `@carbon/charts`). |
 | `ai.enabled` | ai | Unified gate for both AI surfaces (the in-editor Component agent and the Dashboard Assistant). When off, both are hidden/disabled regardless of API key. Both surfaces also require an Anthropic key at server start. |
