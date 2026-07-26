@@ -53,6 +53,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"strip_y_axis_label_mirror_v1", migrateStripYAxisLabelMirror},
 		{"number_chart_to_value_v1", migrateNumberChartToValue},
 		{"value_chart_size_setting_v1", migrateValueChartSizeSetting},
+		{"value_type_availability_v1", migrateValueTypeAvailability},
 	}
 
 	coll := db.Collection("migrations")
@@ -826,6 +827,77 @@ func migrateGaugeNumberLimitOne(ctx context.Context, db *mongo.Database) error {
 		return fmt.Errorf("gauge/number limit to 1: %w", err)
 	}
 	log.Printf("  components: capped query limit to 1 on %d gauge/number documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateValueTypeAvailability renames the retired `number` chart subtype
+// to `value` inside the two type-availability settings.
+//
+// This is NOT cosmetic. `enabled_types` is the allowlist the registry
+// catalog filters against, so a deployment whose stored list still says
+// "number" would filter the newly-registered `value` type OUT — the Value
+// entry would silently vanish from the component-type picker and from the
+// AI's buildable-type catalog until an admin re-enabled it by hand.
+//
+// `known_types` needs the same rename for a subtler reason: it is the
+// ledger the registry seed uses to decide what is NEW on upgrade
+// (registry/seed.go adds anything absent from it to BOTH lists). Renaming
+// the entry keeps the ledger honest — leaving a dead "number" in it would
+// also make the seed treat `value` as brand new and force-enable it even
+// on a deployment where an admin had deliberately disabled the old type.
+//
+// Renaming (rather than appending) is what preserves an existing admin
+// choice: if "number" was absent because it was disabled on purpose,
+// "value" stays absent too.
+//
+// Idempotent: keyed on the presence of the retired name.
+func migrateValueTypeAvailability(ctx context.Context, db *mongo.Database) error {
+	settings := db.Collection("settings")
+	for _, key := range []string{"enabled_types", "known_types"} {
+		var doc struct {
+			Value struct {
+				Charts []string `bson:"charts"`
+			} `bson:"value"`
+		}
+		err := settings.FindOne(ctx, bson.M{"_id": key}).Decode(&doc)
+		if err == mongo.ErrNoDocuments {
+			continue // fresh DB — the seed writes the current names.
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", key, err)
+		}
+
+		renamed := false
+		charts := make([]string, 0, len(doc.Value.Charts))
+		for _, c := range doc.Value.Charts {
+			canonical := registry.CanonicalChartType(c)
+			if canonical != c {
+				renamed = true
+			}
+			// Guard against ending up with both spellings (or a duplicate
+			// `value`) if a list somehow carries each of them already.
+			dup := false
+			for _, existing := range charts {
+				if existing == canonical {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				charts = append(charts, canonical)
+			}
+		}
+		if !renamed {
+			continue
+		}
+		if _, err := settings.UpdateByID(ctx, key, bson.M{"$set": bson.M{
+			"value.charts": charts,
+			"updated":      time.Now(),
+		}}); err != nil {
+			return fmt.Errorf("update %s.charts: %w", key, err)
+		}
+		log.Printf("  settings: %s.charts number → value", key)
+	}
 	return nil
 }
 
