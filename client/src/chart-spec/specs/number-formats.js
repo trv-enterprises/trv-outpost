@@ -25,6 +25,60 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
+/**
+ * True when a raw cell value is usable as a number.
+ *
+ * Deliberately treats a numeric STRING ("42", "3.14") as numeric —
+ * JSON/MQTT/CSV sources routinely deliver numbers as strings, and a
+ * value tile pointed at one should still format it as a number. An
+ * empty/whitespace string is NOT numeric (Number('') === 0 would
+ * otherwise make a blank cell look like a legitimate zero).
+ *
+ * Used by value.js to decide the text-vs-number path when the author
+ * left `valueType` on 'auto'.
+ *
+ * @param {*} raw
+ * @returns {boolean}
+ */
+export function isNumericValue(raw) {
+  if (raw == null || typeof raw === 'boolean') return false;
+  if (typeof raw === 'string' && raw.trim() === '') return false;
+  return toNum(raw) != null;
+}
+
+/**
+ * Apply a text-case transform to an already-stringified value.
+ *
+ * Only used on the value chart's TEXT path — it never touches a numeric
+ * render (re-casing "1.2M" would be meaningless at best). 'none' and any
+ * unrecognized mode return the string untouched.
+ *
+ * `capitalize` uppercases the first letter of the whole string and
+ * leaves the rest alone (so "device offline" → "Device offline", and an
+ * acronym like "OK" survives). `title` uppercases the first letter of
+ * each whitespace-separated word and lowercases the remainder of each,
+ * which is the conventional title-case behavior for labels.
+ *
+ * @param {string} s
+ * @param {string} [mode]  none | upper | lower | capitalize | title
+ * @returns {string}
+ */
+export function applyTextCase(s, mode) {
+  if (!s || !mode || mode === 'none') return s;
+  switch (mode) {
+    case 'upper':
+      return s.toUpperCase();
+    case 'lower':
+      return s.toLowerCase();
+    case 'capitalize':
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    case 'title':
+      return s.replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    default:
+      return s;
+  }
+}
+
 // Plain locale number with an optional fixed decimal count ('auto' = up
 // to 2). Shared by the default + as a fallback.
 function formatPlain(n, decimals) {

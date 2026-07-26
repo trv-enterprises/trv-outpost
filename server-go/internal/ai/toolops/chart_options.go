@@ -110,7 +110,17 @@ func ChartOptionsSchema() map[string]interface{} {
 				"enum":        []string{"auto", "0", "1", "2", "3", "4"},
 				"description": "value chart decimal places. \"auto\" = source precision; \"0\"–\"4\" forces that many. Applies to auto/plain/compact formats; ignored for text values.",
 			},
-			"valueUnit": map[string]interface{}{"type": "string", "description": "value chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\")."},
+			"valueType": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"auto", "number", "text"},
+				"description": "value chart: which family of options applies. Leave unset/\"auto\" — the renderer detects it from the data and is almost always right. Set \"text\" or \"number\" ONLY to override a bad detection (empty sample, mixed column, a stream that hasn't produced a record yet). \"text\" ignores valueFormat/valueDecimals/valueUnit.",
+			},
+			"valueTextCase": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"none", "upper", "lower", "capitalize", "title"},
+				"description": "value chart, TEXT values only: re-case the rendered string. \"none\" (default) leaves it as the source has it — prefer that unless the user asks for a specific case. \"upper\" = ALL CAPS, \"lower\" = lowercase, \"capitalize\" = first letter of the string, \"title\" = First Letter Of Each Word. Display-only; the underlying data is unchanged. Ignored for numeric values.",
+			},
+			"valueUnit": map[string]interface{}{"type": "string", "description": "value chart: unit suffix rendered after the value (e.g. \"%\", \"°C\", \"GB\"). Numeric values only — a text value renders no unit."},
 			"valueSize": map[string]interface{}{
 				"type": "integer",
 				// Constrain to the same discrete size ladder the editor's
@@ -138,7 +148,8 @@ var ChartOptionKeys = map[string]struct{}{
 	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
 	"xAxisLabelRotate": {}, "barOrientation": {}, "barWidthPct": {},
 	"bandedBarStyle":   {}, "valueFormat": {}, "valueDateFormat": {},
-	"valueDecimals": {}, "valueUnit": {}, "valueSize": {}, "title": {},
+	"valueDecimals": {}, "valueUnit": {}, "valueSize": {},
+	"valueType": {}, "valueTextCase": {}, "title": {},
 }
 
 // Retired option-key spellings translate to their current names via

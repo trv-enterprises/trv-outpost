@@ -384,6 +384,8 @@ const DEFAULT_CHART_OPTIONS = {
   valueDecimals: 'auto',     // 'auto' (≤2 places) | '0'..'4' (forced)
   valueFormat: 'auto',       // auto | plain | compact | duration | duration_clock | datetime
   valueDateFormat: 'datetime', // sub-option when valueFormat=datetime
+  valueType: 'auto',         // auto (detect from data) | number | text
+  valueTextCase: 'none',     // none | upper | lower | capitalize | title (text only)
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -4073,7 +4075,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // stored number; unit is free text. The `?? number*`
                       // reads are the accept-old fallback for a record
                       // that escaped the boot migration.
+                      // value_type drives which Display row renders
+                      // (numeric vs text). 'auto' = infer from the data.
+                      value_type: chartOptions.valueType ?? 'auto',
+                      value_text_case: chartOptions.valueTextCase ?? 'none',
+                      // Both size fields bind the SAME stored key — only
+                      // one is ever visible, so the size survives a
+                      // number↔text switch.
                       value_size: String(chartOptions.valueSize ?? chartOptions.numberSize ?? 56),
+                      value_size_text: String(chartOptions.valueSize ?? chartOptions.numberSize ?? 56),
                       value_unit: chartOptions.valueUnit ?? chartOptions.numberUnit ?? '',
                       // Decimal places enum. Stored as a string ('auto' |
                       // '0'..'4'); default 'auto' keeps the auto formatter.
@@ -4247,7 +4257,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         // value: size enum stores back as a Number (legacy
                         // shape); unit is free text. (value_column is handled
                         // by the shared case above.)
+                        case 'value_type':
+                          updateChartOption('valueType', value);
+                          break;
+                        case 'value_text_case':
+                          updateChartOption('valueTextCase', value);
+                          break;
+                        // Both size fields write the same stored key —
+                        // the numeric and text Display rows each carry
+                        // their own field id, but there is one size.
                         case 'value_size':
+                        case 'value_size_text':
                           updateChartOption('valueSize', Number(value));
                           break;
                         case 'value_unit':

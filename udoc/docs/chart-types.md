@@ -66,9 +66,38 @@ The **Value** type shows one cell — the first row's value for the chosen
 column, after any aggregation — at a large font size.
 
 The value may be a **number or text**. A text value (a status string like
-`ONLINE`, a device state, a name) renders as-is, so you don't need custom
-code or a special setting to display one. The numeric options below simply
-don't apply to it; the unit suffix still does.
+`ONLINE`, a device state, a name) renders as-is — no custom code needed.
+
+**Value type** decides which options you get. It defaults to **Auto**, which
+reads the type from your data and is right nearly always. Set it to **Number**
+or **Text** explicitly when detection can't work — an empty sample, a column
+with mixed values, or a live stream that hasn't produced a record yet — so you
+can still reach the options you need.
+
+The options follow that choice:
+
+| Value type | Options shown |
+|---|---|
+| **Number** | Format, Value size, Decimal places, Unit suffix |
+| **Text** | Text case, Value size |
+
+Decimal places and Unit suffix aren't offered for text, because neither
+applies to a string.
+
+### Text case
+
+For text values, **Text case** re-cases the displayed string. It is
+display-only — your source data is untouched.
+
+| Setting | `device offline` renders as |
+|---|---|
+| **As-is (source)** (default) | `device offline` |
+| **ALL CAPS** | `DEVICE OFFLINE` |
+| **lowercase** | `device offline` |
+| **Capitalize First Letter** | `Device offline` |
+| **Title Case** | `Device Offline` |
+
+### Numeric formats
 
 For numeric values, pick the **Format** that matches what the raw column
 actually holds. The format *implies* the unit, so map the raw column and
@@ -87,6 +116,14 @@ choose a format rather than converting in your query:
 the source precision, up to two places). **Unit suffix** appends a
 cosmetic label after the value (`%`, `°C`, `GB`) — it does not scale the
 value.
+
+:::note
+Auto treats a numeric *string* as a number. JSON, MQTT, and CSV sources
+routinely deliver numbers quoted as text (`"42"`), and a tile pointed at one
+should still format it as a number. If you genuinely want such a value shown
+as text — an ID or a version code that shouldn't be locale-formatted — set
+**Value type** to **Text**.
+:::
 
 :::tip
 Give every Value tile on a dashboard the same panel height and the same

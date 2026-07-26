@@ -54,10 +54,31 @@
       "label": "Value Options",
       "subsections": [
         {
-          "id": "value_value_format",
-          "label": "Value format",
-          "helperText": "How to render the value. The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed. Text values render as-is; the numeric formats do not apply to them.",
+          "id": "value_type_group",
+          "label": "Value type",
+          "helperText": "Auto reads the type from the sampled data and is right nearly always. Set it explicitly when the sample is empty, mixed, or a live stream hasn't produced a record yet — the options below follow this choice.",
+          "layout": "single-column",
+          "fields": [
+            {
+              "id": "value_type",
+              "binds": "options.valueType",
+              "type": "enum",
+              "label": "Value type",
+              "default": "auto",
+              "options": [
+                { "value": "auto", "label": "Auto — detect from data" },
+                { "value": "number", "label": "Number" },
+                { "value": "text", "label": "Text" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "value_style_numeric",
+          "label": "Display",
+          "helperText": "The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed.",
           "layout": "row-4",
+          "visibleWhen": { "field": "value_type", "operator": "not_in", "value": ["text"] },
           "fields": [
             {
               "id": "value_format",
@@ -74,29 +95,6 @@
                 { "value": "datetime", "label": "Date / time (value is a timestamp)" }
               ]
             },
-            {
-              "id": "value_date_format",
-              "binds": "options.valueDateFormat",
-              "type": "enum",
-              "label": "Date/time style",
-              "default": "datetime",
-              "helperText": "Only used when Format is Date / time.",
-              "visibleWhen": { "field": "value_format", "operator": "eq", "value": "datetime" },
-              "options": [
-                { "value": "date", "label": "Date (Jan 15)" },
-                { "value": "time", "label": "Time (10:30 AM)" },
-                { "value": "time_seconds", "label": "Time + seconds (10:30:05 AM)" },
-                { "value": "datetime", "label": "Date + time (Jan 15, 10:30 AM)" },
-                { "value": "datetime_seconds", "label": "Date + time + seconds" }
-              ]
-            }
-          ]
-        },
-        {
-          "id": "value_style",
-          "label": "Display",
-          "layout": "row-4",
-          "fields": [
             {
               "id": "value_size",
               "binds": "options.valueSize",
@@ -130,7 +128,7 @@
               "type": "enum",
               "label": "Decimal places",
               "default": "auto",
-              "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals. Does not apply to text values.",
+              "helperText": "Auto keeps the source precision (up to 2 places).",
               "options": [
                 { "value": "auto", "label": "Auto" },
                 { "value": "0", "label": "0" },
@@ -148,6 +146,80 @@
               "default": "",
               "placeholder": "e.g. °F, %, psi",
               "helperText": "Rendered inline after the value, same size."
+            }
+          ]
+        },
+        {
+          "id": "value_date_style",
+          "label": "Date / time style",
+          "layout": "row-4",
+          "visibleWhen": { "field": "value_format", "operator": "eq", "value": "datetime" },
+          "fields": [
+            {
+              "id": "value_date_format",
+              "binds": "options.valueDateFormat",
+              "type": "enum",
+              "label": "Date/time style",
+              "default": "datetime",
+              "helperText": "Only used when Format is Date / time.",
+              "options": [
+                { "value": "date", "label": "Date (Jan 15)" },
+                { "value": "time", "label": "Time (10:30 AM)" },
+                { "value": "time_seconds", "label": "Time + seconds (10:30:05 AM)" },
+                { "value": "datetime", "label": "Date + time (Jan 15, 10:30 AM)" },
+                { "value": "datetime_seconds", "label": "Date + time + seconds" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "value_style_text",
+          "label": "Display",
+          "helperText": "Text values render as-is. Decimal places and unit suffix don't apply to text, so they aren't shown here.",
+          "layout": "row-4",
+          "visibleWhen": { "field": "value_type", "operator": "eq", "value": "text" },
+          "fields": [
+            {
+              "id": "value_text_case",
+              "binds": "options.valueTextCase",
+              "type": "enum",
+              "label": "Text case",
+              "default": "none",
+              "helperText": "Applied to the rendered string only — the source data is unchanged.",
+              "options": [
+                { "value": "none", "label": "As-is (source)" },
+                { "value": "upper", "label": "ALL CAPS" },
+                { "value": "lower", "label": "lowercase" },
+                { "value": "capitalize", "label": "Capitalize First Letter" },
+                { "value": "title", "label": "Title Case" }
+              ]
+            },
+            {
+              "id": "value_size_text",
+              "binds": "options.valueSize",
+              "type": "enum",
+              "label": "Value size (px)",
+              "default": "56",
+              "options": [
+                { "value": "12", "label": "12 px" },
+                { "value": "14", "label": "14 px" },
+                { "value": "16", "label": "16 px" },
+                { "value": "20", "label": "20 px" },
+                { "value": "24", "label": "24 px" },
+                { "value": "32", "label": "32 px" },
+                { "value": "40", "label": "40 px" },
+                { "value": "48", "label": "48 px" },
+                { "value": "56", "label": "56 px" },
+                { "value": "64", "label": "64 px" },
+                { "value": "80", "label": "80 px" },
+                { "value": "96", "label": "96 px" },
+                { "value": "120", "label": "120 px" },
+                { "value": "160", "label": "160 px" },
+                { "value": "200", "label": "200 px" },
+                { "value": "240", "label": "240 px" },
+                { "value": "300", "label": "300 px" },
+                { "value": "400", "label": "400 px" }
+              ]
             }
           ]
         }

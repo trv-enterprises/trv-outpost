@@ -57,7 +57,10 @@ const textFormatted = buildOption(
   data(['state'], [['degraded']]),
 );
 check('numeric format on text → no NaN, string preserved', textFormatted.props.formatted === 'degraded', textFormatted.props.formatted);
-check('unit still applies to a text value', textFormatted.props.unit === '!');
+// Unit is a NUMERIC-only option: the editor hides it on the text Display
+// row, so a stale stored unit must not render where the author can no
+// longer see or clear it. (Asserted again under valueType below.)
+check('unit NOT applied to a text value', textFormatted.props.unit === '', textFormatted.props.unit);
 
 // --- accept-old: un-migrated records still render -------------------------
 const legacyKeys = buildOption(
@@ -72,6 +75,42 @@ const bothKeys = buildOption(vals({ valueUnit: 'NEW', numberUnit: 'OLD', valueSi
 check('value* wins when both spellings present',
   bothKeys.props.unit === 'NEW' && bothKeys.props.size === 24,
   JSON.stringify(bothKeys.props));
+
+// --- valueType override + text case --------------------------------------
+// A numeric-looking value forced to text must NOT be number-formatted.
+const forcedText = buildOption(
+  vals({ valueType: 'text', valueFormat: 'compact' }, ['code']),
+  data(['code'], [[1234567]]),
+);
+check('valueType=text forces the string path', forcedText.props.formatted === '1234567', forcedText.props.formatted);
+
+// A text value forced to number falls back to the auto formatter (no NaN).
+const forcedNum = buildOption(vals({ valueType: 'number' }, ['s']), data(['s'], [['abc']]));
+check('valueType=number on text → no NaN', forcedNum.props.formatted === 'abc', forcedNum.props.formatted);
+
+// Numeric STRINGS are numeric under auto-detection (JSON/MQTT/CSV deliver these).
+check('numeric string auto-detects as number',
+  buildOption(vals({ valueFormat: 'compact' }, ['n']), data(['n'], [['1234567']])).props.formatted === '1.2M');
+check('empty string is NOT numeric',
+  buildOption(vals({}, ['s']), data(['s'], [['']])).props.formatted === '');
+check('boolean is treated as text',
+  buildOption(vals({ valueTextCase: 'upper' }, ['b']), data(['b'], [[false]])).props.formatted === 'FALSE');
+
+var caseCases = [['none','device offline'],['upper','DEVICE OFFLINE'],['lower','device offline'],
+                 ['capitalize','Device offline'],['title','Device Offline']];
+caseCases.forEach(function ([mode, want]) {
+  check('text case ' + mode,
+    buildOption(vals({ valueTextCase: mode }, ['s']), data(['s'], [['device offline']])).props.formatted === want,
+    buildOption(vals({ valueTextCase: mode }, ['s']), data(['s'], [['device offline']])).props.formatted);
+});
+check('text case never applies to a numeric value',
+  buildOption(vals({ valueTextCase: 'upper', valueFormat: 'compact' }, ['n']), data(['n'], [[1234567]])).props.formatted === '1.2M');
+
+// Unit is numeric-only: a stale stored unit must not render on text.
+check('unit suppressed for a text value',
+  buildOption(vals({ valueUnit: '°C' }, ['s']), data(['s'], [['ONLINE']])).props.unit === '');
+check('unit still renders for a numeric value',
+  buildOption(vals({ valueUnit: '°C' }), numeric).props.unit === '°C');
 
 // --- edges ---------------------------------------------------------------
 check('no value column → null', buildOption({ data_mapping: {}, options: {} }, data([], [])) === null);

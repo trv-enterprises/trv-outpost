@@ -14,10 +14,29 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   numbers.** The chart type formerly called **Number** is now **Value**,
   and its value may be a string: a status readout (`ONLINE`, `degraded`),
   a device state, or a name renders as-is at the tile's font size. No
-  custom code and no format setting are needed for text — the numeric
-  formats (plain, compact SI, duration, duration clock, date/time) and
-  the decimal-places setting simply do not apply to it, while the unit
-  suffix still does. Numeric values behave exactly as before.
+  custom code is needed for text. Numeric values behave exactly as
+  before.
+
+- **Value chart: type-aware options + text case.** A **Value type**
+  control (Auto / Number / Text) sits above the Value options and
+  decides which of them apply. **Auto** detects the type from the data
+  and is correct nearly always; the explicit settings are the override
+  for when detection can't work — an empty sample, a mixed column, or a
+  live stream that hasn't produced a record yet — so an author is never
+  locked out of a setting by a bad or missing sample.
+
+  Numeric values keep the full row (Format, Value size, Decimal places,
+  Unit suffix). Text values get **Text case** — As-is, ALL CAPS,
+  lowercase, Capitalize First Letter, or Title Case — plus Value size.
+  Decimal places and Unit suffix are not shown for text, because
+  neither applies to a string. Text case is display-only; the source
+  data is unchanged. Both new options (`valueType`, `valueTextCase`)
+  are exposed to the AI surfaces alongside the rest of the chart
+  options.
+
+  Note that Auto treats a numeric *string* (`"42"`) as a number, since
+  JSON/MQTT/CSV sources routinely quote numbers; set Value type to
+  **Text** when such a value should render verbatim.
 
 ### Changed
 

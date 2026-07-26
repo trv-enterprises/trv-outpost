@@ -17,7 +17,7 @@
 // the migrateNumberChartToValue boot migration.
 
 import { columnIndex, toNumber } from '../option-helpers.js';
-import { formatNumberValue } from './number-formats.js';
+import { formatNumberValue, applyTextCase, isNumericValue } from './number-formats.js';
 
 /**
  * @param {Object} values   { data_mapping, options }
@@ -43,29 +43,50 @@ export function buildOption(values, data, helpers = {}) {
   const idx = columnIndex(data, valueColumn);
   const raw = idx >= 0 && rows.length > 0 ? rows[0][idx] : null;
 
-  // Value formatting: options.valueFormat picks how the raw value is
+  // Which family of options applies: options.valueType is the author's
+  // explicit declaration ('number' | 'text'), defaulting to 'auto' —
+  // detect from the value itself. The explicit setting exists because
+  // detection needs a sample: an empty result, a mixed column, or a
+  // stream that hasn't produced a record yet would otherwise leave the
+  // author unable to reach the options they need.
+  const declaredType = opts.valueType || 'auto';
+  const isText = declaredType === 'text'
+    || (declaredType === 'auto' && raw != null && !isNumericValue(raw));
+
+  // Text path: render the string, optionally re-cased. The numeric
+  // formats and decimals are meaningless here and the editor doesn't
+  // offer them. Unit is NOT applied to text — the editor hides it for
+  // this type, so honoring a stale stored value would render a suffix
+  // the author can no longer see or remove.
+  //
+  // Numeric path: options.valueFormat picks how the raw value is
   // rendered (auto / plain / compact / duration / duration_clock /
   // datetime), with valueDecimals + valueDateFormat as sub-options. The
-  // format implies the value's unit (duration→seconds, etc.), so no query
-  // math is needed. Defaults to 'auto'. A non-numeric raw value renders
-  // as its own string regardless of the numeric format. See
-  // number-formats.js.
+  // format implies the value's unit (duration→seconds, etc.), so no
+  // query math is needed.
   //
   // formatNumberValue keeps its numberX parameter names — it is the
   // shared cell formatter used by the data grids too, so only the STORED
   // option keys renamed. Map value* → the formatter's param names here.
-  const formatted = formatNumberValue(raw, valueColumn, {
-    numberFormat: opts.valueFormat ?? opts.numberFormat,
-    numberDecimals: opts.valueDecimals ?? opts.numberDecimals,
-    numberDateFormat: opts.valueDateFormat ?? opts.numberDateFormat,
-  }, formatCellValue);
+  let formatted;
+  if (isText) {
+    formatted = applyTextCase(raw == null ? '' : String(raw), opts.valueTextCase);
+  } else {
+    formatted = formatNumberValue(raw, valueColumn, {
+      numberFormat: opts.valueFormat ?? opts.numberFormat,
+      numberDecimals: opts.valueDecimals ?? opts.numberDecimals,
+      numberDateFormat: opts.valueDateFormat ?? opts.numberDateFormat,
+    }, formatCellValue);
+  }
 
   // valueSize is stored as a number on the legacy path but the enum
   // field writes a string; coerce and floor at a sane minimum. >0 guard
   // mirrors the default of 56.
   const rawSize = opts.valueSize ?? opts.numberSize;
   const size = toNumber(rawSize, 56) > 0 ? toNumber(rawSize, 56) : 56;
-  const unit = opts.valueUnit ?? opts.numberUnit ?? '';
+  // Unit is a numeric-only option (the editor hides it for text), so a
+  // text value never renders one even if an old record still carries it.
+  const unit = isText ? '' : (opts.valueUnit ?? opts.numberUnit ?? '');
 
   return {
     render: 'value',
