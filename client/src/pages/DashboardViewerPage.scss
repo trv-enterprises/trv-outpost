@@ -1050,6 +1050,27 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       cursor: move;
     }
 
+    // The header must never cover a resize grip. It sits at z-index 5 —
+    // above the edge grips (3) and the corner (4) — and takes pointer events
+    // on hover, so wherever it overlaps a grip, the grip becomes unclickable.
+    //
+    // On a normal panel that's harmless: the header is 28px starting 6px
+    // down, and the grips it would reach are inset clear of it. On a SHORT
+    // panel (1 cell = 32px) the header spans 6→34px — the entire panel — so
+    // every side grip is buried and the panel can only be dragged, never
+    // resized.
+    //
+    // The header is ALSO the drag handle and carries the title + buttons, so
+    // shrinking it to fit would trade a resize bug for a drag one. Instead
+    // leave its box alone and let the grips outrank it: raising the grips
+    // above z-index 5 means the header still fills the panel visually and
+    // still drags from the middle, while the outer few px along each edge
+    // belong to the resize grips.
+    &.is-short-panel {
+      .edit-resize-edge { z-index: 7; }
+      .edit-resize-handle { z-index: 8; }
+    }
+
     // ...but NOT in adornment mode, where hovering a panel means "click to
     // border this panel", not "drag me".
     //
@@ -1097,6 +1118,14 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       &:hover {
         background: linear-gradient(135deg, transparent 40%, #4589ff 40%);
       }
+
+      // On a 1-cell panel the default 16px corner is half the panel's height
+      // and swallows the shortened side grips. 10px still reads as a corner
+      // and still hits comfortably.
+      &.is-compact {
+        width: 10px;
+        height: 10px;
+      }
     }
 
     // Single-axis edge grips: thin hit-strips along the left/right/bottom
@@ -1132,6 +1161,28 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     }
     .edit-resize-edge--left  { left: 0;  &::after { left: 0; } }
     .edit-resize-edge--right { right: 0; &::after { right: 0; } }
+
+    // Short panels (<= 2 cells tall). The default 8px/16px insets reserve
+    // 24px for the top and corner grips — on a 1-cell panel (32px) that
+    // leaves ~8px of grabbable side, and the top grip and corner overlap
+    // most of it, so the side edge is effectively unreachable. Give the
+    // sides nearly the full height back and let the corner keep only what
+    // it needs.
+    // `bottom: 10px` matches the compact corner's height exactly, so the two
+    // sit flush without overlapping.
+    .edit-resize-edge--left.is-short,
+    .edit-resize-edge--right.is-short {
+      top: 2px;
+      bottom: 10px;
+    }
+
+    // Same problem on the other axis for 1-cell-wide panels: the bottom and
+    // top grips inset 8px/16px horizontally, which is most of a 32px width.
+    .edit-resize-edge--bottom.is-narrow,
+    .edit-resize-edge--top.is-narrow {
+      left: 2px;
+      right: 10px;
+    }
 
     // bottom edge: full-width strip (minus the corner), ns-resize cursor.
     .edit-resize-edge--bottom {

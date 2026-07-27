@@ -118,7 +118,11 @@ const ADORNMENT_WIDTHS = [1, 2, 3, 4];
 // models.PanelBorderWidths in server-go.
 const PANEL_BORDER_WIDTHS = [1, 2, 3];
 const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted'];
-const ADORNMENT_DEFAULT_COLOR = '#0f62fe';
+// Carbon red50. Deliberately NOT blue60: edit mode outlines panels in
+// `--cds-focus` (blue), so a blue 1px adornment was almost impossible to
+// distinguish from ordinary edit chrome — the thing the author just added
+// looked like part of the editor.
+const ADORNMENT_DEFAULT_COLOR = '#fa4d56';
 // Smallest border a resize may shrink to.
 const ADORNMENT_MIN_CELLS = 1;
 // Click-vs-drag threshold. A press that never grew past this is a CLICK: on a
@@ -1721,7 +1725,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const panelsCopy = (dashboard?.panels || []).map(p => ({ ...p }));
     setEditablePanels(panelsCopy);
     setOriginalPanels(panelsCopy.map(p => ({ ...p })));
-    setEditableAdornments((dashboard?.adornments || []).map(a => ({ ...a })));
+    // Coerce geometry on load. A rect border with a non-finite x/y/w/h is
+    // permanently stuck — `NaN !== NaN` makes every change-check report true,
+    // so each drag rewrites NaN and the border can never move, while the grip
+    // cursor insists it should. Records can carry NaN from older sessions, so
+    // repair on the way in rather than leaving a dead border on the canvas.
+    // panel_border has no rect by design and is left untouched.
+    setEditableAdornments((dashboard?.adornments || []).map(a => {
+      if (a.kind === 'panel_border') return { ...a };
+      return {
+        ...a,
+        x: Number.isFinite(a.x) ? a.x : 0,
+        y: Number.isFinite(a.y) ? a.y : 0,
+        w: Number.isFinite(a.w) && a.w > 0 ? a.w : 1,
+        h: Number.isFinite(a.h) && a.h > 0 ? a.h : 1,
+      };
+    }));
     // Always start in panel mode — adornment mode is an explicit opt-in.
     setAdornmentMode(false);
     setSelectedAdornmentId(null);
@@ -1947,11 +1966,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       {/* Resize grips: bottom-right corner (both axes) + top/left/right/bottom
           edges (single axis). Left/top move the near edge with the opposite
           edge anchored; right/bottom grow from a fixed top-left. */}
-      <div className="edit-resize-handle" onMouseDown={(e) => startResizing(e, panel, 'corner')} />
-      <div className="edit-resize-edge edit-resize-edge--top" onMouseDown={(e) => startResizing(e, panel, 'top')} />
-      <div className="edit-resize-edge edit-resize-edge--left" onMouseDown={(e) => startResizing(e, panel, 'left')} />
-      <div className="edit-resize-edge edit-resize-edge--right" onMouseDown={(e) => startResizing(e, panel, 'right')} />
-      <div className="edit-resize-edge edit-resize-edge--bottom" onMouseDown={(e) => startResizing(e, panel, 'bottom')} />
+      {/* Short/narrow panels get tighter grip insets. The defaults reserve
+          24px vertically (corner + top grip) and 24px horizontally, which is
+          most of a 1-cell panel (32px) — the side grips end up with almost no
+          hittable length and the edge feels missing. See `.is-short` /
+          `.is-narrow` in the SCSS. */}
+      <div className={`edit-resize-handle ${panel.h <= 2 || panel.w <= 1 ? 'is-compact' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'corner')} />
+      <div className={`edit-resize-edge edit-resize-edge--top ${panel.w <= 1 ? 'is-narrow' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'top')} />
+      <div className={`edit-resize-edge edit-resize-edge--left ${panel.h <= 2 ? 'is-short' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'left')} />
+      <div className={`edit-resize-edge edit-resize-edge--right ${panel.h <= 2 ? 'is-short' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'right')} />
+      <div className={`edit-resize-edge edit-resize-edge--bottom ${panel.w <= 1 ? 'is-narrow' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'bottom')} />
     </>
   );
 
@@ -2378,15 +2402,33 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // ── Drag/resize logic ────────────────────────────────────────────
 
-  const getGridPosition = useCallback((e) => {
+  // Single source of truth for rect→cell geometry.
+  //
+  // `.dashboard-grid` has no padding (see the SCSS for why — the canvas
+  // budget can't spare it), so the cell tracks fill the element's box
+  // exactly and the origin is the rect's own top-left.
+  //
+  // Every gesture — panel drag, panel resize, panel draw, adornment
+  // draw/move/resize — goes through here, so a geometry change lands in one
+  // place instead of six.
+  const gridCellGeometry = useCallback(() => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
-    const cellW = rect.width / maxGridCol;
-    const cellH = rect.height / maxGridRow;
-    const x = Math.floor((e.clientX - rect.left) / cellW);
-    const y = Math.floor((e.clientY - rect.top) / cellH);
-    return { x: Math.max(0, Math.min(x, maxGridCol - 1)), y: Math.max(0, y) };
+    return {
+      originX: rect.left,
+      originY: rect.top,
+      cellW: rect.width / maxGridCol,
+      cellH: rect.height / maxGridRow,
+    };
   }, [maxGridCol, maxGridRow]);
+
+  const getGridPosition = useCallback((e) => {
+    const g = gridCellGeometry();
+    if (!g) return null;
+    const x = Math.floor((e.clientX - g.originX) / g.cellW);
+    const y = Math.floor((e.clientY - g.originY) / g.cellH);
+    return { x: Math.max(0, Math.min(x, maxGridCol - 1)), y: Math.max(0, y) };
+  }, [gridCellGeometry, maxGridCol]);
 
   // Like getGridPosition, but also reports WHERE inside the cell the pointer
   // landed. A cell is 32px of panel plus a 4px gutter, so a press in that
@@ -2399,12 +2441,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // border ON an edge feel arbitrary. Kept separate rather than folded into
   // getGridPosition so the panel gestures keep their existing behavior.
   const getGridPositionDetailed = useCallback((e) => {
-    if (!gridRef.current) return null;
-    const rect = gridRef.current.getBoundingClientRect();
-    const cellW = rect.width / maxGridCol;
-    const cellH = rect.height / maxGridRow;
-    const rawX = (e.clientX - rect.left) / cellW;
-    const rawY = (e.clientY - rect.top) / cellH;
+    const g = gridCellGeometry();
+    if (!g) return null;
+    const rawX = (e.clientX - g.originX) / g.cellW;
+    const rawY = (e.clientY - g.originY) / g.cellH;
     const x = Math.floor(rawX);
     const y = Math.floor(rawY);
     // Fraction of the way through the cell, 0..1. The gutter is the tail of
@@ -2417,7 +2457,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       inGutterX: rawX - x >= GUTTER_START,
       inGutterY: rawY - y >= GUTTER_START,
     };
-  }, [maxGridCol, maxGridRow]);
+  }, [gridCellGeometry, maxGridCol]);
 
   const startDragging = (e, panel) => {
     e.stopPropagation();
@@ -2441,16 +2481,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const startResizing = (e, panel, edge = 'corner') => {
     e.stopPropagation();
     e.preventDefault();
-    if (gridRef.current) {
-      const rect = gridRef.current.getBoundingClientRect();
-      const cellW = rect.width / maxGridCol;
-      const cellH = rect.height / maxGridRow;
+    const g = gridCellGeometry();
+    if (g) {
       // The moving edge's current pixel position, per grip. Left/top move the
       // near edge (x / y); right/bottom/corner move the far edge (x+w / y+h).
       const movingLeft = edge === 'left';
       const movingTop = edge === 'top';
-      const edgePixelX = rect.left + (movingLeft ? panel.x : panel.x + panel.w) * cellW;
-      const edgePixelY = rect.top + (movingTop ? panel.y : panel.y + panel.h) * cellH;
+      const edgePixelX = g.originX + (movingLeft ? panel.x : panel.x + panel.w) * g.cellW;
+      const edgePixelY = g.originY + (movingTop ? panel.y : panel.y + panel.h) * g.cellH;
       const offsetX = e.clientX - edgePixelX;
       const offsetY = e.clientY - edgePixelY;
       setResizingPanel({ id: panel.id, edge, offsetX, offsetY });
@@ -2523,13 +2561,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         if (panel && gridRef.current) {
           const minSize = getMinSizeForPanel(resizingPanel.id);
           // Raw pixel position adjusted by the initial offset for smooth resizing.
-          const rect = gridRef.current.getBoundingClientRect();
+          const g = gridCellGeometry();
+          if (!g) return;
           const adjustedX = e.clientX - (resizingPanel.offsetX || 0);
           const adjustedY = e.clientY - (resizingPanel.offsetY || 0);
-          const cellW = rect.width / maxGridCol;
-          const cellH = rect.height / maxGridRow;
-          const gridX = Math.floor((adjustedX - rect.left) / cellW);
-          const gridY = Math.floor((adjustedY - rect.top) / cellH);
+          const gridX = Math.floor((adjustedX - g.originX) / g.cellW);
+          const gridY = Math.floor((adjustedY - g.originY) / g.cellH);
           const edge = resizingPanel.edge || 'corner';
 
           // Start from the panel's current geometry; each grip mutates only
@@ -2584,11 +2621,23 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition]);
+  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry]);
 
   // ── Adornment (decoration) editing ───────────────────────────────
 
   const updateAdornment = useCallback((adornmentId, updates) => {
+    // Refuse to write a non-finite rect. A single NaN here is permanent
+    // corruption, not a transient glitch: `NaN !== NaN`, so every later
+    // "did it change?" comparison reports true, every drag rewrites NaN, and
+    // the border can never be moved or resized again — it just sits there
+    // while the cursor says it should be dragging. Cheaper to reject the bad
+    // write than to explain the dead border later.
+    for (const k of ['x', 'y', 'w', 'h']) {
+      if (k in updates && !Number.isFinite(updates[k])) {
+        console.warn(`[adornment] refusing non-finite ${k}:`, updates[k], updates);
+        return;
+      }
+    }
     setEditableAdornments(prev =>
       prev.map(a => (a.id === adornmentId ? { ...a, ...updates } : a))
     );
@@ -2643,6 +2692,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const pos = getGridPosition(e);
     if (!pos) return;
 
+    // Only a rect border can be moved or resized. A panel_border has NO
+    // geometry — the server zeroes x/y/w/h for that kind, because it renders
+    // as its panel's own CSS border and follows the panel. Reading
+    // `adornment.w` on one yields undefined, which turns the grab offset into
+    // NaN and poisons every later comparison: the resize then computes NaN
+    // bounds, the "did anything change" guard rejects them, and the edge
+    // appears frozen — grip cursor showing, nothing moving.
+    if (adornment.kind !== 'border') return;
+
     if (edge) {
       // Capture the grab point's pixel offset from the edge being moved, the
       // same way startResizing does for panels. Without it, a grip click that
@@ -2651,14 +2709,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       // half the grip band's grab area.
       let offsetX = 0;
       let offsetY = 0;
-      if (gridRef.current) {
-        const rect = gridRef.current.getBoundingClientRect();
-        const cellW = rect.width / maxGridCol;
-        const cellH = rect.height / maxGridRow;
+      const g = gridCellGeometry();
+      if (g) {
         const movingLeft = edge === 'left';
         const movingTop = edge === 'top';
-        const edgePixelX = rect.left + (movingLeft ? adornment.x : adornment.x + adornment.w) * cellW;
-        const edgePixelY = rect.top + (movingTop ? adornment.y : adornment.y + adornment.h) * cellH;
+        const edgePixelX = g.originX + (movingLeft ? adornment.x : adornment.x + adornment.w) * g.cellW;
+        const edgePixelY = g.originY + (movingTop ? adornment.y : adornment.y + adornment.h) * g.cellH;
         offsetX = e.clientX - edgePixelX;
         offsetY = e.clientY - edgePixelY;
       }
@@ -2670,7 +2726,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         offsetY: pos.y - adornment.y,
       });
     }
-  }, [getGridPosition, maxGridCol, maxGridRow]);
+  }, [getGridPosition, gridCellGeometry]);
 
   // Live preview of a pending shift-click extend: the cell the cursor is over
   // while Shift is held. Null whenever the gesture isn't armed.
@@ -2693,25 +2749,38 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   //
   // Shared by both shrink gestures (shift-click inside, double-click inside)
   // so the two can never disagree about what "shrink to here" means.
-  const collapseToCorner = useCallback((a, pos) => {
+  const collapseToCorner = useCallback((a, pos, target = null) => {
     const right = a.x + a.w - 1;
     const bottom = a.y + a.h - 1;
     if (pos.x < a.x || pos.x > right || pos.y < a.y || pos.y > bottom) return null;
 
     const next = { x: a.x, y: a.y, w: a.w, h: a.h };
 
+    // Snap to the clicked PANEL's outer edge when there is one, not to the
+    // single cell under the cursor. Grow already works this way (it unions
+    // the whole panel rect), so shrinking to a bare cell would cut a panel in
+    // half and leave the two gestures disagreeing about what "the thing you
+    // clicked" means. `target` is the panel rect; without it, fall back to
+    // the cell, which is the right answer on bare grid.
+    const tLeft = target ? target.x : pos.x;
+    const tRight = target ? target.x + target.w - 1 : pos.x;
+    const tTop = target ? target.y : pos.y;
+    const tBottom = target ? target.y + target.h - 1 : pos.y;
+
+    // Distance is still measured from the CURSOR — that's what says which
+    // edge the author is pulling — but the boundary lands on the panel edge.
     if (pos.x - a.x <= right - pos.x) {
-      next.x = pos.x;
-      next.w = right - pos.x + 1;
+      next.x = tLeft;
+      next.w = right - tLeft + 1;
     } else {
-      next.w = pos.x - a.x + 1;
+      next.w = tRight - a.x + 1;
     }
 
     if (pos.y - a.y <= bottom - pos.y) {
-      next.y = pos.y;
-      next.h = bottom - pos.y + 1;
+      next.y = tTop;
+      next.h = bottom - tTop + 1;
     } else {
-      next.h = pos.y - a.y + 1;
+      next.h = tBottom - a.y + 1;
     }
 
     next.w = Math.max(ADORNMENT_MIN_CELLS, next.w);
@@ -2741,14 +2810,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const pos = getGridPosition(e);
     if (!pos) return;
 
-    const next = collapseToCorner(a, pos);
+    // Snap to the panel under the cursor, matching shift-click shrink.
+    const panelEl = e.target?.closest?.('[data-panel-id]');
+    const next = collapseToCorner(
+      a, pos, extendTargetRect(panelEl?.dataset?.panelId || null, pos)
+    );
     if (!next) return;
 
     e.preventDefault();
     updateAdornment(a.id, next);
   }, [
     selectedAdornmentId, editableAdornments, getGridPosition,
-    updateAdornment, collapseToCorner,
+    updateAdornment, collapseToCorner, extendTargetRect,
   ]);
 
   // Track the cursor cell while Shift is held with a border selected, so the
@@ -2859,7 +2932,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           && pos.y >= a.y && pos.y < a.y + a.h;
 
         if (inside) {
-          const next = collapseToCorner(a, pos);
+          // Same target resolution as the grow branch below, so shrinking to
+          // a panel lands on its outer edge rather than mid-panel.
+          const next = collapseToCorner(a, pos, extendTargetRect(panelId, pos));
           if (next) updateAdornment(a.id, next);
           return;
         }
@@ -3015,15 +3090,28 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (resizingAdornment) {
         const a = editableAdornments.find(v => v.id === resizingAdornment.id);
         if (!a || !gridRef.current) return;
+        // Heal a rect that is already corrupt. Records written before the
+        // guard in updateAdornment can carry NaN geometry, which makes the
+        // border permanently undraggable. Snap it back to something sane on
+        // first touch rather than making the user delete and redraw.
+        if (!Number.isFinite(a.x) || !Number.isFinite(a.y)
+            || !Number.isFinite(a.w) || !Number.isFinite(a.h)) {
+          updateAdornment(a.id, {
+            x: Number.isFinite(a.x) ? a.x : 0,
+            y: Number.isFinite(a.y) ? a.y : 0,
+            w: Number.isFinite(a.w) ? a.w : 1,
+            h: Number.isFinite(a.h) ? a.h : 1,
+          });
+          return;
+        }
         const edge = resizingAdornment.edge;
 
         // Subtract the grab offset before flooring to a cell, so the edge
         // tracks the pointer smoothly instead of snapping on mousedown.
-        const rect = gridRef.current.getBoundingClientRect();
-        const cellW = rect.width / maxGridCol;
-        const cellH = rect.height / maxGridRow;
-        const gridX = Math.floor((e.clientX - (resizingAdornment.offsetX || 0) - rect.left) / cellW);
-        const gridY = Math.floor((e.clientY - (resizingAdornment.offsetY || 0) - rect.top) / cellH);
+        const g = gridCellGeometry();
+        if (!g) return;
+        const gridX = Math.floor((e.clientX - (resizingAdornment.offsetX || 0) - g.originX) / g.cellW);
+        const gridY = Math.floor((e.clientY - (resizingAdornment.offsetY || 0) - g.originY) / g.cellH);
 
         const next = { x: a.x, y: a.y, w: a.w, h: a.h };
 
@@ -3112,7 +3200,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
   }, [
     isEditMode, adornmentMode, draggingAdornment, resizingAdornment, drawingAdornment,
-    editableAdornments, editBudgetCols, editBudgetRows, getGridPosition,
+    editableAdornments, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry,
     updateAdornment, lastAdornmentStyle, maxGridCol, maxGridRow,
     attachPanelBorder,
   ]);
@@ -3138,15 +3226,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Resize grips on the selected border. The grip identity travels via a data
   // attribute so the single mousedown handler can tell move from resize.
-  const renderAdornmentChrome = useCallback(() => (
-    <>
-      <div className="adornment-grip adornment-grip--top" data-adornment-grip="top" />
-      <div className="adornment-grip adornment-grip--left" data-adornment-grip="left" />
-      <div className="adornment-grip adornment-grip--right" data-adornment-grip="right" />
-      <div className="adornment-grip adornment-grip--bottom" data-adornment-grip="bottom" />
-      <div className="adornment-grip adornment-grip--corner" data-adornment-grip="corner" />
-    </>
-  ), []);
+  const renderAdornmentChrome = useCallback((a) => {
+    // A panel_border has no rect of its own — it IS its panel's border and
+    // moves with the panel. Offering resize grips on one is a lie: the
+    // cursor changes but there is no geometry to change, so the drag reads
+    // as broken. Only rect borders get chrome.
+    if (a?.kind !== 'border') return null;
+    return (
+      <>
+        <div className="adornment-grip adornment-grip--top" data-adornment-grip="top" />
+        <div className="adornment-grip adornment-grip--left" data-adornment-grip="left" />
+        <div className="adornment-grip adornment-grip--right" data-adornment-grip="right" />
+        <div className="adornment-grip adornment-grip--bottom" data-adornment-grip="bottom" />
+        <div className="adornment-grip adornment-grip--corner" data-adornment-grip="corner" />
+      </>
+    );
+  }, []);
 
   // ── Chart editor / component picker / AI preflight ───────────────
 

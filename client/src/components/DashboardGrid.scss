@@ -14,7 +14,12 @@
   flex: 1 1 0; // Grow, shrink, and use 0 as basis for proper flex overflow
   min-height: 0; // Required for flex overflow to work
   height: 0; // Force flex to control height, not content
-  padding: spacing.$spacing-02; // Match grid gap for consistent outer spacing
+  // Matches the grid gap for consistent outer spacing, and doubles as the
+  // room a border on row 0 / column 0 needs: those draw OUTWARD from the
+  // grid box (negative offsets), so they land in this padding. The widest
+  // border is 4px, so 4px is the minimum that keeps one from being clipped
+  // by the `overflow` below.
+  padding: spacing.$spacing-02;
   overflow: auto; // Default: both-axis scroll (used by "actual" mode)
   background-color: var(--cds-background);
 
@@ -92,6 +97,17 @@
     min-width: 800px;
     position: relative;
     width: fit-content;
+
+    // NO padding ring here — deliberately. The grid box must stay exactly
+    // cols*32 + (cols-1)*4 wide, because the cols/rows formula in
+    // DashboardViewerPage sizes the grid to consume nearly ALL the canvas:
+    // at 2560 wide only ~4px is left over (12px at 1920, 24px at 3840). A
+    // symmetric 4px ring needs 8px horizontally, which usually isn't there,
+    // so padding either overflows the canvas or gets squeezed away.
+    //
+    // The outer edge is instead made mouse-reachable by `.grid-edge-strip`
+    // overlays (see DashboardViewerPage) — absolutely positioned just
+    // outside the grid, so they cost zero layout space at any preset.
 
     // Adornment mode. Panels recede but stay CLICKABLE — clicking one
     // attaches a border to it. Their contents, however, are click-through

@@ -178,6 +178,28 @@ left/top. Double-click does the same thing (shared `collapseToCorner`, so
 the two can't drift). The edge grips remain the single-edge, precise
 path; both click gestures are the coarse one.
 
+**The outer boundary needs overlay strips, not padding.** The grid box
+ends exactly at the last cell (`cols*32 + (cols-1)*4`), so there is no
+grid surface above row 0, left of column 0, or past the last row/column
+— nothing to press, so a border can't be *started* on the outer edge.
+
+Padding cannot fix this. The `cols`/`rows` formulas floor a near-exact
+fit, so the leftover canvas is whatever the modulo happens to be — **4 px
+at 2560 wide**, 12 px at 1920, 24 px at 3840. A symmetric 4 px ring needs
+8 px horizontally, which usually isn't there; adding it overflows the
+canvas or gets squeezed to nothing. Any fix that consumes layout space
+has the same problem, and taking it from `VIEWER_CHROME_H` instead would
+cost a whole column and reflow existing dashboards.
+
+An earlier attempt at overlay hit-strips along the four edges was reverted:
+sitting above the grid's outer cells, they intercepted edge-grip drags and
+shift-clicks near the boundary — trading an inconvenience for two broken
+gestures. Any future attempt needs `pointer-events` handled so the strips
+never shadow the adornment chrome underneath.
+
+The outer boundary is currently reachable only by drawing inside the grid
+and dragging an edge grip outward.
+
 **Gutter presses resolve by drag direction.** `getGridPosition` floors,
 so a press in the 4 px gap between cells lands on whichever cell the
 pixel math picks — arbitrary from the author's point of view, and it
