@@ -121,9 +121,9 @@ const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted'];
 const ADORNMENT_DEFAULT_COLOR = '#0f62fe';
 // Smallest border a resize may shrink to.
 const ADORNMENT_MIN_CELLS = 1;
-// A DRAWN box must span more than a single cell to commit. Drawing starts at
-// 1x1, so without a threshold above that a bare click (no drag) would litter
-// the dashboard with 1-cell borders. Panels use the same guard (w >= 2).
+// Click-vs-drag threshold. A press that never grew past this is a CLICK: on a
+// panel it attaches a panel border, on bare grid it seeds a 1x1 box to build
+// from with shift-click. Anything larger is a drawn box.
 const ADORNMENT_MIN_DRAW_CELLS = 2;
 import { useNotifications } from '../context/NotificationContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
@@ -2641,6 +2641,131 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     }
   }, [getGridPosition, maxGridCol, maxGridRow]);
 
+  // Live preview of a pending shift-click extend: the cell the cursor is over
+  // while Shift is held. Null whenever the gesture isn't armed.
+  const [extendHoverCell, setExtendHoverCell] = useState(null);
+
+  // What a shift-click or double-click is pointing AT: the full rect of the
+  // panel under the cursor, or the single clicked cell when there is none.
+  const extendTargetRect = useCallback((panelId, pos) => {
+    if (panelId) {
+      const panel = editablePanels.find(p => p.id === panelId);
+      if (panel) return { x: panel.x, y: panel.y, w: panel.w, h: panel.h };
+    }
+    return { x: pos.x, y: pos.y, w: 1, h: 1 };
+  }, [editablePanels]);
+
+  // DOUBLE-CLICK SHRINK — collapse the selected border inward so the clicked
+  // cell becomes a CORNER of the result.
+  //
+  // Both the nearest horizontal edge (left or right) and the nearest vertical
+  // edge (top or bottom) move in on the same gesture, so one double-click
+  // fully re-corners the box. Grips remain the way to move a single edge with
+  // precision; this is the coarse fast path.
+  //
+  // Only fires for a click strictly INSIDE the selected border — a
+  // double-click anywhere else is left alone, so it can't silently mangle a
+  // box the author wasn't aiming at.
+  const handleAdornmentDoubleClick = useCallback((e) => {
+    if (!selectedAdornmentId) return;
+    const a = editableAdornments.find(v => v.id === selectedAdornmentId);
+    if (!a || a.kind !== 'border') return;
+
+    const pos = getGridPosition(e);
+    if (!pos) return;
+
+    const right = a.x + a.w - 1;
+    const bottom = a.y + a.h - 1;
+    // Strictly inside. A double-click on the boundary itself would be a
+    // no-op collapse in that axis anyway.
+    if (pos.x < a.x || pos.x > right || pos.y < a.y || pos.y > bottom) return;
+
+    e.preventDefault();
+
+    // Distance to each edge, in cells. The smaller of each pair is the edge
+    // that moves; the opposite one stays anchored.
+    const next = { x: a.x, y: a.y, w: a.w, h: a.h };
+
+    if (pos.x - a.x <= right - pos.x) {
+      // Nearer the left edge → left edge moves in to the clicked column.
+      next.x = pos.x;
+      next.w = right - pos.x + 1;
+    } else {
+      next.w = pos.x - a.x + 1;
+    }
+
+    if (pos.y - a.y <= bottom - pos.y) {
+      next.y = pos.y;
+      next.h = bottom - pos.y + 1;
+    } else {
+      next.h = pos.y - a.y + 1;
+    }
+
+    next.w = Math.max(ADORNMENT_MIN_CELLS, next.w);
+    next.h = Math.max(ADORNMENT_MIN_CELLS, next.h);
+
+    if (next.x !== a.x || next.y !== a.y || next.w !== a.w || next.h !== a.h) {
+      updateAdornment(a.id, next);
+    }
+  }, [selectedAdornmentId, editableAdornments, getGridPosition, updateAdornment]);
+
+  // Track the cursor cell while Shift is held with a border selected, so the
+  // panels a shift-click would consume can be outlined before committing.
+  // Armed only in that exact state — outside it the listeners aren't attached
+  // at all, so this costs nothing during normal editing.
+  useEffect(() => {
+    if (!isEditMode || !adornmentMode || !selectedAdornmentId) return undefined;
+
+    const clear = () => setExtendHoverCell(null);
+
+    const onMove = (e) => {
+      if (!e.shiftKey) { clear(); return; }
+      const pos = getGridPosition(e);
+      if (!pos) { clear(); return; }
+      const panelEl = e.target?.closest?.('[data-panel-id]');
+      setExtendHoverCell({ ...pos, panelId: panelEl?.dataset?.panelId || null });
+    };
+    // Releasing Shift must drop the preview even if the mouse never moves.
+    const onKeyUp = (e) => { if (e.key === 'Shift') clear(); };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', clear);
+      clear();
+    };
+  }, [isEditMode, adornmentMode, selectedAdornmentId, getGridPosition]);
+
+  // Panels that a shift-click at the hovered cell would end up crossing.
+  // Computed from the UNION rect (current border + extend target), so it
+  // shows exactly what the commit will overlap.
+  const adornmentPreviewPanelIds = useMemo(() => {
+    if (!extendHoverCell || !selectedAdornmentId) return null;
+    const a = editableAdornments.find(v => v.id === selectedAdornmentId);
+    if (!a || a.kind !== 'border') return null;
+
+    const target = extendTargetRect(extendHoverCell.panelId, extendHoverCell);
+    const x = Math.min(a.x, target.x);
+    const y = Math.min(a.y, target.y);
+    const right = Math.max(a.x + a.w, target.x + target.w);
+    const bottom = Math.max(a.y + a.h, target.y + target.h);
+
+    const ids = new Set();
+    for (const p of editablePanels) {
+      // Half-open interval overlap on both axes.
+      if (p.x < right && p.x + p.w > x && p.y < bottom && p.y + p.h > y) {
+        ids.add(p.id);
+      }
+    }
+    return ids.size ? ids : null;
+  }, [
+    extendHoverCell, selectedAdornmentId, editableAdornments,
+    editablePanels, extendTargetRect,
+  ]);
+
   // Mouse-down anywhere in the grid while in adornment mode: deselect and
   // start drawing a new border.
   //
@@ -2652,18 +2777,79 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // nest a box inside another border. Anything that should NOT start a draw
   // (edge strips, resize grips) stops propagation before reaching here.
   const handleAdornmentGridMouseDown = useCallback((e) => {
-    setSelectedAdornmentId(null);
     const pos = getGridPosition(e);
     if (!pos) return;
+
     // Record the panel under the press (if any). If the gesture turns out to
     // be a click rather than a drag, mouseup attaches a border to it instead
     // of committing a 1x1 box.
     const panelEl = e.target?.closest?.('[data-panel-id]');
+    const panelId = panelEl?.dataset?.panelId || null;
+
+    // SHIFT-CLICK EXTEND — grow the selected border to swallow the clicked
+    // target, then stop. No draw gesture starts, so the shift-click can't
+    // also leave a stray box behind.
+    //
+    // The target is the whole PANEL when one is under the cursor, otherwise
+    // the single cell. Consuming the panel's full rect is the point of the
+    // gesture: clicking any part of a panel means "include that panel",
+    // which would otherwise take several clicks along its edge.
+    //
+    // Extending across an unrelated panel is allowed and deliberate — a
+    // rectangle can't dodge one, and trying to make it would produce results
+    // that are far harder to explain than an overlap the author can see.
+    if (e.shiftKey && selectedAdornmentId) {
+      const target = extendTargetRect(panelId, pos);
+      const a = editableAdornments.find(v => v.id === selectedAdornmentId);
+      if (a && a.kind === 'border' && target) {
+        const x = Math.min(a.x, target.x);
+        const y = Math.min(a.y, target.y);
+        const right = Math.max(a.x + a.w, target.x + target.w);
+        const bottom = Math.max(a.y + a.h, target.y + target.h);
+        updateAdornment(a.id, {
+          x,
+          y,
+          w: Math.min(right - x, editBudgetCols - x),
+          h: Math.min(bottom - y, editBudgetRows - y),
+        });
+      }
+      return;
+    }
+
+    // The SECOND press of a double-click must not start anything. A
+    // double-click is the shrink gesture, and it arrives as two full
+    // mousedown/mouseup pairs — without this the first pair would already
+    // have deselected the border and seeded a stray 1x1, leaving the
+    // dblclick handler with nothing selected to shrink.
+    //
+    // Deselection is skipped for the whole double-click (detail >= 2), which
+    // is what keeps the target border selected long enough to shrink it.
+    if (e.detail >= 2) return;
+
+    // A press INSIDE the currently-selected border keeps the selection and
+    // never seeds. That interior is the double-click shrink's working area,
+    // and the first press of a shrink would otherwise deselect the target
+    // and drop a stray 1x1 in it. Dragging still works — a real drag from
+    // here draws a nested box on mouseup as before.
+    const sel = selectedAdornmentId
+      ? editableAdornments.find(v => v.id === selectedAdornmentId)
+      : null;
+    const insideSelected = sel && sel.kind === 'border'
+      && pos.x >= sel.x && pos.x < sel.x + sel.w
+      && pos.y >= sel.y && pos.y < sel.y + sel.h;
+
+    if (!insideSelected) setSelectedAdornmentId(null);
+
     setDrawingAdornment({
       startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, w: 1, h: 1,
-      panelId: panelEl?.dataset?.panelId || null,
+      panelId,
+      // Suppresses the 1x1 seed on mouseup; a real drag ignores this.
+      noSeed: !!insideSelected,
     });
-  }, [getGridPosition]);
+  }, [
+    getGridPosition, selectedAdornmentId, editableAdornments, updateAdornment,
+    extendTargetRect, editBudgetCols, editBudgetRows,
+  ]);
 
   // Attach a border to a panel, or select the one it already has. Clicking a
   // bordered panel never removes the border — removal is explicit (Delete or
@@ -2787,11 +2973,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         setResizingAdornment(null);
         return;
       }
-      // Require a real drag in at least one axis — a click that never moved
-      // stays 1x1 and is discarded.
-      if (drawingAdornment
-          && (drawingAdornment.w >= ADORNMENT_MIN_DRAW_CELLS
-              || drawingAdornment.h >= ADORNMENT_MIN_DRAW_CELLS)) {
+      // A click inside the selected border seeds nothing — it's the first
+      // half of a possible double-click shrink. Drags are unaffected.
+      if (isClick && drawingAdornment?.noSeed) {
+        setDrawingAdornment(null);
+        setDraggingAdornment(null);
+        setResizingAdornment(null);
+        return;
+      }
+      // Otherwise commit the box. A click that never moved commits as a 1x1
+      // seed surrounding the clicked cell — the starting point for building a
+      // box by shift-click instead of by dragging. (A click on a PANEL is
+      // handled above and never reaches here, so the two click meanings stay
+      // disjoint.)
+      if (drawingAdornment) {
         const created = {
           // Random suffix, not a bare timestamp: two borders drawn in the
           // same millisecond would otherwise share an id, and selection +
@@ -3676,6 +3871,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           editZoom={zoom}
           editScaleFactor={scaleFactor}
           onGridMouseDown={adornmentMode ? handleAdornmentGridMouseDown : handleGridMouseDown}
+          onGridDoubleClick={adornmentMode ? handleAdornmentDoubleClick : undefined}
+          adornmentPreviewPanelIds={adornmentPreviewPanelIds}
           renderPanelChrome={renderEditPanelChrome}
           gridExtras={editGridExtras}
           // Decorations: editable copy while editing, saved record in view.

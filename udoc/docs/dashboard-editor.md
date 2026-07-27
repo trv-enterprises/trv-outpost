@@ -65,12 +65,39 @@ stop responding to clicks, so every mouse action applies to borders.
 | Action | How |
 |--------|-----|
 | **Draw a border** | Drag out a rectangle on the grid, exactly like drawing a panel |
+| **Start from one cell** | Click an empty cell — a one-cell border appears around it, ready to extend |
+| **Extend** | <kbd>Shift</kbd>-click a cell or panel; the selected border grows to take it in |
+| **Shrink** | Double-click a cell inside the selected border — it becomes the border's new corner |
 | **Select** | Click an existing border |
 | **Move** | Drag a selected border |
 | **Resize** | Drag any edge or the bottom-right corner |
 | **Restyle** | With a border selected, use the color / width / line-style controls that appear in the toolbar |
 | **Delete** | Press <kbd>Delete</kbd>, or click the trash icon in the style controls |
-| **Deselect** | Press <kbd>Esc</kbd> or click empty grid space |
+| **Deselect** | Press <kbd>Esc</kbd> |
+
+### Building a border by clicking
+
+Dragging a rectangle is the quickest way to box in panels that are already
+next to each other. When the group is a more awkward shape, build it up
+instead:
+
+1. Click an empty cell. A one-cell border appears there.
+2. <kbd>Shift</kbd>-click each panel you want inside it. The border grows
+   to the smallest rectangle containing everything you've clicked — so
+   clicking anywhere on a panel takes in that whole panel.
+3. Double-click a cell inside to pull it back in. The cell you click
+   becomes a corner: the nearer left/right edge and the nearer top/bottom
+   edge both move in to meet it.
+
+While you hold <kbd>Shift</kbd>, every panel the border would end up
+crossing is outlined, so you can see what a click will take in before you
+commit to it.
+
+Because a border is always a rectangle, extending it to reach one panel can
+sweep in another that happens to sit between them. That's expected — a
+rectangle can't route around an obstacle, and the alternatives all produce
+shapes that are harder to predict than the overlap you can see. Move the
+panel or the border if the result isn't what you wanted.
 
 Click **Done** to leave adornment mode and return to editing panels.
 Borders save with the rest of the dashboard when you click **Save**.

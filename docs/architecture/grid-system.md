@@ -130,8 +130,10 @@ grid root, multiplied into the chart-header font size via
 ## Adornments (decorations in the gutter)
 
 Adornments are purely visual decorations drawn *over* the panel grid.
-Today there is one kind, `border` — a rectangle that draws its line
-centered in the 4 px gutter between panels. They are stored in their
+There are two kinds: `border` — a rectangle that draws its line in the
+4 px gutter between panels, growing outward from the panels' edge (see
+below) — and `panel_border`, which restyles a single panel's own border
+inward. They are stored in their
 own `adornments` array on the dashboard record, **not** in `panels`:
 they reference no component, render no data, and must never appear in
 panel counts, component-usage lookups, or export dependency walks.
@@ -139,6 +141,49 @@ panel counts, component-usage lookups, or export dependency walks.
 Geometry is a cell rect `{x, y, w, h}` in the same units as a panel.
 The renderer (`AdornmentLayer.jsx`) anchors the line to the panels'
 own edge and grows it **outward** into the gutter.
+
+### Building a border rect
+
+Two ways to get to the same rect, because dragging is awkward once the
+target group isn't already a tidy block:
+
+- **Drag** — the original gesture. Press, drag ≥ `ADORNMENT_MIN_DRAW_CELLS`
+  (2) cells in either axis, release.
+- **Click / shift-click / double-click** — click bare grid to commit a
+  1×1 seed; <kbd>Shift</kbd>-click to union the rect with the click
+  target; double-click inside to collapse it.
+
+The union target is the whole **panel** rect when a panel is under the
+cursor, otherwise the single cell. That's what makes "shift-click the
+panels you want" work in one click per panel rather than one per edge
+cell.
+
+Double-click shrink moves **both** the nearer horizontal edge and the
+nearer vertical edge in to the clicked cell, making it a corner. Ties
+resolve toward left/top. The edge grips remain the single-edge,
+precise path; double-click is the coarse one.
+
+Three collisions this gesture set has to resolve, all in
+`handleAdornmentGridMouseDown` / `handleMouseUp`:
+
+- A click on a **panel** attaches a `panel_border` and returns before the
+  seed branch, so the two click meanings never overlap.
+- A double-click arrives as two full mousedown/mouseup pairs. A press
+  inside the *selected* border sets a transient `noSeed` flag and keeps
+  the selection, so the first press of a shrink can't deselect the target
+  or litter a 1×1 inside it. `e.detail >= 2` short-circuits the second
+  press. `noSeed` is gesture state only — the committed record is built
+  field-by-field and never carries it.
+- The panel expand-modal double-click (`DashboardGrid.jsx`) is suppressed
+  while `adornmentMode` is on, since adornment mode owns that gesture.
+
+Extending across an unrelated panel is **allowed**. A rectangle can't
+route around an obstacle, and every alternative (splitting the box,
+skipping the panel, auto-shrinking) produces geometry that's harder to
+predict than a visible overlap. While <kbd>Shift</kbd> is held the panels
+the union would cross are outlined (`adornment-extend-preview`) so the
+overlap is visible *before* the click. That cue is preview-only — nothing
+about overlap is stored on the adornment.
 
 The cell rect's content box — the panels' footprint — is
 `[x * stride, x * stride + w * stride - GAP]`, where

@@ -87,6 +87,7 @@ function DashboardGrid({
   editZoom = 100,
   editScaleFactor = 1,
   onGridMouseDown = null,
+  onGridDoubleClick = null,
   // Per-panel edit overlay JSX (hover header, drag/resize, add). Receives
   // (panel, { chart, hasText, hasChart, hasContent }).
   renderPanelChrome = null,
@@ -98,6 +99,9 @@ function DashboardGrid({
   // so clicks select/drag borders instead of panels.
   adornmentMode = false,
   selectedAdornmentId = null,
+  // Panel ids a pending shift-click extend would cross. Preview-only — the
+  // committed border stores nothing about what it overlaps.
+  adornmentPreviewPanelIds = null,
   onAdornmentMouseDown = null,
   renderAdornmentChrome = null,
   // Optional external refs so the editor can attach its drag/resize and
@@ -269,6 +273,11 @@ function DashboardGrid({
           ref={gridRef}
           className={`dashboard-grid ${editMode ? 'edit-active' : ''} ${adornmentMode ? 'adornment-active' : ''}`}
           onMouseDown={editMode ? onGridMouseDown : undefined}
+          // Grid-level double-click, not adornment-level: a border's interior
+          // is pointer-events:none, so a double-click inside a box never
+          // reaches the adornment element. The editor resolves the cell and
+          // finds the containing selected border itself.
+          onDoubleClick={editMode ? onGridDoubleClick : undefined}
           style={{
             gridTemplateColumns: `repeat(${maxGridCol}, ${CELL_WIDTH}px)`,
             gridTemplateRows: `repeat(${maxGridRow}, ${CELL_HEIGHT}px)`,
@@ -331,7 +340,7 @@ function DashboardGrid({
                 // panels have no component, so no tooltip. Suppressed in edit
                 // mode (the edit hover header surfaces this instead).
                 title={!editMode && hasChart ? (chart?.name || undefined) : undefined}
-                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''}`}
+                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''} ${adornmentPreviewPanelIds?.has(panel.id) ? 'adornment-extend-preview' : ''}`}
                 style={{
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
@@ -346,7 +355,9 @@ function DashboardGrid({
                     borderStyle: panelBordersById[panel.id].line_style || 'solid',
                   } : {}),
                 }}
-                onDoubleClick={canExpand ? () => onExpandPanel(panel.id) : undefined}
+                // Adornment mode owns the double-click (it shrinks the selected
+                // border), so the expand modal must not also fire on it.
+                onDoubleClick={canExpand && !adornmentMode ? () => onExpandPanel(panel.id) : undefined}
               >
                 {/* Edit chrome (hover header / drag overlay / resize / add) is
                     injected by the editor; null in view/kiosk. */}
@@ -411,6 +422,7 @@ DashboardGrid.propTypes = {
   adornments: PropTypes.array,
   adornmentMode: PropTypes.bool,
   selectedAdornmentId: PropTypes.string,
+  adornmentPreviewPanelIds: PropTypes.instanceOf(Set),
   onAdornmentMouseDown: PropTypes.func,
   renderAdornmentChrome: PropTypes.func,
   chartsMap: PropTypes.object,
@@ -437,6 +449,7 @@ DashboardGrid.propTypes = {
   editZoom: PropTypes.number,
   editScaleFactor: PropTypes.number,
   onGridMouseDown: PropTypes.func,
+  onGridDoubleClick: PropTypes.func,
   renderPanelChrome: PropTypes.func,
   gridExtras: PropTypes.node,
   containerRef: PropTypes.object,

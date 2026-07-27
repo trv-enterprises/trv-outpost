@@ -117,6 +117,16 @@
         pointer-events: none;
       }
 
+      // Panels a pending shift-click extend would cross. Preview only — it
+      // clears the moment Shift is released, and the committed border stores
+      // nothing about what it overlaps. Brighter than the 0.55 dim so the
+      // consumed set reads at a glance.
+      .panel-container.adornment-extend-preview {
+        opacity: 0.85;
+        outline: 1px dashed var(--cds-support-info);
+        outline-offset: -1px;
+      }
+
       // The selected panel border gets the same dashed selection ring the
       // rect adornments use.
       .panel-container.panel-border-selected {
