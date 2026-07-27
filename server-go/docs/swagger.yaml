@@ -1231,6 +1231,8 @@ definitions:
         $ref: '#/definitions/models.SocketConfig'
       sql:
         $ref: '#/definitions/models.SQLConfig'
+      synology:
+        $ref: '#/definitions/models.SynologyDSMConfig'
       tsstore:
         $ref: '#/definitions/models.TSStoreConfig'
     type: object
@@ -1272,6 +1274,7 @@ definitions:
     - edgelake
     - mqtt
     - frigate
+    - synology
     type: string
     x-enum-varnames:
     - ConnectionTypeSQL
@@ -1283,6 +1286,7 @@ definitions:
     - ConnectionTypeEdgeLake
     - ConnectionTypeMQTT
     - ConnectionTypeFrigate
+    - ConnectionTypeSynology
   models.ControlConfig:
     description: Configuration for interactive control components (buttons, toggles,
       etc.)
@@ -3065,6 +3069,31 @@ definitions:
         type: boolean
       variable:
         type: string
+    type: object
+  models.SynologyDSMConfig:
+    properties:
+      insecure_skip_verify:
+        description: |-
+          InsecureSkipVerify disables TLS certificate verification. Same two-gate
+          model as APIConfig — the server-level api.allow_insecure_tls must also
+          be true for this to take effect.
+        type: boolean
+      password:
+        description: DSM password
+        type: string
+      timeout:
+        description: Request timeout in seconds (default 30)
+        type: integer
+      url:
+        description: DSM base URL incl. port, e.g. https://nas.example:5001
+        type: string
+      username:
+        description: DSM account
+        type: string
+    required:
+    - password
+    - url
+    - username
     type: object
   models.SystemConfigResponse:
     properties:

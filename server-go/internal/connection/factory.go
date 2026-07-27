@@ -79,6 +79,18 @@ func (f *ConnectionFactory) CreateFromConfig(ds *models.Connection) (models.Conn
 		}
 		return NewEdgeLakeDataSource(ds.Config.EdgeLake)
 
+	case models.ConnectionTypeSynology:
+		if ds.Config.Synology == nil {
+			return nil, fmt.Errorf("Synology configuration is required")
+		}
+		// Synology is registry-only — there is no legacy DataSource
+		// implementation, so route through the registry adapter.
+		adapter, err := registry.CreateAdapter("api.synology", ds.GetEffectiveConfig())
+		if err != nil {
+			return nil, err
+		}
+		return &RegistryAdapterWrapper{adapter: adapter}, nil
+
 	case models.ConnectionTypeMQTT:
 		if ds.Config.MQTT == nil {
 			return nil, fmt.Errorf("MQTT configuration is required")

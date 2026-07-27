@@ -36,6 +36,7 @@ const TYPE_FILTER_ITEMS = [
   { id: 'mqtt', text: 'MQTT' },
   { id: 'tsstore', text: 'ts-store' },
   { id: 'prometheus', text: 'Prometheus' },
+  { id: 'synology', text: 'Synology DSM' },
   { id: 'edgelake', text: 'EdgeLake' },
   { id: 'frigate', text: 'Frigate' },
 ];

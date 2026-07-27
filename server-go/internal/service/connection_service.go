@@ -553,6 +553,13 @@ func preserveSecrets(newConfig, existingConfig *models.ConnectionConfig) {
 			newConfig.Frigate.Password = existingConfig.Frigate.Password
 		}
 	}
+
+	// Preserve Synology secrets
+	if newConfig.Synology != nil && existingConfig.Synology != nil {
+		if newConfig.Synology.Password == models.SecretMaskedValue {
+			newConfig.Synology.Password = existingConfig.Synology.Password
+		}
+	}
 }
 
 // preserveAllSecretsFromExisting overwrites every secret field on
@@ -597,6 +604,10 @@ func preserveAllSecretsFromExisting(newConfig, existingConfig *models.Connection
 	}
 	if newConfig.Frigate != nil && existingConfig.Frigate != nil {
 		newConfig.Frigate.Password = existingConfig.Frigate.Password
+	}
+	if newConfig.Synology != nil && existingConfig.Synology != nil {
+		newConfig.Synology.URL = existingConfig.Synology.URL
+		newConfig.Synology.Password = existingConfig.Synology.Password
 	}
 }
 
@@ -667,6 +678,11 @@ func stripPlaceholderSecrets(cfg *models.ConnectionConfig) {
 	if cfg.MQTT != nil {
 		if cfg.MQTT.Password == models.SecretMaskedValue {
 			cfg.MQTT.Password = ""
+		}
+	}
+	if cfg.Synology != nil {
+		if cfg.Synology.Password == models.SecretMaskedValue {
+			cfg.Synology.Password = ""
 		}
 	}
 	if cfg.Frigate != nil {
@@ -790,6 +806,8 @@ func (s *ConnectionService) TestConnection(ctx context.Context, req *models.Test
 		response = s.testTSStoreConnection(ctx, req.Config.TSStore)
 	case models.ConnectionTypePrometheus:
 		response = s.testPrometheusConnection(ctx, req.Config.Prometheus)
+	case models.ConnectionTypeSynology:
+		response = s.testSynologyConnection(ctx, req.Config.Synology)
 	case models.ConnectionTypeEdgeLake:
 		response = s.testEdgeLakeConnection(ctx, req.Config.EdgeLake)
 	case models.ConnectionTypeMQTT:
@@ -839,6 +857,8 @@ func (s *ConnectionService) CheckHealth(ctx context.Context, id string) (*models
 		testResponse = s.testTSStoreConnection(ctx, connection.Config.TSStore)
 	case models.ConnectionTypePrometheus:
 		testResponse = s.testPrometheusConnection(ctx, connection.Config.Prometheus)
+	case models.ConnectionTypeSynology:
+		testResponse = s.testSynologyConnection(ctx, connection.Config.Synology)
 	case models.ConnectionTypeEdgeLake:
 		testResponse = s.testEdgeLakeConnection(ctx, connection.Config.EdgeLake)
 	case models.ConnectionTypeMQTT:
@@ -903,6 +923,12 @@ func (s *ConnectionService) validateConfig(dsType models.ConnectionType, config 
 			return fmt.Errorf("Prometheus configuration is required for Prometheus connection")
 		}
 		return s.validatePrometheusConfig(config.Prometheus)
+
+	case models.ConnectionTypeSynology:
+		if config.Synology == nil {
+			return fmt.Errorf("Synology configuration is required for Synology connection")
+		}
+		return s.validateSynologyConfig(config.Synology)
 
 	case models.ConnectionTypeEdgeLake:
 		if config.EdgeLake == nil {
@@ -1044,6 +1070,21 @@ func (s *ConnectionService) validateTSStoreConfig(config *models.TSStoreConfig) 
 func (s *ConnectionService) validatePrometheusConfig(config *models.PrometheusConfig) error {
 	if config.URL == "" {
 		return fmt.Errorf("Prometheus URL is required")
+	}
+	return nil
+}
+
+// validateSynologyConfig validates Synology DSM configuration. Unlike
+// Prometheus, credentials are mandatory — DSM has no anonymous read surface.
+func (s *ConnectionService) validateSynologyConfig(config *models.SynologyDSMConfig) error {
+	if config.URL == "" {
+		return fmt.Errorf("DSM URL is required")
+	}
+	if config.Username == "" {
+		return fmt.Errorf("DSM username is required")
+	}
+	if config.Password == "" {
+		return fmt.Errorf("DSM password is required")
 	}
 	return nil
 }
@@ -1341,6 +1382,49 @@ func (s *ConnectionService) testPrometheusConnection(ctx context.Context, config
 	}
 }
 
+// testSynologyConnection logs in to DSM and reads system info. Synology is
+// registry-only (no legacy DataSource type), so this builds the adapter through
+// the registry rather than a New*DataSource constructor.
+func (s *ConnectionService) testSynologyConnection(ctx context.Context, config *models.SynologyDSMConfig) *models.TestConnectionResponse {
+	if config == nil {
+		return &models.TestConnectionResponse{
+			Success: false,
+			Status:  models.HealthStatusUnhealthy,
+			Message: "Synology configuration is required",
+		}
+	}
+
+	adapter, err := registry.CreateAdapter("api.synology", map[string]interface{}{
+		"url":                  config.URL,
+		"username":             config.Username,
+		"password":             config.Password,
+		"timeout":              config.Timeout,
+		"insecure_skip_verify": config.InsecureSkipVerify,
+	})
+	if err != nil {
+		return &models.TestConnectionResponse{
+			Success: false,
+			Status:  models.HealthStatusUnhealthy,
+			Message: fmt.Sprintf("Failed to create Synology connection: %v", err),
+		}
+	}
+	defer adapter.Close()
+
+	if err := adapter.TestConnection(ctx); err != nil {
+		return &models.TestConnectionResponse{
+			Success: false,
+			Status:  models.HealthStatusUnhealthy,
+			Message: fmt.Sprintf("Connection failed: %v", err),
+		}
+	}
+
+	return &models.TestConnectionResponse{
+		Success: true,
+		Status:  models.HealthStatusHealthy,
+		Message: fmt.Sprintf("Connection successful (%s)", config.URL),
+	}
+}
+
 // testEdgeLakeConnection tests an EdgeLake connection
 func (s *ConnectionService) testEdgeLakeConnection(ctx context.Context, config *models.EdgeLakeConfig) *models.TestConnectionResponse {
 	elDS, err := connection.NewEdgeLakeDataSource(config)
@@ -1600,6 +1684,16 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 	// the schema fetch hits the same REST endpoint either way.
 	if ds.Type == models.ConnectionTypeTSStore {
 		return s.getTSStoreSchema(ctx, ds)
+	}
+
+	// Synology: DSM has no schema endpoint, so sample a small fixed set of
+	// APIs and infer columns from the results — same idea as the ts-store
+	// json-store path. Deliberately scoped to Synology: the other unsupported
+	// types (api / csv / socket / mqtt / edgelake) each need their own probe
+	// strategy and none has been tested, so they keep the explicit
+	// "not supported" answer rather than a guess. See #215.
+	if ds.Type == models.ConnectionTypeSynology {
+		return s.getSynologySchema(ctx, ds)
 	}
 
 	// Only SQL connections support schema discovery
@@ -1965,6 +2059,139 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 	// Build columns. Type comes from the first non-null cell we see in
 	// each column across the sample — JSON has limited type info, but
 	// "number" vs "string" vs "bool" is still useful for the UI.
+	// (Shared with the Synology probe so the typing rules stay identical.)
+	columns := inferColumnsFromResultSet(rs)
+
+	return &models.SchemaResponse{
+		Success: true,
+		Schema: &models.SchemaInfo{
+			Database: ds.Config.TSStore.StoreName,
+			Tables: []models.TableInfo{{
+				Name:    ds.Config.TSStore.StoreName,
+				Columns: columns,
+			}},
+		},
+		Duration: time.Since(startTime).Milliseconds(),
+	}, nil
+}
+
+// synologySchemaProbes are the DSM APIs sampled to build an inferred schema.
+//
+// Unlike ts-store — where a single "newest" query describes the whole store —
+// a Synology connection has no one probe that characterizes it: each component
+// targets a different DSM API, and the columns depend on which one plus the
+// result_path. So we sample a small fixed set of the APIs the adapter is
+// actually useful for and return each as its own "table".
+//
+// Deliberately NOT the full API surface: these are the ones that carry
+// dashboard-worthy data, need no per-component parameters, and are cheap. An
+// author targeting some other API still discovers its columns the same way
+// anyone does — run the query (the editor's Fetch Data, or the agent's query
+// tool) and read result_set.columns.
+var synologySchemaProbes = []struct {
+	Table      string
+	API        string
+	Version    int
+	Method     string
+	ResultPath string
+	Additional string
+}{
+	{"system.utilization", "SYNO.Core.System.Utilization", 1, "get", "", ""},
+	{"system.info", "SYNO.Core.System", 1, "info", "", ""},
+	{"storage.disks", "SYNO.Storage.CGI.Storage", 1, "load_info", "disks", ""},
+	{"services", "SYNO.Core.Service", 3, "get", "service", ""},
+	{"packages", "SYNO.Core.Package", 2, "list", "packages", `["status","description"]`},
+}
+
+// getSynologySchema builds an inferred schema for a Synology DSM connection by
+// sampling a handful of DSM APIs and reading the columns off each ResultSet.
+//
+// DSM exposes no schema endpoint — it is a fixed set of RPC-ish APIs whose
+// response shape is whatever that API returns. This mirrors the ts-store
+// sample-and-infer path: run the adapter's own Query (which already handles
+// flattening + the column union across records) and type-tag from the first
+// non-null cell in each column.
+//
+// A probe that fails is SKIPPED rather than failing the whole call — an
+// account without privilege for one API (DSM returns 105) should still get the
+// schema of the APIs it can read. Only an empty result overall is an error.
+func (s *ConnectionService) getSynologySchema(ctx context.Context, ds *models.Connection) (*models.SchemaResponse, error) {
+	startTime := time.Now()
+
+	if ds.Config.Synology == nil {
+		return &models.SchemaResponse{
+			Success:  false,
+			Error:    "Synology connection has no synology config block",
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+
+	factory := connection.NewConnectionFactory()
+	adapter, err := factory.CreateFromConfig(ds)
+	if err != nil {
+		return &models.SchemaResponse{
+			Success:  false,
+			Error:    fmt.Sprintf("Failed to create Synology connection: %v", err),
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+	defer adapter.Close()
+
+	tables := make([]models.TableInfo, 0, len(synologySchemaProbes))
+	var skipped []string
+
+	for _, probe := range synologySchemaProbes {
+		params := map[string]interface{}{
+			"method":      probe.Method,
+			"version":     probe.Version,
+			"result_path": probe.ResultPath,
+		}
+		if probe.Additional != "" {
+			params["additional"] = probe.Additional
+		}
+
+		rs, err := adapter.Query(ctx, models.Query{Raw: probe.API, Params: params})
+		if err != nil || rs == nil || len(rs.Columns) == 0 {
+			// Most commonly DSM error 105 (this account lacks privilege for
+			// that API). Record it so the caller knows the schema is partial.
+			skipped = append(skipped, probe.Table)
+			continue
+		}
+
+		tables = append(tables, models.TableInfo{
+			Name:    probe.Table,
+			Columns: inferColumnsFromResultSet(rs),
+		})
+	}
+
+	if len(tables) == 0 {
+		msg := "No Synology API returned data — the account may lack privilege for SYNO.Core.* reads (DSM error 105 requires a group with administrator privilege)"
+		return &models.SchemaResponse{
+			Success:  false,
+			Error:    msg,
+			Duration: time.Since(startTime).Milliseconds(),
+		}, nil
+	}
+
+	if len(skipped) > 0 {
+		log.Printf("synology schema: %d/%d probes returned no data (skipped: %v) — schema is partial",
+			len(skipped), len(synologySchemaProbes), skipped)
+	}
+
+	return &models.SchemaResponse{
+		Success: true,
+		Schema: &models.SchemaInfo{
+			Database: ds.Name,
+			Tables:   tables,
+		},
+		Duration: time.Since(startTime).Milliseconds(),
+	}, nil
+}
+
+// inferColumnsFromResultSet type-tags each column from the first non-null cell
+// found in the sample. Extracted from the ts-store schema path so the Synology
+// probe uses the identical typing rules.
+func inferColumnsFromResultSet(rs *models.ResultSet) []models.ColumnInfo {
 	columns := make([]models.ColumnInfo, 0, len(rs.Columns))
 	for colIdx, name := range rs.Columns {
 		typ := "unknown"
@@ -1990,18 +2217,7 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 			Nullable: true,
 		})
 	}
-
-	return &models.SchemaResponse{
-		Success: true,
-		Schema: &models.SchemaInfo{
-			Database: ds.Config.TSStore.StoreName,
-			Tables: []models.TableInfo{{
-				Name:    ds.Config.TSStore.StoreName,
-				Columns: columns,
-			}},
-		},
-		Duration: time.Since(startTime).Milliseconds(),
-	}, nil
+	return columns
 }
 
 // GetPrometheusLabelValues retrieves all values for a specific label from a Prometheus connection

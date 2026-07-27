@@ -535,6 +535,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Query configuration
   const [queryRaw, setQueryRaw] = useState('');
   const [queryType, setQueryType] = useState('sql');
+  // query_config.params as loaded from the stored component, for connection
+  // types the editor has no dedicated params UI for (synology, and any future
+  // adapter whose params carry required dispatch fields).
+  //
+  // The save path builds params per known type (tsstore / prometheus /
+  // edgelake) and previously fell through to `{}` for everything else — which
+  // silently DESTROYED the stored params on any save. That is invisible for
+  // sql (params is already {}) and harmless for tsstore (limit is re-derived
+  // from the UI), but fatal for Synology, where params carries method /
+  // version / result_path / additional: the next query goes out bare and DSM
+  // rejects it with error 120. Round-tripping the loaded value preserves it
+  // until a type gets a real editor surface.
+  const [passthroughQueryParams, setPassthroughQueryParams] = useState(null);
   // Ref to the raw-query TextArea so a variable pill can insert its token at the
   // cursor position rather than only appending.
   const queryRawRef = useRef(null);
@@ -1043,6 +1056,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setSelectedConnectionId(chart.connection_id || chart.connection_id || '');
       setQueryRaw(chart.query_config?.raw || '');
       setQueryType(chart.query_config?.type || 'sql');
+      setPassthroughQueryParams(chart.query_config?.params || null);
       setXAxisColumn(chart.data_mapping?.x_axis || '');
       setXAxisLabel(chart.data_mapping?.x_axis_label || '');
       setXAxisFormat(chart.data_mapping?.x_axis_format || 'auto'); // pre-'auto' charts w/o a stored format now adapt to span
@@ -1723,6 +1737,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
 
   const handleDatasourceChange = (newDatasourceId, connObj = null) => {
     setSelectedConnectionId(newDatasourceId);
+    // Params are connection-type specific (a Synology method/result_path means
+    // nothing to a SQL connection), so a connection switch must NOT carry the
+    // previous connection's passthrough params over.
+    setPassthroughQueryParams(null);
 
     // Resolve the connection: an explicitly-passed object (from the picker
     // modal, which may know connections beyond the editor's capped list) wins;
@@ -2224,6 +2242,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryParams = buildPrometheusParams();
       } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
         queryParams = { database: edgelakeDatabase };
+      } else if (passthroughQueryParams && Object.keys(passthroughQueryParams).length > 0) {
+        // Types with no dedicated params UI (synology, and any future adapter
+        // whose params carry required dispatch fields) must send their STORED
+        // params on preview too. Without this the fetch goes out bare and the
+        // adapter rejects it — for Synology, DSM returns error 120 — so the
+        // preview shows an error and availableColumns is never refreshed,
+        // which in turn makes the dataview column list look permanently stuck
+        // at the saved subset. Same root cause as the save-path fix.
+        queryParams = { ...passthroughQueryParams };
       }
 
       // Must go through apiClient — raw fetch() sends no auth headers
@@ -2511,7 +2538,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
               ? { database: edgelakeDatabase }
-              : {}
+              // Types with no dedicated params UI keep whatever was stored.
+              // Dropping to {} here destroys required dispatch params — see
+              // passthroughQueryParams.
+              : (passthroughQueryParams || {})
       } : null,
       data_mapping: selectedConnectionId ? {
         x_axis: xAxisColumn,

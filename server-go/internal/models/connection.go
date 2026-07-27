@@ -39,6 +39,7 @@ const (
 	ConnectionTypeEdgeLake  ConnectionType = "edgelake"
 	ConnectionTypeMQTT     ConnectionType = "mqtt"
 	ConnectionTypeFrigate  ConnectionType = "frigate"
+	ConnectionTypeSynology ConnectionType = "synology"
 )
 
 // HealthStatus represents the health status of a data source
@@ -222,6 +223,8 @@ func (d *Connection) GetEffectiveTypeID() string {
 		return "stream.mqtt"
 	case ConnectionTypeFrigate:
 		return "nvr.frigate"
+	case ConnectionTypeSynology:
+		return "api.synology"
 	default:
 		return ""
 	}
@@ -305,6 +308,14 @@ func (d *Connection) GetEffectiveConfig() map[string]interface{} {
 			config["password"] = d.Config.Prometheus.Password
 			config["timeout"] = d.Config.Prometheus.Timeout
 		}
+	case ConnectionTypeSynology:
+		if d.Config.Synology != nil {
+			config["url"] = d.Config.Synology.URL
+			config["username"] = d.Config.Synology.Username
+			config["password"] = d.Config.Synology.Password
+			config["timeout"] = d.Config.Synology.Timeout
+			config["insecure_skip_verify"] = d.Config.Synology.InsecureSkipVerify
+		}
 	case ConnectionTypeEdgeLake:
 		if d.Config.EdgeLake != nil {
 			config["host"] = d.Config.EdgeLake.Host
@@ -348,6 +359,24 @@ type ConnectionConfig struct {
 	EdgeLake   *EdgeLakeConfig   `json:"edgelake,omitempty" bson:"edgelake,omitempty"`
 	MQTT       *MQTTConfig       `json:"mqtt,omitempty" bson:"mqtt,omitempty"`
 	Frigate    *FrigateConfig    `json:"frigate,omitempty" bson:"frigate,omitempty"`
+	Synology   *SynologyDSMConfig `json:"synology,omitempty" bson:"synology,omitempty"`
+}
+
+// SynologyDSMConfig represents configuration for a Synology DSM connection.
+//
+// SYNO.Core.* system reads (utilization, storage, services) require an account
+// in a group carrying administrator privilege — a plain DSM user gets error
+// 105. DSM also ships a self-signed certificate, so InsecureSkipVerify is
+// usually required unless the cert has been replaced or trusted.
+type SynologyDSMConfig struct {
+	URL      string `json:"url" bson:"url" binding:"required"`             // DSM base URL incl. port, e.g. https://nas.example:5001
+	Username string `json:"username" bson:"username" binding:"required"`   // DSM account
+	Password string `json:"password" bson:"password" binding:"required"`   // DSM password
+	Timeout  int    `json:"timeout,omitempty" bson:"timeout,omitempty"`    // Request timeout in seconds (default 30)
+	// InsecureSkipVerify disables TLS certificate verification. Same two-gate
+	// model as APIConfig — the server-level api.allow_insecure_tls must also
+	// be true for this to take effect.
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
 }
 
 // SQLConfig represents configuration for SQL databases
@@ -1126,6 +1155,15 @@ func (d *Connection) sanitize(replacement string) *Connection {
 		sanitized.Config.Frigate = &frigateCopy
 	}
 
+	if d.Config.Synology != nil {
+		synoCopy := *d.Config.Synology
+		synoCopy.URL = maskURLUserinfo(synoCopy.URL)
+		if synoCopy.Password != "" {
+			synoCopy.Password = replacement
+		}
+		sanitized.Config.Synology = &synoCopy
+	}
+
 	return &sanitized
 }
 
@@ -1143,6 +1181,8 @@ func (d *Connection) HasSecret(fieldPath string) bool {
 		return d.Config.MQTT != nil && d.Config.MQTT.Password != ""
 	case "frigate.password":
 		return d.Config.Frigate != nil && d.Config.Frigate.Password != ""
+	case "synology.password":
+		return d.Config.Synology != nil && d.Config.Synology.Password != ""
 	default:
 		return false
 	}

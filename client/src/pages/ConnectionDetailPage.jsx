@@ -92,7 +92,8 @@ function ConnectionDetailPage() {
       tsstore: ['store.tsstore'],
       prometheus: ['api.prometheus'],
       edgelake: ['api.edgelake'],
-      frigate: ['frigate']
+      frigate: ['frigate'],
+      synology: ['api.synology']
     };
     return (bareName) => {
       const matchers = families[bareName];
@@ -372,6 +373,19 @@ function ConnectionDetailPage() {
             username: '',
             password: '',
             timeout: 30
+          }
+        };
+      case 'synology':
+        return {
+          synology: {
+            url: '',
+            username: '',
+            password: '',
+            timeout: 30,
+            // DSM ships a self-signed certificate, so verification is off by
+            // default here (unlike other types). The server-level
+            // api.allow_insecure_tls gate still has to be open for it to apply.
+            insecure_skip_verify: true
           }
         };
       case 'edgelake':
@@ -1602,6 +1616,57 @@ function ConnectionDetailPage() {
     );
   };
 
+  const renderSynologyConfig = () => {
+    const synologyConfig = config.synology || {};
+    return (
+      <div className="config-form">
+        <TextInput
+          id="synology-url"
+          labelText="DSM URL"
+          value={synologyConfig.url || ''}
+          onChange={(e) => updateConfig('synology.url', e.target.value)}
+          placeholder="https://nas.example.com:5001"
+          helperText="Base URL of the Synology NAS, including the DSM port (5001 for HTTPS, 5000 for HTTP)"
+        />
+
+        <TextInput
+          id="synology-username"
+          labelText="Username"
+          value={synologyConfig.username || ''}
+          onChange={(e) => updateConfig('synology.username', e.target.value)}
+          placeholder="Enter DSM account name"
+          helperText="System reads (utilization, storage, services) require an account with administrator privilege — a standard DSM user is rejected with error 105"
+        />
+
+        <SecretTextInput
+          id="synology-password"
+          labelText="Password"
+          value={synologyConfig.password || ''}
+          onChange={(e) => updateConfig('synology.password', e.target.value)}
+          placeholder="Enter DSM password"
+          helperText="The account must not have 2-factor authentication enabled — unattended logins cannot supply an OTP"
+        />
+
+        <NumberInput
+          id="synology-timeout"
+          label="Timeout (seconds)"
+          value={synologyConfig.timeout || 30}
+          onChange={(e, { value }) => updateConfig('synology.timeout', value)}
+          min={1}
+          max={300}
+          helperText="Request timeout in seconds"
+        />
+
+        <TLSSkipVerifyToggle
+          id="synology-insecure-skip-verify"
+          isTls={(synologyConfig.url || '').toLowerCase().startsWith('https://')}
+          value={synologyConfig.insecure_skip_verify}
+          onChange={(checked) => updateConfig('synology.insecure_skip_verify', checked)}
+        />
+      </div>
+    );
+  };
+
   const renderEdgeLakeConfig = () => {
     const elConfig = config.edgelake || {};
     return (
@@ -1915,6 +1980,7 @@ function ConnectionDetailPage() {
             {renderConnTypeOption('edgelake', 'EdgeLake', type)}
             {renderConnTypeOption('mqtt', 'MQTT Broker', type)}
             {renderConnTypeOption('frigate', 'Frigate NVR', type)}
+            {renderConnTypeOption('synology', 'Synology DSM', type)}
           </Select>
         </div>
 
@@ -1938,6 +2004,7 @@ function ConnectionDetailPage() {
           {type === 'api' && renderAPIConfig()}
           {type === 'tsstore' && renderTSStoreConfig()}
           {type === 'prometheus' && renderPrometheusConfig()}
+          {type === 'synology' && renderSynologyConfig()}
           {type === 'edgelake' && renderEdgeLakeConfig()}
           {type === 'mqtt' && renderMQTTConfig()}
           {type === 'frigate' && renderFrigateConfig()}
