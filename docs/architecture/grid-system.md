@@ -205,6 +205,35 @@ trading an inconvenience for two broken gestures. The container sits
 by normal bubbling — the container only ever sees presses that missed
 everything else.
 
+### Panel multi-select
+
+<kbd>Shift</kbd>-drag on the grid is a marquee; on release, panels **fully
+enclosed** by it become `selectedPanelIds`. Dragging any member then moves
+the whole set.
+
+Three details that are easy to get wrong:
+
+- **`startDragging` passes shift-presses through.** Panels normally claim
+  their own mousedown, so without that passthrough a marquee could never be
+  started on top of a panel.
+- **Batch moves apply one delta to a grab-time snapshot**, not to live
+  panel state — applying deltas incrementally lets rounding accumulate and
+  the group drifts apart over a long drag.
+- **Clamping is group-wide.** The delta is limited by whichever member hits
+  an edge first, keeping the group rigid; clamping each panel independently
+  squashes the group against the boundary.
+
+An outside click *deselects only* — the click after it draws or selects
+normally. Always-deselect-and-act meant a slightly-missed click both lost
+the selection and left a stray 1-cell panel behind. Same two-stage rule the
+border gestures use.
+
+The selection is transient: cleared on save, on entering adornment mode
+(shift is the marquee in normal mode but extend/shrink in adornment mode —
+one modifier can't mean both), on `enterEditMode` (which re-seeds every
+panel, so a surviving selection would point at the pre-revert set), and on
+leaving edit mode.
+
 ### Line weight under non-uniform fit
 
 "stretch" scales the grid by `scale(sx, sy)` with **different factors per

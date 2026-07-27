@@ -525,6 +525,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [draggingPanel, setDraggingPanel] = useState(null);
   const [resizingPanel, setResizingPanel] = useState(null);
   const [drawingPanel, setDrawingPanel] = useState(null);
+  // Multi-select: ids of panels picked out by a shift-drag marquee, plus the
+  // transient marquee rect while the drag is in flight, plus the in-flight
+  // batch move. Selection survives until an outside click clears it.
+  const [selectedPanelIds, setSelectedPanelIds] = useState([]);
+  const [marquee, setMarquee] = useState(null);
+  const [batchMove, setBatchMove] = useState(null);
   const gridRef = useRef(null);
   const didDragRef = useRef(false); // Distinguishes click from drag in compact mode
 
@@ -1724,6 +1730,13 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const enterEditMode = () => {
     const panelsCopy = (dashboard?.panels || []).map(p => ({ ...p }));
     setEditablePanels(panelsCopy);
+    // Re-seeding replaces every panel, so any selection now points at the
+    // pre-revert set. Clear it — this runs on entering the editor and on
+    // Discard (which is a revert-in-place), and a stale selection there would
+    // arm a batch move over panels the user just discarded.
+    setSelectedPanelIds([]);
+    setMarquee(null);
+    setBatchMove(null);
     setOriginalPanels(panelsCopy.map(p => ({ ...p })));
     // Coerce geometry on load. A rect border with a non-finite x/y/w/h is
     // permanently stuck — `NaN !== NaN` makes every change-check report true,
@@ -1984,6 +1997,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // gridExtras so they render INSIDE the same .dashboard-grid.
   const editGridExtras = (
     <>
+      {marquee && (
+        <div
+          className="marquee-preview"
+          style={{
+            gridColumn: `${marquee.x + 1} / span ${marquee.w}`,
+            gridRow: `${marquee.y + 1} / span ${marquee.h}`,
+          }}
+        />
+      )}
       {drawingPanel && (
         <div
           className="drawing-panel-preview"
@@ -2148,6 +2170,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           // (so reloads/saves target it), and reset the saved-state baseline
           // to what we just persisted so Cancel/Discard compares correctly.
           setOriginalPanels(editablePanels.map(p => ({ ...p })));
+          // A save is a commit point — the selection was a working aid for
+          // the edits just persisted, so it shouldn't linger with its move
+          // affordance still armed.
+          setSelectedPanelIds([]);
           navigate(`/view/dashboards/${created.id}`, {
             replace: true,
             state: { autoEdit: true, fromDesign: true },
@@ -2185,6 +2211,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           // so Cancel/Discard reverts to this version.
           setDashboard((prev) => ({ ...prev, ...payload }));
           setOriginalPanels(editablePanels.map(p => ({ ...p })));
+          // A save is a commit point — the selection was a working aid for
+          // the edits just persisted, so it shouldn't linger with its move
+          // affordance still armed.
+          setSelectedPanelIds([]);
           pushToast({ kind: 'success', title: 'Dashboard saved', duration: 2000 });
           maybeAutoThumbnail();
           return id;
@@ -2460,17 +2490,41 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   }, [gridCellGeometry, maxGridCol]);
 
   const startDragging = (e, panel) => {
+    // A shift-press is the marquee gesture and must reach the grid handler.
+    // Panels normally claim their own presses, so without this passthrough a
+    // selection box could never be started on top of a panel.
+    if (e.shiftKey) return;
+
     e.stopPropagation();
     e.preventDefault();
     didDragRef.current = false;
     const pos = getGridPosition(e);
-    if (pos) {
-      setDraggingPanel({
-        id: panel.id,
-        offsetX: pos.x - panel.x,
-        offsetY: pos.y - panel.y
+    if (!pos) return;
+
+    // Pressing a panel that is part of the current selection moves the WHOLE
+    // selection. Pressing an unselected panel is an ordinary single drag and
+    // drops the selection — "click outside" in the sense that matters, since
+    // the intent is clearly to work on that panel instead.
+    if (selectedPanelIds.length > 0 && selectedPanelIds.includes(panel.id)) {
+      setBatchMove({
+        startX: pos.x,
+        startY: pos.y,
+        // Snapshot the group's geometry at grab time. Deltas are applied to
+        // THIS, not to the live panels, so accumulated rounding can't make
+        // the group creep or drift apart over a long drag.
+        origins: editablePanels
+          .filter(p => selectedPanelIds.includes(p.id))
+          .map(p => ({ id: p.id, x: p.x, y: p.y, w: p.w, h: p.h })),
       });
+      return;
     }
+    if (selectedPanelIds.length > 0) setSelectedPanelIds([]);
+
+    setDraggingPanel({
+      id: panel.id,
+      offsetX: pos.x - panel.x,
+      offsetY: pos.y - panel.y
+    });
   };
 
   // edge: which grip is being dragged — 'corner' (bottom-right, resizes both
@@ -2500,6 +2554,28 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Start drawing a new panel by clicking empty grid space
   const handleGridMouseDown = (e) => {
     if (!isEditMode) return;
+
+    // SHIFT-DRAG = marquee select. Allowed to start anywhere, including over
+    // a panel — panels let shift-presses fall through (see the drag overlay)
+    // precisely so a selection box can start on top of one.
+    if (e.shiftKey) {
+      const pos = getGridPosition(e);
+      if (!pos) return;
+      e.preventDefault();
+      setMarquee({ startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, w: 1, h: 1 });
+      return;
+    }
+
+    // A live selection absorbs the next outside click: it DESELECTS and does
+    // nothing else. Only the click after that draws. Without this, a click
+    // that lands slightly outside the selection both loses the selection and
+    // silently leaves a stray 1-cell panel behind — the same two-stage rule
+    // borders use, so the editor behaves consistently.
+    if (selectedPanelIds.length > 0) {
+      setSelectedPanelIds([]);
+      return;
+    }
+
     // Only trigger on clicks directly on the grid (not on panels)
     if (e.target !== gridRef.current) return;
     const pos = getGridPosition(e);
@@ -2516,7 +2592,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
 
   useEffect(() => {
-    if (!isEditMode || (!draggingPanel && !resizingPanel && !drawingPanel)) return;
+    if (!isEditMode || (!draggingPanel && !resizingPanel && !drawingPanel
+        && !marquee && !batchMove)) return;
 
     // Clamp against the STABLE edit budget, never maxGridCol — maxGridCol
     // grows with panel extent (to render legacy oversized panels), so using
@@ -2529,6 +2606,43 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const handleMouseMove = (e) => {
       const pos = getGridPosition(e);
       if (!pos) return;
+
+      if (marquee) {
+        setMarquee(prev => ({
+          ...prev,
+          x: Math.min(prev.startX, pos.x),
+          y: Math.min(prev.startY, pos.y),
+          w: Math.abs(pos.x - prev.startX) + 1,
+          h: Math.abs(pos.y - prev.startY) + 1,
+        }));
+        return;
+      }
+
+      if (batchMove) {
+        // One delta for the whole group, applied to the grab-time snapshot.
+        // Clamped so the group as a WHOLE stays on canvas: the delta is
+        // limited by whichever member would hit an edge first, which keeps
+        // the panels' relative positions rigid. Clamping each panel
+        // independently would squash the group against the edge instead.
+        let dx = pos.x - batchMove.startX;
+        let dy = pos.y - batchMove.startY;
+        for (const o of batchMove.origins) {
+          dx = Math.max(dx, -o.x);
+          dy = Math.max(dy, -o.y);
+          dx = Math.min(dx, boundCols - (o.x + o.w));
+          dy = Math.min(dy, boundRows - (o.y + o.h));
+        }
+        if (dx === 0 && dy === 0) return;
+        setEditablePanels(prev => prev.map(p => {
+          const o = batchMove.origins.find(v => v.id === p.id);
+          if (!o) return p;
+          const nx = o.x + dx;
+          const ny = o.y + dy;
+          return (nx === p.x && ny === p.y) ? p : { ...p, x: nx, y: ny };
+        }));
+        setEditHasChanges(true);
+        return;
+      }
 
       if (drawingPanel) {
         const x = Math.min(drawingPanel.startX, pos.x);
@@ -2602,6 +2716,24 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
 
     const handleMouseUp = () => {
+      if (marquee) {
+        // FULLY ENCLOSED only — a panel the box merely clips is not selected.
+        // Predictable enough to trust without checking, and it makes "grab
+        // everything in this area" a deliberate act rather than a guess.
+        const mx2 = marquee.x + marquee.w;
+        const my2 = marquee.y + marquee.h;
+        const hits = editablePanels
+          .filter(p => p.x >= marquee.x && p.x + p.w <= mx2
+                    && p.y >= marquee.y && p.y + p.h <= my2)
+          .map(p => p.id);
+        setSelectedPanelIds(hits);
+        setMarquee(null);
+        return;
+      }
+      if (batchMove) {
+        setBatchMove(null);
+        return;
+      }
       if (drawingPanel && drawingPanel.w >= 2 && drawingPanel.h >= 1) {
         addPanel({
           x: drawingPanel.x,
@@ -2621,7 +2753,25 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry]);
+  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, marquee, batchMove, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry]);
+
+  // Escape clears a panel selection. Ignored while typing so it can never
+  // eat an Escape meant for a field or modal.
+  useEffect(() => {
+    if (!isEditMode || selectedPanelIds.length === 0) return undefined;
+    const onKeyDown = (e) => {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'Escape') setSelectedPanelIds([]);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isEditMode, selectedPanelIds]);
+
+  // Leaving edit mode or switching dashboards must not strand a selection.
+  useEffect(() => {
+    if (!isEditMode) setSelectedPanelIds([]);
+  }, [isEditMode]);
 
   // ── Adornment (decoration) editing ───────────────────────────────
 
@@ -2672,6 +2822,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         setDraggingPanel(null);
         setResizingPanel(null);
         setDrawingPanel(null);
+        // Drop any multi-selection too. Shift means "marquee" in normal mode
+        // and "extend/shrink the border" in adornment mode, so a selection
+        // that survived the switch would leave two gestures fighting over the
+        // same modifier — and the selected panels would keep their move
+        // affordance while panels are supposed to be inert.
+        setSelectedPanelIds([]);
+        setMarquee(null);
+        setBatchMove(null);
       } else {
         setSelectedAdornmentId(null);
         setDraggingAdornment(null);
@@ -4064,6 +4222,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           onGridMouseDown={adornmentMode ? handleAdornmentGridMouseDown : handleGridMouseDown}
           onGridDoubleClick={adornmentMode ? handleAdornmentDoubleClick : undefined}
           adornmentPreviewPanelIds={adornmentPreviewPanelIds}
+          selectedPanelIds={selectedPanelIds}
           renderPanelChrome={renderEditPanelChrome}
           gridExtras={editGridExtras}
           // Decorations: editable copy while editing, saved record in view.

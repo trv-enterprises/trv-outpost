@@ -53,6 +53,29 @@ No header bar — components render at full size. The entire panel is a drag tar
 
 Toggle between modes using the icon button in the toolbar.
 
+## Moving several panels at once
+
+Hold <kbd>Shift</kbd> and drag a box across the canvas. On release, every
+panel **completely inside** the box is selected — a panel the box only
+clips is left out, so grabbing a group is deliberate rather than a guess.
+
+Selected panels get a blue outline and stay selected until you clear them.
+While the selection is live:
+
+| Action | Result |
+|--------|--------|
+| **Drag inside the selection** | Moves the whole group together |
+| **Click empty space** | Clears the selection (that click does nothing else) |
+| **Click a panel outside the selection** | Clears the selection and works on that panel |
+| **<kbd>Esc</kbd>** | Clears the selection |
+
+The group moves as a rigid block and stops at the canvas edge — it won't
+squash together when one panel reaches the boundary. Panels may overlap
+after a group move, exactly as they may when dragged one at a time.
+
+The selection is a working aid, not saved state: it clears on save, on
+switching to Borders, and on leaving the editor.
+
 ## Borders (Adornments)
 
 Borders are grouping boxes you draw around related panels — a visual way

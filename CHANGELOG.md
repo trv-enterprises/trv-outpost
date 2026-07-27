@@ -36,7 +36,20 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   outermost panels is live too, so a border can be started on the canvas
   boundary itself.
 
+- **Move several panels at once.** <kbd>Shift</kbd>-drag a box across the
+  canvas to select every panel fully inside it, then drag any one of them to
+  move the whole group as a block. Clicking empty space clears the selection
+  without doing anything else, so a near-miss can't scatter a group you just
+  built; <kbd>Esc</kbd> clears it too. The selection is a working aid, not
+  saved state — it clears on save, on switching to Borders, and on leaving
+  the editor.
+
 ### Fixed
+
+- **A dashboard no longer renders at a fraction of its size.** One adornment
+  with corrupt stored geometry collapsed the grid to a fixed fallback size,
+  leaving a large empty band and pushing the outermost panels off the canvas.
+  Affected dashboards render correctly again with no action needed.
 
 - **Border lines no longer paint across the panel.** A border grew *inward*
   from the panel edge, so the wider the line the more of the chart it

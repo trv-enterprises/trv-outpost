@@ -15,11 +15,6 @@
   min-height: 0; // Required for flex overflow to work
   height: 0; // Force flex to control height, not content
   // Matches the grid gap for consistent outer spacing, and doubles as the
-  // room a border on row 0 / column 0 needs: those draw OUTWARD from the
-  // grid box (negative offsets), so they land in this padding. The widest
-  // border is 4px, so 4px is the minimum that keeps one from being clipped
-  // by the `overflow` below.
-  // Matches the grid gap for consistent outer spacing, and doubles as the
   // room a border on row 0 / column 0 renders into — those draw outward
   // from the grid box (negative offsets), so the line lands in this band.
   //
@@ -170,6 +165,15 @@
       // file's `&:hover .edit-hover-header` reveal rule. A plain
       // `.adornment-active .edit-hover-header` here loses the specificity
       // race (and fights on `display` while the reveal sets `opacity`).
+    }
+
+    // Multi-selected panels. `move` on the whole panel because a press
+    // anywhere inside the selection drags the entire group — the affordance
+    // has to cover the panel, not just its header.
+    .panel-container.is-multi-selected {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
+      cursor: move;
     }
 
     .panel-container {

@@ -815,6 +815,16 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     cursor: crosshair;
   }
 
+  // Shift-drag selection marquee. Distinct from .drawing-panel-preview (which
+  // is solid-ish and blue) so it never reads as "you are creating a panel".
+  .marquee-preview {
+    border: 1px dashed var(--cds-focus);
+    background: rgba(15, 98, 254, 0.06);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 6;
+  }
+
   // Drawing preview while dragging to create a new panel
   .drawing-panel-preview {
     border: 2px dashed #0f62fe;
