@@ -19,8 +19,23 @@
   // grid box (negative offsets), so they land in this padding. The widest
   // border is 4px, so 4px is the minimum that keeps one from being clipped
   // by the `overflow` below.
+  // Matches the grid gap for consistent outer spacing, and doubles as the
+  // room a border on row 0 / column 0 renders into — those draw outward
+  // from the grid box (negative offsets), so the line lands in this band.
+  //
+  // `overflow` below clips at this padding box, so the band must be at
+  // least as wide as the widest border (4px) or the outermost line loses
+  // pixels.
   padding: spacing.$spacing-02;
   overflow: auto; // Default: both-axis scroll (used by "actual" mode)
+
+  // In adornment mode the padding band is a live hit target (see the
+  // container's onMouseDown), so it must advertise itself the same way the
+  // grid does. Without this the crosshair dies the moment the pointer
+  // crosses out of the grid box, which reads as "the edge is dead".
+  &.adornment-active {
+    cursor: crosshair;
+  }
   background-color: var(--cds-background);
 
   // "actual" mode — no scale, native pixels, scroll in both axes.

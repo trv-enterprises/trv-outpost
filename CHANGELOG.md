@@ -32,7 +32,32 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   Starting a drag in the gap *between* two panels now resolves by drag
   direction: the box starts on the side you drag toward, rather than on
   whichever cell the gap happened to round to. This makes it possible to
-  start a border exactly on an edge.
+  start a border exactly on an edge. The narrow band just outside the
+  outermost panels is live too, so a border can be started on the canvas
+  boundary itself.
+
+### Fixed
+
+- **Border lines no longer paint across the panel.** A border grew *inward*
+  from the panel edge, so the wider the line the more of the chart it
+  covered. Lines now sit in the gutter between panels at every width, and a
+  new border defaults to red rather than the blue that made it almost
+  indistinguishable from the editor's own panel outlines.
+
+- **Border line weight is even under "fit to screen" (stretch).** Stretch
+  scales the canvas by a different factor on each axis, which rendered the
+  top and bottom of a border visibly thinner than its sides. Lines are now
+  corrected per axis while keeping their share of the gap between panels, so
+  two adjacent borders still show a gap between them.
+
+- **A border with corrupt stored geometry can no longer become permanently
+  stuck.** Such a border ignored every drag while the cursor insisted it
+  should be moving; affected borders are repaired on load, and the bad
+  values are rejected at the source.
+
+- **Resize edges are grabbable on single-cell panels.** The grips reserved
+  more space for the corner and the hover header than a 1-cell panel has, so
+  the side edges were effectively unreachable.
 
   While <kbd>Shift</kbd> is held, every panel the border would end up
   crossing is outlined, so you can see what a click takes in before

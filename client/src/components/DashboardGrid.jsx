@@ -253,7 +253,22 @@ function DashboardGrid({
   return (
     <div
       ref={containerRef}
-      className={`dashboard-grid-container fit-mode-${editMode ? 'edit' : fitMode}`}
+      className={`dashboard-grid-container fit-mode-${editMode ? 'edit' : fitMode} ${adornmentMode ? 'adornment-active' : ''}`}
+      // Adornment mode only: a press in the container's padding — the band
+      // just outside the grid — starts a border on the boundary cell.
+      //
+      // The grid box ends exactly at the last cell, so without this there is
+      // nothing to press above row 0 or past the last column and a border
+      // can't be STARTED on the outer edge. Padding the grid can't work
+      // either: the canvas leaves as little as 4px of total slack.
+      //
+      // Handled here rather than by overlay strips (tried and reverted):
+      // strips floated ABOVE the grid and shadowed the edge grips, breaking
+      // resize drags. The container sits BELOW the grid, so anything the
+      // grid handles — panels, borders, grips — claims the event first and
+      // this only ever sees presses that missed everything.
+      // getGridPosition clamps out-of-range coords to the first/last cell.
+      onMouseDown={editMode && adornmentMode ? onGridMouseDown : undefined}
     >
       <div
         className="dashboard-grid-scale-wrapper"
@@ -408,6 +423,15 @@ function DashboardGrid({
             selectedId={selectedAdornmentId}
             onSelect={onAdornmentMouseDown}
             renderChrome={renderAdornmentChrome}
+            // "stretch" fit scales the grid by scale(sx, sy) with DIFFERENT
+            // factors per axis, and a CSS border scales with it — so a 4px
+            // line renders 4*sx on the sides and 4*sy on top/bottom, i.e.
+            // visibly uneven. Pass the factors so the layer can counter-scale
+            // each edge back to the width the author actually chose. Same
+            // problem gaugeCounterTransform solves for round charts. 1/1 in
+            // every uniform mode, where this is a no-op.
+            scaleX={editMode ? 1 : (fitTransform.sx || 1)}
+            scaleY={editMode ? 1 : (fitTransform.sy || 1)}
           />
           {/* Edit-only extras (drawing preview, canvas boundary). */}
           {editMode ? gridExtras : null}

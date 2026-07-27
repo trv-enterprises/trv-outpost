@@ -103,7 +103,8 @@ When you start a drag from the narrow gap *between* two panels, the box
 starts on the side you drag **toward** — drag right and the panel to the
 left is left out, drag left and it's the one on the right. That makes it
 possible to start a border exactly on an edge instead of guessing which
-cell the gap belongs to.
+cell the gap belongs to. The thin margin just outside the outermost
+panels works the same way, so a border can start on the canvas edge.
 
 With several borders on a dashboard, click any border's **edge** to make
 it the selected one — that works whether or not something else is

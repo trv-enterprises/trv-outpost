@@ -115,13 +115,40 @@ function AdornmentLayer({
   selectedId = null,
   onSelect = null,
   renderChrome = null,
+  scaleX = 1,
+  scaleY = 1,
 }) {
   if (!adornments || adornments.length === 0) return null;
 
   return (
     <div className={`adornment-layer ${interactive ? 'is-interactive' : ''}`}>
       {adornments.map((a) => {
+        const line = a.width || 2;
+        // Correct only the ASYMMETRY between axes, not the overall scale.
+        //
+        // Under "stretch" the grid is scaled by scale(sx, sy) with different
+        // factors, so a 4px border renders 4*sx on the sides and 4*sy on
+        // top/bottom — visibly uneven. Normalizing each axis against the mean
+        // evens them out while leaving the border's share of the gutter
+        // unchanged.
+        //
+        // Dividing by sx/sy outright (the obvious version) is WRONG: when the
+        // scale is below 1 it makes the line thicker in grid coordinates, so
+        // two adjacent boxes eat into the 4px gutter from both sides and the
+        // gap between them closes — visible even at ratios near 1, where the
+        // gutter itself has barely shrunk. Borders must scale WITH the canvas
+        // like everything else; only the axis difference is the artifact.
+        const sx = scaleX || 1;
+        const sy = scaleY || 1;
+        const mean = (sx + sy) / 2;
+        const lineX = line * (mean / sx);
+        const lineY = line * (mean / sy);
+        // adornmentRect offsets by the nominal line width; re-offset with the
+        // per-axis values so the line's INNER edge still sits flush against
+        // the panel rather than drifting by the scale difference.
         const rect = adornmentRect(a);
+        const left = rect.left + line - lineX;
+        const top = rect.top + line - lineY;
         const isSelected = interactive && selectedId === a.id;
 
         return (
@@ -129,12 +156,16 @@ function AdornmentLayer({
             key={a.id}
             className={`adornment adornment--${a.kind || 'border'} ${isSelected ? 'is-selected' : ''}`}
             style={{
-              left: `${rect.left}px`,
-              top: `${rect.top}px`,
+              left: `${left}px`,
+              top: `${top}px`,
               width: `${rect.width}px`,
               height: `${rect.height}px`,
               borderStyle: a.line_style || 'solid',
-              borderWidth: `${a.width || 2}px`,
+              // Per-axis widths: left/right counter-scale on X, top/bottom on Y.
+              borderLeftWidth: `${lineX}px`,
+              borderRightWidth: `${lineX}px`,
+              borderTopWidth: `${lineY}px`,
+              borderBottomWidth: `${lineY}px`,
               // Carbon red50 — matches ADORNMENT_DEFAULT_COLOR in
               // DashboardViewerPage. Distinct from the blue edit chrome.
               borderColor: a.color || '#fa4d56',
@@ -206,6 +237,10 @@ AdornmentLayer.propTypes = {
   selectedId: PropTypes.string,
   onSelect: PropTypes.func,
   renderChrome: PropTypes.func,
+  // Per-axis fit scale. Only "stretch" makes these differ; the layer divides
+  // border widths by them so lines render evenly on all four sides.
+  scaleX: PropTypes.number,
+  scaleY: PropTypes.number,
 };
 
 export default AdornmentLayer;

@@ -191,14 +191,44 @@ canvas or gets squeezed to nothing. Any fix that consumes layout space
 has the same problem, and taking it from `VIEWER_CHROME_H` instead would
 cost a whole column and reflow existing dashboards.
 
-An earlier attempt at overlay hit-strips along the four edges was reverted:
-sitting above the grid's outer cells, they intercepted edge-grip drags and
-shift-clicks near the boundary — trading an inconvenience for two broken
-gestures. Any future attempt needs `pointer-events` handled so the strips
-never shadow the adornment chrome underneath.
+The press is instead handled on `.dashboard-grid-container`, whose 4 px
+padding is the band just outside the grid. In adornment mode that element
+takes the same `onGridMouseDown` and wears `cursor: crosshair`, and
+`getGridPosition`'s existing clamp resolves the out-of-range coordinate to
+the boundary cell.
 
-The outer boundary is currently reachable only by drawing inside the grid
-and dragging an edge grip outward.
+Handling it on the CONTAINER rather than on overlay strips is the whole
+trick. An earlier attempt floated hit-strips above the grid's outer cells;
+they intercepted edge-grip drags and shift-clicks near the boundary,
+trading an inconvenience for two broken gestures. The container sits
+*below* the grid, so panels, borders, and grips all claim the event first
+by normal bubbling — the container only ever sees presses that missed
+everything else.
+
+### Line weight under non-uniform fit
+
+"stretch" scales the grid by `scale(sx, sy)` with **different factors per
+axis**, and a CSS border scales with everything else — so a 4 px line
+renders `4*sx` on the sides and `4*sy` on top and bottom. `AdornmentLayer`
+corrects this by normalizing each axis against the **mean** of the two:
+
+```
+lineX = width * (mean / sx)      lineY = width * (mean / sy)
+```
+
+Normalize against the mean, **not** by dividing by `sx`/`sy` outright. The
+divide-outright version renders each axis at exactly the nominal width, but
+when a scale factor is below 1 it makes the line *thicker in grid
+coordinates* — two adjacent boxes then eat the shared 4 px gutter from both
+sides and the gap between them closes. That shows up even at ratios near 1,
+where the gutter itself has barely shrunk. Borders must scale WITH the
+canvas like everything else; only the axis *difference* is the artifact.
+
+The position offset uses the same per-axis values, so the line's inner edge
+stays flush against the panel instead of drifting by the scale difference.
+Both factors are 1 in every uniform mode, making the whole thing a no-op
+there. Panel borders (`panel_border`) are plain CSS borders on grid items
+and are still subject to the original distortion.
 
 **Gutter presses resolve by drag direction.** `getGridPosition` floors,
 so a press in the 4 px gap between cells lands on whichever cell the
