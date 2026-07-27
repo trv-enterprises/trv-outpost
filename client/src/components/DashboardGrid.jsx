@@ -102,6 +102,9 @@ function DashboardGrid({
   // Panel ids a pending shift-click extend would cross. Preview-only — the
   // committed border stores nothing about what it overlaps.
   adornmentPreviewPanelIds = null,
+  // Panels picked out by a shift-drag marquee. Dragging any one of them
+  // moves the whole set until the selection is cleared.
+  selectedPanelIds = null,
   onAdornmentMouseDown = null,
   renderAdornmentChrome = null,
   // Optional external refs so the editor can attach its drag/resize and
@@ -137,8 +140,16 @@ function DashboardGrid({
   }, [adornments]);
 
   // Only rect-positioned adornments belong in the overlay layer.
+  // Rect borders only, and only ones with usable geometry. A record carrying
+  // NaN x/y/w/h would render at a nonsense position anyway; dropping it here
+  // also keeps it out of the extent maths below, where a single NaN collapses
+  // the grid to its fallback size (see extentOf).
   const rectAdornments = useMemo(
-    () => (adornments || []).filter((a) => a.kind !== 'panel_border'),
+    () => (adornments || []).filter((a) => (
+      a.kind !== 'panel_border'
+      && Number.isFinite(a.x) && Number.isFinite(a.y)
+      && Number.isFinite(a.w) && Number.isFinite(a.h)
+    )),
     [adornments]
   );
 
@@ -147,19 +158,31 @@ function DashboardGrid({
   // grid's fit-tight box and get clipped (and, in the scaled fit modes,
   // shift the scale factor it was authored against). panel_border kinds are
   // excluded — they live inside a panel, so they can never extend the grid.
+  // Extent helper. Non-finite geometry is SKIPPED rather than folded in:
+  // `Math.max(73, NaN)` is NaN, which then fails the `|| 60` guard below and
+  // collapses the whole grid to the 60-cell fallback. A single adornment with
+  // a corrupt rect therefore shrank the entire dashboard — panels past column
+  // 60 fell outside the grid box, and every fit mode scaled against 60
+  // columns instead of the real content, leaving a large empty band.
+  //
+  // Guarding here rather than only at load: view and kiosk render straight
+  // from the server record and never pass through the editor's coercion.
+  const extentOf = (items, lo, size) => items.reduce((max, it) => {
+    const a = it[lo];
+    const b = it[size];
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return max;
+    return Math.max(max, a + b);
+  }, 0);
+
   const maxGridCol = useMemo(() => {
     if (editMode && editGridCols) return editGridCols;
     if (!hasPanels) return 60;
-    const panelExtent = panels.reduce((max, p) => Math.max(max, p.x + p.w), 0);
-    const adornExtent = rectAdornments.reduce((max, a) => Math.max(max, a.x + a.w), 0);
-    return Math.max(panelExtent, adornExtent) || 60;
+    return Math.max(extentOf(panels, 'x', 'w'), extentOf(rectAdornments, 'x', 'w')) || 60;
   }, [editMode, editGridCols, panels, rectAdornments, hasPanels]);
   const maxGridRow = useMemo(() => {
     if (editMode && editGridRows) return editGridRows;
     if (!hasPanels) return 60;
-    const panelExtent = panels.reduce((max, p) => Math.max(max, p.y + p.h), 0);
-    const adornExtent = rectAdornments.reduce((max, a) => Math.max(max, a.y + a.h), 0);
-    return Math.max(panelExtent, adornExtent) || 60;
+    return Math.max(extentOf(panels, 'y', 'h'), extentOf(rectAdornments, 'y', 'h')) || 60;
   }, [editMode, editGridRows, panels, rectAdornments, hasPanels]);
 
   // Measure the container so fit-mode can scale to it. Double-rAF lets CSS class
@@ -355,7 +378,7 @@ function DashboardGrid({
                 // panels have no component, so no tooltip. Suppressed in edit
                 // mode (the edit hover header surfaces this instead).
                 title={!editMode && hasChart ? (chart?.name || undefined) : undefined}
-                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''} ${adornmentPreviewPanelIds?.has(panel.id) ? 'adornment-extend-preview' : ''} ${editMode && (panel.h <= 2 || panel.w <= 1) ? 'is-short-panel' : ''}`}
+                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''} ${adornmentPreviewPanelIds?.has(panel.id) ? 'adornment-extend-preview' : ''} ${editMode && (panel.h <= 2 || panel.w <= 1) ? 'is-short-panel' : ''} ${selectedPanelIds?.includes(panel.id) ? 'is-multi-selected' : ''}`}
                 style={{
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
@@ -447,6 +470,7 @@ DashboardGrid.propTypes = {
   adornmentMode: PropTypes.bool,
   selectedAdornmentId: PropTypes.string,
   adornmentPreviewPanelIds: PropTypes.instanceOf(Set),
+  selectedPanelIds: PropTypes.arrayOf(PropTypes.string),
   onAdornmentMouseDown: PropTypes.func,
   renderAdornmentChrome: PropTypes.func,
   chartsMap: PropTypes.object,
