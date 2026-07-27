@@ -44,8 +44,18 @@
   // The inner .dashboard-grid-scale-wrapper has an explicit width/height
   // matching the post-scale size (set inline from fitTransform.scaledW/H),
   // so flex centering can position it correctly.
+  //
+  // `clip` rather than `hidden`, with a margin: both clip, but
+  // `overflow-clip-margin` extends the clip rectangle outward, so a border on
+  // row 0 / column 0 — which paints at a NEGATIVE offset, outside the grid
+  // box, by design — survives instead of being sliced off. `hidden` has no
+  // such control, which is why those edges vanished in the viewer while the
+  // editor kept them: the editor's container scrolls (`overflow: auto`), and
+  // a scrollable box lets overflow bleed into its padding. 8px comfortably
+  // covers the 4px widest border.
   &.fit-mode-window {
-    overflow: hidden;
+    overflow: clip;
+    overflow-clip-margin: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -86,8 +96,11 @@
 
   // "stretch" mode — legacy fill-both-axes behavior. Distorts round charts.
   // Kept for back-compat with users who liked the old fit-to-screen toggle.
+  // Same clip-with-margin as window mode — see the note there. A row-0 or
+  // column-0 border paints outside the grid box and `hidden` sliced it off.
   &.fit-mode-stretch {
-    overflow: hidden;
+    overflow: clip;
+    overflow-clip-margin: 8px;
   }
 
   // Wrapper that reserves post-scale size for flex centering and scroll.
@@ -95,6 +108,12 @@
   // native size; in the other modes the inline style sets width/height.
   .dashboard-grid-scale-wrapper {
     flex-shrink: 0;
+    // Deliberately NOT padded. This wrapper is sized to the scaled grid
+    // exactly, and a row-0 / column-0 border overhangs it — but padding here
+    // would shift the grid's origin and drag the absolutely-positioned
+    // boundary lines below along with it. The overhang is handled by the
+    // container's `overflow-clip-margin` instead.
+    //
     // Anchor for the un-scaled TARGET (blue) boundary lines, which are
     // absolutely positioned here (siblings of .dashboard-grid) so they
     // stay fixed at the target extent while the grid content scales.
