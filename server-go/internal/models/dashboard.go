@@ -138,8 +138,9 @@ type DashboardAdornment struct {
 	// dropped on save (see sanitizeAdornments) so deleting a panel cannot
 	// leave an orphan behind.
 	PanelID string `json:"panel_id,omitempty" bson:"panel_id,omitempty"`
-	// Color is a hex string ("#0f62fe") chosen from the same swatch palette the
-	// value-chart text rules use.
+	// Color is a hex string ("#fa4d56") chosen from the same swatch palette the
+	// value-chart text rules use. The server assigns no default; the client
+	// supplies one (Carbon red50) on create.
 	Color string `json:"color,omitempty" bson:"color,omitempty"`
 	// Width is the line width in px — must be one of the values returned by
 	// WidthsForAdornmentKind for this adornment's Kind.

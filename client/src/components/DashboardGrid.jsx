@@ -340,7 +340,7 @@ function DashboardGrid({
                 // panels have no component, so no tooltip. Suppressed in edit
                 // mode (the edit hover header surfaces this instead).
                 title={!editMode && hasChart ? (chart?.name || undefined) : undefined}
-                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''} ${adornmentPreviewPanelIds?.has(panel.id) ? 'adornment-extend-preview' : ''}`}
+                className={`panel-container ${hasContent ? 'has-component' : 'empty-panel'} ${hasText ? 'text-panel' : ''} ${chart?.control_config?.control_type === 'text_label' ? 'text-label-panel' : ''} ${editMode ? 'edit-mode' : ''} ${panelBordersById[panel.id] ? 'has-panel-border' : ''} ${adornmentMode && selectedAdornmentId && panelBordersById[panel.id]?.id === selectedAdornmentId ? 'panel-border-selected' : ''} ${adornmentPreviewPanelIds?.has(panel.id) ? 'adornment-extend-preview' : ''} ${editMode && (panel.h <= 2 || panel.w <= 1) ? 'is-short-panel' : ''}`}
                 style={{
                   gridColumn: `${panel.x + 1} / span ${panel.w}`,
                   gridRow: `${panel.y + 1} / span ${panel.h}`,
@@ -350,7 +350,7 @@ function DashboardGrid({
                   // bordered neighbours stay separated by the gutter. Only
                   // widths 1–3 are offered, so it never reaches the content.
                   ...(panelBordersById[panel.id] ? {
-                    borderColor: panelBordersById[panel.id].color || '#0f62fe',
+                    borderColor: panelBordersById[panel.id].color || '#fa4d56',
                     borderWidth: `${panelBordersById[panel.id].width || 1}px`,
                     borderStyle: panelBordersById[panel.id].line_style || 'solid',
                   } : {}),
