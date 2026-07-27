@@ -150,7 +150,11 @@
 
         &:hover {
           opacity: 0.8;
-          outline: 1px dashed var(--cds-focus);
+          // Neutral, NOT blue. Blue reads as an author-applied border, so
+          // editor chrome must not use it — otherwise hovering a panel looks
+          // like it just gained a border. See the note on
+          // .panel-container.is-multi-selected below.
+          outline: 1px dashed var(--cds-text-secondary);
           outline-offset: -1px;
         }
       }
@@ -172,10 +176,12 @@
         outline-offset: -1px;
       }
 
-      // The selected panel border gets the same dashed selection ring the
-      // rect adornments use.
+      // Selection ring for a panel_border. Offset OUTWARD (+2px) and dashed
+      // so it reads as a selection marker sitting outside the panel, never
+      // as the border itself — the border it marks is drawn on the panel's
+      // own edge and is whatever colour the author chose.
       .panel-container.panel-border-selected {
-        outline: 1px dashed var(--cds-focus);
+        outline: 1px dashed var(--cds-text-secondary);
         outline-offset: 2px;
       }
 
@@ -189,8 +195,17 @@
     // Multi-selected panels. `move` on the whole panel because a press
     // anywhere inside the selection drags the entire group — the affordance
     // has to cover the panel, not just its header.
+    // Multi-selected panels. `move` on the whole panel because a press
+    // anywhere inside the selection drags the entire group — the affordance
+    // has to cover the panel, not just its header.
+    //
+    // DASHED and neutral-coloured, deliberately. A solid blue ring is
+    // indistinguishable from an author-applied border, which made it
+    // impossible to tell at a glance whether a panel had a border or was
+    // merely selected. Blue belongs to adornments; editor chrome is dashed
+    // and neutral so the two never compete.
     .panel-container.is-multi-selected {
-      outline: 2px solid var(--cds-focus);
+      outline: 2px dashed var(--cds-text-primary);
       outline-offset: -2px;
       cursor: move;
     }
