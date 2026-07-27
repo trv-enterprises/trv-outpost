@@ -153,15 +153,43 @@ target group isn't already a tidy block:
   1×1 seed; <kbd>Shift</kbd>-click to union the rect with the click
   target; double-click inside to collapse it.
 
+Plain click is deliberately **not** overloaded three ways. With a
+selection live it deselects; only from a clean slate does it seed. The
+alternative — always seeding — makes clearing a selection drop a stray
+1×1, which is exactly the move needed to get from one border to another.
+Switching between borders needs no gesture of its own: edge hit strips
+render for *every* border, not just the selected one, so clicking another
+border's edge selects it directly.
+
 The union target is the whole **panel** rect when a panel is under the
 cursor, otherwise the single cell. That's what makes "shift-click the
 panels you want" work in one click per panel rather than one per edge
 cell.
 
-Double-click shrink moves **both** the nearer horizontal edge and the
-nearer vertical edge in to the clicked cell, making it a corner. Ties
-resolve toward left/top. The edge grips remain the single-edge,
-precise path; double-click is the coarse one.
+<kbd>Shift</kbd>-click has ONE rule: it sets the boundary to the clicked
+cell. Outside the rect that's a union (grow); inside it's a collapse
+(shrink). Splitting those across two different gestures made the inside
+click a silent no-op — a union with a cell already contained changes
+nothing — which reads as a broken gesture rather than a deliberate one.
+
+Shrink moves **both** the nearer horizontal edge and the nearer vertical
+edge in to the clicked cell, making it a corner. Ties resolve toward
+left/top. Double-click does the same thing (shared `collapseToCorner`, so
+the two can't drift). The edge grips remain the single-edge, precise
+path; both click gestures are the coarse one.
+
+**Gutter presses resolve by drag direction.** `getGridPosition` floors,
+so a press in the 4 px gap between cells lands on whichever cell the
+pixel math picks — arbitrary from the author's point of view, and it
+makes starting a border *on* an edge feel like a coin flip.
+`getGridPositionDetailed` additionally reports whether the press was in
+the gutter (the tail of the 36 px stride, `>= 32/36`), and the draw
+excludes the cell BEHIND the drag: drag right from a gutter and the box
+starts on the right-hand cell. Resolved per-axis, and only once the drag
+has a direction to read — which is why the flags are stored at mousedown
+and applied in `handleMouseMove` rather than resolved up front.
+`getGridPosition` itself is deliberately unchanged: it's shared with
+panel dragging, which grabs a panel body and never a gutter.
 
 Three collisions this gesture set has to resolve, all in
 `handleAdornmentGridMouseDown` / `handleMouseUp`:
@@ -176,6 +204,16 @@ Three collisions this gesture set has to resolve, all in
   field-by-field and never carries it.
 - The panel expand-modal double-click (`DashboardGrid.jsx`) is suppressed
   while `adornmentMode` is on, since adornment mode owns that gesture.
+- **A border's own chrome must not swallow the build gestures.** The edge
+  hit strips (9 px) plus the grips (10 px) cover essentially ALL of a 1×1
+  box (~36 px), and `AdornmentLayer` `stopPropagation()`s every mousedown
+  that reaches it. So on a freshly seeded box, a shift-click or
+  double-click hit a grip and became a resize — the grid handler that
+  implements extend/shrink never ran, and the gesture looked dead. Both
+  are unambiguous (shift never means resize; a double-click never means
+  drag), so `AdornmentLayer` lets `e.shiftKey` and `e.detail >= 2` fall
+  through untouched. Any future gesture routed through the grid needs the
+  same passthrough, or it will be unusable on small borders.
 
 Extending across an unrelated panel is **allowed**. A rectangle can't
 route around an obstacle, and every alternative (splitting the box,

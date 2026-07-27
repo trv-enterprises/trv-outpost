@@ -2388,6 +2388,37 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return { x: Math.max(0, Math.min(x, maxGridCol - 1)), y: Math.max(0, y) };
   }, [maxGridCol, maxGridRow]);
 
+  // Like getGridPosition, but also reports WHERE inside the cell the pointer
+  // landed. A cell is 32px of panel plus a 4px gutter, so a press in that
+  // last ~11% of the stride is really "on the seam between two cells" — the
+  // author is aiming at an edge, not at either cell.
+  //
+  // getGridPosition floors, so a gutter press silently resolves to whichever
+  // cell the pixel math happens to land in. That's fine for dragging a panel
+  // (it's grabbing the panel body, never the gutter) but it makes starting a
+  // border ON an edge feel arbitrary. Kept separate rather than folded into
+  // getGridPosition so the panel gestures keep their existing behavior.
+  const getGridPositionDetailed = useCallback((e) => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    const cellW = rect.width / maxGridCol;
+    const cellH = rect.height / maxGridRow;
+    const rawX = (e.clientX - rect.left) / cellW;
+    const rawY = (e.clientY - rect.top) / cellH;
+    const x = Math.floor(rawX);
+    const y = Math.floor(rawY);
+    // Fraction of the way through the cell, 0..1. The gutter is the tail of
+    // the stride (32px cell + 4px gap = 36), so >= 32/36 is in the gap.
+    // Same geometry as AdornmentLayer's CELL_WIDTH/GAP and DashboardGrid's.
+    const GUTTER_START = 32 / 36;
+    return {
+      x: Math.max(0, Math.min(x, maxGridCol - 1)),
+      y: Math.max(0, y),
+      inGutterX: rawX - x >= GUTTER_START,
+      inGutterY: rawY - y >= GUTTER_START,
+    };
+  }, [maxGridCol, maxGridRow]);
+
   const startDragging = (e, panel) => {
     e.stopPropagation();
     e.preventDefault();
@@ -2655,6 +2686,42 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return { x: pos.x, y: pos.y, w: 1, h: 1 };
   }, [editablePanels]);
 
+  // Collapse a border inward so `pos` becomes a CORNER of the result: the
+  // nearer horizontal edge and the nearer vertical edge each move in to meet
+  // it. Ties resolve toward left/top. Returns null when the cell is outside
+  // the border or the shrink would be a no-op.
+  //
+  // Shared by both shrink gestures (shift-click inside, double-click inside)
+  // so the two can never disagree about what "shrink to here" means.
+  const collapseToCorner = useCallback((a, pos) => {
+    const right = a.x + a.w - 1;
+    const bottom = a.y + a.h - 1;
+    if (pos.x < a.x || pos.x > right || pos.y < a.y || pos.y > bottom) return null;
+
+    const next = { x: a.x, y: a.y, w: a.w, h: a.h };
+
+    if (pos.x - a.x <= right - pos.x) {
+      next.x = pos.x;
+      next.w = right - pos.x + 1;
+    } else {
+      next.w = pos.x - a.x + 1;
+    }
+
+    if (pos.y - a.y <= bottom - pos.y) {
+      next.y = pos.y;
+      next.h = bottom - pos.y + 1;
+    } else {
+      next.h = pos.y - a.y + 1;
+    }
+
+    next.w = Math.max(ADORNMENT_MIN_CELLS, next.w);
+    next.h = Math.max(ADORNMENT_MIN_CELLS, next.h);
+
+    const unchanged = next.x === a.x && next.y === a.y
+      && next.w === a.w && next.h === a.h;
+    return unchanged ? null : next;
+  }, []);
+
   // DOUBLE-CLICK SHRINK — collapse the selected border inward so the clicked
   // cell becomes a CORNER of the result.
   //
@@ -2674,40 +2741,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const pos = getGridPosition(e);
     if (!pos) return;
 
-    const right = a.x + a.w - 1;
-    const bottom = a.y + a.h - 1;
-    // Strictly inside. A double-click on the boundary itself would be a
-    // no-op collapse in that axis anyway.
-    if (pos.x < a.x || pos.x > right || pos.y < a.y || pos.y > bottom) return;
+    const next = collapseToCorner(a, pos);
+    if (!next) return;
 
     e.preventDefault();
-
-    // Distance to each edge, in cells. The smaller of each pair is the edge
-    // that moves; the opposite one stays anchored.
-    const next = { x: a.x, y: a.y, w: a.w, h: a.h };
-
-    if (pos.x - a.x <= right - pos.x) {
-      // Nearer the left edge → left edge moves in to the clicked column.
-      next.x = pos.x;
-      next.w = right - pos.x + 1;
-    } else {
-      next.w = pos.x - a.x + 1;
-    }
-
-    if (pos.y - a.y <= bottom - pos.y) {
-      next.y = pos.y;
-      next.h = bottom - pos.y + 1;
-    } else {
-      next.h = pos.y - a.y + 1;
-    }
-
-    next.w = Math.max(ADORNMENT_MIN_CELLS, next.w);
-    next.h = Math.max(ADORNMENT_MIN_CELLS, next.h);
-
-    if (next.x !== a.x || next.y !== a.y || next.w !== a.w || next.h !== a.h) {
-      updateAdornment(a.id, next);
-    }
-  }, [selectedAdornmentId, editableAdornments, getGridPosition, updateAdornment]);
+    updateAdornment(a.id, next);
+  }, [
+    selectedAdornmentId, editableAdornments, getGridPosition,
+    updateAdornment, collapseToCorner,
+  ]);
 
   // Track the cursor cell while Shift is held with a border selected, so the
   // panels a shift-click would consume can be outlined before committing.
@@ -2747,6 +2789,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const a = editableAdornments.find(v => v.id === selectedAdornmentId);
     if (!a || a.kind !== 'border') return null;
 
+    // Inside the border, shift-click shrinks rather than extends — and a
+    // shrink never sweeps in new panels, so there is nothing to warn about.
+    const inside = extendHoverCell.x >= a.x && extendHoverCell.x < a.x + a.w
+      && extendHoverCell.y >= a.y && extendHoverCell.y < a.y + a.h;
+    if (inside) return null;
+
     const target = extendTargetRect(extendHoverCell.panelId, extendHoverCell);
     const x = Math.min(a.x, target.x);
     const y = Math.min(a.y, target.y);
@@ -2777,7 +2825,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // nest a box inside another border. Anything that should NOT start a draw
   // (edge strips, resize grips) stops propagation before reaching here.
   const handleAdornmentGridMouseDown = useCallback((e) => {
-    const pos = getGridPosition(e);
+    const pos = getGridPositionDetailed(e);
     if (!pos) return;
 
     // Record the panel under the press (if any). If the gesture turns out to
@@ -2799,19 +2847,36 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     // rectangle can't dodge one, and trying to make it would produce results
     // that are far harder to explain than an overlap the author can see.
     if (e.shiftKey && selectedAdornmentId) {
-      const target = extendTargetRect(panelId, pos);
       const a = editableAdornments.find(v => v.id === selectedAdornmentId);
-      if (a && a.kind === 'border' && target) {
-        const x = Math.min(a.x, target.x);
-        const y = Math.min(a.y, target.y);
-        const right = Math.max(a.x + a.w, target.x + target.w);
-        const bottom = Math.max(a.y + a.h, target.y + target.h);
-        updateAdornment(a.id, {
-          x,
-          y,
-          w: Math.min(right - x, editBudgetCols - x),
-          h: Math.min(bottom - y, editBudgetRows - y),
-        });
+      if (a && a.kind === 'border') {
+        // INSIDE the border, shift-click SHRINKS: the clicked cell becomes a
+        // corner, exactly as double-click does. One modifier with one
+        // meaning — "shift-click sets the boundary" — rather than shift
+        // growing and a different gesture shrinking. The union below can
+        // only ever grow, so without this branch a click inside would be a
+        // silent no-op (the target is already contained).
+        const inside = pos.x >= a.x && pos.x < a.x + a.w
+          && pos.y >= a.y && pos.y < a.y + a.h;
+
+        if (inside) {
+          const next = collapseToCorner(a, pos);
+          if (next) updateAdornment(a.id, next);
+          return;
+        }
+
+        const target = extendTargetRect(panelId, pos);
+        if (target) {
+          const x = Math.min(a.x, target.x);
+          const y = Math.min(a.y, target.y);
+          const right = Math.max(a.x + a.w, target.x + target.w);
+          const bottom = Math.max(a.y + a.h, target.y + target.h);
+          updateAdornment(a.id, {
+            x,
+            y,
+            w: Math.min(right - x, editBudgetCols - x),
+            h: Math.min(bottom - y, editBudgetRows - y),
+          });
+        }
       }
       return;
     }
@@ -2840,15 +2905,34 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
     if (!insideSelected) setSelectedAdornmentId(null);
 
+    // A plain click on empty grid means DESELECT whenever something is
+    // selected — it only seeds a new box when nothing is.
+    //
+    // Without this, plain click carries three jobs at once (seed / select /
+    // deselect) and they collide: with two borders on the canvas, clearing
+    // the current selection to get at the other one would itself drop a
+    // stray 1x1 box. Deselect-first also keeps the seed gesture honest —
+    // "click empty grid to start a box" is only reachable from a clean
+    // slate, which is exactly when it's unambiguous.
+    //
+    // Selecting the OTHER border needs no gesture of its own: every border's
+    // edge strips are always hittable, so clicking its edge selects it
+    // directly, whether or not something else is selected.
     setDrawingAdornment({
       startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, w: 1, h: 1,
       panelId,
-      // Suppresses the 1x1 seed on mouseup; a real drag ignores this.
-      noSeed: !!insideSelected,
+      // Where in the cell the press landed — the draw resolves a gutter
+      // press by drag direction once there IS a direction to read.
+      inGutterX: pos.inGutterX,
+      inGutterY: pos.inGutterY,
+      // Suppresses the 1x1 seed on mouseup; a real drag ignores this, so
+      // dragging out a box still works from either state.
+      noSeed: !!insideSelected || !!selectedAdornmentId,
     });
   }, [
-    getGridPosition, selectedAdornmentId, editableAdornments, updateAdornment,
-    extendTargetRect, editBudgetCols, editBudgetRows,
+    getGridPositionDetailed, selectedAdornmentId, editableAdornments,
+    updateAdornment, extendTargetRect, collapseToCorner,
+    editBudgetCols, editBudgetRows,
   ]);
 
   // Attach a border to a panel, or select the one it already has. Clicking a
@@ -2895,10 +2979,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (!pos) return;
 
       if (drawingAdornment) {
-        const x = Math.min(drawingAdornment.startX, pos.x);
-        const y = Math.min(drawingAdornment.startY, pos.y);
-        const w = Math.abs(pos.x - drawingAdornment.startX) + 1;
-        const h = Math.abs(pos.y - drawingAdornment.startY) + 1;
+        // A press that landed in the GUTTER is aiming at the seam, not at
+        // either neighbouring cell. Resolve it by the drag direction: the
+        // cell BEHIND the drag is excluded, so dragging right from a gutter
+        // starts at the cell to the right, dragging left starts at the cell
+        // to the left. Per-axis, so a diagonal drag resolves each
+        // independently. Without this, flooring picks a cell arbitrarily and
+        // starting a border on an edge feels like a coin flip.
+        let startX = drawingAdornment.startX;
+        let startY = drawingAdornment.startY;
+        if (drawingAdornment.inGutterX && pos.x > startX) startX += 1;
+        if (drawingAdornment.inGutterY && pos.y > startY) startY += 1;
+
+        const x = Math.min(startX, pos.x);
+        const y = Math.min(startY, pos.y);
+        const w = Math.abs(pos.x - startX) + 1;
+        const h = Math.abs(pos.y - startY) + 1;
         setDrawingAdornment(prev => ({
           ...prev, x, y,
           w: Math.min(w, boundCols - x),

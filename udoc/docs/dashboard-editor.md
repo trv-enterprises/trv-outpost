@@ -65,15 +65,15 @@ stop responding to clicks, so every mouse action applies to borders.
 | Action | How |
 |--------|-----|
 | **Draw a border** | Drag out a rectangle on the grid, exactly like drawing a panel |
-| **Start from one cell** | Click an empty cell — a one-cell border appears around it, ready to extend |
-| **Extend** | <kbd>Shift</kbd>-click a cell or panel; the selected border grows to take it in |
-| **Shrink** | Double-click a cell inside the selected border — it becomes the border's new corner |
-| **Select** | Click an existing border |
+| **Start from one cell** | With nothing selected, click an empty cell — a one-cell border appears around it, ready to extend |
+| **Extend** | <kbd>Shift</kbd>-click a cell or panel *outside* the selected border; it grows to take it in |
+| **Shrink** | <kbd>Shift</kbd>-click (or double-click) a cell *inside* the selected border — it becomes the border's new corner |
+| **Select** | Click a border's edge — this works even when another border is already selected, so it's how you switch between them |
 | **Move** | Drag a selected border |
 | **Resize** | Drag any edge or the bottom-right corner |
 | **Restyle** | With a border selected, use the color / width / line-style controls that appear in the toolbar |
 | **Delete** | Press <kbd>Delete</kbd>, or click the trash icon in the style controls |
-| **Deselect** | Press <kbd>Esc</kbd> |
+| **Deselect** | Press <kbd>Esc</kbd>, or click empty grid space |
 
 ### Building a border by clicking
 
@@ -81,17 +81,35 @@ Dragging a rectangle is the quickest way to box in panels that are already
 next to each other. When the group is a more awkward shape, build it up
 instead:
 
-1. Click an empty cell. A one-cell border appears there.
+1. Click an empty cell, with no border currently selected. A one-cell
+   border appears there. (If something *is* selected, that first click
+   just deselects it — click again to start the new box.)
 2. <kbd>Shift</kbd>-click each panel you want inside it. The border grows
    to the smallest rectangle containing everything you've clicked — so
    clicking anywhere on a panel takes in that whole panel.
-3. Double-click a cell inside to pull it back in. The cell you click
-   becomes a corner: the nearer left/right edge and the nearer top/bottom
-   edge both move in to meet it.
+3. To pull it back in, <kbd>Shift</kbd>-click a cell *inside* the border
+   (double-click does the same thing). The cell you click becomes a
+   corner: the nearer left/right edge and the nearer top/bottom edge both
+   move in to meet it.
+
+So <kbd>Shift</kbd>-click has one rule — **it sets the boundary to where
+you clicked**. Outside the border that grows it; inside, it shrinks it.
 
 While you hold <kbd>Shift</kbd>, every panel the border would end up
 crossing is outlined, so you can see what a click will take in before you
 commit to it.
+
+When you start a drag from the narrow gap *between* two panels, the box
+starts on the side you drag **toward** — drag right and the panel to the
+left is left out, drag left and it's the one on the right. That makes it
+possible to start a border exactly on an edge instead of guessing which
+cell the gap belongs to.
+
+With several borders on a dashboard, click any border's **edge** to make
+it the selected one — that works whether or not something else is
+selected, so you can go straight from extending one border to extending
+another. The style controls in the toolbar always act on the currently
+selected border.
 
 Because a border is always a rectangle, extending it to reach one panel can
 sweep in another that happens to sit between them. That's expected — a

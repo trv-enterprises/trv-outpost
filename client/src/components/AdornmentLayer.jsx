@@ -119,6 +119,21 @@ function AdornmentLayer({
             onMouseDown={
               interactive && onSelect
                 ? (e) => {
+                    // A SHIFT press is always the grid's extend gesture, never
+                    // a move or resize. Let it fall through untouched.
+                    //
+                    // This matters most on a small border: the edge strips
+                    // (9px) and grips (10px) together cover essentially all of
+                    // a 1x1 box (~36px), so without this a shift-click on the
+                    // seed box you just created can never reach the grid — the
+                    // chrome swallows it and starts a resize instead. Shift is
+                    // unambiguous, so there is nothing to disambiguate here.
+                    if (e.shiftKey) return;
+                    // Likewise the second press of a DOUBLE-click: that's the
+                    // grid's shrink gesture. Starting a resize on it would
+                    // both fight the shrink and, on a small box, make the
+                    // gesture unreachable for the same coverage reason.
+                    if (e.detail >= 2) return;
                     // Only edge strips and grips are hittable — a mousedown
                     // reaching here came from one of them. Claim it so it
                     // never reaches the grid's draw-new handler underneath.

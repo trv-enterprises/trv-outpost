@@ -12,16 +12,27 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Dashboard borders can be built by clicking, not just dragging.**
   Dragging out a rectangle still works unchanged, but it's awkward when the
-  panels you want to group aren't already a tidy block. Now: click an empty
-  cell to drop a one-cell border around it, then <kbd>Shift</kbd>-click each
+  panels you want to group aren't already a tidy block. Now: with nothing
+  selected, click an empty cell to drop a one-cell border around it (when a
+  border *is* selected, clicking empty grid deselects it instead, so
+  clearing a selection never leaves a stray box behind). Then
+  <kbd>Shift</kbd>-click each
   panel or cell to take in — the border grows to the smallest rectangle
   containing everything clicked. Clicking anywhere on a panel takes in that
   whole panel, so grouping is one click per panel rather than one per edge.
 
-  To pull a border back in, **double-click a cell inside it**. That cell
-  becomes the new corner: the nearer left/right edge and the nearer
-  top/bottom edge both move in to meet it. The edge grips are unchanged and
-  remain the way to move a single edge precisely.
+  To pull a border back in, **<kbd>Shift</kbd>-click a cell inside it** (or
+  double-click, which does the same). That cell becomes the new corner: the
+  nearer left/right edge and the nearer top/bottom edge both move in to meet
+  it. So <kbd>Shift</kbd>-click has a single rule — it sets the boundary to
+  where you clicked, growing the border from outside and shrinking it from
+  inside. The edge grips are unchanged and remain the way to move a single
+  edge precisely.
+
+  Starting a drag in the gap *between* two panels now resolves by drag
+  direction: the box starts on the side you drag toward, rather than on
+  whichever cell the gap happened to round to. This makes it possible to
+  start a border exactly on an edge.
 
   While <kbd>Shift</kbd> is held, every panel the border would end up
   crossing is outlined, so you can see what a click takes in before
