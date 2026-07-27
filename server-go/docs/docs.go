@@ -8762,6 +8762,9 @@ const docTemplate = `{
                 "sql": {
                     "$ref": "#/definitions/models.SQLConfig"
                 },
+                "synology": {
+                    "$ref": "#/definitions/models.SynologyDSMConfig"
+                },
                 "tsstore": {
                     "$ref": "#/definitions/models.TSStoreConfig"
                 }
@@ -8802,7 +8805,8 @@ const docTemplate = `{
                 "prometheus",
                 "edgelake",
                 "mqtt",
-                "frigate"
+                "frigate",
+                "synology"
             ],
             "x-enum-varnames": [
                 "ConnectionTypeSQL",
@@ -8813,7 +8817,8 @@ const docTemplate = `{
                 "ConnectionTypePrometheus",
                 "ConnectionTypeEdgeLake",
                 "ConnectionTypeMQTT",
-                "ConnectionTypeFrigate"
+                "ConnectionTypeFrigate",
+                "ConnectionTypeSynology"
             ]
         },
         "models.ControlConfig": {
@@ -11221,6 +11226,36 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "variable": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SynologyDSMConfig": {
+            "type": "object",
+            "required": [
+                "password",
+                "url",
+                "username"
+            ],
+            "properties": {
+                "insecure_skip_verify": {
+                    "description": "InsecureSkipVerify disables TLS certificate verification. Same two-gate\nmodel as APIConfig — the server-level api.allow_insecure_tls must also\nbe true for this to take effect.",
+                    "type": "boolean"
+                },
+                "password": {
+                    "description": "DSM password",
+                    "type": "string"
+                },
+                "timeout": {
+                    "description": "Request timeout in seconds (default 30)",
+                    "type": "integer"
+                },
+                "url": {
+                    "description": "DSM base URL incl. port, e.g. https://nas.example:5001",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "DSM account",
                     "type": "string"
                 }
             }
