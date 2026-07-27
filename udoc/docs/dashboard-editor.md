@@ -73,6 +73,10 @@ The group moves as a rigid block and stops at the canvas edge — it won't
 squash together when one panel reaches the boundary. Panels may overlap
 after a group move, exactly as they may when dragged one at a time.
 
+A **border** completely inside the selection box travels with the group,
+so a framed set of panels keeps its frame. A border that only partly
+overlaps the box stays where it is — move it separately in Borders mode.
+
 The selection is a working aid, not saved state: it clears on save, on
 switching to Borders, and on leaving the editor.
 

@@ -223,6 +223,22 @@ Three details that are easy to get wrong:
   an edge first, keeping the group rigid; clamping each panel independently
   squashes the group against the boundary.
 
+Gutter borders fully enclosed by the marquee are **carried**, not
+selected: they take the group's delta but get no outline, no style bar,
+and no entry in `selectedPanelIds`. A border is a decoration *around*
+panels rather than a peer of them, so it travels with the group it frames
+instead of being torn away from it. Carried borders deliberately skip
+their own edge clamp — the delta is already bounded by the panels, and
+re-clamping per border would let one stop short and break the alignment
+that carrying exists to preserve.
+
+The batch move must **not** early-return on a zero delta. `dx`/`dy` are
+measured from the grab point, not from the panels' current position, so
+`dx === 0` means "back where the drag started" — exactly when the panels
+are displaced and need writing back. Returning there stranded the group
+at its last non-zero offset: it moved out and refused to come home. The
+per-item identity checks already make redundant writes free.
+
 An outside click *deselects only* — the click after it draws or selects
 normally. Always-deselect-and-act meant a slightly-missed click both lost
 the selection and left a stray 1-cell panel behind. Same two-stage rule the
