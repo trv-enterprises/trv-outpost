@@ -12,6 +12,10 @@
   // applied to `.dashboard-grid`, the whole layer scales with the panels
   // automatically in every fit mode.
   position: absolute;
+  // `.dashboard-grid` has no padding, so its padding box and content box
+  // coincide and `inset: 0` puts cell (0,0) exactly where the panels start.
+  // If a padding ring is ever added to the grid, this must be offset to
+  // match or every border renders shifted off its panels.
   inset: 0;
 
   // Above panel bodies (z-index 1 in edit mode), below a panel actively
@@ -67,9 +71,11 @@
 
   .adornment {
     position: absolute;
-    // The rect from adornmentRect() is the LINE's centerline box, so the
-    // border must be drawn inside it rather than outside.
-    box-sizing: border-box;
+    // adornmentRect() returns exactly the panels' footprint, so the border
+    // must be drawn OUTSIDE that box — into the gutter — rather than eating
+    // into it. With border-box the line would grow inward and a thick border
+    // would cover panel content.
+    box-sizing: content-box;
     // Matches .panel-container's radius so a border hugging a panel
     // follows the same corner curve.
     border-radius: 4px;
