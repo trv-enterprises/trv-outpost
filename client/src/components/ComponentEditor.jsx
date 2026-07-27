@@ -2242,6 +2242,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryParams = buildPrometheusParams();
       } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
         queryParams = { database: edgelakeDatabase };
+      } else if (passthroughQueryParams && Object.keys(passthroughQueryParams).length > 0) {
+        // Types with no dedicated params UI (synology, and any future adapter
+        // whose params carry required dispatch fields) must send their STORED
+        // params on preview too. Without this the fetch goes out bare and the
+        // adapter rejects it — for Synology, DSM returns error 120 — so the
+        // preview shows an error and availableColumns is never refreshed,
+        // which in turn makes the dataview column list look permanently stuck
+        // at the saved subset. Same root cause as the save-path fix.
+        queryParams = { ...passthroughQueryParams };
       }
 
       // Must go through apiClient — raw fetch() sends no auth headers
