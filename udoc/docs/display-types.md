@@ -58,8 +58,30 @@ Displays current weather information for a configured location.
 - Current conditions display
 - Temperature, humidity, and other weather metrics
 - Automatic updates via MQTT subscription
+- Alert banner when a weather advisory is active for the location
 
-### Minimum Panel Size
-6 columns x 8 rows
+### Size variants
+
+Set **Weather Size** to choose how much the widget shows:
+
+| Variant | Shows | Give it at least |
+|---------|-------|------------------|
+| **Small** | Icon, temperature, conditions, location | 3 rows |
+| **Medium** | Current conditions, detail metrics, sunrise/sunset bar | 6 rows |
+| **Large** (default) | Everything above, plus hourly and 5-day forecasts | 10 rows |
+
+All variants need at least 7 columns.
+
+:::caution Size medium and large for the alert banner
+The editor only enforces a 7 x 3 minimum — the floor for the *small*
+variant — so it will happily let you make a medium or large panel too
+short. Nothing warns you, and the panel looks fine most of the time.
+
+The catch is the **alert banner**: it appears only while a weather
+advisory is active for your location. A 4-row medium panel can look
+correct for weeks and then clip the moment a heat advisory comes through.
+Size for the alert case up front and the bad-weather day takes care of
+itself.
+:::
 
 ---

@@ -97,7 +97,7 @@ func init() {
 			{Name: "mqtt_connection_id", Type: "string", Required: true, Description: "MQTT connection for the weather feed"},
 			{Name: "weather_topic_prefix", Type: "string", Required: false, Default: "weather", Description: "MQTT topic prefix"},
 			{Name: "weather_location", Type: "string", Required: false, Description: "Display label (e.g. 'Spring, TX')"},
-			{Name: "weather_size", Type: "string", Required: false, Default: "large", Description: "Layout variant: 'small' (icon + temp + conditions), 'medium' (current conditions + details + sun bar), or 'large' (adds hourly and 5-day forecasts)"},
+			{Name: "weather_size", Type: "string", Required: false, Default: "large", Description: "Layout variant: 'small' (icon + temp + conditions), 'medium' (current conditions + details + sun bar), or 'large' (adds hourly and 5-day forecasts). Panel height guidance in grid rows: small >= 3, medium >= 6, large >= 10. The enforced minimum is 7x3 for every variant, so a too-short medium/large panel is not blocked — it just clips. Medium needs 6 rather than 4 because an active weather alert adds a banner that only appears during an advisory, so a shorter panel looks correct until one arrives."},
 		},
 	})
 }
