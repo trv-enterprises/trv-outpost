@@ -11,6 +11,7 @@ Click the gear icon in the edit-mode toolbar to open the Dashboard Settings moda
 | **Description** | Optional text shown in the dashboard tile view. | Empty |
 | **Tags** | Free-form tags. The tag filter on the [tile view](viewing-dashboards.md) and the design-mode dashboard list match against these. | Empty |
 | **Auto Refresh (seconds)** | How often each chart's data should re-fetch. Polling is paused while the browser tab is hidden so backgrounded dashboards don't keep hitting the server. Set to `0` to disable refresh entirely. Range 0–3600, step 5. | 30 |
+| **Panel background** | Whether this dashboard's panels are drawn on a raised surface or float on the canvas. Overrides the deployment-wide [Transparent Panels](system-settings.md) setting for this dashboard only. | Default (follow deployment setting) |
 
 ## Auto Refresh — what it actually does
 
@@ -19,6 +20,26 @@ When `refresh_interval > 0`, every chart on the dashboard polls its data source 
 - **Visibility-gated.** When the browser tab is hidden (user switched tabs, screen locked, kiosk dormant), the polling timer pauses. When the tab becomes visible again the chart refetches immediately and resumes the cadence — so a kiosk that wakes up shows fresh data right away.
 - **Streaming sources are unaffected.** MQTT, ts-store push streaming, and bidirectional WebSocket connections push their own updates and ignore the refresh interval entirely.
 - **Manual refresh.** The toolbar's refresh button forces every chart to refetch immediately, regardless of the configured interval.
+
+## Panel background
+
+By default a dashboard follows the deployment's **Transparent Panels**
+appearance setting — whatever an administrator chose applies everywhere. This
+setting lets one dashboard opt out in either direction:
+
+| Choice | Result |
+|--------|--------|
+| **Default (follow deployment setting)** | Inherits the deployment setting. Change the global setting and this dashboard follows it. |
+| **Solid background** | Panels keep their raised surface, border and title band even where the deployment has transparency switched on. |
+| **Transparent background** | Panels lose their background, border and title-band fill and float directly on the canvas, even where the deployment is solid. |
+
+Only the panel *chrome* changes. Panel sizes, positions and spacing are
+identical either way, so switching can't reflow a dashboard.
+
+:::note
+A component that paints its own background still shows it — this only removes
+the panel surface underneath.
+:::
 
 ## Applying Settings
 

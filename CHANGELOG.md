@@ -10,6 +10,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Per-dashboard panel background.** Dashboard Settings gains a **Panel
+  background** choice — *Default*, *Solid background*, or *Transparent
+  background* — that overrides the deployment-wide Transparent Panels setting
+  for that dashboard alone. Default follows the deployment setting, so
+  existing dashboards are unaffected. Only the panel chrome changes; sizes and
+  positions are identical either way.
+
 - **Gauge styles.** A **Gauge Style** dropdown applies a whole coordinated
   look to a gauge in one pick, instead of setting a dozen interacting options
   by hand. **Modern** is a single threshold-colored arc sweeping over a flat

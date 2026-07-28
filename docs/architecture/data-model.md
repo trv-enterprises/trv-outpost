@@ -84,7 +84,8 @@ text label onto grid cells.
     "scale_percent": 100,
     "is_public": false,
     "allow_export": true,
-    "layout_dimension": "default-12col"
+    "layout_dimension": "default-12col",
+    "panel_background": ""
   },
   "created": "2026-04-01T12:00:00Z",
   "updated": "2026-04-11T09:14:00Z"
@@ -95,6 +96,24 @@ Panels without `chart_id` and without `text_config` are placeholder
 empty panels (common during authoring). The `thumbnail` field is a
 captured preview used on list pages. `settings.layout_dimension`
 names a preset from the `layouts` collection.
+
+`settings.panel_background` overrides the deployment-wide
+`transparent_panels` appearance setting for this dashboard only. Three
+states: `""` (inherit the global — the default), `"solid"`, `"transparent"`.
+
+Two implementation notes that are easy to get wrong:
+
+- The viewer reflects it as a **separate** `data-panel-background` root
+  attribute rather than writing the global's `data-transparent-panels`.
+  `App.jsx` sets the global one when `identityResolved` flips, which happens
+  *after* the viewer mounts — sharing the attribute meant the global effect
+  ran second and wiped the override. `DashboardGrid.scss` combines the two
+  selectors, so the outcome no longer depends on effect ordering.
+- The BSON tag deliberately carries **no** `omitempty`. With it, clearing the
+  field back to `""` serialized to nothing, which is indistinguishable from
+  "leave it alone" — a dashboard set to solid or transparent could never
+  return to inheriting. The JSON tag keeps `omitempty` so the field stays
+  absent from API responses for dashboards that never opted in.
 
 `settings.scale_percent` is the dashboard's **build-scale** (50–200,
 default 100). `layout_dimension` is the render *target*; the dashboard
