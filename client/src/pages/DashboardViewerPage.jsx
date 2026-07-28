@@ -118,12 +118,16 @@ const ADORNMENT_WIDTHS = [1, 2, 3, 4];
 // models.PanelBorderWidths in server-go.
 const PANEL_BORDER_WIDTHS = [1, 2, 3];
 const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted'];
-const ADORNMENT_DEFAULT_COLOR = '#0f62fe';
+// Carbon red50. Deliberately NOT blue60: edit mode outlines panels in
+// `--cds-focus` (blue), so a blue 1px adornment was almost impossible to
+// distinguish from ordinary edit chrome — the thing the author just added
+// looked like part of the editor.
+const ADORNMENT_DEFAULT_COLOR = '#fa4d56';
 // Smallest border a resize may shrink to.
 const ADORNMENT_MIN_CELLS = 1;
-// A DRAWN box must span more than a single cell to commit. Drawing starts at
-// 1x1, so without a threshold above that a bare click (no drag) would litter
-// the dashboard with 1-cell borders. Panels use the same guard (w >= 2).
+// Click-vs-drag threshold. A press that never grew past this is a CLICK: on a
+// panel it attaches a panel border, on bare grid it seeds a 1x1 box to build
+// from with shift-click. Anything larger is a drawn box.
 const ADORNMENT_MIN_DRAW_CELLS = 2;
 import { useNotifications } from '../context/NotificationContext';
 import StreamConnectionManager from '../utils/streamConnectionManager';
@@ -521,6 +525,24 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [draggingPanel, setDraggingPanel] = useState(null);
   const [resizingPanel, setResizingPanel] = useState(null);
   const [drawingPanel, setDrawingPanel] = useState(null);
+  // Multi-select: ids of panels picked out by a shift-drag marquee, plus the
+  // transient marquee rect while the drag is in flight, plus the in-flight
+  // batch move. Selection survives until an outside click clears it.
+  const [selectedPanelIds, setSelectedPanelIds] = useState([]);
+  // Gutter borders enclosed by the marquee. Carried by a batch move but NOT
+  // selected — they get no outline and no style bar.
+  const [carriedAdornmentIds, setCarriedAdornmentIds] = useState([]);
+
+  // Clear the panel selection AND its carried borders together. Single entry
+  // point on purpose: the two are set as a pair by the marquee, so clearing
+  // one without the other would leave borders armed to move with a selection
+  // that no longer exists.
+  const clearPanelSelection = useCallback(() => {
+    setSelectedPanelIds([]);
+    setCarriedAdornmentIds([]);
+  }, []);
+  const [marquee, setMarquee] = useState(null);
+  const [batchMove, setBatchMove] = useState(null);
   const gridRef = useRef(null);
   const didDragRef = useRef(false); // Distinguishes click from drag in compact mode
 
@@ -1720,8 +1742,30 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const enterEditMode = () => {
     const panelsCopy = (dashboard?.panels || []).map(p => ({ ...p }));
     setEditablePanels(panelsCopy);
+    // Re-seeding replaces every panel, so any selection now points at the
+    // pre-revert set. Clear it — this runs on entering the editor and on
+    // Discard (which is a revert-in-place), and a stale selection there would
+    // arm a batch move over panels the user just discarded.
+    clearPanelSelection();
+    setMarquee(null);
+    setBatchMove(null);
     setOriginalPanels(panelsCopy.map(p => ({ ...p })));
-    setEditableAdornments((dashboard?.adornments || []).map(a => ({ ...a })));
+    // Coerce geometry on load. A rect border with a non-finite x/y/w/h is
+    // permanently stuck — `NaN !== NaN` makes every change-check report true,
+    // so each drag rewrites NaN and the border can never move, while the grip
+    // cursor insists it should. Records can carry NaN from older sessions, so
+    // repair on the way in rather than leaving a dead border on the canvas.
+    // panel_border has no rect by design and is left untouched.
+    setEditableAdornments((dashboard?.adornments || []).map(a => {
+      if (a.kind === 'panel_border') return { ...a };
+      return {
+        ...a,
+        x: Number.isFinite(a.x) ? a.x : 0,
+        y: Number.isFinite(a.y) ? a.y : 0,
+        w: Number.isFinite(a.w) && a.w > 0 ? a.w : 1,
+        h: Number.isFinite(a.h) && a.h > 0 ? a.h : 1,
+      };
+    }));
     // Always start in panel mode — adornment mode is an explicit opt-in.
     setAdornmentMode(false);
     setSelectedAdornmentId(null);
@@ -1947,11 +1991,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       {/* Resize grips: bottom-right corner (both axes) + top/left/right/bottom
           edges (single axis). Left/top move the near edge with the opposite
           edge anchored; right/bottom grow from a fixed top-left. */}
-      <div className="edit-resize-handle" onMouseDown={(e) => startResizing(e, panel, 'corner')} />
-      <div className="edit-resize-edge edit-resize-edge--top" onMouseDown={(e) => startResizing(e, panel, 'top')} />
-      <div className="edit-resize-edge edit-resize-edge--left" onMouseDown={(e) => startResizing(e, panel, 'left')} />
-      <div className="edit-resize-edge edit-resize-edge--right" onMouseDown={(e) => startResizing(e, panel, 'right')} />
-      <div className="edit-resize-edge edit-resize-edge--bottom" onMouseDown={(e) => startResizing(e, panel, 'bottom')} />
+      {/* Short/narrow panels get tighter grip insets. The defaults reserve
+          24px vertically (corner + top grip) and 24px horizontally, which is
+          most of a 1-cell panel (32px) — the side grips end up with almost no
+          hittable length and the edge feels missing. See `.is-short` /
+          `.is-narrow` in the SCSS. */}
+      <div className={`edit-resize-handle ${panel.h <= 2 || panel.w <= 1 ? 'is-compact' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'corner')} />
+      <div className={`edit-resize-edge edit-resize-edge--top ${panel.w <= 1 ? 'is-narrow' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'top')} />
+      <div className={`edit-resize-edge edit-resize-edge--left ${panel.h <= 2 ? 'is-short' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'left')} />
+      <div className={`edit-resize-edge edit-resize-edge--right ${panel.h <= 2 ? 'is-short' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'right')} />
+      <div className={`edit-resize-edge edit-resize-edge--bottom ${panel.w <= 1 ? 'is-narrow' : ''}`} onMouseDown={(e) => startResizing(e, panel, 'bottom')} />
     </>
   );
 
@@ -1960,6 +2009,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // gridExtras so they render INSIDE the same .dashboard-grid.
   const editGridExtras = (
     <>
+      {marquee && (
+        <div
+          className="marquee-preview"
+          style={{
+            gridColumn: `${marquee.x + 1} / span ${marquee.w}`,
+            gridRow: `${marquee.y + 1} / span ${marquee.h}`,
+          }}
+        />
+      )}
       {drawingPanel && (
         <div
           className="drawing-panel-preview"
@@ -2124,6 +2182,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           // (so reloads/saves target it), and reset the saved-state baseline
           // to what we just persisted so Cancel/Discard compares correctly.
           setOriginalPanels(editablePanels.map(p => ({ ...p })));
+          // A save is a commit point — the selection was a working aid for
+          // the edits just persisted, so it shouldn't linger with its move
+          // affordance still armed.
+          clearPanelSelection();
           navigate(`/view/dashboards/${created.id}`, {
             replace: true,
             state: { autoEdit: true, fromDesign: true },
@@ -2161,6 +2223,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           // so Cancel/Discard reverts to this version.
           setDashboard((prev) => ({ ...prev, ...payload }));
           setOriginalPanels(editablePanels.map(p => ({ ...p })));
+          // A save is a commit point — the selection was a working aid for
+          // the edits just persisted, so it shouldn't linger with its move
+          // affordance still armed.
+          clearPanelSelection();
           pushToast({ kind: 'success', title: 'Dashboard saved', duration: 2000 });
           maybeAutoThumbnail();
           return id;
@@ -2378,28 +2444,103 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // ── Drag/resize logic ────────────────────────────────────────────
 
-  const getGridPosition = useCallback((e) => {
+  // Single source of truth for rect→cell geometry.
+  //
+  // `.dashboard-grid` has no padding (see the SCSS for why — the canvas
+  // budget can't spare it), so the cell tracks fill the element's box
+  // exactly and the origin is the rect's own top-left.
+  //
+  // Every gesture — panel drag, panel resize, panel draw, adornment
+  // draw/move/resize — goes through here, so a geometry change lands in one
+  // place instead of six.
+  const gridCellGeometry = useCallback(() => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
-    const cellW = rect.width / maxGridCol;
-    const cellH = rect.height / maxGridRow;
-    const x = Math.floor((e.clientX - rect.left) / cellW);
-    const y = Math.floor((e.clientY - rect.top) / cellH);
-    return { x: Math.max(0, Math.min(x, maxGridCol - 1)), y: Math.max(0, y) };
+    return {
+      originX: rect.left,
+      originY: rect.top,
+      cellW: rect.width / maxGridCol,
+      cellH: rect.height / maxGridRow,
+    };
   }, [maxGridCol, maxGridRow]);
 
+  const getGridPosition = useCallback((e) => {
+    const g = gridCellGeometry();
+    if (!g) return null;
+    const x = Math.floor((e.clientX - g.originX) / g.cellW);
+    const y = Math.floor((e.clientY - g.originY) / g.cellH);
+    return { x: Math.max(0, Math.min(x, maxGridCol - 1)), y: Math.max(0, y) };
+  }, [gridCellGeometry, maxGridCol]);
+
+  // Like getGridPosition, but also reports WHERE inside the cell the pointer
+  // landed. A cell is 32px of panel plus a 4px gutter, so a press in that
+  // last ~11% of the stride is really "on the seam between two cells" — the
+  // author is aiming at an edge, not at either cell.
+  //
+  // getGridPosition floors, so a gutter press silently resolves to whichever
+  // cell the pixel math happens to land in. That's fine for dragging a panel
+  // (it's grabbing the panel body, never the gutter) but it makes starting a
+  // border ON an edge feel arbitrary. Kept separate rather than folded into
+  // getGridPosition so the panel gestures keep their existing behavior.
+  const getGridPositionDetailed = useCallback((e) => {
+    const g = gridCellGeometry();
+    if (!g) return null;
+    const rawX = (e.clientX - g.originX) / g.cellW;
+    const rawY = (e.clientY - g.originY) / g.cellH;
+    const x = Math.floor(rawX);
+    const y = Math.floor(rawY);
+    // Fraction of the way through the cell, 0..1. The gutter is the tail of
+    // the stride (32px cell + 4px gap = 36), so >= 32/36 is in the gap.
+    // Same geometry as AdornmentLayer's CELL_WIDTH/GAP and DashboardGrid's.
+    const GUTTER_START = 32 / 36;
+    return {
+      x: Math.max(0, Math.min(x, maxGridCol - 1)),
+      y: Math.max(0, y),
+      inGutterX: rawX - x >= GUTTER_START,
+      inGutterY: rawY - y >= GUTTER_START,
+    };
+  }, [gridCellGeometry, maxGridCol]);
+
   const startDragging = (e, panel) => {
+    // A shift-press is the marquee gesture and must reach the grid handler.
+    // Panels normally claim their own presses, so without this passthrough a
+    // selection box could never be started on top of a panel.
+    if (e.shiftKey) return;
+
     e.stopPropagation();
     e.preventDefault();
     didDragRef.current = false;
     const pos = getGridPosition(e);
-    if (pos) {
-      setDraggingPanel({
-        id: panel.id,
-        offsetX: pos.x - panel.x,
-        offsetY: pos.y - panel.y
+    if (!pos) return;
+
+    // Pressing a panel that is part of the current selection moves the WHOLE
+    // selection. Pressing an unselected panel is an ordinary single drag and
+    // drops the selection — "click outside" in the sense that matters, since
+    // the intent is clearly to work on that panel instead.
+    if (selectedPanelIds.length > 0 && selectedPanelIds.includes(panel.id)) {
+      setBatchMove({
+        startX: pos.x,
+        startY: pos.y,
+        // Snapshot the group's geometry at grab time. Deltas are applied to
+        // THIS, not to the live panels, so accumulated rounding can't make
+        // the group creep or drift apart over a long drag.
+        origins: editablePanels
+          .filter(p => selectedPanelIds.includes(p.id))
+          .map(p => ({ id: p.id, x: p.x, y: p.y, w: p.w, h: p.h })),
+        // Same snapshot treatment for the carried borders.
+        adornOrigins: editableAdornments
+          .filter(a => carriedAdornmentIds.includes(a.id))
+          .map(a => ({ id: a.id, x: a.x, y: a.y, w: a.w, h: a.h })),
       });
+      return;
     }
+    if (selectedPanelIds.length > 0) clearPanelSelection();
+
+    setDraggingPanel({
+      id: panel.id,
+      offsetX: pos.x - panel.x,
+      offsetY: pos.y - panel.y
+    });
   };
 
   // edge: which grip is being dragged — 'corner' (bottom-right, resizes both
@@ -2410,16 +2551,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const startResizing = (e, panel, edge = 'corner') => {
     e.stopPropagation();
     e.preventDefault();
-    if (gridRef.current) {
-      const rect = gridRef.current.getBoundingClientRect();
-      const cellW = rect.width / maxGridCol;
-      const cellH = rect.height / maxGridRow;
+    const g = gridCellGeometry();
+    if (g) {
       // The moving edge's current pixel position, per grip. Left/top move the
       // near edge (x / y); right/bottom/corner move the far edge (x+w / y+h).
       const movingLeft = edge === 'left';
       const movingTop = edge === 'top';
-      const edgePixelX = rect.left + (movingLeft ? panel.x : panel.x + panel.w) * cellW;
-      const edgePixelY = rect.top + (movingTop ? panel.y : panel.y + panel.h) * cellH;
+      const edgePixelX = g.originX + (movingLeft ? panel.x : panel.x + panel.w) * g.cellW;
+      const edgePixelY = g.originY + (movingTop ? panel.y : panel.y + panel.h) * g.cellH;
       const offsetX = e.clientX - edgePixelX;
       const offsetY = e.clientY - edgePixelY;
       setResizingPanel({ id: panel.id, edge, offsetX, offsetY });
@@ -2431,6 +2570,28 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Start drawing a new panel by clicking empty grid space
   const handleGridMouseDown = (e) => {
     if (!isEditMode) return;
+
+    // SHIFT-DRAG = marquee select. Allowed to start anywhere, including over
+    // a panel — panels let shift-presses fall through (see the drag overlay)
+    // precisely so a selection box can start on top of one.
+    if (e.shiftKey) {
+      const pos = getGridPosition(e);
+      if (!pos) return;
+      e.preventDefault();
+      setMarquee({ startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, w: 1, h: 1 });
+      return;
+    }
+
+    // A live selection absorbs the next outside click: it DESELECTS and does
+    // nothing else. Only the click after that draws. Without this, a click
+    // that lands slightly outside the selection both loses the selection and
+    // silently leaves a stray 1-cell panel behind — the same two-stage rule
+    // borders use, so the editor behaves consistently.
+    if (selectedPanelIds.length > 0) {
+      clearPanelSelection();
+      return;
+    }
+
     // Only trigger on clicks directly on the grid (not on panels)
     if (e.target !== gridRef.current) return;
     const pos = getGridPosition(e);
@@ -2447,7 +2608,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   };
 
   useEffect(() => {
-    if (!isEditMode || (!draggingPanel && !resizingPanel && !drawingPanel)) return;
+    if (!isEditMode || (!draggingPanel && !resizingPanel && !drawingPanel
+        && !marquee && !batchMove)) return;
 
     // Clamp against the STABLE edit budget, never maxGridCol — maxGridCol
     // grows with panel extent (to render legacy oversized panels), so using
@@ -2460,6 +2622,61 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const handleMouseMove = (e) => {
       const pos = getGridPosition(e);
       if (!pos) return;
+
+      if (marquee) {
+        setMarquee(prev => ({
+          ...prev,
+          x: Math.min(prev.startX, pos.x),
+          y: Math.min(prev.startY, pos.y),
+          w: Math.abs(pos.x - prev.startX) + 1,
+          h: Math.abs(pos.y - prev.startY) + 1,
+        }));
+        return;
+      }
+
+      if (batchMove) {
+        // One delta for the whole group, applied to the grab-time snapshot.
+        // Clamped so the group as a WHOLE stays on canvas: the delta is
+        // limited by whichever member would hit an edge first, which keeps
+        // the panels' relative positions rigid. Clamping each panel
+        // independently would squash the group against the edge instead.
+        let dx = pos.x - batchMove.startX;
+        let dy = pos.y - batchMove.startY;
+        for (const o of batchMove.origins) {
+          dx = Math.max(dx, -o.x);
+          dy = Math.max(dy, -o.y);
+          dx = Math.min(dx, boundCols - (o.x + o.w));
+          dy = Math.min(dy, boundRows - (o.y + o.h));
+        }
+        // NO early return on a zero delta. dx/dy are measured from the
+        // GRAB POINT, not from the panels' current position, so dx === 0
+        // means "back where the drag started" — which is precisely when the
+        // panels are displaced and need writing back. Returning early there
+        // stranded the group at its last non-zero offset: it would move out
+        // happily and then refuse to come home.
+        setEditablePanels(prev => prev.map(p => {
+          const o = batchMove.origins.find(v => v.id === p.id);
+          if (!o) return p;
+          const nx = o.x + dx;
+          const ny = o.y + dy;
+          return (nx === p.x && ny === p.y) ? p : { ...p, x: nx, y: ny };
+        }));
+        // Carried borders take the SAME delta, deliberately without their own
+        // clamp: the delta is already bounded by the panels, and re-clamping
+        // per border would let a border stop short of the group and break the
+        // alignment that carrying them exists to preserve.
+        if (batchMove.adornOrigins?.length) {
+          setEditableAdornments(prev => prev.map(a => {
+            const o = batchMove.adornOrigins.find(v => v.id === a.id);
+            if (!o) return a;
+            const nx = o.x + dx;
+            const ny = o.y + dy;
+            return (nx === a.x && ny === a.y) ? a : { ...a, x: nx, y: ny };
+          }));
+        }
+        setEditHasChanges(true);
+        return;
+      }
 
       if (drawingPanel) {
         const x = Math.min(drawingPanel.startX, pos.x);
@@ -2492,13 +2709,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         if (panel && gridRef.current) {
           const minSize = getMinSizeForPanel(resizingPanel.id);
           // Raw pixel position adjusted by the initial offset for smooth resizing.
-          const rect = gridRef.current.getBoundingClientRect();
+          const g = gridCellGeometry();
+          if (!g) return;
           const adjustedX = e.clientX - (resizingPanel.offsetX || 0);
           const adjustedY = e.clientY - (resizingPanel.offsetY || 0);
-          const cellW = rect.width / maxGridCol;
-          const cellH = rect.height / maxGridRow;
-          const gridX = Math.floor((adjustedX - rect.left) / cellW);
-          const gridY = Math.floor((adjustedY - rect.top) / cellH);
+          const gridX = Math.floor((adjustedX - g.originX) / g.cellW);
+          const gridY = Math.floor((adjustedY - g.originY) / g.cellH);
           const edge = resizingPanel.edge || 'corner';
 
           // Start from the panel's current geometry; each grip mutates only
@@ -2534,6 +2750,37 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
 
     const handleMouseUp = () => {
+      if (marquee) {
+        // FULLY ENCLOSED only — a panel the box merely clips is not selected.
+        // Predictable enough to trust without checking, and it makes "grab
+        // everything in this area" a deliberate act rather than a guess.
+        const mx2 = marquee.x + marquee.w;
+        const my2 = marquee.y + marquee.h;
+        const encloses = (r) => r.x >= marquee.x && r.x + r.w <= mx2
+                             && r.y >= marquee.y && r.y + r.h <= my2;
+        const hits = editablePanels.filter(encloses).map(p => p.id);
+        setSelectedPanelIds(hits);
+        // Gutter borders fully inside the box are CARRIED, not selected: no
+        // outline, no style bar, no entry in selectedPanelIds. A border is a
+        // decoration AROUND panels rather than a peer of them, so it should
+        // travel with the group it frames — otherwise a batch move visibly
+        // tears a framed group apart from its own border. panel_border kinds
+        // need no handling: they have no rect and follow their panel already.
+        setCarriedAdornmentIds(
+          editableAdornments
+            .filter(a => a.kind === 'border'
+                      && Number.isFinite(a.x) && Number.isFinite(a.y)
+                      && Number.isFinite(a.w) && Number.isFinite(a.h)
+                      && encloses(a))
+            .map(a => a.id)
+        );
+        setMarquee(null);
+        return;
+      }
+      if (batchMove) {
+        setBatchMove(null);
+        return;
+      }
       if (drawingPanel && drawingPanel.w >= 2 && drawingPanel.h >= 1) {
         addPanel({
           x: drawingPanel.x,
@@ -2553,11 +2800,41 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition]);
+  }, [isEditMode, draggingPanel, resizingPanel, drawingPanel, marquee, batchMove, editablePanels, maxGridCol, maxGridRow, gridCols, gridRows, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry]);
+
+  // Escape clears a panel selection. Ignored while typing so it can never
+  // eat an Escape meant for a field or modal.
+  useEffect(() => {
+    if (!isEditMode || selectedPanelIds.length === 0) return undefined;
+    const onKeyDown = (e) => {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'Escape') clearPanelSelection();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isEditMode, selectedPanelIds, clearPanelSelection]);
+
+  // Leaving edit mode or switching dashboards must not strand a selection.
+  useEffect(() => {
+    if (!isEditMode) clearPanelSelection();
+  }, [isEditMode, clearPanelSelection]);
 
   // ── Adornment (decoration) editing ───────────────────────────────
 
   const updateAdornment = useCallback((adornmentId, updates) => {
+    // Refuse to write a non-finite rect. A single NaN here is permanent
+    // corruption, not a transient glitch: `NaN !== NaN`, so every later
+    // "did it change?" comparison reports true, every drag rewrites NaN, and
+    // the border can never be moved or resized again — it just sits there
+    // while the cursor says it should be dragging. Cheaper to reject the bad
+    // write than to explain the dead border later.
+    for (const k of ['x', 'y', 'w', 'h']) {
+      if (k in updates && !Number.isFinite(updates[k])) {
+        console.warn(`[adornment] refusing non-finite ${k}:`, updates[k], updates);
+        return;
+      }
+    }
     setEditableAdornments(prev =>
       prev.map(a => (a.id === adornmentId ? { ...a, ...updates } : a))
     );
@@ -2592,6 +2869,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         setDraggingPanel(null);
         setResizingPanel(null);
         setDrawingPanel(null);
+        // Drop any multi-selection too. Shift means "marquee" in normal mode
+        // and "extend/shrink the border" in adornment mode, so a selection
+        // that survived the switch would leave two gestures fighting over the
+        // same modifier — and the selected panels would keep their move
+        // affordance while panels are supposed to be inert.
+        clearPanelSelection();
+        setMarquee(null);
+        setBatchMove(null);
       } else {
         setSelectedAdornmentId(null);
         setDraggingAdornment(null);
@@ -2600,7 +2885,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       }
       return next;
     });
-  }, []);
+  }, [clearPanelSelection]);
 
   // Mouse-down on an existing border: select it, and start a move or a
   // resize depending on which grip was hit.
@@ -2612,6 +2897,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const pos = getGridPosition(e);
     if (!pos) return;
 
+    // Only a rect border can be moved or resized. A panel_border has NO
+    // geometry — the server zeroes x/y/w/h for that kind, because it renders
+    // as its panel's own CSS border and follows the panel. Reading
+    // `adornment.w` on one yields undefined, which turns the grab offset into
+    // NaN and poisons every later comparison: the resize then computes NaN
+    // bounds, the "did anything change" guard rejects them, and the edge
+    // appears frozen — grip cursor showing, nothing moving.
+    if (adornment.kind !== 'border') return;
+
     if (edge) {
       // Capture the grab point's pixel offset from the edge being moved, the
       // same way startResizing does for panels. Without it, a grip click that
@@ -2620,14 +2914,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       // half the grip band's grab area.
       let offsetX = 0;
       let offsetY = 0;
-      if (gridRef.current) {
-        const rect = gridRef.current.getBoundingClientRect();
-        const cellW = rect.width / maxGridCol;
-        const cellH = rect.height / maxGridRow;
+      const g = gridCellGeometry();
+      if (g) {
         const movingLeft = edge === 'left';
         const movingTop = edge === 'top';
-        const edgePixelX = rect.left + (movingLeft ? adornment.x : adornment.x + adornment.w) * cellW;
-        const edgePixelY = rect.top + (movingTop ? adornment.y : adornment.y + adornment.h) * cellH;
+        const edgePixelX = g.originX + (movingLeft ? adornment.x : adornment.x + adornment.w) * g.cellW;
+        const edgePixelY = g.originY + (movingTop ? adornment.y : adornment.y + adornment.h) * g.cellH;
         offsetX = e.clientX - edgePixelX;
         offsetY = e.clientY - edgePixelY;
       }
@@ -2639,7 +2931,166 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         offsetY: pos.y - adornment.y,
       });
     }
-  }, [getGridPosition, maxGridCol, maxGridRow]);
+  }, [getGridPosition, gridCellGeometry]);
+
+  // Live preview of a pending shift-click extend: the cell the cursor is over
+  // while Shift is held. Null whenever the gesture isn't armed.
+  const [extendHoverCell, setExtendHoverCell] = useState(null);
+
+  // What a shift-click or double-click is pointing AT: the full rect of the
+  // panel under the cursor, or the single clicked cell when there is none.
+  const extendTargetRect = useCallback((panelId, pos) => {
+    if (panelId) {
+      const panel = editablePanels.find(p => p.id === panelId);
+      if (panel) return { x: panel.x, y: panel.y, w: panel.w, h: panel.h };
+    }
+    return { x: pos.x, y: pos.y, w: 1, h: 1 };
+  }, [editablePanels]);
+
+  // Collapse a border inward so `pos` becomes a CORNER of the result: the
+  // nearer horizontal edge and the nearer vertical edge each move in to meet
+  // it. Ties resolve toward left/top. Returns null when the cell is outside
+  // the border or the shrink would be a no-op.
+  //
+  // Shared by both shrink gestures (shift-click inside, double-click inside)
+  // so the two can never disagree about what "shrink to here" means.
+  const collapseToCorner = useCallback((a, pos, target = null) => {
+    const right = a.x + a.w - 1;
+    const bottom = a.y + a.h - 1;
+    if (pos.x < a.x || pos.x > right || pos.y < a.y || pos.y > bottom) return null;
+
+    const next = { x: a.x, y: a.y, w: a.w, h: a.h };
+
+    // Snap to the clicked PANEL's outer edge when there is one, not to the
+    // single cell under the cursor. Grow already works this way (it unions
+    // the whole panel rect), so shrinking to a bare cell would cut a panel in
+    // half and leave the two gestures disagreeing about what "the thing you
+    // clicked" means. `target` is the panel rect; without it, fall back to
+    // the cell, which is the right answer on bare grid.
+    const tLeft = target ? target.x : pos.x;
+    const tRight = target ? target.x + target.w - 1 : pos.x;
+    const tTop = target ? target.y : pos.y;
+    const tBottom = target ? target.y + target.h - 1 : pos.y;
+
+    // Distance is still measured from the CURSOR — that's what says which
+    // edge the author is pulling — but the boundary lands on the panel edge.
+    if (pos.x - a.x <= right - pos.x) {
+      next.x = tLeft;
+      next.w = right - tLeft + 1;
+    } else {
+      next.w = tRight - a.x + 1;
+    }
+
+    if (pos.y - a.y <= bottom - pos.y) {
+      next.y = tTop;
+      next.h = bottom - tTop + 1;
+    } else {
+      next.h = tBottom - a.y + 1;
+    }
+
+    next.w = Math.max(ADORNMENT_MIN_CELLS, next.w);
+    next.h = Math.max(ADORNMENT_MIN_CELLS, next.h);
+
+    const unchanged = next.x === a.x && next.y === a.y
+      && next.w === a.w && next.h === a.h;
+    return unchanged ? null : next;
+  }, []);
+
+  // DOUBLE-CLICK SHRINK — collapse the selected border inward so the clicked
+  // cell becomes a CORNER of the result.
+  //
+  // Both the nearest horizontal edge (left or right) and the nearest vertical
+  // edge (top or bottom) move in on the same gesture, so one double-click
+  // fully re-corners the box. Grips remain the way to move a single edge with
+  // precision; this is the coarse fast path.
+  //
+  // Only fires for a click strictly INSIDE the selected border — a
+  // double-click anywhere else is left alone, so it can't silently mangle a
+  // box the author wasn't aiming at.
+  const handleAdornmentDoubleClick = useCallback((e) => {
+    if (!selectedAdornmentId) return;
+    const a = editableAdornments.find(v => v.id === selectedAdornmentId);
+    if (!a || a.kind !== 'border') return;
+
+    const pos = getGridPosition(e);
+    if (!pos) return;
+
+    // Snap to the panel under the cursor, matching shift-click shrink.
+    const panelEl = e.target?.closest?.('[data-panel-id]');
+    const next = collapseToCorner(
+      a, pos, extendTargetRect(panelEl?.dataset?.panelId || null, pos)
+    );
+    if (!next) return;
+
+    e.preventDefault();
+    updateAdornment(a.id, next);
+  }, [
+    selectedAdornmentId, editableAdornments, getGridPosition,
+    updateAdornment, collapseToCorner, extendTargetRect,
+  ]);
+
+  // Track the cursor cell while Shift is held with a border selected, so the
+  // panels a shift-click would consume can be outlined before committing.
+  // Armed only in that exact state — outside it the listeners aren't attached
+  // at all, so this costs nothing during normal editing.
+  useEffect(() => {
+    if (!isEditMode || !adornmentMode || !selectedAdornmentId) return undefined;
+
+    const clear = () => setExtendHoverCell(null);
+
+    const onMove = (e) => {
+      if (!e.shiftKey) { clear(); return; }
+      const pos = getGridPosition(e);
+      if (!pos) { clear(); return; }
+      const panelEl = e.target?.closest?.('[data-panel-id]');
+      setExtendHoverCell({ ...pos, panelId: panelEl?.dataset?.panelId || null });
+    };
+    // Releasing Shift must drop the preview even if the mouse never moves.
+    const onKeyUp = (e) => { if (e.key === 'Shift') clear(); };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', clear);
+      clear();
+    };
+  }, [isEditMode, adornmentMode, selectedAdornmentId, getGridPosition]);
+
+  // Panels that a shift-click at the hovered cell would end up crossing.
+  // Computed from the UNION rect (current border + extend target), so it
+  // shows exactly what the commit will overlap.
+  const adornmentPreviewPanelIds = useMemo(() => {
+    if (!extendHoverCell || !selectedAdornmentId) return null;
+    const a = editableAdornments.find(v => v.id === selectedAdornmentId);
+    if (!a || a.kind !== 'border') return null;
+
+    // Inside the border, shift-click shrinks rather than extends — and a
+    // shrink never sweeps in new panels, so there is nothing to warn about.
+    const inside = extendHoverCell.x >= a.x && extendHoverCell.x < a.x + a.w
+      && extendHoverCell.y >= a.y && extendHoverCell.y < a.y + a.h;
+    if (inside) return null;
+
+    const target = extendTargetRect(extendHoverCell.panelId, extendHoverCell);
+    const x = Math.min(a.x, target.x);
+    const y = Math.min(a.y, target.y);
+    const right = Math.max(a.x + a.w, target.x + target.w);
+    const bottom = Math.max(a.y + a.h, target.y + target.h);
+
+    const ids = new Set();
+    for (const p of editablePanels) {
+      // Half-open interval overlap on both axes.
+      if (p.x < right && p.x + p.w > x && p.y < bottom && p.y + p.h > y) {
+        ids.add(p.id);
+      }
+    }
+    return ids.size ? ids : null;
+  }, [
+    extendHoverCell, selectedAdornmentId, editableAdornments,
+    editablePanels, extendTargetRect,
+  ]);
 
   // Mouse-down anywhere in the grid while in adornment mode: deselect and
   // start drawing a new border.
@@ -2652,18 +3103,117 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // nest a box inside another border. Anything that should NOT start a draw
   // (edge strips, resize grips) stops propagation before reaching here.
   const handleAdornmentGridMouseDown = useCallback((e) => {
-    setSelectedAdornmentId(null);
-    const pos = getGridPosition(e);
+    const pos = getGridPositionDetailed(e);
     if (!pos) return;
+
     // Record the panel under the press (if any). If the gesture turns out to
     // be a click rather than a drag, mouseup attaches a border to it instead
     // of committing a 1x1 box.
     const panelEl = e.target?.closest?.('[data-panel-id]');
+    const panelId = panelEl?.dataset?.panelId || null;
+
+    // SHIFT-CLICK EXTEND — grow the selected border to swallow the clicked
+    // target, then stop. No draw gesture starts, so the shift-click can't
+    // also leave a stray box behind.
+    //
+    // The target is the whole PANEL when one is under the cursor, otherwise
+    // the single cell. Consuming the panel's full rect is the point of the
+    // gesture: clicking any part of a panel means "include that panel",
+    // which would otherwise take several clicks along its edge.
+    //
+    // Extending across an unrelated panel is allowed and deliberate — a
+    // rectangle can't dodge one, and trying to make it would produce results
+    // that are far harder to explain than an overlap the author can see.
+    if (e.shiftKey && selectedAdornmentId) {
+      const a = editableAdornments.find(v => v.id === selectedAdornmentId);
+      if (a && a.kind === 'border') {
+        // INSIDE the border, shift-click SHRINKS: the clicked cell becomes a
+        // corner, exactly as double-click does. One modifier with one
+        // meaning — "shift-click sets the boundary" — rather than shift
+        // growing and a different gesture shrinking. The union below can
+        // only ever grow, so without this branch a click inside would be a
+        // silent no-op (the target is already contained).
+        const inside = pos.x >= a.x && pos.x < a.x + a.w
+          && pos.y >= a.y && pos.y < a.y + a.h;
+
+        if (inside) {
+          // Same target resolution as the grow branch below, so shrinking to
+          // a panel lands on its outer edge rather than mid-panel.
+          const next = collapseToCorner(a, pos, extendTargetRect(panelId, pos));
+          if (next) updateAdornment(a.id, next);
+          return;
+        }
+
+        const target = extendTargetRect(panelId, pos);
+        if (target) {
+          const x = Math.min(a.x, target.x);
+          const y = Math.min(a.y, target.y);
+          const right = Math.max(a.x + a.w, target.x + target.w);
+          const bottom = Math.max(a.y + a.h, target.y + target.h);
+          updateAdornment(a.id, {
+            x,
+            y,
+            w: Math.min(right - x, editBudgetCols - x),
+            h: Math.min(bottom - y, editBudgetRows - y),
+          });
+        }
+      }
+      return;
+    }
+
+    // The SECOND press of a double-click must not start anything. A
+    // double-click is the shrink gesture, and it arrives as two full
+    // mousedown/mouseup pairs — without this the first pair would already
+    // have deselected the border and seeded a stray 1x1, leaving the
+    // dblclick handler with nothing selected to shrink.
+    //
+    // Deselection is skipped for the whole double-click (detail >= 2), which
+    // is what keeps the target border selected long enough to shrink it.
+    if (e.detail >= 2) return;
+
+    // A press INSIDE the currently-selected border keeps the selection and
+    // never seeds. That interior is the double-click shrink's working area,
+    // and the first press of a shrink would otherwise deselect the target
+    // and drop a stray 1x1 in it. Dragging still works — a real drag from
+    // here draws a nested box on mouseup as before.
+    const sel = selectedAdornmentId
+      ? editableAdornments.find(v => v.id === selectedAdornmentId)
+      : null;
+    const insideSelected = sel && sel.kind === 'border'
+      && pos.x >= sel.x && pos.x < sel.x + sel.w
+      && pos.y >= sel.y && pos.y < sel.y + sel.h;
+
+    if (!insideSelected) setSelectedAdornmentId(null);
+
+    // A plain click on empty grid means DESELECT whenever something is
+    // selected — it only seeds a new box when nothing is.
+    //
+    // Without this, plain click carries three jobs at once (seed / select /
+    // deselect) and they collide: with two borders on the canvas, clearing
+    // the current selection to get at the other one would itself drop a
+    // stray 1x1 box. Deselect-first also keeps the seed gesture honest —
+    // "click empty grid to start a box" is only reachable from a clean
+    // slate, which is exactly when it's unambiguous.
+    //
+    // Selecting the OTHER border needs no gesture of its own: every border's
+    // edge strips are always hittable, so clicking its edge selects it
+    // directly, whether or not something else is selected.
     setDrawingAdornment({
       startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, w: 1, h: 1,
-      panelId: panelEl?.dataset?.panelId || null,
+      panelId,
+      // Where in the cell the press landed — the draw resolves a gutter
+      // press by drag direction once there IS a direction to read.
+      inGutterX: pos.inGutterX,
+      inGutterY: pos.inGutterY,
+      // Suppresses the 1x1 seed on mouseup; a real drag ignores this, so
+      // dragging out a box still works from either state.
+      noSeed: !!insideSelected || !!selectedAdornmentId,
     });
-  }, [getGridPosition]);
+  }, [
+    getGridPositionDetailed, selectedAdornmentId, editableAdornments,
+    updateAdornment, extendTargetRect, collapseToCorner,
+    editBudgetCols, editBudgetRows,
+  ]);
 
   // Attach a border to a panel, or select the one it already has. Clicking a
   // bordered panel never removes the border — removal is explicit (Delete or
@@ -2709,10 +3259,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (!pos) return;
 
       if (drawingAdornment) {
-        const x = Math.min(drawingAdornment.startX, pos.x);
-        const y = Math.min(drawingAdornment.startY, pos.y);
-        const w = Math.abs(pos.x - drawingAdornment.startX) + 1;
-        const h = Math.abs(pos.y - drawingAdornment.startY) + 1;
+        // A press that landed in the GUTTER is aiming at the seam, not at
+        // either neighbouring cell. Resolve it by the drag direction: the
+        // cell BEHIND the drag is excluded, so dragging right from a gutter
+        // starts at the cell to the right, dragging left starts at the cell
+        // to the left. Per-axis, so a diagonal drag resolves each
+        // independently. Without this, flooring picks a cell arbitrarily and
+        // starting a border on an edge feels like a coin flip.
+        let startX = drawingAdornment.startX;
+        let startY = drawingAdornment.startY;
+        if (drawingAdornment.inGutterX && pos.x > startX) startX += 1;
+        if (drawingAdornment.inGutterY && pos.y > startY) startY += 1;
+
+        const x = Math.min(startX, pos.x);
+        const y = Math.min(startY, pos.y);
+        const w = Math.abs(pos.x - startX) + 1;
+        const h = Math.abs(pos.y - startY) + 1;
         setDrawingAdornment(prev => ({
           ...prev, x, y,
           w: Math.min(w, boundCols - x),
@@ -2733,15 +3295,28 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (resizingAdornment) {
         const a = editableAdornments.find(v => v.id === resizingAdornment.id);
         if (!a || !gridRef.current) return;
+        // Heal a rect that is already corrupt. Records written before the
+        // guard in updateAdornment can carry NaN geometry, which makes the
+        // border permanently undraggable. Snap it back to something sane on
+        // first touch rather than making the user delete and redraw.
+        if (!Number.isFinite(a.x) || !Number.isFinite(a.y)
+            || !Number.isFinite(a.w) || !Number.isFinite(a.h)) {
+          updateAdornment(a.id, {
+            x: Number.isFinite(a.x) ? a.x : 0,
+            y: Number.isFinite(a.y) ? a.y : 0,
+            w: Number.isFinite(a.w) ? a.w : 1,
+            h: Number.isFinite(a.h) ? a.h : 1,
+          });
+          return;
+        }
         const edge = resizingAdornment.edge;
 
         // Subtract the grab offset before flooring to a cell, so the edge
         // tracks the pointer smoothly instead of snapping on mousedown.
-        const rect = gridRef.current.getBoundingClientRect();
-        const cellW = rect.width / maxGridCol;
-        const cellH = rect.height / maxGridRow;
-        const gridX = Math.floor((e.clientX - (resizingAdornment.offsetX || 0) - rect.left) / cellW);
-        const gridY = Math.floor((e.clientY - (resizingAdornment.offsetY || 0) - rect.top) / cellH);
+        const g = gridCellGeometry();
+        if (!g) return;
+        const gridX = Math.floor((e.clientX - (resizingAdornment.offsetX || 0) - g.originX) / g.cellW);
+        const gridY = Math.floor((e.clientY - (resizingAdornment.offsetY || 0) - g.originY) / g.cellH);
 
         const next = { x: a.x, y: a.y, w: a.w, h: a.h };
 
@@ -2787,11 +3362,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         setResizingAdornment(null);
         return;
       }
-      // Require a real drag in at least one axis — a click that never moved
-      // stays 1x1 and is discarded.
-      if (drawingAdornment
-          && (drawingAdornment.w >= ADORNMENT_MIN_DRAW_CELLS
-              || drawingAdornment.h >= ADORNMENT_MIN_DRAW_CELLS)) {
+      // A click inside the selected border seeds nothing — it's the first
+      // half of a possible double-click shrink. Drags are unaffected.
+      if (isClick && drawingAdornment?.noSeed) {
+        setDrawingAdornment(null);
+        setDraggingAdornment(null);
+        setResizingAdornment(null);
+        return;
+      }
+      // Otherwise commit the box. A click that never moved commits as a 1x1
+      // seed surrounding the clicked cell — the starting point for building a
+      // box by shift-click instead of by dragging. (A click on a PANEL is
+      // handled above and never reaches here, so the two click meanings stay
+      // disjoint.)
+      if (drawingAdornment) {
         const created = {
           // Random suffix, not a bare timestamp: two borders drawn in the
           // same millisecond would otherwise share an id, and selection +
@@ -2821,7 +3405,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
   }, [
     isEditMode, adornmentMode, draggingAdornment, resizingAdornment, drawingAdornment,
-    editableAdornments, editBudgetCols, editBudgetRows, getGridPosition,
+    editableAdornments, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry,
     updateAdornment, lastAdornmentStyle, maxGridCol, maxGridRow,
     attachPanelBorder,
   ]);
@@ -2847,15 +3431,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Resize grips on the selected border. The grip identity travels via a data
   // attribute so the single mousedown handler can tell move from resize.
-  const renderAdornmentChrome = useCallback(() => (
-    <>
-      <div className="adornment-grip adornment-grip--top" data-adornment-grip="top" />
-      <div className="adornment-grip adornment-grip--left" data-adornment-grip="left" />
-      <div className="adornment-grip adornment-grip--right" data-adornment-grip="right" />
-      <div className="adornment-grip adornment-grip--bottom" data-adornment-grip="bottom" />
-      <div className="adornment-grip adornment-grip--corner" data-adornment-grip="corner" />
-    </>
-  ), []);
+  const renderAdornmentChrome = useCallback((a) => {
+    // A panel_border has no rect of its own — it IS its panel's border and
+    // moves with the panel. Offering resize grips on one is a lie: the
+    // cursor changes but there is no geometry to change, so the drag reads
+    // as broken. Only rect borders get chrome.
+    if (a?.kind !== 'border') return null;
+    return (
+      <>
+        <div className="adornment-grip adornment-grip--top" data-adornment-grip="top" />
+        <div className="adornment-grip adornment-grip--left" data-adornment-grip="left" />
+        <div className="adornment-grip adornment-grip--right" data-adornment-grip="right" />
+        <div className="adornment-grip adornment-grip--bottom" data-adornment-grip="bottom" />
+        <div className="adornment-grip adornment-grip--corner" data-adornment-grip="corner" />
+      </>
+    );
+  }, []);
 
   // ── Chart editor / component picker / AI preflight ───────────────
 
@@ -3676,6 +4267,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           editZoom={zoom}
           editScaleFactor={scaleFactor}
           onGridMouseDown={adornmentMode ? handleAdornmentGridMouseDown : handleGridMouseDown}
+          onGridDoubleClick={adornmentMode ? handleAdornmentDoubleClick : undefined}
+          adornmentPreviewPanelIds={adornmentPreviewPanelIds}
+          selectedPanelIds={selectedPanelIds}
           renderPanelChrome={renderEditPanelChrome}
           gridExtras={editGridExtras}
           // Decorations: editable copy while editing, saved record in view.

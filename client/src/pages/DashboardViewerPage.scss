@@ -815,6 +815,16 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     cursor: crosshair;
   }
 
+  // Shift-drag selection marquee. Distinct from .drawing-panel-preview (which
+  // is solid-ish and blue) so it never reads as "you are creating a panel".
+  .marquee-preview {
+    border: 1px dashed var(--cds-focus);
+    background: rgba(15, 98, 254, 0.06);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 6;
+  }
+
   // Drawing preview while dragging to create a new panel
   .drawing-panel-preview {
     border: 2px dashed #0f62fe;
@@ -904,8 +914,14 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     background: repeating-linear-gradient(90deg, #da1e28 0px, #da1e28 4px, transparent 4px, transparent 8px);
   }
 
+  // Edit mode gives every panel a visible edge so its bounds are readable
+  // while arranging. Deliberately NEUTRAL, not blue: blue is the colour of an
+  // author-applied border, and tinting every panel blue in edit mode made it
+  // impossible to tell which panels actually HAD a border. Panels carrying a
+  // real panel_border override this with the author's colour (see
+  // `.has-panel-border` / the inline style in DashboardGrid).
   .dashboard-grid .panel-container.edit-mode {
-    border-color: #0f62fe;
+    border-color: var(--cds-border-strong-01);
     position: relative;
     z-index: 1;
 
@@ -932,9 +948,20 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     // Hover header overlay — shown on mouse enter, overlays content
     .edit-hover-header {
       position: absolute;
-      top: 6px; // clear the top-edge resize grip (which owns the top 6px)
-      left: 0;
-      right: 16px; // Leave space for resize handle
+      // Inset EQUALLY on both sides so the header reads as centred rather
+      // than jammed against the left edge. The old `right: 16px` reserved
+      // room for the corner resize handle — but that handle is
+      // `bottom: 0; right: 0`, so it never reaches this band. The
+      // reservation only bought an empty gap at the top right. The left and
+      // right grips are 8px wide, so 8px a side clears them symmetrically.
+      //
+      // `top` overlaps the top resize grip's 6px band by 2px. That is safe:
+      // the grip sits at z-index 6, ABOVE this header, so it keeps its full
+      // hit area — the overlap costs appearance only, and buys back visible
+      // space on short panels where the band is a large share of the height.
+      top: 4px;
+      left: 8px;
+      right: 8px;
       height: 28px;
       background-color: rgba(22, 22, 22, 0.92);
       display: flex;
@@ -1050,6 +1077,27 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       cursor: move;
     }
 
+    // The header must never cover a resize grip. It sits at z-index 5 —
+    // above the edge grips (3) and the corner (4) — and takes pointer events
+    // on hover, so wherever it overlaps a grip, the grip becomes unclickable.
+    //
+    // On a normal panel that's harmless: the header is 28px starting 6px
+    // down, and the grips it would reach are inset clear of it. On a SHORT
+    // panel (1 cell = 32px) the header spans 6→34px — the entire panel — so
+    // every side grip is buried and the panel can only be dragged, never
+    // resized.
+    //
+    // The header is ALSO the drag handle and carries the title + buttons, so
+    // shrinking it to fit would trade a resize bug for a drag one. Instead
+    // leave its box alone and let the grips outrank it: raising the grips
+    // above z-index 5 means the header still fills the panel visually and
+    // still drags from the middle, while the outer few px along each edge
+    // belong to the resize grips.
+    &.is-short-panel {
+      .edit-resize-edge { z-index: 7; }
+      .edit-resize-handle { z-index: 8; }
+    }
+
     // ...but NOT in adornment mode, where hovering a panel means "click to
     // border this panel", not "drag me".
     //
@@ -1097,6 +1145,14 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       &:hover {
         background: linear-gradient(135deg, transparent 40%, #4589ff 40%);
       }
+
+      // On a 1-cell panel the default 16px corner is half the panel's height
+      // and swallows the shortened side grips. 10px still reads as a corner
+      // and still hits comfortably.
+      &.is-compact {
+        width: 10px;
+        height: 10px;
+      }
     }
 
     // Single-axis edge grips: thin hit-strips along the left/right/bottom
@@ -1121,17 +1177,48 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     }
 
     // vertical edges (left/right): full-height strip, ew-resize cursor.
+    //
+    // `top: 4px` matches the hover header's own top inset, so the grip runs
+    // as high as the header does instead of stopping short of it.
+    //
+    // `bottom` is per-side, NOT shared. There is no bottom-LEFT corner grip:
+    // the corner handle is 16px at `bottom: 0; right: 0`, and the bottom
+    // edge grip is itself inset `left: 8px`. So the bottom-left corner is
+    // unclaimed and the left grip can run the full height. It was reserving
+    // 16px for a handle that never sits on its side.
     .edit-resize-edge--left,
     .edit-resize-edge--right {
-      top: 8px;              // clear the corner + header hit areas
-      bottom: 16px;         // clear the bottom edge grip + corner
+      top: 4px;
       width: 8px;
       cursor: ew-resize;
 
       &::after { top: 0; bottom: 0; width: 3px; }
     }
-    .edit-resize-edge--left  { left: 0;  &::after { left: 0; } }
-    .edit-resize-edge--right { right: 0; &::after { right: 0; } }
+    .edit-resize-edge--left  { left: 0;  bottom: 4px;  &::after { left: 0; } }
+    .edit-resize-edge--right { right: 0; bottom: 16px; &::after { right: 0; } }
+
+    // Short panels (<= 2 cells tall). The default insets reserve more than a
+    // 1-cell panel (32px) can spare, leaving almost no grabbable side — the
+    // top grip and corner overlap what little remains. Give the sides nearly
+    // the full height back and let the corner keep only what it needs.
+    .edit-resize-edge--left.is-short,
+    .edit-resize-edge--right.is-short {
+      top: 2px;
+    }
+    // Per-side at the bottom, for the same reason as the full-size rule: the
+    // compact corner is 10px and sits bottom RIGHT, so only the right grip
+    // needs to clear it. `bottom: 10px` matches that corner exactly, so the
+    // two sit flush without overlapping.
+    .edit-resize-edge--left.is-short  { bottom: 4px; }
+    .edit-resize-edge--right.is-short { bottom: 10px; }
+
+    // Same problem on the other axis for 1-cell-wide panels: the bottom and
+    // top grips inset 8px/16px horizontally, which is most of a 32px width.
+    .edit-resize-edge--bottom.is-narrow,
+    .edit-resize-edge--top.is-narrow {
+      left: 2px;
+      right: 10px;
+    }
 
     // bottom edge: full-width strip (minus the corner), ns-resize cursor.
     .edit-resize-edge--bottom {
@@ -1145,9 +1232,10 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     }
 
     // top edge: the hover HEADER already owns the top band as the move-drag
-    // handle, so the top resize grip is a thin strip ABOVE it (higher z, top
-    // 6px) and the header is nudged down 6px in edit mode (below) so the two
-    // don't fight. Inset from the sides to clear the left/right edge grips.
+    // handle, so the top resize grip is a thin strip ABOVE it — higher z, so
+    // it wins the hit test where the two overlap (the header starts at 4px,
+    // 2px into this 6px band). Inset from the sides to clear the left/right
+    // edge grips.
     .edit-resize-edge--top {
       top: 0;
       left: 8px;
@@ -1176,16 +1264,17 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       }
     }
 
-    // Empty panels in edit mode
+    // Empty panels in edit mode. Neutral like the rest of the edit chrome —
+    // an empty panel is a placeholder, not a bordered one.
     &.empty-panel {
       border-style: solid;
-      border-color: #0f62fe;
-      background-color: rgba(15, 98, 254, 0.03);
+      border-color: var(--cds-border-strong-01);
+      background-color: rgba(255, 255, 255, 0.02);
     }
 
     // Text label panels (legacy control-based) keep their minimal style
     &.text-label-panel {
-      border: 1px solid #0f62fe;
+      border: 1px solid var(--cds-border-subtle-01);
       background-color: #262626;
     }
 

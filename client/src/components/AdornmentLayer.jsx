@@ -21,15 +21,22 @@ const GAP = 4;
  * where stride = CELL + GAP. So the content box of the whole cell rect is
  * [x*stride, x*stride + w*stride - GAP].
  *
- * The border starts at the first pixel OUTSIDE that box and grows away from
- * the panels. Since `box-sizing: border-box` draws the border inward from
- * the element's edge, the element is simply the content box expanded by the
- * line width on every side:
+ * `width`/`height` are that box exactly, and `left`/`top` are shifted up-and-
+ * left by the line width. With `box-sizing: content-box` the border is added
+ * OUTSIDE the given width, so the line occupies
+ * [x*stride - lineWidth, x*stride] — flush against the panel edge, extending
+ * away into the gutter — and panel content is never covered, at any width.
  *
- *   left  = x*stride - lineWidth        width = w*stride - GAP + 2*lineWidth
+ * The offset is the part that is easy to lose. `content-box` alone is not
+ * enough: `left`/`top` anchor the element's BORDER box, so without the shift
+ * the line's outer edge lands on the panel's edge and the whole line paints
+ * inward across the panel. Measured in the browser, that showed up as the
+ * element's left edge sitting exactly at the layer's left edge (offset 0)
+ * instead of -lineWidth.
  *
- * The line then occupies [x*stride - lineWidth, x*stride] — flush against
- * the panel edge, extending into the gutter.
+ * Equally, do not re-expand `width` by 2*lineWidth "to make room". Under
+ * content-box the border is already additive, so that double-counts and the
+ * box overshoots its panels on the right/bottom.
  *
  * Why outward rather than centered: the gutter is 4px, so growing outward
  * lets TWO adjacent boxes each take 2px of the same gutter without
@@ -38,8 +45,8 @@ const GAP = 4;
  * same centerline and they'd collide.
  *
  * Widths above 2px consume more than half the gutter, so two adjacent boxes
- * at 4px or 6px will overlap each other (and at 6px spill onto the far
- * panel). That is the author's call — the geometry no longer forces it.
+ * at 3px or 4px will overlap each other. That is the author's call — the
+ * geometry no longer forces it.
  *
  * These are NATIVE px. The layer is a child of `.dashboard-grid`, which is
  * the element the fit-mode transform scales — so the browser scales the
@@ -51,13 +58,27 @@ export function adornmentRect(a) {
   const strideY = CELL_HEIGHT + GAP;
   const line = a.width || 2;
 
-  // Content box of the cell rect (the panels' own footprint), then expanded
-  // by the line width on each side so the border grows outward from it.
+  // The panels' footprint, shifted UP-AND-LEFT by the line width.
+  //
+  // With `box-sizing: content-box`, `width`/`height` describe the CONTENT
+  // box and the border is added outside it — so the element's total footprint
+  // is content + 2*line. But `left`/`top` still anchor the element's border
+  // box, so a bare `left: x*stride` puts the line's outer edge at the panel's
+  // edge and paints the whole line INWARD across the panel. Subtracting the
+  // line width moves that outer edge into the gutter, leaving the line's
+  // inner edge flush against the panel — which is the whole point.
+  //
+  // Net effect at column 0: left = -line, so the line occupies [-line, 0] —
+  // outside the grid box entirely, in the container's padding.
+  //
+  // Two things must stay true together, or the line lands back on the panel:
+  // this offset, and `content-box` (with `border-box` the width would absorb
+  // the border instead of adding to it).
   return {
     left: a.x * stride - line,
     top: a.y * strideY - line,
-    width: a.w * stride - GAP + 2 * line,
-    height: a.h * strideY - GAP + 2 * line,
+    width: a.w * stride - GAP,
+    height: a.h * strideY - GAP,
   };
 }
 
@@ -94,13 +115,40 @@ function AdornmentLayer({
   selectedId = null,
   onSelect = null,
   renderChrome = null,
+  scaleX = 1,
+  scaleY = 1,
 }) {
   if (!adornments || adornments.length === 0) return null;
 
   return (
     <div className={`adornment-layer ${interactive ? 'is-interactive' : ''}`}>
       {adornments.map((a) => {
+        const line = a.width || 2;
+        // Correct only the ASYMMETRY between axes, not the overall scale.
+        //
+        // Under "stretch" the grid is scaled by scale(sx, sy) with different
+        // factors, so a 4px border renders 4*sx on the sides and 4*sy on
+        // top/bottom — visibly uneven. Normalizing each axis against the mean
+        // evens them out while leaving the border's share of the gutter
+        // unchanged.
+        //
+        // Dividing by sx/sy outright (the obvious version) is WRONG: when the
+        // scale is below 1 it makes the line thicker in grid coordinates, so
+        // two adjacent boxes eat into the 4px gutter from both sides and the
+        // gap between them closes — visible even at ratios near 1, where the
+        // gutter itself has barely shrunk. Borders must scale WITH the canvas
+        // like everything else; only the axis difference is the artifact.
+        const sx = scaleX || 1;
+        const sy = scaleY || 1;
+        const mean = (sx + sy) / 2;
+        const lineX = line * (mean / sx);
+        const lineY = line * (mean / sy);
+        // adornmentRect offsets by the nominal line width; re-offset with the
+        // per-axis values so the line's INNER edge still sits flush against
+        // the panel rather than drifting by the scale difference.
         const rect = adornmentRect(a);
+        const left = rect.left + line - lineX;
+        const top = rect.top + line - lineY;
         const isSelected = interactive && selectedId === a.id;
 
         return (
@@ -108,17 +156,38 @@ function AdornmentLayer({
             key={a.id}
             className={`adornment adornment--${a.kind || 'border'} ${isSelected ? 'is-selected' : ''}`}
             style={{
-              left: `${rect.left}px`,
-              top: `${rect.top}px`,
+              left: `${left}px`,
+              top: `${top}px`,
               width: `${rect.width}px`,
               height: `${rect.height}px`,
               borderStyle: a.line_style || 'solid',
-              borderWidth: `${a.width || 2}px`,
-              borderColor: a.color || '#0f62fe',
+              // Per-axis widths: left/right counter-scale on X, top/bottom on Y.
+              borderLeftWidth: `${lineX}px`,
+              borderRightWidth: `${lineX}px`,
+              borderTopWidth: `${lineY}px`,
+              borderBottomWidth: `${lineY}px`,
+              // Carbon red50 — matches ADORNMENT_DEFAULT_COLOR in
+              // DashboardViewerPage. Distinct from the blue edit chrome.
+              borderColor: a.color || '#fa4d56',
             }}
             onMouseDown={
               interactive && onSelect
                 ? (e) => {
+                    // A SHIFT press is always the grid's extend gesture, never
+                    // a move or resize. Let it fall through untouched.
+                    //
+                    // This matters most on a small border: the edge strips
+                    // (9px) and grips (10px) together cover essentially all of
+                    // a 1x1 box (~36px), so without this a shift-click on the
+                    // seed box you just created can never reach the grid — the
+                    // chrome swallows it and starts a resize instead. Shift is
+                    // unambiguous, so there is nothing to disambiguate here.
+                    if (e.shiftKey) return;
+                    // Likewise the second press of a DOUBLE-click: that's the
+                    // grid's shrink gesture. Starting a resize on it would
+                    // both fight the shrink and, on a small box, make the
+                    // gesture unreachable for the same coverage reason.
+                    if (e.detail >= 2) return;
                     // Only edge strips and grips are hittable — a mousedown
                     // reaching here came from one of them. Claim it so it
                     // never reaches the grid's draw-new handler underneath.
@@ -168,6 +237,10 @@ AdornmentLayer.propTypes = {
   selectedId: PropTypes.string,
   onSelect: PropTypes.func,
   renderChrome: PropTypes.func,
+  // Per-axis fit scale. Only "stretch" makes these differ; the layer divides
+  // border widths by them so lines render evenly on all four sides.
+  scaleX: PropTypes.number,
+  scaleY: PropTypes.number,
 };
 
 export default AdornmentLayer;

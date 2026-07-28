@@ -115,7 +115,18 @@ export const COMPONENT_MIN_SIZES = {
   // 7x3 is the floor for the "small" weather variant (icon + temperature +
   // conditions). The medium and large variants need more room, but minimums
   // are keyed by subtype only — not by weather_size — so this is the smallest
-  // that any variant can use. Authors size up for medium/large.
+  // that any variant can use. Authors size up for medium/large:
+  //
+  //   small  >= 3 rows
+  //   medium >= 6 rows
+  //   large  >= 10 rows  (.weather-forecasts alone sets min-height: 180px,
+  //                       which is 6 rows before the conditions block above)
+  //
+  // Medium wants 6 rather than 4 because an active weather alert adds a
+  // banner. That banner only renders during an advisory, so a 4-row medium
+  // panel looks correct for weeks and then clips the first time a heat
+  // advisory (or similar) comes through. Sizing for the alert case avoids a
+  // bug that only shows up in bad weather.
   weather:        { w: 7, h: 3 },
 };
 

@@ -8,6 +8,76 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Dashboard borders can be built by clicking, not just dragging.**
+  Dragging out a rectangle still works unchanged, but it's awkward when the
+  panels you want to group aren't already a tidy block. Now: with nothing
+  selected, click an empty cell to drop a one-cell border around it (when a
+  border *is* selected, clicking empty grid deselects it instead, so
+  clearing a selection never leaves a stray box behind). Then
+  <kbd>Shift</kbd>-click each
+  panel or cell to take in — the border grows to the smallest rectangle
+  containing everything clicked. Clicking anywhere on a panel takes in that
+  whole panel, so grouping is one click per panel rather than one per edge.
+
+  To pull a border back in, **<kbd>Shift</kbd>-click a cell inside it** (or
+  double-click, which does the same). That cell becomes the new corner: the
+  nearer left/right edge and the nearer top/bottom edge both move in to meet
+  it. So <kbd>Shift</kbd>-click has a single rule — it sets the boundary to
+  where you clicked, growing the border from outside and shrinking it from
+  inside. The edge grips are unchanged and remain the way to move a single
+  edge precisely.
+
+  Starting a drag in the gap *between* two panels now resolves by drag
+  direction: the box starts on the side you drag toward, rather than on
+  whichever cell the gap happened to round to. This makes it possible to
+  start a border exactly on an edge. The narrow band just outside the
+  outermost panels is live too, so a border can be started on the canvas
+  boundary itself.
+
+- **Move several panels at once.** <kbd>Shift</kbd>-drag a box across the
+  canvas to select every panel fully inside it, then drag any one of them to
+  move the whole group as a block. Clicking empty space clears the selection
+  without doing anything else, so a near-miss can't scatter a group you just
+  built; <kbd>Esc</kbd> clears it too. The selection is a working aid, not
+  saved state — it clears on save, on switching to Borders, and on leaving
+  the editor.
+
+### Fixed
+
+- **A dashboard no longer renders at a fraction of its size.** One adornment
+  with corrupt stored geometry collapsed the grid to a fixed fallback size,
+  leaving a large empty band and pushing the outermost panels off the canvas.
+  Affected dashboards render correctly again with no action needed.
+
+- **Border lines no longer paint across the panel.** A border grew *inward*
+  from the panel edge, so the wider the line the more of the chart it
+  covered. Lines now sit in the gutter between panels at every width, and a
+  new border defaults to red rather than the blue that made it almost
+  indistinguishable from the editor's own panel outlines.
+
+- **Border line weight is even under "fit to screen" (stretch).** Stretch
+  scales the canvas by a different factor on each axis, which rendered the
+  top and bottom of a border visibly thinner than its sides. Lines are now
+  corrected per axis while keeping their share of the gap between panels, so
+  two adjacent borders still show a gap between them.
+
+- **A border with corrupt stored geometry can no longer become permanently
+  stuck.** Such a border ignored every drag while the cursor insisted it
+  should be moving; affected borders are repaired on load, and the bad
+  values are rejected at the source.
+
+- **Resize edges are grabbable on single-cell panels.** The grips reserved
+  more space for the corner and the hover header than a 1-cell panel has, so
+  the side edges were effectively unreachable.
+
+  While <kbd>Shift</kbd> is held, every panel the border would end up
+  crossing is outlined, so you can see what a click takes in before
+  committing. A border is always a rectangle, so extending it to reach one
+  panel can sweep in another sitting between them — that's expected, and the
+  preview is there to make it visible rather than surprising.
+
 ## [0.47.0] — 2026-07-26
 
 ### Added

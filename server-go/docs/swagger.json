@@ -9313,7 +9313,7 @@
             "type": "object",
             "properties": {
                 "color": {
-                    "description": "Color is a hex string (\"#0f62fe\") chosen from the same swatch palette the\nvalue-chart text rules use.",
+                    "description": "Color is a hex string (\"#fa4d56\") chosen from the same swatch palette the\nvalue-chart text rules use. The server assigns no default; the client\nsupplies one (Carbon red50) on create.",
                     "type": "string"
                 },
                 "h": {

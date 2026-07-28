@@ -130,8 +130,10 @@ grid root, multiplied into the chart-header font size via
 ## Adornments (decorations in the gutter)
 
 Adornments are purely visual decorations drawn *over* the panel grid.
-Today there is one kind, `border` — a rectangle that draws its line
-centered in the 4 px gutter between panels. They are stored in their
+There are two kinds: `border` — a rectangle that draws its line in the
+4 px gutter between panels, growing outward from the panels' edge (see
+below) — and `panel_border`, which restyles a single panel's own border
+inward. They are stored in their
 own `adornments` array on the dashboard record, **not** in `panels`:
 they reference no component, render no data, and must never appear in
 panel counts, component-usage lookups, or export dependency walks.
@@ -139,6 +141,184 @@ panel counts, component-usage lookups, or export dependency walks.
 Geometry is a cell rect `{x, y, w, h}` in the same units as a panel.
 The renderer (`AdornmentLayer.jsx`) anchors the line to the panels'
 own edge and grows it **outward** into the gutter.
+
+### Building a border rect
+
+Two ways to get to the same rect, because dragging is awkward once the
+target group isn't already a tidy block:
+
+- **Drag** — the original gesture. Press, drag ≥ `ADORNMENT_MIN_DRAW_CELLS`
+  (2) cells in either axis, release.
+- **Click / shift-click / double-click** — click bare grid to commit a
+  1×1 seed; <kbd>Shift</kbd>-click to union the rect with the click
+  target; double-click inside to collapse it.
+
+Plain click is deliberately **not** overloaded three ways. With a
+selection live it deselects; only from a clean slate does it seed. The
+alternative — always seeding — makes clearing a selection drop a stray
+1×1, which is exactly the move needed to get from one border to another.
+Switching between borders needs no gesture of its own: edge hit strips
+render for *every* border, not just the selected one, so clicking another
+border's edge selects it directly.
+
+The union target is the whole **panel** rect when a panel is under the
+cursor, otherwise the single cell. That's what makes "shift-click the
+panels you want" work in one click per panel rather than one per edge
+cell.
+
+<kbd>Shift</kbd>-click has ONE rule: it sets the boundary to the clicked
+cell. Outside the rect that's a union (grow); inside it's a collapse
+(shrink). Splitting those across two different gestures made the inside
+click a silent no-op — a union with a cell already contained changes
+nothing — which reads as a broken gesture rather than a deliberate one.
+
+Shrink moves **both** the nearer horizontal edge and the nearer vertical
+edge in to the clicked cell, making it a corner. Ties resolve toward
+left/top. Double-click does the same thing (shared `collapseToCorner`, so
+the two can't drift). The edge grips remain the single-edge, precise
+path; both click gestures are the coarse one.
+
+**The outer boundary needs overlay strips, not padding.** The grid box
+ends exactly at the last cell (`cols*32 + (cols-1)*4`), so there is no
+grid surface above row 0, left of column 0, or past the last row/column
+— nothing to press, so a border can't be *started* on the outer edge.
+
+Padding cannot fix this. The `cols`/`rows` formulas floor a near-exact
+fit, so the leftover canvas is whatever the modulo happens to be — **4 px
+at 2560 wide**, 12 px at 1920, 24 px at 3840. A symmetric 4 px ring needs
+8 px horizontally, which usually isn't there; adding it overflows the
+canvas or gets squeezed to nothing. Any fix that consumes layout space
+has the same problem, and taking it from `VIEWER_CHROME_H` instead would
+cost a whole column and reflow existing dashboards.
+
+The press is instead handled on `.dashboard-grid-container`, whose 4 px
+padding is the band just outside the grid. In adornment mode that element
+takes the same `onGridMouseDown` and wears `cursor: crosshair`, and
+`getGridPosition`'s existing clamp resolves the out-of-range coordinate to
+the boundary cell.
+
+Handling it on the CONTAINER rather than on overlay strips is the whole
+trick. An earlier attempt floated hit-strips above the grid's outer cells;
+they intercepted edge-grip drags and shift-clicks near the boundary,
+trading an inconvenience for two broken gestures. The container sits
+*below* the grid, so panels, borders, and grips all claim the event first
+by normal bubbling — the container only ever sees presses that missed
+everything else.
+
+### Panel multi-select
+
+<kbd>Shift</kbd>-drag on the grid is a marquee; on release, panels **fully
+enclosed** by it become `selectedPanelIds`. Dragging any member then moves
+the whole set.
+
+Three details that are easy to get wrong:
+
+- **`startDragging` passes shift-presses through.** Panels normally claim
+  their own mousedown, so without that passthrough a marquee could never be
+  started on top of a panel.
+- **Batch moves apply one delta to a grab-time snapshot**, not to live
+  panel state — applying deltas incrementally lets rounding accumulate and
+  the group drifts apart over a long drag.
+- **Clamping is group-wide.** The delta is limited by whichever member hits
+  an edge first, keeping the group rigid; clamping each panel independently
+  squashes the group against the boundary.
+
+Gutter borders fully enclosed by the marquee are **carried**, not
+selected: they take the group's delta but get no outline, no style bar,
+and no entry in `selectedPanelIds`. A border is a decoration *around*
+panels rather than a peer of them, so it travels with the group it frames
+instead of being torn away from it. Carried borders deliberately skip
+their own edge clamp — the delta is already bounded by the panels, and
+re-clamping per border would let one stop short and break the alignment
+that carrying exists to preserve.
+
+The batch move must **not** early-return on a zero delta. `dx`/`dy` are
+measured from the grab point, not from the panels' current position, so
+`dx === 0` means "back where the drag started" — exactly when the panels
+are displaced and need writing back. Returning there stranded the group
+at its last non-zero offset: it moved out and refused to come home. The
+per-item identity checks already make redundant writes free.
+
+An outside click *deselects only* — the click after it draws or selects
+normally. Always-deselect-and-act meant a slightly-missed click both lost
+the selection and left a stray 1-cell panel behind. Same two-stage rule the
+border gestures use.
+
+The selection is transient: cleared on save, on entering adornment mode
+(shift is the marquee in normal mode but extend/shrink in adornment mode —
+one modifier can't mean both), on `enterEditMode` (which re-seeds every
+panel, so a surviving selection would point at the pre-revert set), and on
+leaving edit mode.
+
+### Line weight under non-uniform fit
+
+"stretch" scales the grid by `scale(sx, sy)` with **different factors per
+axis**, and a CSS border scales with everything else — so a 4 px line
+renders `4*sx` on the sides and `4*sy` on top and bottom. `AdornmentLayer`
+corrects this by normalizing each axis against the **mean** of the two:
+
+```
+lineX = width * (mean / sx)      lineY = width * (mean / sy)
+```
+
+Normalize against the mean, **not** by dividing by `sx`/`sy` outright. The
+divide-outright version renders each axis at exactly the nominal width, but
+when a scale factor is below 1 it makes the line *thicker in grid
+coordinates* — two adjacent boxes then eat the shared 4 px gutter from both
+sides and the gap between them closes. That shows up even at ratios near 1,
+where the gutter itself has barely shrunk. Borders must scale WITH the
+canvas like everything else; only the axis *difference* is the artifact.
+
+The position offset uses the same per-axis values, so the line's inner edge
+stays flush against the panel instead of drifting by the scale difference.
+Both factors are 1 in every uniform mode, making the whole thing a no-op
+there. Panel borders (`panel_border`) are plain CSS borders on grid items
+and are still subject to the original distortion.
+
+**Gutter presses resolve by drag direction.** `getGridPosition` floors,
+so a press in the 4 px gap between cells lands on whichever cell the
+pixel math picks — arbitrary from the author's point of view, and it
+makes starting a border *on* an edge feel like a coin flip.
+`getGridPositionDetailed` additionally reports whether the press was in
+the gutter (the tail of the 36 px stride, `>= 32/36`), and the draw
+excludes the cell BEHIND the drag: drag right from a gutter and the box
+starts on the right-hand cell. Resolved per-axis, and only once the drag
+has a direction to read — which is why the flags are stored at mousedown
+and applied in `handleMouseMove` rather than resolved up front.
+`getGridPosition` itself is deliberately unchanged: it's shared with
+panel dragging, which grabs a panel body and never a gutter.
+
+Three collisions this gesture set has to resolve, all in
+`handleAdornmentGridMouseDown` / `handleMouseUp`:
+
+- A click on a **panel** attaches a `panel_border` and returns before the
+  seed branch, so the two click meanings never overlap.
+- A double-click arrives as two full mousedown/mouseup pairs. A press
+  inside the *selected* border sets a transient `noSeed` flag and keeps
+  the selection, so the first press of a shrink can't deselect the target
+  or litter a 1×1 inside it. `e.detail >= 2` short-circuits the second
+  press. `noSeed` is gesture state only — the committed record is built
+  field-by-field and never carries it.
+- The panel expand-modal double-click (`DashboardGrid.jsx`) is suppressed
+  while `adornmentMode` is on, since adornment mode owns that gesture.
+- **A border's own chrome must not swallow the build gestures.** The edge
+  hit strips (9 px) plus the grips (10 px) cover essentially ALL of a 1×1
+  box (~36 px), and `AdornmentLayer` `stopPropagation()`s every mousedown
+  that reaches it. So on a freshly seeded box, a shift-click or
+  double-click hit a grip and became a resize — the grid handler that
+  implements extend/shrink never ran, and the gesture looked dead. Both
+  are unambiguous (shift never means resize; a double-click never means
+  drag), so `AdornmentLayer` lets `e.shiftKey` and `e.detail >= 2` fall
+  through untouched. Any future gesture routed through the grid needs the
+  same passthrough, or it will be unusable on small borders.
+
+Extending across an unrelated panel is **allowed**. A rectangle can't
+route around an obstacle, and every alternative (splitting the box,
+skipping the panel, auto-shrinking) produces geometry that's harder to
+predict than a visible overlap. While <kbd>Shift</kbd> is held the panels
+the union would cross are outlined (`adornment-extend-preview`) so the
+overlap is visible *before* the click. That cue is preview-only — nothing
+about overlap is stored on the adornment.
 
 The cell rect's content box — the panels' footprint — is
 `[x * stride, x * stride + w * stride - GAP]`, where

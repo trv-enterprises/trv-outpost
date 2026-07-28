@@ -53,6 +53,33 @@ No header bar — components render at full size. The entire panel is a drag tar
 
 Toggle between modes using the icon button in the toolbar.
 
+## Moving several panels at once
+
+Hold <kbd>Shift</kbd> and drag a box across the canvas. On release, every
+panel **completely inside** the box is selected — a panel the box only
+clips is left out, so grabbing a group is deliberate rather than a guess.
+
+Selected panels get a blue outline and stay selected until you clear them.
+While the selection is live:
+
+| Action | Result |
+|--------|--------|
+| **Drag inside the selection** | Moves the whole group together |
+| **Click empty space** | Clears the selection (that click does nothing else) |
+| **Click a panel outside the selection** | Clears the selection and works on that panel |
+| **<kbd>Esc</kbd>** | Clears the selection |
+
+The group moves as a rigid block and stops at the canvas edge — it won't
+squash together when one panel reaches the boundary. Panels may overlap
+after a group move, exactly as they may when dragged one at a time.
+
+A **border** completely inside the selection box travels with the group,
+so a framed set of panels keeps its frame. A border that only partly
+overlaps the box stays where it is — move it separately in Borders mode.
+
+The selection is a working aid, not saved state: it clears on save, on
+switching to Borders, and on leaving the editor.
+
 ## Borders (Adornments)
 
 Borders are grouping boxes you draw around related panels — a visual way
@@ -65,12 +92,58 @@ stop responding to clicks, so every mouse action applies to borders.
 | Action | How |
 |--------|-----|
 | **Draw a border** | Drag out a rectangle on the grid, exactly like drawing a panel |
-| **Select** | Click an existing border |
+| **Start from one cell** | With nothing selected, click an empty cell — a one-cell border appears around it, ready to extend |
+| **Extend** | <kbd>Shift</kbd>-click a cell or panel *outside* the selected border; it grows to take it in |
+| **Shrink** | <kbd>Shift</kbd>-click (or double-click) a cell *inside* the selected border — it becomes the border's new corner |
+| **Select** | Click a border's edge — this works even when another border is already selected, so it's how you switch between them |
 | **Move** | Drag a selected border |
 | **Resize** | Drag any edge or the bottom-right corner |
 | **Restyle** | With a border selected, use the color / width / line-style controls that appear in the toolbar |
 | **Delete** | Press <kbd>Delete</kbd>, or click the trash icon in the style controls |
-| **Deselect** | Press <kbd>Esc</kbd> or click empty grid space |
+| **Deselect** | Press <kbd>Esc</kbd>, or click empty grid space |
+
+### Building a border by clicking
+
+Dragging a rectangle is the quickest way to box in panels that are already
+next to each other. When the group is a more awkward shape, build it up
+instead:
+
+1. Click an empty cell, with no border currently selected. A one-cell
+   border appears there. (If something *is* selected, that first click
+   just deselects it — click again to start the new box.)
+2. <kbd>Shift</kbd>-click each panel you want inside it. The border grows
+   to the smallest rectangle containing everything you've clicked — so
+   clicking anywhere on a panel takes in that whole panel.
+3. To pull it back in, <kbd>Shift</kbd>-click a cell *inside* the border
+   (double-click does the same thing). The cell you click becomes a
+   corner: the nearer left/right edge and the nearer top/bottom edge both
+   move in to meet it.
+
+So <kbd>Shift</kbd>-click has one rule — **it sets the boundary to where
+you clicked**. Outside the border that grows it; inside, it shrinks it.
+
+While you hold <kbd>Shift</kbd>, every panel the border would end up
+crossing is outlined, so you can see what a click will take in before you
+commit to it.
+
+When you start a drag from the narrow gap *between* two panels, the box
+starts on the side you drag **toward** — drag right and the panel to the
+left is left out, drag left and it's the one on the right. That makes it
+possible to start a border exactly on an edge instead of guessing which
+cell the gap belongs to. The thin margin just outside the outermost
+panels works the same way, so a border can start on the canvas edge.
+
+With several borders on a dashboard, click any border's **edge** to make
+it the selected one — that works whether or not something else is
+selected, so you can go straight from extending one border to extending
+another. The style controls in the toolbar always act on the currently
+selected border.
+
+Because a border is always a rectangle, extending it to reach one panel can
+sweep in another that happens to sit between them. That's expected — a
+rectangle can't route around an obstacle, and the alternatives all produce
+shapes that are harder to predict than the overlap you can see. Move the
+panel or the border if the result isn't what you wanted.
 
 Click **Done** to leave adornment mode and return to editing panels.
 Borders save with the rest of the dashboard when you click **Save**.

@@ -1638,8 +1638,9 @@ definitions:
     properties:
       color:
         description: |-
-          Color is a hex string ("#0f62fe") chosen from the same swatch palette the
-          value-chart text rules use.
+          Color is a hex string ("#fa4d56") chosen from the same swatch palette the
+          value-chart text rules use. The server assigns no default; the client
+          supplies one (Carbon red50) on create.
         type: string
       h:
         type: integer
