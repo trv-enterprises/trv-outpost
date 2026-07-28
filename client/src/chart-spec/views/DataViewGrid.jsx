@@ -493,10 +493,14 @@ export default function DataViewGrid({
     // Editor mode: reorder writes the AUTHOR's visible_columns order. Same
     // reasoning as the resize split above.
     if (editable) {
-      // AG Grid fires columnMoved continuously through a drag; only the drop
-      // is a real reorder. (event.finished is undefined for programmatic
-      // moves, which we also want to ignore here.)
-      if (event?.finished === false) return;
+      // Only a completed USER drag is a real reorder. AG Grid fires
+      // columnMoved continuously while dragging (finished: false), and also
+      // for programmatic column changes during setup/remount — where
+      // `source` is 'api'/'gridInitializing' and `finished` may be undefined.
+      // Writing on those would let a remount echo the grid's own column order
+      // back into visible_columns as if the author had dragged it.
+      if (!event?.finished) return;
+      if (event.source !== 'uiColumnMoved') return;
       onAuthorOrderChange?.(ids);
       return;
     }
