@@ -6,6 +6,48 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Gauge styles.** A **Gauge Style** dropdown applies a whole coordinated
+  look to a gauge in one pick, instead of setting a dozen interacting options
+  by hand. **Modern** is a single threshold-colored arc sweeping over a flat
+  track — no tick marks or dial numbers, a slim needle, the value set high in
+  the dial with an optional caption beneath. **Classic** is the traditional
+  dial: the track painted in green/yellow/red threshold bands, with tick
+  marks, dial numbers and a broad pointer over a center hub.
+
+  New gauges start on Modern. **Gauges created before this release keep
+  rendering exactly as they did** — they read as Classic and change only if
+  you choose otherwise.
+
+  A style is a starting point, not a mode: everything it sets stays editable
+  under **Dial & Arc**, **Ticks & Pointer** and **Readout**, and the dropdown
+  reads **Custom** once you change any of them, so it's clear that picking a
+  style again will overwrite your tuning. Choosing a style touches appearance
+  only — min/max, thresholds, unit, decimals and SI abbreviation all survive.
+
+  Newly adjustable: dial start and end angle, dial size, arc coloring mode and
+  thickness, split lines, dial numbers, pointer visibility/length/width, the
+  center hub, value size and position, and a caption with its own size and
+  position.
+
+### Fixed
+
+- **Aggregations now actually apply on Gauge and Value charts.** Choosing
+  **Average** (or Min / Max / Sum / Count) on a single-value chart displayed
+  the *first raw reading* instead of the aggregate — the number was computed
+  correctly and then discarded, with no error to indicate it. Both types now
+  show the aggregated value, so "average over the last 5 minutes, ignoring
+  spikes" (a sliding window plus Average) works as written.
+
+- **The aggregation Field can no longer point at the wrong column.** On Gauge
+  and Value it is fixed to the Value Column and shown greyed out. Previously
+  it could be left blank — which silently fell back to the first raw reading —
+  or set to a column the chart doesn't display, which aggregated data you
+  never see.
+
 ## [0.48.0] — 2026-07-28
 
 ### Added

@@ -42,6 +42,15 @@ Map query result fields to chart axes and series:
 - **Filters**: Include/exclude specific values
 - **Aggregation**: Sum, average, count, min, max
 
+On the single-value types — **Gauge** and **Value** — an aggregation reduces
+the rows to the one number shown, so picking **Average** displays the average
+rather than the newest reading. The **Field** it aggregates is fixed to the
+Value Column (there's only one column on display, so there's nothing to
+choose) and is shown greyed out to make that clear. What the average is taken
+*over* is whatever rows the query returned, narrowed by any filters and by the
+sliding window if one is set — so on a live chart, "average over the last 5
+minutes, ignoring spikes" is a sliding window of 5 minutes plus **Average**.
+
 ### Chart Options
 | Option | Applicable Types |
 |--------|-----------------|
@@ -54,11 +63,44 @@ Map query result fields to chart axes and series:
 | **Orientation** (vertical / horizontal) | Bar — horizontal runs the bars left-to-right with categories down the side axis; best for long category names. Dual-Y-axis bars stay vertical |
 | **Bar width (%)** | Bar — each bar's width as a percent of its category slot; blank = automatic sizing |
 | **Show data labels** | All chart types |
+| **Gauge style** | Gauge — a named preset for the dial's whole look; see [Gauge styles](#gauge-styles) below |
 | **Gauge min/max** | Gauge |
 | **Gauge thresholds** | Gauge (warning at 70, danger at 90 by default) |
 | **Gauge unit** | Gauge |
+| **Gauge dial appearance** | Gauge — start/end angle, dial size, arc coloring and thickness, split lines, dial numbers, pointer, value and caption placement |
 | **Pie inner radius** | Pie (0 for pie, >0 for donut) |
 | **Pie show labels** | Pie |
+
+### Gauge styles
+
+A gauge's look is a dozen interacting settings — where the dial starts and
+ends, how thick the arc is, whether it has tick marks, where the number sits.
+Setting those one at a time to reach something coherent is tedious, so the
+**Gauge Style** dropdown at the top of Gauge Options applies a whole
+coordinated set at once.
+
+| Style | Look |
+|---|---|
+| **Modern** | One colored arc sweeping over a flat track, no tick marks or dial numbers, a slim needle, and the value set high in the dial with an optional caption beneath it. The arc takes the color of the threshold band the value is in. |
+| **Classic** | The traditional dial: the whole track painted in green / yellow / red threshold bands, with tick marks, dial numbers, and a broad pointer over a center hub. |
+
+**New gauges start on Modern.** Gauges you created before styles existed keep
+rendering exactly as they always have — they show as **Classic** and nothing
+about them changes until you choose otherwise.
+
+A style is a *starting point*, not a mode. Every setting it applies stays
+editable underneath, in the **Dial & Arc**, **Ticks & Pointer** and
+**Readout** groups. Once you change any of them the dropdown reads
+**Custom** — that's your cue that picking a style again will *overwrite* what
+you've tuned.
+
+Choosing a style only touches appearance. Min and max, the warning and danger
+thresholds, the unit suffix, decimal places and SI abbreviation all survive a
+style change, because they describe what the number *means* rather than how
+the dial looks.
+
+The **caption** is the small label under the value — a unit, a source name,
+anything short. Leave it blank and it takes no space.
 
 ### Value formatting
 
