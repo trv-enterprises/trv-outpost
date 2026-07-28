@@ -5214,6 +5214,39 @@ paths:
       summary: Get component draft
       tags:
       - components
+  /components/{id}/usage:
+    get:
+      description: List the dashboards referencing this component (panel default or
+        component-swap override). Used by the editor's shared-component save warning.
+        Dashboards in namespaces the caller can't see are returned as {unauthorized:true}
+        so the count stays accurate.
+      parameters:
+      - description: Component ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get component dashboard usage
+      tags:
+      - components
   /components/{id}/version-info:
     get:
       description: Get version metadata for a component (version count, has draft,
@@ -5835,6 +5868,57 @@ paths:
             additionalProperties: true
             type: object
       summary: Save discovered dashboard-variable values for a connection column
+      tags:
+      - connections
+  /connections/{id}/duplicate:
+    post:
+      consumes:
+      - application/json
+      description: Copy an existing connection under a new name in the SAME namespace,
+        including its secrets — the API masks secrets on read, so only the server
+        can produce a usable copy. Requires a grant on the source's namespace.
+      parameters:
+      - description: Source connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'New connection name: {\'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Connection'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Duplicate a connection
       tags:
       - connections
   /connections/{id}/edgelake/databases:

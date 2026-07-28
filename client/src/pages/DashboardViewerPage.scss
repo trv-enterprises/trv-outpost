@@ -1017,6 +1017,28 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
           }
         }
 
+        // Shared-component indicator — the panel's component is also placed on
+        // other dashboards, so editing it here is a wider change than it
+        // looks. Passive marker like the custom-code one, but carries a count
+        // and is warned-colored: it's advisory, not an error, so it uses the
+        // Carbon warning token rather than error red.
+        .panel-shared-indicator {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          color: var(--cds-support-warning);
+
+          svg {
+            display: block;
+          }
+
+          .panel-shared-count {
+            font-size: 0.6875rem;
+            line-height: 1;
+            font-weight: 600;
+          }
+        }
+
         .panel-header-edit-menu {
           display: flex;
           align-items: center;

@@ -2,9 +2,10 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Modal, Search, Tag, Tile, Loading, Dropdown, OverflowMenu, OverflowMenuItem
+  Modal, Search, Tag, Tile, Loading, Dropdown, OverflowMenu, OverflowMenuItem,
+  Checkbox, InlineNotification
 } from '@carbon/react';
 import {
   ChartLineSmooth, ChartBar, ChartArea, ChartPie,
@@ -22,6 +23,7 @@ import VariableIndicator from './shared/VariableIndicator';
 import CustomCodeIndicator from './shared/CustomCodeIndicator';
 import SortMenu from './shared/SortMenu';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
+import { buildComponentCopy } from '../utils/duplicateEntity';
 import './ComponentPickerModal.scss';
 import './shared/FilterOverflowMenu.scss';
 
@@ -81,11 +83,18 @@ function categoryToTypeSet(category) {
  * Modal for browsing and selecting existing components (charts, controls, displays).
  * Features hierarchical type filter, tag filter, search, and per-type icons.
  */
-function ComponentPickerModal({ open, onClose, onSelect, category: initialCategory }) {
+function ComponentPickerModal({ open, onClose, onSelect, category: initialCategory, allowDuplicate = false }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selected, setSelected] = useState(null);
+  // "Create a duplicate" (issue #221) — when checked, confirming the picker
+  // creates a "<name> (copy)" component and hands the COPY back to the caller,
+  // so the panel gets the new component and the original is untouched.
+  const [duplicateOnSelect, setDuplicateOnSelect] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState(null);
+  const duplicatingRef = useRef(false); // synchronous re-entry guard, see handleSelect
   // null = all selected; Set of "parent:subtype" keys otherwise.
   const [selectedTypes, setSelectedTypes] = useState(() => categoryToTypeSet(initialCategory));
   const [tagFilter, setTagFilter] = useState([]);
@@ -112,6 +121,8 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       setTagFilter([]);
       setNamespaceFilter([]);
       setConnectionFilter('all');
+      setDuplicateOnSelect(false);
+      setDuplicateError(null);
       // Sort is intentionally NOT reset here — it's a persisted user
       // preference, not a per-open filter.
     }
@@ -223,8 +234,46 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
     return sorted;
   }, [items, namespaceFilter, selectedTypes, tagFilter, connectionFilter, variableOnly, customCodeOnly, searchTerm, sortKey, sortDirection]);
 
-  const handleSelect = () => {
-    if (selected) onSelect(selected);
+  // Confirm the picker. Plain select hands back the chosen component. With
+  // "create a duplicate" checked, create a "<name> (copy)" first and hand back
+  // the COPY — the panel then points at a component the user can edit freely
+  // without touching the original (issue #221). The copy is created here, on
+  // confirm, rather than on save: it exists immediately and shows up in the
+  // components list, so Cancel unambiguously creates nothing.
+  // `item` is passed by the double-click shortcut (where `selected` may not
+  // have flushed yet); the footer button relies on `selected`.
+  const handleSelect = async (item) => {
+    const target = item && item.id ? item : selected;
+    // Ref guard, not the `duplicating` state: double-click fires faster than a
+    // re-render, so two events in one batch would both pass a state check and
+    // create two copies. (The footer button is also disabled via state.)
+    if (!target || duplicatingRef.current) return;
+    if (!duplicateOnSelect) {
+      onSelect(target);
+      return;
+    }
+    duplicatingRef.current = true;
+    setDuplicating(true);
+    setDuplicateError(null);
+    let created;
+    try {
+      // getComponents() returns whole component documents (the list pipeline
+      // has no projection — only /summaries does), so the loaded item is the
+      // copy source; `items` doubles as the name-collision set.
+      const existingNames = new Set(items.map((c) => c?.name).filter(Boolean));
+      created = await apiClient.createComponent(buildComponentCopy(target, existingNames));
+    } catch (err) {
+      console.error('Failed to duplicate component:', err);
+      setDuplicateError(err.message || 'Failed to create the duplicate');
+      return;
+    } finally {
+      duplicatingRef.current = false;
+      setDuplicating(false);
+    }
+    // Outside the try: the copy is already created, so a throw from the
+    // consumer's onSelect must not be reported as "duplicate failed" — that
+    // would orphan the new component and invite the user to make a second one.
+    onSelect(created);
   };
 
   const renderIcon = (item) => {
@@ -276,13 +325,23 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
       onRequestClose={onClose}
       onRequestSubmit={handleSelect}
       modalHeading="Select Component"
-      primaryButtonText="Select"
-      primaryButtonDisabled={!selected}
+      primaryButtonText={duplicating ? 'Creating copy…' : (duplicateOnSelect ? 'Create duplicate' : 'Select')}
+      primaryButtonDisabled={!selected || duplicating}
       secondaryButtonText="Cancel"
       size="lg"
       className="component-picker-modal"
     >
       <div className="picker-content">
+        {duplicateError && (
+          <InlineNotification
+            kind="error"
+            title="Duplicate failed"
+            subtitle={duplicateError}
+            onCloseButtonClick={() => setDuplicateError(null)}
+            lowContrast
+            className="picker-duplicate-error"
+          />
+        )}
         <div className="picker-toolbar">
           <div className="picker-search">
             <Search
@@ -416,7 +475,10 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                   key={item.id}
                   className={`picker-tile ${selected?.id === item.id ? 'selected' : ''}`}
                   onClick={() => setSelected(item)}
-                  onDoubleClick={() => onSelect(item)}
+                  // Double-click is a shortcut for select-then-confirm, so it
+                  // must honor the duplicate checkbox too. setSelected is
+                  // async, so hand the item to the handler directly.
+                  onDoubleClick={() => handleSelect(item)}
                 >
                   <div className="picker-tile-header">
                     <div className={`picker-tile-icon picker-tile-icon--${getCategoryTagColor(item)}`}>
@@ -461,6 +523,28 @@ function ComponentPickerModal({ open, onClose, onSelect, category: initialCatego
                 </Tile>
               );
             })}
+          </div>
+        )}
+
+        {/* Duplicate opt-in (issue #221). Sits below the grid, next to the
+            footer buttons it modifies. Confirming with this checked creates
+            "<name> (copy)" and drops THAT into the panel, leaving the original
+            untouched — the common "I want a slight variant of this chart"
+            case. Cancel creates nothing. */}
+        {allowDuplicate && (
+          <div className="picker-duplicate-option">
+            <Checkbox
+              id="component-picker-duplicate"
+              labelText="Create a duplicate of the selected component"
+              checked={duplicateOnSelect}
+              onChange={(_e, { checked }) => setDuplicateOnSelect(checked)}
+              disabled={duplicating}
+            />
+            <p className="picker-duplicate-hint">
+              {duplicateOnSelect
+                ? 'A copy is created and placed on the panel — the original is unchanged.'
+                : 'The panel will use the original component; edits affect every dashboard using it.'}
+            </p>
           </div>
         )}
       </div>

@@ -807,6 +807,28 @@ class APIClient {
     });
   }
 
+  /**
+   * Dashboards referencing this component (panel default or component-swap
+   * override). Powers the shared-component save warning and the dashboard
+   * editor's panel-header "shared" indicator.
+   * @returns {Promise<{dashboards: Array<{id,name}|{unauthorized:true,kind:string}>, has_unauthorized?: boolean}>}
+   */
+  async getComponentUsage(id) {
+    return this.request(`/api/components/${id}/usage`);
+  }
+
+  /**
+   * Copy a connection under a new name, secrets included. Server-side because
+   * the API masks secrets on read — the browser can't build a usable copy.
+   * The copy lands in the source's namespace.
+   */
+  async duplicateConnection(id, name) {
+    return this.request(`/api/connections/${id}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   // Component versioning endpoints
   async getComponentVersionInfo(id) {
     return this.request(`/api/components/${id}/version-info`);

@@ -12,7 +12,10 @@ import {
   Tag,
   TextInput,
   Modal,
-  Link
+  Link,
+  UnorderedList,
+  ListItem,
+  InlineLoading
 } from '@carbon/react';
 import {
   ArrowLeft,
@@ -136,6 +139,10 @@ function AIBuilderPage() {
   const [componentName, setComponentName] = useState(preflightName || '');
   const [componentNameInitialized, setComponentNameInitialized] = useState(!!preflightName);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  // Dashboards this save will reach, shown inside the save dialog.
+  // null = not applicable (new component) or lookup failed.
+  const [saveUsage, setSaveUsage] = useState(null);
+  const [saveUsageLoading, setSaveUsageLoading] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [initialMessageSent, setInitialMessageSent] = useState(false);
@@ -236,6 +243,30 @@ function AIBuilderPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  // Open the save dialog, and for an EXISTING component also look up which
+  // dashboards the save will reach. Promoting an AI draft rewrites the shared
+  // component, so the same "this lands on other dashboards" notice the manual
+  // editors show belongs here too. Fetched alongside the open, not before it,
+  // so the dialog appears immediately and the list fills in.
+  const openSaveDialog = async () => {
+    setShowSaveDialog(true);
+    if (isNewChart || !chartId) {
+      setSaveUsage(null);
+      return;
+    }
+    setSaveUsageLoading(true);
+    try {
+      const usage = await apiClient.getComponentUsage(chartId);
+      setSaveUsage(usage?.dashboards || []);
+    } catch (err) {
+      // Informational only — never block the save on a usage hiccup.
+      console.error('[AIBuilderPage] usage lookup failed:', err);
+      setSaveUsage(null);
+    } finally {
+      setSaveUsageLoading(false);
     }
   };
 
@@ -422,7 +453,7 @@ function AIBuilderPage() {
           <Button
             kind="primary"
             renderIcon={Save}
-            onClick={() => setShowSaveDialog(true)}
+            onClick={openSaveDialog}
             disabled={loading || !component}
             size="md"
           >
@@ -567,6 +598,30 @@ function AIBuilderPage() {
           <p className="save-dialog-note">
             This will save your component and make it available in the components library.
           </p>
+          {/* Shared-component notice — promoting this draft rewrites the
+              component on every dashboard already using it. */}
+          {saveUsageLoading && (
+            <InlineLoading description="Checking where this component is used…" />
+          )}
+          {!saveUsageLoading && saveUsage && saveUsage.length > 0 && (
+            <>
+              <p className="save-dialog-note">
+                It is used on {saveUsage.length} dashboard
+                {saveUsage.length === 1 ? '' : 's'} — saving updates it there too:
+              </p>
+              <UnorderedList style={{ margin: '0.5rem 0 0 1rem' }}>
+                {saveUsage.filter((d) => !d.unauthorized).map((d) => (
+                  <ListItem key={d.id}>{d.name}</ListItem>
+                ))}
+                {saveUsage.some((d) => d.unauthorized) && (
+                  <ListItem key="hidden">
+                    {saveUsage.filter((d) => d.unauthorized).length} in a namespace you
+                    can&apos;t view
+                  </ListItem>
+                )}
+              </UnorderedList>
+            </>
+          )}
         </Modal>
       )}
 

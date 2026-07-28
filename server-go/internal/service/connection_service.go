@@ -199,6 +199,76 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, req *models.Cr
 	return connection, nil
 }
 
+// DuplicateConnection copies an existing connection under a new name,
+// INCLUDING its secrets.
+//
+// This has to happen server-side. The API masks every secret as
+// "********" on read, so the browser physically cannot build a faithful
+// copy — a client-side duplicate can only produce a credential-less
+// record, which types with mandatory credentials (Synology) correctly
+// refuse to create, and which is useless even where it's accepted.
+// Copying here means the duplicate is usable immediately, which is what
+// "Duplicate" implies.
+//
+// SECURITY INVARIANT — the copy lands in the SOURCE's namespace, and
+// there is deliberately no target-namespace parameter. Because this is
+// the one write path that moves real secrets, letting the caller choose
+// a destination would turn "duplicate" into a way to copy a credential
+// OUT of the namespace that contains it. Keeping the namespace pinned to
+// the source means secrets can never cross a boundary here: you can only
+// duplicate what you were already granted (findAuthorized on the read,
+// CheckNamespace re-asserted for the write). Moving the copy elsewhere
+// afterwards goes through the normal update path, which requires a grant
+// on the destination.
+//
+// Do NOT add a namespace argument to this function.
+func (s *ConnectionService) DuplicateConnection(ctx context.Context, id, name string) (*models.Connection, error) {
+	src, err := s.findAuthorized(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := authz.CheckNamespace(ctx, src.Namespace); err != nil {
+		return nil, err
+	}
+
+	newName := strings.TrimSpace(name)
+	if newName == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	existing, err := s.repo.FindByName(ctx, src.Namespace, newName)
+	if err != nil {
+		return nil, fmt.Errorf("error checking name uniqueness: %w", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("connection with name '%s' already exists in namespace '%s'", newName, src.Namespace)
+	}
+
+	// Copy every configuration-bearing field. Identity, timestamps and
+	// health are intentionally NOT copied — the duplicate is a new record
+	// that has never been contacted.
+	dup := &models.Connection{
+		Namespace:        src.Namespace,
+		Name:             newName,
+		Description:      src.Description,
+		Type:             src.Type,
+		TypeID:           src.TypeID,
+		TypeConfig:       src.TypeConfig,
+		Config:           src.Config,
+		Tags:             models.NormalizeTags(src.Tags),
+		SupportedSchemas: src.SupportedSchemas,
+		Health: models.HealthInfo{
+			Status: models.HealthStatusUnknown,
+		},
+	}
+
+	if err := s.repo.Create(ctx, dup); err != nil {
+		return nil, fmt.Errorf("error creating connection: %w", err)
+	}
+
+	return dup, nil
+}
+
 // findAuthorized fetches a connection by id and enforces the caller's
 // namespace grants (issue #4). The uniform fetch for every external
 // by-id entry point in this service — using it (rather than

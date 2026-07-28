@@ -4,7 +4,7 @@
 
 import { useRef, useState, useEffect } from 'react';
 import { Button } from '@carbon/react';
-import { ChevronDown, Edit, Add, Catalog } from '@carbon/icons-react';
+import { ChevronDown, Edit, Catalog } from '@carbon/icons-react';
 import AiIcon from './icons/AiIcon';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './CreateMenu.scss';
@@ -12,16 +12,25 @@ import './CreateMenu.scss';
 /**
  * CreateMenu Component
  *
- * Dropdown menu for creating an entity, with up to three options:
+ * Create control for an entity, with up to three options:
  * - Create: opens the editor for a blank entity
  * - Create with AI: opens the AI pre-flight modal — only rendered when an
  *   onCreateWithAI handler is supplied AND the deployment has an AI key.
  *   (Omit the handler for entities with no AI builder, e.g. connections.)
- * - From Existing: opens the matching picker modal
+ * - From Existing: opens the matching picker modal — only rendered when an
+ *   onSelectExisting handler is supplied.
  *
- * @param {Function} onCreate        - Handler for creating a new entity manually
- * @param {Function} [onCreateWithAI] - Handler for creating with AI; omit to hide the item
- * @param {Function} onSelectExisting - Handler for selecting an existing entity to clone
+ * Components and connections no longer pass onSelectExisting: the per-row
+ * duplicate action on their list/tile views replaced it and needs no extra
+ * selector (issue #203). The ts-store alert rules list still uses it — its
+ * rules aren't a first-class list entity with row actions.
+ *
+ * When only "Create" is available the dropdown collapses to a plain primary
+ * button — a one-item menu is pure friction.
+ *
+ * @param {Function} onCreate         - Handler for creating a new entity manually
+ * @param {Function} [onCreateWithAI]  - Handler for creating with AI; omit to hide the item
+ * @param {Function} [onSelectExisting] - Handler for cloning an existing entity; omit to hide the item
  */
 function CreateMenu({
   onCreate,
@@ -61,6 +70,18 @@ function CreateMenu({
     action();
   };
 
+  const showAI = Boolean(onCreateWithAI) && aiEnabled;
+  const showExisting = Boolean(onSelectExisting);
+
+  // Single-action case: no menu, just the button.
+  if (!showAI && !showExisting) {
+    return (
+      <Button kind="primary" size="md" onClick={onCreate}>
+        Create
+      </Button>
+    );
+  }
+
   return (
     <div className="create-menu" ref={menuRef}>
       <Button
@@ -81,7 +102,7 @@ function CreateMenu({
             <Edit size={16} />
             <span>Create</span>
           </button>
-          {onCreateWithAI && aiEnabled && (
+          {showAI && (
             <button
               className="create-menu-item"
               onClick={() => handleAction(onCreateWithAI)}
@@ -90,13 +111,15 @@ function CreateMenu({
               <span>Create with AI</span>
             </button>
           )}
-          <button
-            className="create-menu-item"
-            onClick={() => handleAction(onSelectExisting)}
-          >
-            <Catalog size={16} />
-            <span>From Existing</span>
-          </button>
+          {showExisting && (
+            <button
+              className="create-menu-item"
+              onClick={() => handleAction(onSelectExisting)}
+            >
+              <Catalog size={16} />
+              <span>From Existing</span>
+            </button>
+          )}
         </div>
       )}
     </div>

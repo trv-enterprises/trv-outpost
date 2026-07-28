@@ -866,6 +866,9 @@ func main() {
 			connections.GET("/:id", connectionHandler.GetConnection)
 			connections.PUT("/:id", connectionHandler.UpdateConnection)
 			connections.DELETE("/:id", connectionHandler.DeleteConnection)
+			// Server-side copy: only the server can carry secrets into the
+			// duplicate (the API masks them on read).
+			connections.POST("/:id/duplicate", connectionHandler.DuplicateConnection)
 			connections.POST("/test", connectionHandler.TestConnection)
 			connections.POST("/:id/health", connectionHandler.CheckConnectionHealth)
 			connections.POST("/:id/query", connectionHandler.QueryConnection)
@@ -920,6 +923,9 @@ func main() {
 			components.GET("/:id/versions/:version", componentHandler.GetComponentVersion)
 			components.DELETE("/:id/versions/:version", componentHandler.DeleteComponentVersion)
 			components.GET("/:id/version-info", componentHandler.GetComponentVersionInfo)
+			// Which dashboards reference this component — powers the
+			// shared-component save warning and the panel-header indicator.
+			components.GET("/:id/usage", componentHandler.GetComponentUsage)
 			components.GET("/:id/draft", componentHandler.GetComponentDraft)
 			components.DELETE("/:id/draft", componentHandler.DeleteComponentDraft)
 		}

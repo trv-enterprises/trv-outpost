@@ -382,6 +382,7 @@ dashboard/
 | PUT | `/api/connections/:id` | Update connection |
 | DELETE | `/api/connections/:id` | Delete connection |
 | POST | `/api/connections/test` | Test connection |
+| POST | `/api/connections/:id/duplicate` | Copy a connection (secrets included; server-side because the API masks secrets on read). Always lands in the source's namespace — no destination param, so credentials can't cross a namespace boundary. |
 | POST | `/api/connections/:id/query` | Execute query |
 | **Controls** |||
 | POST | `/api/controls/:id/execute` | Execute control command |
@@ -396,6 +397,7 @@ dashboard/
 | GET | `/api/components/:id/versions/:version` | Get a specific version |
 | DELETE | `/api/components/:id/versions/:version` | Delete a specific version |
 | GET | `/api/components/:id/version-info` | Version metadata (count, has draft) |
+| GET | `/api/components/:id/usage` | Dashboards referencing this component; powers the shared-component save warning + panel indicator |
 | GET | `/api/components/:id/draft` | Get the draft version (if any) |
 | DELETE | `/api/components/:id/draft` | Delete the draft version |
 | **Dashboards** |||

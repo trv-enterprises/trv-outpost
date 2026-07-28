@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -27,9 +27,10 @@ import {
   Dropdown,
   OverflowMenu,
   OverflowMenuItem,
+  InlineNotification,
   Pagination
 } from '@carbon/react';
-import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, StringInteger, TableSplit, Code, List, Grid, Edit, DataBase, Dashboard, TouchInteraction, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
+import { TrashCan, ChartLineSmooth, ChartBar, ChartArea, ChartPie, Meter, StringInteger, TableSplit, Code, List, Grid, Edit, Copy, DataBase, Dashboard, TouchInteraction, OverflowMenuVertical, Checkmark } from '@carbon/icons-react';
 import MdiIcon from '@mdi/react';
 import { CONTROL_TYPE_INFO } from '../components/controls';
 import AiIcon from '../components/icons/AiIcon';
@@ -38,7 +39,6 @@ import apiClient from '../api/client';
 import usePaginatedList from '../hooks/usePaginatedList';
 import ComponentDeleteDialog from '../components/ComponentDeleteDialog';
 import CreateMenu from '../components/CreateMenu';
-import ComponentPickerModal from '../components/ComponentPickerModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import TagFilter from '../components/shared/TagFilter';
 import TypeHierarchyFilter, { COMPONENT_TYPE_HIERARCHY } from '../components/shared/TypeHierarchyFilter';
@@ -50,6 +50,7 @@ import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import { toUsageItems } from '../utils/usageRefs';
+import { buildComponentCopy } from '../utils/duplicateEntity';
 import './ComponentsListPage.scss';
 import '../components/shared/FilterOverflowMenu.scss';
 
@@ -142,8 +143,10 @@ function ComponentsListPage() {
   const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [chartToDelete, setChartToDelete] = useState(null);
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const [duplicateError, setDuplicateError] = useState(null);
+  const duplicatingRef = useRef(false); // synchronous re-entry guard, see handleDuplicate
   const [viewMode, setViewMode] = useState(savedFilters.view || 'list'); // 'list' or 'tile'
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
   const [connectionFilter, setConnectionFilter] = useState(savedFilters.ds || 'all'); // 'all' or connection id
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
@@ -257,23 +260,10 @@ function ComponentsListPage() {
     setAiPreflightOpen(true);
   };
 
-  const handleSelectExisting = () => {
-    setPickerOpen(true);
-  };
-
   // AI pre-flight modal handler
   const handleAIPreflightContinue = (context) => {
     setAiPreflightOpen(false);
     navigate('/design/components/ai/new', { state: context });
-  };
-
-  // Component picker handler. "From Existing" creates a NEW component seeded
-  // from the chosen one — navigate to the create route with a cloneFrom hint
-  // so the editor loads the source's fields but saves as a create (not an
-  // overwrite of the original).
-  const handlePickerSelect = (item) => {
-    setPickerOpen(false);
-    navigate(`/design/components/new?cloneFrom=${item.id}`);
   };
 
   const handleRowClick = (chart) => {
@@ -283,6 +273,33 @@ function ComponentsListPage() {
   const handleAIEdit = (e, chart) => {
     e.stopPropagation();
     navigate(`/design/components/ai/${chart.id}`);
+  };
+
+  // Duplicate a component: copy it under a "(copy)" name in the same namespace
+  // and stay on the list (mirrors the dashboard duplicate). The list row is a
+  // paginated summary, so fetch the full record first — the copy has to carry
+  // chart_config / query_config / custom code, not just the summary fields.
+  const handleDuplicate = async (e, chart) => {
+    e.stopPropagation();
+    // Guard on a ref, not the `duplicatingId` state: state is read from this
+    // render's closure, so two clicks dispatched before React re-renders would
+    // both see null and both create a copy. The ref updates synchronously.
+    // The state still drives the disabled prop.
+    if (duplicatingRef.current) return;
+    duplicatingRef.current = true;
+    setDuplicatingId(chart.id);
+    try {
+      const full = await apiClient.getComponent(chart.id);
+      const existingNames = new Set((charts || []).map((c) => c?.name).filter(Boolean));
+      await apiClient.createComponent(buildComponentCopy(full, existingNames));
+      refetch();
+    } catch (err) {
+      console.error('[ComponentsListPage] Duplicate failed:', err);
+      setDuplicateError(err.message || 'Failed to duplicate component');
+    } finally {
+      duplicatingRef.current = false;
+      setDuplicatingId(null);
+    }
   };
 
   const handleDelete = (e, chart) => {
@@ -439,6 +456,16 @@ function ComponentsListPage() {
 
   return (
     <div className="components-list-page">
+      {duplicateError && (
+        <InlineNotification
+          kind="error"
+          title="Duplicate failed"
+          subtitle={duplicateError}
+          onCloseButtonClick={() => setDuplicateError(null)}
+          lowContrast
+          style={{ maxWidth: '100%', marginBottom: '0.75rem' }}
+        />
+      )}
       {/* Page Header */}
       <div className="page-header">
         <h1>Components</h1>
@@ -575,7 +602,6 @@ function ComponentsListPage() {
           <CreateMenu
             onCreate={handleCreate}
             onCreateWithAI={handleCreateWithAI}
-            onSelectExisting={handleSelectExisting}
           />
         </div>
       </div>
@@ -671,6 +697,7 @@ function ComponentsListPage() {
                     <div className="tile-actions">
                       <IconButton
                         kind="ghost"
+                        className="action-edit"
                         label="Edit"
                         onClick={(e) => { e.stopPropagation(); handleRowClick(chart); }}
                         size="sm"
@@ -680,6 +707,7 @@ function ComponentsListPage() {
                       {aiEnabled && (
                         <IconButton
                           kind="ghost"
+                          className="action-ai"
                           label="Edit with AI"
                           onClick={(e) => handleAIEdit(e, chart)}
                           size="sm"
@@ -689,6 +717,16 @@ function ComponentsListPage() {
                       )}
                       <IconButton
                         kind="ghost"
+                        label="Duplicate"
+                        onClick={(e) => handleDuplicate(e, chart)}
+                        size="sm"
+                        disabled={duplicatingId === chart.id}
+                      >
+                        <Copy size={16} />
+                      </IconButton>
+                      <IconButton
+                        kind="ghost"
+                        className="action-delete"
                         label="Delete"
                         onClick={(e) => handleDelete(e, chart)}
                         size="sm"
@@ -858,6 +896,7 @@ function ComponentsListPage() {
                                     {aiEnabled && (
                                       <IconButton
                                         kind="ghost"
+                                        className="action-ai"
                                         label="Edit with AI"
                                         onClick={(e) => handleAIEdit(e, chart)}
                                         size="sm"
@@ -867,6 +906,16 @@ function ComponentsListPage() {
                                     )}
                                     <IconButton
                                       kind="ghost"
+                                      label="Duplicate"
+                                      onClick={(e) => handleDuplicate(e, chart)}
+                                      size="sm"
+                                      disabled={duplicatingId === chart.id}
+                                    >
+                                      <Copy size={16} />
+                                    </IconButton>
+                                    <IconButton
+                                      kind="ghost"
+                                      className="action-delete"
                                       label="Delete"
                                       onClick={(e) => handleDelete(e, chart)}
                                       size="sm"
@@ -953,14 +1002,6 @@ function ComponentsListPage() {
         chart={chartToDelete}
         onClose={handleDeleteClose}
         onDelete={handleDeleteConfirm}
-      />
-
-      {/* Component Picker Modal */}
-      <ComponentPickerModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handlePickerSelect}
-        category="chart"
       />
 
       {/* AI Pre-flight Modal */}

@@ -47,6 +47,7 @@ Access the full component library from Design Mode > Components.
 - **Sort** by name, type, connection, dashboard count, status, or date
 - **View toggle** between list and tile layouts
 - **Dashboard count** shows how many dashboards use each component — including use as a connection-based alternate (component-swap override), not just direct panel placement
+- **Duplicate** copies a component as `<name> (copy)` without leaving the list — the quickest way to make a variant when you don't want your edits to reach every dashboard using the original. See [Duplicate from the Component List](creating-components.md#4-duplicate-from-the-component-list)
 
 ### Component Status
 

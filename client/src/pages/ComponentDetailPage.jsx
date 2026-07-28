@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Loading, Modal } from '@carbon/react';
+import { Button, Loading, Modal, UnorderedList, ListItem, InlineLoading } from '@carbon/react';
 import { Save, Close, ArrowLeft } from '@carbon/icons-react';
 import ComponentEditor from '../components/ComponentEditor';
 import apiClient from '../api/client';
@@ -45,6 +45,10 @@ function ComponentDetailPage() {
   const [saving, setSaving] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  // Dashboards this save will reach, shown inside the save-confirm modal.
+  // null = not applicable (create) or lookup failed.
+  const [saveUsage, setSaveUsage] = useState(null);
+  const [saveUsageLoading, setSaveUsageLoading] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
@@ -122,6 +126,26 @@ function ComponentDetailPage() {
     // Show confirmation modal with the payload
     setPendingPayload(chartPayload);
     setShowSaveModal(true);
+    // This page already confirms every save, so rather than stacking a second
+    // dialog we fold the shared-component warning into that one: look up which
+    // dashboards this edit will reach and list them in the same modal. Fetched
+    // alongside the open (not awaited before it) so the dialog appears
+    // instantly and fills in.
+    if (isCreateMode || !id || id === 'new') {
+      setSaveUsage(null);
+      return;
+    }
+    setSaveUsageLoading(true);
+    try {
+      const usage = await apiClient.getComponentUsage(id);
+      setSaveUsage(usage?.dashboards || []);
+    } catch (err) {
+      // Informational only — never block the save on a usage hiccup.
+      console.error('[ComponentDetailPage] usage lookup failed:', err);
+      setSaveUsage(null);
+    } finally {
+      setSaveUsageLoading(false);
+    }
   };
 
   const confirmSave = async () => {
@@ -260,6 +284,32 @@ function ComponentDetailPage() {
               ? `Create component "${pendingPayload?.name}"?`
               : `Save changes to "${pendingPayload?.name}"?`}
           </p>
+          {/* Shared-component notice: components are shared entities, so this
+              save lands on every dashboard using it, not just the one the
+              author had in mind. */}
+          {saveUsageLoading && (
+            <InlineLoading description="Checking where this component is used…" />
+          )}
+          {!saveUsageLoading && saveUsage && saveUsage.length > 0 && (
+            <>
+              <p style={{ marginTop: '0.75rem' }}>
+                This component is used on {saveUsage.length} dashboard
+                {saveUsage.length === 1 ? '' : 's'} — saving updates it on{' '}
+                {saveUsage.length === 1 ? 'it' : 'all of them'}:
+              </p>
+              <UnorderedList style={{ margin: '0.5rem 0 0 1rem' }}>
+                {saveUsage.filter((d) => !d.unauthorized).map((d) => (
+                  <ListItem key={d.id}>{d.name}</ListItem>
+                ))}
+                {saveUsage.some((d) => d.unauthorized) && (
+                  <ListItem key="hidden">
+                    {saveUsage.filter((d) => d.unauthorized).length} in a namespace you
+                    can&apos;t view
+                  </ListItem>
+                )}
+              </UnorderedList>
+            </>
+          )}
         </Modal>
       )}
     </div>

@@ -4,7 +4,7 @@ sidebar_position: 10
 
 # Creating Components
 
-There are three ways to create components:
+There are four ways to create components:
 
 ## 1. Manual Editor
 
@@ -56,6 +56,25 @@ Reuse a component from the library:
 
 The selected component is assigned to the panel. The panel auto-expands to meet the component's minimum size.
 
+### Create a duplicate instead
+
+The picker has a **Create a duplicate of the selected component** checkbox. With
+it checked, confirming creates `<name> (copy)` and places the *copy* on the
+panel, leaving the original untouched — the fastest way to build a slight
+variant of a chart you already have. The copy is a real component: it is created
+as soon as you confirm and appears in the component list, so cancelling the
+picker creates nothing.
+
+Leave the checkbox clear to use the original component itself. Remember that
+editing a shared component changes it on every dashboard that uses it.
+
+## 4. Duplicate from the Component List
+
+The **Duplicate** icon on each row (list view) or card (tile view) in
+Design Mode > Components copies a component immediately as `<name> (copy)`
+in the same namespace, with its type, connection, query, data mapping, and
+options intact. You stay on the list, and the copy is ready to edit.
+
 ## Editing Existing Components
 
 From the component list or a dashboard panel:
@@ -64,6 +83,19 @@ From the component list or a dashboard panel:
 - **Edit with AI** opens the AI builder with the existing component loaded
 
 Changes to a component update it everywhere it's used.
+
+:::note Saving a shared component
+Because components are shared, the save dialog tells you when the one you're
+editing is placed on more than one dashboard, and names them. This applies
+wherever you save — the component editor, the editor opened from a dashboard
+panel, and the AI builder. Confirming saves to all of them; to change it in
+one place only, cancel and
+[duplicate the component](#4-duplicate-from-the-component-list) instead.
+
+In the dashboard editor, panels whose component is shared also carry a
+counter icon in the panel header — see
+[Panel Management](panel-management.md#shared-component-indicator).
+:::
 
 ## Versioning
 

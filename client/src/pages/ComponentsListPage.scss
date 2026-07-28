@@ -264,18 +264,11 @@
         }
       }
 
-      // Edit button hover - blue
-      .cds--btn--icon-only:first-child:hover {
-        color: #78a9ff !important;
-        background-color: rgba(15, 98, 254, 0.1);
-
-        svg {
-          fill: #78a9ff !important;
-        }
-      }
-
-      // AI button hover - blue
-      .cds--btn--icon-only:nth-child(2):hover {
+      // Edit + AI button hover - blue. Class-keyed rather than positional:
+      // the AI button is gated on aiEnabled and Duplicate sits between the
+      // edit actions and Delete, so nth-child rules mis-target.
+      .action-edit:hover,
+      .action-ai:hover {
         color: #78a9ff !important;
         background-color: rgba(15, 98, 254, 0.1);
 
@@ -285,7 +278,7 @@
       }
 
       // Delete button hover - red
-      .cds--btn--icon-only:last-child:hover {
+      .action-delete:hover {
         color: #fa4d56 !important;
         background-color: rgba(218, 30, 40, 0.1);
 
@@ -420,8 +413,10 @@
       }
     }
 
-    // Delete button hover - red
-    .cds--btn--icon-only:last-child:hover {
+    // Delete button hover - red. Keyed on an explicit class, not :last-child —
+    // the button order varies (AI edit is gated, Duplicate was added) and a
+    // positional selector silently repaints whichever button lands there.
+    .action-delete:hover {
       color: #fa4d56 !important;
       background-color: rgba(218, 30, 40, 0.1);
 
@@ -431,7 +426,7 @@
     }
 
     // AI edit button hover - blue
-    .cds--btn--icon-only:first-child:hover {
+    .action-ai:hover {
       color: #78a9ff !important;
       background-color: rgba(15, 98, 254, 0.1);
 

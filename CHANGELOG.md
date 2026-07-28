@@ -10,6 +10,63 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Duplicate components and connections.** The component and connection lists
+  gain a **Duplicate** action on every row and tile, matching the one
+  dashboards already had. It copies the record as `<name> (copy)` in the same
+  namespace and leaves you on the list — no editor round-trip, no selector to
+  fill in. A repeated copy bumps to `(copy 2)`, `(copy 3)`, and so on.
+
+  Connections duplicate **server-side, credentials included**, so the copy
+  works immediately. This has to happen on the server: the API masks secrets on
+  read, so the browser only ever sees `********` and cannot build a usable copy
+  — and connection types with mandatory credentials (Synology) rightly refuse
+  to be created without them. New endpoint:
+  `POST /api/connections/:id/duplicate`.
+
+  A duplicate always lands in the **source's namespace**, and you can only
+  duplicate a connection you already have a grant on. Duplication is the one
+  write path that moves real secrets, so it deliberately takes no destination
+  parameter — credentials can't be copied out of the namespace holding them.
+  Moving the copy afterwards goes through the normal update path, which
+  requires access to the destination.
+
+  This replaces the **From Existing** item in the Create menu for these two
+  entities, which needed an extra picker to do the same job and created
+  nothing until you saved. The Create menu now collapses to a plain button
+  when only one create option remains. (#203)
+
+- **Create a duplicate when picking a component for a panel.** The dashboard
+  editor's **Select Existing** picker gains a **Create a duplicate of the
+  selected component** checkbox. Confirm with it checked and the panel gets a
+  new `<name> (copy)` instead of the original — the fast path for "I want this
+  chart, but slightly different," without the edits reaching every other
+  dashboard using it.
+
+  The copy is created when you confirm, so it exists immediately and shows up
+  in the component list; cancelling the picker creates nothing. Leave the box
+  clear for the existing behavior of placing the shared component itself.
+  (#221)
+
+- **Shared-component save warning and panel indicator.** Components are shared
+  entities, so editing one changes every dashboard using it — easy to forget
+  when the edit is made from a single dashboard's editor. Two additions make
+  the sharing visible before it bites:
+
+  Saving a component that's on more than one dashboard now asks for
+  confirmation and **names the dashboards the save will reach**. This applies
+  to all three save paths: the component detail page, the editor opened from a
+  dashboard panel (which previously had no confirmation at all), and the AI
+  builder's draft promotion. Dashboards in a namespace you can't view are
+  counted but not named, so the number stays honest without leaking anything.
+
+  In the dashboard editor, panels whose component is used elsewhere carry a
+  **counter icon in the panel header**, with a tooltip naming how many other
+  dashboards are affected.
+
+  Neither blocks anything — sharing is normal and often the point. They exist
+  so the choice is deliberate, and both point at duplication as the way to make
+  a change that stays local. New endpoint: `GET /api/components/:id/usage`.
+
 - **Per-dashboard panel background.** Dashboard Settings gains a **Panel
   background** choice — *Default*, *Solid background*, or *Transparent
   background* — that overrides the deployment-wide Transparent Panels setting
