@@ -144,12 +144,27 @@ function DashboardGrid({
   // NaN x/y/w/h would render at a nonsense position anyway; dropping it here
   // also keeps it out of the extent maths below, where a single NaN collapses
   // the grid to its fallback size (see extentOf).
+  //
+  // x/y are NORMALIZED to 0 when absent, and that is load-bearing rather than
+  // defensive: the Go model tags them `omitempty`, so a border sitting on
+  // column 0 or row 0 serializes with the field MISSING, not as 0. Requiring
+  // Number.isFinite(a.x) then rejected the whole adornment and it vanished
+  // from the dashboard — every border touching the left or top edge. An
+  // absent coordinate means 0 (that is exactly what omitempty encodes), so
+  // read it that way; only a coordinate that is PRESENT AND non-numeric is
+  // corrupt, which is what the finite checks below still catch.
+  //
+  // w/h keep the strict check: omitempty can drop those too, but a zero-sized
+  // border is degenerate rather than edge-positioned, so there is nothing to
+  // draw and dropping it is correct.
   const rectAdornments = useMemo(
-    () => (adornments || []).filter((a) => (
-      a.kind !== 'panel_border'
-      && Number.isFinite(a.x) && Number.isFinite(a.y)
-      && Number.isFinite(a.w) && Number.isFinite(a.h)
-    )),
+    () => (adornments || [])
+      .filter((a) => a.kind !== 'panel_border')
+      .map((a) => ({ ...a, x: a.x ?? 0, y: a.y ?? 0 }))
+      .filter((a) => (
+        Number.isFinite(a.x) && Number.isFinite(a.y)
+        && Number.isFinite(a.w) && Number.isFinite(a.h)
+      )),
     [adornments]
   );
 
