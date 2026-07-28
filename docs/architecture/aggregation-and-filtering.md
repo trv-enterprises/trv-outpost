@@ -44,6 +44,54 @@ violate it when adding features. The rule of thumb up front:
 └──────────────────────────────────────────────────────────────┘
 ```
 
+### Layer 3 output shape: rows vs. a scalar
+
+`transformData` (`client/src/utils/dataTransforms.js`) runs its stages in a
+fixed order — **filters → sliding window → sort → limit → aggregation** — and
+that order is load-bearing: the sliding window is what *bounds* the
+aggregation, which is how "average over the last 5 minutes" is expressed.
+
+The aggregation stage returns **two** things, and which one a chart should
+read depends on the aggregation type:
+
+| Aggregation | `rows` | `aggregatedValue` |
+|---|---|---|
+| `first` / `last` | sliced to 1 | null (unless an explicit field is set) |
+| `avg` / `min` / `max` / `sum` / `count` | **unchanged** | the scalar |
+| `limit` | sliced to N | null |
+| none | unchanged | null |
+
+The middle row is the trap: those five types leave `rows` completely
+untouched and put their result in a separate field. A chart that reads
+`rows[0]` therefore renders the first raw sample while the author believes
+they configured an average — computed correctly, then dropped on the floor.
+
+**Single-value charts must read `aggregatedValue` first.** `gauge` and `value`
+do this via `singleDisplayValue()` in `chart-spec/option-helpers.js`, falling
+back to row 0 when there's no scalar. Multi-row charts (line, bar, …)
+deliberately keep consuming `rows` — an aggregate scalar has no meaning on a
+series.
+
+Two related constraints on single-value types:
+
+- The aggregation **Field** is pinned to the value column in the editor. Left
+  blank, `applyAggregation` returns `value: null` and the chart silently falls
+  back to row 0; pointed at another column, it aggregates data the chart never
+  displays. Neither surfaces an error, so the editor removes the choice
+  instead of validating it.
+- The value chart's **text/number detection reads the raw cell**, never the
+  aggregate. An aggregate is always numeric, so deciding from it would flip a
+  text column onto the numeric path and render a row count where a status
+  string belongs.
+
+> **Open:** which of filters / aggregation / sliding window are coherent for a
+> given `(component type, connection type)` pair is currently expressed by two
+> independent mechanisms that don't compose — per-type flags in
+> `CHART_TYPE_CONFIG` and a single `queryLanguageOwnsClientSideOps` gate for
+> SQL/EdgeLake. Aggregation has no well-defined time bound on polled
+> connections, and the sliding window silently empties a chart when timestamps
+> aren't wall-clock-current. See issue #222.
+
 ## Per-source-type capability
 
 | Source        | Aggregation                               | Filtering                                   | Schema discovery                          |

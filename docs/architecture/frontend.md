@@ -391,7 +391,9 @@ own built-in default of **12px** (see `echarts/lib/coord/axisDefault.js`,
 the component-level default wins. The theme only changes a font size
 where it sets one *explicitly* — which is just the ECharts `title` (16px,
 **unused** because we render the title in HTML) and the gauge detail
-(24px, set in `chart-spec/specs/gauge.js`). So the theme's
+(set in `chart-spec/specs/gauge.js` from the `gaugeValueFontSize` option:
+24px on the Classic gauge style, 22px on Modern, and author-editable in
+either). So the theme's
 `textStyle.fontSize: 14` is effectively inert for the text you actually
 see on a chart.
 
@@ -404,7 +406,7 @@ see on a chart.
 | ECharts legend | **12px** | ECharts default (theme's 14 ignored) |
 | ECharts tooltip | 12px | ECharts default |
 | ECharts `title` | 16px | theme — but unused (HTML band instead) |
-| Gauge detail value | 24px | `specs/gauge.js` |
+| Gauge detail value | 24px Classic / 22px Modern, author-editable | `specs/gauge.js` ← `gaugeValueFontSize` |
 
 The 14px title base was chosen to sit proportionately with the 12px
 in-canvas text. If you ever want the chart's axis/legend text to honor
