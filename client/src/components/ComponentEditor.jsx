@@ -59,6 +59,13 @@ import CollapsibleTile from './shared/CollapsibleTile';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
 import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
+import {
+  CLASSIC_GAUGE_STYLE,
+  MODERN_GAUGE_STYLE,
+  resolveGaugeStyle,
+  applyGaugeStyle,
+  newGaugeStyleOptions,
+} from '../chart-spec/gauge-styles';
 
 // A banded_bar is "configured enough to save" once its scheme's center
 // column is mapped (mean / target). Schemes have different center keys,
@@ -1027,6 +1034,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     const atDefault = tsstoreLimit === defaultTsstoreLimit(chartType) || (!wasSingleValue && tsstoreLimit === 100);
     if (isSingleValue !== wasSingleValue && atDefault) {
       setTsstoreLimit(defaultTsstoreLimit(newType));
+    }
+
+    // Seed the Modern gauge style when a NEW chart becomes a gauge.
+    //
+    // This is the "new charts get the new look" half of the two-defaults
+    // rule (see chart-spec/gauge-styles.js). It deliberately lives here
+    // and NOT in DEFAULT_CHART_OPTIONS, because that object is merged
+    // over every chart on load — putting the Modern values there would
+    // restyle every already-saved gauge the moment it was opened.
+    //
+    // Guarded on `!chart?.id` so switching types while editing an
+    // EXISTING component never rewrites its appearance, and on the keys
+    // being absent so toggling gauge→bar→gauge in one session doesn't
+    // discard tuning the author just did.
+    if (newType === 'gauge' && !chart?.id) {
+      setChartOptions((prev) => (
+        prev.gaugeStyle === undefined ? { ...prev, ...newGaugeStyleOptions() } : prev
+      ));
     }
 
     setChartType(newType);
@@ -2839,6 +2864,30 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setAggregation(prev => ({ ...prev, [field]: value }));
   };
 
+  // Single-value charts (gauge, value) render ONE column, so an
+  // aggregation's "Field" can only sensibly be that same column — the
+  // editor shows it disabled. Keep the stored value bound to it so the
+  // record is correct rather than merely displayed correctly.
+  //
+  // This closes two silent-wrong-number holes: a blank field makes
+  // applyAggregation return value:null (the chart falls back to row 0
+  // while claiming an average), and a field pointing at a DIFFERENT
+  // column aggregates data the chart never displays. Neither surfaces
+  // an error.
+  //
+  // Only runs when an aggregation type that consumes a field is
+  // selected, so it can't resurrect a stale field on a 'none'/'count'
+  // config, and only writes on an actual mismatch to avoid a render loop.
+  const singleValueColumn = SINGLE_VALUE_CHART_TYPES.has(chartType) ? (yAxisColumns[0] || '') : null;
+  useEffect(() => {
+    if (singleValueColumn == null) return;
+    const needsField = AGGREGATION_TYPES.find(a => a.id === aggregation.type)?.needsField;
+    if (!needsField) return;
+    if (aggregation.field !== singleValueColumn) {
+      setAggregation(prev => ({ ...prev, field: singleValueColumn }));
+    }
+  }, [singleValueColumn, aggregation.type, aggregation.field]);
+
   // Expose methods via ref for modal usage. Route every call through a
   // latest-value ref so the imperative methods always read the freshest
   // closure — without this, useImperativeHandle's deps array would freeze
@@ -4121,7 +4170,35 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       gauge_danger_threshold: chartOptions.gaugeDangerThreshold,
                       gauge_unit: chartOptions.gaugeUnit,
                       gauge_decimals: chartOptions.gaugeDecimals ?? 'auto',
-                      gauge_line_thickness: chartOptions.gaugeLineThickness ?? 8,
+                      // Style is DERIVED from the values, never read from the
+                      // stored gaugeStyle marker — that's what flips the
+                      // dropdown to "Custom" the moment any governed field is
+                      // tuned, and what makes a pre-styles record (no keys at
+                      // all) correctly report as Classic.
+                      gauge_style: resolveGaugeStyle(chartOptions),
+                      // Every appearance field falls back to its CLASSIC value
+                      // so an existing gauge shows the values it actually
+                      // renders with, not the Modern defaults.
+                      gauge_line_thickness: chartOptions.gaugeLineThickness ?? CLASSIC_GAUGE_STYLE.gaugeLineThickness,
+                      gauge_arc_mode: chartOptions.gaugeArcMode ?? CLASSIC_GAUGE_STYLE.gaugeArcMode,
+                      gauge_start_angle: chartOptions.gaugeStartAngle ?? CLASSIC_GAUGE_STYLE.gaugeStartAngle,
+                      gauge_end_angle: chartOptions.gaugeEndAngle ?? CLASSIC_GAUGE_STYLE.gaugeEndAngle,
+                      gauge_radius: chartOptions.gaugeRadius ?? CLASSIC_GAUGE_STYLE.gaugeRadius,
+                      gauge_show_split_line: chartOptions.gaugeShowSplitLine ?? CLASSIC_GAUGE_STYLE.gaugeShowSplitLine,
+                      gauge_show_axis_label: chartOptions.gaugeShowAxisLabel ?? CLASSIC_GAUGE_STYLE.gaugeShowAxisLabel,
+                      gauge_show_pointer: chartOptions.gaugeShowPointer ?? CLASSIC_GAUGE_STYLE.gaugeShowPointer,
+                      // Pointer geometry is null in Classic ("ECharts default").
+                      // The sliders can't render null, so they show the Modern
+                      // values as a starting point — picking one then writes a
+                      // concrete number, which is the intent of touching it.
+                      gauge_pointer_length: chartOptions.gaugePointerLength ?? MODERN_GAUGE_STYLE.gaugePointerLength,
+                      gauge_pointer_width: chartOptions.gaugePointerWidth ?? MODERN_GAUGE_STYLE.gaugePointerWidth,
+                      gauge_show_anchor: chartOptions.gaugeShowAnchor ?? CLASSIC_GAUGE_STYLE.gaugeShowAnchor,
+                      gauge_value_font_size: chartOptions.gaugeValueFontSize ?? CLASSIC_GAUGE_STYLE.gaugeValueFontSize,
+                      gauge_value_offset: chartOptions.gaugeValueOffset ?? CLASSIC_GAUGE_STYLE.gaugeValueOffset,
+                      gauge_label: chartOptions.gaugeLabel ?? CLASSIC_GAUGE_STYLE.gaugeLabel,
+                      gauge_label_font_size: chartOptions.gaugeLabelFontSize ?? CLASSIC_GAUGE_STYLE.gaugeLabelFontSize,
+                      gauge_label_offset: chartOptions.gaugeLabelOffset ?? CLASSIC_GAUGE_STYLE.gaugeLabelOffset,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -4134,7 +4211,32 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'gauge_danger_threshold': updateChartOption('gaugeDangerThreshold', value); break;
                         case 'gauge_unit': updateChartOption('gaugeUnit', value); break;
                         case 'gauge_decimals': updateChartOption('gaugeDecimals', value); break;
+                        // Selecting a style overwrites the whole appearance set
+                        // in ONE state update. Doing it via repeated
+                        // updateChartOption calls would queue N updates against
+                        // a stale closure and land only the last one.
+                        // 'custom' isn't a real preset — applyGaugeStyle returns
+                        // {} for it, so choosing it is a no-op rather than a
+                        // reset to nothing.
+                        case 'gauge_style':
+                          setChartOptions((prev) => ({ ...prev, ...applyGaugeStyle(value) }));
+                          break;
                         case 'gauge_line_thickness': updateChartOption('gaugeLineThickness', value); break;
+                        case 'gauge_arc_mode': updateChartOption('gaugeArcMode', value); break;
+                        case 'gauge_start_angle': updateChartOption('gaugeStartAngle', value); break;
+                        case 'gauge_end_angle': updateChartOption('gaugeEndAngle', value); break;
+                        case 'gauge_radius': updateChartOption('gaugeRadius', value); break;
+                        case 'gauge_show_split_line': updateChartOption('gaugeShowSplitLine', value); break;
+                        case 'gauge_show_axis_label': updateChartOption('gaugeShowAxisLabel', value); break;
+                        case 'gauge_show_pointer': updateChartOption('gaugeShowPointer', value); break;
+                        case 'gauge_pointer_length': updateChartOption('gaugePointerLength', value); break;
+                        case 'gauge_pointer_width': updateChartOption('gaugePointerWidth', value); break;
+                        case 'gauge_show_anchor': updateChartOption('gaugeShowAnchor', value); break;
+                        case 'gauge_value_font_size': updateChartOption('gaugeValueFontSize', value); break;
+                        case 'gauge_value_offset': updateChartOption('gaugeValueOffset', value); break;
+                        case 'gauge_label': updateChartOption('gaugeLabel', value); break;
+                        case 'gauge_label_font_size': updateChartOption('gaugeLabelFontSize', value); break;
+                        case 'gauge_label_offset': updateChartOption('gaugeLabelOffset', value); break;
                         default: break;
                       }
                     }}
@@ -4745,11 +4847,26 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         )}
                         {AGGREGATION_TYPES.find(a => a.id === aggregation.type)?.needsField && (
                           <Column lg={4} md={4} sm={4}>
+                            {/* On single-value charts the field is not a
+                                choice — there is exactly one displayed
+                                column, so it's locked to the Value Column
+                                (and kept bound in state by the effect near
+                                updateAggregation). Shown rather than hidden
+                                so it's visible WHICH column is being
+                                aggregated. */}
                             <Select
                               id="aggregation-field"
                               labelText="Field"
-                              value={aggregation.field}
+                              value={singleValueColumn != null ? singleValueColumn : aggregation.field}
                               onChange={(e) => updateAggregation('field', e.target.value)}
+                              disabled={singleValueColumn != null}
+                              helperText={
+                                singleValueColumn != null
+                                  ? (singleValueColumn
+                                      ? 'Locked to the Value Column.'
+                                      : 'Pick a Value Column above first.')
+                                  : undefined
+                              }
                             >
                               <SelectItem value="" text="Select column..." />
                               {sortedColumns.map(col => (

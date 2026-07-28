@@ -14,12 +14,34 @@ import {
   COLOR_DANGER,
   COLOR_PRIMARY,
   COLOR_TEXT,
+  COLOR_TEXT_SECONDARY,
   TRANSPARENT_BG,
   toNumber,
-  firstNumericValue,
+  singleDisplayValue,
   makeSIAxisFormatter,
   formatSI,
 } from '../option-helpers.js';
+import { CLASSIC_GAUGE_STYLE } from '../gauge-styles.js';
+
+// The flat track a 'progress' gauge sweeps its colored arc over. Neutral
+// by design — the arc carries the threshold color, so a track with any
+// hue of its own would read as a second signal.
+const PROGRESS_TRACK_COLOR = '#3d3d3d';
+
+/**
+ * Read an appearance option, falling back to the CLASSIC value when the
+ * key is absent.
+ *
+ * This single line is what keeps every already-saved gauge rendering
+ * exactly as it did before styles existed: those records have none of
+ * the style keys, so each one resolves to its legacy literal. New charts
+ * are seeded with the Modern preset at create time, so they carry
+ * explicit values and never reach the fallback. See gauge-styles.js.
+ */
+function styleOpt(opts, key) {
+  const v = opts?.[key];
+  return v === undefined ? CLASSIC_GAUGE_STYLE[key] : v;
+}
 
 /**
  * Build the gauge axisLine color-segment stops. The spec stores the
@@ -31,6 +53,26 @@ function buildSegments(warningPct, dangerPct) {
   const w = toNumber(warningPct, 70) / 100;
   const d = toNumber(dangerPct, 90) / 100;
   return [[w, COLOR_OK], [d, COLOR_WARN], [1, COLOR_DANGER]];
+}
+
+/**
+ * The single arc color for 'progress' mode: the threshold band the value
+ * currently sits in.
+ *
+ * Same thresholds, same meaning as segmented mode — the two modes differ
+ * only in WHERE the color is painted. Segmented bands the whole track so
+ * every zone is visible at once; progress colors just the swept arc, so
+ * the dial reads as one status color. Thresholds are percentages of the
+ * min→max span, so the value is converted to its position in that span
+ * before comparing (a 0-80 gauge at 60 is at 75%, not 60%).
+ */
+function progressColor(value, min, max, warningPct, dangerPct) {
+  const span = max - min;
+  if (!Number.isFinite(span) || span <= 0) return COLOR_OK;
+  const pct = ((value - min) / span) * 100;
+  if (pct >= toNumber(dangerPct, 90)) return COLOR_DANGER;
+  if (pct >= toNumber(warningPct, 70)) return COLOR_WARN;
+  return COLOR_OK;
 }
 
 /**
@@ -50,16 +92,45 @@ export function buildOption(values, data) {
   // Value column: spec binds to data_mapping.y_axis[0]. Fall back to a
   // legacy flat value_column field for old records.
   const valueColumn = (Array.isArray(dm.y_axis) ? dm.y_axis[0] : undefined) || dm.value_column || '';
-  const value = firstNumericValue(data, valueColumn, 0);
+  // Honors a configured aggregation (avg/min/max/sum/count) when one
+  // produced a scalar; otherwise row 0. See singleDisplayValue.
+  const value = singleDisplayValue(data, valueColumn, 0);
 
   const gaugeMin = toNumber(opts.gaugeMin, 0);
   const gaugeMax = toNumber(opts.gaugeMax, 100);
   const unit = opts.gaugeUnit || '';
-  // Arc thickness is a percentage (1-16) of the dial; legacy used /100
-  // against the gauge's pixel radius. We can't measure pixels in a pure
-  // buildOption, so map the same 1-16 range onto a sensible px width.
-  const thicknessPct = toNumber(opts.gaugeLineThickness, 8);
-  const axisWidth = Math.max(6, Math.round(thicknessPct * 1.5));
+
+  // ── Appearance (style-governed) ────────────────────────────────────
+  // Each of these resolves to its CLASSIC value when the key is absent,
+  // which is every gauge saved before styles shipped.
+  const arcMode = styleOpt(opts, 'gaugeArcMode');
+  const isProgress = arcMode === 'progress';
+  const startAngle = toNumber(styleOpt(opts, 'gaugeStartAngle'), CLASSIC_GAUGE_STYLE.gaugeStartAngle);
+  const endAngle = toNumber(styleOpt(opts, 'gaugeEndAngle'), CLASSIC_GAUGE_STYLE.gaugeEndAngle);
+  const radiusPct = toNumber(styleOpt(opts, 'gaugeRadius'), CLASSIC_GAUGE_STYLE.gaugeRadius);
+  const showSplitLine = styleOpt(opts, 'gaugeShowSplitLine') !== false;
+  const showAxisLabel = styleOpt(opts, 'gaugeShowAxisLabel') !== false;
+  const showPointer = styleOpt(opts, 'gaugeShowPointer') !== false;
+  const pointerLength = styleOpt(opts, 'gaugePointerLength');
+  const pointerWidth = styleOpt(opts, 'gaugePointerWidth');
+  const showAnchor = styleOpt(opts, 'gaugeShowAnchor') !== false;
+  const valueFontSize = toNumber(styleOpt(opts, 'gaugeValueFontSize'), CLASSIC_GAUGE_STYLE.gaugeValueFontSize);
+  const valueOffset = toNumber(styleOpt(opts, 'gaugeValueOffset'), CLASSIC_GAUGE_STYLE.gaugeValueOffset);
+  const label = styleOpt(opts, 'gaugeLabel') || '';
+  const labelFontSize = toNumber(styleOpt(opts, 'gaugeLabelFontSize'), CLASSIC_GAUGE_STYLE.gaugeLabelFontSize);
+  const labelOffset = toNumber(styleOpt(opts, 'gaugeLabelOffset'), CLASSIC_GAUGE_STYLE.gaugeLabelOffset);
+
+  // Arc thickness. Legacy (segmented) stores a 1-16 "percentage" that was
+  // applied against the gauge's pixel radius; a pure buildOption can't
+  // measure pixels, so that range maps onto a px width via *1.5 — kept
+  // exactly as-is so existing dials don't change weight. The Modern
+  // preset instead stores a direct px width (14, per the target design),
+  // which would become a 21px slab under the legacy scaling, so progress
+  // mode takes the value literally.
+  const thickness = toNumber(styleOpt(opts, 'gaugeLineThickness'), CLASSIC_GAUGE_STYLE.gaugeLineThickness);
+  const axisWidth = isProgress
+    ? Math.max(1, Math.round(thickness))
+    : Math.max(6, Math.round(thickness * 1.5));
 
   // Decimal places for the center value. Matches the number chart's
   // semantics (number-formats.js formatPlain): 'auto' (default) = up to 2
@@ -91,33 +162,65 @@ export function buildOption(values, data) {
     ? makeSIAxisFormatter([gaugeMin, gaugeMax])
     : null;
 
+  // In progress mode the threshold colors move OFF the track (which goes
+  // flat) and ONTO the swept arc, so exactly one of these two carries them.
+  const arcColor = isProgress
+    ? progressColor(value, gaugeMin, gaugeMax, opts.gaugeWarningThreshold, opts.gaugeDangerThreshold)
+    : null;
+
   return {
     backgroundColor: TRANSPARENT_BG,
     series: [{
       type: 'gauge',
       min: gaugeMin,
       max: gaugeMax,
-      progress: { show: false },
+      startAngle,
+      endAngle,
+      radius: `${radiusPct}%`,
+      progress: isProgress
+        ? { show: true, width: axisWidth, itemStyle: { color: arcColor } }
+        : { show: false },
       axisLine: {
         lineStyle: {
           width: axisWidth,
-          color: buildSegments(opts.gaugeWarningThreshold, opts.gaugeDangerThreshold),
+          color: isProgress
+            ? [[1, PROGRESS_TRACK_COLOR]]
+            : buildSegments(opts.gaugeWarningThreshold, opts.gaugeDangerThreshold),
         },
       },
       axisTick: { show: false },
-      splitLine: { length: 8, lineStyle: { width: 2, color: '#999' } },
-      axisLabel: { color: '#999', ...(siAxisFormatter ? { formatter: siAxisFormatter } : {}) },
-      pointer: { itemStyle: { color: COLOR_PRIMARY } },
-      anchor: { show: true, showAbove: true, size: 14, itemStyle: { borderWidth: 6 } },
-      title: { show: false },
+      splitLine: showSplitLine
+        ? { length: 8, lineStyle: { width: 2, color: '#999' } }
+        : { show: false },
+      axisLabel: showAxisLabel
+        ? { color: '#999', ...(siAxisFormatter ? { formatter: siAxisFormatter } : {}) }
+        : { show: false },
+      pointer: {
+        show: showPointer,
+        // null length/width mean "leave ECharts' default alone" — the
+        // Classic dial never specified either, and inventing values here
+        // would change how existing gauges draw.
+        ...(pointerLength != null ? { length: `${toNumber(pointerLength, 65)}%` } : {}),
+        ...(pointerWidth != null ? { width: toNumber(pointerWidth, 5) } : {}),
+        itemStyle: { color: COLOR_PRIMARY },
+      },
+      anchor: showAnchor
+        ? { show: true, showAbove: true, size: 14, itemStyle: { borderWidth: 6 } }
+        : { show: false },
+      // The series `name` renders as the gauge's built-in title. Shown
+      // only when the author supplies a caption — an empty title would
+      // otherwise reserve dial space for nothing.
+      title: label
+        ? { show: true, offsetCenter: [0, `${labelOffset}%`], fontSize: labelFontSize, color: COLOR_TEXT_SECONDARY }
+        : { show: false },
       detail: {
         valueAnimation: true,
         formatter: detailFormatter,
         color: COLOR_TEXT,
-        fontSize: 24,
-        offsetCenter: [0, '70%'],
+        fontSize: valueFontSize,
+        offsetCenter: [0, `${valueOffset}%`],
       },
-      data: [{ value }],
+      data: [{ value, ...(label ? { name: label } : {}) }],
     }],
   };
 }
