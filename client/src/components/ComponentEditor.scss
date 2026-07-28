@@ -990,6 +990,56 @@
         min-height: 320px;
         border: 1px solid var(--cds-border-subtle-01);
         margin-bottom: spacing.$spacing-04;
+
+        // Header column separators. Quartz ships
+        // --ag-header-column-separator-display: none, so header cells have
+        // NO right border while body cells do — measured 0px none vs
+        // 1px solid #393939. In the viewer that's a deliberate clean look,
+        // but here the header IS the control surface: dragging a column
+        // edge is the primary way to set a width, and with no line there is
+        // nothing showing WHERE to grab. The cursor changed to ew-resize
+        // over an invisible 8px zone, which reads as a rendering bug.
+        //
+        // Scoped to the editor grid so the viewer's table is untouched.
+        .ag-header-cell::after {
+          content: '';
+          position: absolute;
+          right: 0;
+          top: 20%;
+          height: 60%;
+          width: 1px;
+          background-color: var(--cds-border-subtle-01);
+          pointer-events: none;
+        }
+
+        // Last column has no edge to drag against the next one, so no line.
+        .ag-header-cell:last-of-type::after {
+          display: none;
+        }
+
+        // Make the grab zone itself discoverable on hover — the separator
+        // brightens and thickens, so it reads as a handle rather than a
+        // decorative rule. AG Grid's .ag-header-cell-resize is the real
+        // 8px hit area; this only styles it.
+        .ag-header-cell-resize:hover {
+          background-color: var(--cds-interactive);
+          opacity: 0.5;
+        }
+
+        // Let the header content WRAP instead of being clipped. AG Grid sizes
+        // the header row from the headerHeight option and gives the cell
+        // `overflow: hidden`, so a wrapped second line is invisible without
+        // both of these: the taller row (set via headerHeight on the grid) and
+        // letting the cell's label box actually grow into it.
+        .ag-header-cell {
+          overflow: visible;
+        }
+
+        .ag-header-cell-comp-wrapper,
+        .ag-header-cell-label {
+          overflow: visible;
+          height: 100%;
+        }
       }
 
       .column-formatter__nodata {
@@ -1021,17 +1071,27 @@
     .dvg-editor-header {
       display: flex;
       align-items: center;
+      // WRAP rather than clip. A narrow column can't fit the name plus three
+      // action buttons on one line, and the buttons are the whole point of
+      // this header — losing them to an overflow clip makes the column
+      // unconfigurable at exactly the widths where you most want to resize
+      // it. Letting the row wrap drops the actions onto a second line
+      // instead, and the row height below grows to match.
+      flex-wrap: wrap;
       gap: spacing.$spacing-02;
       width: 100%;
       min-width: 0;
+      // Vertical breathing room once wrapped; harmless on one line.
+      padding: 2px 0;
 
       .dvg-editor-header__name {
+        // Allowed to SHRINK BELOW its content (min-width: 0) and to wrap to
+        // a second line, but it no longer forces the actions off the edge.
         flex: 1 1 auto;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
         font-weight: 600;
+        line-height: 1.2;
       }
 
       // Live px readout during a drag — deliberately prominent (this is the
@@ -1047,11 +1107,15 @@
         border-radius: 2px;
       }
 
+      // Actions stay together as one unit and wrap as a group — splitting
+      // ⇔/⚙/✕ across two lines would read as unrelated controls. Pushed
+      // right on a shared line, left-aligned once it has its own.
       .dvg-editor-header__actions {
         flex: 0 0 auto;
         display: flex;
         align-items: center;
         gap: 1px;
+        margin-left: auto;
       }
 
       .dvg-editor-header__btn {

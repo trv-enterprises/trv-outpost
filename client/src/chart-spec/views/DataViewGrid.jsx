@@ -560,6 +560,13 @@ export default function DataViewGrid({
           context={editable ? { liveResize } : undefined}
           getRowStyle={getRowStyle}
           getRowId={(params) => String(params.data.__id)}
+          // Editor headers carry the column name PLUS three action buttons,
+          // which don't fit on one line in a narrow column — so the header
+          // wraps (see .dvg-editor-header) and the row needs room for the
+          // second line. AG Grid sizes the header row from this option, not
+          // from its content, so without it a wrapped header is clipped.
+          // View mode keeps the default height.
+          headerHeight={editable ? 56 : undefined}
           maintainColumnOrder
           onColumnResized={handleColumnResized}
           onColumnMoved={handleColumnMoved}
