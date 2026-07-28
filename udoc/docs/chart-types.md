@@ -119,6 +119,29 @@ line colors for text rules, since a text state like `Cooling` often isn't a
 severity at all. Click a swatch to pick, or use the dashed well at the end of
 the row for a custom color.
 
+### Background color
+
+**Background** fills the whole tile with a color — a status tile that reads as
+a block of red across a room, rather than a red number on a dark panel.
+
+You pick only the fill. The value's text color is **paired automatically** from
+Carbon's matching light/dark sets, so the number stays readable on whatever you
+choose; the preview under the swatches shows the pairing before you commit. The
+title follows the same pairing.
+
+The swatches lead with the same alert ramp the thresholds use, followed by the
+Carbon chart colors. The dashed well at the end takes a custom color, and the
+text is paired against that too.
+
+Leave it unset (the default) and the tile stays transparent, showing the
+panel's own background as before.
+
+:::note Thresholds still win
+If a color threshold or text rule matches, its color is used for the value —
+setting a background doesn't switch threshold coloring off. The paired color
+applies when no rule has matched.
+:::
+
 ### Text case
 
 For text values, **Text case** re-cases the displayed string. It is
@@ -167,11 +190,37 @@ value size. Uniform sizing is what makes a row of tiles read as a set.
 
 ### Data Table Columns
 
-The Data Table type has a per-column **Columns** editor: check a column to
-include it, reorder with the ↕ arrows (rows move as you click — the table
-matches what you see), and optionally set a **display name**, a fixed
-**width** in pixels (blank = auto-size; viewers can still drag headers to
-override for their own session), and a **value format**:
+The Data Table type's **Columns** section shows the real table, with your own
+data in it. You shape the layout by working on the table directly:
+
+- **Width** — drag a column's edge. The pixel width appears in the header as
+  you drag.
+- **Order** — drag a column header sideways.
+- **Hide** — click **✕** in the header. Hidden columns are listed as tags
+  below the table; click a tag's **✕** to bring one back.
+- **Auto-size** — click **⇔** in the header to size a column to its content,
+  or **Auto-size all** in the toolbar to clear every width at once.
+
+Turn on **Show hidden** to bring hidden columns back into the table, greyed
+out, so you can un-hide them without leaving it. It's off by default — hiding
+a column is usually how you get it out of the way while sizing the rest.
+
+:::note Run the query first
+The table sizes against your real data, so it appears once the query has
+returned rows. Press **Fetch Data** if the section shows a prompt instead of a
+table.
+:::
+
+Widths you set here are the chart default. A viewer can still drag headers in
+the live dashboard to override them for their own session.
+
+#### Per-column options
+
+Click **⚙** in a column's header for the settings that aren't a drag gesture.
+
+On the **Display** tab: a **display name** (the header label), an exact
+**width** in pixels for when a drag won't do (matching a width across two
+tables, say), and a **value format**:
 
 | Format | Renders |
 |--------|---------|
@@ -180,6 +229,41 @@ override for their own session), and a **value format**:
 | **Duration** | Seconds → `2d 3h 4m` |
 | **Duration (HH:MM:SS)** | Seconds → clock form |
 | **Plain number** | Locale number, never abbreviated |
+
+#### Conditional formatting
+
+The **Formatting rules** tab colors a column's cells by what they contain — a
+`status` column showing green for running and red for stopped, say. The tab
+label shows the rule count, so you can tell a formatted column from a plain
+one at a glance.
+
+Each rule is an operator, a value to match, and a color:
+
+| Operator | Matches when the cell |
+|---|---|
+| **equals** | is exactly this text |
+| **contains** | contains this text anywhere |
+| **greater than** | is a number above this one |
+| **less than** | is a number below this one |
+| **is empty** | is blank or has no value |
+
+Text matching **ignores case**, so a rule for `running` catches `Running`.
+Numeric operators skip cells that aren't numbers, so a `>` rule on a text
+column simply never fires.
+
+Rules are checked **top to bottom and the first match wins** — put specific
+rules above broad ones and use the ↑ ↓ buttons to reorder. A rule with no
+value typed in yet is skipped rather than matching everything.
+
+Per rule you also choose:
+
+- **Apply to** — **Text** colors the text; **Text + background** fills the
+  cell and picks a contrasting text color automatically.
+- **Color the whole row** — paints the entire row instead of the single cell.
+  If rules in more than one column claim the same row, the leftmost column
+  wins.
+
+A live preview beside each rule shows exactly how it will render.
 
 ## Auto-Refresh
 
