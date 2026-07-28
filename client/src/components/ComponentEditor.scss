@@ -2483,9 +2483,9 @@
   // so it doesn't sprawl on an ultrawide (40% of 3440px would be 1376px —
   // back to the over-wide dialog this replaced).
   .cds--modal-container {
-    width: 40%;
+    width: 50%;
     min-width: 22rem;
-    max-width: 40rem;
+    max-width: 52rem;
   }
 
   .column-options-modal__section {
