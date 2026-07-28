@@ -416,6 +416,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [editableDescription, setEditableDescription] = useState('');
   const [editableTags, setEditableTags] = useState([]);
   const [editableRefreshInterval, setEditableRefreshInterval] = useState(30);
+  // Per-dashboard override of the deployment's transparent_panels setting.
+  // '' = inherit the global (the default, and what every existing dashboard
+  // stores — i.e. nothing). 'solid' / 'transparent' force one or the other.
+  const [editablePanelBackground, setEditablePanelBackground] = useState('');
   // Dashboard-variable authoring (connection-swap, v1). The single variable
   // uses the fixed token name "dashboard-variable"; the designer sets its
   // display label, discovery tags, and schema-strictness.
@@ -475,10 +479,40 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         namespace: editableNamespace,
         tags: editableTags,
         refreshInterval: editableRefreshInterval,
+        panelBackground: editablePanelBackground,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsModalOpen]);
+
+  // PANEL BACKGROUND OVERRIDE (per-dashboard).
+  //
+  // Writes its OWN root attribute rather than reusing the global
+  // `data-transparent-panels`. Sharing that one didn't work: App.jsx sets it
+  // from the deployment setting when `identityResolved` flips, which happens
+  // AFTER the viewer mounts, so the global effect ran second and wiped the
+  // override every time. Instrumented and confirmed — the viewer applied the
+  // attribute, then the global removed it with no cleanup in between.
+  //
+  // With a separate attribute the two never race: the SCSS gives
+  // `data-panel-background` higher precedence than the global flag, so
+  // whichever effect runs last, the override still wins.
+  //
+  // The saved value is read while VIEWING; the editable state is what's live
+  // while EDITING, so a change previews immediately without saving. Cleared
+  // on unmount so an override can't leak onto the next dashboard.
+  useEffect(() => {
+    const override = isEditMode
+      ? editablePanelBackground
+      : (dashboard?.settings?.panel_background || '');
+    const root = document.documentElement;
+    if (!override) {
+      root.removeAttribute('data-panel-background');
+      return undefined;
+    }
+    root.setAttribute('data-panel-background', override);
+    return () => root.removeAttribute('data-panel-background');
+  }, [isEditMode, editablePanelBackground, dashboard?.settings?.panel_background]);
 
   // Seed the Vars modal draft likewise.
   useEffect(() => {
@@ -1782,6 +1816,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setEditableRefreshInterval(
       dashboard?.settings?.refresh_interval == null ? 30 : dashboard.settings.refresh_interval
     );
+    // '' when absent — inherit the deployment setting.
+    setEditablePanelBackground(dashboard?.settings?.panel_background || '');
     // Dashboard-variable authoring state. The connection/filter variable and the
     // range variable are INDEPENDENT; each toggle reflects the presence of its
     // OWN variable, NOT the shared `variables_enabled` master gate (which is true
@@ -2153,6 +2189,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         layout_dimension: currentDimension,
         scale_percent: scalePercent,
         refresh_interval: editableRefreshInterval,
+        // Omitted entirely when inheriting, so a dashboard that never opts in
+        // stores nothing and keeps following the global setting.
+        panel_background: editablePanelBackground || undefined,
         variables_enabled: editableVariablesEnabled || editableRangeEnabled,
         variables: builtVariables,
       };
@@ -4396,6 +4435,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             setEditableNamespace(settingsDraft.namespace);
             setEditableTags(settingsDraft.tags);
             setEditableRefreshInterval(settingsDraft.refreshInterval);
+            setEditablePanelBackground(settingsDraft.panelBackground || '');
             setEditHasChanges(true);
           }
           setSettingsModalOpen(false);
@@ -4434,6 +4474,17 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             step={5}
             helperText="Polling pauses while the browser tab is hidden. Set to 0 to disable auto refresh entirely."
           />
+          <Select
+            id="settings-panel-background"
+            labelText="Panel background"
+            value={settingsDraft?.panelBackground ?? ''}
+            onChange={(e) => setSettingsDraft((d) => ({ ...d, panelBackground: e.target.value }))}
+            helperText="Default follows the deployment's Transparent Panels setting. Choose Solid or Transparent to override it for this dashboard only."
+          >
+            <SelectItem value="" text="Default (follow deployment setting)" />
+            <SelectItem value="solid" text="Solid background" />
+            <SelectItem value="transparent" text="Transparent background" />
+          </Select>
           {/* Dashboard-variable editing moved to its own "Variables" modal,
               triggered from the toolbar between the name and the dimension
               selector. */}

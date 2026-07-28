@@ -14,18 +14,18 @@ import (
 // buildSystemPrompt assembles the per-turn system prompt by walking
 // the prompt layers:
 //
-//   1. Role / behavior preamble — the same on every turn for every
-//      caller. Encodes the assistant's purpose and the hard rules
-//      (structured config before custom code, confirm before
-//      destructive ops, etc.).
-//   2. Caller context — namespace, capabilities, date templated
-//      from the per-message CallerCtx.
-//   3. Current-view context — what surface (dashboard, component,
-//      connection) and what mode (VIEW/EDIT) the user is on,
-//      including a panel list for dashboards. Drives "this chart"
-//      resolution and the active-edit-respect rule.
-//   4. Tier-B catalog — names + one-line descriptions of every
-//      Tier-B tool. Schemas load on demand via describe_tool.
+//  1. Role / behavior preamble — the same on every turn for every
+//     caller. Encodes the assistant's purpose and the hard rules
+//     (structured config before custom code, confirm before
+//     destructive ops, etc.).
+//  2. Caller context — namespace, capabilities, date templated
+//     from the per-message CallerCtx.
+//  3. Current-view context — what surface (dashboard, component,
+//     connection) and what mode (VIEW/EDIT) the user is on,
+//     including a panel list for dashboards. Drives "this chart"
+//     resolution and the active-edit-respect rule.
+//  4. Tier-B catalog — names + one-line descriptions of every
+//     Tier-B tool. Schemas load on demand via describe_tool.
 //
 // Tier-A tool *schemas* go in the request via the Tools field, not
 // the system prompt — that's what the Anthropic SDK wants. This

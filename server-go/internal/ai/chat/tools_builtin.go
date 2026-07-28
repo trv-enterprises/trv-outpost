@@ -681,6 +681,11 @@ func dashboardSettingsSchema() map[string]interface{} {
 				"type":        "integer",
 				"description": "Display scale % (50-200). Scales the whole dashboard's component text + line sizes up at render. LEAVE UNSET to inherit the chosen layout_dimension's default scale (the cols × rows in get_type_catalog are already at that default — plan to them directly). ONLY set this when the user explicitly asks for a different scale (e.g. \"build it at 150%\"); then the usable grid is SMALLER than the catalog's cols × rows by roughly (default_scale ÷ requested_scale), so reduce your panel budget accordingly.",
 			},
+			"panel_background": map[string]interface{}{
+				"type":        "string",
+				"description": "Per-dashboard override of the deployment's Transparent Panels appearance setting. \"solid\" forces the standard raised panel surface; \"transparent\" makes panels float on the dashboard canvas with no background, border, or title-band fill. LEAVE UNSET to inherit the deployment setting — that is the right choice for essentially every dashboard. ONLY set this when the user explicitly asks for it (e.g. \"make this one transparent\", \"keep this dashboard solid even though the rest are transparent\"); it is a look-and-feel preference, not something to infer from the dashboard's content or purpose.",
+				"enum":        []string{"solid", "transparent"},
+			},
 			"is_public":    map[string]interface{}{"type": "boolean"},
 			"allow_export": map[string]interface{}{"type": "boolean"},
 			"variables_enabled": map[string]interface{}{

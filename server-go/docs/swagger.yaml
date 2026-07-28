@@ -1795,6 +1795,27 @@ definitions:
         type: boolean
       layout_dimension:
         type: string
+      panel_background:
+        description: |-
+          PanelBackground overrides the deployment-wide `transparent_panels`
+          appearance setting FOR THIS DASHBOARD ONLY.
+            ""            — inherit the global setting (the default; omitted from
+                            storage, so every existing dashboard keeps today's
+                            behavior with no migration)
+            "solid"       — force the standard raised panel surface
+            "transparent" — force floating panels
+          Deliberately a string rather than a *bool: "inherit" is a real third
+          state, and a nullable bool makes that distinction easy to lose through
+          JSON/BSON round-trips and form handling.
+
+          NOTE the asymmetric tags. `bson` deliberately has NO omitempty: with it,
+          an empty value serialized to nothing, so setting the field back to
+          "Default" was indistinguishable from "don't touch it" and the previous
+          choice survived — once a dashboard was set to solid or transparent it
+          could never be returned to inheriting. Persisting "" is what makes the
+          third state reachable. `json` keeps omitempty so the field stays absent
+          from API responses for dashboards that never opted in.
+        type: string
       refresh_interval:
         type: integer
       scale_percent:

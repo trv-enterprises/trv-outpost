@@ -443,6 +443,25 @@ type DashboardSettings struct {
 	AllowExport     bool   `json:"allow_export" bson:"allow_export"`
 	LayoutDimension string `json:"layout_dimension,omitempty" bson:"layout_dimension,omitempty"`
 	TitleScale      int    `json:"title_scale,omitempty" bson:"title_scale,omitempty"` // Title font scale % (default 100, range 50-200)
+	// PanelBackground overrides the deployment-wide `transparent_panels`
+	// appearance setting FOR THIS DASHBOARD ONLY.
+	//   ""            — inherit the global setting (the default; omitted from
+	//                   storage, so every existing dashboard keeps today's
+	//                   behavior with no migration)
+	//   "solid"       — force the standard raised panel surface
+	//   "transparent" — force floating panels
+	// Deliberately a string rather than a *bool: "inherit" is a real third
+	// state, and a nullable bool makes that distinction easy to lose through
+	// JSON/BSON round-trips and form handling.
+	//
+	// NOTE the asymmetric tags. `bson` deliberately has NO omitempty: with it,
+	// an empty value serialized to nothing, so setting the field back to
+	// "Default" was indistinguishable from "don't touch it" and the previous
+	// choice survived — once a dashboard was set to solid or transparent it
+	// could never be returned to inheriting. Persisting "" is what makes the
+	// third state reachable. `json` keeps omitempty so the field stays absent
+	// from API responses for dashboards that never opted in.
+	PanelBackground string `json:"panel_background,omitempty" bson:"panel_background"`
 	// ScalePercent is the "everything bigger" zoom. LayoutDimension is the
 	// render TARGET; the dashboard is BUILT on a derived DESIGN canvas of
 	// target/(scale/100), so at render the viewer's transform:scale blows

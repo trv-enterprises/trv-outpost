@@ -15,11 +15,11 @@
 //
 // Architecture overview (see docs/design-notes/dashboard-chat-agent.md):
 //   - layers/   — per-turn prompt assembly (system, caller, tools,
-//                 history, workspace). Each layer queries the budget
-//                 tracker so we can grow the agent's tool surface
-//                 without bloating per-turn cost.
+//     history, workspace). Each layer queries the budget
+//     tracker so we can grow the agent's tool surface
+//     without bloating per-turn cost.
 //   - tools/    — tool registry split into Tier A (always loaded) and
-//                 Tier B (loaded on demand via describe_tool meta-tool).
+//     Tier B (loaded on demand via describe_tool meta-tool).
 //
 // Step 2 (this commit) ships the absolute minimum: one Tier-A tool,
 // `get_current_user`, dispatched end-to-end. Every subsequent step
@@ -66,6 +66,7 @@ const defaultChatModel = ModelSonnet
 //   - any other non-empty value is treated as an explicit model ID and
 //     passed through verbatim (e.g. "claude-sonnet-4-20250514" to pin an
 //     older snapshot for A/B testing, or a future ID before an alias bump).
+//
 // Empty falls back to the Sonnet default so a blank setting can't break
 // the agent.
 func ResolveModelID(adminValue string) string {
