@@ -6,9 +6,22 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.48.0] — 2026-07-28
 
 ### Added
+
+- **Synology DSM connection type.** A read-only `api.synology` adapter for
+  Synology NAS, covering service and package status plus system metrics
+  (CPU, memory, disk, volume, network). The connection editor infers the
+  available columns by sampling the DSM APIs, so charts and data tables can
+  be mapped without knowing the response shape in advance.
+
+- **The component editor loads its data on open.** Opening a saved component
+  now runs its query automatically, so column pickers, axis dropdowns and the
+  Data Table column editor are usable immediately instead of waiting for a
+  manual **Fetch Data**. It only fires for saved components with everything
+  the query needs, and never where a fetch would open a picker or start a
+  live capture.
 
 - **Data Table columns are now shaped on the table itself.** The Columns
   section instantiates the real table with your own data in it: drag a
@@ -95,6 +108,21 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   the editor.
 
 ### Fixed
+
+- **Borders along the top or left edge no longer disappear in view mode.** A
+  border drawn against column 0 or row 0 rendered while editing and then
+  vanished when the dashboard was viewed. Affected borders reappear with no
+  action needed.
+
+- **The component editor shows the connection it's using.** Opening a
+  component sometimes displayed no connection even though one was saved;
+  closing and reopening fixed it. The editor no longer depends on the loaded
+  connection list to know what's selected, so it can't be blanked by a slow
+  or failed list fetch — or by having more than 100 connections.
+
+- **The weather display follows the Transparent Panels setting.** It painted
+  its own background, so it stayed on an opaque tile while every other
+  component went transparent.
 
 - **The component editor's column list shows every column again, not just the
   ones already in use.** On opening a saved component the list rendered only
