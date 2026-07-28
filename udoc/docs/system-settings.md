@@ -14,6 +14,7 @@ Configure deployment-wide settings from **Manage Mode → Settings**. Requires t
 | **Default Layout Dimension** | Layout | The preset selected by default when creating new dashboards. |
 | **Tile Font Size** | Appearance | Font size for compact tile-control labels (xs / sm / md / lg). |
 | **Default Value Chart Size** | Appearance | Default font size (px) for the value on newly-created Value charts. Ships as 56 px; existing deployments keep their stored value. Authors can override per-chart. |
+| **Transparent Panels** | Appearance | Renders dashboard panels with no background, border, or title-band fill, so components appear to float directly on the dashboard's dark canvas. Off (default) gives the standard raised panel surface. Affects every dashboard in the deployment; panel sizes and positions are unchanged either way. Applies on next page load. |
 | **Default Dashboard Fit Mode** | Dashboard | Fit mode applied to any dashboard a user has not explicitly set. One of `actual`, `window`, `width`, `stretch`. Per-user, per-dashboard preferences always override this default — no user's pick affects another user. |
 | **Dashboard Command Topic** | Dashboard | MQTT topic the dashboard subscribes to for voice/kiosk commands (default `dashboard/cmd`). |
 | **Dashboard Command Connection** | Dashboard | MQTT connection used for the dashboard command topic. Pick from configured MQTT connections. |

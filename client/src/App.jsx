@@ -678,6 +678,29 @@ function AppContent({ onDisconnect }) {
     })();
   }, [identityResolved]);
 
+  // Load the transparent-panels appearance setting and reflect it as a
+  // root attribute. Panels key their fill/border/title-band off
+  // :root[data-transparent-panels="true"], so ONE flag at the app shell
+  // switches every panel — the same root-level-selector, neutral-below
+  // shape as the theme itself. Read at load only (applies on next page
+  // load), matching the setting's note.
+  useEffect(() => {
+    if (!identityResolved) return;
+    (async () => {
+      try {
+        const s = await apiClient.getSetting('transparent_panels');
+        // Tolerate a string "true" as well as a real boolean: settings
+        // round-trip through JSON and older rows may carry either.
+        const on = s?.value === true || s?.value === 'true';
+        if (on) document.documentElement.setAttribute('data-transparent-panels', 'true');
+        else document.documentElement.removeAttribute('data-transparent-panels');
+      } catch {
+        // Older deployments may not have the setting — absent attribute
+        // means the standard raised panel surface, i.e. today's look.
+      }
+    })();
+  }, [identityResolved]);
+
   // Load the per-count preferred chart color-pairing options (admin setting
   // chart_preferred_color_options) once identity resolves and push into the
   // shared chart-color config, so multi-series spec-driven charts auto-color
