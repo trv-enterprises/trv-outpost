@@ -4,6 +4,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
+// Carbon icons, not Unicode glyphs. The header actions started as bare
+// characters (⇔ / ⚙ / ✕); the arrow in particular read as nothing in
+// particular, and none of them matched the icon set used everywhere else.
+import { FitToWidth, Settings, Close, Add } from '@carbon/icons-react';
 import { useDataviewLayout } from '../../hooks/useDataviewLayout';
 import { formatCellValue } from '../../utils/dataTransforms';
 import { formatNumberValue } from '../specs/number-formats';
@@ -55,7 +59,7 @@ import { resolveColumnRule, resolveRowRule, contrastPartnerFor } from '../option
 function EditorColumnHeader(props) {
   const {
     displayName, column,
-    hidden, onEditColumn, onHideColumn, onShowColumn, onAutoSizeColumn,
+    hidden, hasWidth, onEditColumn, onHideColumn, onShowColumn, onAutoSizeColumn,
   } = props;
   const colId = column?.getColId?.() || '';
   // The in-flight drag width comes via the grid CONTEXT, not through
@@ -76,7 +80,7 @@ function EditorColumnHeader(props) {
           aria-label={`Show ${colId}`}
           onClick={() => onShowColumn?.(colId)}
         >
-          +
+          <Add size={16} />
         </button>
       </div>
     );
@@ -92,15 +96,23 @@ function EditorColumnHeader(props) {
         <span className="dvg-editor-header__width">{liveWidth}px</span>
       )}
       <span className="dvg-editor-header__actions">
-        <button
-          type="button"
-          className="dvg-editor-header__btn"
-          title="Size to fit content"
-          aria-label={`Auto-size ${colId}`}
-          onClick={() => onAutoSizeColumn?.(colId)}
-        >
-          ⇔
-        </button>
+        {/* Auto-size appears ONLY when the column is pinned to a width.
+            On an auto-sizing column it would do nothing, and offering a
+            control that can't change anything is a false affordance — it's
+            what made this icon unreadable ("what does ⇔ do here?"). Its
+            presence now carries information: this column has a fixed width,
+            and this is how you release it. */}
+        {hasWidth && (
+          <button
+            type="button"
+            className="dvg-editor-header__btn"
+            title="Release the fixed width — size this column to fit its content"
+            aria-label={`Auto-size ${colId}`}
+            onClick={() => onAutoSizeColumn?.(colId)}
+          >
+            <FitToWidth size={16} />
+          </button>
+        )}
         <button
           type="button"
           className="dvg-editor-header__btn"
@@ -108,7 +120,7 @@ function EditorColumnHeader(props) {
           aria-label={`Options for ${colId}`}
           onClick={() => onEditColumn?.(colId)}
         >
-          ⚙
+          <Settings size={16} />
         </button>
         <button
           type="button"
@@ -117,7 +129,7 @@ function EditorColumnHeader(props) {
           aria-label={`Hide ${colId}`}
           onClick={() => onHideColumn?.(colId)}
         >
-          ✕
+          <Close size={16} />
         </button>
       </span>
     </div>
@@ -350,6 +362,12 @@ export default function DataViewGrid({
         def.headerComponent = EditorColumnHeader;
         def.headerComponentParams = {
           hidden: isHidden,
+          // Whether this column currently has an AUTHOR-set width. The
+          // auto-size control only renders when it does — on an already
+          // auto-sizing column it would be a no-op, and offering it implies
+          // a state change that can't happen. Its presence is also the only
+          // indicator that a column is pinned to a width at all.
+          hasWidth: Number.isFinite(authorWidth) && authorWidth > 0,
           onEditColumn,
           onHideColumn,
           onShowColumn,

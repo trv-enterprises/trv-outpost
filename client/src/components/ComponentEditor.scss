@@ -1123,14 +1123,26 @@
         margin-left: auto;
       }
 
+      // Icon buttons. Flex-centered rather than line-height-centered — these
+      // now hold 16px Carbon SVGs, not text glyphs, and line-height does not
+      // center an inline SVG.
       .dvg-editor-header__btn {
         border: none;
         background: transparent;
         color: var(--cds-text-secondary);
         cursor: pointer;
-        padding: 0 spacing.$spacing-02;
-        line-height: 1.5rem;
+        padding: 0;
+        width: 1.5rem;
+        height: 1.5rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border-radius: 2px;
+        flex: 0 0 auto;
+
+        svg {
+          fill: currentColor;
+        }
 
         &:hover {
           background-color: var(--cds-layer-hover-01);
