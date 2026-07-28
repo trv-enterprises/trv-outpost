@@ -29,6 +29,9 @@
  * @param {string} [props.title]        centered title band ('' / omit to hide)
  * @param {string} [props.unit]         unit suffix (e.g. '%', '°C')
  * @param {number} [props.size]         value font size in px (default 64)
+ * @param {string} [props.background]   tile fill color; the value's text color
+ *                                      is paired from it automatically unless
+ *                                      an explicit `color` is also given
  * @param {object} [props.options]      format options. Accepts the value
  *                                      chart's keys (valueFormat /
  *                                      valueDecimals / valueDateFormat) and
@@ -40,12 +43,14 @@
  */
 import ValueView from './ValueView';
 import { formatNumberValue } from '../specs/number-formats.js';
+import { contrastPartnerFor } from '../option-helpers';
 
 export default function ValueTile({
   value,
   unit = '',
   size = 64,
   color = null,
+  background = '',
   options = null,
   valueName = '',
   dataCtx = null,
@@ -72,12 +77,17 @@ export default function ValueTile({
       }, undefined)
     : (value == null ? '' : String(value));
 
+  // An explicit `color` from custom code wins over the background's paired
+  // text color — same precedence as a matched threshold on the structured
+  // chart (see value.js): the pairing is the readable default, not an
+  // override of what the author asked for.
   return (
     <ValueView
       formatted={formatted}
       unit={unit}
       size={size}
-      color={color}
+      color={color || (background ? contrastPartnerFor(background) : null)}
+      background={background}
       title=""
       config={{ options: { showTitle: true } }}
       dataCtx={dataCtx}

@@ -82,6 +82,26 @@ const pruneColumnWidths = (widths) => {
   return Object.keys(out).length > 0 ? out : null;
 };
 
+// dataview column_rules: per-column conditional-format rules. Drops columns
+// whose rule list is empty, and rules that can never fire — no color, or a
+// blank operand on an operator that needs one (a half-typed rule the author
+// abandoned). resolveColumnRule skips those at render time too; pruning here
+// keeps them out of the saved record rather than persisting dead config.
+const pruneColumnRules = (rules) => {
+  if (!rules || typeof rules !== 'object') return undefined;
+  const out = {};
+  for (const [col, list] of Object.entries(rules)) {
+    if (!Array.isArray(list)) continue;
+    const kept = list.filter((r) => {
+      if (!r?.color) return false;
+      if (r.op === 'empty') return true;
+      return r.value != null && String(r.value).trim() !== '';
+    });
+    if (kept.length > 0) out[col] = kept;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 // ── ts-store absolute-range (range: DSL) datetime <-> epoch-seconds helpers ──
 // The <input type="datetime-local"> value is a local "YYYY-MM-DDTHH:MM" string;
 // the ts-store range: DSL takes epoch SECONDS. These convert each way.
@@ -388,6 +408,9 @@ const DEFAULT_CHART_OPTIONS = {
   valueTextCase: 'none',     // none | upper | lower | capitalize | title (text only)
   valueThresholds: [],       // numeric: [{ value, color, label? }] — highest reached wins
   valueTextThresholds: [],   // text: [{ operator, match, color }] — first match wins
+  valueBackground: '',       // tile fill hex; '' = transparent. Text color is
+                             // PAIRED from it automatically (contrastPartnerFor),
+                             // so there is no companion foreground option.
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -687,6 +710,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // For dataview: author-set per-column value formats (column name ->
   // 'compact' | 'duration' | 'duration_clock' | 'plain'). Absent = auto.
   const [columnFormats, setColumnFormats] = useState({});
+  // For dataview: per-column conditional-formatting rules (column name ->
+  // [{ op, value, color, target, wholeRow }]). First match wins. Absent =
+  // no conditional styling for that column.
+  const [columnRules, setColumnRules] = useState({});
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -867,15 +894,40 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const [availableColumns, setAvailableColumns] = useState([]);
-  // Alphabetically-sorted view of availableColumns for the data-mapping
-  // dropdowns (x/y/series/filter/time-bucket/sliding-window). The raw
+  // Alphabetically-sorted OPTION LIST for the data-mapping dropdowns
+  // (x/y/series/group-by/filter/time-bucket/sliding-window). The raw
   // availableColumns keeps its query/fetch order (used only as a default
   // seed, e.g. filters default to [0]); the dropdowns render this sorted
   // copy so the option lists aren't in an arbitrary column order.
-  const sortedColumns = useMemo(
-    () => [...availableColumns].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
-    [availableColumns]
-  );
+  //
+  // Saved selections are UNIONED IN so a dropdown still shows the value the
+  // author previously chose before any Fetch Data has run. This is the local
+  // replacement for the old global availableColumns seed (removed — see the
+  // note in the chart-load effect): the option list may include a saved
+  // column that isn't in the current schema, but availableColumns itself
+  // stays strictly "the real schema", so surfaces that enumerate the schema
+  // — notably the dataview column list — are never shown a subset that
+  // looks complete.
+  //
+  // A saved column that no longer exists in the fetched schema is still
+  // listed, deliberately: silently dropping it would make the author's
+  // selection vanish with no explanation. pruneStaleColumnSelections (in the
+  // fetch handler) is what actually clears genuinely-stale selections.
+  const sortedColumns = useMemo(() => {
+    const opts = new Set(availableColumns);
+    const addSaved = (c) => { if (typeof c === 'string' && c) opts.add(c); };
+    addSaved(xAxisColumn);
+    yAxisColumns.forEach((y) => addSaved(typeof y === 'object' && y ? y.column : y));
+    addSaved(groupByColumn);
+    addSaved(seriesColumn);
+    addSaved(slidingWindowTimestampCol);
+    addSaved(timeBucketTimestampCol);
+    filters.forEach((f) => addSaved(f?.field ?? f?.column));
+    return [...opts].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [
+    availableColumns, xAxisColumn, yAxisColumns, groupByColumn, seriesColumn,
+    slidingWindowTimestampCol, timeBucketTimestampCol, filters,
+  ]);
   // The single query-results table lives at the bottom of the Data Mapping tab
   // (it's filter-aware). It's easy to miss after running a query, so we scroll
   // to it when a NEW run lands. Keyed on previewData (a fresh fetch), NOT on the
@@ -1104,28 +1156,31 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setColumnAliases(chart.data_mapping?.column_aliases || {});
       setColumnWidths(chart.data_mapping?.column_widths || {});
       setColumnFormats(chart.data_mapping?.column_formats || {});
+      setColumnRules(chart.data_mapping?.column_rules || {});
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
       setVisibleColumns(Array.isArray(loadedVisible) && loadedVisible.length > 0 ? loadedVisible : null);
 
-      // Seed availableColumns from the saved column references so the x/y/series/
-      // group-by/filter dropdowns RENDER THE PREVIOUSLY-SELECTED VALUES on edit
-      // WITHOUT requiring a Fetch Data first. availableColumns otherwise starts
-      // empty on load (it's only populated by a fetch), so a saved selection has
-      // no matching <SelectItem> and shows blank. A later Fetch Data replaces
-      // this seed with the real schema. pruneStaleColumnSelections only runs in
-      // the fetch handler, so it never wipes this seed.
-      const seededCols = [];
-      const addCol = (c) => { if (typeof c === 'string' && c && !seededCols.includes(c)) seededCols.push(c); };
-      addCol(chart.data_mapping?.x_axis);
-      loadedYCols.forEach(addCol);
-      addCol(chart.data_mapping?.group_by);
-      addCol(chart.data_mapping?.series);
-      (chart.data_mapping?.filters || []).forEach((f) => addCol(f?.column));
-      (Array.isArray(loadedVisible) ? loadedVisible : []).forEach(addCol);
-      Object.keys(chart.data_mapping?.column_aliases || {}).forEach(addCol);
-      if (seededCols.length > 0) setAvailableColumns(seededCols);
+      // NOTE: availableColumns is deliberately NOT seeded from the saved
+      // column references here. It means exactly one thing — THE REAL SCHEMA
+      // FROM THE LAST FETCH — and nothing else.
+      //
+      // It used to be seeded so the x/y/series dropdowns would render their
+      // saved values without a Fetch Data first. But a seed built from saved
+      // references is a subset masquerading as the schema, and the dataview
+      // column list reads it as the full set: on open the author saw ONLY the
+      // already-ticked columns, with no row for the unticked ones, so a column
+      // that wasn't already added could not be discovered or added at all
+      // (10-column result set → 3 rows, 0 unticked). The seed also bought less
+      // than it looked: it rendered the current selection but left every
+      // dropdown functionally inert, since the other columns still weren't
+      // options until a fetch.
+      //
+      // The narrow case the seed did solve — "render a saved value that isn't
+      // in the option list" — is handled locally instead, by unioning saved
+      // selections into the OPTION lists (columnsWithSaved / sortedColumns
+      // below). Same pattern the sliding-window timestamp select already used.
       // Sliding window initialization
       const sw = chart.data_mapping?.sliding_window;
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
@@ -1414,6 +1469,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         columnAliases: chart.data_mapping?.column_aliases || {},
         columnWidths: chart.data_mapping?.column_widths || {},
         columnFormats: chart.data_mapping?.column_formats || {},
+        columnRules: chart.data_mapping?.column_rules || {},
         visibleColumns: Array.isArray(loadedVisibleSnap) && loadedVisibleSnap.length > 0 ? loadedVisibleSnap : null,
         parserPreset: loadedParserPreset,
         parserDataPath: loadedParser?.data_path || '',
@@ -1490,6 +1546,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         columnAliases: {},
         columnWidths: {},
         columnFormats: {},
+        columnRules: {},
         visibleColumns: null,
         parserPreset: 'none',
         parserDataPath: '',
@@ -1573,6 +1630,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       columnAliases,
       columnWidths,
       columnFormats,
+      columnRules,
       visibleColumns,
       parserPreset,
       parserDataPath,
@@ -1596,7 +1654,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
-    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, visibleColumns,
+    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, columnRules, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
     bandColumns, bandedBarStyle, chartOptions,
     componentCode, showCustomCode, usesDashboardVariable, initialState, onDirtyChange,
@@ -1913,6 +1971,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       return Object.keys(next).length === keys.length ? prev : next;
     });
 
+    // column_rules (dataview) — same treatment: a rule set keyed on a column
+    // the query no longer returns can never fire, so don't carry it forward.
+    setColumnRules((prev) => {
+      if (!prev || typeof prev !== 'object') return prev;
+      const keys = Object.keys(prev);
+      const next = {};
+      for (const k of keys) if (has(k)) next[k] = prev[k];
+      return Object.keys(next).length === keys.length ? prev : next;
+    });
+
     // Time bucket value + timestamp columns.
     setTimeBucketValueCols((prev) => {
       const kept = (prev || []).filter(has);
@@ -2015,6 +2083,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setColumnAliases({});
     setColumnWidths({});
     setColumnFormats({});
+    setColumnRules({});
     setVisibleColumns(null);
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
@@ -2370,6 +2439,51 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   };
 
+  // Auto-fetch the preview query once when the editor opens on a SAVED
+  // component that already has everything the query needs.
+  //
+  // availableColumns is only populated by a fetch (the old seed-from-saved-
+  // references was removed — it showed a misleading subset, see the note in
+  // the chart-load effect). That left every column surface inert on open:
+  // the dataview column formatter rendered nothing but its "run the query"
+  // hint, and the x/y/series dropdowns offered only the already-chosen value.
+  // The author had to know to press Fetch Data before the editor was usable
+  // at all. Running it for them is the whole point.
+  //
+  // Deliberately conservative — this must never surprise the author:
+  //   - saved components only. A brand-new component has nothing to run.
+  //   - ONCE per component id (autoFetchedRef), so it can't re-fire on an
+  //     unrelated state change or fight a manual fetch.
+  //   - skipped when anything is already in flight or already fetched.
+  //   - skipped for custom-code components, which own their own data path.
+  //   - skipped for any case where fetchPreviewData would OPEN A MODAL or
+  //     start a live capture rather than just query: an unresolved dashboard
+  //     variable (value picker) and raw socket/mqtt discovery. An automatic
+  //     action must not pop UI the author didn't ask for.
+  //   - skipped for MQTT, whose "fetch" is a long-lived SSE capture, not a
+  //     one-shot query.
+  // The same preconditions fetchPreviewData would otherwise reject with a
+  // user-facing error are checked here so the auto path stays silent.
+  const autoFetchedRef = useRef(null);
+  useEffect(() => {
+    const id = chart?.id;
+    if (!id) return;                         // new component — nothing saved
+    if (autoFetchedRef.current === id) return;
+    if (showCustomCode) return;
+    if (!selectedConnectionId) return;
+    if (previewLoading || previewData) return;
+    // Needs a query unless the type supplies its own.
+    if (!isSocket && !isMQTT && !isAPI && !isTSStore && !queryRaw.trim()) return;
+    // Would open the value picker instead of querying.
+    if (typeof queryRaw === 'string' && queryRaw.includes(DASHBOARD_VARIABLE_TOKEN) && !previewVariableValue) return;
+    // Would start a live capture instead of querying.
+    if ((isSocket || isMQTT) && variableBoundFilter && !previewVariableValue) return;
+    if (isMQTT) return;
+    autoFetchedRef.current = id;
+    fetchPreviewData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chart?.id, selectedConnectionId, queryRaw, showCustomCode, isSocket, isMQTT, isAPI, isTSStore]);
+
   const generatedCode = useMemo(() => {
     if (showCustomCode && componentCode) {
       return componentCode;
@@ -2658,6 +2772,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
         column_widths: pruneColumnWidths(columnWidths),
         column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
+        column_rules: pruneColumnRules(columnRules),
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -4038,6 +4153,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
+                    // The dataview column manager instantiates the REAL grid
+                    // so the author sizes columns against their own data
+                    // (#214). No other field type reads this.
+                    previewData={previewData}
                     formState={{
                       // data_mapping. multipleYAxis is purely the user's
                       // explicit choice (gated on the chart_type being
@@ -4150,6 +4269,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // text match-rules are separate lists.
                       value_thresholds: Array.isArray(chartOptions.valueThresholds) ? chartOptions.valueThresholds : [],
                       value_text_thresholds: Array.isArray(chartOptions.valueTextThresholds) ? chartOptions.valueTextThresholds : [],
+                      // Background fill (#214). Applies to both value types,
+                      // so it binds one key regardless of the numeric/text
+                      // split above.
+                      value_background: chartOptions.valueBackground ?? '',
                       // Both size fields bind the SAME stored key — only
                       // one is ever visible, so the size survives a
                       // number↔text switch.
@@ -4168,6 +4291,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       column_aliases: columnAliases,
                       column_widths: columnWidths,
                       column_formats: columnFormats,
+                      column_rules: columnRules,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -4340,6 +4464,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         case 'value_text_thresholds':
                           updateChartOption('valueTextThresholds', value);
                           break;
+                        case 'value_background':
+                          updateChartOption('valueBackground', value);
+                          break;
                         // Both size fields write the same stored key —
                         // the numeric and text Display rows each carry
                         // their own field id, but there is one size.
@@ -4377,6 +4504,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'column_formats':
                           setColumnFormats(value);
+                          break;
+                        case 'column_rules':
+                          setColumnRules(value);
                           break;
                         default: break;
                       }
@@ -5154,6 +5284,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           column_aliases: columnAliases,
                           column_widths: pruneColumnWidths(columnWidths),
                           column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
+                          column_rules: pruneColumnRules(columnRules),
                         } : undefined,
                         // bandedBarStyle is a sibling state var (not inside
                         // chartOptions); merge it into options for the

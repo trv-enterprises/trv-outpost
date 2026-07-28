@@ -74,6 +74,22 @@
           ]
         },
         {
+          "id": "value_background_group",
+          "label": "Background",
+          "helperText": "Fill the tile with a color. The value's text color is paired automatically from Carbon's matching light/dark set, so the number stays readable — pick the fill and the contrast is handled. A color threshold or rule that matches still wins over the paired text color.",
+          "layout": "full-width",
+          "fields": [
+            {
+              "id": "value_background",
+              "binds": "options.valueBackground",
+              "type": "color_select",
+              "label": "Background color",
+              "default": "",
+              "showsContrastPartner": true
+            }
+          ]
+        },
+        {
           "id": "value_style_numeric",
           "label": "Display",
           "helperText": "The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed.",

@@ -792,6 +792,15 @@ definitions:
           127G, "duration", "duration_clock", "plain"). Missing/"auto" = default cell
           formatting. Same format vocabulary as the number tile (number-formats.js).'
         type: object
+      column_rules:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/models.ColumnRule'
+          type: array
+        description: 'For dataview only: column name -> conditional-formatting rules.
+          Evaluated top-down, FIRST MATCH WINS (the order is the author''s logic,
+          so it must be preserved as given).'
+        type: object
       column_widths:
         additionalProperties:
           type: integer
@@ -919,6 +928,28 @@ definitions:
       type:
         description: Data type (e.g., "varchar", "integer")
         type: string
+    type: object
+  models.ColumnRule:
+    description: One conditional-formatting rule for a dataview column
+    properties:
+      color:
+        description: Hex color applied on match
+        type: string
+      op:
+        description: 'Match operator: eq, contains, gt, lt, empty'
+        type: string
+      target:
+        description: 'What to paint: "text" (default) or "both" (text + background,
+          text paired for contrast)'
+        type: string
+      value:
+        description: Operand. Unused by "empty"; a blank operand on any other operator
+          makes the rule inert (a half-typed rule must not match every row).
+        type: string
+      wholeRow:
+        description: When true the whole row is painted, not just this cell. If rules
+          in several columns claim the row, the leftmost column wins.
+        type: boolean
     type: object
   models.CommandConfig:
     description: Configuration for sending commands via a connection

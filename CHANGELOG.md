@@ -10,6 +10,44 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Data Table columns are now shaped on the table itself.** The Columns
+  section instantiates the real table with your own data in it: drag a
+  column's edge to set its width (the pixel value shows in the header as you
+  drag), drag a header to reorder, and hide a column from its header. Per-column
+  settings that aren't a drag gesture — display name, value format, an exact
+  pixel width — moved behind a **⚙** button in each header. **Auto-size**
+  is available per column and for the whole table.
+
+  This replaces typing a pixel number into a form, saving, and switching to
+  preview to find out what it looked like.
+
+  Hidden columns are listed as tags below the table so they can always be
+  found again, and **Show hidden** brings them back into the table (greyed)
+  to un-hide in place. Widths set here remain the chart default — a viewer
+  can still drag headers in the live dashboard to override them for their
+  own session.
+
+- **Per-column conditional formatting on Data Tables.** A column can carry a
+  list of rules — **equals**, **contains**, **greater than**, **less than**,
+  **is empty** — each with a color. A `status` column can show green for
+  `running` and red for `stopped`. Rules are checked top to bottom and the
+  first match wins, so specific rules go above broad ones; text matching
+  ignores case, and numeric operators skip cells that aren't numbers.
+
+  Each rule colors the text or the text and background, and can paint the
+  whole row instead of the single cell (if rules in several columns claim a
+  row, the leftmost wins). A live preview beside each rule shows how it will
+  render.
+
+- **Background color on value charts, with automatic contrast.** A value tile
+  can be filled with a color — a status tile that reads as a block of red
+  from across a room rather than a red number on a dark panel. You pick only
+  the fill: the value's text color is paired automatically from Carbon's
+  matching light/dark sets, so the number stays readable whatever you choose.
+  The swatches lead with the same alert ramp the thresholds use.
+
+  Color thresholds and text rules still take precedence when they match —
+  setting a background doesn't switch threshold coloring off.
 - **Transparent panels.** A new **Transparent Panels** appearance setting in
   Manage → Settings drops the panel background, border, and title-band fill
   across every dashboard, so components appear to float directly on the dark
@@ -57,6 +95,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   the editor.
 
 ### Fixed
+
+- **The component editor's column list shows every column again, not just the
+  ones already in use.** On opening a saved component the list rendered only
+  the columns that were already ticked — the unticked ones had no row at all,
+  so a column you hadn't already added could not be discovered or added
+  without knowing to press **Fetch Data** first. A 10-column result set showed
+  3 rows and no way to reach the other 7.
+
+  The cause was a seed that populated the column list from the component's
+  *saved* references rather than the query's real schema. That seed is gone:
+  the list is now either empty (with its "run the query" prompt) or complete,
+  never a subset that looks complete. Saved selections still render in the
+  x/y/series dropdowns before a fetch, as they did before.
 
 - **A dashboard no longer renders at a fraction of its size.** One adornment
   with corrupt stored geometry collapsed the grid to a fixed fallback size,

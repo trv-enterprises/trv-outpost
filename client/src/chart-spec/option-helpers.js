@@ -2,7 +2,10 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { CATEGORICAL_PALETTE, CATEGORICAL_NAMES, CATEGORICAL_PAIRINGS, PAIRING_COUNTS } from '../config/theme.js';
+import {
+  CATEGORICAL_PALETTE, CATEGORICAL_NAMES, CATEGORICAL_PAIRINGS, PAIRING_COUNTS,
+  CATEGORICAL_PAIRINGS_LIGHT, CATEGORICAL_PAIRINGS_DARK, IS_DARK_THEME,
+} from '../config/theme.js';
 import { getPreferredColorOption } from '../utils/chartColorConfig.js';
 
 // Shared ECharts-option helpers for spec-driven chart buildOption
@@ -80,6 +83,160 @@ export function resolveTextThresholdColor(raw, rules) {
   return null;
 }
 
+// ── Per-column conditional formatting rules (dataview, #214) ─────────
+// Operators for the dataview's column rules. A superset of the text
+// threshold operators above: a table column is often numeric ("errors >
+// 0" → red) or sparse ("is empty" → grey), neither of which the value
+// chart's two string operators can express.
+//
+// The string operators stay case-INSENSITIVE for the same reason as the
+// text thresholds: the same logical state arrives as "Running" or
+// "running" depending on the source.
+export const COLUMN_RULE_OPERATORS = [
+  { value: 'eq', label: 'equals', needsValue: true },
+  { value: 'contains', label: 'contains', needsValue: true },
+  { value: 'gt', label: 'greater than', needsValue: true },
+  { value: 'lt', label: 'less than', needsValue: true },
+  // "is empty" takes no operand — null, undefined, and '' all count. A
+  // value input would be dead UI, so the editor hides it (needsValue).
+  { value: 'empty', label: 'is empty', needsValue: false },
+];
+
+// What a matched rule paints. Background implies text too: a background
+// alone would leave the theme's near-white text on an arbitrary fill,
+// which is the unreadable combination contrastPartnerFor exists to
+// prevent — so 'both' pairs the text from the fill automatically.
+export const COLUMN_RULE_TARGETS = [
+  { value: 'text', label: 'Text' },
+  { value: 'both', label: 'Text + background' },
+];
+
+/**
+ * Parse a human-written number for a rule operand.
+ *
+ * The author types what they SEE in the table, and the table abbreviates:
+ * a memory column reads "2.1G", a byte count reads "9,819,455,488". Plain
+ * Number() returns NaN for both, so a `> 2.1G` rule silently never fired —
+ * no error, just a rule that looked right and did nothing.
+ *
+ * Accepts, in addition to a bare number:
+ *   - THOUSANDS SEPARATORS — "2,048" → 2048. Stripped only when they are
+ *     positioned like separators; "1,5" (a decimal comma in some locales)
+ *     is rejected rather than silently read as 15.
+ *   - SI SUFFIXES — k/M/G/T (and lowercase), matching the SI table the
+ *     compact formatter prints with, so "2.1G" round-trips.
+ *   - a leading sign and surrounding whitespace.
+ *
+ * Deliberately NOT accepting binary units (Ki/Mi/Gi): the formatter never
+ * emits them, so honoring them here would invent a convention the display
+ * side doesn't share.
+ *
+ * @param {string|number} input
+ * @returns {number} the parsed value, or NaN when it isn't a number
+ */
+export function parseNumericOperand(input) {
+  if (typeof input === 'number') return input;
+  if (typeof input !== 'string') return NaN;
+  let s = input.trim();
+  if (!s) return NaN;
+  // Strip thousands separators only in a well-formed grouping position:
+  // optional leading 1-3 digits, then one or more ,ddd groups.
+  if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
+  const m = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*([kKmMgGtT])?$/.exec(s);
+  if (!m) return NaN;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return NaN;
+  if (!m[2]) return n;
+  // Same SI table the compact formatter prints with (number-formats.js).
+  const mult = { k: 1e3, m: 1e6, g: 1e9, t: 1e12 }[m[2].toLowerCase()];
+  return n * mult;
+}
+
+/**
+ * Evaluate one column's rules against a cell value.
+ *
+ * FIRST MATCH WINS, in list order — same contract as the value chart's
+ * text thresholds, and the reason the editor offers reorder controls
+ * rather than sorting: the order IS the author's logic, letting a
+ * specific `equals` sit above a broad `contains`.
+ *
+ * A rule whose operand is blank is SKIPPED (except `is empty`, which has
+ * no operand). Without that, a half-typed rule would match every row and
+ * make the table look broken while the author is still typing.
+ *
+ * Numeric comparisons coerce both sides and skip when either is
+ * non-numeric, so a `>` rule on a text column simply never fires instead
+ * of throwing or matching by string ordering.
+ *
+ * @param {*} raw          the cell value
+ * @param {Array} rules    [{ op, value, color, target, wholeRow }]
+ * @returns {{color: string, target: string, wholeRow: boolean}|null}
+ */
+export function resolveColumnRule(raw, rules) {
+  if (!Array.isArray(rules) || rules.length === 0) return null;
+  const isEmpty = raw == null || String(raw).trim() === '';
+  const s = isEmpty ? '' : String(raw).toLowerCase();
+  for (const rule of rules) {
+    if (!rule?.color) continue;
+    const op = rule.op || 'eq';
+    const operand = typeof rule.value === 'string' ? rule.value.trim() : rule.value;
+    let hit = false;
+    if (op === 'empty') {
+      hit = isEmpty;
+    } else if (operand == null || operand === '') {
+      continue; // half-typed rule — don't let it capture everything
+    } else if (op === 'gt' || op === 'lt') {
+      // Both sides go through the same lenient parse. The OPERAND is what
+      // the author typed ("2.1G", "2,048"); the CELL may itself be a
+      // formatted string, since JSON/MQTT/CSV sources routinely deliver
+      // numbers as text. A cell that genuinely isn't numeric yields NaN and
+      // the rule is skipped, so a `>` rule on a text column still never
+      // fires rather than comparing as strings.
+      const a = parseNumericOperand(raw);
+      const b = parseNumericOperand(operand);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      hit = op === 'gt' ? a > b : a < b;
+    } else if (op === 'contains') {
+      hit = !isEmpty && s.includes(String(operand).toLowerCase());
+    } else {
+      hit = !isEmpty && s === String(operand).toLowerCase();
+    }
+    if (hit) {
+      return {
+        color: rule.color,
+        target: rule.target === 'both' ? 'both' : 'text',
+        wholeRow: rule.wholeRow === true,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Row-level resolution: the first column (in `columns` order) whose rules
+ * produce a whole-row match decides the row's formatting.
+ *
+ * Whole-row is opt-in per rule, so most tables never reach this. When two
+ * columns both claim the row, the leftmost wins — an arbitrary tiebreak,
+ * but a STABLE and explainable one ("the earlier column decides"), which
+ * beats last-writer-wins by cell iteration order.
+ *
+ * @param {object} row      { [col]: value }
+ * @param {string[]} columns  column order to scan
+ * @param {object} columnRules  { [col]: rule[] }
+ * @returns {{color: string, target: string}|null}
+ */
+export function resolveRowRule(row, columns, columnRules) {
+  if (!row || !columnRules) return null;
+  for (const col of columns) {
+    const rules = columnRules[col];
+    if (!Array.isArray(rules) || rules.length === 0) continue;
+    const hit = resolveColumnRule(row[col], rules);
+    if (hit?.wholeRow) return { color: hit.color, target: hit.target };
+  }
+  return null;
+}
+
 /**
  * Resolve a numeric value to a threshold color, or null when none apply.
  *
@@ -102,6 +259,10 @@ export function resolveNumericThresholdColor(n, thresholds) {
 }
 export const COLOR_TEXT = '#f4f4f4';
 export const COLOR_TEXT_SECONDARY = '#c6c6c6';
+// Carbon gray100 — the counterpart to COLOR_TEXT (gray10) for drawing text
+// on a LIGHT fill. Used by contrastPartnerFor's luminance fallback, which is
+// only reached for a custom (non-Carbon) background hex.
+export const COLOR_TEXT_ON_LIGHT = '#161616';
 
 // ── Carbon categorical (multi-series) palette ────────────────────────
 // The canonical Carbon Charts 14-color qualitative sequence, in the
@@ -186,6 +347,119 @@ export const TEXT_THRESHOLD_COLOR_PALETTE = (() => {
     .map((c) => ({ name: c.name, hex: c.hex }));
   return [...ALERT_COLOR_PALETTE, ...extras];
 })();
+
+// ── Background / foreground color PAIRS ──────────────────────────────
+// For surfaces that fill a region with color and then draw text on it —
+// the value chart's background, a conditionally-formatted table cell.
+// Picking a background is the author's job; picking readable text on top
+// of it is NOT, so the partner is looked up, never chosen.
+//
+// Carbon's two categorical palettes (LIGHT and DARK) are index-aligned:
+// _LIGHT[n][i] and _DARK[n][i] are the same hue at different lightness
+// (purple-70 ↔ purple-30, blue-80 ↔ blue-50). That alignment IS the
+// pairing — so "given this color, get its contrasting partner" is an
+// index lookup across the two maps, not color math. See config/theme.js.
+//
+// Direction depends on the active theme: on a dark canvas the author
+// picks the deeper LIGHT-palette color as the background and the text
+// takes the brighter DARK-palette partner; on a light canvas it flips.
+//
+// Do NOT hand-pick hex here. theme.js's values are re-extracted from
+// Carbon on upgrade and must stay auditable; this file only indexes them.
+const PAIR_INDEX = (() => {
+  // hex → its partner in the opposite-lightness palette, both directions.
+  const map = new Map();
+  const link = (a, b) => {
+    if (!a || !b) return;
+    const lo = a.toLowerCase();
+    const hi = b.toLowerCase();
+    if (!map.has(lo)) map.set(lo, hi);
+    if (!map.has(hi)) map.set(hi, lo);
+  };
+  for (const count of Object.keys(CATEGORICAL_PAIRINGS_LIGHT)) {
+    const lightOpts = CATEGORICAL_PAIRINGS_LIGHT[count] || [];
+    const darkOpts = CATEGORICAL_PAIRINGS_DARK[count] || [];
+    lightOpts.forEach((combo, oi) => {
+      const darkCombo = darkOpts[oi];
+      if (!Array.isArray(darkCombo)) return;
+      combo.forEach((hex, ci) => link(hex, darkCombo[ci]));
+    });
+  }
+  return map;
+})();
+
+// The ALERT ramp is a severity scale, not a categorical palette, so it has
+// no slot in CATEGORICAL_PAIRINGS and therefore no index-aligned partner.
+// Its partners are declared explicitly: each alert color paired with the
+// Carbon step of THE SAME HUE at the opposite end of the lightness range
+// (red-60 ↔ red-30, green-50 ↔ green-30, …). Named tokens in the comments
+// so this stays as auditable as the extracted maps above.
+const ALERT_PAIRS = [
+  [COLOR_DANGER, '#ffd7d9'], // red60    ↔ red20
+  [COLOR_CAUTION, '#ffd9be'], // orange40 ↔ orange20
+  [COLOR_WARN, '#fcf4d6'], // yellow30 ↔ yellow20
+  [COLOR_OK, '#a7f0ba'], // green50  ↔ green20
+  [COLOR_PRIMARY, '#d0e2ff'], // blue60   ↔ blue20
+];
+for (const [a, b] of ALERT_PAIRS) {
+  const lo = a.toLowerCase();
+  const hi = b.toLowerCase();
+  if (!PAIR_INDEX.has(lo)) PAIR_INDEX.set(lo, hi);
+  if (!PAIR_INDEX.has(hi)) PAIR_INDEX.set(hi, lo);
+}
+
+// Swatches offered when picking a BACKGROUND color. Alert ramp first —
+// a filled value tile is most often a status readout, and these are the
+// same five swatches the numeric/text threshold pickers already offer, so
+// the vocabulary is consistent across the chart's color controls. The
+// curated Carbon pairing colors follow for non-severity uses.
+export const BACKGROUND_COLOR_PALETTE = (() => {
+  const seen = new Set(ALERT_COLOR_PALETTE.map((c) => c.hex.toLowerCase()));
+  const extras = [];
+  // Draw from the ACTIVE theme's pairings so the offered backgrounds are
+  // the ones that have a partner on this canvas.
+  for (const count of PAIRING_COUNTS) {
+    for (const combo of CATEGORICAL_PAIRINGS[count] || []) {
+      for (const hex of combo) {
+        const lo = hex.toLowerCase();
+        if (seen.has(lo)) continue;
+        seen.add(lo);
+        const ni = CATEGORICAL_PALETTE.findIndex((c) => c.toLowerCase() === lo);
+        extras.push({ name: ni >= 0 ? CATEGORICAL_NAMES[ni] : hex, hex });
+      }
+    }
+  }
+  return [...ALERT_COLOR_PALETTE, ...extras];
+})();
+
+/**
+ * The contrasting partner for a background color — what to draw text in
+ * so it reads against that fill.
+ *
+ * Resolution order:
+ *   1. The Carbon index-aligned partner (categorical pairs / alert ramp).
+ *   2. A relative-luminance fallback for a CUSTOM hex the author picked
+ *      out of the OS color wheel, which by definition has no Carbon
+ *      partner. Returns Carbon's text-on-color tokens rather than pure
+ *      black/white.
+ *
+ * @param {string} bg   background hex ('#rrggbb')
+ * @returns {string|null} partner hex, or null when bg is absent/unparseable
+ */
+export function contrastPartnerFor(bg) {
+  if (typeof bg !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(bg)) return null;
+  const lo = bg.toLowerCase();
+  const partner = PAIR_INDEX.get(lo);
+  if (partner) return partner;
+  // Custom color: fall back to luminance. sRGB relative luminance
+  // (WCAG 2.x), threshold at the conventional 0.5 crossover.
+  const r = parseInt(lo.slice(1, 3), 16) / 255;
+  const g = parseInt(lo.slice(3, 5), 16) / 255;
+  const b = parseInt(lo.slice(5, 7), 16) / 255;
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.5 ? COLOR_TEXT_ON_LIGHT : COLOR_TEXT;
+}
 
 /**
  * Resolve a series-color token to a canonical hex from SERIES_COLOR_PALETTE.

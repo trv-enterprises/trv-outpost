@@ -48,7 +48,7 @@
  * @typedef {Object} FieldSpec
  * @property {string} id
  * @property {string} binds         dot-path into the saved component shape
- * @property {'column_select'|'column_multi_select'|'enum'|'text'|'number'|'boolean'|'slider'|'code'|'nullable_number'|'y_axis_columns_list'|'threshold_list'|'text_threshold_list'|'column_manager'|'band_scheme'} type
+ * @property {'column_select'|'column_multi_select'|'enum'|'text'|'number'|'boolean'|'slider'|'code'|'nullable_number'|'y_axis_columns_list'|'threshold_list'|'text_threshold_list'|'column_manager'|'band_scheme'|'color_select'} type
  * @property {string} label
  * @property {boolean} [required]
  * @property {string} [helperText]
@@ -123,6 +123,7 @@ const SUPPORTED_FIELD_TYPES = new Set([
   'text_threshold_list', // free list of { operator, match, color } entries (value chart, text)
   'column_manager',      // dataview: visible-columns checklist + reorder + per-column alias
   'band_scheme',         // banded_bar: scheme selector + per-scheme band-column mappings
+  'color_select',        // optional single color from the swatch palette ('' = unset)
 ]);
 const SUPPORTED_LAYOUTS = new Set([
   'single-column',

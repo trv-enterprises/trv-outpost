@@ -14,6 +14,7 @@ import ThresholdListField from './ThresholdList';
 import TextThresholdListField from './TextThresholdList';
 import ColumnManagerField from './ColumnManager';
 import BandSchemeField from './BandScheme';
+import ColorSelectField from './ColorSelect';
 
 const FIELD_RENDERERS = {
   // Stage 1
@@ -30,6 +31,7 @@ const FIELD_RENDERERS = {
   text_threshold_list: TextThresholdListField,
   column_manager: ColumnManagerField,
   band_scheme: BandSchemeField,
+  color_select: ColorSelectField,
   // column_multi_select + code stay deferred — no current spec uses
   // either. The schema validator permits them; renderers land when
   // a spec needs them.

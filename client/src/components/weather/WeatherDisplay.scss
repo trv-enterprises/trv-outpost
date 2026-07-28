@@ -342,3 +342,17 @@
     align-self: center;
   }
 }
+
+// ── Transparent panels (admin setting `transparent_panels`) ──────────
+// The weather display paints its OWN surface (--cds-layer-01 on the root),
+// so stripping the panel's background left this component still sitting on
+// an opaque tile — it was the one display that visibly ignored the setting.
+//
+// Only the ROOT fill is dropped. The inner cards (.current-detail,
+// .daily-card) keep their --cds-layer-02 backgrounds: those are the
+// component's own structure — they group the forecast into readable
+// tiles — not panel chrome, and removing them would leave the forecast
+// as unseparated text on the canvas rather than a cleaner-looking panel.
+:root[data-transparent-panels='true'] .weather-display {
+  background-color: transparent;
+}

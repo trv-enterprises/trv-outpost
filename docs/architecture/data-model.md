@@ -180,6 +180,62 @@ Each component type uses different sub-documents:
 See [frontend.md](frontend.md) for how each type is rendered and
 [connections.md](connections.md) for how `connection_id` is resolved.
 
+### Dataview column configuration
+
+`chart_type: "dataview"` adds five column-scoped keys to `data_mapping`.
+All are optional; a dataview with none of them renders every returned
+column with default styling.
+
+| Key | Shape | Meaning |
+| --- | --- | --- |
+| `visible_columns` | `string[]` | Ordered whitelist. **Absent/null = show all** (the default and the back-compat read); an explicit `[]` means hide all. The array order IS the table's column order. |
+| `column_aliases` | `{ col → string }` | Header display names. |
+| `column_widths` | `{ col → px }` | Author default widths. Absent = size to content. |
+| `column_formats` | `{ col → format }` | `compact` / `duration` / `duration_clock` / `plain`; absent or `auto` = default cell formatting. |
+| `column_rules` | `{ col → rule[] }` | Conditional formatting. See below. |
+
+Each entry in `column_rules[col]` is
+`{ op, value, color, target, wholeRow }`:
+
+- `op` — `eq` \| `contains` \| `gt` \| `lt` \| `empty`. String matching is
+  case-insensitive; numeric ops skip non-numeric cells rather than
+  comparing as strings; `empty` takes no operand.
+- `target` — `text` (default) or `both`. `both` fills the cell background
+  and derives the text color from it (`contrastPartnerFor`).
+- `wholeRow` — paints the row instead of the cell. When rules in several
+  columns claim the same row the **leftmost column wins**.
+
+Rules evaluate **top-down, first match wins**, so the stored order carries
+meaning and must never be sorted on read or write. A rule with a blank
+operand (on an op that needs one) is inert — the renderer skips it, and
+the editor prunes it before save.
+
+Evaluation is **client-side**: `resolveColumnRule` / `resolveRowRule` in
+`client/src/chart-spec/option-helpers.js`, applied by `DataViewGrid` as
+AG Grid `cellStyle` / `getRowStyle`. The Go `ColumnRule` type exists so
+the config survives the round trip through the strict `ChartDataMapping`
+struct — the server never interprets it.
+
+#### Width precedence (author vs viewer)
+
+Widths come from two layers and the interaction is easy to get wrong:
+
+1. A **viewer's** drag-resize — per-user, stored in
+   `app_config.dataview_layouts`, keyed on component id.
+2. The **author's** `column_widths` — the chart default.
+3. Content autosize, when neither is set.
+
+A viewer's drag wins over the author's width, *except* when the author has
+since changed that column's width. `widthBase` records which author width
+each user override was captured against; a mismatch means the author
+re-pinned it and the stale override is discarded.
+
+The component editor renders the same grid in `editable` mode, where a
+drag writes the **author** layer and the stored per-user layout is ignored
+entirely. That separation is required, not stylistic: an editor drag
+captured as a user override would become its own `widthBase`, making the
+author's own next change look stale and get discarded.
+
 ### Versioning
 
 Components keep a version history in the database (all three sub-types).
