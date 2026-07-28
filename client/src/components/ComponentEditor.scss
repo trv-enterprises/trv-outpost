@@ -2567,14 +2567,38 @@
       font-size: 0.75rem;
     }
 
-    // Shows the rule exactly as the grid will paint it, so the author
-    // doesn't have to save and switch to preview to check readability.
-    .column-rule-list__preview {
+    // Sample cell — shows the rule's operand painted the way the grid will
+    // paint a matching cell, so readability can be judged without saving.
+    .column-rule-list__preview-wrap {
       margin-left: auto;
-      padding: spacing.$spacing-02 spacing.$spacing-04;
-      border-radius: 2px;
-      font-size: 0.875rem;
-      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+      min-width: 0;
+    }
+
+    .column-rule-list__preview-label {
+      font-size: 0.75rem;
+      color: var(--cds-text-secondary);
+      white-space: nowrap;
+    }
+
+    .column-rule-list__preview {
+      // Deliberately NOT button-shaped. With a border-radius and generous
+      // padding it read as a clickable "Preview" control — the author
+      // reasonably tried to press it. Square corners, cell-ish padding and a
+      // monospace face make it read as a sample of table content instead.
+      padding: 2px spacing.$spacing-03;
+      border-radius: 0;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: default;
+      user-select: none;
+      max-width: 12rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .column-rule-list__row-note {

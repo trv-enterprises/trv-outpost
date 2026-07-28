@@ -162,8 +162,23 @@ export default function ColumnRuleList({ rules, onChange, idPrefix }) {
                 onChange={(_e, { checked }) => update(i, { wholeRow: checked })}
               />
 
-              <span className="column-rule-list__preview" style={previewStyle}>
-                Preview
+              {/* A SAMPLE CELL, not a control. It shows the rule's own
+                  operand rendered the way a matching cell will actually be
+                  painted, so the color/target choice can be judged without
+                  saving and switching to the dashboard.
+
+                  It used to read the literal word "Preview", which looked
+                  like a button and told the author nothing about their rule.
+                  aria-hidden because it is decorative — the color is the
+                  content, and a screen reader announcing the matched value a
+                  second time adds nothing. */}
+              <span className="column-rule-list__preview-wrap" aria-hidden="true">
+                <span className="column-rule-list__preview-label">Looks like</span>
+                <span className="column-rule-list__preview" style={previewStyle}>
+                  {needsValue
+                    ? (String(rule.value ?? '').trim() || 'value')
+                    : '(empty)'}
+                </span>
               </span>
             </div>
           </div>
